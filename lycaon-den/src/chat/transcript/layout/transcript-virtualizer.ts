@@ -661,7 +661,11 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       synchronizeScrollOffset();
       const offset = virtualizer.scrollOffset ?? 0;
       const anchor = virtualizer.getVirtualItemForOffset(offset);
-      measurementAnchorIndex = anchor ? anchor.index + (anchor.end <= offset ? 1 : 0) : undefined;
+      const offsetAnchorIndex = anchor ? anchor.index + (anchor.end <= offset ? 1 : 0) : undefined;
+      const carriedIndex = carriedAnchorKey !== undefined ? indexOfKey(virtualizer, carriedAnchorKey, -1) : -1;
+      measurementAnchorIndex = carriedIndex >= 0
+        ? Math.max(offsetAnchorIndex ?? 0, carriedIndex)
+        : offsetAnchorIndex;
     }
     measurementDepth++;
     try {
@@ -735,6 +739,7 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   };
   virtualizerRef.current = virtualizer;
   let pendingAnchorMeasure: { appliedOffsetPx: number; measureOffsetPx: () => number | undefined } | undefined;
+  let carriedAnchorKey: VirtualItem["key"] | undefined;
   let rowDriftQueued = false;
   // Carry the reading offset immediately; shift the DOM after rows mount.
   const carryRowDrift = () => {
@@ -795,18 +800,29 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   untrack(collectRevisionChanges);
   const carryRowChanges = (anchor: ReadingAnchor | null, countBefore: number, originBefore: number) => {
     if (!anchor) return;
-    pendingAnchorMeasure = undefined;
+    if (!rowDriftQueued) {
+      pendingAnchorMeasure = undefined;
+      if (virtualizer.scrollOffset !== null && anchor.start <= virtualizer.scrollOffset) {
+        carriedAnchorKey = undefined;
+      }
+    }
+    let resolvedKey: VirtualItem["key"] = anchor.key;
     // Carry changes within the transcript; outer chrome moves the origin separately.
     const drift = readingAnchorDrift(
       virtualizer,
       anchor,
       virtualizer.options.scrollMargin - originBefore,
-      opts.resolveLostAnchor,
+      (rowKey) => {
+        const resolved = opts.resolveLostAnchor?.(rowKey);
+        if (resolved) resolvedKey = resolved.rowKey;
+        return resolved;
+      },
       (measure) => {
         pendingAnchorMeasure = measure;
       },
     );
     if ((drift === 0 && !pendingAnchorMeasure) || virtualizer.scrollOffset === null) return;
+    if (anchor.start > virtualizer.scrollOffset) carriedAnchorKey = resolvedKey;
     if (Math.abs(drift) >= VIRTUAL_SHIFT_REPORT_PX) {
       denScrollDebugLog("scroll", "virtual-shift", {
         cause: "rows",

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+import { createRoot, createSignal } from "solid-js";
 import { describe, expect, it } from "vitest";
 import type { TranscriptItem } from "./transcript-item-model.ts";
 import {
   EMPTY_TRANSCRIPT_SPAN_STATE,
+  bindTranscriptSpanAnchors,
   reconcileRegroupedActivitySpans,
   resolveTranscriptItemAnchor,
   transcriptItemContainsMessage,
@@ -164,6 +166,30 @@ describe("regrouped activity span anchors", () => {
       }),
     ).toMatchObject({ rowKey: "call-a", offsetPx: 136 });
 
+    // When the span was previously the first row, a newly acquired row seam is included.
+    const rowRoot = document.createElement("div");
+    rowRoot.innerHTML = `
+      <div data-msg-id="call-a">
+        <div class="den-activity-span" data-transcript-disclosure="" data-expanded="true">
+          <div class="den-activity-span-item" data-activity-entry-key="call-a"></div>
+          <div class="den-activity-span-item" data-activity-entry-key="call-c"></div>
+        </div>
+      </div>
+    `;
+    const rowEl = rowRoot.querySelector<HTMLElement>("[data-msg-id]")!;
+    const spanEl = rowRoot.querySelector<HTMLElement>(".den-activity-span")!;
+    const rowEntries = rowRoot.querySelectorAll<HTMLElement>("[data-activity-entry-key]");
+    rowEl.getBoundingClientRect = () => ({ top: 100 } as DOMRect);
+    spanEl.getBoundingClientRect = () => ({ top: 120 } as DOMRect);
+    rowEntries[0]!.getBoundingClientRect = () => ({ top: 150 } as DOMRect);
+    rowEntries[1]!.getBoundingClientRect = () => ({ top: 212 } as DOMRect);
+    expect(
+      resolveTranscriptItemAnchor(grownItems, "call-c", () => true, 42, {
+        previous: previousSpanLead,
+        root: () => rowRoot,
+      }),
+    ).toMatchObject({ rowKey: "call-a", offsetPx: 82 });
+
     // Shrinkage when call-a is evicted and call-b becomes the surviving span lead.
     const shrunkItems: TranscriptItem[] = [
       spanItem("call-b", ["call-b", "call-c"]),
@@ -174,6 +200,29 @@ describe("regrouped activity span anchors", () => {
     expect(
       resolveTranscriptItemAnchor(grownItems, "missing", () => true, 42),
     ).toBeUndefined();
+  });
+
+  it("synchronizes disclosure renames on demand when anchor resolution precedes reactive flush", () => {
+    const openKeys = new Set<string>(["activity-span:call-b"]);
+    let items: TranscriptItem[] = [spanItem("call-b", ["call-b", "call-c"])];
+    const [tick, setTick] = createSignal(0);
+    createRoot((dispose) => {
+      const resolve = bindTranscriptSpanAnchors({
+        items: () => {
+          tick();
+          return items;
+        },
+        isOpen: (key) => openKeys.has(key),
+        rename: (from, to) => {
+          if (openKeys.delete(from)) openKeys.add(to);
+        },
+      });
+      items = [spanItem("call-a", ["call-a", "call-b", "call-c"])];
+      expect(resolve("call-b")).toMatchObject({ rowKey: "call-a", offsetPx: 42 });
+      expect(openKeys.has("activity-span:call-a")).toBe(true);
+      setTick(1);
+      dispose();
+    });
   });
 });
 
