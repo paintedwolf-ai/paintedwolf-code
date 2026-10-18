@@ -14,8 +14,6 @@ mod journal;
 mod state;
 #[cfg(all(test, target_os = "macos"))]
 mod tests;
-#[cfg(all(test, target_os = "macos"))]
-mod relaunch_tests;
 
 pub use admission::{launch, run_helper, Launch, Lease};
 pub use confirmation::confirm_startup;

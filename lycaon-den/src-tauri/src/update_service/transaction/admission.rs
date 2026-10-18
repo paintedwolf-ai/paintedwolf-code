@@ -39,12 +39,12 @@ pub(super) fn should_reopen_after_wait(t: &Transaction, id: &str) -> bool {
 }
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Reopen {
+enum Reopen {
     Existing,
     NewInstance,
 }
 #[cfg(target_os = "macos")]
-pub(super) fn relaunch_activated(
+fn relaunch_activated(
     t: &mut Transaction,
     record: impl FnOnce(&Transaction) -> Result<(), UpdateError>,
     launch: impl FnOnce(&Path, Reopen) -> Result<(), UpdateError>,
@@ -249,3 +249,6 @@ pub(super) fn superseded(t: &Transaction) -> Result<bool, UpdateError> {
     let installed = hash(&executable(&t.target))?;
     Ok(installed != t.next_hash && (t.phase == Phase::Activated || installed != t.previous_hash))
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod relaunch_tests;

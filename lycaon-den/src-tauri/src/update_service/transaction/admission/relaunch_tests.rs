@@ -1,8 +1,5 @@
-use super::{
-    admission::{relaunch_activated, Reopen},
-    journal::Phase,
-    tests::fixture,
-};
+use super::super::{journal::Phase, tests::fixture};
+use super::{relaunch_activated, Reopen};
 use crate::update_service::Failure;
 use std::cell::RefCell;
 
