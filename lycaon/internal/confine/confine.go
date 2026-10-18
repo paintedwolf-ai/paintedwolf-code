@@ -196,7 +196,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		logConfinementPrepareError(err)
 		return nil, false
 	}
-	if !autoConfineEnabled() || BypassEnabled() || SandboxDisabled() || !Available() || len(prepared.Roots) == 0 {
+	if !confinementRequired() || !Available() || len(prepared.Roots) == 0 {
 		return nil, false
 	}
 	c := &Confinement{
