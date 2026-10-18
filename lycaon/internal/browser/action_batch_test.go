@@ -101,3 +101,17 @@ func TestActionFailureControlsAreBoundedAndExplicit(t *testing.T) {
 		t.Fatalf("failure inventory = %q", got)
 	}
 }
+
+func TestActionFailurePreservesControlIdentityAndCheckedState(t *testing.T) {
+	data := actionFailedData(0, CaptureAction{Type: "click"}, json.RawMessage(`{"ok":false,"state":{"interactive":[{"tag":"input","id":"task-input","type":"text","value":"private"},{"tag":"input","id":"done","type":"checkbox","checked":false}]}}`), nil)
+	encoded, err := json.Marshal(data["interactive_controls"])
+	testutil.FailErr(t, "marshal control identity", err)
+	for _, want := range []string{`"id":"task-input"`, `"type":"text"`, `"id":"done"`, `"checked":false`} {
+		if !strings.Contains(string(encoded), want) {
+			t.Fatalf("missing %s in recovery controls: %s", want, encoded)
+		}
+	}
+	if strings.Contains(string(encoded), "private") {
+		t.Fatalf("input value escaped the control projection: %s", encoded)
+	}
+}
