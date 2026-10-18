@@ -25,13 +25,19 @@ func TestPythonUnterminatedStringsAreBroken(t *testing.T) {
 func TestPythonShortStringLineBreaks(t *testing.T) {
 	for _, tc := range []struct {
 		name, source string
-		want Status
+		want         Status
 	}{
 		{"plain newline", "x = 'one\ntwo'\n", StatusBroken},
 		{"formatted newline", "print(f\"Words: {words}\nCharacters: {chars}\")\n", StatusBroken},
 		{"triple quoted", "x = '''one\ntwo'''\n", StatusClean},
 		{"formatted triple", "x = f'''{words}\n{chars}'''\n", StatusClean},
 		{"escaped newline", "x = 'one\\\ntwo'\n", StatusClean},
+		{"formatted escaped newline", "x = f\"{words}\\\n{chars}\"\n", StatusClean},
+		{"raw formatted escaped newline", "x = rf\"{words}\\\n{chars}\"\n", StatusClean},
+		{"formatted CRLF", "x = f\"{words}\r\n{chars}\"\n", StatusBroken},
+		{"formatted escaped CRLF", "x = f\"{words}\\\r\n{chars}\"\n", StatusClean},
+		{"even backslashes", "x = f\"{words}\\\\\n{chars}\"\n", StatusBroken},
+		{"multiline expression", "x = f\"{(\n    words + chars\n)}\"\n", StatusClean},
 		{"escaped character", "x = 'one\\ntwo'\n", StatusClean},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
