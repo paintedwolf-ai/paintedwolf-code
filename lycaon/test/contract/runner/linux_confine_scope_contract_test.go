@@ -79,6 +79,26 @@ func TestLinuxConfineScopeCoversEverySupervisorTest(t *testing.T) {
 	contractcheck.FailViolations(t, "command supervisor tests missing from the "+linuxConfineScript+" supervisor leg", uncovered)
 }
 
+func TestLinuxConfineScopeRequiresAppliedHelperAndBrowserAdmissionFixtures(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	scopes := linuxConfineScopes(t, root)
+	var missing []string
+	for _, fixture := range []struct{ pkg, test string }{
+		{"./internal/mcp", "TestLinuxStdioMCPAppliedBoundary"},
+		{"./internal/scan/integration", "TestLinuxBundledScannerAppliedBoundary"},
+		{"./internal/documentcore", "TestLinuxDocumentCoreAppliedBoundary"},
+		{"./internal/browser", "TestBrowserUnavailableLinuxBoundaryDoesNotLaunch"},
+		{"./internal/browser", "TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt"},
+		{"./internal/browser", "TestLaunchHeadlessRefusesUnsafeProjectRootBeforeProvisioning"},
+	} {
+		if !slices.ContainsFunc(scopes, func(scope goTestScope) bool { return scope.covers(fixture.pkg, fixture.test) }) {
+			missing = append(missing, fixture.pkg+" "+fixture.test)
+		}
+	}
+	contractcheck.FailViolations(t, "required applied Linux helper/browser fixtures missing from native qualification", missing)
+}
+
 // amd64 runs the target in platform qualification, and an arm64 lane runs the same target.
 func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	t.Parallel()
