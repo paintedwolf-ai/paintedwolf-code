@@ -60,10 +60,10 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	for _, want := range []string{
 		"Use `surface_note` for progress updates.",
 		"## Mid-turn note (`surface_note`)",
-		"Use `surface_note` whenever it would help keep the user up to date",
-		"meaningful progress or changes during the turn",
-		"Briefly say what happened and what comes next",
-		"cite the supporting evidence, then keep working",
+		"Use `surface_note` for meaningful progress updates, then keep working.",
+		"Keep `summary` under 600 characters.",
+		"`cited_evidence` takes strings",
+		`["write#1"]`,
 		"Avoid routine tool-by-tool updates",
 	} {
 		if !strings.Contains(noteCore, want) {
