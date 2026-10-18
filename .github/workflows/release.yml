@@ -441,7 +441,7 @@ jobs:
   # Candidate builds share the independent, non-publishing workflow.
   linux-candidates:
     needs: [classify, ship-gates, aggregate-release]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.classify.result == 'success' }}
     uses: ./.github/workflows/linux-candidates.yml
     with:
       source_sha: ${{ needs.classify.outputs.source_sha }}
