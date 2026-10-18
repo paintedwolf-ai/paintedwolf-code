@@ -90,6 +90,9 @@ func immutableNixState(t *testing.T) string {
 	state := t.TempDir()
 	db := filepath.Join(state, "db")
 	testutil.FailErr(t, "private Nix database directory", os.Mkdir(db, 0o700))
+	for _, directory := range []string{"profiles/per-user", "gcroots/per-user", "temproots"} {
+		testutil.FailErr(t, "private Nix state layout", os.MkdirAll(filepath.Join(state, directory), 0o500))
+	}
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "required SQLite backup runtime", err)
 	// Back up through SQLite, not a file copy of a concurrently writable database.
