@@ -130,7 +130,7 @@ func TestTerminalScreenReportsObservedExitStatus(t *testing.T) {
 	}{
 		{"success", "exit 0", false, 0},
 		{"failure", "exit 7", false, 7},
-		{"running", "printf ready; IFS= read -r value", true, 0},
+		{"running", "printf ready; IFS= read -r value; exit 7", true, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			bg := newTestBackgroundRegistry(t)
@@ -169,6 +169,12 @@ func TestTerminalScreenReportsObservedExitStatus(t *testing.T) {
 			raw, err = reg.Run(t.Context(), terminal.SnapshotToolName, map[string]any{"id": result.ID}, tctx)
 			testutil.FailErr(t, "snapshot status terminal", err)
 			check(raw)
+			if tc.running {
+				raw, err = reg.Run(t.Context(), terminal.SendToolName, map[string]any{"id": result.ID, "input": "done{Enter}"}, tctx)
+				testutil.FailErr(t, "finish interactive terminal", err)
+				tc.running, tc.code = false, 7
+				check(raw)
+			}
 		})
 	}
 }
