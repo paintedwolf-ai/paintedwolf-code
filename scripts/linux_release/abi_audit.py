@@ -56,7 +56,10 @@ def audit(tree: Path, architecture: str, floors: dict[str, str]) -> dict:
                 errors.append(f"{relative}: wrong ELF machine {facts['machine']}")
             errors.extend(f"{relative}: {error}" for error in violations(facts, floors))
             with path.open("rb") as source:
-                digest = hashlib.file_digest(source, "sha256").hexdigest()
+                hasher = hashlib.sha256()
+                while chunk := source.read(1 << 20):
+                    hasher.update(chunk)
+                digest = hasher.hexdigest()
             objects.append({"path": relative, "sha256": digest, **facts})
         except (OSError, ValueError) as exc:
             errors.append(f"{relative}: {exc}")
