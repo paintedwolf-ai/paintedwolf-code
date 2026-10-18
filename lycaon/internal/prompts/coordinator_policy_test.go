@@ -168,3 +168,30 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 		t.Fatalf("max_progress_label_chars = %v want %d", vars["max_progress_label_chars"], progress.MaxLabelRunes)
 	}
 }
+
+func TestRequestableOperationHintsFollowActualLoadingState(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	for _, tc := range []struct {
+		name              string
+		offered, deferred []string
+		wantHints         bool
+	}{
+		{"loadable", []string{"request_tools"}, []string{"write", "edit", "command"}, true},
+		{"already loaded", []string{"request_tools", "write", "edit", "command"}, nil, false},
+		{"not requestable", []string{"read"}, []string{"write", "edit", "command"}, false},
+		{"unavailable", []string{"request_tools"}, []string{"http_request"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.CoordinatorPolicyTemplateVars(tc.offered, tc.deferred)
+			vars["requestable_capabilities"] = []string{"file and git changes"}
+			out, err := engine.Render(t.Context(), "partials/requestable-tools.md", vars)
+			testutil.FailErr(t, "render requestable operations", err)
+			for _, tool := range []string{"write", "edit", "command"} {
+				hint := `request_tools({"need":"` + tool + `"})`
+				if strings.Contains(out, hint) != tc.wantHints {
+					t.Fatalf("loading hint %s presence must be %v: %s", hint, tc.wantHints, out)
+				}
+			}
+		})
+	}
+}
