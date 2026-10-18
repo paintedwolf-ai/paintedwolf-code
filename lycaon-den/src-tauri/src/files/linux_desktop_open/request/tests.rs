@@ -142,7 +142,13 @@ impl Fixture {
                                             REQUEST_INTERFACE,
                                             "Response",
                                             Some(
-                                                &(code, HashMap::<String, glib::Variant>::new())
+                                                &(
+                                                    code,
+                                                    HashMap::from([(
+                                                        "uris".to_owned(),
+                                                        vec!["file:///fixture"].to_variant(),
+                                                    )]),
+                                                )
                                                     .to_variant(),
                                             ),
                                         )
@@ -263,6 +269,13 @@ fn all_open_operations_observe_final_success_cancellation_and_failure() {
 }
 
 fn invoke(bus: &gio::DBusConnection, timeout: Duration) -> Result<(), ServiceError> {
+    invoke_result(bus, timeout).map(|_| ())
+}
+
+fn invoke_result(
+    bus: &gio::DBusConnection,
+    timeout: Duration,
+) -> Result<glib::Variant, ServiceError> {
     run_with_timeout(bus, timeout, |owner, options| {
         bus.call_sync(
             Some(owner),
@@ -281,7 +294,19 @@ fn invoke(bus: &gio::DBusConnection, timeout: Duration) -> Result<(), ServiceErr
         )
         .map_err(|error| ServiceError::from_call(&error))
     })
-    .map(|_| ())
+}
+
+#[test]
+fn completed_request_preserves_its_result_dictionary() {
+    let fixture = Fixture::new(Behavior::Respond(0, true, true));
+    let results = invoke_result(&fixture.bus(), Duration::from_secs(2)).unwrap();
+    assert_eq!(
+        glib::VariantDict::new(Some(&results))
+            .lookup::<Vec<String>>("uris")
+            .unwrap()
+            .unwrap(),
+        ["file:///fixture"]
+    );
 }
 
 #[test]
