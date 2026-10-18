@@ -1,0 +1,52 @@
+_pw_refresh_desktop() {
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database -q /usr/share/applications
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor
+    fi
+}
+
+post_install() {
+    _pw_refresh_desktop
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable --now paintedwolf-vault-identity.socket
+    elif [ -d /run/openrc ] && command -v rc-service >/dev/null 2>&1; then
+        rc-update add paintedwolf-vault-identity default
+        rc-service paintedwolf-vault-identity start
+    else
+        printf '%s\n' 'Enable the packaged vault identity service with your configured systemd or OpenRC service manager. App-password custody remains available.'
+    fi
+}
+
+post_upgrade() {
+    _pw_refresh_desktop
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl try-restart paintedwolf-vault-identity.service
+    elif [ -d /run/openrc ] && command -v rc-service >/dev/null 2>&1; then
+        if rc-service paintedwolf-vault-identity status >/dev/null 2>&1; then
+            rc-service paintedwolf-vault-identity restart
+        fi
+    fi
+    printf '%s\n' 'Quit and reopen a running Painted Wolf Code desktop after this upgrade before new credential operations.'
+}
+
+pre_remove() {
+    printf '%s\n' 'Move credential custody to an app password in Settings before disabling this service. Existing identities remain on disk for recovery or reinstall.'
+    if [ -d /run/systemd/system ]; then
+        systemctl disable --now paintedwolf-vault-identity.socket
+        systemctl stop paintedwolf-vault-identity.service
+    elif [ -d /run/openrc ] && command -v rc-service >/dev/null 2>&1; then
+        rc-service paintedwolf-vault-identity stop
+        rc-update del paintedwolf-vault-identity default
+    fi
+}
+
+post_remove() {
+    _pw_refresh_desktop
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+    fi
+}
