@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"encoding/json"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,7 +27,8 @@ func progressRecoveryParts(history []api.Message, current api.Message) []api.Mes
 		Path            string `json:"path,omitempty"`
 	}
 	calls := []priorCall{}
-	seen := map[string]bool{}
+	type attemptKey struct{ tool, path, digest string }
+	seen := map[attemptKey]bool{}
 	for i := len(history) - 1; i >= max(0, len(history)-32) && len(calls) < 8; i-- {
 		msg := history[i]
 		if msg.Role == api.MessageRoleUser && msg.Visibility != api.MessageVisibilityInternal {
@@ -39,10 +41,16 @@ func progressRecoveryParts(history []api.Message, current api.Message) []api.Mes
 		if previous.Tool == "update_progress" && previous.Status == api.InvocationStatusCompleted {
 			break
 		}
-		if seen[previous.Tool] {
+		key := attemptKey{tool: previous.Tool}
+		if path, ok := msg.ToolResult.ToolArgs["path"].(string); ok && path != "" {
+			key.path = path
+		} else {
+			key.digest = previous.ArgsDigest
+		}
+		if seen[key] {
 			continue
 		}
-		seen[previous.Tool] = true
+		seen[key] = true
 		if previous.Status != api.InvocationStatusRejected || previous.Invoked || previous.Failure == nil || previous.Failure.Code != "PROGRESS_MISSING" || msg.ID == "" {
 			continue
 		}
@@ -55,6 +63,7 @@ func progressRecoveryParts(history []api.Message, current api.Message) []api.Mes
 	if len(calls) == 0 {
 		return nil
 	}
+	slices.Reverse(calls)
 	body, err := json.Marshal(struct {
 		Calls []priorCall `json:"prior_unexecuted_calls"`
 	}{calls})
@@ -76,17 +85,16 @@ func pairedProgressReceipt(msg api.Message) *api.InvocationReceipt {
 	return receipt
 }
 
-// ProgressJustRepaired identifies only the latest tool result, before another
-// attempt or human request can make a recovery instruction stale.
-func ProgressJustRepaired(messages []api.Message) bool {
+// ProgressRecovery returns receipt data only immediately after progress repair.
+func ProgressRecovery(messages []api.Message) []api.MessageContentPart {
 	for i := len(messages) - 1; i >= max(0, len(messages)-32); i-- {
 		msg := messages[i]
 		if msg.Role == api.MessageRoleUser && msg.Visibility != api.MessageVisibilityInternal {
-			return false
+			return nil
 		}
 		if msg.Role == api.MessageRoleTool {
-			return len(progressRecoveryParts(messages[:i], msg)) > 0
+			return progressRecoveryParts(messages[:i], msg)
 		}
 	}
-	return false
+	return nil
 }

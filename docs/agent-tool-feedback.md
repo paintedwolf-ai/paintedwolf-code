@@ -327,21 +327,20 @@ window. Neither pause nor snapshot delivery stamps an evidence verdict.
 
 ### Progress prerequisite recovery
 
-After a completed `update_progress` reports `updated`, model transcript projection
-can include `prior_unexecuted_calls`: bounded references to recent calls rejected
-with `PROGRESS_MISSING` whose paired invocation receipts say they never ran.
-Each reference names the result message and call, with a short path when present;
-file contents and executable replacement arguments are not duplicated. These are
+The `inject.progress_recovery` informational anchor follows the conversation
+history immediately after a completed `update_progress` reports `updated`, when
+paired earlier receipts identify calls rejected with `PROGRESS_MISSING` before
+execution. Its instruction and bounded `prior_unexecuted_calls` data share one
+pinned message, with separate instruction/data authority. A later tool result or
+new human turn removes the guidance. Standing tool procedures remain unchanged.
+
+References name result messages and calls, with short paths when present; file
+contents and executable replacement arguments are not duplicated. These are
 historical facts, not a claim that an operation remains authorized or necessary.
 The model chooses whether and how to retry through normal tool admission.
 
 Projection examines at most 32 preceding messages, keeps the latest attempt per
-tool, and stops at a new human turn or a completed progress call. It emits at most
+tool and path (or argument digest without a path), and stops at a new human turn
+or completed progress call. It preserves chronological order and emits at most
 eight references within 2 KiB. Missing or mismatched receipts produce no reminder.
-The durable transcript, tool result, permissions and Bialy selection are unchanged.
-
-The coordinator progress procedure renders repair guidance only while that
-progress result is the latest tool result and no new human turn follows it.
-The guidance names the historical references, conditions retry on continuing
-need, and retains normal tool admission. Later results remove it. Historical
-receipt references remain attached to their original projected progress result.
+Durable messages, tool results, permissions and Bialy selection are unchanged.

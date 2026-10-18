@@ -21,6 +21,7 @@ var (
 
 // PromptBudgetInjectMatrix is the SSOT for coordinator inject budget fixtures.
 var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
+	{ID: "progress_recovery", Hosts: coordinatorTurns, Template: "guidance/progress-recovery.md", Fixture: "Immediate progress repair with prior unexecuted calls", Advice: "Conditional host state guidance follows the latest result."},
 	{
 		ID:       "tool_procedures",
 		Hosts:    coordinatorTurns,

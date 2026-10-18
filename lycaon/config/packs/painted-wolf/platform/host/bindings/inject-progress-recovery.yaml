@@ -1,0 +1,9 @@
+'on': inject.progress_recovery
+effect: inform
+render: progress-recovery
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator model request immediately after a successful progress repair with paired earlier rejected calls

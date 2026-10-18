@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
-	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,12 +21,12 @@ func (l *toolInvocations) appendToolProcedures(
 	for _, meta := range offered {
 		names = append(names, meta.Name)
 	}
-	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names, transcript.ProgressJustRepaired(messages))
+	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
 	if err != nil {
 		return nil, fmt.Errorf("render offered tool procedures: %w", err)
 	}
 	if strings.TrimSpace(block) == "" {
-		return messages, nil
+		return appendProgressRecovery(ctx, sess, profileID, messages, l.Context.Deps.ProgressRecovery)
 	}
 	// The block follows the offered schemas, so it closes the standing tier.
 	index := providerwire.SystemPreambleEnd(messages)
@@ -44,5 +43,5 @@ func (l *toolInvocations) appendToolProcedures(
 		procedures.PromptCacheBreakpoint = api.PromptCacheTierStanding
 	}
 	out = append(out, procedures)
-	return append(out, messages[index:]...), nil
+	return appendProgressRecovery(ctx, sess, profileID, append(out, messages[index:]...), l.Context.Deps.ProgressRecovery)
 }

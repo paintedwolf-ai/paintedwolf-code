@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -20,9 +21,7 @@ import (
 func TestToolProceduresCloseStandingPrefixBeforeSourceBrief(t *testing.T) {
 	l := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string, bool) (string, error) {
-				return "tool procedures", nil
-			},
+			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "tool procedures", nil },
 		},
 	})
 	messages := []api.Message{
@@ -50,7 +49,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
-			ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string, _ bool) (string, error) {
+			ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
 				delivered = slices.Clone(offered)
 				if slices.Contains(offered, "command") {
 					return "runner procedure", nil
@@ -148,7 +147,7 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
-			ToolProcedures: func(context.Context, *api.Session, string, []string, bool) (string, error) {
+			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
 				procedures++
 				return "procedure", nil
 			},
@@ -173,9 +172,7 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 func TestToolProceduresSurviveContextFit(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string, bool) (string, error) {
-				return "runner procedure", nil
-			},
+			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "runner procedure", nil },
 		},
 	})
 	history := []api.Message{{Role: api.MessageRoleSystem, Content: "charter", ContextPinned: true}}
@@ -201,7 +198,7 @@ func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	want := errors.New("template unavailable")
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			ToolProcedures: func(context.Context, *api.Session, string, []string, bool) (string, error) { return "", want },
+			ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "", want },
 		},
 	})
 	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})
@@ -210,27 +207,69 @@ func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	}
 }
 
-func TestToolProceduresReceiveLiveProgressRepair(t *testing.T) {
-	var repaired bool
-	loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
-		ToolProcedures: func(_ context.Context, _ *api.Session, _ string, _ []string, state bool) (string, error) {
-			repaired = state
-			return "", nil
-		},
-	}})
-	history := []api.Message{
+func recoveryHistory() []api.Message {
+	return []api.Message{
 		{ID: "rejected", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "write", ToolCallID: "w", Invocation: &api.InvocationReceipt{ID: "rw", Tool: "write", ToolCallID: "w", Status: api.InvocationStatusRejected, Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING"}}}},
 		{ID: "saved", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress", ToolCallID: "p", Content: `{"status":"updated"}`, Invocation: &api.InvocationReceipt{ID: "rp", Tool: "update_progress", ToolCallID: "p", Status: api.InvocationStatusCompleted, Invoked: true}}},
 	}
-	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "write"}})
-	testutil.FailErr(t, "render fresh repair", err)
-	if !repaired {
-		t.Fatal("latest repair was not passed to renderer")
+}
+
+func TestProgressRecoveryFollowsHistoryWithoutChangingStandingProcedures(t *testing.T) {
+	loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
+		ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
+			return "standing procedures", nil
+		},
+		ProgressRecovery: func(context.Context, *api.Session) (string, error) { return "repair guidance", nil },
+	}})
+	history := recoveryHistory()
+	out, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "write"}})
+	testutil.FailErr(t, "render repair", err)
+	last := out[len(out)-1]
+	if last.ID != "host-progress-recovery" || !last.ContextPinned || last.Authority != api.ContentAuthoritySystem || last.PromptCacheBreakpoint != api.PromptCacheTierNone {
+		t.Fatalf("wrong repair placement or authority: %+v", out)
 	}
-	history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "write"}})
-	_, err = loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "write"}})
-	testutil.FailErr(t, "render later attempt", err)
-	if repaired {
-		t.Fatal("repair remained after later attempt")
+	if len(last.ContentParts) != 2 || last.ContentParts[1].Authority != api.ContentAuthorityNone {
+		t.Fatal("receipt data promoted to instruction")
+	}
+	projected := transcript.Project(out)
+	text := projected[len(projected)-1].Content
+	if !strings.Contains(text, "prior_unexecuted_calls") || !strings.Contains(text, "rejected") {
+		t.Fatal("receipt missing from projected recovery")
+	}
+	again := transcript.Project(projected)
+	if again[len(again)-1].Content != text {
+		t.Fatal("projection duplicated repair")
+	}
+	if out[0].ID != "host-tool-procedures" || out[len(out)-2].ID != "saved" {
+		t.Fatalf("standing or history order changed: %+v", out)
+	}
+	for _, profile := range []string{"coordinator", "implementer"} {
+		later := append(append([]api.Message(nil), history...), api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read"}})
+		if profile == "implementer" {
+			later = history
+		}
+		got, err := appendProgressRecovery(t.Context(), &api.Session{}, profile, later, loop.Context.Deps.ProgressRecovery)
+		testutil.FailErr(t, "render later state", err)
+		if len(got) != len(later) {
+			t.Fatal("stale or worker guidance")
+		}
+	}
+}
+
+func TestProgressRecoveryRendererOutcomes(t *testing.T) {
+	want := errors.New("render failed")
+	for _, tc := range []struct {
+		body string
+		err  error
+	}{{"", nil}, {"", want}} {
+		loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{ProgressRecovery: func(context.Context, *api.Session) (string, error) { return tc.body, tc.err }}})
+		history := recoveryHistory()
+		got, err := appendProgressRecovery(t.Context(), &api.Session{}, "coordinator", history, loop.Context.Deps.ProgressRecovery)
+		if !errors.Is(err, tc.err) {
+			t.Fatalf("error=%v", err)
+		}
+		if err == nil && len(got) != len(history) {
+			t.Fatal("empty guidance appended")
+		}
 	}
 }

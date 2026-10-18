@@ -95,7 +95,7 @@ const (
 func Project(messages []api.Message) []api.Message {
 	out := make([]api.Message, 0, len(messages)+1)
 	hasNotice := false
-	for i, raw := range messages {
+	for _, raw := range messages {
 		msg := api.NormalizeMessageProvenance(raw)
 		if HasAuthorityNotice(msg) {
 			hasNotice = true
@@ -118,9 +118,6 @@ func Project(messages []api.Message) []api.Message {
 		}
 		if feedback := toolFeedbackParts(msg); len(feedback) > 0 {
 			parts = append(append([]api.MessageContentPart(nil), parts...), feedback...)
-		}
-		if recovery := progressRecoveryParts(messages[:i], msg); len(recovery) > 0 {
-			parts = append(append([]api.MessageContentPart(nil), parts...), recovery...)
 		}
 		if len(parts) > 0 {
 			msg.Content = ProjectContentParts(msg.Role, parts)

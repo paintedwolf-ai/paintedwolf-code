@@ -52,6 +52,10 @@ func measureCoordinatorInjectBlock(
 	t.Helper()
 	ctx := context.Background()
 	switch spec.ID {
+	case "progress_recovery":
+		block, err := inject.RenderProgressRecoveryBlock(ctx, renderer, "repair-budget")
+		contractcheck.FailErr(t, "render progress recovery", err)
+		return block
 	case "tool_procedures", "worker_tool_procedures":
 		host, profile := promptunit.HostCoordinator, "coordinator"
 		if spec.ID == "worker_tool_procedures" {
@@ -66,7 +70,7 @@ func measureCoordinatorInjectBlock(
 				offered = append(offered, unit.NeededWith...)
 			}
 		}
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil, true)
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":

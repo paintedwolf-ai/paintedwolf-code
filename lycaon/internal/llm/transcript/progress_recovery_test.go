@@ -23,8 +23,11 @@ func progressRecoveryFixture() []api.Message {
 
 func TestProgressRepairKeepsUnexecutedCallVisible(t *testing.T) {
 	messages := progressRecoveryFixture()
-	projected := Project(messages)
-	got := projected[len(projected)-1].Content
+	parts := ProgressRecovery(messages)
+	if len(parts) != 1 {
+		t.Fatalf("missing recovery data: %+v", parts)
+	}
+	got := parts[0].Content
 	for _, want := range []string{"prior_unexecuted_calls", "rejected-write", "write-call", "temperature.py"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("progress result lacks %q: %s", want, got)
@@ -36,9 +39,9 @@ func TestProgressRepairKeepsUnexecutedCallVisible(t *testing.T) {
 	if strings.Contains(messages[2].ToolResult.Content, "prior_unexecuted_calls") {
 		t.Fatal("projection modified durable result")
 	}
-	again := Project(projected)
-	if again[len(again)-1].Content != got {
-		t.Fatal("projection is not idempotent")
+	again := ProgressRecovery(messages)
+	if again[0].Content != got {
+		t.Fatal("recovery projection changed")
 	}
 }
 
@@ -113,20 +116,41 @@ func TestProgressRepairBoundsDataAndKeepsAuthority(t *testing.T) {
 
 func TestProgressRepairGuidanceTracksLatestResult(t *testing.T) {
 	m := progressRecoveryFixture()
-	if !ProgressJustRepaired(m) {
+	if len(ProgressRecovery(m)) == 0 {
 		t.Fatal("fresh repair missing")
 	}
 	internal := api.Message{Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal, Origin: api.MessageOriginHost, Content: "workflow facts"}
-	if !ProgressJustRepaired(append(m, internal)) {
+	if len(ProgressRecovery(append(m, internal))) == 0 {
 		t.Fatal("internal host frame hid repair")
 	}
-	if ProgressJustRepaired(append(m, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read"}})) {
+	if len(ProgressRecovery(append(m, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read"}}))) != 0 {
 		t.Fatal("later result retained repair guidance")
 	}
-	if ProgressJustRepaired(append(m, api.Message{Role: api.MessageRoleUser, Content: "stop"})) {
+	if len(ProgressRecovery(append(m, api.Message{Role: api.MessageRoleUser, Content: "stop"}))) != 0 {
 		t.Fatal("new user request retained repair guidance")
 	}
-	if ProgressJustRepaired(nil) {
+	if len(ProgressRecovery(nil)) != 0 {
 		t.Fatal("empty history claims repair")
+	}
+}
+
+func TestProgressRepairRetainsDistinctTargetsInOrder(t *testing.T) {
+	m := progressRecoveryFixture()
+	second := *m[1].ToolResult
+	receipt := *second.Invocation
+	receipt.ID = "readme-receipt"
+	receipt.ToolCallID = "readme-call"
+	second.Invocation = &receipt
+	second.ToolCallID = "readme-call"
+	second.ToolArgs = map[string]any{"path": "README.md"}
+	history := append([]api.Message(nil), m[:2]...)
+	history = append(history, api.Message{ID: "readme-result", Role: api.MessageRoleTool, ToolResult: &second})
+	parts := progressRecoveryParts(history, m[2])
+	if len(parts) != 1 {
+		t.Fatalf("missing reminder: %+v", parts)
+	}
+	text := parts[0].Content
+	if strings.Index(text, "temperature.py") < 0 || strings.Index(text, "README.md") < strings.Index(text, "temperature.py") {
+		t.Fatalf("distinct calls lost or reordered: %s", text)
 	}
 }

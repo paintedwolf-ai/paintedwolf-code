@@ -64,6 +64,7 @@ const (
 	InjectTransition             ID = "inject.transition"
 	InjectCommandJobs            ID = "inject.command_jobs"
 	InjectToolProcedures         ID = "inject.tool_procedures"
+	InjectProgressRecovery       ID = "inject.progress_recovery"
 	InjectSkillProcedure         ID = "inject.skill_procedure"
 	InjectSkillPointer           ID = "inject.skill_pointer"
 	InjectSourceChanges          ID = "inject.source_changes"

@@ -1,0 +1,1 @@
+The latest `update_progress` stored the checklist. It did not execute the earlier rejected calls listed below. If those operations are still required, retry them with their original arguments through normal tool admission before moving on to other deliverables. Record completion only after successful results.

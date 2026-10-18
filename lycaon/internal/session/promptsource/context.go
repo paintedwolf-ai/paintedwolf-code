@@ -134,13 +134,16 @@ func (m *Context) Build() promptloop.ContextDeps {
 
 	if m.Prompts != nil {
 		deps.ToolProcedures = m.ToolProcedures
+		deps.ProgressRecovery = func(ctx context.Context, sess *api.Session) (string, error) {
+			return inject.RenderProgressRecoveryBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID)
+		}
 	}
 
 	return deps
 }
 
-func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string, progressRepaired bool) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID), progressRepaired)
+func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
+	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
 }
 
 func (m *Context) WebSearchEnabled() bool {

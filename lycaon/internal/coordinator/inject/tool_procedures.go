@@ -15,13 +15,12 @@ import (
 // turn decision left out.
 func RenderToolProceduresBlock(
 	ctx context.Context, renderer *prompts.InjectRenderer,
-	sessionID, profileID string, offered []string, omitted map[string]bool, progressRepaired bool,
+	sessionID, profileID string, offered []string, omitted map[string]bool,
 ) (string, error) {
 	names := append([]string(nil), offered...)
 	sort.Strings(names)
 	vars := prompts.VisibleToolsNativePartialVars(names)
 	vars["offered_tools"] = names
-	vars["progress_just_repaired"] = progressRepaired
 	mergeRunnerCapabilityVars(names, vars)
 	prompts.MergeHTTPActionVars(names, vars)
 	surface := "worker"

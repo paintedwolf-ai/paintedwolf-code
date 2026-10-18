@@ -585,6 +585,15 @@ anchors:
       vars:
         skill_name: { type: "string", required: true }
 
+  - id: inject.progress_recovery
+    title: Progress repair recovery
+    description: Recovery guidance immediately after a checklist repair with earlier unexecuted calls.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
   - id: inject.tool_procedures
     title: Available tool procedures
     description: Operating guidance derived from the exact tools offered in this model request.
