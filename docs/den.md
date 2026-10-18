@@ -122,7 +122,7 @@ Candidates build on `ubuntu-24.04` and `ubuntu-24.04-arm`. The floors in
 [`linux_floor.txt`](../lycaon/internal/platformfloor/linux_floor.txt) are:
 
 - kernel 6.2, which provides Landlock ABI 3;
-- glibc 2.35;
+- glibc 2.39;
 - WebKitGTK 2.44;
 - GTK 3.24.41.
 

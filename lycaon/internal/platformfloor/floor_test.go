@@ -102,10 +102,10 @@ func TestLinuxKernelFloorCoversLandlockABI3(t *testing.T) {
 }
 
 func TestLinuxGlibcFloorCoversToolchain(t *testing.T) {
-	cmp, err := dotversion.Compare(platformfloor.LinuxGlibcMin(), "2.35")
+	cmp, err := dotversion.Compare(platformfloor.LinuxGlibcMin(), "2.39")
 	testutil.FailErr(t, "compare glibc floor", err)
 	if cmp < 0 {
-		t.Fatalf("glibc floor %q is below 2.35: the shipped binaries link against the toolchain floor", platformfloor.LinuxGlibcMin())
+		t.Fatalf("glibc floor %q is below 2.39: the shipped binaries link against the toolchain floor", platformfloor.LinuxGlibcMin())
 	}
 }
 

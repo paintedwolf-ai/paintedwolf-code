@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/release-stage-platform-artifacts.sh",
+  "kind": "module",
+  "workstream": "linux-release-staging",
+  "disposition": "retain",
+  "reason": "This entry point owns immutable artifact staging across the release platforms. ELF structure and Linux ABI policy now have a separate package and focused behavior tests; the shell retains only platform staging orchestration and shrinks its previous all-ELF loop. Keep this boundary while native package formats are extended.",
+  "reviewed_commit": "7047bea62ae5f8f0fb922e754d15223c6c0fce92",
+  "ceiling": 450,
+  "boundaries": {
+    "scripts/verification_tests/distribution/test_linux_abi_execution.py": "8c1ff7423a3075089c9906ad0f628d6d57c046d8036414d6fe1e833fb1116965",
+    "lycaon/test/contract/runner/release_channel_invariants_test.go": "4c71e5079c6c3e5b05cc033b5ec4a1f0e9591eb7af2b164583a5f5a48d9eb84d"
+  }
+}
