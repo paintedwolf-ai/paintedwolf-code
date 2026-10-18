@@ -391,4 +391,3 @@ func missingStaticEntryPath(root, entry, urlPath string) string {
 	}
 	return rel
 }
-

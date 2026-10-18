@@ -155,4 +155,3 @@ func TestPageToolsRefuseMissingStaticEntryBeforeBrowserAccess(t *testing.T) {
 		})
 	}
 }
-
