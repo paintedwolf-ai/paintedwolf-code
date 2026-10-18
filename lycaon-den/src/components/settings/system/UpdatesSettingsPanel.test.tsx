@@ -52,19 +52,20 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture({ last_error: { code: "package_managed" } }) })} />);
     expect((await screen.findByRole("alert")).textContent).toBe("Your package manager manages this installation. Use its upgrade command to update.");
   });
-  it("names the system package and its exact upgrade command without offering a download", async () => {
+  it("separates the upstream release from unknown package-source availability", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture() })} />);
     expect((await screen.findByTestId("updates-package-identity")).textContent).toBe("Installed from the painted-wolf-code 1.0.2 package (deb). Your package manager owns this installation.");
     const upgrade = screen.getByTestId("updates-package-upgrade");
-    expect(upgrade.textContent).toBe("Version 1.1.0 is available. Run sudo apt update && sudo apt install --only-upgrade painted-wolf-code to update.");
-    expect(upgrade.querySelector("code")?.textContent).toBe("sudo apt update && sudo apt install --only-upgrade painted-wolf-code");
-    expect(screen.getAllByText(/Version 1.1.0 is available/)).toHaveLength(1);
+    expect(upgrade.textContent).toContain("Upstream version 1.1.0 is available");
+    expect(upgrade.textContent).toContain("Availability through your configured package source is unknown");
+    expect(upgrade.querySelector("code")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.queryByTestId("updates-brew-upgrade")).toBeNull();
     expect(screen.getByTestId("updates-package-hint").textContent).toContain("system package manager");
     expect(screen.queryByText(/installs them when you quit/)).toBeNull();
     expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", false);
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", false);
+    expect(screen.getByTestId("updates-package-channel").textContent).toContain("does not change your package repositories");
   });
   it("shows only the package identity when the package is current", async () => {
     const state = packageFixture({ candidate: null, discovery: "up_to_date" });
@@ -73,6 +74,8 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (rpm)");
     expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
     expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
+    expect(screen.queryByText("You’re using the latest version.")).toBeNull();
+    expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
   });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };

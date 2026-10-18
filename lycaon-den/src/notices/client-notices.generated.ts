@@ -236,7 +236,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   update_available: {
     title: "Update available",
     message: "A new version of Painted Wolf Code is available.",
-    suggestedAction: "Open Settings → General → Updates to review and download it.",
+    suggestedAction: "Open Settings → General → Updates to review the release and installation options.",
     scope: "app",
   },
   update_failed: {
