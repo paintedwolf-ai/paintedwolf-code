@@ -277,6 +277,10 @@ tool_call_rejection_profiles:
         source: ollama/ollama model/parsers/ministral.go (toolByName)
         grammar: 'tool ''([a-zA-Z0-9_-]{1,64})'' not found'
       - kind: arguments_unparsed
+        diagnostic: unescaped_newline
+        source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
+        grammar: 'invalid character ''\\n'' in string literal'
+      - kind: arguments_unparsed
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'
       - kind: arguments_unparsed

@@ -49,7 +49,8 @@ type ToolCallRejectionPolicy struct {
 
 // ToolCallRejectionRule is one parser error grammar.
 type ToolCallRejectionRule struct {
-	Kind ToolCallRejectionKind `yaml:"kind"`
+	Kind       ToolCallRejectionKind `yaml:"kind"`
+	Diagnostic string                `yaml:"diagnostic,omitempty"`
 	// Grammar is a regular expression for the entire error message; it is
 	// anchored at both ends when compiled.
 	Grammar string `yaml:"grammar"`
@@ -75,6 +76,9 @@ func (p *ToolCallRejectionPolicy) Compile() error {
 		if !known {
 			return fmt.Errorf("rule %d has unsupported kind %q", i, rule.Kind)
 		}
+		if rule.Diagnostic != "" && (rule.Kind != ToolCallArgumentsUnparsed || rule.Diagnostic != "unescaped_newline") {
+			return fmt.Errorf("rule %d has unsupported diagnostic %q for %s", i, rule.Diagnostic, rule.Kind)
+		}
 		if strings.TrimSpace(rule.Source) == "" {
 			return fmt.Errorf("rule %d cites no source", i)
 		}
@@ -93,8 +97,9 @@ func (p *ToolCallRejectionPolicy) Compile() error {
 // ToolCallRejection is a matched parser error. Tool is the captured name for
 // kinds that capture one.
 type ToolCallRejection struct {
-	Kind ToolCallRejectionKind
-	Tool string
+	Kind       ToolCallRejectionKind
+	Tool       string
+	Diagnostic string
 }
 
 // Match returns the first rule whose grammar spans message. A captured name
@@ -108,7 +113,7 @@ func (p ToolCallRejectionPolicy) Match(message string) (ToolCallRejection, bool)
 		if groups == nil {
 			continue
 		}
-		rejection := ToolCallRejection{Kind: rule.Kind}
+		rejection := ToolCallRejection{Kind: rule.Kind, Diagnostic: rule.Diagnostic}
 		if len(groups) > 1 {
 			if !toolNameToken.MatchString(groups[1]) {
 				continue
@@ -149,7 +154,7 @@ func (p ToolCallRejectionPolicy) Classify(providerID, model, message string, eli
 		return cause
 	}
 	if rejection, ok := p.Match(message); ok && rejection.Kind == ToolCallArgumentsUnparsed {
-		return &failure.ProviderToolCallUnparsedError{ProviderID: providerID, Model: model, Cause: cause}
+		return &failure.ProviderToolCallUnparsedError{ProviderID: providerID, Model: model, Cause: cause, Diagnostic: rejection.Diagnostic}
 	}
 	return cause
 }
