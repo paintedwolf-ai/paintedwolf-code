@@ -43,11 +43,12 @@ const (
 	NamespaceMount = "mnt"
 	NamespacePID   = "pid"
 	NamespaceNet   = "net"
+	NamespaceIPC   = "ipc"
 )
 
 // NamespaceKinds lists every namespace the helper creates.
 func NamespaceKinds() []string {
-	return []string{NamespaceUser, NamespaceMount, NamespacePID, NamespaceNet}
+	return []string{NamespaceUser, NamespaceMount, NamespacePID, NamespaceNet, NamespaceIPC}
 }
 
 // Steps Attest.Omit may name.
