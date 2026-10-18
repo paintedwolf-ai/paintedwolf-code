@@ -376,7 +376,8 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "nix:build": "passthrough"
   },
   "resources": {
     "den:harness:test": {

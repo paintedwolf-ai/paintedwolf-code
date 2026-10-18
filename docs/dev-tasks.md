@@ -902,6 +902,10 @@ the lock file. `./task nix:build` builds the host's native Linux package under
 normal exclusive admission with one Nix job/core and sandboxing enabled. Its
 report binds the source tree, flake lock, derivations, outputs and recursive
 closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+For a focused package input build, use `./task nix:build -- --component bun-lock`;
+the declared component list is checked by the build driver. The generated Bun
+dependency expression is a build output to review and commit, never an
+evaluation-time download or an automatic lock-file mutation.
 These tasks do not publish a cache or authorize daemon access from an agent
 command. Nix build sandboxing and application command confinement are separate.
 The package closure and installed system integration remain under implementation
