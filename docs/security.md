@@ -199,7 +199,7 @@ No credential travels in that environment. Identity is the calling process: the 
 
 ### Host proxy policy
 
-[`internal/hostproxy`](../lycaon/internal/hostproxy) owns proxy selection for each effective destination: local destinations and `NO_PROXY` exceptions remain direct, explicit environment settings take precedence, and desktop settings supply the remaining policy. Invalid settings, unavailable configured readers, and unsupported PAC/WPAD return a failure; they never authorize a direct retry. Linux GNOME settings use a fixed, bounded native read. Nix packaging binds that reader to its retained GLib executable, without an environment or agent-selected command override.
+[`internal/hostproxy`](../lycaon/internal/hostproxy) owns proxy selection for each effective destination: loopback destinations and `NO_PROXY` exceptions remain direct, explicit environment settings take precedence, and desktop settings supply the remaining policy. Invalid settings, unavailable configured readers, and unsupported PAC/WPAD return a failure; they never authorize a direct retry. Linux GNOME settings use a fixed, bounded native read. Nix packaging binds that reader to its retained GLib executable, without an environment or agent-selected command override.
 
 | Network path | Proxy owner |
 |---|---|

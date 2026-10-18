@@ -102,7 +102,7 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 							Download:  download,
 							RemoteHost: egressclass.RequireSingleFixedEndpoint(
 								egressclass.OSVAdvisoryDownload,
-								egressclass.LibraryDownload,
+								egressclass.HTTPDownload,
 							),
 						},
 					},
