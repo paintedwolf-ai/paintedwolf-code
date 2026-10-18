@@ -2,6 +2,7 @@ package inject
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
 )

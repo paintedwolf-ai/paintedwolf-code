@@ -3,10 +3,11 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 func appendProgressRecovery(ctx context.Context, sess *api.Session, profileID string, messages []api.Message, render func(context.Context, *api.Session) (string, error)) ([]api.Message, error) {
