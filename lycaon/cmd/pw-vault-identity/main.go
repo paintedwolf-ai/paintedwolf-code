@@ -43,7 +43,7 @@ func run(args []string) error {
 	manifest := fs.String("manifest", pkgmanifest.DefaultPath, "installed executable manifest")
 	procRoot := fs.String("proc", "/proc", "process filesystem root")
 	idle := fs.Duration("idle-exit", idleExit, "idle shutdown duration; zero serves until stopped")
-	dedicated := fs.Bool("require-dedicated-protection", false, "require a non-login service uid and only CAP_SYS_PTRACE before listening")
+	dedicated := fs.Bool("require-dedicated-protection", false, "require a dedicated non-root service uid and only CAP_SYS_PTRACE before listening")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
