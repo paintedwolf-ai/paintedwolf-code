@@ -2,6 +2,7 @@ package oar
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
@@ -205,15 +206,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"source_analysis_unavailable":     gc.Source.SourceAnalysisUnavailable,
 		"http_request_web_page":           gc.Invocation.HTTPRequestWebPage,
 	}
-	for name, value := range rejectObservationActivation(gc) {
-		out[name] = value
-	}
-	for name, value := range standardActivation(gc) {
-		out[name] = value
-	}
-	for name, value := range workflowActivation(gc) {
-		out[name] = value
-	}
+	maps.Copy(out, rejectObservationActivation(gc))
+	maps.Copy(out, standardActivation(gc))
+	maps.Copy(out, workflowActivation(gc))
 	return out
 }
 
