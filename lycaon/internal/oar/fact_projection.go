@@ -58,6 +58,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 	out := map[string]any{
 		"tool":                            gc.Invocation.Tool,
 		"tool_args":                       mapOrEmpty(gc.Invocation.ToolArgs),
+		"tool_turn_has_text":              gc.Session.ToolTurnHasText,
+		"tool_turn_has_agent_note":        gc.Session.ToolTurnHasAgentNote,
+		"surface_note_offered":            gc.Session.SurfaceNoteOffered,
 		"last_assistant":                  gc.Session.LastAssistant,
 		"turn_tools":                      strList(gc.Session.TurnTools),
 		"session_posture":                 gc.Session.SessionPosture,

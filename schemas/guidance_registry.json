@@ -3270,6 +3270,11 @@
       "emit": "guard:wait",
       "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}."
     },
+    "WAIT_HIDDEN_TEXT": {
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "`wait` has not started; this tool turn contains assistant text hidden from the user"
+    },
     "WAIT_PROBE_SECRET_UNSUPPORTED": {
       "branch_instruction": "Do not reveal or persist the protected value",
       "category": "recoverable",

@@ -322,6 +322,12 @@ host_facts:
    type: bool
  - name: paintedwolf.overlay_state
    type: string
+ - name: paintedwolf.tool_turn_has_text
+   type: bool
+ - name: paintedwolf.tool_turn_has_agent_note
+   type: bool
+ - name: paintedwolf.surface_note_offered
+   type: bool
  - name: paintedwolf.surface_may_finish
    type: bool
  - name: paintedwolf.is_host_cycle_turn
