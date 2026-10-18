@@ -11,10 +11,10 @@ Store the checklist with `update_progress(content=…)`; checklist text in an as
 
 Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`,{% if profile_has_delegate_dispatch %} `task`,{% if profile_has_delegate_decompose %} `delegate_dispatch`, or `delegate_decompose`{% else %} or `delegate_dispatch`{% endif %}{% elif profile_has_delegate_decompose %} `task`, or `delegate_decompose`{% else %} or `task`{% endif %}, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
 
-Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update only changed scope/status. `unchanged` means the same checklist was stored; do not repeat it.
+Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update only changed scope/status. `unchanged` reports a no-op; do not repeat it.
 
 Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Other worker outcomes do not latch it. An unchanged checklist does not clear the latch.
 
 Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
 
-Update progress first; after its result, answer with no tool calls.
+For closeout, reconcile progress; await its result, then answer without tool calls.
