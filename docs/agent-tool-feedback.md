@@ -339,3 +339,9 @@ Projection examines at most 32 preceding messages, keeps the latest attempt per
 tool, and stops at a new human turn or a completed progress call. It emits at most
 eight references within 2 KiB. Missing or mismatched receipts produce no reminder.
 The durable transcript, tool result, permissions and Bialy selection are unchanged.
+
+The coordinator progress procedure renders repair guidance only while that
+progress result is the latest tool result and no new human turn follows it.
+The guidance names the historical references, conditions retry on continuing
+need, and retains normal tool admission. Later results remove it. Historical
+receipt references remain attached to their original projected progress result.

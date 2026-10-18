@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -21,7 +22,7 @@ func (l *toolInvocations) appendToolProcedures(
 	for _, meta := range offered {
 		names = append(names, meta.Name)
 	}
-	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
+	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names, transcript.ProgressJustRepaired(messages))
 	if err != nil {
 		return nil, fmt.Errorf("render offered tool procedures: %w", err)
 	}

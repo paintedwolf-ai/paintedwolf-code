@@ -66,7 +66,7 @@ func measureCoordinatorInjectBlock(
 				offered = append(offered, unit.NeededWith...)
 			}
 		}
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil)
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil, true)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":

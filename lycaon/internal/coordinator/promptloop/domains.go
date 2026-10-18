@@ -36,7 +36,7 @@ type ContextDeps struct {
 	Policy                          toolpolicy.Engine
 	CommitWorkerContext             func(context.Context, string, string) error
 	BuildMessages                   func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
-	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string, progressRepaired bool) (string, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
 	WebSearchEnabled                func() bool
 	CoordinatorFrame                inject.CoordinatorTurnFrameSource

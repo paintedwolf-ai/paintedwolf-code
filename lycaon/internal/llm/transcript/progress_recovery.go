@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,7 +47,7 @@ func progressRecoveryParts(history []api.Message, current api.Message) []api.Mes
 			continue
 		}
 		call := priorCall{ResultMessageID: msg.ID, ToolCallID: previous.ToolCallID, Tool: previous.Tool}
-		if path, ok := msg.ToolResult.ToolArgs["path"].(string); ok && len(path) <= 256 {
+		if path, ok := msg.ToolResult.ToolArgs["path"].(string); ok && len(path) <= 256 && utf8.ValidString(path) {
 			call.Path = path
 		}
 		calls = append(calls, call)
@@ -73,4 +74,19 @@ func pairedProgressReceipt(msg api.Message) *api.InvocationReceipt {
 		return nil
 	}
 	return receipt
+}
+
+// ProgressJustRepaired identifies only the latest tool result, before another
+// attempt or human request can make a recovery instruction stale.
+func ProgressJustRepaired(messages []api.Message) bool {
+	for i := len(messages) - 1; i >= max(0, len(messages)-32); i-- {
+		msg := messages[i]
+		if msg.Role == api.MessageRoleUser && msg.Visibility != api.MessageVisibilityInternal {
+			return false
+		}
+		if msg.Role == api.MessageRoleTool {
+			return len(progressRecoveryParts(messages[:i], msg)) > 0
+		}
+	}
+	return false
 }

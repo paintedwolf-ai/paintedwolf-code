@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -52,7 +52,7 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 			t.Fatalf("calibrated pruning removed required unit %q", id)
 		}
 	}
-	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted)
+	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "pruned", "coordinator", []string{"edit", "update_progress"}, omitted, false)
 	testutil.FailErr(t, "render pruned procedures", err)
 	if !strings.Contains(block, "Store the checklist") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") {
 		t.Fatalf("pruned surface lost progress requirements: %s", block)
@@ -88,7 +88,7 @@ func TestToolProceduresFollowOfferedSchemas(t *testing.T) {
 			{name: "no tools"},
 		} {
 			t.Run(profile+"/"+tc.name, func(t *testing.T) {
-				block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "tool-procedures-test", profile, tc.tools, nil)
+				block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "tool-procedures-test", profile, tc.tools, nil, false)
 				testutil.FailErr(t, "render offered procedures", err)
 				if (block != "") != (tc.want || tc.http || tc.page) {
 					t.Fatalf("block = %q, want runner=%v HTTP=%v", block, tc.want, tc.http)
@@ -159,11 +159,11 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	for _, tool := range []string{"update_progress", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "read", "delete", "wait"} {
 		for _, profile := range []string{"coordinator", "implementer"} {
-			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
+			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil, false)
 			testutil.FailErr(t, "render progress procedure", err)
 			want := profile == "coordinator" && (tool == "update_progress" || progress.IsProgressGatedTool(tool))
-			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
-				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
+			if strings.Contains(block, "not assistant prose") != want {
+				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "not assistant prose"), want, profile, tool)
 			}
 			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
@@ -175,5 +175,21 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 				t.Fatalf("delegate_decompose present=%v for tool %s: %s", strings.Contains(block, "`delegate_decompose`"), tool, block)
 			}
 		}
+	}
+}
+
+func TestProgressRepairGuidanceIsConditional(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	for _, repaired := range []bool{false, true, false} {
+		block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "repair", "coordinator", []string{"update_progress", "write"}, nil, repaired)
+		testutil.FailErr(t, "render repair state", err)
+		if strings.Contains(block, "The latest checklist update") != repaired {
+			t.Fatalf("repaired=%v: %s", repaired, block)
+		}
+	}
+	block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "repair", "implementer", []string{"write"}, nil, true)
+	testutil.FailErr(t, "render worker", err)
+	if strings.Contains(block, "The latest checklist update") {
+		t.Fatal("coordinator recovery leaked to worker")
 	}
 }

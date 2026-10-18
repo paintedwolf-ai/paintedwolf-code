@@ -139,8 +139,8 @@ func (m *Context) Build() promptloop.ContextDeps {
 	return deps
 }
 
-func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
+func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string, progressRepaired bool) (string, error) {
+	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID), progressRepaired)
 }
 
 func (m *Context) WebSearchEnabled() bool {

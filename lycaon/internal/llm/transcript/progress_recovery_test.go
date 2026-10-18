@@ -110,3 +110,23 @@ func TestProgressRepairBoundsDataAndKeepsAuthority(t *testing.T) {
 		t.Fatal("oversized reminder emitted")
 	}
 }
+
+func TestProgressRepairGuidanceTracksLatestResult(t *testing.T) {
+	m := progressRecoveryFixture()
+	if !ProgressJustRepaired(m) {
+		t.Fatal("fresh repair missing")
+	}
+	internal := api.Message{Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal, Origin: api.MessageOriginHost, Content: "workflow facts"}
+	if !ProgressJustRepaired(append(m, internal)) {
+		t.Fatal("internal host frame hid repair")
+	}
+	if ProgressJustRepaired(append(m, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read"}})) {
+		t.Fatal("later result retained repair guidance")
+	}
+	if ProgressJustRepaired(append(m, api.Message{Role: api.MessageRoleUser, Content: "stop"})) {
+		t.Fatal("new user request retained repair guidance")
+	}
+	if ProgressJustRepaired(nil) {
+		t.Fatal("empty history claims repair")
+	}
+}
