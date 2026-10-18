@@ -14,9 +14,9 @@ type fixture struct {
 }
 
 var fixtures = []fixture{
-	{"main.rs", "use reqwest::Client;\nfn main() { let client = Client::builder().danger_accept_invalid_certs(true); }", "lycaon.rust.tls-verification-disabled", 2},
-	{"app.vue", "<template><div>Hi</div></template>\n<script setup lang=\"ts\">const code: string = location.hash; eval(code);</script>", "lycaon.javascript.code-injection", 2},
-	{"run.ps1", "<#\niex ((New-Object Net.WebClient).DownloadString($example))\n#>\niex ((New-Object Net.WebClient).DownloadString($url))\n", "lycaon.powershell.download-execution", 4},
+	{"main.rs", "use reqwest::Client;\nfn main() { let client = Client::builder().danger_accept_invalid_certs(true); }", "opengrep:lycaon.rust.tls-verification-disabled", 2},
+	{"app.vue", "<template><div>Hi</div></template>\n<script setup lang=\"ts\">const code: string = location.hash; eval(code);</script>", "opengrep:lycaon.javascript.code-injection", 2},
+	{"run.ps1", "<#\niex ((New-Object Net.WebClient).DownloadString($example))\n#>\niex ((New-Object Net.WebClient).DownloadString($url))\n", "opengrep:lycaon.powershell.download-execution", 4},
 	{"safe.html", "<!-- <script>eval(location.hash)</script> -->", "", 0},
 	{"ignored.vue", "<script>eval(location.hash)</script>", "", 0},
 	{"data.proto", "syntax = \"proto3\"; message Example { string name = 1; }", "", 0},
@@ -48,7 +48,7 @@ func verifyResult(project string, result *scanoutput.Result) ([]Case, error) {
 		location := finding.Locations[0]
 		fixture, known := expected[location.URI]
 		if !known || fixture.rule == "" || finding.RuleID != fixture.rule || location.StartLine != fixture.line {
-			return nil, fmt.Errorf("installed scan finding differs from expected original source")
+			return nil, fmt.Errorf("installed scan finding differs from expected original source: rule=%q file=%q line=%d, expected rule=%q line=%d", finding.RuleID, location.URI, location.StartLine, fixture.rule, fixture.line)
 		}
 		valid := true
 		scanfindings.VisitFindingLocations(&finding, func(evidence *api.SecurityFindingLocation) {

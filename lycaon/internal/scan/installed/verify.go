@@ -60,7 +60,12 @@ func Verify(ctx context.Context, root string) (report Report, err error) {
 	if err != nil {
 		return report, err
 	}
-	report.EngineVersion = manifest.OpenGrep.Version
+	return verifySelected(ctx, root, manifest)
+}
+
+// verifySelected executes only the artifact authority selected by the caller.
+func verifySelected(ctx context.Context, root string, manifest *bundled.Manifest) (report Report, err error) {
+	report = Report{SchemaVersion: 1, Status: "failed", Code: "artifact_refused", GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, EngineRoot: root, EngineVersion: manifest.OpenGrep.Version}
 	if manifest.OpenGrepSelection != nil {
 		report.ProducerCommit = manifest.OpenGrepSelection.ProducerCommit
 	}
