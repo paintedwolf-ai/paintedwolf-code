@@ -2,15 +2,14 @@
   "category": "source_files",
   "artifact": "lycaon/internal/oar/occurrence_facts.go",
   "kind": "data_record",
-  "workstream": "canonical-recall-recovery",
+  "workstream": "command-directory-recovery",
   "disposition": "retain",
-  "reason": "This declaration table owns the typed occurrence vocabulary used by rule validation and rendering. Recall fault facts belong to that shared catalog. Retain the cohesive table at 397 measured lines, supported by owner-produced fault facts and the production OAR recovery matrix.",
-  "reviewed_commit": "2dfb644aa0b65db3b5e946ae911042438fcfc894",
-  "ceiling": 397,
+  "reason": "Retain the shared typed occurrence declaration table at 407 measured lines. Parser-owned directory-change facts belong beside the existing command-recovery facts; splitting the vocabulary would obscure validation ownership without separating behavior. Catalogue parity, typed rejection classification, and the rendered recovery scenarios cover this boundary.",
+  "reviewed_commit": "7cf7a8e346daf745328f2a15bc90096ea0be898b",
+  "ceiling": 407,
   "boundaries": {
     "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
-    "lycaon/internal/toolfeedback/recovery_tools_test.go": "d1316e9e6510a090d3ff910cbabf6250dacb6a42c9b1ec27bfc166c7c7ed5e78",
-    "lycaon/internal/tools/native/recall_test.go": "9b99ac0675f258a3476d92cd3329846a513c9623b667707af17e8976be435459",
-    "lycaon/internal/toolfeedback/block_plane_reject_data_test.go": "3bbb56ccd41f25f325735ffae081c809c48fb87d935bb5f6837459b3bddc886c"
+    "lycaon/internal/commandsurface/reject_vars_test.go": "f58fc4168f948a1aff4e8b16843199cca3ba63931138cdf9e723c1d779b9241c",
+    "lycaon/internal/guidance/reject_coverage_test.go": "9eb040cfa9719c6cc3d7583b5c1acd9fa07e1c2fec0cf4e045f2a6b097ee78d4"
   }
 }

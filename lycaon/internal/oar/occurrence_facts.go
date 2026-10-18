@@ -232,6 +232,7 @@ var occurrenceFactDecls = []factDecl{
 	{"can_recall", oarcore.TypeBool, FactTierHost, ""},
 	{"entries", oarcore.TypeString, FactTierHost, ""},
 	{"entry", oarcore.TypeString, FactTierHost, ""},
+	{"directory_change", oarcore.TypeBool, FactTierHost, ""},
 	{"env_assignment", oarcore.TypeBool, FactTierHost, ""},
 	{"error", oarcore.TypeString, FactTierHost, ""},
 	{"escape", oarcore.TypeString, FactTierHost, ""},

@@ -80,7 +80,7 @@ func TestCommandRejectVarsEnvironmentAssignment(t *testing.T) {
 func TestCommandRejectVarsDirectoryChange(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		err error
+		err  error
 		want bool
 	}{
 		{"typed", commandsurface.ErrDirectoryChangeCommand, true},
