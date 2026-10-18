@@ -95,3 +95,17 @@ func TestExecutionStateRenderIsConditionalAndUsesHostFacts(t *testing.T) {
 		t.Fatal("missing renderer produced guidance")
 	}
 }
+
+func TestExecutionStateOmitsInvalidAndEncodedOversizeValues(t *testing.T) {
+	for _, value := range []string{string([]byte{0xff}), strings.Repeat("\n", 200), strings.Repeat("x", 257)} {
+		if got := quotedExecutionValue(value); got != "" {
+			t.Errorf("unsafe partial value rendered: %q", got)
+		}
+	}
+	message := executionReceipt("command", "check", api.InvocationStatusCompleted, "")
+	message.ToolResult.ToolCallID = strings.Repeat("x", 129)
+	message.ToolResult.Invocation.ToolCallID = message.ToolResult.ToolCallID
+	if got := executionStateVars([]api.Message{message}, ""); got != nil {
+		t.Fatalf("oversize call identity bypassed bounds: %#v", got)
+	}
+}

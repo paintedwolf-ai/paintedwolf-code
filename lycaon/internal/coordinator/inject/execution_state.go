@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -38,12 +39,12 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 			continue
 		}
 		receipt := result.Invocation
-		if result.Tool == "update_progress" && receipt.Status == api.InvocationStatusCompleted {
+		if result.Tool == "update_progress" && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			checklistUpdated = true
 		}
 		if receipt.Failure != nil && receipt.Failure.Code == "PROGRESS_MISSING" && !receipt.Invoked {
 			operations = append(operations, executionStateRow(message))
-		} else if receipt.Status == api.InvocationStatusCompleted {
+		} else if receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			// Exact argument identity proves a retry; a different write to the
 			// same path does not prove the rejected operation was performed.
 			operations = withoutRetriedOperation(operations, receipt)
@@ -66,7 +67,7 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 
 func pairedExecutionReceipt(result *api.ToolResult) bool {
 	return result != nil && result.Invocation != nil && result.Invocation.ID != "" &&
-		result.ToolCallID != "" && result.Invocation.ToolCallID == result.ToolCallID && result.Invocation.Tool == result.Tool
+		result.ToolCallID != "" && len(result.ToolCallID) <= 128 && result.Invocation.ToolCallID == result.ToolCallID && result.Invocation.Tool == result.Tool
 }
 
 func withoutRetriedOperation(rows []map[string]any, receipt *api.InvocationReceipt) []map[string]any {
@@ -114,7 +115,7 @@ func lastExecutionRows(rows []map[string]any) []map[string]any {
 
 // Omit oversized values rather than presenting a truncated executable or path.
 func quotedExecutionValue(value string) string {
-	if value == "" || len(value) > 256 {
+	if value == "" || len(value) > 256 || !utf8.ValidString(value) {
 		return ""
 	}
 	raw, err := json.Marshal(value)

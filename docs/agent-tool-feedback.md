@@ -325,14 +325,25 @@ before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
 
-### Execution-state guidance experiments
+### Current execution observations
 
-Execution guidance must distinguish a selected verification method from an observed
-check result. A rejected invocation has not executed; satisfying its prerequisite
-does not execute it. Any current-state projection must derive from paired invocation
-receipts, retain the check's source scope, and retire guidance when its underlying
-facts change. It must not infer task completion from prose or alter tool authority.
+The coordinator receives a bounded information anchor from paired invocation
+receipts in the current user intent's retained history. It distinguishes tool
+completion from a command owner's source-bound verdict. It does not infer task
+completion, execute retries, or change the selected verification method.
 
-Candidate projections require live evaluation with captured provider requests and
-independent artifact checks. A better next action in a replay is insufficient to
-establish reliable recovery through an entire task.
+Rejected progress-gated calls remain visible after a checklist update. A later
+successful call with the same tool and argument digest retires that reminder;
+other operations may supersede the work without being treated as an exact retry.
+A new user intent clears the projection. Three rejected calls and three execution
+receipts are shown, with explicit omitted counts. Oversized argument values are
+omitted rather than rewritten into partial commands. The selected project check
+is included when execution observations exist.
+
+Recorded verdicts describe their original source, not a new freshness assertion.
+Full results and arguments remain in history. Live-job command previews are
+limited to 96 runes; stable handles and output controls retain access to details.
+
+Live evaluation uses captured provider requests and independent artifact checks.
+A better next action in a replay is insufficient to establish reliable recovery
+through an entire task.
