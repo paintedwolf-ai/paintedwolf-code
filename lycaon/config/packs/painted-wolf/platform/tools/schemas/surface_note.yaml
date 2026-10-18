@@ -1,10 +1,8 @@
 description: >-
-  Post a concise, grounded mid-turn note for the user, then keep working — this
-  does not end the turn. Assistant text alongside tool calls is hidden. Use this
-  for meaningful updates or answers to mid-task check-ins, including before wait.
-  Say what happened and what comes next. Cite at least one cited_evidence or cited_urls entry. Carries
-  artifact_ids, which is how a still reaches the user mid-run. For a question
-  use ask_user; the final answer is the no-tool closeout.
+  Send a grounded user-visible update and keep working. Assistant text with tool
+  calls is hidden. Use for meaningful updates or mid-task answers, including
+  before waiting. Cite observed evidence or URLs; artifact_ids shows stills.
+  Use ask_user for decisions and a no-tool reply for closeout.
 schema:
   type: object
   properties:
