@@ -419,7 +419,7 @@ jobs:
           fi
           ./task den:bundle
           if [[ "${GOOS}" == darwin ]]; then
-            python3 .release-controller/scripts/macos_staple.py --check "${PW_STAPLE_LOG_DIR}"
+            python3 .release-controller/scripts/macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"
           fi
 
       - name: Retain notarization and stapling evidence

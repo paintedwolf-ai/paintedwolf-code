@@ -1,6 +1,7 @@
 """Native failures and exact ticket evidence survive Tauri's captured output."""
 import contextlib
 import io
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -8,7 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-import macos_staple
+SPEC = importlib.util.spec_from_file_location("macos_staple", Path(__file__).resolve().parents[2] / "macos-notary-tools/notary.py")
+macos_staple = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(macos_staple)
 
 
 def result(code=0, stdout="", stderr=""):
@@ -98,5 +101,5 @@ class StapleTests(unittest.TestCase):
         workflow = (root / ".github/workflows/release.yml").read_text()
         self.assertIn('ref: ${{ github.workflow_sha }}\n          path: .release-controller', workflow)
         self.assertIn('scripts/macos-notary-tools:${PATH}', workflow)
-        self.assertIn('macos_staple.py --check "${PW_STAPLE_LOG_DIR}"', workflow)
+        self.assertIn('macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"', workflow)
         self.assertIn("if: ${{ always() && matrix.goos == 'darwin' }}", workflow)
