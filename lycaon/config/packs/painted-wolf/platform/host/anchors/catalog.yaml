@@ -595,6 +595,21 @@ anchors:
       vars:
         offered_tools: { type: "string[]", required: true }
 
+  - id: inject.execution_state
+    title: Execution observations inject
+    description: Bounded current-intent invocation outcomes from retained host receipts.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        operations: { type: "object[]", required: true }
+        executions: { type: "object[]", required: true }
+        operations_omitted: { type: "int", required: true }
+        executions_omitted: { type: "int", required: true }
+        checklist_updated: { type: "bool", required: true }
+        declared_command: { type: "string", required: true }
+
   - id: inject.command_jobs
     title: Live handles inject
     description: Host-authoritative ledger of live command jobs and held tool calls.

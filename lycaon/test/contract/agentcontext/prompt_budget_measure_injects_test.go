@@ -52,6 +52,8 @@ func measureCoordinatorInjectBlock(
 	t.Helper()
 	ctx := context.Background()
 	switch spec.ID {
+	case "execution_state":
+		return measureExecutionStateBlock(ctx, renderer)
 	case "tool_procedures", "worker_tool_procedures":
 		host, profile := promptunit.HostCoordinator, "coordinator"
 		if spec.ID == "worker_tool_procedures" {
