@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { afterEach, expect, it } from "vitest";
 
 afterEach(() => document.body.replaceChildren());
@@ -10,7 +11,7 @@ it("the embedded driver preserves observed control identity and checked state", 
     Object.defineProperty(input, "offsetParent", { get: () => document.body });
   });
   const bundle = readFileSync("../lycaon/internal/browser/embed/semantic_driver.js", "utf8");
-  new Function(bundle)();
+  runInNewContext(bundle, window, { filename: "semantic_driver.js" });
   const state = window.__lycaonDriver?.state();
   expect(state).toMatchObject({ interactive: [
     { id: "task", type: "text" },
