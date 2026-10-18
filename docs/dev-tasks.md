@@ -995,6 +995,19 @@ To rotate, append the next generation with both of its public keys; set the sour
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
 
+### Linux candidate builds
+
+The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+builds the native amd64 and arm64 deb/rpm packages through the production bundle
+and staging path. It runs independently on relevant packaging pull requests
+once ready, weekly, or by manual dispatch on the selected branch. The release
+workflow calls the same job with its exact selected source commit. Candidate
+artifacts include checksums and the source commit and are retained for 90 days.
+The workflow has read-only repository access and no signing environment or
+publication credentials. Package signing rehearsals and installed-system
+qualification remain separate requirements; a candidate build alone does not
+qualify a release. Draft pull requests do not start candidate builds.
+
 ### Release dry run
 
 Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.

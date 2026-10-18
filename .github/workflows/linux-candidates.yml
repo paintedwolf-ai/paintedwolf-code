@@ -1,0 +1,130 @@
+name: Linux package candidates
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        required: true
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/linux-candidates.yml'
+      - '.github/workflows/release.yml'
+      - '.github/actions/setup-*/**'
+      - 'packaging/**'
+      - 'scripts/*linux*'
+      - 'scripts/*engine*'
+      - 'scripts/*bundle*'
+      - 'scripts/release-stage-platform-artifacts.sh'
+      - 'lycaon-den/src-tauri/Cargo.*'
+      - 'lycaon-den/src-tauri/tauri*.json'
+      - 'rust-toolchain.toml'
+      - '.bun-version'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-candidates-${{ github.event.pull_request.number || inputs.source_sha || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
+      matrix: ${{ steps.source.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - id: source
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          echo "version=$(python3 scripts/release-metadata.py | jq -er .product_version)" >> "${GITHUB_OUTPUT}"
+          echo "matrix=$(python3 scripts/linux_candidates.py)" >> "${GITHUB_OUTPUT}"
+
+  candidates:
+    needs: source
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.source.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - name: Verify native candidate runner
+        env:
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          [[ "$(go env GOOS)" == linux && "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
+          case "${EXPECTED_GOARCH}" in
+            amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
+            arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
+          esac
+      - name: Install Linux bundle and audit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio
+      - name: Verify the catalog row for this candidate
+        env:
+          PLATFORM: ${{ matrix.updater_key }}
+          CANDIDATE_RUNNER_LABEL: ${{ matrix.runner }}
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          python3 scripts/linux_candidates.py --platform "${PLATFORM}" \
+            --runner-label "${CANDIDATE_RUNNER_LABEL}" --architecture "${EXPECTED_GOARCH}"
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+      - name: Build the Linux packages
+        run: ./task den:bundle
+      - name: Verify and stage platform artifacts
+        env:
+          VERSION: ${{ needs.source.outputs.version }}
+          PLATFORM: ${{ matrix.updater_key }}
+          ARCH: ${{ matrix.artifact_arch }}
+        run: |
+          bash scripts/release-stage-platform-artifacts.sh \
+            --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
+            --version "${VERSION}" --package-extensions deb,rpm \
+            --output "${RUNNER_TEMP}/candidate"
+          git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"
+      - name: Retain candidate packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-candidate-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/candidate/*
+          if-no-files-found: error
+          retention-days: 90

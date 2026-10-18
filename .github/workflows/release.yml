@@ -438,120 +438,13 @@ jobs:
           security delete-keychain "${RUNNER_TEMP}/app-signing.keychain-db" 2>/dev/null || true
           rm -f "${RUNNER_TEMP}/AuthKey.p8"
 
-  # Linux candidates exercise the production packaging path without publication:
-  # no signing environment, no feed, no distribution state. Both package
-  # families per architecture are built, audited, and retained with checksums.
-  # They follow the gates and the macOS build so the release holds its declared
-  # runners, and run whatever those jobs concluded so their own result stays visible.
+  # Candidate builds share the independent, non-publishing workflow.
   linux-candidates:
     needs: [classify, ship-gates, aggregate-release]
     if: ${{ !cancelled() }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - updater_key: linux-x86_64
-            runner: ubuntu-24.04
-            artifact_arch: x86_64
-            goos: linux
-            goarch: amd64
-          - updater_key: linux-aarch64
-            runner: ubuntu-24.04-arm
-            artifact_arch: aarch64
-            goos: linux
-            goarch: arm64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 240
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.classify.outputs.source_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache: false
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-          no-cache: true
-
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
-
-      - name: Verify native candidate runner
-        env:
-          EXPECTED_GOARCH: ${{ matrix.goarch }}
-        run: |
-          set -euo pipefail
-          [[ "$(go env GOOS)" == linux && "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
-          case "${EXPECTED_GOARCH}" in
-            amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
-            arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
-          esac
-
-      # rpm provides rpmbuild, which assembles the .rpm from the staged tree.
-      - name: Install Linux bundle and audit dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
-            rpm rpmlint lintian cpio
-
-      - name: Verify the catalog row for this candidate
-        env:
-          PLATFORM: ${{ matrix.updater_key }}
-          EXPECTED_RUNNER: ${{ matrix.runner }}
-        run: |
-          set -euo pipefail
-          row="$(jq -c --arg key "${PLATFORM}" '.platforms[] | select(.updater_key == $key)' packaging/release-platforms.json)"
-          [[ "$(jq -r .publication <<<"${row}")" == candidate ]]
-          [[ "$(jq -r .runner <<<"${row}")" == "${EXPECTED_RUNNER}" ]]
-          [[ "$(jq -c .package_extensions <<<"${row}")" == '["deb","rpm"]' ]]
-          [[ "$(jq -r .updater_extension <<<"${row}")" == null ]]
-
-      - name: Download or restore qualified maintained engine
-        uses: ./.github/actions/setup-opengrep
-
-      - name: Download pinned Bialy heads
-        uses: ./.github/actions/setup-bialy
-
-      - name: Install frontend dependencies
-        working-directory: lycaon-den
-        run: bun install --frozen-lockfile
-
-      - name: Build the Linux packages
-        run: ./task den:bundle
-
-      - name: Verify and stage platform artifacts
-        env:
-          VERSION: ${{ needs.classify.outputs.version }}
-          PLATFORM: ${{ matrix.updater_key }}
-          ARCH: ${{ matrix.artifact_arch }}
-        run: |
-          set -euo pipefail
-          bash scripts/release-stage-platform-artifacts.sh \
-            --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
-            --version "${VERSION}" --package-extensions deb,rpm \
-            --output "${RUNNER_TEMP}/candidate"
-          ls -l "${RUNNER_TEMP}/candidate"
-
-      - name: Retain candidate packages
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: linux-candidate-${{ matrix.updater_key }}
-          path: ${{ runner.temp }}/candidate/*
-          if-no-files-found: error
-          retention-days: 90
+    uses: ./.github/workflows/linux-candidates.yml
+    with:
+      source_sha: ${{ needs.classify.outputs.source_sha }}
 
   aggregate-release:
     needs: [classify, build-release]
