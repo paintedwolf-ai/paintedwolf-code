@@ -119,10 +119,6 @@ func TestExecutionStatePreservesUnexecutedEditBeforeToolLoad(t *testing.T) {
 	if vars == nil || len(vars["operations"].([]map[string]any)) != 1 {
 		t.Fatalf("loading a tool erased the unexecuted edit: %#v", vars)
 	}
-	rejected.ToolResult.Invocation.Invoked = true
-	if got := executionStateVars([]api.Message{rejected}, ""); got != nil {
-		t.Fatalf("possibly partial execution described as unexecuted: %#v", got)
-	}
 }
 
 func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
@@ -171,5 +167,33 @@ func TestExecutionStateSuccessfulExecutionPathIsSilent(t *testing.T) {
 	poll.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
 	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got != nil {
 		t.Fatalf("owner verdict did not end recovery guidance: %#v", got)
+	}
+}
+
+func TestExecutionStateRetainsRejectionsAfterInvocation(t *testing.T) {
+	for _, path := range []string{"src/main.go", "web/app.ts", "lib/client.py", "config.json"} {
+		t.Run(path, func(t *testing.T) {
+			rejected := executionReceipt("write", "candidate", api.InvocationStatusRejected, "MUTATION_BROKE_PARSE")
+			rejected.ToolResult.Invocation.Invoked = true
+			rejected.ToolResult.ToolArgs["path"] = path
+			before, _ := json.Marshal(rejected)
+			block := RenderExecutionStateMessage(t.Context(), promptstest.InjectRenderer(t), "sess", []api.Message{rejected}, "")
+			if !strings.Contains(block.Content, "rejected after invocation") || !strings.Contains(block.Content, path) || !strings.Contains(block.Content, "MUTATION_BROKE_PARSE") {
+				t.Fatalf("lost invoked rejection: %s", block.Content)
+			}
+			for _, unsupported := range []string{"did not execute", "file is absent", "file is unchanged"} {
+				if strings.Contains(block.ContentParts[1].Content, unsupported) {
+					t.Fatalf("unsupported effect claim %q: %s", unsupported, block.Content)
+				}
+			}
+			after, _ := json.Marshal(rejected)
+			if string(before) != string(after) {
+				t.Fatal("projection changed canonical receipt")
+			}
+			retry := executionReceipt("write", "candidate", api.InvocationStatusCompleted, "")
+			if got := executionStateVars([]api.Message{rejected, retry}, ""); got != nil {
+				t.Fatalf("successful retry retained rejection: %#v", got)
+			}
+		})
 	}
 }

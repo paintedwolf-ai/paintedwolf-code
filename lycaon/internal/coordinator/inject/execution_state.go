@@ -62,7 +62,7 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 				}
 			}
 		}
-		if unexecutedChange(result) {
+		if rejectedChange(result) {
 			operations = append(operations, executionStateRow(message))
 		} else if receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			// Exact argument identity proves a retry; a different write to the
@@ -148,9 +148,9 @@ func quotedExecutionValue(value string) string {
 	return string(raw)
 }
 
-func unexecutedChange(result *api.ToolResult) bool {
+func rejectedChange(result *api.ToolResult) bool {
 	receipt := result.Invocation
-	if receipt.Invoked || receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
+	if receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
 		return false
 	}
 	if receipt.Failure.Code == "PROGRESS_MISSING" {
