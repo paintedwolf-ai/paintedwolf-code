@@ -108,8 +108,13 @@ func actionControls(raw any) ([]actionControl, bool) {
 			return value
 		}
 		control := actionControl{
-			Tag: read("tag", 32), ID: read("id", 160), Type: read("type", 32), Role: read("role", 32), Testid: read("testid", 160),
+			Tag: read("tag", 32), Type: read("type", 32), Role: read("role", 32), Testid: read("testid", 160),
 			Name: read("name", 160), Text: read("text", 160),
+		}
+		if id, _ := m["id"].(string); len(id) <= 160 {
+			control.ID = id
+		} else {
+			truncated = true
 		}
 		if checked, ok := m["checked"].(bool); ok {
 			control.Checked = &checked

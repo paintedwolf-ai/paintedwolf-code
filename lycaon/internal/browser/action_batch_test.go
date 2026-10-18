@@ -115,3 +115,17 @@ func TestActionFailurePreservesControlIdentityAndCheckedState(t *testing.T) {
 		t.Fatalf("input value escaped the control projection: %s", encoded)
 	}
 }
+
+func TestActionFailureOmitsOversizedUnicodeIdentity(t *testing.T) {
+	for _, count := range []int{53, 54} {
+		id := strings.Repeat("界", count)
+		controls, truncated := actionControls([]any{map[string]any{"tag": "input", "id": id}})
+		want := id
+		if count == 54 {
+			want = ""
+		}
+		if len(controls) != 1 || controls[0].ID != want || truncated != (count == 54) {
+			t.Fatalf("identity %d: controls=%+v truncated=%v", count, controls, truncated)
+		}
+	}
+}
