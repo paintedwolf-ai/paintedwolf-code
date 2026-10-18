@@ -195,3 +195,29 @@ func TestRequestableOperationHintsFollowActualLoadingState(t *testing.T) {
 		})
 	}
 }
+
+func TestImplementationRoleFollowsWriteAvailability(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	for _, tc := range []struct {
+		name                             string
+		offered, deferred                []string
+		writeOffered, wantRole, wantLoad bool
+	}{
+		{"loadable", []string{"request_tools"}, []string{"write"}, false, true, true},
+		{"loaded", []string{"request_tools", "write"}, nil, true, true, false},
+		{"loader unavailable", []string{"read"}, []string{"write"}, false, false, false},
+		{"write unavailable", []string{"request_tools"}, nil, false, false, false},
+		{"loadable again", []string{"request_tools"}, []string{"write"}, false, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.CoordinatorPolicyTemplateVars(tc.offered, tc.deferred)
+			vars["profile_has_write_tools"] = tc.writeOffered
+			out, err := engine.Render(t.Context(), "agents/coordinator-core.md", vars)
+			testutil.FailErr(t, "render implementation role", err)
+			hasRole := strings.Contains(out, "For implementation requests,") || strings.Contains(out, "Handle diagnosed small changes inline")
+			if hasRole != tc.wantRole || strings.Contains(out, "load the needed tools, create or edit workspace files") != tc.wantLoad {
+				t.Fatalf("role does not match write availability: %s", out)
+			}
+		})
+	}
+}
