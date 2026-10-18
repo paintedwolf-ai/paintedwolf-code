@@ -100,6 +100,15 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if commandStreamTools[tool] {
 		return commandStreamFiles(args)
 	}
+	// Static pages read the mounted tree; path selects a URL inside that tree.
+	switch tool {
+	case "page_open", "capture_page", "measure_page":
+		dir, _ := args["project_dir"].(string)
+		if dir = strings.TrimSpace(dir); dir != "" {
+			return []string{dir}
+		}
+		return nil
+	}
 	var files []string
 	appendString := func(v any) {
 		if s, ok := v.(string); ok && s != "" {
