@@ -11,7 +11,7 @@ copy:
   what: No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call.
   cause: The tool call arguments were not valid JSON.
   why: The host received no call to run.
-  fix: Submit the tool call again through the native tool channel with valid JSON arguments. Escape quotes, backslashes, and line breaks inside string values.
+  fix: Submit the tool call again through the native tool channel with valid JSON arguments. Escape double quotes, backslashes, and newlines inside string values. Single quotes need no escape; a backslash before a single quote is invalid JSON.
   instead: Do not assume the dropped call ran.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

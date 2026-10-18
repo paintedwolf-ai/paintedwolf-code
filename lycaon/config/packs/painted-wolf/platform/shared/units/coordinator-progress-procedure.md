@@ -17,4 +17,4 @@ Pending rows permit work. A successful worker finish latches progress: reconcile
 
 Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
 
-Reconcile an existing checklist before final synthesis.
+Reconcile the checklist first; after the tool result, send final synthesis with no tool calls.

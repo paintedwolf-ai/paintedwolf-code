@@ -178,31 +178,11 @@ func unwrapOuterMarkdownFence(content string) string {
 	if len(blocks) == 1 && blocks[0].StartLine == 0 && blocks[0].EndLine == len(lines)-1 && isMarkdownFenceLang(blocks[0].Language) {
 		return strings.TrimSpace(blocks[0].Payload)
 	}
-	if len(lines) < 2 || !hasMarkdownFenceHeader(lines[0]) {
-		return content
-	}
-	inner := lines[1:]
-	if len(inner) > 0 && strings.TrimSpace(inner[len(inner)-1]) == "```" {
-		remLines, remBlocks := jsonfence.Blocks(strings.Join(inner, "\n"))
-		if len(remBlocks) == 0 || remBlocks[len(remBlocks)-1].EndLine < len(remLines)-1 {
-			inner = inner[:len(inner)-1]
-		}
-	}
-	return strings.TrimSpace(strings.Join(inner, "\n"))
+	return content
 }
 
 func isMarkdownFenceLang(lang string) bool {
 	return strings.EqualFold(lang, "markdown") || strings.EqualFold(lang, "md")
-}
-
-func hasMarkdownFenceHeader(line string) bool {
-	trimmed := strings.TrimLeft(line, " ")
-	if len(line)-len(trimmed) > 3 || (!strings.HasPrefix(trimmed, "```") && !strings.HasPrefix(trimmed, "~~~")) {
-		return false
-	}
-	rest := strings.TrimLeft(trimmed, "`~ \t")
-	lang, _, _ := strings.Cut(rest, " ")
-	return isMarkdownFenceLang(strings.TrimSpace(lang))
 }
 
 // UnreadReportFields sample the unread members for a refusal, one entry per
