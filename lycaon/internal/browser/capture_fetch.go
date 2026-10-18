@@ -299,3 +299,47 @@ func PrepareStaticRoot(root string) (string, error) {
 	}
 	return abs, nil
 }
+
+// requireStaticEntry ensures the initial navigation URL for a project_dir capture
+// resolves to a regular file under root or is answered by an active GET route fixture.
+func requireStaticEntry(root, entry, navURL string, routes []RouteRule) error {
+	if err := ValidateRoutes(routes); err != nil {
+		return err
+	}
+	u, err := url.Parse(navURL)
+	if err != nil {
+		return browserengine.Reject("CAPTURE_TARGET_INVALID", map[string]any{"reason": "bad_url", "url": navURL})
+	}
+	if len(routes) > 0 {
+		if rule, _, ok := newRouteTable(routes).match(http.MethodGet, u); ok && rule.answers() {
+			return nil
+		}
+	}
+	if _, ok := resolveStaticFile(root, u.EscapedPath()); ok {
+		return nil
+	}
+	return browserengine.Reject("CAPTURE_STATIC_ENTRY_MISSING", map[string]any{
+		"path":           root,
+		"entry":          missingStaticEntryPath(root, entry, u.EscapedPath()),
+		"navigation_url": navURL,
+	})
+}
+
+func missingStaticEntryPath(root, entry, urlPath string) string {
+	rel := strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if rel == "." || rel == "" {
+		return "index.html"
+	}
+	if !strings.HasSuffix(rel, "index.html") {
+		if strings.HasSuffix(strings.TrimSpace(entry), "/") {
+			return path.Join(rel, "index.html")
+		}
+		if full, ok := safeJoinUnderRoot(root, rel); ok {
+			if fi, err := os.Stat(full); err == nil && fi.IsDir() {
+				return path.Join(rel, "index.html")
+			}
+		}
+	}
+	return rel
+}
+

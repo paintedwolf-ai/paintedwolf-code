@@ -370,6 +370,9 @@ func resolveCaptureTarget(req CaptureRequest) (captureTarget, error) {
 		if err != nil {
 			return captureTarget{}, err
 		}
+		if err := requireStaticEntry(abs, entry, nav, req.Routes); err != nil {
+			return captureTarget{}, err
+		}
 		return captureTarget{URL: nav, Origin: StaticOrigin, RootDir: abs}, nil
 	}
 	u, uerr := url.Parse(urlStr)

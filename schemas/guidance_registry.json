@@ -350,6 +350,12 @@
       "emit": "guard:visual_capture",
       "summary": "The host could not prepare browser request interception for {{ tool }}."
     },
+    "CAPTURE_STATIC_ENTRY_MISSING": {
+      "branch_instruction": "Branch on Code CAPTURE_STATIC_ENTRY_MISSING; write the static entry file or correct path / project_dir before retrying",
+      "category": "recoverable",
+      "emit": "guard:visual_capture",
+      "summary": "Static entry {{ paintedwolf.entry }} was not found under project_dir {{ paintedwolf.path }}."
+    },
     "CAPTURE_TARGET_INVALID": {
       "branch_instruction": "Branch on Code CAPTURE_TARGET_INVALID; correct the indicated binding or actions without restarting unrelated work",
       "category": "recoverable",
