@@ -1,6 +1,8 @@
 use super::*;
 
 fn fixture(output: &Path, desktop: &[u8], helper: &[u8]) -> PathBuf {
+    std::fs::create_dir_all(output).unwrap();
+    let output = std::fs::canonicalize(output).unwrap();
     let root = output.join(PRIVATE_ROOT);
     std::fs::create_dir_all(root.join("bin")).unwrap();
     std::fs::create_dir_all(root.join("engine-root/schemas/oar")).unwrap();
@@ -37,7 +39,12 @@ fn generation_is_bound_to_the_running_descriptor_after_profile_switch() {
     let second = fixture(&temporary.join("B"), b"desktop B", b"\x7fELFhelper B");
     let image = File::open(&first).unwrap();
     let generation = capture(&first, image).unwrap().unwrap();
-    assert_eq!(generation.root, temporary.join("A").join(PRIVATE_ROOT));
+    assert_eq!(
+        generation.root,
+        std::fs::canonicalize(temporary.join("A"))
+            .unwrap()
+            .join(PRIVATE_ROOT)
+    );
     assert_eq!(
         generation.engine_root().unwrap(),
         generation.root.join("engine-root")

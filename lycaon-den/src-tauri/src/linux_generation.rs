@@ -85,8 +85,7 @@ fn capture(executable: &Path, mut image: File) -> Result<Option<Generation>, Str
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(format!("Nix layout unavailable: {e}")),
     };
-    let receipt: LayoutReceipt = serde_json::from_reader(receipt.take(16385))
-        .map_err(|e| format!("Nix layout invalid: {e}"))?;
+    let receipt: LayoutReceipt = read_json(receipt, 16384, "layout")?;
     if receipt.format_version != 1
         || !receipt.output.is_absolute()
         || !receipt.nix_store.is_absolute()
@@ -98,8 +97,7 @@ fn capture(executable: &Path, mut image: File) -> Result<Option<Generation>, Str
     }
     let file = File::open(root.join("manifest.json"))
         .map_err(|e| format!("Nix manifest unavailable: {e}"))?;
-    let manifest: Manifest = serde_json::from_reader(file.take((4 << 20) + 1))
-        .map_err(|e| format!("Nix manifest invalid: {e}"))?;
+    let manifest: Manifest = read_json(file, 4 << 20, "manifest")?;
     if manifest.format_version != 1
         || manifest.package != "painted-wolf-code"
         || manifest.install_root != root
@@ -116,6 +114,24 @@ fn capture(executable: &Path, mut image: File) -> Result<Option<Generation>, Str
         manifest,
         _running: image,
     }))
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(
+    file: File,
+    max: u64,
+    label: &str,
+) -> Result<T, String> {
+    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err(format!("Nix {label} must be a regular file"));
+    }
+    let mut raw = Vec::new();
+    file.take(max + 1)
+        .read_to_end(&mut raw)
+        .map_err(|e| e.to_string())?;
+    if raw.len() as u64 > max {
+        return Err(format!("Nix {label} too large"));
+    }
+    serde_json::from_slice(&raw).map_err(|e| format!("Nix {label} invalid: {e}"))
 }
 
 fn verify(manifest: &Manifest, path: &Path, image: &mut File) -> Result<(), String> {

@@ -51,10 +51,15 @@ func RunningNix() (*NixLayout, error) { return runningNix() }
 
 func nixLayout(executable string, image io.Reader) (*NixLayout, error) {
 	root := filepath.Dir(filepath.Dir(executable))
-	raw, err := os.ReadFile(filepath.Join(root, "nix-layout.json"))
+	file, err := os.Open(filepath.Join(root, "nix-layout.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(file, 16385))
 	if err != nil {
 		return nil, err
 	}
