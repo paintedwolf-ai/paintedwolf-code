@@ -103,3 +103,6 @@ class StapleTests(unittest.TestCase):
         self.assertIn('scripts/macos-notary-tools:${PATH}', workflow)
         self.assertIn('macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"', workflow)
         self.assertIn("if: ${{ always() && matrix.goos == 'darwin' }}", workflow)
+        self.assertIn("if: ${{ failure() && matrix.goos == 'darwin' }}", workflow)
+        self.assertIn("macos-failed-updater-${{ matrix.updater_key }}", workflow)
+        self.assertIn("bundle/macos/*.app.tar.gz", workflow)

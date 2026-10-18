@@ -431,6 +431,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
+      - name: Retain the failed signed updater for ticket diagnosis
+        if: ${{ failure() && matrix.goos == 'darwin' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: macos-failed-updater-${{ matrix.updater_key }}
+          path: |
+            lycaon-den/src-tauri/target/*/release/bundle/macos/*.app.tar.gz
+            lycaon-den/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify and stage platform artifacts
         env:
           VERSION: ${{ needs.classify.outputs.version }}
