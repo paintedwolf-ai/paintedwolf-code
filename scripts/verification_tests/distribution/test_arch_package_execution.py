@@ -3,6 +3,7 @@
 import hashlib
 from pathlib import Path
 import subprocess
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -35,6 +36,10 @@ class ArchPackageTests(unittest.TestCase):
             document.chmod(0o644)
             link = tree / "usr/pw-link"
             link.symlink_to("../opt/painted-wolf-code/bin/pw")
+            service = tree / "etc/init.d/paintedwolf-vault-identity"
+            service.parent.mkdir(parents=True)
+            service.write_text("#!/sbin/openrc-run\n")
+            service.chmod(0o755)
             payload = root / "payload.tar.xz"
             write_payload(tree, payload, 1234)
             before = hashlib.sha256(payload.read_bytes()).hexdigest()
@@ -58,12 +63,34 @@ class ArchPackageTests(unittest.TestCase):
             self.assertEqual((installed / binary.relative_to(tree)).read_bytes(), binary.read_bytes())
             self.assertEqual((installed / binary.relative_to(tree)).stat().st_mode & 0o777, 0o755)
             self.assertEqual((installed / document.relative_to(tree)).stat().st_mode & 0o777, 0o644)
+            self.assertEqual((installed / service.relative_to(tree)).read_bytes(), service.read_bytes())
+            self.assertEqual((installed / service.relative_to(tree)).stat().st_mode & 0o777, 0o755)
             self.assertEqual((installed / "usr/pw-link").readlink().as_posix(), "../opt/painted-wolf-code/bin/pw")
             self.assertIn(before, text)
             self.assertIn("'!strip' '!debug' '!lto'", text)
             self.assertIn("arch=(aarch64)", text)
             with self.assertRaises(ValueError):
                 recipe(ROOT, payload, "any", "1.2.3")
+
+    def test_install_hook_is_a_hashed_makepkg_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ["packaging/linux/arch/PKGBUILD.in", "packaging/linux/dependencies.json",
+                             "lycaon/internal/platformfloor/linux_floor.txt", "RELEASE_BUILD"]:
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, destination)
+            hook = root / "packaging/linux/arch/painted-wolf-code.install"
+            hook.write_text("post_install() { :; }\n")
+            payload = root / "payload.tar.xz"
+            payload.write_bytes(b"payload")
+            generated = root / "PKGBUILD"
+            generated.write_text(recipe(root, payload, "x86_64", "1.2.3"))
+            result = subprocess.run(["bash", "-c", 'source "$1"; printf "%s\\n" "$install" "${source[@]}" "${sha256sums[@]}"',
+                                     "fixture", str(generated)], capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout.splitlines(), [hook.name, payload.name, hook.name,
+                             hashlib.sha256(payload.read_bytes()).hexdigest(),
+                             hashlib.sha256(hook.read_bytes()).hexdigest()])
 
     def test_incomplete_and_escaping_payloads_fail_before_construction(self):
         with tempfile.TemporaryDirectory() as directory:
