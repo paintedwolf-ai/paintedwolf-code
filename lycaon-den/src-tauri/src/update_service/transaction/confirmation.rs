@@ -5,6 +5,8 @@ use crate::update_service::{
     installer::{self, executable, hash},
     staging, Failure, Installation, UpdateError, UpdateService,
 };
+#[cfg(target_os = "macos")]
+use super::activation::installed_candidate_matches;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
@@ -43,6 +45,18 @@ pub async fn confirm_startup(
             .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         if health.get("status").and_then(|value| value.as_str()) != Some("ok") {
             return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let transaction = t.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if !installed_candidate_matches(&transaction)? {
+                    return Err(Failure::VerificationFailed.into());
+                }
+                installer::verify_bundle(&transaction.target)
+            })
+            .await
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
         }
         let service = app.state::<UpdateService>();
         let mut inner = service.inner.lock().await;

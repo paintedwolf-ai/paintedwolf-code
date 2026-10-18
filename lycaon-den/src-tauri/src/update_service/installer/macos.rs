@@ -211,6 +211,30 @@ mod tests {
         );
     }
     #[test]
+    fn inline_requirement_accepts_the_product_identifier_and_rejects_another_identifier() {
+        let root = crate::test_support::TempDir::new("update-codesign-requirement");
+        let binary = root.join("candidate");
+        fs::copy("/usr/bin/true", &binary).unwrap();
+        let signed = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-", "--identifier", "dev.paintedwolf.code"])
+            .arg(&binary)
+            .output()
+            .unwrap();
+        assert!(signed.status.success(), "{signed:?}");
+        let requirement = publisher_requirement(None, true).unwrap();
+        for (expression, accepted) in [
+            (requirement.as_str(), true),
+            ("=identifier \"another.product\"", false),
+        ] {
+            let output = std::process::Command::new("/usr/bin/codesign")
+                .args(["--verify", "--strict", "-R", expression])
+                .arg(&binary)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.success(), accepted, "{output:?}");
+        }
+    }
+    #[test]
     fn codesign_failures_are_summarized_without_paths() {
         let stderr = b"/Applications/Painted Wolf Code.app: invalid signature (code or signature have been modified)\nIn architecture: arm64\n";
         assert_eq!(
