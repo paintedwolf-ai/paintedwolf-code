@@ -353,7 +353,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 				result.replaceContent(result.content)
 			}
 			if run.runErr == nil && result.facts.Succeeded() {
-				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.contract.MutatesWorld())
+				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.contract.MutatesWorld() && (run.call.Name != "update_progress" || !strings.Contains(run.output, `"unchanged"`)))
 			}
 		}
 		observability.LogToolInvocation(observability.ToolInvocationCapture{

@@ -33,7 +33,7 @@ type CloseoutRead struct {
 // it. Plain Markdown is a report without fields. pinnedSynthesis is the body a
 // fence-only repair belongs to. ok is false for a draft with no answer.
 func ReadCloseoutReport(content, pinnedSynthesis string) (CloseoutRead, bool) {
-	content = strings.TrimSpace(content)
+	content = unwrapOuterMarkdownFence(strings.TrimSpace(content))
 	if content == "" {
 		return CloseoutRead{}, false
 	}
@@ -131,23 +131,78 @@ func readReportFence(fence string) CloseoutRead {
 var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[CoordinatorCompletionReport]())
 
 // splitReportFence separates a closeout's Markdown from its report fence: the
-// last block, fenced as `json` or untagged, holding a JSON object with at
-// least one report member. Any other trailing block is part of the answer.
+// trailing block (or a leading or sign-off-followed block), fenced as `json`
+// or untagged, holding a JSON object with at least one report member.
 func splitReportFence(content string) (body, fence string, ok bool) {
-	before, block, ok := jsonfence.Trailing(content)
-	if !ok || (block.Language != "" && !strings.EqualFold(block.Language, "json")) {
+	if before, block, ok := jsonfence.Trailing(content); ok && isReportFenceBlock(block) {
+		return strings.TrimSpace(before), block.Payload, true
+	}
+	lines, blocks := jsonfence.Blocks(content)
+	if len(blocks) == 0 {
 		return "", "", false
 	}
-	var members map[string]json.RawMessage
-	if json.Unmarshal([]byte(block.Payload), &members) != nil {
-		return "", "", false
+	if last := blocks[len(blocks)-1]; isReportFenceBlock(last.Block) {
+		before := strings.TrimSpace(strings.Join(lines[:last.StartLine], "\n"))
+		after := strings.TrimSpace(strings.Join(lines[last.EndLine+1:], "\n"))
+		if before != "" && after != "" && !CloseoutBodyIsEnvelopeShaped(after) {
+			return before + "\n\n" + after, last.Payload, true
+		}
 	}
-	for name := range members {
-		if slices.Contains(reportFenceMembers, name) {
-			return strings.TrimSpace(before), block.Payload, true
+	if first := blocks[0]; first.StartLine == 0 && isReportFenceBlock(first.Block) {
+		after := strings.TrimSpace(strings.Join(lines[first.EndLine+1:], "\n"))
+		if after != "" && !CloseoutBodyIsEnvelopeShaped(after) {
+			return after, first.Payload, true
 		}
 	}
 	return "", "", false
+}
+
+func isReportFenceBlock(block jsonfence.Block) bool {
+	if block.Language != "" && !strings.EqualFold(block.Language, "json") {
+		return false
+	}
+	var members map[string]json.RawMessage
+	if json.Unmarshal([]byte(block.Payload), &members) != nil {
+		return false
+	}
+	for name := range members {
+		if slices.Contains(reportFenceMembers, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func unwrapOuterMarkdownFence(content string) string {
+	lines, blocks := jsonfence.Blocks(content)
+	if len(blocks) == 1 && blocks[0].StartLine == 0 && blocks[0].EndLine == len(lines)-1 && isMarkdownFenceLang(blocks[0].Language) {
+		return strings.TrimSpace(blocks[0].Payload)
+	}
+	if len(lines) < 2 || !hasMarkdownFenceHeader(lines[0]) {
+		return content
+	}
+	inner := lines[1:]
+	if len(inner) > 0 && strings.TrimSpace(inner[len(inner)-1]) == "```" {
+		remLines, remBlocks := jsonfence.Blocks(strings.Join(inner, "\n"))
+		if len(remBlocks) == 0 || remBlocks[len(remBlocks)-1].EndLine < len(remLines)-1 {
+			inner = inner[:len(inner)-1]
+		}
+	}
+	return strings.TrimSpace(strings.Join(inner, "\n"))
+}
+
+func isMarkdownFenceLang(lang string) bool {
+	return strings.EqualFold(lang, "markdown") || strings.EqualFold(lang, "md")
+}
+
+func hasMarkdownFenceHeader(line string) bool {
+	trimmed := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 || (!strings.HasPrefix(trimmed, "```") && !strings.HasPrefix(trimmed, "~~~")) {
+		return false
+	}
+	rest := strings.TrimLeft(trimmed, "`~ \t")
+	lang, _, _ := strings.Cut(rest, " ")
+	return isMarkdownFenceLang(strings.TrimSpace(lang))
 }
 
 // UnreadReportFields sample the unread members for a refusal, one entry per
