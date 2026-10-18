@@ -908,6 +908,10 @@ The staging script extracts both packages, verifies the manifest against the ext
 
 ### Updates
 
+Before broad activation, use the [update qualification matrix](operations/update-qualification.md)
+to distinguish native tests, publication controls, store migration, and the
+packaged application transition.
+
 The app discovers releases through a **signed static manifest on R2** and authenticates downloaded artifacts with version-bound minisign signatures. Stable uses
 `updates/stable/key-1/latest.json`; Preview uses `updates/preview/key-1/latest.json`
 and receives prereleases plus production releases. Each pointer has a detached
