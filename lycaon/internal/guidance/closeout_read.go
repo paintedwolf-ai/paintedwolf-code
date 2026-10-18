@@ -130,29 +130,11 @@ func readReportFence(fence string) CloseoutRead {
 // reportFenceMembers are the members a report fence may carry.
 var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[CoordinatorCompletionReport]())
 
-// splitReportFence separates a closeout's Markdown from its report fence: the
-// trailing block (or a leading or sign-off-followed block), fenced as `json`
-// or untagged, holding a JSON object with at least one report member.
+// splitReportFence recognizes metadata only at the terminal block boundary.
+// Earlier JSON blocks remain answer content even when their keys overlap.
 func splitReportFence(content string) (body, fence string, ok bool) {
 	if before, block, ok := jsonfence.Trailing(content); ok && isReportFenceBlock(block) {
 		return strings.TrimSpace(before), block.Payload, true
-	}
-	lines, blocks := jsonfence.Blocks(content)
-	if len(blocks) == 0 {
-		return "", "", false
-	}
-	if last := blocks[len(blocks)-1]; isReportFenceBlock(last.Block) {
-		before := strings.TrimSpace(strings.Join(lines[:last.StartLine], "\n"))
-		after := strings.TrimSpace(strings.Join(lines[last.EndLine+1:], "\n"))
-		if before != "" && after != "" && !CloseoutBodyIsEnvelopeShaped(after) {
-			return before + "\n\n" + after, last.Payload, true
-		}
-	}
-	if first := blocks[0]; first.StartLine == 0 && isReportFenceBlock(first.Block) {
-		after := strings.TrimSpace(strings.Join(lines[first.EndLine+1:], "\n"))
-		if after != "" && !CloseoutBodyIsEnvelopeShaped(after) {
-			return after, first.Payload, true
-		}
 	}
 	return "", "", false
 }
