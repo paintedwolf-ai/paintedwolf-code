@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src-tauri/src/update_service/installer/macos.rs",
+  "kind": "module",
+  "workstream": "native-update-qualification",
+  "disposition": "retain",
+  "reason": "Retain the 307-line macOS installation adapter: destination checks, prepared-bundle verification, publisher requirements, and atomic exchange share the platform boundary. The added real codesign acceptance/rejection contract exercises the private publisher requirement beside its implementation. Tests are inline, so the complete module is pinned; any implementation or test change renews this decision. Native verification at the reviewed commit passed all 349 application tests and the workspace checks.",
+  "reviewed_commit": "fc22c98a65c57fcaa2838e8e34b7b9bbcfda46d9",
+  "ceiling": 307,
+  "boundaries": {
+    "lycaon-den/src-tauri/src/update_service/installer/macos.rs": "172d6cd9fa54f8352ec0f0892459e6872d883268aaa5880d3b7f5da35793e097"
+  }
+}
