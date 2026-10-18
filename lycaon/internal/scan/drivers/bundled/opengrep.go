@@ -24,6 +24,7 @@ import (
 type OpenGrepScanner struct {
 	id              string
 	homeDir         string
+	engineRoot      string
 	manifest        *bundled.Manifest
 	jobs            int
 	processPriority exec.ProcessPriority
@@ -31,8 +32,10 @@ type OpenGrepScanner struct {
 }
 
 type OpenGrepOptions struct {
-	ID              string
-	HomeDir         string
+	ID      string
+	HomeDir string
+	// EngineRoot binds app resources; empty uses the installed host's root.
+	EngineRoot      string
 	Manifest        *bundled.Manifest
 	Jobs            int
 	ProcessPriority exec.ProcessPriority
@@ -52,9 +55,14 @@ func NewOpenGrepScanner(opts OpenGrepOptions) *OpenGrepScanner {
 	if prio == "" {
 		prio = exec.ProcessPriorityBelowNormal
 	}
+	engineRoot := opts.EngineRoot
+	if engineRoot == "" {
+		engineRoot = configlayout.EngineRoot()
+	}
 	return &OpenGrepScanner{
 		id:              id,
 		homeDir:         opts.HomeDir,
+		engineRoot:      engineRoot,
 		manifest:        opts.Manifest,
 		jobs:            jobs,
 		processPriority: prio,
@@ -80,7 +88,7 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		}
 	}
 
-	bin, err := bundled.ResolveOpenGrepBinary(o.manifest, o.homeDir, configlayout.EngineRoot())
+	bin, err := bundled.ResolveOpenGrepBinary(o.manifest, o.homeDir, o.engineRoot)
 	if err != nil {
 		return nil, err
 	}

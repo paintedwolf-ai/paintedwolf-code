@@ -117,6 +117,23 @@ selection and staging recheck the archive. Isolated test checkouts reuse this
 cache while keeping their own release selection. Download failures can be
 retried normally and never start an engine source build.
 
+`pw scan engines verify-installed --root /absolute/engine-root` checks the
+packaged payload against the executable's embedded identity, then runs native
+and embedded-source positive cases plus ignored/comment-only controls through
+the product driver under required confinement. It emits JSON with the exact
+binary identity, capability facts, case results, and a structured failure code.
+Missing, changed, or wrong-architecture resources fail; this command never
+repairs the installation, downloads an engine, or searches a host-tool fallback.
+Run it from each installed package with its explicit resource root. A checkout
+probe does not establish an installed-package result.
+
+The selected producer qualification binds the original scanner bytes. Changing
+the ELF loader for Nix changes those bytes and requires a separate consumer
+finalization identity and qualification. Replacing the digest in an otherwise
+unchanged producer report cannot represent that transformation; the current
+consumer audit refuses it. Preserve the original descriptor and evidence while
+that finalization contract is implemented under #49 and #927.
+
 Development executables run under the hardened runtime releases ship with:
 `scripts/sign-dev-binary.sh` signs them with the stable development identity
 when it is provisioned and ad hoc otherwise, always with `--options runtime`.
