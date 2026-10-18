@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
           echo "version=$(python3 scripts/release-metadata.py | jq -er .product_version)" >> "${GITHUB_OUTPUT}"
-          echo "matrix=$(python3 scripts/linux_candidates.py)" >> "${GITHUB_OUTPUT}"
+          echo "matrix=$(python3 scripts/linux_release/candidates.py)" >> "${GITHUB_OUTPUT}"
 
   candidates:
     needs: source
@@ -99,7 +99,7 @@ jobs:
           CANDIDATE_RUNNER_LABEL: ${{ matrix.runner }}
           EXPECTED_GOARCH: ${{ matrix.goarch }}
         run: |
-          python3 scripts/linux_candidates.py --platform "${PLATFORM}" \
+          python3 scripts/linux_release/candidates.py --platform "${PLATFORM}" \
             --runner-label "${CANDIDATE_RUNNER_LABEL}" --architecture "${EXPECTED_GOARCH}"
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep

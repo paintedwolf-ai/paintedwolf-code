@@ -8,7 +8,7 @@ import subprocess
 import sys
 import unittest
 
-from linux_candidates import matrix, verify
+from linux_release.candidates import matrix, verify
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -38,7 +38,7 @@ class LinuxCandidateTests(unittest.TestCase):
                 matrix({"schema_version": 2, "platforms": rows})
 
     def test_runner_identity_variable_does_not_replace_the_catalog_label(self):
-        command = [sys.executable, str(ROOT / "scripts/linux_candidates.py"),
+        command = [sys.executable, str(ROOT / "scripts/linux_release/candidates.py"),
                    "--catalog", str(ROOT / "packaging/release-platforms.json"),
                    "--platform", "linux-x86_64", "--runner-label", "ubuntu-24.04",
                    "--architecture", "amd64"]

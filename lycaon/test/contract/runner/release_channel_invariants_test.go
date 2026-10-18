@@ -116,7 +116,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
 		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
 		"retention-days: 90", "Verify the catalog row for this candidate",
-		"CANDIDATE_RUNNER_LABEL:", "linux_candidates.py",
+		"CANDIDATE_RUNNER_LABEL:", "scripts/linux_release/candidates.py",
 	} {
 		if !strings.Contains(candidates, needle) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
