@@ -49,6 +49,7 @@ func TestNixGenerationUsesTheRunningImageAfterProfileSwitch(t *testing.T) {
 func TestNixLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
 	executable := nixFixture(t, filepath.Join(t.TempDir(), "custom-store", "output"), []byte("image"))
 	root := filepath.Dir(filepath.Dir(executable))
+	testutil.FailErr(t, "make receipt replaceable", os.Chmod(filepath.Join(root, "nix-layout.json"), 0o600))
 	for _, receipt := range []string{
 		`{"format_version":1,"output":"relative","nix_store":"/tools/nix-store"}`,
 		`{"format_version":2,"output":"/wrong","nix_store":"/tools/nix-store"}`,
@@ -71,6 +72,7 @@ func TestNixGenerationRefusesChangedImageAndMalformedManifest(t *testing.T) {
 	if _, err := nixLayout(executable, bytes.NewReader([]byte("changed"))); err == nil {
 		t.Fatal("changed image accepted")
 	}
+	testutil.FailErr(t, "make manifest replaceable", os.Chmod(filepath.Join(filepath.Dir(filepath.Dir(executable)), "manifest.json"), 0o600))
 	testutil.FailErr(t, "corrupt manifest", os.WriteFile(filepath.Join(filepath.Dir(filepath.Dir(executable)), "manifest.json"), []byte("{}"), 0o600))
 	if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
 		t.Fatal("unknown manifest accepted")
