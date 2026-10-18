@@ -91,7 +91,7 @@ fn verify_current(
         }
         digest.update(&buffer[..count]);
     }
-    if size != expected.size || format!("{:x}", digest.finalize()) != expected.sha256 {
+    if size != expected.size || hex::encode(digest.finalize()) != expected.sha256 {
         return Err(RestartReason::DesktopIdentityChanged);
     }
     Ok(())
@@ -105,7 +105,7 @@ mod tests {
         serde_json::to_vec(&serde_json::json!({
             "format_version": 1,
             "install_root": "/opt/painted-wolf-code",
-            "executables": [{"path": "/opt/painted-wolf-code/bin/painted-wolf-code", "sha256": format!("{:x}", Sha256::digest(image)), "size": image.len()}]
+            "executables": [{"path": "/opt/painted-wolf-code/bin/painted-wolf-code", "sha256": hex::encode(Sha256::digest(image)), "size": image.len()}]
         })).unwrap()
     }
 
