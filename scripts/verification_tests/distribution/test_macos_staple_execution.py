@@ -99,7 +99,7 @@ class StapleTests(unittest.TestCase):
     def test_release_controller_retains_receipts_even_when_packaging_fails(self):
         root = Path(__file__).resolve().parents[3]
         workflow = (root / ".github/workflows/release.yml").read_text()
-        self.assertIn('ref: ${{ github.workflow_sha }}\n          path: .release-controller', workflow)
+        self.assertIn('ref: refs/heads/main\n          path: .release-controller', workflow)
         self.assertIn('scripts/macos-notary-tools:${PATH}', workflow)
         self.assertIn('macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"', workflow)
         self.assertIn("if: ${{ always() && matrix.goos == 'darwin' }}", workflow)
