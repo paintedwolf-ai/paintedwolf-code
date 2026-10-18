@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc6]
+
+Sixth release candidate for 1.0.2, published on the preview channel for
+in-app update testing from RC5.
+
+### Fixed
+
+- Restarting after an update starts a fresh application process, including
+  recovery when a launch encounters the previous version during replacement.
+- Update startup confirmation verifies the complete installed application and
+  its publisher signature before removing the previous application bundle.
+- Update failure recovery checks the complete candidate bundle when recording
+  whether activation succeeded.
+
 ## [1.0.2-rc5]
 
 Fifth release candidate for 1.0.2, published on the preview channel to verify
