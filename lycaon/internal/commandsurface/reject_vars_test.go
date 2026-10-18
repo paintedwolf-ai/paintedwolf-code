@@ -77,6 +77,25 @@ func TestCommandRejectVarsEnvironmentAssignment(t *testing.T) {
 	}
 }
 
+func TestCommandRejectVarsDirectoryChange(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err error
+		want bool
+	}{
+		{"typed", commandsurface.ErrDirectoryChangeCommand, true},
+		{"wrapped", fmt.Errorf("stage 0: %w", commandsurface.ErrDirectoryChangeCommand), true},
+		{"prose", fmt.Errorf("%s", commandsurface.ErrDirectoryChangeCommand), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := commandsurface.CommandRejectVars("implement", "cd src && tool --check", "cd src && tool --check", commandFields, tc.err)
+			if vars["directory_change"] != tc.want {
+				t.Fatalf("directory_change = %v, want %v", vars["directory_change"], tc.want)
+			}
+		})
+	}
+}
+
 // Command fixes retain every supported branch.
 func TestCommandRejectVarsCommandKeepsPipelineAdvice(t *testing.T) {
 	vars := commandsurface.CommandRejectVars("implement", "git log | head", "git log | head", commandFields, argv.ErrShellMetacharacters)
