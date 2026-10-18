@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/hostpower/inhibitor_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-native-service-capabilities",
+  "disposition": "retain",
+  "reason": "Retain the shared private-bus fixtures and three inhibition protocol contracts as one bounded suite. Provider selection, descriptor lifetime, portal attribution, and explicit release reuse the same isolated bus and native service fixtures. New activation and owner-replacement contracts live in separate feature suites. The measured 512-line suite has no growth allowance; any growth renews this decision.",
+  "reviewed_commit": "b982e678efe3325ffeec6ec9a05db7c6742b536a",
+  "ceiling": 512,
+  "boundaries": {
+    "lycaon/internal/hostpower/inhibitor_linux_test.go": "a5a19ab44e02493b4155947f59d5a4faa3dc8f7e8610d8ac1e277a02308f4775",
+    "lycaon/internal/hostpower/activation_linux_test.go": "935ddfb96151862b8aa45e4c2e63526447addf010c233f1994f277c06e6cefd0"
+  }
+}
