@@ -127,16 +127,18 @@ func HostNamespaces() map[string]string {
 }
 
 // classifyLaunch names why the kernel refused to create the helper's namespaces.
-func classifyLaunch(err error) *Unavailability {
+func classifyLaunch(err error, appArmorRestrictsUserns bool) *Unavailability {
 	var errno syscall.Errno
 	if !errors.As(err, &errno) {
 		return &Unavailability{Code: UnavailableHelper, Detail: err.Error()}
 	}
 	switch {
-	case errors.Is(errno, unix.EPERM) && sysctlIs(appArmorUsernsSysctl, 1):
+	case (errors.Is(errno, unix.EPERM) || errors.Is(errno, unix.EACCES)) && appArmorRestrictsUserns:
 		return appArmorDenied("AppArmor restricts unprivileged user namespaces to profiled programs")
-	case errors.Is(errno, unix.EPERM), errors.Is(errno, unix.EACCES), errors.Is(errno, unix.ENOSPC), errors.Is(errno, unix.EUSERS):
-		return &Unavailability{Code: UnavailableUserNamespacesDenied, Detail: errno.Error(), Remedy: RemedyEnableUserNamespaces}
+	case errors.Is(errno, unix.ENOSPC), errors.Is(errno, unix.EUSERS):
+		return &Unavailability{Code: UnavailableNamespaceLimit, Detail: errno.Error(), Remedy: RemedyReviewNamespaceLimits}
+	case errors.Is(errno, unix.EPERM), errors.Is(errno, unix.EACCES):
+		return &Unavailability{Code: UnavailableUserNamespacesDenied, Detail: errno.Error(), Remedy: RemedyReviewHostPolicy}
 	case errors.Is(errno, unix.EINVAL), errors.Is(errno, unix.ENOSYS):
 		return &Unavailability{Code: UnavailableUserNamespacesUnsupported, Detail: errno.Error(), Remedy: RemedyUpgradeKernel}
 	}

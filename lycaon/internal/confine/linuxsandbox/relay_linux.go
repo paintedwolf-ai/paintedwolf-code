@@ -79,7 +79,7 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	_ = controlChild.Close()
 	if err != nil {
 		_ = write.Close()
-		return 0, 0, classifyLaunch(err)
+		return 0, 0, classifyLaunch(err, sysctlIs(appArmorUsernsSysctl, 1))
 	}
 	go sup.serve()
 	go func() {
