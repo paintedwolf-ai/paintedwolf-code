@@ -77,6 +77,16 @@ describe("semantic-driver core", () => {
     ] });
   });
 
+  it("omits oversized control IDs instead of suggesting a different target", () => {
+    const input = document.createElement("input");
+    input.id = "x".repeat(161);
+    markVisible(input);
+    document.body.appendChild(input);
+    const state = installLycaonDriver().state();
+    expect(state).toMatchObject({ interactive: [{ tag: "input", type: "text" }], interactive_truncated: true });
+    expect(JSON.stringify(state)).not.toContain('"id"');
+  });
+
   it("snapshot stops at the global node budget and reports truncation", () => {
 	const root = document.createElement("main");
 	markVisible(root);
