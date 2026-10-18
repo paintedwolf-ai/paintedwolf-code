@@ -138,13 +138,6 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		}
 	}
 
-	if coordinator {
-		_, state := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-		if block := inject.RenderExecutionStateBlock(ctx, deps.Injects, sess.ID, history, state.VerifyCommand); block != "" {
-			tail = append(tail, api.Message{Role: api.MessageRoleSystem, Content: block,
-				Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted})
-		}
-	}
 	return tail, nil
 }
 

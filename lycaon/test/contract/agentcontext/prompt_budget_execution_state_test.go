@@ -28,5 +28,5 @@ func measureExecutionStateBlock(ctx context.Context, renderer *prompts.InjectRen
 			}})
 		}
 	}
-	return inject.RenderExecutionStateBlock(ctx, renderer, "sess-inject-test", history, "./task check")
+	return inject.RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "./task check").Content
 }

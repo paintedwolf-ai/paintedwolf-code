@@ -327,12 +327,14 @@ window. Neither pause nor snapshot delivery stamps an evidence verdict.
 
 ### Current execution observations
 
-The coordinator receives a bounded information anchor from paired invocation
-receipts in the current user intent's retained history. It distinguishes tool
+The coordinator receives a bounded information anchor after its board, from paired invocation
+receipts in the current user intent's retained history. Catalog instructions retain
+system authority; receipt fields and arguments remain separately marked data. It distinguishes tool
 completion from a command owner's source-bound verdict. It does not infer task
 completion, execute retries, or change the selected verification method.
 
-Rejected progress-gated calls remain visible after a checklist update. A later
+Unexecuted file mutations and progress-gated calls remain visible after tool loading
+or a checklist update. A later
 successful call with the same tool and argument digest retires that reminder;
 other operations may supersede the work without being treated as an exact retry.
 A new user intent clears the projection. Three rejected calls and three execution

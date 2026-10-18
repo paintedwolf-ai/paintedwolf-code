@@ -603,6 +603,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
+        view: { type: "string", required: true }
         operations: { type: "object[]", required: true }
         executions: { type: "object[]", required: true }
         operations_omitted: { type: "int", required: true }

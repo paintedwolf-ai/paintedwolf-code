@@ -81,17 +81,17 @@ func TestExecutionStateBoundsRowsAndExecutableValues(t *testing.T) {
 func TestExecutionStateRenderIsConditionalAndUsesHostFacts(t *testing.T) {
 	ctx := context.Background()
 	renderer := promptstest.InjectRenderer(t)
-	if got := RenderExecutionStateBlock(ctx, renderer, "sess-inject-test", nil, "project-check"); got != "" {
-		t.Fatalf("empty history added guidance: %q", got)
+	if got := RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", nil, "project-check"); got.Content != "" {
+		t.Fatalf("empty history added guidance: %q", got.Content)
 	}
 	history := []api.Message{executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING"), executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")}
-	block := RenderExecutionStateBlock(ctx, renderer, "sess-inject-test", history, "")
+	block := RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "")
 	for _, want := range []string{"call-first", "test.py", "did not execute", "checklist update completed"} {
-		if !strings.Contains(block, want) {
-			t.Errorf("render missing %q: %q", want, block)
+		if !strings.Contains(block.Content, want) {
+			t.Errorf("render missing %q: %q", want, block.Content)
 		}
 	}
-	if RenderExecutionStateBlock(ctx, nil, "sess", history, "") != "" {
+	if RenderExecutionStateMessage(ctx, nil, "sess", history, "").Content != "" {
 		t.Fatal("missing renderer produced guidance")
 	}
 }
@@ -107,5 +107,31 @@ func TestExecutionStateOmitsInvalidAndEncodedOversizeValues(t *testing.T) {
 	message.ToolResult.Invocation.ToolCallID = message.ToolResult.ToolCallID
 	if got := executionStateVars([]api.Message{message}, ""); got != nil {
 		t.Fatalf("oversize call identity bypassed bounds: %#v", got)
+	}
+}
+
+func TestExecutionStatePreservesUnexecutedEditBeforeToolLoad(t *testing.T) {
+	rejected := executionReceipt("edit", "edit", api.InvocationStatusRejected, "TOOL_NOT_OFFERED")
+	rejected.ToolResult.ToolArgs = nil
+	history := []api.Message{rejected, executionReceipt("request_tools", "load", api.InvocationStatusCompleted, "")}
+	vars := executionStateVars(history, "")
+	if vars == nil || len(vars["operations"].([]map[string]any)) != 1 {
+		t.Fatalf("loading a tool erased the unexecuted edit: %#v", vars)
+	}
+	rejected.ToolResult.Invocation.Invoked = true
+	if got := executionStateVars([]api.Message{rejected}, ""); got != nil {
+		t.Fatalf("possibly partial execution described as unexecuted: %#v", got)
+	}
+}
+
+func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
+	command := executionReceipt("command", "check", api.InvocationStatusCompleted, "")
+	command.ToolResult.ToolArgs["command"] = "instruction-like argument"
+	message := RenderExecutionStateMessage(t.Context(), promptstest.InjectRenderer(t), "sess-inject-test", []api.Message{command}, "project command")
+	if len(message.ContentParts) != 2 || message.ContentParts[0].Authority != api.ContentAuthoritySystem || message.ContentParts[1].Authority != api.ContentAuthorityNone {
+		t.Fatalf("lost instruction/data separation: %+v", message)
+	}
+	if strings.Contains(message.ContentParts[0].Content, "instruction-like argument") || strings.Contains(message.ContentParts[0].Content, "project command") || !strings.Contains(message.ContentParts[1].Content, "instruction-like argument") {
+		t.Fatalf("argument promoted to instruction authority: %+v", message.ContentParts)
 	}
 }

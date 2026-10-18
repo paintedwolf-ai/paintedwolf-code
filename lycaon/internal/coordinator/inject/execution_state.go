@@ -13,21 +13,34 @@ import (
 
 const maxExecutionStateRows = 3
 
-// RenderExecutionStateBlock refreshes observed outcomes from the current intent's
-// retained history. It does not infer completion or execute a rejected operation.
-func RenderExecutionStateBlock(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, history []api.Message, declared string) string {
+// RenderExecutionStateMessage separates host instructions from receipt data.
+// It does not infer completion or execute a rejected operation.
+func RenderExecutionStateMessage(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, history []api.Message, declared string) api.Message {
 	if renderer == nil {
-		return ""
+		return api.Message{}
 	}
 	vars := executionStateVars(history, declared)
 	if vars == nil {
-		return ""
+		return api.Message{}
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectExecutionState, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, vars)
-	if err != nil {
-		return ""
+	var parts []api.MessageContentPart
+	var text []string
+	for _, view := range []string{"instructions", "observations"} {
+		vars["view"] = view
+		block, err := anchor.RenderInform(ctx, anchor.InjectExecutionState, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, vars)
+		if err != nil {
+			return api.Message{}
+		}
+		part := api.MessageContentPart{Content: strings.TrimSpace(block), Origin: api.MessageOriginHost,
+			Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "execution_state"}
+		if view == "instructions" {
+			part.Authority = api.ContentAuthoritySystem
+		}
+		parts = append(parts, part)
+		text = append(text, part.Content)
 	}
-	return strings.TrimSpace(block)
+	return api.Message{Role: api.MessageRoleSystem, Content: strings.Join(text, "\n\n"), Origin: api.MessageOriginHost,
+		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContentParts: parts}
 }
 
 func executionStateVars(history []api.Message, declared string) map[string]any {
@@ -42,7 +55,7 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 		if result.Tool == "update_progress" && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			checklistUpdated = true
 		}
-		if receipt.Failure != nil && receipt.Failure.Code == "PROGRESS_MISSING" && !receipt.Invoked {
+		if unexecutedChange(result) {
 			operations = append(operations, executionStateRow(message))
 		} else if receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
 			// Exact argument identity proves a retry; a different write to the
@@ -123,4 +136,20 @@ func quotedExecutionValue(value string) string {
 		return ""
 	}
 	return string(raw)
+}
+
+func unexecutedChange(result *api.ToolResult) bool {
+	receipt := result.Invocation
+	if receipt.Invoked || receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
+		return false
+	}
+	if receipt.Failure.Code == "PROGRESS_MISSING" {
+		return true
+	}
+	switch result.Tool {
+	case "write", "edit", "replace_lines":
+		return true
+	default:
+		return false
+	}
 }
