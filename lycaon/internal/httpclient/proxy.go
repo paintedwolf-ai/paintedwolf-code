@@ -18,8 +18,10 @@ var systemProxyConfiguration = systemproxy.Current
 // proxy serves its scheme, and the system configuration serves the rest.
 type ProxyConfiguration struct {
 	// EnvironmentHTTP and EnvironmentHTTPS are HTTP_PROXY and HTTPS_PROXY.
-	EnvironmentHTTP  *url.URL
-	EnvironmentHTTPS *url.URL
+	EnvironmentHTTP     *url.URL
+	EnvironmentHTTPS    *url.URL
+	EnvironmentHTTPErr  error
+	EnvironmentHTTPSErr error
 	// EnvironmentExceptions are the NO_PROXY entries; they apply to every proxy.
 	EnvironmentExceptions []systemproxy.Exception
 	System                systemproxy.Configuration
@@ -32,11 +34,11 @@ type ProxyConfiguration struct {
 func CurrentProxyConfiguration() ProxyConfiguration {
 	config := ProxyConfiguration{
 		EnvironmentExceptions: parseEnvironmentExceptions(environmentValue("NO_PROXY", "no_proxy")),
-		EnvironmentHTTPS:      parseEnvironmentProxy(environmentValue("HTTPS_PROXY", "https_proxy")),
 	}
+	config.EnvironmentHTTPS, config.EnvironmentHTTPSErr = parseEnvironmentProxy(environmentValue("HTTPS_PROXY", "https_proxy"))
 	// HTTP_PROXY may be attacker-controlled in a CGI request.
 	if os.Getenv("REQUEST_METHOD") == "" {
-		config.EnvironmentHTTP = parseEnvironmentProxy(environmentValue("HTTP_PROXY", "http_proxy"))
+		config.EnvironmentHTTP, config.EnvironmentHTTPErr = parseEnvironmentProxy(environmentValue("HTTP_PROXY", "http_proxy"))
 	}
 	config.System, config.SystemErr = systemProxyConfiguration()
 	return config
@@ -55,6 +57,18 @@ func (p ProxyConfiguration) ExplicitProxy(scheme string) *url.URL {
 	}
 }
 
+// ExplicitProxyError reports a declared environment policy that could not be read.
+func (p ProxyConfiguration) ExplicitProxyError(scheme string) error {
+	switch strings.ToLower(scheme) {
+	case "https":
+		return p.EnvironmentHTTPSErr
+	case "http":
+		return p.EnvironmentHTTPErr
+	default:
+		return nil
+	}
+}
+
 // ProxyFor returns the proxy for target, nil for a direct connection, or why
 // the system configuration cannot be honoured.
 func (p ProxyConfiguration) ProxyFor(target *url.URL) (*url.URL, error) {
@@ -66,6 +80,9 @@ func (p ProxyConfiguration) ProxyFor(target *url.URL) (*url.URL, error) {
 		if exception.Matches(host, port) {
 			return nil, nil
 		}
+	}
+	if err := p.ExplicitProxyError(target.Scheme); err != nil {
+		return nil, err
 	}
 	if proxy := p.ExplicitProxy(target.Scheme); proxy != nil {
 		return proxy, nil
@@ -121,17 +138,18 @@ func environmentValue(names ...string) string {
 }
 
 // parseEnvironmentProxy accepts a URL or a bare host:port, which means HTTP.
-func parseEnvironmentProxy(raw string) *url.URL {
+func parseEnvironmentProxy(raw string) (*url.URL, error) {
 	if raw == "" {
-		return nil
+		return nil, nil
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
 	}
 	proxy, err := url.Parse(raw)
-	if err != nil || proxy.Host == "" || !environmentProxyScheme(proxy.Scheme) {
-		if proxy, err = url.Parse("http://" + raw); err != nil || proxy.Host == "" {
-			return nil
-		}
+	if err != nil || proxy.Hostname() == "" || !environmentProxyScheme(proxy.Scheme) || proxy.Path != "" && proxy.Path != "/" || proxy.RawQuery != "" || proxy.Fragment != "" {
+		return nil, fmt.Errorf("the configured environment proxy is invalid")
 	}
-	return proxy
+	return proxy, nil
 }
 
 func environmentProxyScheme(scheme string) bool {

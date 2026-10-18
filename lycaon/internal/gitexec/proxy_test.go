@@ -304,3 +304,16 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 		t.Fatalf("refused proxy mechanism: err=%v, proxy requests %d -> %d", err, before, len(requests()))
 	}
 }
+
+func TestMalformedEnvironmentProxyPlanFailsForItsRemote(t *testing.T) {
+	config := httpclient.ProxyConfiguration{EnvironmentHTTPSErr: errors.New("invalid environment proxy")}
+	_, err := planFor(config, "https://remote.example/repo.git")
+	if err == nil {
+		t.Fatal("invalid declared proxy became a direct Git plan")
+	}
+	plan, err := planFor(config, "https://localhost/repo.git")
+	testutil.FailErr(t, "plan exempt Git destination", err)
+	if plan.Mode != ProxyPlanPerRemote {
+		t.Fatalf("proxy plan mode = %s", plan.Mode)
+	}
+}

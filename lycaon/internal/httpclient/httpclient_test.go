@@ -275,10 +275,10 @@ func TestEnvironmentExceptionGrammar(t *testing.T) {
 			}
 		}
 	}
-	if got := parseEnvironmentProxy("proxy.example:3128"); got == nil || got.String() != "http://proxy.example:3128" {
+	if got, err := parseEnvironmentProxy("proxy.example:3128"); err != nil || got == nil || got.String() != "http://proxy.example:3128" {
 		t.Fatalf("bare environment proxy = %v", got)
 	}
-	if got := parseEnvironmentProxy("socks5://socks.example:1080"); got == nil || got.Scheme != "socks5" {
+	if got, err := parseEnvironmentProxy("socks5://socks.example:1080"); err != nil || got == nil || got.Scheme != "socks5" {
 		t.Fatalf("socks environment proxy = %v", got)
 	}
 	t.Setenv("REQUEST_METHOD", "GET")
@@ -325,5 +325,28 @@ func TestWithTransportPreservesProfileTimeout(t *testing.T) {
 	}
 	if base.Transport == wrapped.Transport {
 		t.Fatal("WithTransport mutated the original client instead of returning a copy")
+	}
+}
+
+func TestMalformedEnvironmentProxyDoesNotFallBack(t *testing.T) {
+	clearProxyEnvironment(t)
+	const secret = "private-proxy-secret"
+	for _, raw := range []string{"ftp://proxy.example:21", "http://alice:" + secret + "@proxy.example/%zz", "http://proxy.example/path", "http://proxy.example/?key=" + secret} {
+		t.Run(raw[:4], func(t *testing.T) {
+			t.Setenv("HTTPS_PROXY", raw)
+			t.Setenv("NO_PROXY", "direct.example")
+			config := CurrentProxyConfiguration()
+			_, err := config.ProxyFor(mustURL(t, "https://remote.example/"))
+			if err == nil || strings.Contains(err.Error(), secret) {
+				t.Fatalf("invalid environment proxy must fail without credentials: %v", err)
+			}
+			for _, target := range []string{"https://direct.example/", "https://localhost/"} {
+				proxy, err := config.ProxyFor(mustURL(t, target))
+				testutil.FailErr(t, "resolve exempt destination", err)
+				if proxy != nil {
+					t.Fatalf("exempt destination selected %v", proxy)
+				}
+			}
+		})
 	}
 }

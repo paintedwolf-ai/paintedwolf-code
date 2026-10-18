@@ -99,6 +99,10 @@ func perHostEnvironment(config httpclient.ProxyConfiguration) ([]string, []Proxy
 	proxies := map[string]*url.URL{}
 	fromSystem, fromEnvironment := false, false
 	for _, scheme := range []string{"http", "https"} {
+		if err := config.ExplicitProxyError(scheme); err != nil {
+			reasons = appendReason(reasons, ProxyPlanReason{Kind: ProxyReasonSystemUnavailable, Detail: err.Error()})
+			continue
+		}
 		if explicit := config.ExplicitProxy(scheme); explicit != nil {
 			proxies[scheme], fromEnvironment = explicit, true
 			continue
