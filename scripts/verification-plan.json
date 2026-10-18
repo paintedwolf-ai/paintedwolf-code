@@ -347,6 +347,12 @@
     ],
     "licenses:notices": [
       "licenses:notices"
+    ],
+    "nix:check": [
+      "nix:check"
+    ],
+    "nix:build": [
+      "nix:build"
     ]
   },
   "private": [
@@ -687,6 +693,18 @@
     "licenses:notices": {
       "locks": [
         "notices"
+      ],
+      "workers": 1
+    },
+    "nix:check": {
+      "locks": [
+        "nix"
+      ],
+      "workers": 1
+    },
+    "nix:build": {
+      "locks": [
+        "*"
       ],
       "workers": 1
     }

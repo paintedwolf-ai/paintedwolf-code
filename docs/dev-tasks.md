@@ -889,6 +889,24 @@ flowchart TD
 
 Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
 
+### Nix development and package builds
+
+The pinned [flake](../flake.nix) defines Linux amd64 and arm64 development
+shells from the repository's Rust toolchain, Go module and Bun version. Enter
+with `nix develop`, then use the existing root `./task` commands. The shell
+supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
+application feature code still uses native capability facts.
+
+`./task nix:check` evaluates all declared systems without building or updating
+the lock file. `./task nix:build` builds the host's native Linux package under
+normal exclusive admission with one Nix job/core and sandboxing enabled. Its
+report binds the source tree, flake lock, derivations, outputs and recursive
+closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+These tasks do not publish a cache or authorize daemon access from an agent
+command. Nix build sandboxing and application command confinement are separate.
+The package closure and installed system integration remain under implementation
+in #927/#928/#929; evaluation does not establish installed support.
+
 ### Linux packages
 
 Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and an `.rpm` for Fedora and RHEL-compatible families, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
