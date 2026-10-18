@@ -15,6 +15,6 @@ Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, n
 
 Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Partial, failed, and held legs do not latch it. An unchanged checklist does not clear the latch.
 
-Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
+Ungated lifecycle tools: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
 
-Reconcile the checklist first; after the tool result, send final synthesis with no tool calls.
+Update progress first; after its result, answer with no tool calls.
