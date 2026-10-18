@@ -324,3 +324,18 @@ identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
+
+### Progress prerequisite recovery
+
+After a completed `update_progress` reports `updated`, model transcript projection
+can include `prior_unexecuted_calls`: bounded references to recent calls rejected
+with `PROGRESS_MISSING` whose paired invocation receipts say they never ran.
+Each reference names the result message and call, with a short path when present;
+file contents and executable replacement arguments are not duplicated. These are
+historical facts, not a claim that an operation remains authorized or necessary.
+The model chooses whether and how to retry through normal tool admission.
+
+Projection examines at most 32 preceding messages, keeps the latest attempt per
+tool, and stops at a new human turn or a completed progress call. It emits at most
+eight references within 2 KiB. Missing or mismatched receipts produce no reminder.
+The durable transcript, tool result, permissions and Bialy selection are unchanged.
