@@ -87,6 +87,12 @@ A block answers four questions without narrating implementation: which transitio
 
 An argument validator can also report `inapplicable_fields` when named fields do not apply to the current host state. This is an observation of validation, published as the typed OAR fact `paintedwolf.inapplicable_fields`. The `TOOL_ARGS_INVALID` rule renders the instruction to omit those fields and preserve the remaining arguments; the host does not rewrite or execute a repaired call.
 
+Missing arguments should name the directly declared root requirements as bounded
+host observations, including declared types where known. Requirements from an
+alternative schema branch must not be presented as mandatory for every valid
+call. Diagnostics describe the rejected invocation and never fill or execute
+arguments on the model's behalf.
+
 ## Reachable-remedy rule
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
