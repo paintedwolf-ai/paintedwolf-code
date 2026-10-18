@@ -3,6 +3,8 @@ package toolexecution
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -105,7 +107,18 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	case "page_open", "capture_page", "measure_page":
 		dir, _ := args["project_dir"].(string)
 		if dir = strings.TrimSpace(dir); dir != "" {
-			return []string{dir}
+			entry, _ := args["path"].(string)
+			rel := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(entry)), "/")
+			if rel == "" {
+				rel = "index.html"
+			}
+			target := filepath.Join(dir, filepath.FromSlash(rel))
+			files := []string{dir, target}
+			// Static directory URLs fall back to index.html.
+			if !strings.HasSuffix(rel, "index.html") {
+				files = append(files, filepath.Join(target, "index.html"))
+			}
+			return files
 		}
 		return nil
 	}

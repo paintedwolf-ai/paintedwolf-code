@@ -1,8 +1,13 @@
 package toolexecution
 
 import (
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
 	"reflect"
@@ -11,10 +16,19 @@ import (
 
 func TestPageApprovalUsesMountedDirectory(t *testing.T) {
 	for _, tool := range []string{"page_open", "capture_page", "measure_page"} {
-		for _, entry := range []string{"", "index.html", "/index.html", "/nested/"} {
+		for _, tc := range []struct {
+			entry string
+			want  []string
+		}{
+			{"", []string{"site", "site/index.html"}},
+			{"index.html", []string{"site", "site/index.html"}},
+			{"/index.html", []string{"site", "site/index.html"}},
+			{"/nested/", []string{"site", "site/nested", "site/nested/index.html"}},
+		} {
+			entry := tc.entry
 			got := filesFromArgs(tool, map[string]any{"project_dir": "site", "path": entry})
-			if !reflect.DeepEqual(got, []string{"site"}) {
-				t.Errorf("%s entry %q: files = %v, want mounted directory", tool, entry, got)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("%s entry %q: files = %v, want %v", tool, entry, got, tc.want)
 			}
 		}
 	}
@@ -58,10 +72,41 @@ func TestPageApprovalResolvesWorkspaceDirectory(t *testing.T) {
 				{"@missing/site", ""},
 			} {
 				got := ResolvedApprovalFiles(tool, map[string]any{"project_dir": tt.dir, "path": "/index.html"}, tc)
-				if !reflect.DeepEqual(got, []string{tt.want}) {
+				want := []string{tt.want, ""}
+				if tt.want != "" {
+					want[1] = fspath.CanonicalPath(filepath.Join(tt.want, "index.html"))
+				}
+				if !reflect.DeepEqual(got, want) {
 					t.Errorf("worker=%t tool=%s dir=%q: got %v want %q", worker, tool, tt.dir, got, tt.want)
 				}
 			}
 		}
+	}
+}
+
+func TestPageApprovalRetainsEntryDenials(t *testing.T) {
+	for _, tc := range []struct {
+		pattern string
+		entries []string
+	}{
+		{"private.html", []string{"private.html", "/private.html"}},
+		{"index.html", []string{"", "/nested/"}},
+	} {
+		t.Run(tc.pattern, func(t *testing.T) {
+			configtest.Overlay(t, map[config.Rel]string{config.SecurityApprovals: "rules:\n  - category: path\n    pattern: " + tc.pattern + "\n    effect: deny\n"})
+			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
+			testutil.FailErr(t, "load approval store", err)
+			gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			for _, tool := range []string{"page_open", "capture_page", "measure_page"} {
+				for _, entry := range tc.entries {
+					action := proposedActionFromPolicy(platform.PolicyContext{ToolName: tool, ToolArgs: map[string]any{"project_dir": ".", "path": entry}})
+					result, err := gate.Evaluate(t.Context(), action)
+					testutil.FailErr(t, "evaluate static entry policy", err)
+					if !result.Denied || result.DenyCode != "APPROVAL_RULE_DENIED" {
+						t.Fatalf("%s entry %q bypassed path deny: %+v", tool, entry, result)
+					}
+				}
+			}
+		})
 	}
 }
