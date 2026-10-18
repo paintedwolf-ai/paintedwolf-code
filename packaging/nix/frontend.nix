@@ -1,4 +1,4 @@
-{ lib, stdenv, callPackage, autoPatchelfHook, bun2nix, source }:
+{ lib, stdenv, callPackage, autoPatchelfHook, python3, bun2nix, source }:
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   package = lib.importJSON (source + "/lycaon-den/package.json");
@@ -14,7 +14,7 @@ stdenv.mkDerivation {
   pname = "painted-wolf-code-frontend";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
   src = source;
-  nativeBuildInputs = [ tools.bun tools.nodejs bun2nix.hook autoPatchelfHook ];
+  nativeBuildInputs = [ tools.bun tools.nodejs bun2nix.hook autoPatchelfHook python3 ];
   buildInputs = [ stdenv.cc.cc.lib ];
   bunRoot = "lycaon-den";
   bunDeps = bun2nix.fetchBunDeps {
@@ -30,7 +30,10 @@ stdenv.mkDerivation {
     runHook preBuild
     test "$(bun --version)" = "${tools.bun.version}"
     test "$(node --version)" = "v${tools.nodejs.version}"
-    autoPatchelf lycaon-den/node_modules
+    python3 ${./native-modules.py} lycaon-den/node_modules ${stdenv.hostPlatform.parsed.cpu.name} > native-modules.list
+    while IFS= read -r -d "" native; do
+      autoPatchelf "$native"
+    done < native-modules.list
     cd lycaon-den
     bun run build
     cd ..
