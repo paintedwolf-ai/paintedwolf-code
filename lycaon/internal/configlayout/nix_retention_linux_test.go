@@ -11,9 +11,10 @@ import (
 )
 
 func TestNixRetentionReleasesOwnRootAndReclaimsOnlyDeadRoots(t *testing.T) {
+	t.Setenv("LYCAON_API_TOKEN", "engine-token-must-not-reach-nix")
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
-	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\n[ \"$1\" = --add-root ] || exit 1\nln -s \"$5\" \"$2\"\n"), 0o700))
+	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\n[ -z \"${LYCAON_API_TOKEN+x}\" ] || exit 1\n[ \"$1\" = --add-root ] || exit 1\nln -s \"$5\" \"$2\"\n"), 0o700))
 	layout := &NixLayout{Output: filepath.Join(root, "output"), NixStore: tool}
 	directory := filepath.Join(root, "roots")
 	releaseFirst, err := retainNix(context.Background(), layout, directory)
