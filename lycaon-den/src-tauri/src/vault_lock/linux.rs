@@ -24,6 +24,7 @@ static SOURCES: Mutex<LockSources> = Mutex::new(LockSources {
     sleeping: false,
 });
 static REFRESH: AtomicBool = AtomicBool::new(false);
+static REFRESHING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Default)]
 struct Monitor {
@@ -52,6 +53,9 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     }
     refresh(&app);
     glib::timeout_add_seconds_local(5, move || {
+        if REFRESHING.load(Ordering::Acquire) {
+            return glib::ControlFlow::Continue;
+        }
         let reconnect = MONITOR.with(|monitor| {
             let monitor = monitor.borrow();
             monitor.system.as_ref().is_none_or(|bus| bus.is_closed())
@@ -66,6 +70,15 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
 }
 
 fn refresh(app: &AppHandle) {
+    if REFRESHING.swap(true, Ordering::AcqRel) {
+        REFRESH.store(true, Ordering::Release);
+        return;
+    }
+    struct RefreshGuard;
+    impl Drop for RefreshGuard {
+        fn drop(&mut self) { REFRESHING.store(false, Ordering::Release); }
+    }
+    let _refreshing = RefreshGuard;
     let context = glib::MainContext::default();
     let timeout = Duration::from_millis(1500);
     MONITOR.with(|monitor| {

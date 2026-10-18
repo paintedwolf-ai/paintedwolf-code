@@ -14,6 +14,7 @@ pub(crate) struct LockSources {
 impl LockSources {
     pub(super) fn confirmation_allowed(&self) -> bool {
         !self.sleeping
+            && self.session_error != Some(SessionUnavailable::WrongUser)
             && self
                 .session
                 .as_ref()
@@ -37,6 +38,9 @@ mod tests {
         assert!(!state.confirmation_allowed());
         state.screensaver_locked = Some(false);
         assert!(state.confirmation_allowed());
+        state.session_error = Some(SessionUnavailable::WrongUser);
+        assert!(!state.confirmation_allowed());
+        state.session_error = None;
         state.sleeping = true;
         assert!(!state.confirmation_allowed());
         state.sleeping = false;
