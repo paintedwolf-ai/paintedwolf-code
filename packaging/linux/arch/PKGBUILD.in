@@ -1,0 +1,17 @@
+# Generated from the shared, sealed application payload. See docs/dev-tasks.md.
+pkgname=painted-wolf-code
+pkgver=@PKGVER@
+pkgrel=@PKGREL@
+pkgdesc='Desktop coding agent with a local security engine'
+arch=(@ARCH@)
+url='https://paintedwolf.ai'
+license=('Apache-2.0')
+depends=(@DEPENDS@)
+optdepends=(@OPTDEPENDS@)
+options=('!strip' '!debug' '!lto')
+source=(@PAYLOAD@)
+sha256sums=(@SHA256@)
+
+package() {
+  cp -a "$srcdir/payload/." "$pkgdir/"
+}

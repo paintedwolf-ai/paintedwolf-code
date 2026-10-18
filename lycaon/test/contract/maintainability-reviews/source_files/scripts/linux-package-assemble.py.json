@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/linux-package-assemble.py",
+  "kind": "construction",
+  "workstream": "linux-native-packages",
+  "disposition": "retain",
+  "reason": "The assembler owns common tree sealing and invokes native format adapters. Pacman archive, recipe and makepkg behavior live in linux_release/arch.py; this file adds only the explicit optional dispatch after the shared sealed tree is complete. Keep this bounded orchestration owner while package families are extended.",
+  "reviewed_commit": "20cd91fcb03c99f783c6a1086dee19e0bb07e4b8",
+  "ceiling": 365,
+  "boundaries": {
+    "scripts/verification_tests/distribution/test_arch_package_execution.py": "d96d4c9b516b56b96f102049af4c6bd73ca6c5652e770c409058ef458ecfc91e"
+  }
+}

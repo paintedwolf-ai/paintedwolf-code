@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PACKAGE_ARGS=()
+for argument in "$@"; do
+  case "${argument}" in
+    --pacman) PACKAGE_ARGS+=(--pacman) ;;
+    *) echo "error: unsupported bundle argument ${argument}" >&2; exit 2 ;;
+  esac
+done
+if (( ${#PACKAGE_ARGS[@]} > 0 )) && [[ "$(uname -s)" != "Linux" ]]; then
+  echo "error: --pacman requires a native Linux build host" >&2
+  exit 2
+fi
+
 if [[ -n "${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
   echo "error: local Opengrep candidates cannot be used in release packaging" >&2
   exit 2
@@ -227,7 +239,7 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
     rm -rf "${TAURI_DIR}/target/${TARGET}/release/bundle/deb" "${TAURI_DIR}/target/${TARGET}/release/bundle/rpm"
     bun run tauri bundle --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}" --config "${LINUX_CONFIG}"
     python3 "${ROOT}/scripts/linux-package-assemble.py" assemble --root "${ROOT}" \
-      --bundle-dir "${TAURI_DIR}/target/${TARGET}/release/bundle" --arch "${TARGET%%-*}" --version "${LINUX_PACKAGE_VERSION}"
+      --bundle-dir "${TAURI_DIR}/target/${TARGET}/release/bundle" --arch "${TARGET%%-*}" --version "${LINUX_PACKAGE_VERSION}" "${PACKAGE_ARGS[@]}"
   elif (( ${#BUILD_CONFIG[@]} > 0 )); then
     bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
   else
