@@ -28,8 +28,9 @@ type Server struct {
 	Verifier launchverify.Verifier
 	// Manifest is loaded per connection, so a package upgrade applies to the
 	// next engine without restarting the service.
-	Manifest string
-	PeerOf   func(net.Conn) (Peer, error)
+	Manifest    string
+	TrustPolicy string
+	PeerOf      func(net.Conn) (Peer, error)
 	// IdleExit ends Serve after this long without a connection; the socket
 	// unit starts the service again on demand. Zero serves until ctx ends.
 	IdleExit time.Duration
@@ -116,12 +117,23 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.Log.Warn("vault identity peer credentials unavailable", "error", err)
 		return
 	}
-	verifier, resp := s.verifierFor()
+	verifiers, resp := s.verifiersFor()
 	if resp != nil {
 		s.answer(conn, *resp)
 		return
 	}
-	chain, err := verifier.VerifyChain(peer.PID, peer.UID)
+	var chain launchverify.Chain
+	var verifier launchverify.Verifier
+	for _, candidate := range verifiers {
+		chain, err = candidate.VerifyChain(peer.PID, peer.UID)
+		if err == nil {
+			verifier = candidate
+			break
+		}
+		if launchverify.CodeOf(err) != launchverify.CodeExecutableMismatch {
+			break
+		}
+	}
 	if err != nil {
 		s.Log.Warn("vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
 		s.answer(conn, refusal(err))
@@ -149,19 +161,28 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-// verifierFor loads the manifest for one connection.
-func (s *Server) verifierFor() (launchverify.Verifier, *vaultidentity.Response) {
+// verifiersFor loads explicit trust for one connection; policy changes restart
+// the NixOS unit, terminating connections that used its previous policy.
+func (s *Server) verifiersFor() ([]launchverify.Verifier, *vaultidentity.Response) {
+	if s.TrustPolicy != "" {
+		verifiers, err := loadTrustPolicy(s.TrustPolicy, s.Verifier)
+		if err == nil {
+			return verifiers, nil
+		}
+		s.Log.Error("vault identity trust policy unreadable", "error", err)
+		return nil, &vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable), Message: "the administrator-selected custody policy is unavailable"}
+	}
 	manifest, err := pkgmanifest.Load(s.Manifest)
 	if err != nil {
 		s.Log.Error("vault identity manifest unreadable", "path", s.Manifest, "error", err)
-		return launchverify.Verifier{}, &vaultidentity.Response{
+		return nil, &vaultidentity.Response{
 			Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable),
 			Message: "the installed executable manifest cannot be read",
 		}
 	}
 	verifier := s.Verifier
 	verifier.Manifest = manifest
-	return verifier, nil
+	return []launchverify.Verifier{verifier}, nil
 }
 
 func refusal(err error) vaultidentity.Response {
