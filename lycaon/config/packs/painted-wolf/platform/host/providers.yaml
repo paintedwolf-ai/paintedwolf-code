@@ -281,8 +281,13 @@ tool_call_rejection_profiles:
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'invalid character ''\\n'' in string literal'
       - kind: arguments_unparsed
+        diagnostic: unexpected_end
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'
+      - kind: arguments_unparsed
+        diagnostic: invalid_escape
+        source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
+        grammar: 'invalid character ''(?:[^''\\]|\\[''\\abfnrtv]|\\x[0-9a-f]{2}|\\u[0-9a-f]{4})'' in string escape code'
       - kind: arguments_unparsed
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'invalid character ''(?:[^''\\]|\\[''\\abfnrtv]|\\x[0-9a-f]{2}|\\u[0-9a-f]{4})'' (?:looking for beginning of value|looking for beginning of object key string|after object key|after object key:value pair|after array element|after top-level value|in string literal|in string escape code|in \\u hexadecimal character escape|in numeric literal|after decimal point in numeric literal|in exponent of numeric literal|in literal (?:true|false|null) \(expecting ''[a-z]''\))'

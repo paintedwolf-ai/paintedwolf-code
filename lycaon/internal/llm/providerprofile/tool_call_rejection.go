@@ -76,7 +76,7 @@ func (p *ToolCallRejectionPolicy) Compile() error {
 		if !known {
 			return fmt.Errorf("rule %d has unsupported kind %q", i, rule.Kind)
 		}
-		if rule.Diagnostic != "" && (rule.Kind != ToolCallArgumentsUnparsed || rule.Diagnostic != "unescaped_newline") {
+		if rule.Diagnostic != "" && (rule.Kind != ToolCallArgumentsUnparsed || !slices.Contains([]string{"unescaped_newline", "unexpected_end", "invalid_escape"}, rule.Diagnostic)) {
 			return fmt.Errorf("rule %d has unsupported diagnostic %q for %s", i, rule.Diagnostic, rule.Kind)
 		}
 		if strings.TrimSpace(rule.Source) == "" {
