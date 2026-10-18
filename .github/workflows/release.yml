@@ -284,6 +284,14 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
 
+      - name: Check out the trusted packaging controller
+        if: ${{ matrix.goos == 'darwin' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/heads/main
+          path: .release-controller
+          persist-credentials: false
+
       - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
           go-version-file: lycaon/go.mod
@@ -405,7 +413,34 @@ jobs:
             : "${AZURE_ARTIFACT_SIGNING_ACCOUNT:?missing AZURE_ARTIFACT_SIGNING_ACCOUNT}"
             : "${AZURE_ARTIFACT_SIGNING_PROFILE:?missing AZURE_ARTIFACT_SIGNING_PROFILE}"
           fi
+          if [[ "${GOOS}" == darwin ]]; then
+            export PW_STAPLE_LOG_DIR="${RUNNER_TEMP}/staple-evidence"
+            export PATH="${GITHUB_WORKSPACE}/.release-controller/scripts/macos-notary-tools:${PATH}"
+          fi
           ./task den:bundle
+          if [[ "${GOOS}" == darwin ]]; then
+            python3 .release-controller/scripts/macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"
+          fi
+
+      - name: Retain notarization and stapling evidence
+        if: ${{ always() && matrix.goos == 'darwin' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: macos-notary-evidence
+          path: ${{ runner.temp }}/staple-evidence
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Retain the failed signed updater for ticket diagnosis
+        if: ${{ failure() && matrix.goos == 'darwin' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: macos-failed-updater-${{ matrix.updater_key }}
+          path: |
+            lycaon-den/src-tauri/target/*/release/bundle/macos/*.app.tar.gz
+            lycaon-den/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify and stage platform artifacts
         env:

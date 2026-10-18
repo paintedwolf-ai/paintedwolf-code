@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+# Tauri discards stapler's exit status; the release controller checks our receipt.
+if [[ "${1:-}" == stapler && "${2:-}" == staple ]] ||
+   [[ "${1:-}" == notarytool && "${2:-}" == submit ]]; then
+  exec python3 "$(dirname "$0")/notary.py" "$@"
+fi
+exec /usr/bin/xcrun "$@"
