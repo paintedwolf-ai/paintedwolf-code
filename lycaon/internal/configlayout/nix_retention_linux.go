@@ -86,6 +86,7 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string) (func()
 	operation, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	command := exec.CommandContext(operation, layout.NixStore, "--add-root", link, "--indirect", "--realise", layout.Output) // #nosec G204 -- exact package-owned Nix executable; no PATH lookup
+	command.Env = []string{}
 	for _, value := range os.Environ() {
 		if !strings.HasPrefix(value, "LYCAON_") {
 			command.Env = append(command.Env, value)
