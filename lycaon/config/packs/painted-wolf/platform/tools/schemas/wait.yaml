@@ -14,7 +14,7 @@ schema:
       description: Wait for selected processes to finish, become unavailable, or meet a sandbox refusal (outcome refused; the job keeps running). Requires process_done conditions with exact handles. Defaults timeout_ms to 1800000 when omitted. User input or cancellation can interrupt.
     resume:
       type: boolean
-      description: Resume without prose, retaining prior conditions and deadline mode. Explicit conditions replace prior conditions; timeout_ms or until_complete replaces the prior deadline mode.
+      description: Resume with prior conditions and deadline mode. Explicit conditions replace prior conditions; timeout_ms or until_complete replaces the prior deadline mode.
     reason:
       type: string
       maxLength: 240

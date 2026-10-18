@@ -1,6 +1,7 @@
 description: >-
   Post a concise, grounded mid-turn note for the user, then keep working — this
-  does not end the turn. Use it for meaningful progress or expectation changes.
+  does not end the turn. Assistant text alongside tool calls is hidden. Use this
+  for meaningful updates or answers to mid-task check-ins, including before wait.
   Say what happened and what comes next. Cite at least one cited_evidence or cited_urls entry. Carries
   artifact_ids, which is how a still reaches the user mid-run. For a question
   use ask_user; the final answer is the no-tool closeout.
