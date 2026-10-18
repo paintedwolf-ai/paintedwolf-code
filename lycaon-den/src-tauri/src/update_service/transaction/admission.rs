@@ -54,7 +54,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
         let Some(mut lease) = helper_admission(&t.target)? else {
             // A later quit can revoke the restart while this helper waits.
             if let Some(current) = read()?.filter(|current| should_reopen_after_wait(current, id)) {
-                reopen(&current.target)?;
+                reopen(&current.target, false)?;
             }
             return Ok(());
         };
@@ -68,7 +68,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
                 let recorded = record_activation_failure(&mut t, &error);
                 drop(lease);
                 if t.relaunch && installed_is_known(&t) {
-                    reopen(&t.target)?;
+                    reopen(&t.target, false)?;
                 }
                 return Err(match recorded {
                     Ok(()) => error,
@@ -81,7 +81,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
             // The application reopens even when its receipt cannot be updated.
             let recorded = write(&t);
             drop(lease);
-            reopen(&t.target)?;
+            reopen(&t.target, false)?;
             recorded?;
         }
         Ok(())
@@ -93,9 +93,14 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
     }
 }
 #[cfg(target_os = "macos")]
-fn reopen(target: &Path) -> Result<(), UpdateError> {
+fn reopen(target: &Path, replacing_running_process: bool) -> Result<(), UpdateError> {
     installer::verify_bundle(target)?;
-    let status = std::process::Command::new("/usr/bin/open")
+    let mut command = std::process::Command::new("/usr/bin/open");
+    if replacing_running_process {
+        // LaunchServices would otherwise reopen this still-running old process.
+        command.arg("-n");
+    }
+    let status = command
         .arg(target)
         .status()
         .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
@@ -172,7 +177,7 @@ pub fn launch() -> Result<Launch, UpdateError> {
             if !t.recovery_relaunch_attempted {
                 t.recovery_relaunch_attempted = true;
                 let _ = write(&t);
-                reopen(&target)?;
+                reopen(&target, true)?;
                 std::process::exit(0);
             }
         }

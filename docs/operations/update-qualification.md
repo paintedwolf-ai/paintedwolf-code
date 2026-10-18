@@ -43,7 +43,7 @@ to the rehearsal bucket. Test feeds must use a deliberately built test applicati
 with its matching trust registry; production clients must retain their embedded
 origin and keys.
 
-Start with the last broadly distributed release and each affected RC as the
+Start with the last broadly distributed release and each supported RC as the
 installed source. Use the actual signed, notarized candidate as the destination.
 Retain a representative history fixture and its semantic expectations. Verify
 the following cases before broad activation:
@@ -67,6 +67,22 @@ the following cases before broad activation:
 Keep the previous bundle while confirmation fails. Recovery must not launch an
 older binary against a migrated database. A halt prevents further distribution;
 it does not repair clients that already installed the withdrawn release.
+
+When startup recovery exchanges the application beneath the launching process,
+LaunchServices must start a new instance with `open -n` before the old process
+exits. Plain `open` can report success by reopening the still-running old process
+without launching its replacement. Exercise this separately from a helper's
+ordinary relaunch after the parent has exited.
+
+The updater shipped in 1.0.2-rc1 and 1.0.2-rc3 passes its inline `codesign`
+requirement without the required `=` prefix. Those clients cannot prepare an
+otherwise valid candidate through that path. The correction in 1.0.2-rc4
+([#920](https://github.com/paintedwolf-ai/paintedwolf-code/pull/920)) cannot change
+code already executing in an older installation. Verify refusal and preservation
+of the old app for these sources, then manually install a corrected signed build
+before testing a successful automatic transition. Keep that bootstrap result
+separate from a successful update; never bypass signature verification to make
+the affected RCs update.
 
 ## Release decision
 
