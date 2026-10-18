@@ -22,6 +22,7 @@ type passphraseIdentityProvider struct {
 	// missingGuidance names where a vault's identity may be instead when no
 	// wrapped identity exists beside it.
 	missingGuidance string
+	missingError    error
 }
 
 func newPassphraseIdentityProvider(vaultPath string) identityProvider {
@@ -39,7 +40,11 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 	}
 	if os.IsNotExist(err) {
 		if vaultExists {
-			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing%s", ErrVaultCorrupt, p.missingGuidance)
+			missing := p.missingError
+			if missing == nil {
+				missing = ErrIdentityMissing
+			}
+			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing%s", missing, p.missingGuidance)
 		}
 		if len(password) == 0 {
 			return identityDocument{}, ErrVaultUninitialized

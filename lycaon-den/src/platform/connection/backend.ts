@@ -88,7 +88,10 @@ export type SidecarStartFailure =
   | "credential_vault_locked"
   | "credential_vault_uninitialized"
   | "credential_vault_unlock_failed"
-  | "credential_vault_corrupt";
+  | "credential_vault_corrupt"
+  | "credential_vault_custodian_unavailable"
+  | "credential_vault_launcher_refused"
+  | "credential_vault_identity_missing";
 
 /** Mirrors the `SidecarStartError` tag in `sidecar.rs`. */
 type TaggedStartError = { code: string; message?: string };
@@ -144,7 +147,10 @@ function noteStartFailure(err: unknown): void {
     tagged.code === "credential_vault_locked" ||
     tagged.code === "credential_vault_uninitialized" ||
     tagged.code === "credential_vault_unlock_failed" ||
-    tagged.code === "credential_vault_corrupt"
+    tagged.code === "credential_vault_corrupt" ||
+    tagged.code === "credential_vault_custodian_unavailable" ||
+    tagged.code === "credential_vault_launcher_refused" ||
+    tagged.code === "credential_vault_identity_missing"
   ) {
     lastStartFailure = tagged.code;
   }

@@ -291,6 +291,21 @@ where
                                     "That password did not unlock the credential vault.".into(),
                                 )
                             }
+                            "credential_vault_custodian_unavailable" => {
+                                SidecarStartError::CredentialVaultCustodianUnavailable(
+                                    "Restore the vault identity service; encrypted credentials are preserved.".into(),
+                                )
+                            }
+                            "credential_vault_launcher_refused" => {
+                                SidecarStartError::CredentialVaultLauncherRefused(
+                                    "Quit and open the installed desktop app; encrypted credentials are preserved.".into(),
+                                )
+                            }
+                            "credential_vault_identity_missing" => {
+                                SidecarStartError::CredentialVaultIdentityMissing(
+                                    "Restore the matching credential vault identity; encrypted credentials are preserved.".into(),
+                                )
+                            }
                             "credential_vault_corrupt" => {
                                 SidecarStartError::CredentialVaultCorrupt(engine_failure_message(
                                     "the encrypted credential vault or its identity is damaged"
