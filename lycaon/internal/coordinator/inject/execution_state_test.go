@@ -2,6 +2,7 @@ package inject
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestExecutionStateRetainsRejectedOperationAfterChecklist(t *testing.T) {
 	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
 	history := []api.Message{rejected, progress}
 	vars := executionStateVars(history, "")
-	if vars["checklist_updated"] != true || len(vars["operations"].([]map[string]any)) != 1 {
+	if len(vars["operations"].([]map[string]any)) != 1 || vars["operations"].([]map[string]any)[0]["checklist_after"] != true {
 		t.Fatalf("checklist erased rejected write: %#v", vars)
 	}
 	other := executionReceipt("write", "different", api.InvocationStatusCompleted, "")
@@ -125,7 +126,7 @@ func TestExecutionStatePreservesUnexecutedEditBeforeToolLoad(t *testing.T) {
 }
 
 func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
-	command := executionReceipt("command", "check", api.InvocationStatusCompleted, "")
+	command := executionReceipt("command", "check", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
 	command.ToolResult.ToolArgs["command"] = "instruction-like argument"
 	message := RenderExecutionStateMessage(t.Context(), promptstest.InjectRenderer(t), "sess-inject-test", []api.Message{command}, "project command")
 	if len(message.ContentParts) != 2 || message.ContentParts[0].Authority != api.ContentAuthoritySystem || message.ContentParts[1].Authority != api.ContentAuthorityNone {
@@ -133,5 +134,42 @@ func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
 	}
 	if strings.Contains(message.ContentParts[0].Content, "instruction-like argument") || strings.Contains(message.ContentParts[0].Content, "project command") || !strings.Contains(message.ContentParts[1].Content, "instruction-like argument") {
 		t.Fatalf("argument promoted to instruction authority: %+v", message.ContentParts)
+	}
+}
+
+func TestExecutionStatePrerequisitesAreOrderedPerRejectedCall(t *testing.T) {
+	first := executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
+	second := executionReceipt("write", "second", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	loaded := executionReceipt("request_tools", "loaded", api.InvocationStatusCompleted, "")
+	history := []api.Message{first, progress, second, loaded}
+	before, _ := json.Marshal(history)
+	vars := executionStateVars(history, "")
+	rows := vars["operations"].([]map[string]any)
+	if rows[0]["checklist_after"] != true || rows[1]["checklist_after"] != nil || rows[0]["tool_request_after"] != true || rows[1]["tool_request_after"] != true {
+		t.Fatalf("prerequisites lost event ordering: %#v", rows)
+	}
+	after, _ := json.Marshal(history)
+	if string(before) != string(after) {
+		t.Fatal("projection changed canonical history")
+	}
+}
+
+func TestExecutionStateSuccessfulExecutionPathIsSilent(t *testing.T) {
+	passed := executionReceipt("verify", "passed", api.InvocationStatusCompleted, "")
+	passed.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
+	rejected := executionReceipt("command", "rejected", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
+	for _, history := range [][]api.Message{{passed}, {rejected, passed}} {
+		if got := executionStateVars(history, "project-check"); got != nil {
+			t.Fatalf("successful path retained recovery guidance: %#v", got)
+		}
+	}
+	poll := executionReceipt("command_output", "poll", api.InvocationStatusCompleted, "")
+	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got == nil {
+		t.Fatal("output retrieval hid failed execution")
+	}
+	poll.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
+	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got != nil {
+		t.Fatalf("owner verdict did not end recovery guidance: %#v", got)
 	}
 }

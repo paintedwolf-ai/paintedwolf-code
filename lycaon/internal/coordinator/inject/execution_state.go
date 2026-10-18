@@ -45,15 +45,22 @@ func RenderExecutionStateMessage(ctx context.Context, renderer *prompts.InjectRe
 
 func executionStateVars(history []api.Message, declared string) map[string]any {
 	var operations, executions []map[string]any
-	checklistUpdated := false
+	executionRecovery := false
 	for _, message := range history[api.UserIntentBoundary(history):] {
 		result := message.ToolResult
 		if message.Role != api.MessageRoleTool || !pairedExecutionReceipt(result) {
 			continue
 		}
 		receipt := result.Invocation
-		if result.Tool == "update_progress" && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
-			checklistUpdated = true
+		if (result.Tool == "update_progress" || result.Tool == "request_tools") && receipt.Status == api.InvocationStatusCompleted && receipt.Invoked {
+			for _, row := range operations {
+				switch result.Tool {
+				case "update_progress":
+					row["checklist_after"] = true
+				case "request_tools":
+					row["tool_request_after"] = true
+				}
+			}
 		}
 		if unexecutedChange(result) {
 			operations = append(operations, executionStateRow(message))
@@ -64,17 +71,20 @@ func executionStateVars(history []api.Message, declared string) map[string]any {
 		}
 		switch result.Tool {
 		case "command", "verify", "terminal_open", "terminal_write", "command_output", "terminal_read":
+			if result.Tool != "command_output" && result.Tool != "terminal_read" || receipt.SourceVerdict != "" {
+				executionRecovery = !receipt.Invoked || receipt.Status != api.InvocationStatusCompleted || receipt.Failure != nil || receipt.SourceVerdict == api.SourceVerdictFailed
+			}
 			executions = append(executions, executionStateRow(message))
 		}
 	}
-	if len(operations)+len(executions) == 0 {
+	if len(operations) == 0 && !executionRecovery {
 		return nil
 	}
 	return map[string]any{
 		"operations": lastExecutionRows(operations), "executions": lastExecutionRows(executions),
 		"operations_omitted": max(0, len(operations)-maxExecutionStateRows),
 		"executions_omitted": max(0, len(executions)-maxExecutionStateRows),
-		"checklist_updated":  checklistUpdated, "declared_command": quotedExecutionValue(declared),
+		"declared_command":   quotedExecutionValue(declared),
 	}
 }
 

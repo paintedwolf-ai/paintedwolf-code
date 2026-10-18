@@ -28,5 +28,9 @@ func measureExecutionStateBlock(ctx context.Context, renderer *prompts.InjectRen
 			}})
 		}
 	}
+	for _, tool := range []string{"update_progress", "request_tools"} {
+		id := "call-" + tool
+		history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: id, Invocation: &api.InvocationReceipt{ID: id, Tool: tool, ToolCallID: id, Status: api.InvocationStatusCompleted, Invoked: true}}})
+	}
 	return inject.RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "./task check").Content
 }

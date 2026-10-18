@@ -344,8 +344,15 @@ is included when execution observations exist.
 
 Recorded verdicts describe their original source, not a new freshness assertion.
 Full results and arguments remain in history. Live-job command previews are
-limited to 96 runes; stable handles and output controls retain access to details.
+limited to 64 runes; stable handles and output controls retain access to details.
 
 Live evaluation uses captured provider requests and independent artifact checks.
 A better next action in a replay is insufficient to establish reliable recovery
 through an entire task.
+
+The execution projection is silent on successful execution paths without pending
+rejected operations. Output retrieval alone does not clear a failed execution
+observation. Each rejected operation records only prerequisite calls completed
+after that rejection; those historical events do not assert current tool availability,
+permission, or task completion. Rebuilding the projection never modifies canonical
+messages or invocation receipts.
