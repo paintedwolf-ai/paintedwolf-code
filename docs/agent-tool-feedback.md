@@ -324,3 +324,15 @@ identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
+
+### Execution-state guidance experiments
+
+Execution guidance must distinguish a selected verification method from an observed
+check result. A rejected invocation has not executed; satisfying its prerequisite
+does not execute it. Any current-state projection must derive from paired invocation
+receipts, retain the check's source scope, and retire guidance when its underlying
+facts change. It must not infer task completion from prose or alter tool authority.
+
+Candidate projections require live evaluation with captured provider requests and
+independent artifact checks. A better next action in a replay is insufficient to
+establish reliable recovery through an entire task.
