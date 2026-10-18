@@ -80,11 +80,17 @@ A block answers four questions without narrating implementation: which transitio
 
 ### Typed detail conventions
 
-Oversized feedback should preserve a small set of actionable host observations
-through the shared transcript projection. Select complete diagnostic values;
-never trim a replacement call into a different executable operation. Keep the
-original result unchanged and expose omission markers with its durable result
-reference. Bounds apply to encoded bytes, list entries, and nested repairs.
+Oversized feedback preserves a small set of actionable host observations
+through the shared transcript projection: identities, parser locations, failed
+fields, and bounded issue or browser-state inventories. Ordinary diagnostic
+fallbacks have a 2 KiB encoded limit; review fallbacks retain their 12 KiB limit.
+Each selected value is at most 1 KiB, lists retain at most eight entries, and
+nested repairs stop after two levels. Values deeper than ten JSON containers
+are omitted. Bounds include JSON escaping and omission metadata.
+
+Selected values remain complete; a replacement call is never trimmed into a
+different executable operation. The original result stays unchanged, with
+omission markers and its durable result reference on the projected fallback.
 This presentation boundary does not alter OAR facts, selection, copy grammar,
 or occurrence delivery.
 
