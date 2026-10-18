@@ -20,6 +20,7 @@ pub(super) struct InstallLocation {
 }
 
 pub(super) fn current() -> Result<InstallLocation, String> {
+    crate::linux_generation::running()?;
     let mut location = resolve(
         InstallationMode::current(),
         std::env::consts::OS,
@@ -93,6 +94,23 @@ mod tests {
             Some(Path::new("relative"))
         )
         .is_err());
+    }
+
+    #[test]
+    fn nix_entry_points_are_owned_by_the_output_and_never_repaired() {
+        let output = PathBuf::from("/custom-store/generation");
+        let location = resolve(
+            InstallationMode::Nix {
+                root: output.join("lib/painted-wolf-code"),
+                output: output.clone(),
+            },
+            "linux",
+            None,
+        )
+        .unwrap();
+        assert_eq!(location.bin_dir, output.join("bin"));
+        assert!(location.managed_by_package);
+        assert_eq!(location.mode.label(), "nix");
     }
 
     #[test]
