@@ -281,6 +281,7 @@ fn invoke(bus: &gio::DBusConnection, timeout: Duration) -> Result<(), ServiceErr
         )
         .map_err(|error| ServiceError::from_call(&error))
     })
+    .map(|_| ())
 }
 
 #[test]
