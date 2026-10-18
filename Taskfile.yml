@@ -1823,7 +1823,7 @@ tasks:
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags integration --name test:scanners -- \
           ./internal/scan/... ./test/security/... \
-          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery)$'
+          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestInstalledScannerProductCases)$'
 
   check-fast:
     desc: Handoff gate on one stable source snapshot

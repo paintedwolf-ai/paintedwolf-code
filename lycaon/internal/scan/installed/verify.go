@@ -43,6 +43,10 @@ func Verify(ctx context.Context, root string) (report Report, err error) {
 			report.Error = err.Error()
 		}
 	}()
+	if err := ctx.Err(); err != nil {
+		report.Code = "canceled"
+		return report, err
+	}
 	if !filepath.IsAbs(root) {
 		return report, fmt.Errorf("installed scanner root must be absolute")
 	}

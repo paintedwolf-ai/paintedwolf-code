@@ -1,6 +1,8 @@
 package installed
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -86,5 +88,11 @@ func TestInstalledVerificationRequiresTheExplicitPackagedRoot(t *testing.T) {
 	report, err := Verify(t.Context(), t.TempDir())
 	if err == nil || report.Status != "failed" || report.Code != "artifact_refused" || report.Confined || report.Binary != "" {
 		t.Fatalf("missing packaged artifact report=%+v error=%v", report, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	report, err = Verify(ctx, t.TempDir())
+	if !errors.Is(err, context.Canceled) || report.Code != "canceled" || report.Confined {
+		t.Fatalf("canceled qualification report=%+v error=%v", report, err)
 	}
 }
