@@ -34,7 +34,9 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_EXIT','0')))
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                         "commit", "-q", "--allow-empty", "-m", "fixture"], cwd=self.root, check=True)
         self.environment = {"PATH": str(binary) + os.pathsep + os.environ["PATH"],
-                            "NIX_FIXTURE_CALLS": str(self.calls), "PW_ARTIFACT_ROOT": str(self.root / "artifacts"),
+                            "NIX_FIXTURE_CALLS": str(self.calls),
+                            "PW_TEST_ARTIFACT_ROOT": str(self.root / "artifacts"),
+                            "PW_ARTIFACT_ROOT": str(self.root / "artifacts"),
                             "GH_TOKEN": "private", "LINUX_PACKAGE_SIGNING_KEY": "private",
                             "FEED_SIGNING_KEYS_JSON": "private", "TAURI_SIGNING_PRIVATE_KEY": "private"}
 
