@@ -36,11 +36,12 @@ type CustodyOutcome struct {
 }
 
 var (
-	// ErrLauncherRefused: the identity service holds this user's identities
-	// but refused this engine, so the vault cannot open on either path.
+	// ErrCustodianUnavailable: access to the identity custodian could not be established.
 	ErrCustodianUnavailable = errors.New("the credential vault custodian is unavailable")
-	ErrIdentityMissing      = errors.New("the credential vault identity is missing")
-	ErrLauncherRefused      = errors.New("the vault identity service refused this engine")
+	// ErrIdentityMissing: the selected custodian has no key for this vault.
+	ErrIdentityMissing = errors.New("the credential vault identity is missing")
+	// ErrLauncherRefused: the identity service refused this engine.
+	ErrLauncherRefused = errors.New("the vault identity service refused this engine")
 	// ErrCustodyUnsupported: this platform keeps the identity with one custodian.
 	ErrCustodyUnsupported = errors.New("this platform keeps the vault identity with one custodian")
 	// ErrServiceUnverified: no identity service verified this engine.
