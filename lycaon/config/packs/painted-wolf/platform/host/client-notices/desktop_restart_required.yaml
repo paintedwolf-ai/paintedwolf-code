@@ -1,0 +1,7 @@
+scope: app
+title: Restart the installed desktop app
+message: >-
+  The installed package changed while this desktop was running. Quit Painted
+  Wolf Code, finish any package operation, then open it from the installed
+  desktop launcher. Your saved credentials are preserved.
+suggested_action: Quit the app from its menu, then open the installed desktop launcher.
