@@ -3,6 +3,7 @@
 package confine_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/url"
@@ -32,7 +33,7 @@ func nixFixture(t *testing.T) (string, []string) {
 	env := []string{
 		"PATH=" + filepath.Dir(bin) + ":/usr/bin:/bin", "HOME=" + home, "TMPDIR=" + home,
 		"XDG_CACHE_HOME=" + home, "NIX_USER_CONF_FILES=/dev/null",
-		"NIX_CONFIG=experimental-features = nix-command flakes\naccept-flake-config = false\nsandbox = true\nsubstituters =\nbuilders =\n",
+		"NIX_CONFIG=experimental-features = nix-command flakes read-only-local-store\naccept-flake-config = false\nsandbox = true\nsubstituters =\nbuilders =\n",
 	}
 	return bin, env
 }
@@ -43,9 +44,11 @@ func nativeNix(t *testing.T, bin string, env []string, args ...string) []byte {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = env
-	out, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("native Nix control %v: %v\n%s", args, err, out)
+		t.Fatalf("native Nix control %v: %v\n%s\n%s", args, err, out, stderr.String())
 	}
 	return out
 }
@@ -53,7 +56,7 @@ func nativeNix(t *testing.T, bin string, env []string, args ...string) []byte {
 func TestLinuxNixDaemonAuthorityIsActionScoped(t *testing.T) {
 	bin, env := nixFixture(t)
 	self := requireLinuxSandbox(t)
-	args := []string{"--offline", "--store", "daemon", "store", "ping", "--json"}
+	args := []string{"--offline", "--store", "daemon", "store", "info", "--json"}
 	var response map[string]any
 	testutil.FailErr(t, "native daemon ping response", json.Unmarshal(nativeNix(t, bin, env, args...), &response))
 	if info, err := os.Stat(nixDaemonSocket); err != nil || info.Mode()&os.ModeSocket == 0 {
