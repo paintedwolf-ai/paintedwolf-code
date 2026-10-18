@@ -119,4 +119,68 @@ describe("createTranscriptVirtualizer lost anchor resolution", () => {
       el.remove();
     }
   });
+
+  it("adjusts scroll offset when rows prepended into the before runway resize above the carried anchor", async () => {
+    const el = document.createElement("div");
+    Object.defineProperty(el, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(el, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(el, "scrollHeight", { value: 100_000, configurable: true });
+    Object.defineProperty(el, "scrollTop", { value: 0, writable: true, configurable: true });
+    mockScrollerMotion(el);
+    document.body.appendChild(el);
+
+    const user = (key: string): TranscriptItem => ({ kind: "user", key, text: key });
+    const [items, setItems] = createSignal<TranscriptItem[]>([
+      spanItem("call-b", ["call-b", "call-c"]),
+      user("after-1"),
+    ]);
+    const [unloadedBefore, setUnloadedBefore] = createSignal(10);
+    const shifts: number[] = [];
+    let virtualizer!: MeasuredTranscriptVirtualizer;
+    const dispose = createRoot((d) => {
+      virtualizer = createTranscriptVirtualizer({
+        items,
+        scrollElement: () => el,
+        unloadedOrds: () => ({ before: unloadedBefore(), after: 0 }),
+        residentRowSpan: () => ({ count: items().length, ordSpan: items().length }),
+        resolveLostAnchor: (rowKey) =>
+          resolveTranscriptItemAnchor(items(), rowKey, () => true, 42),
+        rowSizeHint: (item) => (item.kind === "activity_span" ? 200 : 72),
+        revealOffset: () => {},
+        shiftContent: (delta) => {
+          shifts.push(delta);
+          return delta;
+        },
+        observeElementRect: (_instance, cb) => {
+          cb({ width: 400, height: 400 });
+          return () => {};
+        },
+        observeElementOffset: (_instance, cb) => {
+          cb(100, false);
+          return () => {};
+        },
+      });
+      return d;
+    });
+
+    try {
+      expect(virtualizer.getVirtualItemForOffset(100)?.key).toBe("call-b");
+      setUnloadedBefore(0);
+      setItems([
+        user("prepended-0"),
+        user("prepended-1"),
+        spanItem("call-a", ["call-a", "call-b", "call-c"]),
+        user("after-1"),
+      ]);
+      await Promise.resolve();
+      virtualizer.resizeItems([
+        { index: 0, size: 60 },
+        { index: 1, size: 64 },
+      ]);
+      expect(shifts.at(-1)).toBe(-20);
+    } finally {
+      dispose();
+      el.remove();
+    }
+  });
 });
