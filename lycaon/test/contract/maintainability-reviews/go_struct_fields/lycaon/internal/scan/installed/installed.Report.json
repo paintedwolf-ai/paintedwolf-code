@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/scan/installed/installed.Report",
+  "kind": "projection",
+  "workstream": "linux-installed-scanner",
+  "disposition": "retain",
+  "reason": "The report binds one qualification attempt: selected artifact identity, confinement, execution result, and its case evidence. Retain this flat diagnostic projection at its current 15 fields; artifact verification and case evaluation remain separate owners.",
+  "reviewed_commit": "b86d965c7c776979368ef70cc2104909b4c36ed6",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/scan/installed/verify_test.go": "52ac5dc4d43a2ee99fd9df1e76cd23eb03e2eef28ce483a9fdd3873c393ef646",
+    "lycaon/internal/scan/installed/selected_unix_test.go": "c23fef371b7815dabcdffb60a2af03322bf84f41e07119fb992dcf53a3b3329b",
+    "lycaon/internal/scan/installed/verify_integration_linux_test.go": "984b19325c9fe1f992bf2075bb1ea9c46be51000bb4ca5d439f44ad26eb1daf9",
+    "lycaon/cmd/lycaon/scan_engines_installed_test.go": "978a9cdad7d10daa5515ddbdcf1bfe04ff7f8114b7d62c3714f67adaad80ed3b"
+  },
+  "reviewed_shape": "d55b94982c8d35c71019bc653ca6a1067a682ac321d24459a9b33eed7403139c"
+}
