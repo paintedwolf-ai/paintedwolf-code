@@ -1,4 +1,5 @@
-package httpclient
+// Package hostproxy owns environment and desktop proxy precedence.
+package hostproxy
 
 import (
 	"fmt"
@@ -11,12 +12,12 @@ import (
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
-var systemProxyConfiguration = systemproxy.Current
+var systemConfiguration = systemproxy.Current
 
-// ProxyConfiguration is the proxy policy every host client applies: loopback
+// Configuration is the proxy policy every host client applies: loopback
 // is always direct, NO_PROXY exempts destinations, an explicit environment
 // proxy serves its scheme, and the system configuration serves the rest.
-type ProxyConfiguration struct {
+type Configuration struct {
 	// EnvironmentHTTP and EnvironmentHTTPS are HTTP_PROXY and HTTPS_PROXY.
 	EnvironmentHTTP     *url.URL
 	EnvironmentHTTPS    *url.URL
@@ -30,9 +31,9 @@ type ProxyConfiguration struct {
 	SystemErr error
 }
 
-// CurrentProxyConfiguration reads the environment and system proxy policy.
-func CurrentProxyConfiguration() ProxyConfiguration {
-	config := ProxyConfiguration{
+// Current reads the environment and system proxy policy.
+func Current() Configuration {
+	config := Configuration{
 		EnvironmentExceptions: parseEnvironmentExceptions(environmentValue("NO_PROXY", "no_proxy")),
 	}
 	config.EnvironmentHTTPS, config.EnvironmentHTTPSErr = parseEnvironmentProxy(environmentValue("HTTPS_PROXY", "https_proxy"))
@@ -40,13 +41,13 @@ func CurrentProxyConfiguration() ProxyConfiguration {
 	if os.Getenv("REQUEST_METHOD") == "" {
 		config.EnvironmentHTTP, config.EnvironmentHTTPErr = parseEnvironmentProxy(environmentValue("HTTP_PROXY", "http_proxy"))
 	}
-	config.System, config.SystemErr = systemProxyConfiguration()
+	config.System, config.SystemErr = systemConfiguration()
 	return config
 }
 
 // ExplicitProxy is the environment proxy for scheme, or nil when the system
 // configuration decides.
-func (p ProxyConfiguration) ExplicitProxy(scheme string) *url.URL {
+func (p Configuration) ExplicitProxy(scheme string) *url.URL {
 	switch strings.ToLower(scheme) {
 	case "https":
 		return p.EnvironmentHTTPS
@@ -58,7 +59,7 @@ func (p ProxyConfiguration) ExplicitProxy(scheme string) *url.URL {
 }
 
 // ExplicitProxyError reports a declared environment policy that could not be read.
-func (p ProxyConfiguration) ExplicitProxyError(scheme string) error {
+func (p Configuration) ExplicitProxyError(scheme string) error {
 	switch strings.ToLower(scheme) {
 	case "https":
 		return p.EnvironmentHTTPSErr
@@ -71,7 +72,7 @@ func (p ProxyConfiguration) ExplicitProxyError(scheme string) error {
 
 // ProxyFor returns the proxy for target, nil for a direct connection, or why
 // the system configuration cannot be honoured.
-func (p ProxyConfiguration) ProxyFor(target *url.URL) (*url.URL, error) {
+func (p Configuration) ProxyFor(target *url.URL) (*url.URL, error) {
 	if loopbackDestination(target) {
 		return nil, nil
 	}
@@ -97,21 +98,20 @@ func (p ProxyConfiguration) ProxyFor(target *url.URL) (*url.URL, error) {
 	return proxy, nil
 }
 
-func hostProxy() func(*http.Request) (*url.URL, error) {
-	return func(request *http.Request) (*url.URL, error) {
-		if request == nil || request.URL == nil {
-			return nil, nil
-		}
-		return CurrentProxyConfiguration().ProxyFor(request.URL)
+// ForRequest resolves policy for the effective HTTP destination.
+func ForRequest(request *http.Request) (*url.URL, error) {
+	if request == nil || request.URL == nil {
+		return nil, nil
 	}
+	return Current().ProxyFor(request.URL)
 }
 
-// ResolveProxy reports the proxy every host client would use for target.
-func ResolveProxy(target *url.URL) (*url.URL, error) {
+// Resolve reports the proxy every host client would use for target.
+func Resolve(target *url.URL) (*url.URL, error) {
 	if target == nil {
 		return nil, fmt.Errorf("proxy resolution requires a target")
 	}
-	return CurrentProxyConfiguration().ProxyFor(target)
+	return Current().ProxyFor(target)
 }
 
 // loopbackDestination reports loopback literals and reserved local names.

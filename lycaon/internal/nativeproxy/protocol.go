@@ -9,7 +9,7 @@ import (
 	"io"
 	"net/url"
 
-	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
@@ -33,7 +33,7 @@ type response struct {
 
 // Serve accepts exactly one bounded request and never prints resolver diagnostics.
 func Serve(input io.Reader, output io.Writer) error {
-	return serve(input, output, httpclient.ResolveProxy)
+	return serve(input, output, hostproxy.Resolve)
 }
 
 func serve(input io.Reader, output io.Writer, resolve func(*url.URL) (*url.URL, error)) error {

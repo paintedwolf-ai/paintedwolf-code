@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/net/http/httpproxy"
@@ -48,19 +48,19 @@ func environmentOf(env []string) map[string]string {
 
 func TestPerHostPlanTranslatesTheWholePolicy(t *testing.T) {
 	for name, tc := range map[string]struct {
-		config  httpclient.ProxyConfiguration
+		config  hostproxy.Configuration
 		http    string
 		https   string
 		noProxy string
 	}{
 		"desktop exceptions": {
-			config: httpclient.ProxyConfiguration{System: desktop(t, "http://alice:pw@proxy.example:3128",
+			config: hostproxy.Configuration{System: desktop(t, "http://alice:pw@proxy.example:3128",
 				"*.corp.example", ".internal.example", "build.example", "10.0.0.0/8", "192.0.2.7", "[2001:db8::1]", "169.254/16")},
 			http: "http://alice:pw@proxy.example:3128", https: "http://alice:pw@proxy.example:3128",
 			noProxy: "localhost,127.0.0.0/8,::1,corp.example,internal.example,build.example,10.0.0.0/8,192.0.2.7,2001:db8::1,169.254.0.0/16",
 		},
 		"environment exceptions apply to the desktop proxy": {
-			config: httpclient.ProxyConfiguration{
+			config: hostproxy.Configuration{
 				EnvironmentExceptions: []systemproxy.Exception{systemproxy.ParseDesktopException("mirror.example"), systemproxy.ParseDesktopException("corp.example")},
 				System:                desktop(t, "http://proxy.example:3128", "localhost", "127.0.0.0/8", "::1", "corp.example"),
 			},
@@ -68,24 +68,24 @@ func TestPerHostPlanTranslatesTheWholePolicy(t *testing.T) {
 			noProxy: "localhost,127.0.0.0/8,::1,mirror.example,corp.example",
 		},
 		"every host excepted": {
-			config: httpclient.ProxyConfiguration{System: desktop(t, "http://proxy.example:3128", "corp.example", "*")},
+			config: hostproxy.Configuration{System: desktop(t, "http://proxy.example:3128", "corp.example", "*")},
 			http:   "http://proxy.example:3128", https: "http://proxy.example:3128", noProxy: "*",
 		},
 		"socks serves both schemes": {
-			config: httpclient.ProxyConfiguration{System: systemproxy.Configuration{
+			config: hostproxy.Configuration{System: systemproxy.Configuration{
 				Source: systemproxy.SourceKIO, Mode: systemproxy.ModeManual, SOCKS: proxyURL(t, "socks5://socks.example:1080"),
 			}},
 			http: "socks5://socks.example:1080", https: "socks5://socks.example:1080", noProxy: "localhost,127.0.0.0/8,::1",
 		},
 		"environment proxies alone ignore the desktop exceptions": {
-			config: httpclient.ProxyConfiguration{
+			config: hostproxy.Configuration{
 				EnvironmentHTTP: proxyURL(t, "http://env.example:8080"), EnvironmentHTTPS: proxyURL(t, "http://env.example:8080"),
 				System: desktop(t, "http://proxy.example:3128", "*.corp.example", "foo*.example"),
 			},
 			http: "http://env.example:8080", https: "http://env.example:8080", noProxy: "localhost,127.0.0.0/8,::1",
 		},
 		"no proxy configured": {
-			config:  httpclient.ProxyConfiguration{System: systemproxy.Configuration{Source: systemproxy.SourceNone, Mode: systemproxy.ModeNone}},
+			config:  hostproxy.Configuration{System: systemproxy.Configuration{Source: systemproxy.SourceNone, Mode: systemproxy.ModeNone}},
 			noProxy: "localhost,127.0.0.0/8,::1",
 		},
 	} {
@@ -110,7 +110,7 @@ func TestPerHostPlanTranslatesTheWholePolicy(t *testing.T) {
 // assertGitGrammarAgrees checks that the variables, read with Go's NO_PROXY
 // grammar (the one Git LFS uses, and a subset curl reads identically), pick
 // the same proxy as host clients for every destination.
-func assertGitGrammarAgrees(t *testing.T, name string, config httpclient.ProxyConfiguration, env map[string]string) {
+func assertGitGrammarAgrees(t *testing.T, name string, config hostproxy.Configuration, env map[string]string) {
 	t.Helper()
 	git := (&httpproxy.Config{HTTPProxy: env["HTTP_PROXY"], HTTPSProxy: env["HTTPS_PROXY"], NoProxy: env["NO_PROXY"]}).ProxyFunc()
 	for _, raw := range []string{
@@ -137,37 +137,37 @@ func TestPolicyOutsideTheSharedGrammarKeepsThePerRemoteDecision(t *testing.T) {
 	simple.Source = systemproxy.SourceMacOS
 	simple.Exceptions = append(simple.Exceptions, systemproxy.Exception{Kind: systemproxy.ExceptionSimpleHostnames, Raw: "ExcludeSimpleHostnames"})
 	for name, tc := range map[string]struct {
-		config httpclient.ProxyConfiguration
+		config hostproxy.Configuration
 		want   []ProxyPlanReason
 	}{
 		"wildcard inside a name": {
-			config: httpclient.ProxyConfiguration{System: desktop(t, "http://proxy.example:3128", "corp.example", "build-*.example")},
+			config: hostproxy.Configuration{System: desktop(t, "http://proxy.example:3128", "corp.example", "build-*.example")},
 			want:   []ProxyPlanReason{{Kind: ProxyReasonException, Detail: "build-*.example"}},
 		},
 		"subdomains-only environment entry": {
-			config: httpclient.ProxyConfiguration{EnvironmentExceptions: []systemproxy.Exception{{Kind: systemproxy.ExceptionSubdomains, Domain: "corp.example", Raw: ".corp.example"}},
+			config: hostproxy.Configuration{EnvironmentExceptions: []systemproxy.Exception{{Kind: systemproxy.ExceptionSubdomains, Domain: "corp.example", Raw: ".corp.example"}},
 				System: desktop(t, "http://proxy.example:3128")},
 			want: []ProxyPlanReason{{Kind: ProxyReasonException, Detail: ".corp.example"}},
 		},
 		"port-specific entry": {
-			config: httpclient.ProxyConfiguration{EnvironmentExceptions: []systemproxy.Exception{{Kind: systemproxy.ExceptionDomain, Domain: "corp.example", Port: "8443", Raw: "corp.example:8443"}},
+			config: hostproxy.Configuration{EnvironmentExceptions: []systemproxy.Exception{{Kind: systemproxy.ExceptionDomain, Domain: "corp.example", Port: "8443", Raw: "corp.example:8443"}},
 				System: desktop(t, "http://proxy.example:3128")},
 			want: []ProxyPlanReason{{Kind: ProxyReasonException, Detail: "corp.example:8443"}},
 		},
 		"simple host names": {
-			config: httpclient.ProxyConfiguration{System: simple},
+			config: hostproxy.Configuration{System: simple},
 			want:   []ProxyPlanReason{{Kind: ProxyReasonException, Detail: "ExcludeSimpleHostnames"}},
 		},
 		"inverted exceptions": {
-			config: httpclient.ProxyConfiguration{System: inverted},
+			config: hostproxy.Configuration{System: inverted},
 			want:   []ProxyPlanReason{{Kind: ProxyReasonInverted, Detail: "gsettings"}},
 		},
 		"mixed sources": {
-			config: httpclient.ProxyConfiguration{EnvironmentHTTPS: proxyURL(t, "http://env.example:8080"), System: desktop(t, "http://proxy.example:3128", "corp.example")},
+			config: hostproxy.Configuration{EnvironmentHTTPS: proxyURL(t, "http://env.example:8080"), System: desktop(t, "http://proxy.example:3128", "corp.example")},
 			want:   []ProxyPlanReason{{Kind: ProxyReasonMixedSources, Detail: "gsettings"}},
 		},
 		"unreadable system configuration": {
-			config: httpclient.ProxyConfiguration{EnvironmentHTTPS: proxyURL(t, "http://env.example:8080"), SystemErr: errors.New("settings tool failed")},
+			config: hostproxy.Configuration{EnvironmentHTTPS: proxyURL(t, "http://env.example:8080"), SystemErr: errors.New("settings tool failed")},
 			want:   []ProxyPlanReason{{Kind: ProxyReasonSystemUnavailable, Detail: "settings tool failed"}},
 		},
 	} {
@@ -184,7 +184,7 @@ func TestPolicyOutsideTheSharedGrammarKeepsThePerRemoteDecision(t *testing.T) {
 		}
 	}
 
-	excepted := httpclient.ProxyConfiguration{System: desktop(t, "http://proxy.example:3128", "github.com", "build-*.example")}
+	excepted := hostproxy.Configuration{System: desktop(t, "http://proxy.example:3128", "github.com", "build-*.example")}
 	plan, err := planFor(excepted, "https://github.com/o/r.git")
 	testutil.FailErr(t, "excepted remote", err)
 	if env := environmentOf(plan.Environment()); env["https_proxy"] != "" || env["HTTPS_PROXY"] != "" {
@@ -196,7 +196,7 @@ func TestPolicyOutsideTheSharedGrammarKeepsThePerRemoteDecision(t *testing.T) {
 		t.Fatalf("ssh remote plan = %+v", plan)
 	}
 
-	auto := httpclient.ProxyConfiguration{System: systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeAuto}}
+	auto := hostproxy.Configuration{System: systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeAuto}}
 	if plan, err := planFor(auto, "ssh://git@github.com/o/r.git"); err != nil || plan.Reasons[0].Kind != ProxyReasonAutomatic {
 		t.Fatalf("automatic configuration over ssh = %+v, %v", plan, err)
 	}
@@ -227,8 +227,8 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(proxy.Close)
-	proxyConfigurationFn = func() httpclient.ProxyConfiguration {
-		return httpclient.ProxyConfiguration{System: desktop(t, proxy.URL, "git.invalid")}
+	proxyConfigurationFn = func() hostproxy.Configuration {
+		return hostproxy.Configuration{System: desktop(t, proxy.URL, "git.invalid")}
 	}
 
 	dir := t.TempDir()
@@ -279,8 +279,8 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(proxy.Close)
-	proxyConfigurationFn = func() httpclient.ProxyConfiguration {
-		return httpclient.ProxyConfiguration{System: desktop(t, proxy.URL)}
+	proxyConfigurationFn = func() hostproxy.Configuration {
+		return hostproxy.Configuration{System: desktop(t, proxy.URL)}
 	}
 
 	remote := "http://git.invalid/r.git"
@@ -295,8 +295,8 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 		t.Fatalf("proxy saw %q, want the remote's ref advertisement", requests())
 	}
 
-	proxyConfigurationFn = func() httpclient.ProxyConfiguration {
-		return httpclient.ProxyConfiguration{System: systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeAuto}}
+	proxyConfigurationFn = func() hostproxy.Configuration {
+		return hostproxy.Configuration{System: systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeAuto}}
 	}
 	before := len(requests())
 	var unsupported *systemproxy.Unsupported
@@ -306,7 +306,7 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 }
 
 func TestMalformedEnvironmentProxyPlanFailsForItsRemote(t *testing.T) {
-	config := httpclient.ProxyConfiguration{EnvironmentHTTPSErr: errors.New("invalid environment proxy")}
+	config := hostproxy.Configuration{EnvironmentHTTPSErr: errors.New("invalid environment proxy")}
 	_, err := planFor(config, "https://remote.example/repo.git")
 	if err == nil {
 		t.Fatal("invalid declared proxy became a direct Git plan")

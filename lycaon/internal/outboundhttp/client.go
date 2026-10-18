@@ -410,7 +410,7 @@ func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.T
 				}
 			}
 		}
-		return egress.PinnedTransport(target.Hostname(), []netip.Addr{addr}, targetPort), 0, nil
+		return egress.PinnedTransport(target, []netip.Addr{addr}, targetPort), 0, nil
 	}
 	dnsStart := time.Now()
 	ips, err := egress.ResolveIPsWithPolicy(ctx, target.Hostname(), func(ip netip.Addr) bool {
@@ -423,7 +423,7 @@ func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.T
 	if err != nil {
 		return nil, dnsElapsed, err
 	}
-	return egress.PinnedTransport(target.Hostname(), ips, 0), dnsElapsed, nil
+	return egress.PinnedTransport(target, ips, 0), dnsElapsed, nil
 }
 
 func (in Request) clientForHop(remaining time.Duration, transport *http.Transport) *http.Client {
