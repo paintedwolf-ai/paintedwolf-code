@@ -17,7 +17,7 @@ func measureExecutionStateBlock(ctx context.Context, renderer *prompts.InjectRen
 	for i := range 4 {
 		for _, tool := range []string{"write", "command"} {
 			id := fmt.Sprintf("01234567-0123-4567-8901-%012d", i)
-			receipt := &api.InvocationReceipt{ID: id, Tool: tool, ToolCallID: id, ArgsDigest: id, Status: api.InvocationStatusRejected, Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING"}}
+			receipt := &api.InvocationReceipt{ID: id, Tool: tool, ToolCallID: id, ArgsDigest: id, Status: api.InvocationStatusRejected, Invoked: true, Failure: &api.InvocationFailure{Code: "MUTATION_BROKE_PARSE"}}
 			if tool == "command" {
 				receipt.Status, receipt.Invoked, receipt.Failure = api.InvocationStatusCompleted, true, nil
 				receipt.SourceVerdict, receipt.SourceRevision, receipt.SourceRootDigest = "failed", strings.Repeat("a", 64), strings.Repeat("b", 64)

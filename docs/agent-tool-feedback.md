@@ -356,3 +356,8 @@ observation. Each rejected operation records only prerequisite calls completed
 after that rejection; those historical events do not assert current tool availability,
 permission, or task completion. Rebuilding the projection never modifies canonical
 messages or invocation receipts.
+
+Rejected source mutations remain in these observations even when their handler
+started. The summary distinguishes rejection after invocation from a call that
+never executed; it does not infer whether a file exists, remains unchanged, or
+has partial effects. This distinction applies across supported languages.
