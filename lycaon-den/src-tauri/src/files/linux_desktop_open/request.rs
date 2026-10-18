@@ -13,7 +13,10 @@ use super::{
 };
 
 const REQUEST_INTERFACE: &str = "org.freedesktop.portal.Request";
+#[cfg(not(test))]
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(test)]
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(3);
 type Completion = Arc<Mutex<Option<oneshot::Sender<Result<(), ServiceError>>>>>;
 
 fn finish(completion: &Completion, result: Result<(), ServiceError>) {

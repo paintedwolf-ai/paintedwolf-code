@@ -100,8 +100,7 @@ impl Fixture {
                                     .unwrap();
                                 let token = options["handle_token"].get::<String>().unwrap();
                                 assert!(token.starts_with("paintedwolf_"));
-                                let sender =
-                                    sender.unwrap().trim_start_matches(':').replace('.', "_");
+                                let sender = sender.trim_start_matches(':').replace('.', "_");
                                 let alternate = matches!(behavior, Behavior::Respond(_, _, true));
                                 let token = if alternate {
                                     format!("alternate_{}", uuid::Uuid::new_v4().simple())
