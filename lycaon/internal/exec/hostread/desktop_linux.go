@@ -71,18 +71,18 @@ func read(ctx context.Context, program string) ([]byte, int, error) {
 	if err != nil {
 		return nil, -1, errors.New("desktop proxy settings reader failed")
 	}
-	return output.Bytes(), 0, nil
+	return output.buffer.Bytes(), 0, nil
 }
 
 type boundedOutput struct {
-	bytes.Buffer
+	buffer bytes.Buffer
 	exceeded bool
 }
 
 func (output *boundedOutput) Write(value []byte) (int, error) {
-	if len(value) > outputLimit-output.Len() {
+	if len(value) > outputLimit-output.buffer.Len() {
 		output.exceeded = true
 		return 0, errOutputLimit
 	}
-	return output.Buffer.Write(value)
+	return output.buffer.Write(value)
 }
