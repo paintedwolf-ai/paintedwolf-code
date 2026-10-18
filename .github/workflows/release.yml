@@ -510,12 +510,12 @@ jobs:
       - name: Verify the catalog row for this candidate
         env:
           PLATFORM: ${{ matrix.updater_key }}
-          RUNNER_NAME: ${{ matrix.runner }}
+          EXPECTED_RUNNER: ${{ matrix.runner }}
         run: |
           set -euo pipefail
           row="$(jq -c --arg key "${PLATFORM}" '.platforms[] | select(.updater_key == $key)' packaging/release-platforms.json)"
           [[ "$(jq -r .publication <<<"${row}")" == candidate ]]
-          [[ "$(jq -r .runner <<<"${row}")" == "${RUNNER_NAME}" ]]
+          [[ "$(jq -r .runner <<<"${row}")" == "${EXPECTED_RUNNER}" ]]
           [[ "$(jq -c .package_extensions <<<"${row}")" == '["deb","rpm"]' ]]
           [[ "$(jq -r .updater_extension <<<"${row}")" == null ]]
 

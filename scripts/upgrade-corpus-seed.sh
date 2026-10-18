@@ -315,15 +315,17 @@ stage = Path(sys.argv[1])
 with zipfile.ZipFile(stage / 'backup.zip') as archive, archive.open('store.db') as source, (stage / 'store.db').open('wb') as output:
     shutil.copyfileobj(source, output)
 PYCODE
-# A library connection closes without leaving the persistent WAL the sqlite3 CLI keeps beside the store.
+# Checkpoint the WAL and remove any persistent WAL/SHM files left by macOS libsqlite3.
 python3 - "${STAGE_DIR}/store.db" "${SEED_PROJECT_ROOT}" <<'PYCODE'
 import sqlite3
 import sys
 connection = sqlite3.connect(sys.argv[1])
 connection.execute("UPDATE project_roots SET path = 'project-root' WHERE path = ?", (sys.argv[2],))
 connection.commit()
+connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 connection.close()
 PYCODE
+rm -f "${STAGE_DIR}/store.db-wal" "${STAGE_DIR}/store.db-shm"
 cp -a "${APP_STATE_PATH}" "${STAGE_DIR}/app-state-v1"
 cp -a "${SEED_PROJECT_ROOT}/." "${STAGE_DIR}/project-root/"
 # Boot restores the overlay directory name from this fixture placeholder.
