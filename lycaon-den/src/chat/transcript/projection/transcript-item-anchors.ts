@@ -14,6 +14,7 @@ import { isTranscriptDisclosureOpen, isTranscriptDisclosureShell } from "../pres
 export type TranscriptSpanState = {
   entryToSpanKey: ReadonlyMap<string, string>;
   spanEntries: ReadonlyMap<string, readonly string[]>;
+  firstRowKey?: string;
 };
 
 export const EMPTY_TRANSCRIPT_SPAN_STATE: TranscriptSpanState = {
@@ -78,6 +79,9 @@ export function reconcileRegroupedActivitySpans(
 ): TranscriptSpanState {
   const entryToSpanKey = new Map<string, string>();
   const spanEntries = new Map<string, readonly string[]>();
+  const firstRowKey = items.find(
+    (item) => item.kind !== "time_marker" && item.kind !== "unread_marker",
+  )?.key;
   for (const item of items) {
     if (item.kind !== "activity_span") continue;
     const keys = item.entries.map(activitySpanEntryKey);
@@ -92,13 +96,14 @@ export function reconcileRegroupedActivitySpans(
       }
     }
   }
-  return { entryToSpanKey, spanEntries };
+  return { entryToSpanKey, spanEntries, firstRowKey };
 }
 
 function measureActivitySpanEntryOffsetPx(
   root: ParentNode | null | undefined,
   entryKey: string,
   relativeToFirstEntry: boolean,
+  includeRowSeam = false,
 ): number | undefined {
   if (!root) return undefined;
   let targetEl: HTMLElement | null = null;
@@ -111,14 +116,18 @@ function measureActivitySpanEntryOffsetPx(
   if (!targetEl) return undefined;
   const spanEl = targetEl.closest<HTMLElement>(".den-activity-span");
   if (spanEl instanceof HTMLDetailsElement && !spanEl.open) return 0;
+  const rowEl = targetEl.closest<HTMLElement>("[data-msg-id]");
   const baseEl = relativeToFirstEntry
     ? (spanEl ?? root).querySelector<HTMLElement>("[data-activity-entry-key]")
-    : (targetEl.closest<HTMLElement>("[data-msg-id]") ?? spanEl);
+    : (rowEl ?? spanEl);
   if (!baseEl || baseEl === targetEl) return undefined;
+  const seamPx = includeRowSeam && relativeToFirstEntry && spanEl && rowEl
+    ? Math.max(0, spanEl.getBoundingClientRect().top - rowEl.getBoundingClientRect().top)
+    : 0;
   const rectDelta = targetEl.getBoundingClientRect().top - baseEl.getBoundingClientRect().top;
-  if (rectDelta > 0) return rectDelta;
+  if (rectDelta > 0) return rectDelta + seamPx;
   const offsetDelta = targetEl.offsetTop - (relativeToFirstEntry ? baseEl.offsetTop : 0);
-  return offsetDelta > 0 ? offsetDelta : undefined;
+  return offsetDelta > 0 ? offsetDelta + seamPx : undefined;
 }
 
 /** Finds the row that absorbed or succeeded a vanished anchor key and the offset within it. */
@@ -139,9 +148,10 @@ export function resolveTranscriptItemAnchor(
       if (index < 0) continue;
       const entryKey = activitySpanEntryKey(item.entries[index]!);
       const wasSpan = options?.previous ? options.previous.spanEntries.has(rowKey) : true;
+      const wasFirstRow = options?.previous?.firstRowKey === rowKey;
       const measureOffsetPx = () =>
         isSpanOpen(item.key)
-          ? measureActivitySpanEntryOffsetPx(options?.root?.(), entryKey, wasSpan)
+          ? measureActivitySpanEntryOffsetPx(options?.root?.(), entryKey, wasSpan, wasFirstRow)
           : 0;
       return {
         rowKey: item.key,
@@ -180,8 +190,11 @@ export function bindTranscriptSpanAnchors(options: {
 }): (rowKey: string) => ResolvedTranscriptAnchor | undefined {
   let previous = EMPTY_TRANSCRIPT_SPAN_STATE;
   let currentState = EMPTY_TRANSCRIPT_SPAN_STATE;
-  createComputed(() => {
+  let syncedItems: readonly TranscriptItem[] | undefined;
+  const sync = () => {
     const current = options.items();
+    if (current === syncedItems) return current;
+    syncedItems = current;
     untrack(() => {
       previous = currentState;
       currentState = reconcileRegroupedActivitySpans(current, currentState, (from, to) =>
@@ -191,10 +204,12 @@ export function bindTranscriptSpanAnchors(options: {
         ),
       );
     });
-  });
+    return current;
+  };
+  createComputed(sync);
   return (rowKey: string) =>
     resolveTranscriptItemAnchor(
-      options.items(),
+      sync(),
       rowKey,
       (spanKey) => options.isOpen(transcriptDisclosureKey.activitySpan(spanKey)),
       ACTIVITY_SPAN_ENTRY_ESTIMATE_PX,
