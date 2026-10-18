@@ -80,6 +80,14 @@ A block answers four questions without narrating implementation: which transitio
 
 ### Typed detail conventions
 
+Oversized feedback should preserve a small set of actionable host observations
+through the shared transcript projection. Select complete diagnostic values;
+never trim a replacement call into a different executable operation. Keep the
+original result unchanged and expose omission markers with its durable result
+reference. Bounds apply to encoded bytes, list entries, and nested repairs.
+This presentation boundary does not alter OAR facts, selection, copy grammar,
+or occurrence delivery.
+
 - Browser action failures retain the original zero-based `index` and a bounded `completed_actions` prefix (index, type, locators per completed step). Those effects remain applied; the failing step may also have taken effect before settling failed. `interactive_controls` retains observed control names, text, and disabled state; `interactive_truncated` says the inventory is partial. An absent disabled value is unknown, not enabled. Successful idle waits return the settled control state.
 - Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/toolrejection/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
 
