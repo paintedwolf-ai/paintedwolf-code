@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import sys
 
-CATALOG = Path(__file__).resolve().parent.parent / "packaging/linux/support-matrix.json"
+CATALOG = Path(__file__).resolve().parents[2] / "packaging/linux/support-matrix.json"
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]*\Z")
 TIERS = {"installed-functional", "native-desktop", "native-security", "native-performance"}
 

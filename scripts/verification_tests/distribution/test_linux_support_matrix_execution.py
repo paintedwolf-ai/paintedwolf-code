@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from linux_support_matrix import CATALOG, expand
+from linux_release.support_matrix import CATALOG, expand
 
 
 class LinuxSupportMatrixTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class LinuxSupportMatrixTests(unittest.TestCase):
                 expand(catalog)
 
     def test_command_emits_rows_and_rejects_unknown_catalog_version(self):
-        script = Path(__file__).resolve().parents[2] / "linux_support_matrix.py"
+        script = Path(__file__).resolve().parents[2] / "linux_release" / "support_matrix.py"
         result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["rows"], expand(self.catalog))
