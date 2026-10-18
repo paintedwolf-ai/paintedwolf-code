@@ -22,6 +22,7 @@ func TestWaitVisibilityObservesCurrentBatch(t *testing.T) {
 		offered, worker, blocked bool
 	}{
 		{"unpublished wait", []api.Message{wait}, "wait", true, false, true},
+		{"sibling tool result", []api.Message{wait, {Role: api.MessageRoleTool, Content: "ok"}}, "wait", true, false, true},
 		{"silent wait", []api.Message{silent}, "wait", true, false, false},
 		{"same batch note", []api.Message{wait, note}, "wait", true, false, false},
 		{"previous batch note", []api.Message{note, wait}, "wait", true, false, true},

@@ -16,7 +16,8 @@ copy:
   what: '`wait` has not started; this tool turn contains assistant text hidden from the user'
   cause: No user-visible note was committed in this batch
   why: Waiting parks the turn without publishing that text
-  fix: 'If the user needs an update, send a grounded `surface_note` and `wait` together. Otherwise call `wait` with empty assistant text. Keep the same wait conditions.'
+  fix: 'If the user needs an update, send a grounded `surface_note` and `wait` together. Otherwise call `wait` with empty assistant text.'
+  instead: 'Retry with the same wait conditions after choosing either recovery path.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Hidden assistant text before wait
