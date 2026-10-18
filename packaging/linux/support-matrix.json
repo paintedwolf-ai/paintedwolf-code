@@ -1,0 +1,1186 @@
+{
+  "format_version": 1,
+  "floor_source": "lycaon/internal/platformfloor/linux_floor.txt",
+  "recorded_environment_facts": [
+    "distribution-and-release",
+    "repository-snapshots",
+    "kernel-and-libc",
+    "gtk-webkitgtk-and-graphics-driver",
+    "desktop-compositor-display-protocol",
+    "session-and-portal-provider-versions",
+    "security-policy",
+    "nix-version-and-locks-when-applicable",
+    "source-commit-and-final-package-or-closure-identity"
+  ],
+  "architectures": [
+    {
+      "id": "amd64",
+      "nix_system": "x86_64-linux"
+    },
+    {
+      "id": "arm64",
+      "nix_system": "aarch64-linux"
+    }
+  ],
+  "installations": [
+    {
+      "id": "deb",
+      "package_owner": "dpkg/apt",
+      "vault_mode": "system-service or app password",
+      "issues": [
+        758,
+        759,
+        736,
+        450,
+        456
+      ]
+    },
+    {
+      "id": "rpm",
+      "package_owner": "rpm/dnf",
+      "vault_mode": "system-service or app password",
+      "issues": [
+        758,
+        759,
+        736,
+        450,
+        456
+      ]
+    },
+    {
+      "id": "pacman",
+      "package_owner": "pacman, including packages built through AUR/yay",
+      "vault_mode": "system-service or app password",
+      "issues": [
+        940,
+        941,
+        942,
+        943
+      ]
+    },
+    {
+      "id": "nixos-system",
+      "package_owner": "administrator-selected NixOS generation",
+      "vault_mode": "generation-bound system-service or app password",
+      "issues": [
+        927,
+        928,
+        929,
+        931,
+        932
+      ]
+    },
+    {
+      "id": "nix-package",
+      "package_owner": "package-only Nix installation",
+      "vault_mode": "app password unless administrator integration is independently configured",
+      "issues": [
+        927,
+        928,
+        931,
+        932
+      ]
+    },
+    {
+      "id": "nix-profile",
+      "package_owner": "user-selected Nix profile generation",
+      "vault_mode": "app password unless administrator integration is independently configured",
+      "issues": [
+        927,
+        928,
+        931,
+        932
+      ]
+    },
+    {
+      "id": "home-manager",
+      "package_owner": "Home Manager generation",
+      "vault_mode": "app password unless administrator integration is independently configured",
+      "issues": [
+        927,
+        928,
+        931,
+        932
+      ]
+    },
+    {
+      "id": "nix-run",
+      "package_owner": "temporary pinned nix run invocation",
+      "vault_mode": "app password unless administrator integration is independently configured",
+      "issues": [
+        927,
+        928,
+        931,
+        932
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "conversation",
+      "outcome": "Chats, workflows, approvals, provider onboarding and MCP",
+      "tier": "installed-functional",
+      "issues": [
+        444,
+        456
+      ],
+      "cases": [
+        "provider-onboarding",
+        "chat-and-workflow",
+        "approvals-and-mcp",
+        "restart-and-reconnect"
+      ]
+    },
+    {
+      "id": "git",
+      "outcome": "SSH/HTTPS Git, LFS and signing from a thin desktop environment",
+      "tier": "installed-functional",
+      "issues": [
+        47,
+        456
+      ],
+      "cases": [
+        "ssh-and-https",
+        "lfs-and-signing",
+        "credential-cancel",
+        "thin-launch-environment"
+      ]
+    },
+    {
+      "id": "files",
+      "outcome": "Edit, search, review, watch recovery, Trash and restore",
+      "tier": "installed-functional",
+      "issues": [
+        452
+      ],
+      "cases": [
+        "edit-search-review",
+        "watch-exhaustion-recovery",
+        "same-and-cross-volume-trash",
+        "restore-after-restart"
+      ]
+    },
+    {
+      "id": "external-files",
+      "outcome": "Folder picking, open/reveal and external editors",
+      "tier": "native-desktop",
+      "issues": [
+        452,
+        790,
+        936,
+        938
+      ],
+      "cases": [
+        "small-screen-folder-picker",
+        "portal-cancel-denial-and-loss",
+        "flatpak-file-forwarding",
+        "unicode-and-uri-paths"
+      ]
+    },
+    {
+      "id": "clipboard",
+      "outcome": "Copy/paste text, images and primary selection",
+      "tier": "native-desktop",
+      "issues": [
+        751,
+        447
+      ],
+      "cases": [
+        "text-and-image-clipboard",
+        "ownership-lifetime",
+        "no-xwayland",
+        "no-clipboard-manager",
+        "primary-selection"
+      ]
+    },
+    {
+      "id": "input",
+      "outcome": "Menus, keyboard, pointer, IME, drag/drop and non-US input",
+      "tier": "native-desktop",
+      "issues": [
+        447
+      ],
+      "cases": [
+        "app-menu-and-shortcuts",
+        "ime-and-dead-keys",
+        "non-us-layout",
+        "pointer-and-drag-drop"
+      ]
+    },
+    {
+      "id": "windowing",
+      "outcome": "Native chrome, multiple monitors/windows and restored geometry",
+      "tier": "native-desktop",
+      "issues": [
+        446
+      ],
+      "cases": [
+        "client-and-server-decorations",
+        "tiling-and-multi-window",
+        "mixed-scale-monitors",
+        "geometry-recovery"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "outcome": "Appearance preferences, text scaling and assistive navigation",
+      "tier": "native-desktop",
+      "issues": [
+        48,
+        889,
+        456
+      ],
+      "cases": [
+        "orca-navigation",
+        "atspi-text-attributes",
+        "contrast-and-reduced-motion",
+        "overflow-and-large-text"
+      ]
+    },
+    {
+      "id": "notifications",
+      "outcome": "Background delivery, replacement, inhibition and chat activation",
+      "tier": "native-desktop",
+      "issues": [
+        451
+      ],
+      "cases": [
+        "delivery-and-replacement",
+        "inhibition-and-service-loss",
+        "activation-token-and-chat",
+        "missing-actions"
+      ]
+    },
+    {
+      "id": "session",
+      "outcome": "Lock, suspend, resume and active-work power inhibition",
+      "tier": "native-security",
+      "issues": [
+        45,
+        733,
+        734
+      ],
+      "cases": [
+        "lock-during-presence",
+        "initial-lock-state",
+        "suspend-and-resume",
+        "inhibitor-lifetime",
+        "provider-loss-and-reconnect"
+      ]
+    },
+    {
+      "id": "vault",
+      "outcome": "Credential onboarding, custody, password fallback and recovery",
+      "tier": "native-security",
+      "issues": [
+        448,
+        754,
+        755,
+        756,
+        939
+      ],
+      "cases": [
+        "service-and-password-onboarding",
+        "presence-cancel-and-expiry",
+        "service-unavailable-retry",
+        "wrong-launcher-and-memory",
+        "reinstall-with-healthy-credentials"
+      ]
+    },
+    {
+      "id": "confinement",
+      "outcome": "Applied filesystem, IPC, process and egress boundaries",
+      "tier": "native-security",
+      "issues": [
+        445,
+        194,
+        196,
+        933,
+        935
+      ],
+      "cases": [
+        "filesystem-and-egress-denial",
+        "system-v-ipc-isolation",
+        "private-shared-memory",
+        "restricted-user-namespaces",
+        "helper-boundary-and-descendants"
+      ]
+    },
+    {
+      "id": "processes",
+      "outcome": "Terminals, background cancellation and descendant cleanup",
+      "tier": "native-security",
+      "issues": [
+        211,
+        196
+      ],
+      "cases": [
+        "terminal-interaction",
+        "background-cancel",
+        "setsid-and-double-fork",
+        "host-execution-lifetime"
+      ]
+    },
+    {
+      "id": "browser",
+      "outcome": "Managed browser, capture, downloads and local development servers",
+      "tier": "native-security",
+      "issues": [
+        43,
+        196
+      ],
+      "cases": [
+        "browser-sandbox-composition",
+        "capture-and-download",
+        "allowed-local-server",
+        "denied-local-services"
+      ]
+    },
+    {
+      "id": "documents",
+      "outcome": "Scanning, OCR, redaction and document processing",
+      "tier": "installed-functional",
+      "issues": [
+        49,
+        454
+      ],
+      "cases": [
+        "pinned-scanner-execution",
+        "ocr-and-documents",
+        "redacted-send",
+        "helper-startup"
+      ]
+    },
+    {
+      "id": "networking",
+      "outcome": "System proxies, TLS trust and network policy changes",
+      "tier": "installed-functional",
+      "issues": [
+        453,
+        934
+      ],
+      "cases": [
+        "gnome-and-kde-proxy",
+        "inherited-and-immutable-kconfig",
+        "authentication-and-no-proxy",
+        "pac-wpad-refusal",
+        "configuration-change"
+      ]
+    },
+    {
+      "id": "installation",
+      "outcome": "Complete payload, dependency closure, identity and launchers",
+      "tier": "installed-functional",
+      "issues": [
+        731,
+        736,
+        758,
+        927,
+        928,
+        940,
+        941
+      ],
+      "cases": [
+        "clean-install-and-launch",
+        "all-helpers-and-resources",
+        "elf-abi-and-runtime-modules",
+        "launcher-arguments",
+        "package-ownership-and-removal"
+      ]
+    },
+    {
+      "id": "updates",
+      "outcome": "Source-owned channels, live upgrades, interrupted updates and rollback",
+      "tier": "installed-functional",
+      "issues": [
+        450,
+        759,
+        931,
+        937,
+        942
+      ],
+      "cases": [
+        "source-and-channel-identity",
+        "running-app-upgrade",
+        "interrupted-upgrade",
+        "holds-stale-and-unavailable-source",
+        "newer-data-rollback-refusal"
+      ]
+    },
+    {
+      "id": "recovery",
+      "outcome": "Recovery points, low/full disk, restore and preserved device credentials",
+      "tier": "installed-functional",
+      "issues": [
+        41,
+        448,
+        450
+      ],
+      "cases": [
+        "ext4-and-reflink-storage",
+        "low-and-full-disk",
+        "interrupted-capture-and-restore",
+        "credential-preservation"
+      ]
+    },
+    {
+      "id": "development",
+      "outcome": "Confined development tools and explicit Nix daemon authority",
+      "tier": "native-security",
+      "issues": [
+        930,
+        196
+      ],
+      "cases": [
+        "nix-store-and-dev-shell",
+        "daemon-authority-and-attribution",
+        "remote-builder-authority",
+        "cancellation-and-no-silent-escalation"
+      ]
+    },
+    {
+      "id": "distribution",
+      "outcome": "Authentic packages/cache, rotation, withdrawal and source-build fallback",
+      "tier": "installed-functional",
+      "issues": [
+        50,
+        759,
+        931,
+        942,
+        945
+      ],
+      "cases": [
+        "signature-and-tamper-refusal",
+        "interrupted-publication",
+        "rotation-and-withdrawal",
+        "installation-owner-source-build-fallback"
+      ]
+    },
+    {
+      "id": "performance",
+      "outcome": "Application and Bialy latency, memory, startup and sustained workload",
+      "tier": "native-performance",
+      "issues": [
+        455
+      ],
+      "cases": [
+        "cold-and-warm-start",
+        "workflow-and-bialy-latency",
+        "memory-and-sustained-load",
+        "architecture-specific-thresholds"
+      ]
+    }
+  ],
+  "environments": [
+    {
+      "id": "ubuntu-floor-gnome-wayland",
+      "distribution": "Ubuntu",
+      "release": "24.04; pin updates and repositories at qualification",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "default AppArmor; restricted user namespaces with and without package profile",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        456
+      ]
+    },
+    {
+      "id": "ubuntu-floor-gnome-x11",
+      "distribution": "Ubuntu",
+      "release": "24.04; pin updates and repositories at qualification",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "default AppArmor; restricted user namespaces with and without package profile",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        456
+      ]
+    },
+    {
+      "id": "ubuntu-newer-kde-wayland",
+      "distribution": "Ubuntu",
+      "release": "maintained newer release; pin exact release and repositories",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "default AppArmor",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        453,
+        456
+      ]
+    },
+    {
+      "id": "ubuntu-newer-kde-x11",
+      "distribution": "Ubuntu",
+      "release": "maintained newer release; pin exact release and repositories",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "default AppArmor",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        453,
+        456
+      ]
+    },
+    {
+      "id": "debian-floor-gnome",
+      "distribution": "Debian",
+      "release": "13; pin updates and repositories",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        456
+      ]
+    },
+    {
+      "id": "fedora-maintained-gnome",
+      "distribution": "Fedora",
+      "release": "oldest maintained release satisfying declared floors, plus a newer maintained release",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "rpm",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "SELinux enforcing",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        456
+      ]
+    },
+    {
+      "id": "rhel-floor-gnome",
+      "distribution": "RHEL-compatible",
+      "release": "10; name distribution and pin repositories",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "rpm",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "SELinux enforcing",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        456
+      ]
+    },
+    {
+      "id": "arch-plasma",
+      "distribution": "Arch Linux",
+      "release": "rolling; pin repository snapshot date",
+      "architectures": [
+        "amd64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        943
+      ]
+    },
+    {
+      "id": "arch-arm-plasma",
+      "distribution": "Arch Linux ARM",
+      "release": "aarch64 rolling; pin repository snapshot and supported hardware",
+      "architectures": [
+        "arm64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        731,
+        943
+      ]
+    },
+    {
+      "id": "artix-openrc",
+      "distribution": "Artix",
+      "release": "rolling; pin OpenRC and elogind repositories",
+      "architectures": [
+        "amd64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "X11",
+      "session": "OpenRC with elogind",
+      "portal": "KDE",
+      "security": "protected OpenRC vault service state",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        941,
+        943
+      ]
+    },
+    {
+      "id": "debian-xfce",
+      "distribution": "Debian-compatible",
+      "release": "maintained release with named desktop packages and repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Xfce",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "GTK",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        456
+      ]
+    },
+    {
+      "id": "debian-cinnamon",
+      "distribution": "Debian-compatible",
+      "release": "maintained release with named desktop packages and repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Cinnamon",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "Xapp",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        456
+      ]
+    },
+    {
+      "id": "debian-mate",
+      "distribution": "Debian-compatible",
+      "release": "maintained release with named desktop packages and repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "MATE",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "GTK",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        456
+      ]
+    },
+    {
+      "id": "debian-lxqt",
+      "distribution": "Debian-compatible",
+      "release": "maintained release with named desktop packages and repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "LXQt",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "LXQt",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        456
+      ]
+    },
+    {
+      "id": "debian-cosmic",
+      "distribution": "Debian-compatible",
+      "release": "maintained release with named desktop packages and repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "deb",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "COSMIC",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "COSMIC",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        456
+      ]
+    },
+    {
+      "id": "arch-sway",
+      "distribution": "Arch-family",
+      "release": "Arch Linux amd64 and Arch Linux ARM arm64; pin each repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Sway",
+      "display": "Wayland with XWayland disabled",
+      "session": "explicit session bus; optional login manager",
+      "portal": "wlr",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        943
+      ]
+    },
+    {
+      "id": "arch-hyprland",
+      "distribution": "Arch-family",
+      "release": "Arch Linux amd64 and Arch Linux ARM arm64; pin each repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Hyprland",
+      "display": "Wayland with XWayland disabled",
+      "session": "explicit session bus; optional login manager",
+      "portal": "Hyprland",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        734,
+        943
+      ]
+    },
+    {
+      "id": "arch-i3",
+      "distribution": "Arch-family",
+      "release": "Arch Linux amd64 and Arch Linux ARM arm64; pin each repository snapshot",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "i3",
+      "display": "standalone X11 without a clipboard manager",
+      "session": "explicit session bus; optional login manager",
+      "portal": "GTK",
+      "security": "distribution default",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "i3 is the standalone X11 protocol representative; Awesome, bspwm and Openbox reuse only protocol-class cases, with native differences owned by #734/#456",
+      "issues": [
+        733,
+        734,
+        943
+      ]
+    },
+    {
+      "id": "nixos-stable-gnome-wayland",
+      "distribution": "NixOS",
+      "release": "26.05 stable",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-stable-gnome-x11",
+      "distribution": "NixOS",
+      "release": "26.05 stable",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-stable-plasma-wayland",
+      "distribution": "NixOS",
+      "release": "26.05 stable",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-stable-plasma-x11",
+      "distribution": "NixOS",
+      "release": "26.05 stable",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-unstable-gnome-wayland",
+      "distribution": "NixOS",
+      "release": "nixos-unstable; pin exact nixpkgs revision",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-unstable-gnome-x11",
+      "distribution": "NixOS",
+      "release": "nixos-unstable; pin exact nixpkgs revision",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "GNOME",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "GNOME",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-unstable-plasma-wayland",
+      "distribution": "NixOS",
+      "release": "nixos-unstable; pin exact nixpkgs revision",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "Wayland",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    },
+    {
+      "id": "nixos-unstable-plasma-x11",
+      "distribution": "NixOS",
+      "release": "nixos-unstable; pin exact nixpkgs revision",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "installations": [
+        "nixos-system",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Plasma",
+      "display": "X11",
+      "session": "systemd-logind",
+      "portal": "KDE",
+      "security": "generation-bound administrator-selected service trust",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        929,
+        932
+      ]
+    }
+  ]
+}
