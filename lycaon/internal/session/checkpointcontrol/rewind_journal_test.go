@@ -25,7 +25,8 @@ func prepareJournalFixture(t *testing.T) (*Rewinds, *sessioncheckpoint.Journal, 
 	testutil.FailErr(t, "write turn result", os.WriteFile(path, []byte("after"), 0o640))
 	p, err := mgr.rewindProject(ctx, id)
 	testutil.FailErr(t, "resolve project", err)
-	turn, err := repository.UserTurnOrdinal(ctx, id)
+	turnSource, err := repository.ReadSourceTurn(ctx, id, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record source effect", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "file.txt"}, ProjectID: p.ID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))

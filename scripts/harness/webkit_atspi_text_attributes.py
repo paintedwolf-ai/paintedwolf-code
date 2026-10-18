@@ -44,9 +44,11 @@ if (session?.ok !== true) return { ok: false, error: "new session: " + JSON.stri
 const replied = await __harness.prompt("Say hello");
 if (replied?.ok !== true) return { ok: false, error: "prompt: " + JSON.stringify(replied) };
 const seeded = await __harness.goto("scroll-transcript", { turns: 3, activity: true });
-if (seeded?.ok !== true) return { ok: false, error: "transcript: " + JSON.stringify(seeded) };
-const tail = await __harness.waitForText("Can we improve the interface?", 15000);
-if (tail?.ok !== true) return { ok: false, error: "transcript tail: " + JSON.stringify(tail) };
+if (seeded?.ok !== true || !seeded.sessionId || !seeded.lastMessageId) return { ok: false, error: "transcript: " + JSON.stringify(seeded) };
+// The admitted tail row mounts in the seeded session's chat.
+const tailRow = () => document.querySelector(`[data-testid="chat-stream"][data-session-id="${CSS.escape(seeded.sessionId)}"] [data-msg-id="${CSS.escape(seeded.lastMessageId)}"]`);
+for (let i = 0; i < 60 && !tailRow(); i++) await new Promise((r) => setTimeout(r, 250));
+if (!tailRow()) return { ok: false, error: "admitted transcript tail did not mount: " + JSON.stringify({ lastMessageId: seeded.lastMessageId, state: __harness.state(), transcript: __harness.transcript() }) };
 const folders = document.querySelector('[data-testid="project-folder-summary"][aria-expanded="false"]');
 if (folders) folders.click();
 PAUSE

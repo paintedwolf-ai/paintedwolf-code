@@ -171,6 +171,7 @@ func assertExactCommandReplacement(t *testing.T, command, code, tool string) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
+		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", tool}},
 	})
 	refusal, ok := guidance.RefusalFromError(err)
 	if err == nil || !ok {

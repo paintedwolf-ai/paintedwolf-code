@@ -242,9 +242,9 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   await bootstrapChatSession(page);
   const sessionId = await settledChatSessionId(page);
 
-  // Build 260 messages so the 200-message resident tail starts inside a 4-call activity run
-  // (indices 56..63, where index 60 is the first resident message in the 200-row tail).
-  const base = steps(260);
+  // Build 160 messages so the 100-message resident tail starts inside a 4-call activity run
+  // (indices 56..63, where index 60 is the first resident message in the 100-row tail).
+  const base = steps(160);
   const boundaryCalls = [
     { at: 56, id: "call-boundary-0" },
     { at: 58, id: "call-boundary-1" },
@@ -265,6 +265,8 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     });
   }
   const rows = transcriptMessages(base);
+  const leadKeyBefore = `${base[60]!.id}:call-boundary-2`;
+  const leadKeyAfter = `${base[56]!.id}:call-boundary-0`;
 
   const olderPage = (url: URL) =>
     url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
@@ -278,17 +280,20 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   });
 
   await apiSeedSessionTranscript(page.request, sessionId, rows);
-  await expect(liveChatStage(page).getByText("Step 260.", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await page.reload();
+  await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
 
+  const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
   await expect(async () => {
-    await wheel(page, -3_000);
+    if (!(await spanRow.isVisible())) await wheel(page, -1_500);
     expect(olderHeld).toBe(true);
+    await expect(spanRow).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 60_000 });
-
-  const spanRow = scroller(page).locator('.transcript-viewport-row[data-msg-id="call-boundary-2"]');
-  await expect(spanRow).toBeVisible();
-  await spanRow.locator('[data-testid="activity-span-card"] > summary').click();
-  const entry = scroller(page).locator('[data-activity-entry-key="call-boundary-2"]');
+  const spanCard = spanRow.getByTestId("activity-span-card");
+  await spanCard.locator(":scope > .den-transcript-disclosure-header").click();
+  await expect(spanCard).toHaveAttribute("data-expanded", "true");
+  await expect(spanCard).not.toHaveAttribute("data-animating", "true");
+  const entry = scroller(page).locator(`[data-activity-entry-key="${leadKeyBefore}"]`);
   await expect(entry).toBeVisible();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
@@ -299,15 +304,16 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   const response = page.waitForResponse((res) => res.url().includes(`/v1/sessions/${sessionId}/messages`) && res.url().includes("before_message_id="));
   releaseOlder();
   await response;
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-  const mergedSpan = scroller(page).locator('.transcript-viewport-row[data-msg-id="call-boundary-0"] [data-testid="activity-span-card"]');
-  await expect(mergedSpan).toHaveAttribute("open", "");
-  const topAfter = await entry.evaluate((el) => {
-    const host = el.closest<HTMLElement>(".den-chat-stream")!;
-    return el.getBoundingClientRect().top - host.getBoundingClientRect().top;
-  });
-  expect(Math.abs(topAfter - topBefore)).toBeLessThanOrEqual(2);
+  const mergedSpan = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyAfter}"] [data-testid="activity-span-card"]`);
+  await expect(mergedSpan).toHaveAttribute("data-expanded", "true");
+  await expect.poll(async () => {
+    const topAfter = await entry.evaluate((el) => {
+      const host = el.closest<HTMLElement>(".den-chat-stream")!;
+      return el.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    });
+    return Math.abs(topAfter - topBefore);
+  }).toBeLessThanOrEqual(2);
   await page.unroute(olderPage);
 });
 

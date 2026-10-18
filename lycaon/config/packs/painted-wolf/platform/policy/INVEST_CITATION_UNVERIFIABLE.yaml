@@ -9,14 +9,16 @@ requires:
     - paintedwolf.offenders_sample
     - paintedwolf.citation_unverifiable
     - paintedwolf.surface
+    - paintedwolf.can_recall
+    - paintedwolf.can_read
 when: paintedwolf.surface == "implement_investigate" && paintedwolf.citation_unverifiable
 effect: block
 copy:
   what: 'Investigate supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence.'
   cause: 'The citation metadata does not resolve to the claimed recorded passage.'
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Repair only the trailing citation metadata using the exact observed evidence handle or path, line and verbatim excerpt. Preserve the pinned report and omit any citation that cannot be supported.'
-  instead: 'Use existing coordinator or worker observations; citation repair does not reopen tool calls.'
+  fix: 'Repair only the trailing citation metadata using the exact observed evidence handle or path, line and verbatim excerpt. {% if paintedwolf.can_recall %}Recover each rejected citation''s recorded observation with `recall(query="handle:read#3")`, passing its exact handle alone, or a `path:` query when you have only the path; copy the line and excerpt from the returned body, not from memory.{% else %}{% if paintedwolf.can_read %}Re-read the cited lines with `read` and cite that observation.{% else %}Copy the line and excerpt from an observation still shown in this chat.{% endif %}{% endif %} Preserve the pinned report and omit any citation that cannot be supported.'
+  instead: 'Use existing coordinator or worker observations. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_investigate
 x-paintedwolf-evidence:
@@ -25,6 +27,25 @@ x-paintedwolf-evidence:
   in_session_retry: true
 x-paintedwolf-message: 'Investigate citation location or excerpt did not match recorded evidence'
 x-paintedwolf-scenarios:
+  - id: recall_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: read#3
+      can_recall: true
+    expect_contains:
+      - 'Code: INVEST_CITATION_UNVERIFIABLE'
+      - 'recall(query='
+  - id: recall_not_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: read#3
+      can_recall: false
+      can_read: true
+    expect_contains:
+      - 'Code: INVEST_CITATION_UNVERIFIABLE'
+      - 'Re-read the cited lines'
   - id: paraphrased_excerpt
     vars:
       offender_count: 1

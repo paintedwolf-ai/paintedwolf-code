@@ -180,7 +180,9 @@ func ollamaToolCallsToAPI(calls []ollamaToolCall) []api.ToolCall {
 }
 
 // Tool calls accumulate across events and join usage on the terminal chunk.
-func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64)) <-chan modelcall.StreamChunk {
+// reject answers an in-band error message: a refused call to append, or the
+// error. nil keeps every message an untyped error.
+func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64), reject func(message string) (api.ToolCall, bool, error)) <-chan modelcall.StreamChunk {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
@@ -205,7 +207,16 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 			if resp.Error != "" {
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("ollama: %s", resp.Error), Done: true})
+				err := fmt.Errorf("ollama: %s", resp.Error)
+				if reject != nil {
+					var tc api.ToolCall
+					var refused bool
+					if tc, refused, err = reject(resp.Error); refused {
+						modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ToolCalls: append(ollamaToolCallsToAPI(rawToolCalls), tc), Done: true})
+						return
+					}
+				}
+				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Done: true})
 				return
 			}
 			if resp.Message.Content != "" {

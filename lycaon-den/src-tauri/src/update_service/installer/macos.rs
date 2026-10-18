@@ -191,12 +191,48 @@ mod tests {
     #[test]
     fn production_requires_a_developer_id_publisher_and_cannot_inject_a_requirement() {
         let requirement = publisher_requirement(Some("TEAM123456"), false).unwrap();
+        assert!(requirement.starts_with("=identifier \"dev.paintedwolf.code\""));
         assert!(requirement.contains("certificate leaf[subject.OU] = \"TEAM123456\""));
         assert!(requirement.contains("certificate 1[field.1.2.840.113635.100.6.2.6]"));
+        let output = std::process::Command::new("/usr/bin/codesign")
+            .args(["--verify", "--strict", "-R", &requirement, "/usr/bin/true"])
+            .output()
+            .unwrap();
+        assert_eq!(
+            codesign_summary(&output.stderr),
+            "code failed to satisfy specified code requirement(s)"
+        );
         assert!(publisher_requirement(Some("not set"), false).is_err());
         assert!(publisher_requirement(None, false).is_err());
         assert!(publisher_requirement(Some("TEAM\" or true"), false).is_err());
-        assert!(publisher_requirement(Some("not set"), true).is_ok());
+        assert_eq!(
+            publisher_requirement(Some("not set"), true).unwrap(),
+            "=identifier \"dev.paintedwolf.code\""
+        );
+    }
+    #[test]
+    fn inline_requirement_accepts_the_product_identifier_and_rejects_another_identifier() {
+        let root = crate::test_support::TempDir::new("update-codesign-requirement");
+        let binary = root.join("candidate");
+        fs::copy("/usr/bin/true", &binary).unwrap();
+        let signed = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-", "--identifier", "dev.paintedwolf.code"])
+            .arg(&binary)
+            .output()
+            .unwrap();
+        assert!(signed.status.success(), "{signed:?}");
+        let requirement = publisher_requirement(None, true).unwrap();
+        for (expression, accepted) in [
+            (requirement.as_str(), true),
+            ("=identifier \"another.product\"", false),
+        ] {
+            let output = std::process::Command::new("/usr/bin/codesign")
+                .args(["--verify", "--strict", "-R", expression])
+                .arg(&binary)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.success(), accepted, "{output:?}");
+        }
     }
     #[test]
     fn codesign_failures_are_summarized_without_paths() {
@@ -262,7 +298,7 @@ fn signing_requirement() -> Result<String, UpdateError> {
 }
 /// Production bundles must carry a Developer ID Application signature from the running team.
 fn publisher_requirement(team: Option<&str>, development: bool) -> Result<String, UpdateError> {
-    let identifier = "identifier \"dev.paintedwolf.code\"";
+    let identifier = "=identifier \"dev.paintedwolf.code\"";
     match team {
         Some(team)
             if team.len() == 10

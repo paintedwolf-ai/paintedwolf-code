@@ -17,5 +17,4 @@ func (m *Host) SetProgressStore(store progress.RunScopedStore) {
 	m.Stops.SetProgress(store)
 	m.Workers.State.SetProgress(store)
 	m.Runner.Instructions.SetProgress(store)
-	m.Runner.History.SetProgress(store)
 }

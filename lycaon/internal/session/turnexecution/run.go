@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -239,7 +240,7 @@ func (m *Service) executePromptRun(
 			return execution, err
 		}
 	}
-	if err := m.PostTurn.After(ctx, sessionID, assembly.ProfileID, result.TurnTools); err != nil {
+	if err := m.PostTurn.After(tools.WithRecoveryTools(ctx, result.OfferedTools), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
 		return execution, err
 	}
 	checkpointJSON, err := sessionexecution.FinalizingCheckpoint(sessionID, result.LastAssistantID, result.LastOutputID)
@@ -262,7 +263,8 @@ func (m *Service) executePromptRun(
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
 	execution.Response = &promptresult.Result{
-		MessageID: result.LastAssistantID,
+		MessageID:    result.LastAssistantID,
+		OfferedTools: result.OfferedTools,
 	}
 	return execution, nil
 }

@@ -31,11 +31,13 @@ const (
 )
 
 // modelOutputState keeps a response's durable identity, source provenance, and
-// policy refusal together until that response is settled.
+// policy refusal together until that response is settled, and counts the
+// consecutive responses whose native call the provider dropped as invalid JSON.
 type modelOutputState struct {
-	id            string
-	sourceContext *api.SourceContext
-	rejection     *guidance.Refusal
+	id                    string
+	sourceContext         *api.SourceContext
+	rejection             *guidance.Refusal
+	droppedToolCallStreak int
 }
 
 type promptLoopTurnState struct {
@@ -274,6 +276,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
 		}
 	} else {
+		l.Closeout.resumeWork(ctx, sessionID, st)
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
@@ -320,13 +323,6 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if breakToolLoop {
 			out.breakLoop = true
 			out.exit = loopExitToolBoundary
-			return out, nil
-		}
-		if stalled, serr := l.Closeout.maybeEmitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st); serr != nil {
-			return out, serr
-		} else if stalled {
-			out.breakLoop = true
-			out.exit = loopExitCompleted
 			return out, nil
 		}
 		st.history, err = l.Tools.reloadHistoryAfterToolCompaction(ctx, sessionID, sess, surfaceID, st.history, st)
@@ -425,28 +421,6 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	out.breakLoop = true
 	out.exit = loopExitCompleted
 	return out, nil
-}
-
-func (l *turnCloseout) maybeEmitStalledCloseout(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
-	st *promptLoopTurnState,
-) (committed bool, err error) {
-	if !l.closeoutFuseTripped(ctx, sess, sessionID, surfaceID) {
-		return false, nil
-	}
-	emitOut, eerr := l.emitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st, st.history)
-	if eerr != nil {
-		return false, eerr
-	}
-	if !emitOut.committed {
-		return false, nil
-	}
-	st.history = emitOut.history
-	st.lastAssistantContent = emitOut.assistantMsg.Content
-	st.proseFinishDelivered = true
-	return true, nil
 }
 
 func workersIdleForSynthesis(l *promptContext, ctx context.Context, sess *api.Session) bool {
@@ -548,6 +522,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
+			OfferedTools:         st.offeredToolNames,
 			TasksDispatchedCount: st.tasksDispatchedCount,
 		}, nil
 	}
@@ -556,6 +531,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
+		OfferedTools:         st.offeredToolNames,
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}, nil
 }

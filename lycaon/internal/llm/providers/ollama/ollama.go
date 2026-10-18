@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const ollamaProbeTimeout = 3 * time.Second
@@ -72,6 +73,12 @@ func (p *Provider) WithHTTPRetry(policy providerretry.ProviderHTTPRetry) *Provid
 // WithPromptCache sets the provider's prompt-cache policy.
 func (p *Provider) WithPromptCache(policy providerprofile.PromptCachePolicy) *Provider {
 	p.profile.PromptCache = policy
+	return p
+}
+
+// WithToolCallRejections sets the parser rejection grammars of the provider kind.
+func (p *Provider) WithToolCallRejections(policy providerprofile.ToolCallRejectionPolicy) *Provider {
+	p.profile.ToolCallRejections = policy
 	return p
 }
 
@@ -163,7 +170,7 @@ func (p *Provider) resolveThink(req modelcall.CompletionRequest, model string) a
 func estimatePromptTokens(messages []ollamaChatMessage, toolMetas []ollamaTool) int {
 	total := 0
 	for _, m := range messages {
-		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking)
+		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking) + len(m.Images)*providerwire.UnsizedImageTokenEstimate
 		for _, tc := range m.ToolCalls {
 			total += tokenest.EstimateDefault(tc.Function.Name)
 			if raw, err := json.Marshal(tc.Function.Arguments); err == nil {
@@ -194,7 +201,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	maxContext := p.ContextLimit(ctx, model)
 	// Keep automatic answer room inside the model's actual context window.
 	// An explicit request cap remains the caller's contract and must fit.
-	if req.MaxTokens == 0 && maxContext > 0 && numPredict > 0 {
+	if (req.MaxTokens == 0 || req.StrictBudget) && maxContext > 0 && numPredict > 0 {
 		available := maxContext - projectedPromptTokens - ollamaContextHeadroom
 		if available > 0 && numPredict > available {
 			numPredict = available
@@ -274,7 +281,8 @@ func (p *Provider) postWithHTTPRetry(ctx context.Context, client *http.Client, p
 		RefusalCodes: providerprofile.ModelRefusalCodesFor(p.Profile()),
 		Policy:       p.httpRetry,
 		Send: func(attemptCtx context.Context) (*http.Response, error) {
-			return p.post(attemptCtx, client, payload)
+			resp, err := p.post(attemptCtx, client, payload)
+			return payload.admitToolCallRejection(p.profile.ToolCallRejections, resp, err)
 		},
 		Describe: func(status int, body []byte) error {
 			return fmt.Errorf("ollama: chat HTTP %d: %s", status, strings.TrimSpace(string(body)))
@@ -308,7 +316,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 		return nil, fmt.Errorf("ollama: decode response: %w", err)
 	}
 	if decoded.Error != "" {
-		return nil, fmt.Errorf("ollama: %s", decoded.Error)
+		return payload.rejectionCompletion(p.profile.ToolCallRejections, p.id, decoded)
 	}
 	p.warnIfTruncated(payload, promptEst, decoded.PromptEvalCount)
 	p.observePromptTokens(payload.Model, promptEst, decoded.PromptEvalCount)
@@ -348,6 +356,8 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		p.warnIfTruncated(payload, promptEst, promptTokens)
 		p.observePromptTokens(payload.Model, promptEst, promptTokens)
 		providerwire.NoteOllamaPromptEvalDuration(providerwire.PromptCacheScope(p.id, payload.Model, req.Debug), promptEvalDuration)
+	}, func(message string) (api.ToolCall, bool, error) {
+		return payload.toolCallRejection(p.profile.ToolCallRejections, p.id, message)
 	})
 	out := make(chan modelcall.StreamChunk)
 	go func() {

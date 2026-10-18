@@ -39,6 +39,25 @@ class AdmissionTests(unittest.TestCase):
         backend = dict(full=False, paths=['lycaon/internal/a/a.go'])
         self.assertNotIn('webkit-gtk', {row['lane'] for row in ci.matrix('integration', scope=backend)['include']})
 
+    def test_prose_runs_only_the_scope_every_change_runs(self):
+        paths = ['docs/test-strategy.md', 'docs/operations/runbook.md', 'AGENTS.md', 'lycaon/AGENTS.md',
+                 'lycaon-den/AGENTS.md', 'README.md']
+        self.assertEqual(impact.broad_scope(paths), (False, []))
+        scope = dict(full=False, paths=paths)
+        lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
+        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'behavior'})
+        with patch.object(impact.subprocess, 'run') as run:
+            run.return_value = impact.subprocess.CompletedProcess([], 0, stdout=json.dumps({
+                'ImportPath': 'github.com/lycaon/lycaon/test/smoke', 'Dir': str(impact.ROOT / 'lycaon/test/smoke')}))
+            self.assertEqual(impact.go_scope(scope), ['./test/smoke'])
+        # Prose beside code adds nothing to the code's own scope.
+        mixed = dict(full=False, paths=['docs/git.md', 'lycaon/internal/a/a.go'])
+        self.assertNotIn('frontend', {row['lane'] for row in ci.matrix('integration', scope=mixed)['include']})
+        # Documentation that a build or contract parses still widens the gate.
+        for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml',
+                     'lycaon/config/README.md', 'lycaon/internal/governance/testdata/agentsmd/frontmatter/AGENTS.md']:
+            self.assertTrue(impact.broad_scope([path])[0], path)
+
     def test_confinement_changes_admit_the_other_architecture(self):
         for path in ['lycaon/internal/confine/boundary_linux.go', 'lycaon/internal/confine/linuxsandbox/seccomp_linux_arm64.go',
                      'lycaon/internal/confine/helper_main.go', 'lycaon/internal/exec/supervisor_tree_linux.go',

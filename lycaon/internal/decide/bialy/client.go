@@ -1,20 +1,14 @@
 package bialy
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os/exec"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
-	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -26,8 +20,19 @@ const (
 	methodRank   = "rank"
 )
 
-// startTimeout bounds the first handshake, which loads model weights.
-const startTimeout = 90 * time.Second
+// startTimeout bounds one engine start. A first launch measures every device
+// and compiles GPU kernels, which can take minutes; later launches reuse the
+// cached verdict and kernels.
+const startTimeout = 5 * time.Minute
+
+// exitNoCapableDevice is the engine's exit status when no device meets the
+// speed requirement (EXIT_NO_CAPABLE_DEVICE in native/src/protocol.rs).
+const exitNoCapableDevice = 3
+
+// ErrNoCapableDevice reports that no device on this machine runs the engine
+// fast enough. The hardware does not change while the host runs, so the engine
+// is not started again.
+var ErrNoCapableDevice = fmt.Errorf("%w: no device meets the speed requirement", decide.ErrUnavailable)
 
 // Client serializes concurrent requests through one supervised engine process.
 type Client struct {
@@ -38,6 +43,13 @@ type Client struct {
 	seq     atomic.Int64
 	started bool
 	engine  decide.Engine
+	// starting is closed when the start in flight finishes; nil when none is.
+	starting chan struct{}
+	startErr error
+	// generation advances on Close, so a start that finishes after it stops its
+	// own process instead of installing it.
+	generation int
+	incapable  bool
 	// warmErr is the last handshake failure; cleared once an engine answers.
 	warmErr error
 }
@@ -46,10 +58,11 @@ type Client struct {
 type Reason string
 
 const (
-	ReasonDisabled      Reason = "disabled"
-	ReasonBinaryMissing Reason = "binary_missing"
-	ReasonModelMissing  Reason = "model_missing"
-	ReasonUnusable      Reason = "unusable"
+	ReasonDisabled        Reason = "disabled"
+	ReasonBinaryMissing   Reason = "binary_missing"
+	ReasonModelMissing    Reason = "model_missing"
+	ReasonNoCapableDevice Reason = "no_capable_device"
+	ReasonUnusable        Reason = "unusable"
 )
 
 // Status reports whether the engine can answer, and why not.
@@ -65,6 +78,9 @@ func (c *Client) Status() Reason {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.incapable {
+		return ReasonNoCapableDevice
+	}
 	if c.warmErr != nil && !c.started {
 		return ReasonUnusable
 	}
@@ -77,36 +93,6 @@ func (c *Client) Config() Config {
 		return Config{}
 	}
 	return c.cfg
-}
-
-type process struct {
-	cmd      *exec.Cmd
-	cleanup  func()
-	stdin    io.WriteCloser
-	admitted chan struct{}
-
-	pendingMu sync.Mutex
-	pending   map[int64]chan response
-	done      chan struct{}
-	exitErr   error
-}
-
-type request struct {
-	ID         int64                      `json:"id"`
-	Method     string                     `json:"method"`
-	Head       decide.Head                `json:"head,omitempty"`
-	State      any                        `json:"state,omitempty"`
-	Questions  map[string]decide.Question `json:"questions,omitempty"`
-	Task       string                     `json:"task,omitempty"`
-	Candidates []string                   `json:"candidates,omitempty"`
-}
-
-type response struct {
-	ID      int64          `json:"id"`
-	Answers decide.Answers `json:"answers,omitempty"`
-	Scores  []float64      `json:"scores,omitempty"`
-	Engine  *decide.Engine `json:"engine,omitempty"`
-	Error   string         `json:"error,omitempty"`
 }
 
 // New builds a client; the engine starts on first use or Warm.
@@ -128,6 +114,12 @@ func (c *Client) Engine() decide.Engine {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.engine
+}
+
+// Speed is the reference batch time the engine measured when it chose its
+// device; zero before the handshake or for a pinned device.
+func (c *Client) Speed() time.Duration {
+	return time.Duration(c.Engine().ProbeMS * float64(time.Millisecond))
 }
 
 // Loaded reports whether the handshake listed head among the loaded heads;
@@ -191,6 +183,7 @@ func (c *Client) Close() error {
 		c.proc = nil
 	}
 	c.started = false
+	c.generation++
 	return nil
 }
 
@@ -225,6 +218,9 @@ func (c *Client) forget(proc *process) {
 	}
 }
 
+// ensure returns the running engine, starting it when none runs. The start
+// belongs to the client, not the caller: a caller whose context ends stops
+// waiting, and the start carries on for the next one.
 func (c *Client) ensure(ctx context.Context) (*process, error) {
 	if c == nil {
 		return nil, decide.ErrUnavailable
@@ -233,202 +229,95 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 		return nil, decide.ErrDisabled
 	}
 	c.mu.Lock()
+	if c.started && c.proc != nil {
+		proc := c.proc
+		c.mu.Unlock()
+		return proc, nil
+	}
+	if c.incapable {
+		c.mu.Unlock()
+		return nil, ErrNoCapableDevice
+	}
+	if c.starting == nil {
+		bin := c.cfg.Resolve()
+		if bin == "" {
+			c.mu.Unlock()
+			return nil, decide.ErrUnavailable
+		}
+		if !modelReady(c.cfg.ModelDir) {
+			c.mu.Unlock()
+			return nil, fmt.Errorf("%w: checkpoint not installed at %q", decide.ErrUnavailable, c.cfg.ModelDir)
+		}
+		c.starting = make(chan struct{})
+		go c.start(context.WithoutCancel(ctx), bin, c.starting, c.generation)
+	}
+	starting := c.starting
+	c.mu.Unlock()
+
+	select {
+	case <-starting:
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, decide.ErrDeadline
+		}
+		return nil, ctx.Err()
+	}
+	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.started && c.proc != nil {
 		return c.proc, nil
 	}
-	bin := c.cfg.Resolve()
-	if bin == "" {
-		return nil, decide.ErrUnavailable
+	return nil, c.startErr
+}
+
+// start launches the engine and completes its handshake, then installs it
+// unless the client closed meanwhile.
+func (c *Client) start(ctx context.Context, bin string, done chan struct{}, generation int) {
+	defer close(done)
+	proc, engine, err := c.handshake(ctx, bin)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.starting = nil
+	if generation != c.generation {
+		if proc != nil {
+			proc.stop()
+		}
+		c.startErr = fmt.Errorf("%w: the client closed during start", decide.ErrUnavailable)
+		return
 	}
-	if !modelReady(c.cfg.ModelDir) {
-		return nil, fmt.Errorf("%w: checkpoint not installed at %q", decide.ErrUnavailable, c.cfg.ModelDir)
+	c.startErr = err
+	if errors.Is(err, ErrNoCapableDevice) {
+		c.incapable = true
+		log.Info("decision engine has no device fast enough; decisions fall back")
+		return
 	}
+	if err != nil {
+		return
+	}
+	c.engine = engine
+	c.proc = proc
+	c.started = true
+	log.Info("decision engine ready", "engine", engine.Name, "base_model", engine.Model, "device", engine.Device, "adapter", engine.Adapter, "head", engine.Head)
+}
+
+func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.Engine, error) {
 	proc, err := startProcess(ctx, bin, c.cfg.Args())
 	if err != nil {
-		return nil, err
+		return nil, decide.Engine{}, err
 	}
 	helloCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	hello, err := proc.roundTrip(helloCtx, request{ID: c.seq.Add(1), Method: methodHello})
 	if err != nil {
 		proc.stop()
-		return nil, fmt.Errorf("decide: engine handshake: %w", err)
+		if proc.exitCode == exitNoCapableDevice {
+			return nil, decide.Engine{}, ErrNoCapableDevice
+		}
+		return nil, decide.Engine{}, fmt.Errorf("decide: engine handshake: %w", err)
 	}
 	if hello.Engine == nil {
 		proc.stop()
-		return nil, fmt.Errorf("%w: handshake carried no engine identity", decide.ErrEngine)
+		return nil, decide.Engine{}, fmt.Errorf("%w: handshake carried no engine identity", decide.ErrEngine)
 	}
-	c.engine = *hello.Engine
-	c.proc = proc
-	c.started = true
-	log.Info("decision engine ready", "engine", c.engine.Name, "base_model", c.engine.Model, "device", c.engine.Device, "head", c.engine.Head)
-	return proc, nil
-}
-
-func startProcess(ctx context.Context, bin string, args []string) (*process, error) {
-	opts := execpkg.ExecOpts{
-		Launch:    execpkg.HostLaunch("decide_engine"),
-		NoTimeout: true,
-	}
-	cmd, cleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), bin, args, opts)
-	if err != nil {
-		return nil, fmt.Errorf("decide: prepare engine: %w", err)
-	}
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("decide: engine stdin: %w", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("decide: engine stdout: %w", err)
-	}
-	cmd.Stderr = stderrLogger{}
-	if err := cmd.Start(); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("decide: start engine: %w", err)
-	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
-	proc := &process{
-		cmd: cmd,
-		cleanup: func() {
-			untrack()
-			cleanup()
-		},
-		stdin:    stdin,
-		admitted: make(chan struct{}, 1),
-		pending:  make(map[int64]chan response),
-		done:     make(chan struct{}),
-	}
-	go proc.read(stdout)
-	return proc, nil
-}
-
-var errEngineExited = errors.New("decide: engine exited")
-
-func (p *process) read(stdout io.Reader) {
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var resp response
-		if err := json.Unmarshal([]byte(line), &resp); err != nil {
-			log.Warn("decision engine wrote an unreadable line", "error", err)
-			continue
-		}
-		p.pendingMu.Lock()
-		ch := p.pending[resp.ID]
-		delete(p.pending, resp.ID)
-		p.pendingMu.Unlock()
-		if ch != nil {
-			<-p.admitted
-			ch <- resp
-		}
-	}
-	p.exitErr = errors.Join(errEngineExited, scanner.Err())
-	close(p.done)
-	p.pendingMu.Lock()
-	for id, ch := range p.pending {
-		delete(p.pending, id)
-		close(ch)
-	}
-	p.pendingMu.Unlock()
-	_ = p.cmd.Wait()
-	p.cleanup()
-}
-
-func (p *process) roundTrip(ctx context.Context, req request) (response, error) {
-	if err := ctx.Err(); err != nil {
-		return response{}, err
-	}
-	select {
-	case p.admitted <- struct{}{}:
-	case <-p.done:
-		return response{}, p.exitErr
-	case <-ctx.Done():
-		return response{}, ctx.Err()
-	}
-	// Cancellation and process exit can race with admission.
-	if err := ctx.Err(); err != nil {
-		<-p.admitted
-		return response{}, err
-	}
-	select {
-	case <-p.done:
-		<-p.admitted
-		return response{}, p.exitErr
-	default:
-	}
-	ch := make(chan response, 1)
-	p.pendingMu.Lock()
-	p.pending[req.ID] = ch
-	p.pendingMu.Unlock()
-	raw, err := json.Marshal(req)
-	if err != nil {
-		p.drop(req.ID)
-		return response{}, fmt.Errorf("decide: encode request: %w", err)
-	}
-	raw = append(raw, '\n')
-	_, err = p.stdin.Write(raw)
-	if err != nil {
-		p.drop(req.ID)
-		return response{}, errors.Join(errEngineExited, err)
-	}
-	select {
-	case resp, ok := <-ch:
-		if !ok {
-			return response{}, p.exitErr
-		}
-		if err := ctx.Err(); err != nil {
-			return response{}, err
-		}
-		return resp, nil
-	case <-p.done:
-		return response{}, p.exitErr
-	case <-ctx.Done():
-		// Native work still owns admission until its matching response arrives.
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return response{}, decide.ErrDeadline
-		}
-		return response{}, ctx.Err()
-	}
-}
-
-func (p *process) drop(id int64) {
-	p.pendingMu.Lock()
-	if _, ok := p.pending[id]; ok {
-		delete(p.pending, id)
-		<-p.admitted
-	}
-	p.pendingMu.Unlock()
-}
-
-func (p *process) stop() {
-	_ = p.stdin.Close()
-	select {
-	case <-p.done:
-		return
-	case <-time.After(2 * time.Second):
-	}
-	if p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
-	}
-	<-p.done
-}
-
-// stderrLogger forwards engine diagnostics line by line.
-type stderrLogger struct{}
-
-func (stderrLogger) Write(b []byte) (int, error) {
-	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			log.Debug("decision engine", "stderr", line)
-		}
-	}
-	return len(b), nil
+	return proc, *hello.Engine, nil
 }

@@ -144,7 +144,8 @@ class PlanningTests(unittest.TestCase):
                 with self.subTest(stage=name):
                     check = operation(name, "2", "queued")
                     self.assertIsNone(resources.blocked_reason(check, [harness, check]))
-                    self.assertIsNone(resources.blocked_reason(go, [harness, check, go]))
+                    # Go work that arrives later must not take the workers the check is about to start with.
+                    self.assertIn("earlier operation", resources.blocked_reason(go, [harness, check, go]))
                     check["state"] = "running"
                     self.assertIsNone(resources.blocked_reason(go, [check, go]))
                     self.assertEqual(resources.blocked_reason(go, [harness, check, go]), "worker capacity")
@@ -194,6 +195,19 @@ class PlanningTests(unittest.TestCase):
             self.assertIsNotNone(resources.blocked_reason(operation("3", [], 1), [operation("1", ["*"], 1, "running")]))
             self.assertEqual(resources.demand({"workers": "shared"}, 6), 3)
             self.assertEqual(resources.demand({"workers": "shared"}, 1), 1)
+
+    def test_later_work_cannot_take_the_workers_an_earlier_waiter_needs(self):
+        # A dedicated runner's shared stages each claim every worker; stages finish while waiters sleep.
+        waiter = {"ticket": "2", "locks": ["lint"], "workers": 4, "state": "queued", "name": "lint:fast",
+                  "order": 1}
+        with patch.object(resources, "capacity", return_value=4):
+            for locks, workers in ((["go"], 4), (["frontend"], 1)):
+                with self.subTest(workers=workers):
+                    later = {"ticket": "3", "locks": locks, "workers": workers, "state": "queued", "name": "later",
+                             "order": 1, "estimate": 30}
+                    self.assertEqual(resources.blocked_reason(later, [waiter, later]),
+                                     "earlier operation: lint:fast (2)")
+            self.assertIsNone(resources.blocked_reason(waiter, [waiter]))
 
     def test_resource_wait_allows_unrelated_work_but_prevents_starvation(self):
         running = {"ticket": "1", "locks": ["rust"], "workers": 3, "state": "running", "name": "rust"}

@@ -211,8 +211,11 @@ def blocked_reason(candidate, records, now=None):
         return "worker capacity"
     estimate = candidate.get("estimate")
     for entry in sorted(records, key=lambda item: (order_of(item), item["ticket"])):
-        if entry["state"] != "queued" or not precedes(entry, candidate) or not (
-                resource_conflict(candidate, entry) or used + entry["workers"] > capacity()):
+        if entry["state"] != "queued" or not precedes(entry, candidate):
+            continue
+        # Running work the waiter conflicts with must finish before it starts, freeing those workers.
+        beside = sum(other["workers"] for other in running if not resource_conflict(entry, other))
+        if not (resource_conflict(candidate, entry) or beside + entry["workers"] + candidate["workers"] > capacity()):
             continue
         start = shadow_start(entry, running, now)
         if estimate is None or start is None or now + estimate > start:

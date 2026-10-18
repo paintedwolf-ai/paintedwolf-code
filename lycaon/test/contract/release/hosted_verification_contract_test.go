@@ -86,11 +86,13 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
+	// A job that observes, or reports the gate's own result, is not a dependency.
 	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate && !(workflow == "nightly" && name == "quarantine") {
+			if name != gate && !(workflow == "nightly" && name == "quarantine") &&
+				!(workflow == "ci" && name == "dispatched-check") {
 				dependencies = append(dependencies, name)
 			}
 		}
@@ -123,14 +125,14 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	}
 }
 
-// A release ships only a commit the full tier passed, and gates publication on
-// its own preflight and upgrade rehearsal while the signed build runs alongside them.
+// Publication requires qualified source, preflight, and upgrade rehearsal.
 func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
 	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade"})
 	for name, dependencies := range map[string][]string{
-		"preflight": {"classify"}, "upgrade": {"classify", "preflight"}, "build-release": {"classify"},
+		"compatibility": {"classify"}, "preflight": {"classify", "compatibility"},
+		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "compatibility"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)

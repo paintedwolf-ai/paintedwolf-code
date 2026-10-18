@@ -4,11 +4,12 @@
   "kind": "runtime_service",
   "workstream": "project-reasoning-retention",
   "disposition": "retain",
-  "reason": "The native provider owns request preparation, context admission, and stream lifetime. It computes request projection once for estimation and serialization; replay selection and wire mapping remain separate domain boundaries.",
-  "reviewed_commit": "f3941b0da321257f3a73bef42b041f61f30feaac",
-  "ceiling": 397,
+  "reason": "The native provider owns request preparation, context admission, and stream lifetime. It computes request projection once for estimation and serialization; replay selection and wire mapping remain separate domain boundaries. Catalog policies (HTTP retry, prompt cache, tool-call parser rejections) attach through setters, and request-frame admission checks the receiver context; parser rejection grammars and their classification live in providerprofile, so the driver only extracts its error message.",
+  "reviewed_commit": "5f7a2d7376fc3ed8ed1e222b3576772b3c7d86a1",
+  "ceiling": 405,
   "boundaries": {
-    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "c18d5c4e7f7fef019d9407a286b9d47fcb909fc5c7eb9d7eff52081f203d83b7",
-    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72"
+    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "065c4be1d768fe005e7bfb2c5a192dc24caa5d94ae1e2f80d409823d7361968b",
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72",
+    "lycaon/internal/llm/providerprofile/tool_call_rejection_test.go": "8e66761a10268a19657d07971b5fc474105b1f90a0c0e09eb6260d89f6513103"
   }
 }

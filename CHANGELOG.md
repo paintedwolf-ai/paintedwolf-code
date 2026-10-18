@@ -7,10 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc6]
+
+Sixth release candidate for 1.0.2, published on the preview channel for
+in-app update testing from RC5.
+
+### Fixed
+
+- Restarting after an update starts a fresh application process, including
+  recovery when a launch encounters the previous version during replacement.
+- Update startup confirmation verifies the complete installed application and
+  its publisher signature before removing the previous application bundle.
+- Update failure recovery checks the complete candidate bundle when recording
+  whether activation succeeded.
+
+## [1.0.2-rc5]
+
+Fifth release candidate for 1.0.2, published on the preview channel to verify
+in-app upgrades from 1.0.2-rc4 and complete Linux candidate package verification.
+
+### Fixed
+
+- Debian package assembly records `/etc` paths in `DEBIAN/conffiles` and omits
+  them from `DEBIAN/md5sums` so `lintian` verification succeeds during release
+  staging.
+
+## [1.0.2-rc4]
+
+Fourth release candidate for 1.0.2, published on the preview channel for upgrade
+testing. Replaces 1.0.2-rc1 and 1.0.2-rc3 on preview.
+
+### Fixed
+
+- macOS in-app update verification passes its code-signing requirement as an
+  inline `codesign` expression rather than a file path, so staged updates verify
+  and install cleanly. Existing 1.0.2-rc1 and 1.0.2-rc3 preview installations
+  must upgrade once via the disk image or Homebrew cask.
+
 ## [1.0.2-rc3]
 
 Third release candidate for 1.0.2, prepared for preview upgrade testing.
 Includes the changes listed under 1.0.2-rc2, whose publication did not complete.
+
+### Added
+
+- Linux desktop integration: opening, revealing, trashing, and watching files
+  goes through the desktop services, notifications arrive through the session
+  bus, clipboard runs through the GTK display connection, and window chrome
+  follows GNOME conventions.
+- Linux commands run confined with namespaces, Landlock, and seccomp, with
+  desktop proxies, session providers, Git host services, and SSH agents
+  resolved from the native session.
+- Linux builds bundle a Tesseract OCR engine and OpenGrep engines for x86_64
+  and aarch64.
+- The rerank engine runs on any Vulkan GPU when Metal is unavailable.
 
 ### Changed
 
@@ -18,11 +68,27 @@ Includes the changes listed under 1.0.2-rc2, whose publication did not complete.
 - Missing executable feedback names available catalog equivalents.
 - Coordinator guidance handles checklist instructions and completed document-read
   prerequisites consistently.
+- Compacted history is enriched asynchronously without blocking chat and scales
+  its representations to the receiving context.
+- Transcript scrolling sizes its runway to the full session bounds and seeks
+  unloaded history on demand.
+- A single file-watch stream is shared across watched roots.
+- Power capability facts stay current while settings are open.
+- Source mutation receipts show accepted changes, and recorded checks show
+  whether they match current source.
 
 ### Fixed
 
 - Release verification retains native notarization ticket validation errors to
   diagnose signing failures without weakening release checks.
+- Unoffered, unparsed, and provider-dropped tool calls recover in-turn, with
+  parser grammars declared in the provider catalog.
+- Terminal empty responses recover with bounded feedback.
+- Provider request budgets match native dispatch, and complete provider frames
+  fit within receiver context.
+- Session history recovers through bounded recall pages, and recorded tool
+  results stay discoverable by their target path.
+- Event stream bursts end promptly so WebKitGTK delivers them.
 
 ## [1.0.2-rc2]
 

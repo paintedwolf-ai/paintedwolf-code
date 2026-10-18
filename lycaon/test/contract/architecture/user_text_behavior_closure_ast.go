@@ -383,6 +383,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
 	"repair_observations":          true,
 	"retained_citations":           true,
+	"resume_work_allowed":          true,
+	"can_recall":                   true, // recall in the repair turn's offered tools (promptloop repairOfferedTools)
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData
 	"offenders_omitted":            true, // report-document repair: guidance.OffenderHintData
 	"offending_keys":               true, // report-document repair: unread key names

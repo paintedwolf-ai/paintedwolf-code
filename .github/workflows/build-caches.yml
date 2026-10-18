@@ -83,6 +83,10 @@ jobs:
         runner: [ubuntu-latest, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    # Publishing lint diagnostics deletes the entries they replace.
+    permissions:
+      contents: read
+      actions: write
     env:
       PW_TEST_HOST: dedicated
     defaults:
@@ -112,9 +116,19 @@ jobs:
         if: runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task build:lycaon-dev
 
+      - name: Build the decision engine
+        if: runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true'
+        run: ./task build:decide
+
       - name: Warm desktop workspace builds
         if: steps.setup.outputs.rust-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
+
+      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      - name: Record lint diagnostics
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: ./task lint:full
 
       # Resolve paths at publication time instead of relying on nested post-job contexts.
       - name: Publish prepared Go caches
@@ -124,7 +138,7 @@ jobs:
           save: 'true'
 
       - name: Publish prepared decision engine
-        if: runner.os == 'macOS' && github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
         uses: ./.github/actions/cache-decide
         with:
           save: 'true'
@@ -140,6 +154,12 @@ jobs:
         uses: ./.github/actions/cache-analysis-tools
         with:
           tools: all
+          save: 'true'
+
+      - name: Publish lint diagnostics
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/cache-lint-diagnostics
+        with:
           save: 'true'
 
       # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.

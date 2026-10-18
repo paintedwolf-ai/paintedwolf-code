@@ -285,21 +285,17 @@ func (l *modelTurn) completeStream(
 			CoordinatorLoop: loop,
 		})
 	})
-	if l.Projection.Deps.Events != nil && isCoordinatorTurn {
-		// Publish one terminal event even after cancellation.
-		defer func() {
-			if err == nil {
-				return
-			}
-			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-				CallID:          llmCallID,
-				Provider:        callProvider,
-				Model:           callModel,
-				Status:          api.LLMCallStatusError,
-				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
-			})
-		}()
+	callFailed := func() {
+		if isCoordinatorTurn {
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+		}
 	}
+	// Publish one terminal event even after cancellation.
+	defer func() {
+		if err != nil {
+			callFailed()
+		}
+	}()
 
 	// Retry updates reuse the call id.
 	ctx = providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
@@ -320,12 +316,16 @@ func (l *modelTurn) completeStream(
 		})
 	})
 
+	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
 	if collectErr != nil {
-		err = collectErr
-		return nil, nil, err
+		var recovered *modelcall.Completion
+		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
+			callFailed()
+		}
+		return recovered, nil, err
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model
@@ -350,7 +350,7 @@ func (l *modelTurn) completeStream(
 	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
 	if st != nil {
-		st.output.rejection = nil
+		st.output.rejection, st.output.droppedToolCallStreak = nil, 0
 	}
 	if blocked {
 		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
@@ -362,7 +362,7 @@ func (l *modelTurn) completeStream(
 		tokens = []string{transformed}
 	}
 	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
-		l.Deps.RecordCompactionTokenObservation(sessionID, input, transcriptEstimate)
+		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, input, transcriptEstimate)
 	}
 	if proseFinish {
 		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))
@@ -534,7 +534,6 @@ func (l *modelTurn) buildTurnRequest(
 			st.history = append(st.history, feedback...)
 		}
 	}
-	messages = l.fitMessagesForCompaction(ctx, sess, sessionID, messages, turnTools)
 	// Detach the request from mutable history.
 	messages = append([]api.Message(nil), messages...)
 	req := modelcall.CompletionRequest{
@@ -559,11 +558,17 @@ func (l *modelTurn) buildTurnRequest(
 	}
 	req.Tools = turnTools
 	req.ToolUse = toolUse
+	if l.Deps.FitRequest != nil {
+		req, err = l.Deps.FitRequest(ctx, sess, history, req)
+		if err != nil {
+			return coordinatorTurnRequest{}, err
+		}
+	}
 	st.stampOfferedToolNames(callable)
 	return coordinatorTurnRequest{
 		Req:                req,
 		SurfaceID:          surfaceID,
-		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages)),
+		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(req.Messages)),
 		ToolPlan:           toolPlan,
 	}, nil
 }
@@ -590,28 +595,4 @@ func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Sessio
 		return ""
 	}
 	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
-}
-
-func (l *modelTurn) fitMessagesForCompaction(ctx context.Context, sess *api.Session, sessionID string, messages []api.Message, turnTools []tools.ToolMeta) []api.Message {
-	if l.Deps.CompactionConfig == nil {
-		return messages
-	}
-	compCfg := l.Deps.CompactionConfig(ctx, sess)
-	if !compCfg.Enabled || compCfg.HardCeilingTokens <= 0 {
-		return messages
-	}
-	cal := compaction.PromptTokenCalibration{}
-	if l.Deps.CompactionTokenCalibration != nil {
-		cal = l.Deps.CompactionTokenCalibration(sessionID)
-	}
-	toolsJSON := ""
-	if len(turnTools) > 0 {
-		if raw, marshalErr := json.Marshal(turnTools); marshalErr == nil {
-			toolsJSON = string(raw)
-		}
-	}
-	maxTokens := compaction.FitMaxTokens(compCfg, cal, compCfg.ColdStartOverhead(compaction.ResolveColdStartOverhead(toolsJSON)))
-	ctxMsgs := compaction.ContextMessagesFromAPI(messages)
-	fitted := compaction.DeterministicFit(compCfg, ctxMsgs, maxTokens)
-	return compaction.ContextMessagesToAPI(fitted, messages)
 }

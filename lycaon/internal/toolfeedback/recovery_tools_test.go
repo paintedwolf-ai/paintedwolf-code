@@ -228,7 +228,8 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 							return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
 						})
 						for _, name := range names {
-							if !slices.Contains(offered, name) && slices.Contains(words, name) {
+							loadable := slices.Contains(offered, "request_tools") && (vars["tool_loadable"] == true || vars[name+"_loadable"] == true)
+							if !slices.Contains(offered, name) && !loadable && slices.Contains(words, name) {
 								t.Errorf("%s names unavailable %s with offered %v: %s", field, name, offered, first[field])
 							}
 						}

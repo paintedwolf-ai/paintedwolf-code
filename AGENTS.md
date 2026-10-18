@@ -232,7 +232,8 @@ Permission floors use the executor's `confine.DefaultConfinement`; roots derive
 from OS conventions and explicit grants, not program lists or tool-specific roots.
 Before editing gates, permissions, confinement, provider adapters, retrieval parsing,
 or trust presentation, read [Grounding and host authority](docs/architecture.md#grounding-and-host-authority)
-and its linked contracts. Protocol grammars, identifiers, retrieval ranking, and
+and its linked contracts. Protocol grammars (including provider tool-call parser
+rejections declared in the provider catalog), identifiers, retrieval ranking, and
 host-written markers have bounded exceptions; parsing never makes prose authoritative.
 
 <a id="detection-packs-overlay-not-floor"></a>

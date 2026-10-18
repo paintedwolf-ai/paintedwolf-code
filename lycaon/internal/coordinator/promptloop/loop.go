@@ -67,6 +67,8 @@ type PromptRunResult struct {
 	LastOutputID         string
 	LastAssistantContent string
 	TurnTools            []string
+	// OfferedTools are the tools the final model request could call.
+	OfferedTools         []string
 	TasksDispatchedCount int
 }
 
@@ -323,10 +325,9 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 		},
 	}
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
-		if retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID); retained.Active {
-			setup.state.closeoutRetry = closeoutRetryState{
-				attempt: retained.Attempt, documentAttempt: retained.DocumentAttempt, prevKey: retained.PrevKey, codes: retained.ForcedBy,
-			}
+		retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
+		setup.state.closeoutRetry = closeoutRetryState{
+			attempt: retained.Attempt, documentAttempt: retained.DocumentAttempt, prevKey: retained.PrevKey, codes: retained.ForcedBy,
 		}
 	}
 	setup.limits = settings.DefaultSessionLimits()

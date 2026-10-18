@@ -76,6 +76,10 @@ services:
         target: /workspace/scripts/gitengine-fetch.sh
         read_only: true
       - type: bind
+        source: ${LYCAON_REPO_ROOT}/scripts/sha256.sh
+        target: /workspace/scripts/sha256.sh
+        read_only: true
+      - type: bind
         source: ${LYCAON_REPO_ROOT}/lycaon/config/gitengine/pin.yaml
         target: /workspace/lycaon/config/gitengine/pin.yaml
         read_only: true

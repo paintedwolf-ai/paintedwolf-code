@@ -31,7 +31,7 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 		target.ObservationData["offered_tools"] = slices.Clone(names)
 		return nil
 	})
-	for _, tool := range []string{"read", "write", "edit", "list_dir", "find", "grep", "request_tools", "task", "complete_leg", "terminal_open", "terminal_close", "terminal_read", "command_stop", "command_output", "secret_generate", "ask_user", "capture_page", "measure_page", "page_act", "page_snapshot", "page_close", "stat", "view_image", "command"} {
+	for _, tool := range []string{"read", "write", "edit", "list_dir", "find", "grep", "request_tools", "task", "complete_leg", "terminal_open", "terminal_close", "terminal_read", "command_stop", "command_output", "secret_generate", "ask_user", "capture_page", "measure_page", "page_act", "page_snapshot", "page_close", "stat", "view_image", "command", "recall"} {
 		fact := "can_" + tool
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {
 			if target.ObservationData == nil {

@@ -79,6 +79,7 @@ func (l *turnNudges) applySpendCeiling(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: content,
 		TurnTools:            st.turnTools,
+		OfferedTools:         st.offeredToolNames,
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}
 	return out, nil
@@ -169,6 +170,25 @@ func (l *modelTurn) voidCostReceipt(ctx context.Context, callID string) {
 	if err := ledger.VoidCall(ctx, callID); err != nil {
 		slog.WarnContext(ctx, "void llm call receipt", "call_id", callID, "error", err)
 	}
+}
+
+// publishLLMCallError reports a failed coordinator call, even after cancellation.
+func (l *modelTurn) publishLLMCallError(
+	ctx context.Context,
+	sess *api.Session,
+	sessionID, callID, providerID, model string,
+	loop *api.CoordinatorLoopProgress,
+) {
+	if l.Projection.Deps.Events == nil {
+		return
+	}
+	l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+		CallID:          callID,
+		Provider:        providerID,
+		Model:           model,
+		Status:          api.LLMCallStatusError,
+		CoordinatorLoop: loop,
+	})
 }
 
 // publishLLMCallOK reports a completed coordinator call.

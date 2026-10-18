@@ -91,6 +91,8 @@ An argument validator can also report `inapplicable_fields` when named fields do
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
 
+Native command recovery separates parser equivalence from tool availability. The executor validates the complete ordered replacement against registration, current schemas, and the frozen offered surface. Missing targets may receive separate exact-name `request_tools` calls only when the compiled plan permits loading them; loading is never a partial execution recipe. Inexact file-write observations carry no fabricated contents. Copy distinguishes validated replacements from missing prerequisites and refers conditionally to diagnostics that provider projection may omit. Loading schemas grants no additional execution permission.
+
 A named **field** is reachable on the same terms as a named tool. In card copy, an unqualified backticked field name refers to an argument accepted by the receiving tool; name the owning tool when referring to another tool's field. Three things hold this together:
 
 - The reject formatter refuses to render a card for a tool its `selector.tool` excludes, so a remedy authored against one tool's fields cannot reach another.
@@ -170,6 +172,31 @@ recovery adds no standing instruction or Bialy instruction unit. A requested raw
 JSON answer with the reserved action shape can also trigger repair; use a fenced
 example to present that shape as content.
 
+Terminal responses without usable assistant content or native calls may use an
+already-admitted provider retry for `MODEL_RESPONSE_EMPTY` feedback at
+`model.output`. Native coordinator and worker requests supply the request-scoped
+OAR evaluation. Copy reflects the frozen request's callable tools and structured
+output requirement. Reasoning is never parsed or copied into this feedback.
+The repair consumes the existing retry allowance and deadline; it does not add a
+model turn or replenish workflow budgets. Each physical request retains its own
+capture, and source attribution uses the latest dispatched request. A bounded
+host message is appended without changing the caller's transcript or stable
+prompt prefix. Provider context admission still applies to the amended request.
+Utility calls and explicitly selected alternate text protocols retain their
+existing empty-response behavior. Nonterminal stream loss, partial output, and
+output-limit recovery remain distinct paths.
+
+A provider can also drop a native call itself. When a provider's tool-call
+parser rejects a call's arguments as invalid JSON, it reports only the error,
+without the tool name or arguments. On a callable-tool request without
+structured output, the adapter types an error matching the kind's declared
+[rejection grammar](providers.md#parser-dropped-tool-calls) as a dropped call. The prompt
+loop settles the prose the model streamed before it, and `TOOL_CALL_UNPARSED`
+enters the same `content.output` occurrence and rejected-draft lifecycle. The
+feedback asks the model to resubmit the call with valid JSON arguments. No call
+is reconstructed, so nothing executes. A third consecutive drop ends the turn
+with the provider's original error.
+
 ## Coordinator nudges
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
@@ -193,6 +220,12 @@ Worker artifact checks and parent completion receipts share the same host inspec
 ## Tool-output steering
 
 Some successful tool results include structured state updates such as queue position, active task, new revision, or no-op reason. Prompt steering consumes those fields directly. A no-op remains a result; if the agent must branch, the result needs a structured discriminator, not a parse of “nothing changed.”
+
+### Recall recovery
+
+Recall separates recorded observations from current files. A known message ID is sufficient for body recovery; ordinal bounds remain available for index paging and bounded reads. The host resolves a body’s ordinal and returns complete continuation arguments. `record_request` is the value of the next call’s `history` argument; `next_request` is the complete argument object.
+
+Matched results explain how to recover their public records when no body is present. Recorded text is projected beside its metadata, preserving cursor coordinates, authority, and canonical bytes. Query time-filter failures and history-coordinate failures carry separate typed facts into OAR copy. A read-only streak never establishes that evidence is complete or that another required recovery page is unnecessary.
 
 ### Progress reconciliation
 

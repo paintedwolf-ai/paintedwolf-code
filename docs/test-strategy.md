@@ -697,11 +697,24 @@ The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.
 Frontend execution deliberately stays broad because source-scanning tests and
-runtime discovery are not represented by static imports alone. Unknown paths,
+runtime discovery are not represented by static imports alone. Documentation prose,
+Markdown under `docs/` and the repository's policy and community files, adds
+nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
+documentation are build inputs and widen the gate. Unknown paths,
 fixtures, dependencies, build inputs, generated contracts, and verification
 policy expand to the full `check` profile. A missing Git base fails planning;
 an unresolved Go graph runs the full Go recipe. An empty shard never passes as
 an empty test run. Selection and source identities travel with each lane receipt.
+
+Lanes and shards are planned from measured durations. Each lane of main's
+qualification records its elapsed time beside its receipts in `ci/timings.json`;
+a sharded lane also records its packages' durations. The plan job reads the
+newest qualification that recorded them and hands every shard of the run the
+same package durations, so the shards partition the selection identically:
+packages go longest first to the least loaded shard, so the longest package
+starts first and the shards finish together. A selection smaller than the split
+repeats packages rather than leave a shard empty. Without measurements, such as
+for a token that cannot read Actions, shards deal the sorted selection in turn.
 
 The planner in [`scripts/ci_policy/impact.py`](../scripts/ci_policy/impact.py)
 uses the pull request merge base or the merge group's explicit `base_sha`, not
@@ -736,7 +749,9 @@ provisions the pinned browser before the lane goes offline.
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
-inventory's. [`qualification.yml`](../.github/workflows/qualification.yml)
+inventory's. A pull request's checks leave out dispatch runs, so the
+dispatch's `dispatched-check` job reports its gate as the required `check`
+commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
 runs the complete check, then platform confinement and upgrade corpus beside
 the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time: it does
@@ -847,7 +862,7 @@ Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
-A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by commit instead: the Linux warmer runs `lint:full` and saves its golangci-lint results for each main commit, deleting the entries they replace, and lint lanes restore the newest, so they reanalyze only the packages that changed since and their dependents. Cache warming enters
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
@@ -878,9 +893,10 @@ gate's cap. The `capacity` table in
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
-cheap ones that fail most often, then the rest longest budget first, so a
-capped matrix neither finishes on its slowest lane nor runs long before a
-cheap failure.
+cheap ones that fail most often, then the rest longest first by the durations
+main's qualification measured, so a capped matrix neither finishes on its
+slowest lane nor runs long before a cheap failure. A lane qualification does
+not run is planned at its budget, so it starts early.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|

@@ -21,7 +21,7 @@ func TestOllamaDecoderReleasesAbandonedStream(t *testing.T) {
 		`{"message":{"content":"three"},"done":false}`,
 	)
 
-	ch := decodeOllamaStream(ctx, body, "desktop", "model", 8192, nil)
+	ch := decodeOllamaStream(ctx, body, "desktop", "model", 8192, nil, nil)
 	if _, ok := <-ch; !ok {
 		t.Fatal("expected at least one decoded chunk")
 	}

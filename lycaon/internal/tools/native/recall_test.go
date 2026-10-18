@@ -10,11 +10,13 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 func TestRecallHistoryAndCoordinateReject(t *testing.T) {
@@ -37,10 +39,9 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 
 	out, err := reg.Run(t.Context(), recall.ToolName, map[string]any{
 		"history": map[string]any{
-			"through_ord": 1,
-			"message_id":  "m1",
-			"format":      "record",
-			"body_runes":  1024,
+			"message_id": "m1",
+			"format":     "record",
+			"body_runes": 1024,
 		},
 	}, tctx)
 	testutil.FailErr(t, "run recall history record", err)
@@ -79,5 +80,77 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 	_, err = reg.Run(t.Context(), recall.ToolName, map[string]any{}, tctx)
 	if !errors.As(err, &rej) || rej.Code != recallQueryInvalid {
 		t.Fatalf("expected %s, got %v", recallQueryInvalid, err)
+	}
+}
+
+func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, tc := range []struct {
+		name   string
+		result recall.Result
+		want   string
+	}{
+		{"missing body", recall.Result{Resolution: recall.ResolutionNoMatchInScope, History: &recall.HistoryPage{Format: "text"}}, "message_id"},
+		{"index", recall.Result{History: &recall.HistoryPage{Format: "index", Entries: []recall.HistoryEntry{{MessageID: "m"}}}}, "record_request"},
+		{"hit", recall.Result{NextAction: "Narrow the query.", Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}}}}, "record_request"},
+		{"body", recall.Result{Hits: []recall.Hit{{Body: []string{"already observed"}}}}, ""},
+		{"body with record", recall.Result{Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}, Body: []string{"already observed"}}}}, "record_request"},
+		{"page", recall.Result{NextRequest: &recall.HistoryContinuation{History: recall.HistoryRequest{MessageID: "m", Offset: 5}}}, "next_request"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := tc.result.NextAction
+			addRecallRecoveryAction(t.Context(), &tc.result)
+			if tc.want == "" {
+				if tc.result.NextAction != "" {
+					t.Fatal("complete observation acquired needless recovery guidance")
+				}
+				return
+			}
+			if !strings.Contains(tc.result.NextAction, tc.want) || before != "" && !strings.Contains(tc.result.NextAction, before) {
+				t.Fatalf("lost reachable or existing action: %s", tc.result.NextAction)
+			}
+		})
+	}
+}
+
+func TestRecallRejectionFactsComeFromTypedFields(t *testing.T) {
+	for field, flag := range map[string]string{"history": "recall_history_mode_invalid", "history.after_ord": "recall_history_bounds_invalid", "history.through_ord": "recall_history_bounds_invalid", "history.message_id": "recall_history_body_missing", "history.search": "recall_history_search_invalid"} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(recallReject(&recall.ErrHistoryCoordinates{Field: field, Reason: "diagnostic"}), &reject) || reject.Data[flag] != true {
+			t.Fatalf("missing typed fact for %s", field)
+		}
+	}
+	for _, field := range []string{"after", "before", "other"} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(recallReject(&search.ParseError{Field: field, Message: "diagnostic"}), &reject) || reject.Data["recall_query_time_invalid"] != (field != "other") {
+			t.Fatalf("wrong time fact for %s", field)
+		}
+	}
+}
+
+func TestRecallSchemaKeepsBothRecoveryModes(t *testing.T) {
+	config, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load actual recall schema", err)
+	meta, ok := config.ToolMeta("recall")
+	if !ok {
+		t.Fatal("recall schema missing")
+	}
+	for _, tc := range []struct {
+		name  string
+		args  map[string]any
+		valid bool
+	}{
+		{"handle", map[string]any{"query": "handle:read#1"}, true},
+		{"known body", map[string]any{"history": map[string]any{"message_id": "original"}}, true},
+		{"full record", map[string]any{"history": map[string]any{"message_id": "original", "format": "record", "through_ord": 3}}, true},
+		{"index", map[string]any{"history": map[string]any{"through_ord": 3, "search": "observations.txt"}}, true},
+		{"empty", map[string]any{"history": map[string]any{}}, false},
+		{"mixed", map[string]any{"query": "tool:read", "history": map[string]any{"message_id": "original"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tools.ValidateToolArgs(meta.ArgsSchema, tc.args); (err == nil) != tc.valid {
+				t.Fatalf("schema validity=%v, want %v: %v", err == nil, tc.valid, err)
+			}
+		})
 	}
 }

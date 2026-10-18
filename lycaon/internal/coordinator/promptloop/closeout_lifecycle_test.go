@@ -116,3 +116,16 @@ func TestCloseoutContinuationRestoresWholeRetryProjection(t *testing.T) {
 		t.Fatalf("incomplete retry projection: %+v", got)
 	}
 }
+
+func TestCloseoutContinuationRestoresRetiredRetryBudgets(t *testing.T) {
+	loop := NewPromptLoopForTest(PromptLoopDeps{Closeout: CloseoutDeps{
+		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+			return guidance.RetainedCloseout{Attempt: 2, DocumentAttempt: 1}
+		},
+	}})
+	setup, err := loop.preparePromptLoop(t.Context(), PromptRunInput{SessionID: "session", Session: &api.Session{ID: "session"}, ProfileID: "coordinator"})
+	testutil.FailErr(t, "prepare resumed work", err)
+	if got := setup.state.closeoutRetry; got.attempt != 2 || got.documentAttempt != 1 || got.prevKey != "" || len(got.codes) != 0 {
+		t.Fatalf("retired retry budgets = %+v", got)
+	}
+}

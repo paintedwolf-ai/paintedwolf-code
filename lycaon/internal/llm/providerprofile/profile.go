@@ -44,6 +44,9 @@ type Profile struct {
 	// PromptCache is the provider's prompt-cache policy, attached from the
 	// provider catalog. Model rules refine it per request.
 	PromptCache PromptCachePolicy
+	// ToolCallRejections declares errors the provider's tool-call parser
+	// reports after dropping a model's call, attached from the provider catalog.
+	ToolCallRejections ToolCallRejectionPolicy
 	// StreamResponseHeaderTimeout bounds the wait for streaming headers.
 	StreamResponseHeaderTimeout time.Duration
 	// CompleteResponseHeaderTimeout bounds the wait for completion headers.

@@ -1,0 +1,66 @@
+name: release-feed-signature-backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel whose pointer signature is republished
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+
+      - name: Install the pinned Tauri CLI for pointer signing
+        run: bun install --frozen-lockfile
+        working-directory: lycaon-den
+      - name: Install minisign for cryptographic feed verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
+
+      - name: Republish the channel pointer signature
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          GENERATION="$(jq -r .signing_generation packaging/update-keys.json)"
+          WORK="$(mktemp -d "${TMPDIR:-/tmp}/feed-signature-backfill.XXXXXX")"
+          trap 'rm -rf "${WORK}"' EXIT
+          # Activate from the immutable release manifest so activation_manifest
+          # reproduces the live pointer bytes and takes the signature-only branch.
+          [[ "$(python3 scripts/release_distribution.py storage-read \
+            --key "updates/${CHANNEL}/key-${GENERATION}/latest.json" \
+            --output "${WORK}/pointer.json")" == 200 ]]
+          VERSION="$(jq -er .version "${WORK}/pointer.json")"
+          [[ "$(python3 scripts/release_distribution.py storage-read \
+            --key "updates/releases/${VERSION}.json" \
+            --output "${WORK}/latest.json")" == 200 ]]
+          bash scripts/release-r2-publish-pointer.sh \
+            --file "${WORK}/latest.json" --channel "${CHANNEL}" --generation "${GENERATION}"
