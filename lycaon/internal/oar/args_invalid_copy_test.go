@@ -28,6 +28,11 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 		wantFix   string
 	}{
 		{
+			name: "missing required argument", tool: "update_progress",
+			data:     map[string]any{"reason": "missing content", "missing_required_arguments": `{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}`},
+			wantWhat: "missing content", wantCause: "missing content", wantFix: `"content":"string"`,
+		},
+		{
 			name: "inapplicable workflow field", tool: "task",
 			data:     map[string]any{"field": "workflow_work_id", "reason": "not_a_planned_fanout_phase", "inapplicable_fields": []string{"workflow_work_id"}},
 			wantWhat: "workflow_work_id", wantCause: "not_a_planned_fanout_phase", wantFix: "Omit `workflow_work_id`",

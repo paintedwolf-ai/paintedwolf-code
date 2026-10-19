@@ -112,6 +112,20 @@ or occurrence delivery.
 
 - `TOOL_ARGS_INVALID` explains a schema failure in terms of what the caller wrote ([`tools/argdiag`](../lycaon/internal/tools/argdiag)). A member that a closed object does not declare, and that exactly one adjacent object (its parent or one child) declares and lacks, is reported as `misplaced_fields` with `found_under` and `belongs_under`, at any depth. A string in a declared object or array slot is JSON text: `json_encoded` when it parses, `json_malformed` when it does not. Malformed text names where reading stopped — `json_open_paths` for containers still open at the end, or the 1-based byte of an unexpected token, unterminated string, or trailing text — and the members its structure misplaces as written; `close_before` names where an object read too far should have closed. Members written after the value closed are `json_trailing_members`, placed under `json_trailing_belongs_under`: the slot when it declares them, or the object beside it when the text swallowed the call's other arguments. When every finding is repairable and the repaired call validates, `replacement_args_json` restates it, up to 3 KB; the host never applies a repair itself.
 
+Missing arguments publish `missing_required_arguments` from actual validation
+failures at the root schema and instance. The JSON observation names missing
+arguments, directly declared types where known, and received keys. It is capped
+at 1 KiB after encoding, with at most eight missing and eight received names;
+names over 128 bytes are omitted whole and counts record omissions. Oversized
+received-key samples are removed before missing names. If no missing name fits,
+the generic diagnostic remains.
+
+Requirements from alternative schema branches, referenced schemas, or nested
+objects do not become unconditional root requirements. Referenced or union
+property types remain unspecified. OAR uses the declared string fact through
+standard copy interpolation; it does not parse diagnostic prose or synthesize
+argument values. Existing exact replacement guidance remains available.
+
 An argument validator can also report `inapplicable_fields` when named fields do not apply to the current host state. This is an observation of validation, published as the typed OAR fact `paintedwolf.inapplicable_fields`. The `TOOL_ARGS_INVALID` rule renders the instruction to omit those fields and preserve the remaining arguments; the host does not rewrite or execute a repaired call.
 
 ## Reachable-remedy rule
