@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc7]
+
+Seventh release candidate for 1.0.2, published on the preview channel for
+in-app update testing from RC6 and incorporating coordinator, tool-recovery,
+and release-verification fixes.
+
+### Changed
+
+- Coordinator and execution-state guidance surface current checklist readiness,
+  workspace tools, user-visible updates, and observed tool outcomes more clearly.
+- Tool rejection and syntax recovery preserve bounded host diagnostics,
+  required-argument observations, and source-read prerequisites.
+
+### Fixed
+
+- macOS release staging validates stapled notarization tickets on both the
+  application bundle and disk image and retains native ticket diagnostics.
+- RPM package staging accepts domain vocabulary (`Agentic`, `toolchain`) during
+  `rpmlint` verification.
+- Hidden answers remain visible across `wait` transitions, terminal screen
+  results preserve exit status, and repository summaries refresh when the index
+  changes.
+- Browser static captures validate entry files, page approvals resolve mounted
+  directories, and scratch file discovery refreshes after writes.
+
 ## [1.0.2-rc6]
 
 Sixth release candidate for 1.0.2, published on the preview channel for
