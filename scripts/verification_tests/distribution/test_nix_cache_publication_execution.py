@@ -269,3 +269,39 @@ class CachePublicHTTPTests(unittest.TestCase):
         transport._read.return_value = (b'{"schema_version": 1, "state": "free"}', "free-tag")
         with transport.serialized("c" * 32):
             self.assertEqual(transport._write.call_args.args[-2:], ("--if-match", "free-tag"))
+
+    def test_rotation_and_metadata_creation_use_atomic_preconditions(self):
+        transport = R2Transport.__new__(R2Transport)
+        transport._read = Mock(return_value=(b"previous", "observed"))
+        transport._write = Mock()
+        transport.put_bytes = Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "metadata"
+            path.write_bytes(b"incoming")
+            record = {"phase": "narinfo", "bytes": 8, "sha256": hashlib.sha256(b"incoming").hexdigest(),
+                      "content_type": "text/plain", "cache_control": "no-store"}
+            transport.replace("object.narinfo", path, record, b"previous")
+            self.assertEqual(transport._write.call_args.args[-2:], ("--if-match", "observed"))
+            transport._write.reset_mock()
+            transport._read.return_value = (b"different", "raced")
+            with self.assertRaises(ValueError):
+                transport.replace("object.narinfo", path, record, b"previous")
+            transport._write.assert_not_called()
+            transport.put("object.narinfo", path, record)
+            transport.put_bytes.assert_called_once_with("object.narinfo", b"incoming", "text/plain", "no-store")
+
+    def test_r2_listing_is_complete_and_foreign_production_domain_refuses_before_credentials(self):
+        transport = R2Transport.__new__(R2Transport)
+        transport.prefix = "nix-cache"
+        transport._aws = Mock(side_effect=[json.dumps({"Contents": [{"Key": "nix-cache/a.narinfo", "Size": 1,
+                         "ETag": "a", "LastModified": "2020-01-01T00:00:00Z"}], "IsTruncated": True, "NextContinuationToken": "next"}),
+                         json.dumps({"Contents": [{"Key": "nix-cache/nar/a.nar.xz", "Size": 2,
+                         "ETag": "b", "LastModified": "2020-01-01T00:00:00Z"}], "IsTruncated": False})])
+        self.assertEqual(len(transport.listing()), 2)
+        self.assertIn("next", transport._aws.call_args.args)
+        environment = {"R2_BUCKET": "release-bucket", "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
+                       "DOWNLOAD_BASE_URL": "https://foreign.example"}
+        with patch.dict("os.environ", environment), patch("scripts.nix_cache.r2.subprocess.run") as external:
+            with self.assertRaises(ValueError):
+                R2Transport({"mode": "production", "cache_prefix": "nix-cache"})
+            external.assert_not_called()
