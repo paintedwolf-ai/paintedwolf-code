@@ -638,7 +638,7 @@ export function GitStrip(props: Props) {
                   disabled={busy()}
                   onInput={(e) => setMessage(e.currentTarget.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+                    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
                       e.preventDefault();
                       void commit();
                     }

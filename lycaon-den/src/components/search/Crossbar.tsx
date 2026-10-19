@@ -897,7 +897,7 @@ export function Crossbar(props: CrossbarProps) {
   };
 
   const onPanelKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing) return;
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

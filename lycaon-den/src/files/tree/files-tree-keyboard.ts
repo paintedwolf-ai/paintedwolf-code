@@ -131,7 +131,7 @@ export function createFilesTreeKeyboard(ports: KeyboardPorts) {
     const path = target.dataset.path ?? ".";
     const model = ports.displayModel();
     typeaheadRequest?.abort();
-    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
+    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       const now = performance.now();
       typeahead = now - typedAt < 750 ? typeahead + e.key : e.key;

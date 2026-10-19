@@ -63,7 +63,7 @@ export function createSearchResultNavigation(options: Options) {
 
   // Stage shortcuts skip controls and suggestions.
   const onStageKeyDown = (e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.isComposing) return;
+    if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest("button, a, select, textarea")) return;
     if (

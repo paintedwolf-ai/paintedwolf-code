@@ -439,10 +439,10 @@ export function shortcutCommandMatchesEvent(
   commandId: string,
   event: KeyboardEventLike & {
     target?: EventTarget | null;
-    isComposing?: boolean;
+    isComposing?: boolean; keyCode?: number;
   },
 ): boolean {
-  if (event.isComposing || shortcutCommandsSuspended() || pendingLeader) {
+  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE || shortcutCommandsSuspended() || pendingLeader) {
     return false;
   }
   const chord = eventToChord(event, activePlatform());

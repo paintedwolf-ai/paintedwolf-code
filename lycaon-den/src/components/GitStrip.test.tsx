@@ -443,6 +443,8 @@ describe("GitStrip", () => {
     const ta = screen.getByTestId("git-message") as HTMLTextAreaElement;
     fireEvent.input(ta, { target: { value: "feat: x" } });
     fireEvent.keyDown(ta, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(ta, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(ta, { key: "Enter", keyCode: 229 });
     expect(onCommit).not.toHaveBeenCalled();
     fireEvent.keyDown(ta, { key: "Enter" });
     expect(onCommit).toHaveBeenCalledWith("feat: x");

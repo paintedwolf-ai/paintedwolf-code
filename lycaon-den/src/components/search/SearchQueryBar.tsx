@@ -378,7 +378,7 @@ export function SearchQueryBar(props: Props) {
               onClick={() => queueMicrotask(revealCaret)}
               onKeyUp={() => queueMicrotask(revealCaret)}
               onKeyDown={(e) => {
-                if (e.isComposing) return;
+                if (e.isComposing || e.keyCode === 229) return;
                 if (e.key === "Escape") {
                   if (showSuggestions()) {
                     e.stopPropagation();
