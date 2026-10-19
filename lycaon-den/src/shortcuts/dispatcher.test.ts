@@ -70,8 +70,8 @@ describe("composition keys", () => {
     });
     expect(result.handled).toBe(false);
     const local = evt({ key: ",", code: "Comma", ctrlKey: true });
-    expect(shortcutCommandMatchesEvent("settings.open", { ...local, keyCode: 229 })).toBe(false);
-    expect(shortcutCommandMatchesEvent("settings.open", local)).toBe(true);
+    expect(shortcutCommandMatchesEvent(stockId("settings-open"), { ...local, keyCode: 229 })).toBe(false);
+    expect(shortcutCommandMatchesEvent(stockId("settings-open"), local)).toBe(true);
     expect(handler).not.toHaveBeenCalled();
     release();
   });
