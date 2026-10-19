@@ -47,7 +47,7 @@ def select(api, repository: str, repository_id: int, run_id: int) -> dict:
     identity = artifact.get("id")
     digest = artifact.get("digest")
     if (type(identity) is not int or identity < 1 or artifact.get("expired") is not False
-            or type(artifact.get("size_in_bytes")) is not int or artifact["size_in_bytes"] < 1
+            or type(artifact.get("size_in_bytes")) is not int or not 1 <= artifact["size_in_bytes"] <= 64 << 30
             or type(producer.get("id")) is not int or producer["id"] != run_id
             or producer.get("head_sha") != commit
             or type(producer.get("repository_id")) is not int or producer["repository_id"] != repository_id
@@ -56,6 +56,7 @@ def select(api, repository: str, repository_id: int, run_id: int) -> dict:
         raise ValueError("final campaign artifact has stale or mismatched server provenance")
     return {"repository": repository, "repository_id": repository_id, "run_id": run_id,
             "run_attempt": attempt, "controller_commit": commit, "artifact_id": identity,
+            "artifact_bytes": artifact["size_in_bytes"],
             "artifact_sha256": digest.removeprefix("sha256:")}
 
 
