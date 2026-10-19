@@ -8,19 +8,20 @@ import tarfile
 import tempfile
 import unittest
 
-from linux_release.arch import package_version, recipe, validate_resources, write_payload
+from linux_release.arch import recipe, validate_resources, write_payload
+from release_semver import pacman_package_version, parse
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 class ArchPackageTests(unittest.TestCase):
     def test_versions_preserve_release_and_reject_ambiguous_prerelease_ordering(self):
-        self.assertEqual(package_version("1.2.3"), "1.2.3")
-        self.assertEqual(package_version("1.2.3-rc6"), "1.2.3pre.rc6")
-        self.assertEqual(package_version("1.2.3-beta.12+source"), "1.2.3pre.beta.12")
+        self.assertEqual(pacman_package_version(parse("1.2.3")), "1.2.3")
+        self.assertEqual(pacman_package_version(parse("1.2.3-rc6")), "1.2.3pre.rc6")
+        self.assertEqual(pacman_package_version(parse("1.2.3-beta.12+source")), "1.2.3pre.beta.12")
         for version in ["1.2.3-4", "1.2.3-rc.x", "1.2.3-custom", "1.2.3-rc;touch /tmp/invalid"]:
             with self.subTest(version=version), self.assertRaises(ValueError):
-                package_version(version)
+                pacman_package_version(parse(version))
 
     def test_generated_recipe_copies_exact_bytes_modes_and_unicode_paths(self):
         with tempfile.TemporaryDirectory() as directory:
