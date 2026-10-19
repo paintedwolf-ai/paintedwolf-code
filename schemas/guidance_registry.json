@@ -2804,7 +2804,7 @@
       "summary": "A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "SURFACE_NOTE_ARTIFACT_UNKNOWN": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_ARTIFACT_UNKNOWN; copy a producer artifact_id from this turn or capture one before presenting",
+      "branch_instruction": "Capture the required visual before presenting it, or omit artifact_ids and accurately report the remaining work.",
       "category": "recoverable",
       "emit": "guard:surface_note",
       "summary": "The note includes an artifact ID not observed as presentable in this turn."
@@ -2990,7 +2990,7 @@
       "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
     },
     "TOOL_ARGS_INVALID": {
-      "branch_instruction": "{% if paintedwolf.suggested_tool %}Fix the argument object, or switch to `{{ paintedwolf.suggested_tool }}`.{% else %}Repair the rejected argument object and retry.{% endif %}",
+      "branch_instruction": "Repair the rejected argument object and retry; preserve any source-read prerequisite from an earlier rejection.",
       "category": "recoverable",
       "emit": "guard:tool_args",
       "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
