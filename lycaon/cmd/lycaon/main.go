@@ -106,7 +106,7 @@ func run(ctx context.Context, args []string) error {
 		if len(rest) < 1 || rest[0] != "engines" {
 			return fmt.Errorf("usage: pw scan engines {list|check|validate} [--project DIR]")
 		}
-		return runScanEngines(rest[1:])
+		return runScanEngines(ctx, rest[1:])
 	case "internal-system-proxy":
 		if len(rest) != 0 {
 			return errors.New("native proxy helper accepts its request on stdin")

@@ -2,6 +2,25 @@
 # Resolve a pinned engine release or an explicit development candidate.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "${1:-}" in
+  --finalize-consumer|--relocate-consumer|--audit-consumer)
+    MODE=finalize-consumer
+    [[ "$1" != --relocate-consumer ]] || MODE=relocate-consumer
+    [[ "$1" != --audit-consumer ]] || MODE=audit
+    shift
+    if [[ -n "${OPENGREP:-}${OPENGREP_SHA256:-}${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
+      echo "resolve-opengrep: consumer builds require the selected producer, without development overrides" >&2
+      exit 1
+    fi
+    for ARG in "$@"; do
+      case "${ARG%%=*}" in
+        -mode|--mode) echo "resolve-opengrep: consumer mode cannot be overridden" >&2; exit 2 ;;
+      esac
+    done
+    cd "${ROOT}/lycaon"
+    exec go run ./cmd/opengrep-artifact -mode "$MODE" "$@"
+    ;;
+esac
 # shellcheck source=artifact-paths.sh
 source "$(dirname "$0")/artifact-paths.sh"
 STAGE_DIR="${OPENGREP_STAGE_DIR:-${PW_BUILD_DIR}/opengrep-bundle}"
