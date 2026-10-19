@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 
 SERVICES = {
     "org.freedesktop.portal.Desktop": ("/org/freedesktop/portal/desktop", (
@@ -68,12 +69,18 @@ class SessionBus:
         except ImportError as exc:
             raise ObservationUnavailable("gio-unavailable") from exc
         self.Gio, self.GLib = Gio, GLib
+        cancellation = Gio.Cancellable()
+        deadline = threading.Timer(2, cancellation.cancel)
+        deadline.daemon = True
+        deadline.start()
         try:
             self.connection = Gio.DBusConnection.new_for_address_sync(address,
                 Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
-                None, None)
+                None, cancellation)
         except GLib.Error as exc:
             raise ObservationUnavailable("session-bus-connect-failed") from exc
+        finally:
+            deadline.cancel()
 
     def call(self, destination, path, interface, method, parameters, reply_type):
         try:
