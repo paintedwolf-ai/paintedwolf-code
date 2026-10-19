@@ -7,8 +7,9 @@ let
 in rust.buildRustPackage {
   pname = "painted-wolf-code-bialy";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = source + "/lycaon/internal/decide/native";
+  src = source;
   cargoLock.lockFile = source + "/lycaon/internal/decide/native/Cargo.lock";
+  buildAndTestSubdir = "lycaon/internal/decide/native";
   buildFeatures = [ "vulkan" ];
   cargoBuildFlags = [ "--bin" "bialy" ];
   nativeBuildInputs = [ pkg-config cmake patchelf ];
