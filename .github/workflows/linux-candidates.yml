@@ -1,6 +1,9 @@
 name: Linux package candidates
 
 on:
+  push:
+    branches: [linux/candidate-ci-isolation]
+    paths: [packaging/linux/qualification-source.json]
   workflow_call:
     inputs:
       source_sha:
@@ -45,6 +48,27 @@ jobs:
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
+      - name: Select the frozen premerge qualification source
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          selection="$(python3 - <<'SOURCE_PY'
+          import json, re
+          from pathlib import Path
+          selected = json.loads(Path('packaging/linux/qualification-source.json').read_text())
+          if set(selected) != {'source_commit', 'source_tree'} or any(
+              not isinstance(value, str) or not re.fullmatch('[0-9a-f]{40}', value)
+              for value in selected.values()
+          ):
+              raise SystemExit('Invalid frozen candidate qualification source')
+          print(selected['source_commit'], selected['source_tree'])
+          SOURCE_PY
+          )"
+          read -r source_sha source_tree <<< "$selection"
+          git fetch --no-tags origin "refs/qualification/$source_sha"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$source_sha" ]]
+          [[ "$(git rev-parse 'FETCH_HEAD^{tree}')" == "$source_tree" ]]
+          git checkout --detach "$source_sha"
       - id: source
         run: |
           set -euo pipefail
@@ -56,7 +80,7 @@ jobs:
     needs: source
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix: ${{ fromJSON(needs.source.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
@@ -121,6 +145,8 @@ jobs:
             --version "${VERSION}" --package-extensions deb,rpm \
             --output "${RUNNER_TEMP}/candidate"
           git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"
+          git rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/candidate/source-tree.txt"
+          printf '%s\n' 'nonrelease; installed qualification is required' > "${RUNNER_TEMP}/candidate/qualification-scope.txt"
       - name: Retain candidate packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
