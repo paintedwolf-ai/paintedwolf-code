@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
+import re
 from pathlib import Path
 import tarfile
 
-from .pacman_repository import NAME, package_info
+from .pacman_repository import NAME, ARCHITECTURES, package_info
 from .signing import digest, verify
+from .openpgp import selection
 
 
 def fields(raw: bytes) -> dict:
@@ -24,13 +28,22 @@ def fields(raw: bytes) -> dict:
 
 
 def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
-    if (receipt.get("format_version") != 1 or receipt.get("rehearsal") is not rehearsal
-            or receipt.get("channel") not in {"stable", "preview"}):
+    if (receipt.get("format_version") != 1 or receipt.get("family") != "pacman" or receipt.get("rehearsal") is not rehearsal
+            or receipt.get("channel") not in {"stable", "preview"}
+            or receipt.get("architecture") not in ARCHITECTURES
+            or not re.fullmatch(r"[0-9a-f]{40}", receipt.get("source_commit", ""))
+            or not NAME.fullmatch(receipt.get("version", ""))):
         raise ValueError("unsupported or cross-trust pacman generation")
+    signer, _ = selection(catalog, rehearsal)
+    if receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
+        raise ValueError("pacman generation differs from the selected signing identity")
     repository = "painted-wolf-code" + ("-preview" if receipt["channel"] == "preview" else "")
     if receipt.get("repository") != repository:
         raise ValueError("pacman database differs from its selected release channel")
     rows = receipt.get("objects", [])
+    measured = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if receipt.get("inventory_sha256") != measured:
+        raise ValueError("pacman inventory differs from its selected identity")
     names = [row["path"] for row in rows]
     observed = {p.name for p in directory.iterdir() if p.name != "generation.json"}
     if not rows or len(set(names)) != len(names) or observed != set(names):
@@ -40,9 +53,18 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
         if not isinstance(name, str) or not NAME.fullmatch(name):
             raise ValueError("pacman inventory object is not a sibling file")
         path = directory / name
-        if (not path.is_file() or path.resolve().parent != directory.resolve()
+        if (type(row["size"]) is not int or row["size"] < 0
+                or not path.is_file() or path.resolve().parent != directory.resolve()
                 or path.stat().st_size != row["size"] or digest(path) != row["sha256"]):
             raise ValueError("pacman object differs from its selected final bytes")
+    packages = receipt.get("packages")
+    if not isinstance(packages, list) or {row["file"] for row in packages} != {
+            name for name in names if name.endswith(".pkg.tar.zst")}:
+        raise ValueError("pacman final package inventory is incomplete")
+    for row in packages:
+        selected = next(item for item in rows if item["path"] == row["file"])
+        if row["sha256"] != selected["sha256"] or row["architecture"] != receipt["architecture"]:
+            raise ValueError("pacman final package identity differs from its selected inventory")
     for suffix in ["db", "files"]:
         archive = directory / f"{repository}.{suffix}.tar.gz"
         verify("detached", archive, archive.with_name(archive.name + ".sig"), catalog, rehearsal)
@@ -75,6 +97,9 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
             if any(values[key] != [info[field]] for key, field in
                    [("NAME", "pkgname"), ("VERSION", "pkgver"), ("ARCH", "arch")]):
                 raise ValueError("pacman database identity differs from its native package")
+            selected_package = next(row for row in packages if row["file"] == filename)
+            if info["pkgver"] != selected_package["native_version"]:
+                raise ValueError("pacman final package version differs from its selected receipt")
             if info["arch"] != receipt["architecture"]:
                 raise ValueError("pacman package differs from the selected architecture")
             selected.add(filename)

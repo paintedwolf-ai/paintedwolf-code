@@ -15,6 +15,8 @@ from .openpgp import ephemeral, keyring, selection, run
 from .pacman_repository import assemble, package_info, binary_signature
 from .aur_recipe import generate
 from .pacman_validation import admit
+from .pacman_publication import publish
+from .repository_objects import replace
 from .signing import digest
 
 PACKAGE = "paintedwolf-repository-fixture"
@@ -28,26 +30,30 @@ def rejected(action):
     raise ValueError("invalid pacman generation was admitted")
 
 
-def install(package: Path, root: Path, catalog: Path, expected: str):
+def install(package: Path, root: Path, catalog: Path, expected: str, repository: Path | None = None):
     root.mkdir(exist_ok=True)
     for name in ["db", "cache", "hooks"]:
         (root / name).mkdir(exist_ok=True)
     config = root / "pacman.conf"
     config.write_text("[options]\nArchitecture = " + platform.machine()
                       + "\nSigLevel = Required DatabaseRequired\nLocalFileSigLevel = Required\n")
+    if repository is not None:
+        with config.open("a") as output:
+            output.write("\n[painted-wolf-code-preview]\nServer = " + repository.as_uri() + "\n")
     selected, public = selection(catalog, True)
     with keyring(public, selected["fingerprint"]) as home:
         run(["gpg", "--batch", "--import-ownertrust"], home,
             (selected["fingerprint"] + ":6:\n").encode())
         run(["gpg", "--batch", "--check-trustdb"], home)
+        action = ["-Syu", "--noconfirm", expected] if repository is not None else ["-U", "--noconfirm", str(package)]
         try:
             subprocess.run(["sudo", "-n", "pacman", "--config", str(config), "--root", str(root),
                             "--dbpath", str(root / "db"), "--cachedir", str(root / "cache"),
                             "--hookdir", str(root / "hooks"), "--gpgdir", str(home),
-                            "--logfile", str(root / "pacman.log"), "-U", "--noconfirm", str(package)], check=True)
+                            "--logfile", str(root / "pacman.log"), *action], check=True)
         finally:
             subprocess.run(["sudo", "-n", "chown", "-R", f"{os.getuid()}:{os.getgid()}", "--", str(root)], check=True)
-    owned = subprocess.check_output(["pacman", "--root", str(root), "--dbpath", str(root / "db"),
+    owned = subprocess.check_output(["pacman", "--config", str(config), "--root", str(root), "--dbpath", str(root / "db"),
                                      "-Qoq", "--", str(root / "usr/share" / PACKAGE / "value")], text=True).strip()
     if owned != expected:
         raise ValueError("installed fixture file has the wrong package owner")
@@ -59,6 +65,8 @@ def rehearse(work: Path):
     catalog = ephemeral(work / "key")
     wrong = ephemeral(work / "wrong")
     results = []
+    active = None
+    retained = None
     for version in ["0.0.1", "0.0.2"]:
         source = work / version
         source.mkdir()
@@ -74,7 +82,7 @@ package() {{
   printf '%s\\n' '{version}' > "$pkgdir/usr/share/{PACKAGE}/value"
 }}
 """)
-        subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force"],
+        subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force", "--nosign"],
                        cwd=source, check=True)
         packages = list(source.glob("*.pkg.tar.zst"))
         if len(packages) != 1:
@@ -100,7 +108,26 @@ package() {{
         rejected(lambda: admit(receipt, destination, catalog, True))
         absent.rename(selected)
         admit(receipt, destination, catalog, True)
-        install(destination / package.name, work / "native-root", catalog, PACKAGE)
+        origin = work / "origin"
+        channel = origin / "channels/pacman/preview" / architecture
+        if retained is not None:
+            # The package manager must refuse a detached signature for another database.
+            alias = channel / (receipt["repository"] + ".db.sig")
+            previous_signature = alias.read_bytes()
+            replace(alias, (destination / alias.name).read_bytes())
+            try:
+                install(destination / package.name, work / "mismatched-root", catalog, PACKAGE, channel)
+            except subprocess.CalledProcessError:
+                pass
+            else:
+                raise ValueError("pacman accepted a database/signature mismatch")
+            replace(alias, previous_signature)
+        selected = publish(receipt, destination, origin, "https://repository.example.invalid", catalog, active, True)
+        rejected(lambda: publish(receipt, destination, origin, "https://repository.example.invalid", catalog, "0" * 64, True))
+        if retained is None:
+            retained = receipt, destination
+        active = selected["generation"]
+        install(destination / package.name, work / "native-root", catalog, PACKAGE, channel)
         if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
             raise ValueError("native pacman upgrade did not install the selected payload")
         recipe = work / ("aur-" + version)
@@ -111,8 +138,22 @@ package() {{
                 shutil.copyfile(destination / row["path"], recipe / row["path"])
         selected_key, public = selection(catalog, True)
         with keyring(public, selected_key["fingerprint"]) as home:
-            subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force"],
+            subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force", "--nosign"],
                            cwd=recipe, env={**os.environ, "GNUPGHOME": str(home)}, check=True)
+            altered = recipe / package.name
+            original = altered.read_bytes()
+            altered.write_bytes(original + b"changed")
+            invalid = subprocess.run(["makepkg", "--verifysource", "--noconfirm"], cwd=recipe,
+                                     env={**os.environ, "GNUPGHOME": str(home)})
+            altered.write_bytes(original)
+            if invalid.returncode == 0:
+                raise ValueError("AUR makepkg accepted changed upstream package bytes")
+        wrong_key, wrong_public = selection(wrong, True)
+        with keyring(wrong_public, wrong_key["fingerprint"]) as home:
+            invalid = subprocess.run(["makepkg", "--verifysource", "--noconfirm"], cwd=recipe,
+                                     env={**os.environ, "GNUPGHOME": str(home)})
+            if invalid.returncode == 0:
+                raise ValueError("AUR makepkg accepted an unavailable upstream signing key")
         rebuilt = list(recipe.glob(PACKAGE + "-preview-bin-*.pkg.tar.zst"))
         if len(rebuilt) != 1 or package_info(rebuilt[0]) != {
                 "pkgname": generated["package"], "pkgver": version + "-1", "arch": architecture}:
@@ -128,6 +169,15 @@ package() {{
             raise ValueError("AUR recipe changed the authenticated upstream payload")
         if "pkgname = " + generated["package"] not in (recipe / ".SRCINFO").read_text():
             raise ValueError("generated SRCINFO differs from the selected AUR package")
+        if version == "0.0.2":
+            old_receipt, old_directory = retained
+            restored = publish(old_receipt, old_directory, origin, "https://repository.example.invalid", catalog,
+                               active, True, True)
+            if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
+                raise ValueError("repository withdrawal changed an installed fixture")
+            selected = publish(receipt, destination, origin, "https://repository.example.invalid", catalog,
+                               restored["generation"], True)
+            active = selected["generation"]
         results.append({"version": version, "objects": len(receipt["objects"])})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
             "published": False, "generations": results,
@@ -135,7 +185,10 @@ package() {{
                       "wrong-key", "production-refuses-fixture", "changed-package", "missing-object",
                       "channel-mismatch", "retained-generations", "pinned-aur-makepkg",
                       "aur-input-signature-and-checksum", "aur-srcinfo", "aur-payload-identity",
-                      "native-installed-upgrade", "aur-installed-upgrade", "actual-pacman-file-ownership"]}
+                      "native-repository-Syu-upgrade", "aur-installed-upgrade", "actual-pacman-file-ownership",
+                      "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
+                      "retained-repository-recovery", "withdrawal-preserves-installed-package",
+                      "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused"]}
 
 
 def main():

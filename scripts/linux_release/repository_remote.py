@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 from pathlib import Path
 import shlex
 import re
@@ -36,13 +38,24 @@ def main():
                 for path in sorted((root / "scripts/linux_release").glob("*.py")):
                     bundle.add(path, arcname="scripts/linux_release/" + path.name)
             archive.seek(0)
+            bundle_sha256 = hashlib.sha256(archive.read()).hexdigest()
+            archive.seek(0)
             subprocess.run([*ssh, "tar -xzf - -C " + shlex.quote(remote)], stdin=archive, check=True)
         subprocess.run([*ssh, "cd " + shlex.quote(remote)
                         + " && python3 -m scripts.linux_release.pacman_rehearsal --receipt result.json"],
                        check=True)
         raw = subprocess.check_output([*ssh, "cat " + shlex.quote(remote + "/result.json")], timeout=60)
+        subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p",
+                        "test_pacman_publication_execution.py"], cwd=root, check=True)
+        result = json.loads(raw)
+        if result.get("rehearsal") is not True or result.get("application_qualified") is not False:
+            raise ValueError("remote receipt differs from the selected fixture scope")
+        result["cases"].append("r2-pacman-publication-contracts")
+        result["module_bundle_sha256"] = bundle_sha256
+        result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        result["verification_source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
-        args.receipt.write_bytes(raw)
+        args.receipt.write_text(json.dumps(result, indent=2) + "\n")
         print(f"Native VM pacman rehearsal receipt: {args.receipt}")
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"Native VM pacman rehearsal failed: {exc}\n")

@@ -94,7 +94,7 @@ def generate(generations: list[tuple[dict, Path]], destination: Path, base_url: 
     text += quoted_array("validpgpkeys", [selected["fingerprint"]])
     text += quoted_array("options", ["!strip", "!debug"])
     for output, source in [("license", "license"), ("depends", "depend"), ("optdepends", "optdepend"),
-                           ("backup", "backup")]:
+                           ("backup", "backup"), ("replaces", "replaces")]:
         text += quoted_array(output, common[source])
     text += quoted_array("provides", [package + "=" + native[0], *common["provides"]])
     text += quoted_array("conflicts", sorted({package, package + "-preview", *common["conflict"]}))

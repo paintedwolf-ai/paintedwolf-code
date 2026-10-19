@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -71,7 +72,7 @@ def assemble(manifest: dict, inputs: Path, destination: Path, channel: str,
         if info != {"pkgname": package, "pkgver": row["native_version"], "arch": architecture}:
             raise ValueError("native pacman identity differs from its selected receipt")
         selected_inputs.append(path)
-    selection(catalog, rehearsal)
+    signer, _ = selection(catalog, rehearsal)
     destination.mkdir(parents=True, exist_ok=False)
     packages = []
     for path in selected_inputs:
@@ -95,7 +96,11 @@ def assemble(manifest: dict, inputs: Path, destination: Path, channel: str,
             raise ValueError("repository alias escapes its immutable generation")
         if path.is_file():
             objects.append({"path": path.name, "sha256": digest(path), "size": path.stat().st_size})
-    return {"format_version": 1, "source_commit": source, "version": version,
+    return {"format_version": 1, "family": "pacman", "source_commit": source,
+            "signing_generation": signer["generation"], "key_fingerprint": signer["fingerprint"],
+            "inventory_sha256": hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+            "packages": [{"file": path.name, "sha256": digest(path), "native_version": package_info(path)["pkgver"], "architecture": architecture}
+                         for path in packages], "version": version,
             "architecture": architecture, "channel": channel, "repository": repository,
             "rehearsal": rehearsal, "activation": "not-published", "objects": objects,
             "reader_consistency": "immutable-generation-config", "aur_published": False}
