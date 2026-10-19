@@ -166,3 +166,29 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertFalse(report["accepted"])
         self.assertTrue(any(row["status"] == "failed" for row in report["rows"]))
+
+    def test_cli_retains_failed_checklist_and_never_replaces_inputs_or_reports(self):
+        self.campaign["results"].pop()
+        for name, value in (("catalog", self.catalog), ("campaign", self.campaign), ("artifacts", self.final)):
+            (self.root / (name + ".json")).write_text(json.dumps(value))
+        command = [sys.executable, "-m", "scripts.linux_release.installed_results",
+                   "--catalog", str(self.root / "catalog.json"),
+                   "--campaign", str(self.root / "campaign.json"),
+                   "--final-artifacts", str(self.root / "artifacts.json"),
+                   "--source-commit", SOURCE, "--evidence-root", str(self.root), "--report"]
+        cwd = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as output_directory:
+            output = Path(output_directory) / "report.json"
+            result = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            retained = output.read_bytes()
+            self.assertEqual(json.loads(retained), json.loads(result.stdout))
+            self.assertFalse(json.loads(retained)["accepted"])
+            self.assertTrue(json.loads(retained)["manual_checklist"])
+            repeated = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            self.assertNotEqual(repeated.returncode, 0)
+            self.assertEqual(output.read_bytes(), retained)
+        before = self.proof.read_bytes()
+        refused = subprocess.run(command + [str(self.proof)], cwd=cwd, text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertEqual(self.proof.read_bytes(), before)

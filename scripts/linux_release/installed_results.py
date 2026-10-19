@@ -6,6 +6,9 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
+
+from scripts.artifact_paths import artifact_root
 
 from . import installed_evidence as evidence
 from .support_matrix import CATALOG, expand
@@ -121,13 +124,24 @@ def main() -> int:
     parser.add_argument("--final-artifacts", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
+    output = (args.report or (artifact_root(Path(__file__).resolve().parents[2]) /
+              "linux-installed" / f"campaign-{time.time_ns()}.json")).resolve()
+    if output.is_relative_to(args.evidence_root.resolve()) or output in {
+            args.catalog.resolve(), args.campaign.resolve(), args.final_artifacts.resolve()}:
+        parser.error("campaign report must not replace its inputs or retained evidence")
     try:
         read = lambda path: json.loads(path.read_text(encoding="utf-8"))
         report = admit(read(args.catalog), read(args.campaign), read(args.final_artifacts),
                        args.source_commit, args.evidence_root)
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         report = {"format_version": 1, "accepted": False, "errors": [str(exc)]}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as retained:
+        json.dump(report, retained, indent=2)
+        retained.write("\n")
+    print(f"Installed Linux campaign report: {output}", file=sys.stderr)
     json.dump(report, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0 if report["accepted"] else 1

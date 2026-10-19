@@ -347,6 +347,9 @@
     ],
     "licenses:notices": [
       "licenses:notices"
+    ],
+    "test:linux:installed": [
+      "test:linux:installed"
     ]
   },
   "private": [
@@ -370,7 +373,8 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "test:linux:installed": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -688,6 +692,10 @@
       "locks": [
         "notices"
       ],
+      "workers": 1
+    },
+    "test:linux:installed": {
+      "locks": [],
       "workers": 1
     }
   },
