@@ -174,7 +174,7 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
                 artifacts = json.loads((root / "artifacts.json").read_text())
                 artifacts["artifacts"][0].update(installation=family, architecture=architecture)
                 manifest = plan["generations"][0]["manifest"]
-                manifest.update(family=family, version=product)
+                manifest.update(family=family, version=product, channel="preview" if "-" in product else "stable")
                 native_arch = {"amd64": "x86_64", "arm64": "aarch64"}[architecture] if family == "pacman" else architecture
                 manifest["packages"][0].update(architecture=native_arch, native_version=native)
                 if family == "pacman":
@@ -182,7 +182,7 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
                 operation = {key: value for key, value in manifest.items() if key != "objects"}
                 operation.update(operation="publish", generation=digest(manifest), previous=None)
                 plan["generations"][0]["operation"] = operation
-                arguments = dict(version=product, channel="stable", signing_generation=1,
+                arguments = dict(version=product, channel=manifest["channel"], signing_generation=1,
                     key_fingerprint="A" * 40, release_build=14,
                     verified_files=[{"id": "app", "sha256": manifest["packages"][0]["sha256"], "bytes": 13}])
                 self.assertEqual(len(verify_repositories(plan, artifacts, "a" * 40, **arguments)), 1)
@@ -190,3 +190,17 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
                 operation["generation"] = digest(manifest)
                 with self.assertRaisesRegex(ValueError, "differs from the installed final artifact"):
                     verify_repositories(plan, artifacts, "a" * 40, **arguments)
+
+    def test_product_channel_cannot_be_relabelled_by_matching_repository_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _, _ = self.fixture(directory)
+            plan = json.loads((root / "repositories.json").read_text())
+            artifacts = json.loads((root / "artifacts.json").read_text())
+            manifest = plan["generations"][0]["manifest"]
+            manifest["channel"] = "preview"
+            operation = plan["generations"][0]["operation"]
+            operation.update(channel="preview", generation=digest(manifest))
+            with self.assertRaisesRegex(ValueError, "channel differs"):
+                verify_repositories(plan, artifacts, "a" * 40, version="1.0.0", channel="preview",
+                    signing_generation=1, key_fingerprint="A" * 40, release_build=14,
+                    verified_files=[{"id": "app", "sha256": manifest["packages"][0]["sha256"], "bytes": 13}])
