@@ -26,13 +26,14 @@ type options struct {
 	cacheRoot, archive, releaseManifest, manifestOutput string
 	tag, expectedCommit                                 string
 	evidenceRoot, auditOutput, packagedDirectory        string
+	consumerRecipe, consumerIdentity                    string
 	offline                                             bool
 	dirOnly                                             bool
 }
 
 func run() (string, error) {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "stage", "fetch, select, audit, identity, stage, verify, or resolve the exact artifact")
+	flag.StringVar(&opts.mode, "mode", "stage", "fetch, select, audit, identity, stage, verify, resolve, or finalize-consumer")
 	flag.StringVar(&opts.root, "root", "", "artifact staging root")
 	flag.StringVar(&opts.target, "target", "", "Rust target triple; defaults to the host")
 	flag.StringVar(&opts.directory, "artifact-directory", "", "absolute verified prebuilt artifact directory")
@@ -48,6 +49,8 @@ func run() (string, error) {
 	flag.StringVar(&opts.evidenceRoot, "evidence-root", "", "committed scanner configuration directory for offline audit")
 	flag.StringVar(&opts.auditOutput, "audit-output", "", "application release audit output")
 	flag.StringVar(&opts.packagedDirectory, "packaged-directory", "", "engine directory verified inside the application package")
+	flag.StringVar(&opts.consumerRecipe, "consumer-recipe", "", "closed JSON declaration for native Linux consumer finalization")
+	flag.StringVar(&opts.consumerIdentity, "consumer-identity-file", "", "finalized build identity for a separate consumer package audit")
 	flag.BoolVar(&opts.offline, "offline", false, "use only imported or cached release bytes")
 	flag.Parse()
 	if flag.NArg() != 0 {
@@ -87,10 +90,19 @@ func execute(opts options) (string, error) {
 			return "", err
 		}
 	}
+	if opts.mode == "finalize-consumer" {
+		return finalizeConsumer(context.Background(), m, opts)
+	}
 	if opts.mode == "identity" {
 		return bundled.EncodedBuildIdentity(m)
 	}
 	if opts.mode == "audit" {
+		if opts.consumerIdentity != "" {
+			m, err = selectConsumerAudit(context.Background(), m, opts)
+			if err != nil {
+				return "", err
+			}
+		}
 		if err := bundled.WriteReleaseAudit(context.Background(), m, opts.packagedDirectory, opts.evidenceRoot, opts.auditOutput); err != nil {
 			return "", err
 		}
@@ -124,12 +136,18 @@ func (opts options) validate() error {
 		return fmt.Errorf("independent executable overrides are unavailable in release builds")
 	}
 	switch opts.mode {
-	case "identity", "stage", "resolve", "verify", "fetch", "select", "audit":
+	case "identity", "stage", "resolve", "verify", "fetch", "select", "audit", "finalize-consumer":
 	default:
 		return fmt.Errorf("invalid mode: %s", opts.mode)
 	}
-	if opts.mode != "audit" && (opts.evidenceRoot != "" || opts.auditOutput != "" || opts.packagedDirectory != "") {
+	if opts.mode != "audit" && opts.mode != "finalize-consumer" && (opts.evidenceRoot != "" || opts.auditOutput != "" || opts.packagedDirectory != "") {
 		return fmt.Errorf("evidence-root, packaged-directory and audit-output require audit mode")
+	}
+	if opts.consumerRecipe != "" && opts.mode != "finalize-consumer" {
+		return fmt.Errorf("consumer-recipe requires finalize-consumer mode")
+	}
+	if opts.consumerIdentity != "" && opts.mode != "audit" {
+		return fmt.Errorf("consumer-identity-file requires audit mode")
 	}
 	if os.Getenv(bundled.EnvOpenGrepCandidate) != "" && (opts.executable != "" || opts.digest != "" || opts.directory != "" || opts.mode == "identity") {
 		return fmt.Errorf("independent artifact identities cannot be combined with %s", bundled.EnvOpenGrepCandidate)
@@ -139,6 +157,12 @@ func (opts options) validate() error {
 	}
 	if opts.cacheRoot != "" || opts.archive != "" || opts.offline || opts.releaseManifest != "" || opts.manifestOutput != "" || opts.tag != "" || opts.expectedCommit != "" {
 		return fmt.Errorf("release options require fetch or select mode")
+	}
+	if opts.mode == "finalize-consumer" {
+		if opts.directory == "" || opts.root == "" || opts.consumerRecipe == "" || opts.evidenceRoot == "" || opts.auditOutput == "" || opts.packagedDirectory != "" || opts.executable != "" || opts.digest != "" || opts.dirOnly {
+			return fmt.Errorf("finalize-consumer requires original artifact-directory, final root, consumer-recipe, evidence-root and audit-output")
+		}
+		return nil
 	}
 	if opts.mode == "audit" {
 		if opts.directory == "" || opts.evidenceRoot == "" || opts.auditOutput == "" || opts.packagedDirectory == "" || opts.root != "" || opts.executable != "" || opts.digest != "" || opts.dirOnly {

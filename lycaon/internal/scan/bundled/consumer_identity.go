@@ -49,6 +49,26 @@ type ConsumerRecipe struct {
 	Arguments       []string `json:"arguments"`
 }
 
+// ParseConsumerRecipe reads one closed declaration of consumer packaging inputs.
+func ParseConsumerRecipe(raw []byte) (ConsumerRecipe, error) {
+	var recipe ConsumerRecipe
+	if len(raw) > 64<<10 {
+		return recipe, fmt.Errorf("consumer recipe exceeds its bound")
+	}
+	if err := rejectVerifierDuplicateFields(json.NewDecoder(bytes.NewReader(raw)), 0); err != nil {
+		return recipe, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&recipe); err != nil {
+		return recipe, err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return recipe, fmt.Errorf("consumer recipe requires one JSON object")
+	}
+	return recipe, recipe.validate()
+}
+
 func (recipe ConsumerRecipe) validate() error {
 	if recipe.SchemaVersion != 1 || recipe.Kind != "nix-elf-relocation" || !validHex(recipe.SourceCommit, 20) || !validHex(recipe.FlakeLockSHA256, 32) || !validHex(recipe.ToolSHA256, 32) {
 		return fmt.Errorf("consumer recipe requires a versioned Nix relocation and pinned source inputs")
