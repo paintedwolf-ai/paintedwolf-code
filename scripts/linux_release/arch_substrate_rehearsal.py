@@ -12,7 +12,7 @@ import tempfile
 
 from .arch import recipe, stream_digest, write_payload
 from .arch_stage import extract
-from .arch_substrate import build
+from .arch_substrate import build, rootfs
 from release_semver import pacman_package_version, parse, parse_release_build
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +46,8 @@ def rehearse(work):
     hook = ROOT / "packaging/linux/arch/painted-wolf-code.install"
     if hook.exists():
         shutil.copyfile(hook, recipe_dir / hook.name)
+    arm = json.loads((ROOT / "packaging/linux/arch/substrates.json").read_text())["aarch64"]
+    authenticated_arm = rootfs(ROOT, arm)
     substrate = build(ROOT, recipe_dir, architecture, 1234567890)
     package = recipe_dir / ("painted-wolf-code-" + pacman_package_version(parse(product)) + "-" + str(revision)
                             + "-" + architecture + ".pkg.tar.zst")
@@ -62,10 +64,11 @@ def rehearse(work):
             "published": False, "source_commit": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
             "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT, text=True).strip(),
-            "architecture": architecture, "substrate": substrate, "package_sha256": stream_digest(package),
+            "architecture": architecture, "substrate": substrate,
+            "authenticated_arm_rootfs_sha256": stream_digest(authenticated_arm), "package_sha256": stream_digest(package),
             "package_bytes": package.stat().st_size, "native_version": fields["pkgver"][0],
             "sealed_fixture": sealed,
-            "cases": ["actual-native-makepkg", "pinned-official-substrate", "signed-toolchain-preparation",
+            "cases": ["actual-native-makepkg", "authenticated-ARM-rootfs-preparation", "pinned-official-substrate", "signed-toolchain-preparation",
                       "offline-unprivileged-packaging", "native-ELF-bytes-preserved", "final-PKGINFO-admission",
                       "exact-dependency-catalog", "native-BUILDINFO-and-MTREE", "unicode-modes-and-links-preserved"]}
 
