@@ -143,3 +143,47 @@ func TestWorkflowWakeStartsConversationWithoutUserHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateProvidersFoldPostToolSystemInjectsWithoutTrailingUser(t *testing.T) {
+	toolResult := &api.ToolResult{Tool: "update_progress", ToolCallID: "call-1", Content: `{"status":"updated"}`}
+	messages := []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Standing guidance.", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Implement the feature."},
+		{
+			Role:           api.MessageRoleAssistant,
+			ToolCalls:      []api.ToolCall{{ID: "call-1", WireID: "call-1", Name: "update_progress", Args: map[string]any{"content": "- [ ] step"}}},
+			ModelReasoning: &api.ModelReasoning{ProviderID: "ollama", Model: "qwen3-coder", Text: "plan first"},
+		},
+		{Role: api.MessageRoleTool, Content: `{"status":"updated"}`, ToolResult: toolResult, PromptCacheBreakpoint: api.PromptCacheTierHistory},
+		{Role: api.MessageRoleSystem, Content: "## Workflow"},
+		{Role: api.MessageRoleSystem, Content: "## Pack board"},
+	}
+	wantToolContent := "{\"status\":\"updated\"}\n\n## Workflow\n\n## Pack board"
+	for name, profile := range map[string]providerprofile.Profile{
+		"together": providerprofile.Together(), "gemini": providerprofile.Gemini(), "vertex": providerprofile.Vertex(),
+		"lmstudio": providerprofile.Lmstudio(), "omlx": providerprofile.Omlx(), "litellm": providerprofile.Litellm(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			provider := openaicompat.New(name, "http://localhost", "unused", nil).WithProfile(profile)
+			body, err := provider.Prepare(modelcall.CompletionRequest{Model: "fixture", Messages: messages}, false)
+			testutil.FailErr(t, "encode tool loop conversation", err)
+			var wire openaicompat.Request
+			testutil.FailErr(t, "decode tool loop conversation", json.Unmarshal(body, &wire))
+			if len(wire.Messages) != 4 || wire.Messages[3].Role != "tool" || wire.Messages[3].Content != wantToolContent {
+				t.Fatalf("template tool loop = %s", body)
+			}
+			for i, m := range wire.Messages {
+				if m.Role == "user" && i != 1 {
+					t.Fatalf("unexpected user message at index %d: %s", i, body)
+				}
+			}
+		})
+	}
+	ollama := ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{ProviderID: "ollama", Model: "qwen3-coder"})
+	if len(ollama) != 4 || ollama[1].Role != "user" || ollama[2].Thinking != "plan first" || ollama[3].Role != "tool" || ollama[3].Content != wantToolContent {
+		t.Fatalf("ollama tool loop = %+v", ollama)
+	}
+	if toolResult.Content != `{"status":"updated"}` {
+		t.Fatalf("wire projection mutated caller ToolResult: %+v", toolResult)
+	}
+}
