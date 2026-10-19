@@ -2,14 +2,22 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"errors"
 	"io"
+	"path/filepath"
 )
 
 // The desktop owns stdin until shutdown. EOF also releases the root when the
 // desktop crashes, while the next launch reclaims roots from a killed retainer.
-func runNixRetainer(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
-	if _, err := fmt.Fprintln(stdout, "ready"); err != nil {
+func runNixRetainer(ctx context.Context, lockPath string, stdin io.Reader, stdout io.Writer) error {
+	if !filepath.IsAbs(lockPath) || filepath.Clean(lockPath) != lockPath {
+		return errors.New("Nix retention requires its registered session lock")
+	}
+	if err := json.NewEncoder(stdout).Encode(struct {
+		FormatVersion int    `json:"format_version"`
+		LockPath      string `json:"lock_path"`
+	}{1, lockPath}); err != nil {
 		return err
 	}
 	closed := make(chan struct{})

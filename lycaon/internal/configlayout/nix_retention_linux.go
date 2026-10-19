@@ -19,13 +19,13 @@ import (
 
 // RetainRunningNix registers only this application's indirect root. The lock
 // separates live sessions from roots left by a crashed process.
-func RetainRunningNix(ctx context.Context) (func(), error) {
+func RetainRunningNix(ctx context.Context) (*NixRetention, error) {
 	layout, err := RunningNix()
 	if err != nil {
 		return nil, err
 	}
 	if layout == nil {
-		return func() {}, nil
+		return &NixRetention{}, nil
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil || !filepath.IsAbs(cache) {
@@ -34,7 +34,7 @@ func RetainRunningNix(ctx context.Context) (func(), error) {
 	return retainNix(ctx, layout, filepath.Join(cache, "paintedwolf", "nix-running"))
 }
 
-func retainNix(ctx context.Context, layout *NixLayout, directory string) (func(), error) {
+func retainNix(ctx context.Context, layout *NixLayout, directory string) (*NixRetention, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string) (func()
 	if err != nil {
 		return nil, err
 	}
-	if err := unix.Flock(int(file.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	if err := unix.Flock(int(file.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil {
 		_ = file.Close()
 		_ = os.Remove(lockPath)
 		return nil, err
@@ -104,7 +104,7 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string) (func()
 		release()
 		return nil, errors.New("Nix did not register the running generation root")
 	}
-	return release, nil
+	return &NixRetention{LockPath: lockPath, lock: file, release: release}, nil
 }
 
 func lockNixRegistry(directory string) (*os.File, error) {

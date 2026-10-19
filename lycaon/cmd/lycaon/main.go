@@ -54,13 +54,13 @@ func runCLI(args []string) int {
 }
 
 func run(ctx context.Context, args []string) error {
-	release, err := configlayout.RetainRunningNix(ctx)
+	retention, err := configlayout.RetainRunningNix(ctx)
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer retention.Close()
 	if len(args) == 1 && args[0] == "internal-nix-retain" {
-		return runNixRetainer(ctx, os.Stdin, os.Stdout)
+		return runNixRetainer(ctx, retention.LockPath, os.Stdin, os.Stdout)
 	}
 	kind, verb, rest := classifyArgs(args)
 	if kind == dispatchOpen {
