@@ -5,6 +5,7 @@ package confine_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,9 +21,9 @@ import (
 )
 
 type nixWorkflowFixture struct {
-	bin, bash, project, profile, store string
-	env                                []string
-	boundary                           confine.Confinement
+	bin, bash, project, flake, profile, store string
+	env                                       []string
+	boundary                                  confine.Confinement
 }
 
 func nixStoreFixtureInput(t *testing.T, key, suffix string) string {
@@ -77,6 +78,11 @@ in builtins.derivation {
 	env = append(env, "NIX_BUILD_SHELL="+bash, "PW_NIX_INHERITED=person-value")
 	// Only this declared fixture is prepared outside the application boundary. No downloads or remote builders.
 	nativeNix(t, bin, env, "--offline", "--option", "max-jobs", "1", "--option", "cores", "1", "print-dev-env", "--impure", "--no-write-lock-file", "--profile", profile, project)
+	var metadata struct{ Path string }
+	testutil.FailErr(t, "parse prepared flake source", json.Unmarshal(nativeNix(t, bin, env, "--offline", "flake", "metadata", "--json", "--no-write-lock-file", project), &metadata))
+	if !strings.HasPrefix(metadata.Path, "/nix/store/") {
+		t.Fatalf("flake preparation did not produce an immutable source: %s", metadata.Path)
+	}
 	if _, err := os.Stat(filepath.Join(project, "hook-invoked")); !os.IsNotExist(err) {
 		t.Fatal("environment preparation executed the project shell hook")
 	}
@@ -89,7 +95,7 @@ in builtins.derivation {
 		}
 	}
 	box.ReadRoots = []string{state, "/nix/store"}
-	return nixWorkflowFixture{bin: bin, bash: bash, project: project, profile: profile, store: store, env: env, boundary: box}
+	return nixWorkflowFixture{bin: bin, bash: bash, project: project, flake: metadata.Path, profile: profile, store: store, env: env, boundary: box}
 }
 
 func (fixture nixWorkflowFixture) run(t *testing.T, ctx context.Context, kind execpkg.LaunchKind, bin string, arguments ...string) (*execpkg.PipelineResult, error) {
@@ -105,6 +111,9 @@ func (fixture nixWorkflowFixture) run(t *testing.T, ctx context.Context, kind ex
 func nixResult(t *testing.T, result *execpkg.PipelineResult, err error) []byte {
 	t.Helper()
 	if err != nil || result == nil || result.ExitCode != 0 || result.TimedOut {
+		if result != nil {
+			t.Logf("Nix stdout=%s\nstderr=%s", result.Output, result.Stderr)
+		}
 		t.Fatalf("Nix workflow failed: result=%+v error=%v", result, err)
 	}
 	return bytes.TrimSpace(result.Output)
