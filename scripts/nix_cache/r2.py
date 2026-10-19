@@ -19,8 +19,10 @@ LOCK = "publication-lock.json"
 
 
 def relative_name(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("cache transport key must be a string")
     path = PurePosixPath(value)
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9+._/-]+", value) or path.is_absolute() or str(path) != value or ".." in path.parts:
+    if not re.fullmatch(r"[A-Za-z0-9+._/-]+", value) or path.is_absolute() or str(path) != value or ".." in path.parts:
         raise ValueError("cache transport key must be a normalized relative name")
     return value
 
@@ -58,7 +60,9 @@ class R2Transport:
                                 capture_output=True, text=True, timeout=120)
         if result.returncode:
             raise ValueError("cache R2 authority initialization failed")
-        credentials = json.loads(result.stdout.splitlines()[-1])
+        selected = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION",
+                    "AWS_REQUEST_CHECKSUM_CALCULATION", "AWS_RESPONSE_CHECKSUM_VALIDATION"}
+        credentials = {key: value for key, value in json.loads(result.stdout.splitlines()[-1]).items() if key in selected}
         self.environment = {key: value for key, value in os.environ.items() if not key.startswith("AWS_")}
         self.environment.update(credentials, AWS_CONFIG_FILE="/dev/null", AWS_SHARED_CREDENTIALS_FILE="/dev/null",
                                 AWS_PAGER="", AWS_EC2_METADATA_DISABLED="true")
