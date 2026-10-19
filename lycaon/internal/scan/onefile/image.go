@@ -136,6 +136,20 @@ func dataChecksum(raw []byte) uint32 {
 }
 
 func validateLauncher(raw []byte) error {
+	if len(raw) < 64 || raw[4] != 2 || raw[5] != 1 {
+		return fmt.Errorf("onefile launcher requires a bounded ELF64 header")
+	}
+	programs, sections := binary.LittleEndian.Uint16(raw[56:]), binary.LittleEndian.Uint16(raw[60:])
+	programOffset, sectionOffset := binary.LittleEndian.Uint64(raw[32:]), binary.LittleEndian.Uint64(raw[40:])
+	if programs > 4096 || sections > 4096 || (sections == 0 && sectionOffset != 0) || binary.LittleEndian.Uint16(raw[62:]) == 0xffff {
+		return fmt.Errorf("onefile launcher has unsupported extended ELF tables")
+	}
+	if programs != 0 && (binary.LittleEndian.Uint16(raw[54:]) != 56 || programOffset > uint64(len(raw)) || uint64(programs) > (uint64(len(raw))-programOffset)/56) {
+		return fmt.Errorf("onefile launcher program table overlaps attached payload")
+	}
+	if sections != 0 && (binary.LittleEndian.Uint16(raw[58:]) != 64 || sectionOffset > uint64(len(raw)) || uint64(sections) > (uint64(len(raw))-sectionOffset)/64) {
+		return fmt.Errorf("onefile launcher section table overlaps attached payload")
+	}
 	image, err := elf.NewFile(bytes.NewReader(raw))
 	if err != nil {
 		return err

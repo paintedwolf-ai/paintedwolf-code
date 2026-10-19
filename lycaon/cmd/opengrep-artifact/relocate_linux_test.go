@@ -167,3 +167,27 @@ func TestConsumerDependenciesRequireDeclaredProviders(t *testing.T) {
 		}
 	}
 }
+
+func TestConsumerRelativeLibrarySearchCannotEscapePayload(t *testing.T) {
+	for _, entry := range []string{"$ORIGIN", "$ORIGIN/..", "$ORIGIN/../lib"} {
+		if !consumerRelativeLibraryPath("sub/program", entry) {
+			t.Fatalf("safe relative path refused: %s", entry)
+		}
+	}
+	for _, entry := range []string{"", "/usr/lib", "$ORIGINALLY", "$ORIGIN/../..", "$ORIGIN/../../outside"} {
+		if consumerRelativeLibraryPath("sub/program", entry) {
+			t.Fatalf("escaping or ambient path admitted: %s", entry)
+		}
+	}
+	if consumerRelativeLibraryPath("opengrep", "$ORIGIN/..") {
+		t.Fatal("launcher escaped package root")
+	}
+	var output relocationToolOutput
+	raw := bytes.Repeat([]byte{'x'}, 1<<20)
+	for range 2 {
+		n, err := output.Write(raw)
+		if err != nil || n != len(raw) || len(output.data) != 4096 {
+			t.Fatal("patch-tool diagnostic exceeded bound or interrupted drainage")
+		}
+	}
+}

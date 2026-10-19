@@ -104,3 +104,19 @@ func TestOnefileWriterRefusesUnsafeMemberSets(t *testing.T) {
 		}
 	}
 }
+
+func TestOnefileRejectsUnboundedOrOverlappingELFTables(t *testing.T) {
+	for _, field := range []int{32, 40, 54, 56, 58, 60, 62} {
+		raw := fixtureLauncher()
+		if field == 32 || field == 54 {
+			binary.LittleEndian.PutUint16(raw[56:], 1)
+		}
+		if field == 40 || field == 58 {
+			binary.LittleEndian.PutUint16(raw[60:], 1)
+		}
+		binary.LittleEndian.PutUint16(raw[field:], 0xffff)
+		if err := validateLauncher(raw); err == nil {
+			t.Fatalf("unbounded ELF table field %d accepted", field)
+		}
+	}
+}

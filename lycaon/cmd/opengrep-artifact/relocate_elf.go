@@ -5,6 +5,7 @@ import (
 	"context"
 	"debug/elf"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -57,11 +58,7 @@ func (relocator consumerELFRelocator) relocate(name string, raw []byte) ([]byte,
 		}
 		for _, value := range values {
 			for _, entry := range strings.Split(value, ":") {
-				if entry != "$ORIGIN" && !strings.HasPrefix(entry, "$ORIGIN/") {
-					return nil, fmt.Errorf("embedded ELF has an uncontrolled original RPATH: %s", name)
-				}
-				inside := path.Join(path.Dir(name), strings.TrimPrefix(strings.TrimPrefix(entry, "$ORIGIN"), "/"))
-				if inside == ".." || strings.HasPrefix(inside, "../") {
+				if !consumerRelativeLibraryPath(name, entry) {
 					return nil, fmt.Errorf("embedded ELF RPATH escapes its payload: %s", name)
 				}
 				search = append(search, entry)
@@ -98,11 +95,33 @@ func (relocator consumerELFRelocator) relocate(name string, raw []byte) ([]byte,
 	arguments = append(arguments, fileName)
 	// #nosec G204 -- build-only tool pinned by the closed consumer recipe; arguments are constructed here.
 	command := exec.CommandContext(relocator.ctx, relocator.recipe.ToolPath, arguments...)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("relocate ELF %s: %w: %.4096s", name, err, output)
+	var output relocationToolOutput
+	command.Stdout, command.Stderr = io.Discard, &output
+	if err := command.Run(); err != nil {
+		return nil, fmt.Errorf("relocate ELF %s: %w: %s", name, err, output.data)
 	}
 	return readConsumerInput(fileName, onefile.MaxBytes)
+}
+
+func consumerRelativeLibraryPath(name, entry string) bool {
+	if entry != "$ORIGIN" && !strings.HasPrefix(entry, "$ORIGIN/") {
+		return false
+	}
+	inside := path.Join(path.Dir(name), strings.TrimPrefix(strings.TrimPrefix(entry, "$ORIGIN"), "/"))
+	return inside != ".." && !strings.HasPrefix(inside, "../")
+}
+
+type relocationToolOutput struct{ data []byte }
+
+func (output *relocationToolOutput) Write(raw []byte) (int, error) {
+	remaining := 4096 - len(output.data)
+	if remaining > len(raw) {
+		remaining = len(raw)
+	}
+	if remaining > 0 {
+		output.data = append(output.data, raw[:remaining]...)
+	}
+	return len(raw), nil
 }
 
 func (relocator consumerELFRelocator) dependencyPresent(name, dependency string, search []string) bool {
