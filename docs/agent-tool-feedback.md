@@ -70,6 +70,19 @@ Lifecycle anchors determine when feedback is emitted. One anchor catalog drives 
 
 The channel follows the event lifecycle. A tool argument error is immediate; a closeout-grounding failure discovered after the model stops is a next-turn nudge; a background scan completion is a completion item.
 
+## User updates before waiting
+
+`WAIT_HIDDEN_TEXT` blocks a coordinator `wait` when its current tool batch
+contains nonempty assistant text, `surface_note` is offered, and no agent note
+has been committed in that batch. Tool-step assistant text is hidden from the
+user; waiting does not publish it. A prior batch's note does not satisfy this
+boundary, and a rejected note does not count as a committed update.
+
+The model can send a grounded `surface_note` with `wait`, or retry `wait` with
+empty assistant text if no user update is needed. The host does not classify
+what the text means or demand notes on ordinary action calls. Workers and
+surfaces without `surface_note` are unaffected.
+
 ## Compact reject block (spec posture)
 
 The spec-posture template ([`reject/spec-posture-block.md`](../lycaon/config/packs/painted-wolf/platform/guidance/reject/spec-posture-block.md)) renders:
