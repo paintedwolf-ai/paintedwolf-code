@@ -157,6 +157,11 @@ func assertOfferedPageProcedures(t *testing.T, offered []string, block string) {
 
 func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
+	gatedAndLifecycle := []string{
+		"write", "edit", "replace_lines", "restore_version", "jq_edit",
+		"task", "delegate_dispatch", "delegate_decompose",
+		"preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board",
+	}
 	for _, tool := range []string{"update_progress", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "read", "delete", "wait"} {
 		for _, profile := range []string{"coordinator", "implementer"} {
 			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
@@ -165,15 +170,38 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "## Progress") || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task") || !strings.Contains(block, "Reads, deletion, and explanations need none")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
-			if want && strings.Contains(block, "`delegate_dispatch`") != (tool == "delegate_dispatch") {
-				t.Fatalf("delegate_dispatch present=%v for tool %s: %s", strings.Contains(block, "`delegate_dispatch`"), tool, block)
-			}
-			if want && strings.Contains(block, "`delegate_decompose`") != (tool == "delegate_decompose") {
-				t.Fatalf("delegate_decompose present=%v for tool %s: %s", strings.Contains(block, "`delegate_decompose`"), tool, block)
+			for _, candidate := range gatedAndLifecycle {
+				wantCandidate := want && tool == candidate
+				if strings.Contains(block, "`"+candidate+"`") != wantCandidate {
+					t.Fatalf("progress procedure tool %q present=%v, want %v for %s/%s: %s", candidate, strings.Contains(block, "`"+candidate+"`"), wantCandidate, profile, tool, block)
+				}
 			}
 		}
+	}
+
+	investigateOffered := []string{"read_file", "grep", "glob", "ast_grep", "symbol_outline", "update_progress"}
+	investigateBlock, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-investigate", "coordinator", investigateOffered, nil)
+	testutil.FailErr(t, "render investigate progress procedure", err)
+	for _, required := range []string{"Store the checklist", "## Progress", "one row is sufficient for a small task", "Reads, deletion, and explanations need none", "PROGRESS_ITEM_NOT_CLOSED"} {
+		if !strings.Contains(investigateBlock, required) {
+			t.Fatalf("investigate progress procedure missing %q: %s", required, investigateBlock)
+		}
+	}
+	for _, unoffered := range gatedAndLifecycle {
+		if strings.Contains(investigateBlock, "`"+unoffered+"`") {
+			t.Fatalf("investigate progress procedure named unoffered tool %q: %s", unoffered, investigateBlock)
+		}
+	}
+
+	withLifecycle, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-lifecycle", "coordinator", []string{"update_progress", "write", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"}, nil)
+	testutil.FailErr(t, "render lifecycle progress procedure", err)
+	if !strings.Contains(withLifecycle, "Before `write` or `task`, call it") {
+		t.Fatalf("unexpected gated tool phrasing: %s", withLifecycle)
+	}
+	if !strings.Contains(withLifecycle, "Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, `pack_board`.") {
+		t.Fatalf("unexpected lifecycle tool phrasing: %s", withLifecycle)
 	}
 }

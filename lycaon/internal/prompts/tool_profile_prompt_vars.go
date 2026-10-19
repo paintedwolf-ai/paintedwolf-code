@@ -438,14 +438,11 @@ func profileHasRetrievalTool(enabled map[string]bool) bool {
 // Capability guidance follows the offered schemas.
 func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	set := toolNameSet(offered)
-	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose"} {
+	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board"} {
 		into["profile_has_"+name] = set[name]
 	}
+	into["progress_gated_tools"] = orderedEnabledTools([]string{"write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose"}, set)
 	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
-	available := true
-	for _, name := range []string{"secret_generate", "secret_list", "secret_revoke"} {
-		available = available && set[name]
-	}
-	into["profile_has_managed_secrets"] = available
+	into["profile_has_managed_secrets"] = set["secret_generate"] && set["secret_list"] && set["secret_revoke"]
 }
