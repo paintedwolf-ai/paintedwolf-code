@@ -455,6 +455,7 @@ providers:
     prompt_cache_profile: implicit
 
   - id: openai-compatible
+    reasoning_wire: reasoning_content
     kind: openai-compatible
     label: OpenAI-compatible
     base_url: http://127.0.0.1:8080/v1
@@ -484,6 +485,7 @@ providers:
     tool_call_rejection_profile: ollama
 
   - id: lmstudio
+    reasoning_wire: reasoning_content
     kind: lmstudio
     label: LM Studio
     base_url: http://localhost:1234/v1
@@ -494,6 +496,7 @@ providers:
     prompt_cache_profile: local
 
   - id: omlx
+    reasoning_wire: reasoning_content
     kind: omlx
     label: oMLX
     base_url: http://localhost:8000/v1
