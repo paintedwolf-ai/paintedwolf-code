@@ -3,8 +3,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 case "${1:-}" in
-  --finalize-consumer|--audit-consumer)
+  --finalize-consumer|--relocate-consumer|--audit-consumer)
     MODE=finalize-consumer
+    [[ "$1" != --relocate-consumer ]] || MODE=relocate-consumer
     [[ "$1" != --audit-consumer ]] || MODE=audit
     shift
     if [[ -n "${OPENGREP:-}${OPENGREP_SHA256:-}${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then

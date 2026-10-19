@@ -89,7 +89,7 @@ if [[ "$mode" == identity ]]; then
  if [[ "${SCANNER_TEST_FAIL:-}" == identity ]]; then exit 8; fi
  printf 'qualified-identity\n'; exit 0
 fi
-if [[ "$mode" == finalize-consumer || "$mode" == audit ]]; then printf 'consumer-result\n'; exit 0; fi
+if [[ "$mode" == finalize-consumer || "$mode" == relocate-consumer || "$mode" == audit ]]; then printf 'consumer-result\n'; exit 0; fi
 if [[ -n "$executable" ]]; then printf '%s\n' "$executable"; exit 0; fi
 [[ "$root" == "$SCANNER_TEST_ROOT/"* ]] || exit 91
 mkdir -p "$root/bundled"

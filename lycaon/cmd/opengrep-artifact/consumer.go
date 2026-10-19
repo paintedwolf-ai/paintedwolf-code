@@ -38,6 +38,11 @@ func finalizeConsumer(ctx context.Context, producer *bundled.Manifest, opts opti
 	if err != nil {
 		return "", err
 	}
+	if opts.mode == "relocate-consumer" {
+		if err := relocateConsumer(ctx, producer, opts, recipe); err != nil {
+			return "", err
+		}
+	}
 	selected, err := bundled.FinalizeConsumerArtifact(ctx, producer, opts.root, recipe, func(ctx context.Context, manifest *bundled.Manifest) (json.RawMessage, error) {
 		report, err := installed.VerifyArtifact(ctx, opts.root, manifest)
 		if err != nil {

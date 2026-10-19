@@ -33,7 +33,7 @@ type options struct {
 
 func run() (string, error) {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "stage", "fetch, select, audit, identity, stage, verify, resolve, or finalize-consumer")
+	flag.StringVar(&opts.mode, "mode", "stage", "fetch, select, audit, identity, stage, verify, resolve, finalize-consumer, or relocate-consumer")
 	flag.StringVar(&opts.root, "root", "", "artifact staging root")
 	flag.StringVar(&opts.target, "target", "", "Rust target triple; defaults to the host")
 	flag.StringVar(&opts.directory, "artifact-directory", "", "absolute verified prebuilt artifact directory")
@@ -90,7 +90,7 @@ func execute(opts options) (string, error) {
 			return "", err
 		}
 	}
-	if opts.mode == "finalize-consumer" {
+	if opts.mode == "finalize-consumer" || opts.mode == "relocate-consumer" {
 		return finalizeConsumer(context.Background(), m, opts)
 	}
 	if opts.mode == "identity" {
@@ -136,14 +136,14 @@ func (opts options) validate() error {
 		return fmt.Errorf("independent executable overrides are unavailable in release builds")
 	}
 	switch opts.mode {
-	case "identity", "stage", "resolve", "verify", "fetch", "select", "audit", "finalize-consumer":
+	case "identity", "stage", "resolve", "verify", "fetch", "select", "audit", "finalize-consumer", "relocate-consumer":
 	default:
 		return fmt.Errorf("invalid mode: %s", opts.mode)
 	}
-	if opts.mode != "audit" && opts.mode != "finalize-consumer" && (opts.evidenceRoot != "" || opts.auditOutput != "" || opts.packagedDirectory != "") {
+	if opts.mode != "audit" && opts.mode != "finalize-consumer" && opts.mode != "relocate-consumer" && (opts.evidenceRoot != "" || opts.auditOutput != "" || opts.packagedDirectory != "") {
 		return fmt.Errorf("evidence-root, packaged-directory and audit-output require audit mode")
 	}
-	if opts.consumerRecipe != "" && opts.mode != "finalize-consumer" {
+	if opts.consumerRecipe != "" && opts.mode != "finalize-consumer" && opts.mode != "relocate-consumer" {
 		return fmt.Errorf("consumer-recipe requires finalize-consumer mode")
 	}
 	if opts.consumerIdentity != "" && opts.mode != "audit" {
@@ -158,7 +158,7 @@ func (opts options) validate() error {
 	if opts.cacheRoot != "" || opts.archive != "" || opts.offline || opts.releaseManifest != "" || opts.manifestOutput != "" || opts.tag != "" || opts.expectedCommit != "" {
 		return fmt.Errorf("release options require fetch or select mode")
 	}
-	if opts.mode == "finalize-consumer" {
+	if opts.mode == "finalize-consumer" || opts.mode == "relocate-consumer" {
 		if opts.directory == "" || opts.root == "" || opts.consumerRecipe == "" || opts.evidenceRoot == "" || opts.auditOutput == "" || opts.packagedDirectory != "" || opts.executable != "" || opts.digest != "" || opts.dirOnly {
 			return fmt.Errorf("finalize-consumer requires original artifact-directory, final root, consumer-recipe, evidence-root and audit-output")
 		}

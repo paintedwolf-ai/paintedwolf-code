@@ -7,12 +7,15 @@ import (
 )
 
 func TestOpenGrepConsumerModesUseExplicitArtifactOwner(t *testing.T) {
-	for _, mode := range []string{"--finalize-consumer", "--audit-consumer"} {
+	for _, mode := range []string{"--finalize-consumer", "--relocate-consumer", "--audit-consumer"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newScannerScriptFixture(t)
 			root := filepath.Join(f.root, "final root")
 			args := []string{mode, "-artifact-directory", "/original producer", "-evidence-root", "/source config", "-audit-output", "/audit.json"}
 			selected, suffix := "finalize-consumer", "|-root|"+root+"|-consumer-recipe|/recipe with spaces.json"
+			if mode == "--relocate-consumer" {
+				selected = "relocate-consumer"
+			}
 			if mode == "--audit-consumer" {
 				selected, suffix = "audit", "|-packaged-directory|"+root+"|-consumer-identity-file|/identity.txt"
 				args = append(args, "-packaged-directory", root, "-consumer-identity-file", "/identity.txt")

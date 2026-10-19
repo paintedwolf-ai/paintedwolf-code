@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -41,15 +40,9 @@ func TestConsumerFinalizationNativeScanner(t *testing.T) {
 	originalIdentity, err := bundled.EncodedBuildIdentity(producer)
 	testutil.FailErr(t, "retain original authority", err)
 	root := t.TempDir()
-	binary, err := bundled.StageArtifact(t.Context(), producer, root, "linux", runtime.GOARCH)
+	_, err = bundled.StageArtifact(t.Context(), producer, root, "linux", runtime.GOARCH)
 	testutil.FailErr(t, "stage private scanner copy", err)
 	testutil.FailErr(t, "verify declared relocation tool", bundled.VerifyFileSHA256(recipe.ToolPath, recipe.ToolSHA256))
-	recipe.Arguments = append(recipe.Arguments, binary)
-	patch := exec.CommandContext(t.Context(), recipe.ToolPath, recipe.Arguments...)
-	output, err := patch.CombinedOutput()
-	if err != nil {
-		t.Fatalf("relocate private scanner: %v\n%s", err, output)
-	}
 	raw, err = json.Marshal(recipe)
 	testutil.FailErr(t, "encode executed relocation recipe", err)
 	recipePath := filepath.Join(t.TempDir(), "executed-recipe.json")
@@ -59,7 +52,7 @@ func TestConsumerFinalizationNativeScanner(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	encoded, err := execute(options{mode: "finalize-consumer", directory: producerDirectory, root: root,
+	encoded, err := execute(options{mode: "relocate-consumer", directory: producerDirectory, root: root,
 		consumerRecipe: recipePath, evidenceRoot: evidence, auditOutput: filepath.Join(t.TempDir(), "consumer-audit.json")})
 	testutil.FailErr(t, "qualify actual transformed scanner through build CLI", err)
 	finalDirectory := bundled.EngineBundledDir(root, source.OpenGrep.Version)

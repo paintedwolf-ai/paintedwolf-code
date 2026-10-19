@@ -70,7 +70,7 @@ func ParseConsumerRecipe(raw []byte) (ConsumerRecipe, error) {
 }
 
 func (recipe ConsumerRecipe) validate() error {
-	if recipe.SchemaVersion != 1 || recipe.Kind != "nix-elf-relocation" || !validHex(recipe.SourceCommit, 20) || !validHex(recipe.FlakeLockSHA256, 32) || !validHex(recipe.ToolSHA256, 32) {
+	if recipe.SchemaVersion != 1 || (recipe.Kind != "nix-elf-relocation" && recipe.Kind != "nix-nuitka-relocation") || !validHex(recipe.SourceCommit, 20) || !validHex(recipe.FlakeLockSHA256, 32) || !validHex(recipe.ToolSHA256, 32) {
 		return fmt.Errorf("consumer recipe requires a versioned Nix relocation and pinned source inputs")
 	}
 	if !filepath.IsAbs(recipe.ToolPath) || filepath.Clean(recipe.ToolPath) != recipe.ToolPath || len(recipe.Arguments) == 0 || len(recipe.Arguments) > 128 {
