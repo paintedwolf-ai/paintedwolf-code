@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.arch_substrate import build, rootfs
-from linux_release.arch_stage import extract
+from linux_release.arch_stage import extract, package_filter
 from linux_release.candidate_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +63,18 @@ class PacmanCandidateTests(unittest.TestCase):
                     "linux_release.arch_substrate.command") as runner, self.assertRaisesRegex(ValueError, "reviewed pin"):
                 rootfs(ROOT, row)
             runner.assert_not_called()
+
+    def test_symbolic_links_are_relative_to_their_parent_and_cannot_escape(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            member = tarfile.TarInfo("usr/share/fixture/link")
+            member.type = tarfile.SYMTYPE
+            member.linkname = "../../../opt/painted-wolf-code/bin/pw"
+            self.assertEqual(package_filter(member, root).linkname, member.linkname)
+            for target in ["../../../../escape", "/opt/painted-wolf-code/bin/pw"]:
+                member.linkname = target
+                with self.subTest(target=target), self.assertRaisesRegex(ValueError, "escapes"):
+                    package_filter(member, root)
 
     def test_archive_escape_and_duplicate_paths_never_escape_extraction(self):
         class Decoder:

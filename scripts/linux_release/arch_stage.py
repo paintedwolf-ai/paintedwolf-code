@@ -1,12 +1,28 @@
 """Admit final native pacman metadata and safely extract bytes for shared payload audits."""
 
 import argparse
+import copy
 import json
 from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
 
 from release_semver import pacman_package_version, parse, parse_release_build
+
+
+def package_filter(member, directory):
+    if not member.issym():
+        return tarfile.data_filter(member, directory)
+    root = Path(directory).resolve()
+    target = (root / member.name).parent / member.linkname
+    if Path(member.linkname).is_absolute() or not target.resolve().is_relative_to(root):
+        raise ValueError("pacman symbolic link escapes its selected extraction root")
+    # Validate member location, type and metadata independently of relative-link resolution.
+    checked = copy.copy(member)
+    checked.linkname = ""
+    checked = tarfile.data_filter(checked, directory)
+    checked.linkname = member.linkname
+    return checked
 
 
 def extract(package, destination, root, architecture, version):
@@ -27,7 +43,7 @@ def extract(package, destination, root, architecture, version):
                 if len(seen) > 200000 or total > 16 << 30:
                     raise ValueError("pacman package exceeds its audited payload bounds")
                 try:
-                    archive.extract(member, destination, filter="data")
+                    archive.extract(member, destination, filter=package_filter)
                 except tarfile.FilterError as error:
                     raise ValueError(f"unsafe pacman archive link {member.name!r} -> {member.linkname!r}") from error
         if process.wait() != 0:
