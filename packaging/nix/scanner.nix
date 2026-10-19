@@ -6,7 +6,7 @@ let
   pins = inputs.pins;
   sourceCommit = source.rev or (throw "Scanner consumer qualification requires a committed source revision");
   interpreter = stdenv.cc.bintools.dynamicLinker;
-  runtimePath = lib.makeLibraryPath [ stdenv.cc.libc ];
+  runtimePath = lib.makeLibraryPath [ stdenv.cc.libc stdenv.cc.cc.lib ];
 in stdenvNoCC.mkDerivation {
   pname = "painted-wolf-code-scanner-finalized";
   version = pins.scannerVersion;
