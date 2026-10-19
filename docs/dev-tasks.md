@@ -1055,6 +1055,23 @@ origin rehearsal does not establish custom-domain CDN convergence or both-archit
 installed package qualification; the release controller must admit that evidence before
 production publication.
 
+`python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
+through the existing R2 immutable-object helper and serialized release owner. Its
+current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`
+prefix; production use refuses until the final release controller supplies admission.
+It verifies public custom-domain bytes and object cache roles before replacing
+`InRelease` or a dnf mirrorlist, then verifies the authority and activation record.
+Interrupted uploads retain unreferenced objects and retries accept identical bytes.
+Reviewed expected-generation checks run before and after upload. Cross-host
+serialization belongs to the protected release workflow, not an R2 list-before-write
+check. The local native rehearsal also runs deterministic publication contracts for
+ordering, interrupted upload/retry, stale plans, concurrent state changes, immutable
+collisions and fixture-prefix refusal. Those contracts do not replace a credentialed
+custom-domain rehearsal. Use only explicitly supplied test credentials; no credential
+lookup or automatic production fallback occurs. Repository manifests bind the exact
+source commit, final signed package hashes and a canonical `inventory_sha256` over
+their selected object rows for final-controller admission.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
