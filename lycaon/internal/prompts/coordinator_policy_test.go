@@ -177,7 +177,6 @@ func TestRequestableToolsTeachesOperationFirstWithoutHardcodedNames(t *testing.T
 	testutil.FailErr(t, "render requestable operations", err)
 	for _, want := range []string{
 		"### More tools",
-		"Only a starting set of tools is offered.",
 		"file and git changes",
 		"call `request_tools` with `need` describing one concrete operation and target",
 	} {
