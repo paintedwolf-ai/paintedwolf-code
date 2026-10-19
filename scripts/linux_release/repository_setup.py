@@ -30,6 +30,8 @@ def build(manifest, directory, catalog, destination, base_url, private=None, reh
     admit(manifest, directory, catalog, rehearsal)
     selected, public = selection(catalog, rehearsal)
     version = linux_package_version(parse(manifest["version"]))
+    if destination.resolve().is_relative_to(directory.resolve()):
+        raise ValueError("setup output cannot modify its immutable repository generation")
     if destination.exists() or destination.is_symlink():
         raise ValueError("repository setup requires a new output directory")
     destination.mkdir(parents=True)
