@@ -12,11 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func exchange(t *testing.T, input string, resolve func(*url.URL) (*url.URL, error)) response {
+func exchange(t *testing.T, input string, resolve func(*url.URL) (*url.URL, error)) Response {
 	t.Helper()
 	var output bytes.Buffer
 	testutil.FailErr(t, "serve native proxy request", serve(strings.NewReader(input), &output, resolve))
-	var result response
+	var result Response
 	testutil.FailErr(t, "decode private response", json.Unmarshal(output.Bytes(), &result))
 	return result
 }

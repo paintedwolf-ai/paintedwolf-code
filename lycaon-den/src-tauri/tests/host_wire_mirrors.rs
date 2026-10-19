@@ -48,6 +48,29 @@ struct Entry {
 
 const HOST_WIRE_MIRRORS: &[Entry] = &[
     Entry {
+        file: "src/sidecar/captured_engine.rs",
+        rust_type: "Manifest",
+        binding: Binding::NotHostWire {
+            reason: "filesystem descriptor produced by native packaging, never engine output",
+        },
+    },
+    Entry {
+        file: "src/sidecar/captured_engine.rs",
+        rust_type: "Executable",
+        binding: Binding::NotHostWire {
+            reason: "an executable entry in the native packaging filesystem descriptor",
+        },
+    },
+    Entry {
+        file: "src/http_transport/linux_proxy.rs",
+        rust_type: "Reply",
+        binding: Binding::Mirror {
+            fixture: "native_proxy_response",
+            ignored: &[],
+            forward: None,
+        },
+    },
+    Entry {
         file: "src/presence.rs",
         rust_type: "HostError",
         binding: Binding::Mirror {

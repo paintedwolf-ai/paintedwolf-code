@@ -24,7 +24,8 @@ type request struct {
 	Target        string `json:"target"`
 }
 
-type response struct {
+// Response is the private child result mirrored by the co-shipped native client.
+type Response struct {
 	FormatVersion int     `json:"format_version"`
 	Target        string  `json:"target"`
 	ProxyURL      *string `json:"proxy_url"`
@@ -37,7 +38,7 @@ func Serve(input io.Reader, output io.Writer) error {
 }
 
 func serve(input io.Reader, output io.Writer, resolve func(*url.URL) (*url.URL, error)) error {
-	result := response{FormatVersion: formatVersion}
+	result := Response{FormatVersion: formatVersion}
 	raw, err := io.ReadAll(io.LimitReader(input, maxRequestBytes+1))
 	if err != nil || len(raw) > maxRequestBytes {
 		result.ErrorCode = "invalid_request"
