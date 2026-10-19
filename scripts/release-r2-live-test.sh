@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --local-native-repositories ]]; then
+  shift
+  cd "${ROOT}"
+  exec python3 -m scripts.linux_release.repository_rehearsal "$@"
+fi
 if [[ "${1:-}" == --local-linux-signing ]]; then
   shift
   cd "${ROOT}"
