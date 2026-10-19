@@ -8,6 +8,7 @@ let
       (import ./nixos.nix { packageFor = _: package; })
       ({ lib, pkgs, ... }: {
         system.stateVersion = "26.05";
+        nix.settings.experimental-features = [ "nix-command" "flakes" ];
         networking.hostName = "paintedwolf-${desktop}-qualification";
         services.painted-wolf-code.enable = true;
         users.users.root.initialHashedPassword = "!";
