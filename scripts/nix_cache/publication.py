@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from pathlib import Path
+import shutil
+import tempfile
 import uuid
 
 from .adapter import path_info, verify
@@ -59,13 +62,30 @@ def record_name(request: dict) -> str:
     return f"release-records/{request['version']}/{request['system']}.json"
 
 
+@contextmanager
+def staged_cache(cache: Path, report: dict):
+    with tempfile.TemporaryDirectory(prefix="paintedwolf-cache-publication-") as directory:
+        snapshot = Path(directory)
+        for record in report["objects"]:
+            destination = snapshot / record["name"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cache / record["name"], destination)
+        if inventory(snapshot, report["closure"], report["public_keys"]) != report["objects"]:
+            raise ValueError("cache changed while capturing private publication bytes")
+        yield snapshot
+
+
 def publish(cache: Path, report: dict, *, authorize, backend_factory, operation: str | None = None) -> dict:
     checked = verified_report(cache, report)
+    with staged_cache(cache, checked) as snapshot:
+        if authorize(checked["request"], checked) is not True:
+            raise ValueError("cache controller did not authorize this exact release")
+        # External I/O uses private captured bytes after fresh controller admission.
+        return publish_objects(snapshot, checked, backend_factory(checked["request"]), operation)
+
+
+def publish_objects(cache: Path, checked: dict, backend, operation: str | None) -> dict:
     request = checked["request"]
-    if authorize(request, checked) is not True:
-        raise ValueError("cache controller did not authorize this exact release")
-    # Credential loading and all external I/O follow fresh controller admission.
-    backend = backend_factory(request)
     operation = operation or uuid.uuid4().hex
     with backend.serialized(operation):
         name = record_name(request)

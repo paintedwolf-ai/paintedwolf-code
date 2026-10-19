@@ -126,6 +126,14 @@ class CachePublicationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verified_report(self.cache, report)
 
+    def test_source_changes_during_capture_refuse_before_transport_credentials(self):
+        def changed(source, destination):
+            destination.write_bytes(b"replaced during capture")
+        with patch("scripts.nix_cache.publication.shutil.copyfile", side_effect=changed):
+            with self.assertRaises(ValueError):
+                self.publish()
+        self.factory.assert_not_called()
+
     def test_content_precedes_metadata_and_complete_record_retry_survives_cached_miss(self):
         self.store.fail = self.metadata
         with self.assertRaises(ValueError):
