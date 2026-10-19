@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/platform/semantic-driver/page-api.ts",
+  "kind": "projection",
+  "workstream": "browser-control-identity",
+  "disposition": "retain",
+  "reason": "Retain the page-driver API and its bounded live DOM projection together. Control identity and checked state extend the existing interactive inventory without changing targeting, effects or lifecycle ownership. Focused driver tests cover actual state, absent values and omitted oversized identifiers.",
+  "reviewed_commit": "8ca9e71675c8d5ce42952c4735b3360dca2e8ca7",
+  "ceiling": 422,
+  "boundaries": {
+    "lycaon-den/src/platform/semantic-driver/core.test.ts": "fad634e217ad8ba4b228cacaae2acc693d073ab54563dd6d44b2b527c916220e"
+  }
+}

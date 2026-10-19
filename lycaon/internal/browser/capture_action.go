@@ -72,6 +72,9 @@ func locatorSummary(act CaptureAction) string {
 
 type actionControl struct {
 	Tag      string `json:"tag"`
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Checked  *bool  `json:"checked,omitempty"`
 	Role     string `json:"role,omitempty"`
 	Testid   string `json:"testid,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -105,8 +108,16 @@ func actionControls(raw any) ([]actionControl, bool) {
 			return value
 		}
 		control := actionControl{
-			Tag: read("tag", 32), Role: read("role", 32), Testid: read("testid", 160),
+			Tag: read("tag", 32), Type: read("type", 32), Role: read("role", 32), Testid: read("testid", 160),
 			Name: read("name", 160), Text: read("text", 160),
+		}
+		if id, _ := m["id"].(string); len(id) <= 160 {
+			control.ID = id
+		} else {
+			truncated = true
+		}
+		if checked, ok := m["checked"].(bool); ok {
+			control.Checked = &checked
 		}
 		if disabled, ok := m["disabled"].(bool); ok {
 			control.Disabled = &disabled

@@ -1431,6 +1431,26 @@ tasks:
         --out-reserved-ts ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
         --check
 
+  codegen:browser-driver:
+    desc: Regenerate the browser page driver embedded by the host
+    sources:
+      - Taskfile.yml
+      - lycaon-den/src/platform/semantic-driver/**/*.ts
+    generates:
+      - lycaon/internal/browser/embed/semantic_driver.js
+    cmds:
+      - |
+        bash scripts/repo-snapshot-lock.sh generate -- bash <<'SCRIPT'
+        set -euo pipefail
+        source scripts/snapshot-publish.sh
+        output=lycaon/internal/browser/embed/semantic_driver.js
+        stage="$(mktemp "${output}.XXXXXX")"
+        trap 'rm -f "$stage"; snapshot_publish_finish' EXIT
+        bun build lycaon-den/src/platform/semantic-driver/inject.ts \
+          --minify --target=browser --outfile="$stage"
+        snapshot_publish_file "$stage" "$output"
+        SCRIPT
+
   codegen:theme-tokens:
     desc: >-
       Derive the baked token stylesheet, CodeMirror highlight style, theme
