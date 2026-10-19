@@ -10,7 +10,7 @@ let
       (sourcePath + "/CHANGELOG.md")
     ];
   };
-  dependencyExpression = builtins.path { path = ./bun.nix; name = "bun.nix"; };
+  dependencyExpression = import ./bun.nix;
   package = lib.importJSON (source + "/lycaon-den/package.json");
   identity = lib.importJSON ./bun-lock.json;
   patchFiles = lib.mapAttrs (_: path: builtins.path {
