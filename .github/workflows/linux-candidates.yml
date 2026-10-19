@@ -49,7 +49,7 @@ jobs:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - name: Select the frozen premerge qualification source
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/linux/candidate-ci-isolation'
         run: |
           set -euo pipefail
           selection="$(python3 - <<'SOURCE_PY'
