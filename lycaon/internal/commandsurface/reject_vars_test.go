@@ -1,6 +1,7 @@
 package commandsurface_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -74,6 +75,25 @@ func TestCommandRejectVarsEnvironmentAssignment(t *testing.T) {
 	)
 	if vars["env_assignment"] != true {
 		t.Fatalf("expected env_assignment=true: %#v", vars)
+	}
+}
+
+func TestCommandRejectVarsDirectoryChange(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"typed", commandsurface.ErrDirectoryChangeCommand, true},
+		{"wrapped", fmt.Errorf("stage 0: %w", commandsurface.ErrDirectoryChangeCommand), true},
+		{"prose", errors.New(commandsurface.ErrDirectoryChangeCommand.Error()), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := commandsurface.CommandRejectVars("implement", "cd src && tool --check", "cd src && tool --check", commandFields, tc.err)
+			if vars["directory_change"] != tc.want {
+				t.Fatalf("directory_change = %v, want %v", vars["directory_change"], tc.want)
+			}
+		})
 	}
 }
 

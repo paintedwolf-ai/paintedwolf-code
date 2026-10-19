@@ -21,9 +21,9 @@ copy:
   cause: Working directory must be a directory under the attached project roots (or under the worker branch
     when on a write leg).
   why: The process needs an existing working directory within its assigned roots.
-  fix: Confirm the intended directory through the current root view and pass that path as cwd. Use an attached
-    @label only when that root is offered; a worker’s branch remains its execution root. Do not create an unrelated
-    directory merely to clear this refusal.
+  fix: For the current workspace root, use `cwd:"."`, not its folder name. For a subdirectory, confirm it exists
+    with `list_dir` and use its workspace-relative path. Use an attached @label only when that root is offered;
+    a worker’s branch remains its execution root. Do not create an unrelated directory to clear this refusal.
   instead: Branch on Code; fix args and retry once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
@@ -37,3 +37,5 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Rejected:'
   - 'Code: CWD_NOT_DIRECTORY'
+  - 'cwd:"."'
+  - not its folder name
