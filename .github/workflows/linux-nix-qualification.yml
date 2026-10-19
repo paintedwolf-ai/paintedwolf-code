@@ -81,6 +81,35 @@ jobs:
           go-version-file: ${{ steps.source.outputs.path }}/lycaon/go.mod
           cache: false
 
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ${{ steps.source.outputs.path }}/.bun-version
+          no-cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ steps.source.outputs.path }}/.node-version
+
+      - name: Prepare native confinement verification inputs
+        working-directory: ${{ steps.source.outputs.path }}
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+          ./task setup-dev -- --ci-inputs
+          if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+            sudo install -m 0644 .github/actions/setup-verification/apparmor-go-test-userns /etc/apparmor.d/paintedwolf-go-test
+            sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+          fi
+
+      - name: Verify native kernel and supervisor boundaries
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: |
+          set -euo pipefail
+          ./task test:confine:linux -- sandbox supervisor
+          ./task test:digest -- ./internal/userpath -run '^(TestLinuxAccountLookup.*|TestLinuxNativeAccountLookupDoesNotRequireShellEnvironment|TestNixStoreAccountShell.*)$' -count=1
+
       - name: Prepare the ephemeral runner for the pinned Nix toolchain
         env:
           MACHINE: ${{ matrix.machine }}
@@ -105,6 +134,39 @@ jobs:
             --nix-extra-conf-file "$install_root/nix.conf"
           printf '%s\n' /nix/var/nix/profiles/default/bin >> "$GITHUB_PATH"
 
+      - name: Prepare the locked Nix development fixture
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: |
+          set -euo pipefail
+          ./task nix:build -- --component nix-workflow-fixture
+          python3 - <<'FIXTURE_PY'
+          import json, os, re
+          from pathlib import Path
+          reports = [json.loads(path.read_text()) for path in
+                     (Path(os.environ['PW_ARTIFACT_ROOT'])/'nix').glob('build-*.json')]
+          reports = [report for report in reports if report.get('component') == 'nix-workflow-fixture']
+          if len(reports) != 1 or not reports[0].get('passed') or reports[0].get('source_commit') != os.environ['SOURCE_COMMIT']:
+              raise SystemExit('Missing exact-source locked Nix workflow fixture')
+          output = reports[0]['builds'][0]['outputs']['out']
+          fixture = json.loads(Path(output).read_text())
+          if fixture.get('schema') != 1 or set(fixture) != {'schema', 'bash', 'coreutils', 'stdenv'}:
+              raise SystemExit('Invalid locked Nix workflow fixture')
+          with open(os.environ['GITHUB_ENV'], 'a') as environment:
+              for field in ('bash', 'coreutils', 'stdenv'):
+                  value = fixture[field]
+                  if not isinstance(value, str) or not re.fullmatch(r'/nix/store/[a-z0-9]{32}-[^\s]+', value):
+                      raise SystemExit('Invalid locked Nix workflow path')
+                  environment.write(f'PW_NIX_FIXTURE_{field.upper()}={value}\n')
+          FIXTURE_PY
+
+      - name: Verify confined Nix development and explicit daemon authority
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: ./task test:confine:linux -- nix
+
       - name: Evaluate and build the native application closure
         working-directory: ${{ steps.source.outputs.path }}
         env:
@@ -125,10 +187,11 @@ jobs:
           import hashlib, json, os, platform
           from pathlib import Path
           evidence = Path(os.environ['PW_ARTIFACT_ROOT'])
-          paths = list((evidence/'nix').glob('build-*.json'))
-          if len(paths) != 1:
+          reports = [json.loads(path.read_text()) for path in (evidence/'nix').glob('build-*.json')]
+          reports = [report for report in reports if report.get('component') == 'default']
+          if len(reports) != 1:
               raise SystemExit('Expected exactly one native closure build report')
-          report = json.loads(paths[0].read_text())
+          report = reports[0]
           expected = {'source_commit': os.environ['SOURCE_COMMIT'],
                       'source_tree': os.environ['EXPECTED_TREE'],
                       'lock_sha256': hashlib.sha256(Path('flake.lock').read_bytes()).hexdigest()}
