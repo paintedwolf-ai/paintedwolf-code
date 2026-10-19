@@ -56,8 +56,9 @@ def rootfs(root, row):
         fingerprints = [line.split(":")[9] for line in records.splitlines() if line.startswith("fpr:")]
         if not fingerprints or fingerprints[0] != row["key_fingerprint"]:
             raise ValueError("Arch Linux ARM substrate key differs from its reviewed fingerprint")
-        signature = home / "rootfs.sig"
-        download(row["signature_url"], signature, 16384)
+        signature = root / "packaging/linux/arch" / row["signature_file"]
+        if signature.is_symlink() or not signature.is_file() or signature.stat().st_size > 16384:
+            raise ValueError("Arch Linux ARM requires its retained upstream rootfs signature")
         keyring = home / "trusted.gpg"
         command("gpg", "--homedir", str(home), "--batch", "--dearmor", "--output", str(keyring), str(public))
         status = command("gpgv", "--homedir", str(home), "--status-fd", "1", "--keyring", str(keyring),
