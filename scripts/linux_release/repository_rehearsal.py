@@ -10,11 +10,16 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import uuid
 
 from .native_repositories import assemble
 from .openpgp import ephemeral
 from .repository_validation import admit
 from .repository_publication import publish
+from .repository_origin import serve
+from .repository_r2 import publish_r2
+from .r2_objects import rehearsal_environment
+from .repository_installation import apt as install_apt, dnf as install_dnf
 from .signing import digest
 
 PACKAGE = "paintedwolf-repository-fixture"
@@ -69,7 +74,7 @@ def rejected(action):
     raise ValueError("invalid repository generation was admitted")
 
 
-def rehearse(work: Path):
+def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None = None):
     os.environ.pop("LINUX_PACKAGE_SIGNING_KEY", None)
     catalog = ephemeral(work / "key")
     wrong = ephemeral(work / "wrong-key")
@@ -77,6 +82,8 @@ def rehearse(work: Path):
     generations = []
     active = {}
     retained = {}
+    remote_active = {}
+    storage_prefix = "release-system-tests/native-repositories-" + uuid.uuid4().hex
     for version in ["0.0.1", "0.0.2"]:
         fixture_work = work / version
         fixture_work.mkdir()
@@ -103,39 +110,61 @@ def rehearse(work: Path):
             admit(receipt, destination, catalog, True)
             store = work / "origin"
             previous = active.get(family)
-            record = publish(receipt, destination, store, "https://repository.example.invalid", catalog,
+            record = publish(receipt, destination, store, origin, catalog,
                              previous, True)
-            rejected(lambda: publish(receipt, destination, store, "https://repository.example.invalid",
+            rejected(lambda: publish(receipt, destination, store, origin,
                                      catalog, "0" * 64, True))
             if family in retained:
                 old_receipt, old_destination = retained[family]
                 restored = publish(old_receipt, old_destination, store, "https://repository.example.invalid",
                                    catalog, record["generation"], True, True)
-                record = publish(receipt, destination, store, "https://repository.example.invalid", catalog,
+                record = publish(receipt, destination, store, origin, catalog,
                                  restored["generation"], True)
             else:
                 retained[family] = receipt, destination
             active[family] = record["generation"]
+            if r2_origin is not None:
+                remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin,
+                                    remote_active.get(family), True)
+                if family in remote_active:
+                    old_receipt, old_destination = retained[family]
+                    restored_remote = publish_r2(old_receipt, old_destination, catalog, storage_prefix,
+                                                 r2_origin, remote["generation"], True, True)
+                    remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin,
+                                        restored_remote["generation"], True)
+                remote_active[family] = remote["generation"]
+            if family == "deb":
+                install_apt(work / "apt-root", origin + "/channels/deb/preview", certificate,
+                            catalog, PACKAGE, version)
+            else:
+                install_dnf(work / "dnf-root", origin + "/channels/rpm/preview/mirrorlist", certificate,
+                            catalog, PACKAGE, version)
             generations.append({"version": version, "family": family, "objects": len(receipt["objects"])})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
-            "published": False, "generations": generations,
+            "published": False, "isolated_r2_published": r2_origin is not None,
+            "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": generations,
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes",
                       "old-and-new-retained", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
-                      "stale-activation-refused", "retained-generation-recovery"]}
+                      "stale-activation-refused", "retained-generation-recovery",
+                      "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",
+                      "explicit-fixture-TLS-trust"]}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--r2", action="store_true")
     args = parser.parse_args()
-    required = ["gpg", "gpgv", "gpgconf", "dpkg-deb", "apt-ftparchive", "rpm", "rpmkeys", "rpmsign", "rpmbuild", "createrepo_c"]
+    required = ["gpg", "gpgv", "gpgconf", "dpkg-deb", "apt-ftparchive", "rpm", "rpmkeys", "rpmsign", "rpmbuild", "createrepo_c", "openssl", "sudo", "apt-get", "dnf", "dpkg-query"]
     for executable in required:
         if shutil.which(executable) is None:
             parser.error(f"{executable} is required")
     try:
+        r2_origin = rehearsal_environment() if args.r2 else None
         with tempfile.TemporaryDirectory(prefix="paintedwolf-native-repository-rehearsal-") as directory:
-            result = rehearse(Path(directory))
+            with serve(Path(directory)) as (origin, certificate):
+                result = rehearse(Path(directory), origin, certificate, r2_origin)
         subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p",
                         "test_native_repository_publication_execution.py"],
                        cwd=Path(__file__).resolve().parents[2], check=True)

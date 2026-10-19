@@ -12,41 +12,10 @@ import shutil
 import tempfile
 from urllib.parse import urlsplit
 
+from .repository_objects import encoded, immutable, replace
 from .repository_validation import admit
 from .openpgp import selection
 from scripts.release_semver import compare, parse
-
-
-def encoded(value):
-    return (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
-
-
-def immutable(path: Path, data: bytes):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as staging:
-        staging.write(data)
-        staging.flush()
-        os.fsync(staging.fileno())
-        staged = Path(staging.name)
-    try:
-        try:
-            os.link(staged, path)
-        except FileExistsError:
-            if path.is_symlink() or path.read_bytes() != data:
-                raise ValueError("immutable repository object collision")
-    finally:
-        staged.unlink()
-
-
-
-def replace(path: Path, data: bytes):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as staging:
-        staging.write(data)
-        staging.flush()
-        os.fsync(staging.fileno())
-        staged = Path(staging.name)
-    os.replace(staged, path)
 
 
 def configuration(receipt: dict, url: str, fingerprint: str) -> str:
@@ -104,6 +73,7 @@ def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog:
         record = {"format_version": 1, "generation": identity, "previous": expected,
                   "family": family, "channel": channel, "version": receipt["version"],
                   "source_commit": receipt["source_commit"], "key_fingerprint": key["fingerprint"],
+                  "inventory_sha256": receipt["inventory_sha256"], "packages": receipt["packages"],
                   "rehearsal": rehearsal, "recovery": recover,
                   "configuration": f"generations/{identity}/client.conf"}
         # The package manager consumes one final authority object. All objects reached by

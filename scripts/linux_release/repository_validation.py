@@ -9,6 +9,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from .signing import verify
+from .openpgp import selection
 
 
 def selected_object(directory: Path, name: str) -> Path:
@@ -89,8 +90,13 @@ def rpm(directory: Path, catalog: Path, rehearsal: bool):
 
 def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
     if (receipt.get("format_version") != 1 or receipt.get("family") not in {"deb", "rpm"}
-            or receipt.get("channel") not in {"stable", "preview"} or receipt.get("rehearsal") is not rehearsal):
+            or receipt.get("channel") not in {"stable", "preview"} or receipt.get("rehearsal") is not rehearsal
+            or not re.fullmatch(r"[0-9a-f]{40}", receipt.get("source_commit", ""))
+            or not isinstance(receipt.get("version"), str) or not receipt["version"]):
         raise ValueError("unsupported or cross-trust repository generation")
+    signer, _ = selection(catalog, rehearsal)
+    if receipt.get("signing_generation") != signer["generation"] or receipt.get("key_fingerprint") != signer["fingerprint"]:
+        raise ValueError("repository generation differs from the selected signing identity")
     objects = receipt.get("objects")
     if not isinstance(objects, list) or not objects:
         raise ValueError("selected repository inventory is empty")
