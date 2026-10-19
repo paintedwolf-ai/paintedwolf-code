@@ -1014,7 +1014,7 @@ are verified by the format-specific publication work.
 
 **Native apt/dnf repository rehearsals.**
 `./task release:live-test -- --local-native-repositories --receipt /absolute/path/result.json`
-uses disposable keys and two tiny native package versions. It requires `apt-ftparchive`,
+uses disposable keys and three tiny native package versions. It requires `apt-ftparchive`,
 `createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
 signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
 stale activation refusal and explicit recovery. It does not qualify the application,
