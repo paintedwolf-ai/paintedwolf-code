@@ -55,7 +55,13 @@ in {
     pname = "painted-wolf-code-gitengine";
     version = "${pins.gitVersion}+${pins.gitBuild}";
     src = gitArchive;
-    sourceRoot = ".";
+    unpackPhase = ''
+      runHook preUnpack
+      mkdir source
+      tar -xzf "$src" -C source
+      sourceRoot=source
+      runHook postUnpack
+    '';
     nativeBuildInputs = [ autoPatchelfHook ];
     buildInputs = [ stdenv.cc.cc.lib ];
     dontConfigure = true;
