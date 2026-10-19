@@ -3,11 +3,28 @@
 package linuxsandbox
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 
 	"golang.org/x/sys/unix"
 )
+
+// resolveSocketPath resolves the target's working directory and symbolic links
+// before socket identity and grants are examined.
+func resolveSocketPath(path string, target *targetProcess) string {
+	if !filepath.IsAbs(path) {
+		cwd, err := os.Readlink("/proc/" + strconv.Itoa(target.pid) + "/cwd")
+		if err != nil {
+			return ""
+		}
+		path = filepath.Join(cwd, path)
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
+}
 
 type delegatedServiceEndpoint struct {
 	service DelegatedService
