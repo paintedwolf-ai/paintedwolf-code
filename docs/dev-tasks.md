@@ -935,6 +935,12 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The release controller must bind the request to the selected qualified build; the adapter records source identity and actual derivations without qualifying the application itself.
+
+Nix constructs and verifies the standard signed file cache. Admission requires the entire runtime closure in this cache, including dependencies available upstream, so no unaccounted upstream cache is needed. The report orders immutable NAR content before its `.narinfo` metadata and `nix-cache-info`, records content hashes, and requires revalidation for metadata. It provides an upload plan; it does not publish to R2, change trust, or delete retained objects. Keep every object referenced by retained release reports. Withdrawal does not revoke an installed or pinned store path.
+
+`./task release:live-test -- --local-nix-cache` uses disposable keys and private local stores to rehearse complete closure copying, cold-store import, wrong trust, altered NARs/metadata, missing dependencies, overlapping key rotation, and production refusal of rehearsal identity. It makes no R2 calls and changes no daemon trust. Standard cache layout and signing remain owned by [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html). Real HTTPS/R2 negative caching, interrupted uploads, both architecture installed substitution, source builds, and application qualification remain required before production cache publication.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.

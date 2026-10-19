@@ -353,6 +353,9 @@
     ],
     "nix:build": [
       "nix:build"
+    ],
+    "release:live-test": [
+      "release:live-test"
     ]
   },
   "private": [
@@ -377,7 +380,8 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
-    "nix:build": "passthrough"
+    "nix:build": "passthrough",
+    "release:live-test": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -704,6 +708,12 @@
       "workers": 1
     },
     "nix:build": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
       "locks": [
         "*"
       ],

@@ -3,6 +3,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --local-nix-cache && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.rehearsal
+fi
+[[ $# -eq 0 ]] || { echo "error: unsupported release rehearsal arguments" >&2; exit 2; }
+for need in bun curl jq python3 ruby; do
+  command -v "${need}" >/dev/null 2>&1 || { echo "error: ${need} is required for the R2 rehearsal" >&2; exit 1; }
+done
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)
