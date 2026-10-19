@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -92,7 +93,7 @@ func TestFeedDeadlineDoesNotRestartAfterRedirect(t *testing.T) {
 			}
 			return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 		},
-		transport: func(string, []netip.Addr) feedTransport {
+		transport: func(*url.URL, []netip.Addr) feedTransport {
 			return &feedTestTransport{roundTrip: func(r *http.Request) (*http.Response, error) {
 				got, _ := r.Context().Deadline()
 				if !got.Equal(deadline) {

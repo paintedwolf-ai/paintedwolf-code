@@ -23,6 +23,7 @@ func TestClassifyArgs(t *testing.T) {
 		{name: "ls verb", args: []string{"ls"}, wantKind: dispatchVerb, wantVerb: "ls", wantRest: []string{}},
 		{name: "logs verb", args: []string{"logs", "--follow"}, wantKind: dispatchVerb, wantVerb: "logs", wantRest: []string{"--follow"}},
 		{name: "extensions verb", args: []string{"extensions", "validate"}, wantKind: dispatchVerb, wantVerb: "extensions", wantRest: []string{"validate"}},
+		{name: "native proxy helper verb", args: []string{"internal-system-proxy"}, wantKind: dispatchVerb, wantVerb: "internal-system-proxy", wantRest: []string{}},
 		{name: "internal scan worker verb", args: []string{"internal-scan-worker"}, wantKind: dispatchVerb, wantVerb: "internal-scan-worker", wantRest: []string{}},
 	}
 	for _, tc := range cases {

@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hostpower"
-	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/hostproxy"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/upgradefixture"
 	"github.com/lycaon/lycaon/internal/visualscreen"
@@ -74,7 +74,7 @@ func describeSystemProxy(raw string, out io.Writer) error {
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		return fmt.Errorf("system-proxy requires an absolute URL")
 	}
-	proxy, err := httpclient.ResolveProxy(target)
+	proxy, err := hostproxy.Resolve(target)
 	if err != nil {
 		return err
 	}

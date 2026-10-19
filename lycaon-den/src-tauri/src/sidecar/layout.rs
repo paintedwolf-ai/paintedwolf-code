@@ -86,6 +86,8 @@ pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
             })
     };
     let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    #[cfg(target_os = "linux")]
+    super::captured_engine::setup();
 }
 
 pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {

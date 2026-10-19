@@ -79,7 +79,7 @@ func guardedGetWithHopPolicy(
 			callIfSet(releaseHop)
 			return nil, "", err
 		}
-		transport := egress.PinnedTransport(host, ips, 0)
+		transport := egress.PinnedTransport(current, ips, 0)
 		client := httpclient.WithTransport(httpclient.Streaming(egressclass.WebResearchRequest), transport)
 		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 		req, err := http.NewRequestWithContext(ioCtx, http.MethodGet, current.String(), nil)
