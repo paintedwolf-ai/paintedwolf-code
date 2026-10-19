@@ -30,6 +30,9 @@ func WriteReleaseAudit(ctx context.Context, m *Manifest, packagedDirectory, evid
 	if err := ValidateManifest(m); err != nil {
 		return err
 	}
+	if m.consumerPending {
+		return fmt.Errorf("consumer artifact requires completed qualification before release audit")
+	}
 	if err := m.verifyReleaseSelection(ctx); err != nil {
 		return err
 	}

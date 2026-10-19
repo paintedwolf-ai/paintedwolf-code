@@ -66,13 +66,13 @@ func TestSelectedScannerCannotQualifyAnEmptySuccessfulReport(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	report, err := verifySelected(t.Context(), root, manifest)
+	report, err := VerifyArtifact(t.Context(), root, manifest)
 	if err == nil || report.Status != "failed" || report.Code != "fixture_mismatch" || !report.Confined || len(report.Cases) != len(fixtures) {
 		t.Fatalf("empty engine report=%+v error=%v", report, err)
 	}
 	t.Run("explicit off is unverified", func(t *testing.T) {
 		t.Setenv("LYCAON_SANDBOX", "off")
-		report, err := verifySelected(t.Context(), root, manifest)
+		report, err := VerifyArtifact(t.Context(), root, manifest)
 		if err == nil || report.Status != "unverified" || report.Code != "confinement_unavailable" || report.Confined {
 			t.Fatalf("disabled qualification report=%+v error=%v", report, err)
 		}
@@ -80,7 +80,7 @@ func TestSelectedScannerCannotQualifyAnEmptySuccessfulReport(t *testing.T) {
 	t.Run("changed installed executable is refused", func(t *testing.T) {
 		binary := bundled.ArtifactPath(root, manifest.OpenGrep.Version, runtime.GOOS)
 		testutil.FailErr(t, "change fixture bytes", os.WriteFile(binary, []byte("changed"), 0o700))
-		report, err := verifySelected(t.Context(), root, manifest)
+		report, err := VerifyArtifact(t.Context(), root, manifest)
 		if err == nil || report.Code != "artifact_refused" || report.Confined {
 			t.Fatalf("changed artifact report=%+v error=%v", report, err)
 		}
