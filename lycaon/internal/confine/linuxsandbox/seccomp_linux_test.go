@@ -104,6 +104,7 @@ func TestSeccompProgramDecides(t *testing.T) {
 	allow := int(unix.SECCOMP_RET_ALLOW)
 	enosys := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS))
 	eacces := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES))
+	eperm := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EPERM))
 	notify := int(uint32(unix.SECCOMP_RET_USER_NOTIF))
 	argsRecord := func(nr uint32, args ...uint32) []byte {
 		b := make([]byte, 64)
@@ -114,6 +115,8 @@ func TestSeccompProgramDecides(t *testing.T) {
 		}
 		return b
 	}
+	unshareHigh := argsRecord(unix.SYS_UNSHARE, unix.CLONE_FS)
+	binary.BigEndian.PutUint32(unshareHigh[seccompDataArg0+4:], 1)
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -125,6 +128,12 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"ioctl TCGETS", record(unix.SYS_IOCTL, 0, unix.TCGETS, 0), allow},
 		{"read with a TIOCSTI-valued argument", record(unix.SYS_READ, 0, unix.TIOCSTI, 0), allow},
 		{"ptrace", record(unix.SYS_PTRACE, 0, 0, 0), kill},
+		{"unshare filesystem state", record(unix.SYS_UNSHARE, unix.CLONE_FS, 0, 0), eperm},
+		{"unshare no flags", record(unix.SYS_UNSHARE, 0, 0, 0), kill},
+		{"unshare mount namespace", record(unix.SYS_UNSHARE, unix.CLONE_NEWNS, 0, 0), kill},
+		{"unshare filesystem and namespace", record(unix.SYS_UNSHARE, unix.CLONE_FS|unix.CLONE_NEWUSER, 0, 0), kill},
+		{"unshare filesystem and unknown flags", record(unix.SYS_UNSHARE, unix.CLONE_FS|0x80000000, 0, 0), kill},
+		{"unshare filesystem and high flags", unshareHigh, kill},
 		{"clone into a user namespace", record(unix.SYS_CLONE, unix.CLONE_NEWUSER, 0, 0), kill},
 		{"plain clone", record(unix.SYS_CLONE, unix.CLONE_VM, 0, 0), allow},
 		{"clone3", record(unix.SYS_CLONE3, 0, 0, 0), enosys},

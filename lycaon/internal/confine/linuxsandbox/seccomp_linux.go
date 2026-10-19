@@ -32,7 +32,7 @@ var ioUringSyscalls = []uint32{unix.SYS_IO_URING_SETUP, unix.SYS_IO_URING_ENTER,
 // escapeSyscalls would let a process leave or reshape the boundary the
 // namespaces, mounts, and Landlock built. Each one kills the process.
 var escapeSyscalls = []uint32{
-	unix.SYS_UNSHARE, unix.SYS_SETNS,
+	unix.SYS_SETNS,
 	unix.SYS_MOUNT, unix.SYS_UMOUNT2, unix.SYS_PIVOT_ROOT, unix.SYS_MOUNT_SETATTR,
 	unix.SYS_OPEN_TREE, unix.SYS_MOVE_MOUNT, unix.SYS_FSOPEN, unix.SYS_FSCONFIG, unix.SYS_FSMOUNT, unix.SYS_FSPICK,
 	unix.SYS_PTRACE, unix.SYS_PROCESS_VM_READV, unix.SYS_PROCESS_VM_WRITEV,
@@ -88,6 +88,17 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 			bpf.RetConstant{Val: kill},
 		)
 	}
+	// A library may try to isolate only its thread's cwd/root/umask state.
+	// Deny that exact operation without killing its process; no unshare runs.
+	insts = append(insts,
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_UNSHARE, SkipFalse: 6},
+		bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.CLONE_FS, SkipFalse: 3},
+		bpf.LoadAbsolute{Off: seccompDataArg0 + 4, Size: 4},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: 0, SkipFalse: 1},
+		bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EPERM)},
+		bpf.RetConstant{Val: kill},
+	)
 	for _, nr := range escapeSyscalls {
 		insts = append(insts,
 			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 1},
