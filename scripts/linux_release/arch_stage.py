@@ -26,7 +26,10 @@ def extract(package, destination, root, architecture, version):
                 total += member.size
                 if len(seen) > 200000 or total > 16 << 30:
                     raise ValueError("pacman package exceeds its audited payload bounds")
-                archive.extract(member, destination, filter="data")
+                try:
+                    archive.extract(member, destination, filter="data")
+                except tarfile.FilterError as error:
+                    raise ValueError(f"unsafe pacman archive link {member.name!r} -> {member.linkname!r}") from error
         if process.wait() != 0:
             raise ValueError("pacman archive decoding failed")
     finally:

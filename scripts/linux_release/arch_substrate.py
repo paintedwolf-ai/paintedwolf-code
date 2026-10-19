@@ -113,7 +113,8 @@ def build(root, work, architecture, epoch):
         command("docker", "commit", container, prepared)
         launch = ["docker", "run", "--rm", "--platform", expected_platform, "--network=none", "--cap-drop=ALL",
                   "--security-opt=no-new-privileges", "--user", uid + ":" + gid,
-                  "--env", "HOME=/tmp", "--env", "SOURCE_DATE_EPOCH=" + str(epoch),
+                  "--env", "HOME=/tmp", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
+                  "--env", "SOURCE_DATE_EPOCH=" + str(epoch),
                   "--env", "PKGEXT=.pkg.tar.zst", "--mount", "type=bind,source=" + str(work.resolve()) + ",target=/build",
                   "--workdir", "/build", prepared]
         info = command(*launch, "makepkg", "--printsrcinfo")
