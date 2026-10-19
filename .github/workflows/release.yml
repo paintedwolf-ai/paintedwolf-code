@@ -11,6 +11,11 @@ on:
         type: string
         required: false
         default: ''
+      linux_campaign_run_id:
+        description: 'Successful main controller run retaining the final installed Linux campaign; required for public Linux'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -41,6 +46,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       cask_token: ${{ steps.release.outputs.cask_token }}
       matrix: ${{ steps.release.outputs.matrix }}
+      linux_public: ${{ steps.release.outputs.linux_public }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -117,6 +123,7 @@ jobs:
           echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
           echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
+          echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
@@ -633,6 +640,9 @@ jobs:
     needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     environment: release-publication
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -653,6 +663,28 @@ jobs:
         with:
           name: release-metadata
           path: release-metadata
+
+      - id: linux-policy
+        name: Check out protected Linux publication policy
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          path: .linux-publication-controller
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: linux-admission
+        name: Admit the exact Linux publication inputs before production writes
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: ./.linux-publication-controller/.github/actions/admit-linux-publication
+        with:
+          controller_root: ${{ github.workspace }}/.linux-publication-controller
+          source_commit: ${{ needs.classify.outputs.source_sha }}
+          campaign_run_id: ${{ inputs.linux_campaign_run_id }}
+          publication_files: ${{ github.workspace }}/release-artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Validate channel monotonicity
         env:
