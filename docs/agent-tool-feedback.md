@@ -255,11 +255,13 @@ Matched results explain how to recover their public records when no body is pres
 
 `update_progress` reports `status: updated` or `status: unchanged`; this is a
 checklist write result, not gate admission. An identical write adds no revision
-or progress event. Pending rows permit implementation. A successful worker
+or progress event and does not reset tool-repetition tracking. Rewording an
+all-terminal checklist retains the same repetition identity until intervening
+work changes the state. Pending rows permit implementation. A successful worker
 finish can latch reconciliation before further dispatch or editing; an unchanged
 checklist does not clear that latch. Closeout recovery keeps unfinished rows
 pending and directs the coordinator to continue with tools. Completed work is
-recorded before the final response. A tool-free response ends the turn, so
+recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
 continuing progress updates use `surface_note`.
 
 ### Editing after source discovery
