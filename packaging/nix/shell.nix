@@ -19,7 +19,7 @@ in rust.buildRustPackage {
     bundle = {
       active = false;
       externalBin = [ ];
-      resources = { };
+      resources = [ ];
       createUpdaterArtifacts = false;
     };
   };
