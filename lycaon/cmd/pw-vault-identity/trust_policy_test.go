@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
 func TestCustodyPolicyNamesExactGenerationsAndClosures(t *testing.T) {
@@ -45,6 +48,24 @@ func TestCustodyPolicyNamesExactGenerationsAndClosures(t *testing.T) {
 	for _, bad := range []string{string(raw) + " {}", strings.Replace(string(raw), `"format_version":1`, `"format_version":1,"unknown":true`, 1)} {
 		if _, err := decodeTrustPolicy([]byte(bad)); err == nil {
 			t.Fatalf("accepted %s", bad)
+		}
+	}
+}
+
+func TestUnavailableSelectedPolicyNeverUsesTheDefaultManifest(t *testing.T) {
+	for _, content := range []string{"", `{ "format_version": 2 }`, `{
+		"format_version": 1, "store_directory": "/custom/store",
+		"generations": [{"install_root": "/custom/store/package/lib/painted-wolf-code",
+		"manifest": "/custom/store/package/lib/painted-wolf-code/manifest.json",
+		"store_paths": ["/custom/store/package"]}]}`} {
+		f := newFixture(t)
+		f.server.TrustPolicy = filepath.Join(t.TempDir(), "trust.json")
+		if content != "" {
+			testutil.FailErr(t, "write untrusted policy", os.WriteFile(f.server.TrustPolicy, []byte(content), 0o644))
+		}
+		verifiers, response := f.server.verifiersFor()
+		if len(verifiers) != 0 || response == nil || response.Status != vaultidentity.StatusUnavailable || response.Code != "manifest_unreadable" {
+			t.Fatalf("untrusted policy fell back: verifiers=%v, response=%+v", verifiers, response)
 		}
 	}
 }
