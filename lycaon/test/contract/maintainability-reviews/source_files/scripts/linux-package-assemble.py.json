@@ -5,7 +5,7 @@
   "workstream": "linux-native-packages",
   "disposition": "retain",
   "reason": "Retain the measured 355-line common tree sealing and native format dispatch owner under its existing 365-line ceiling. Native CPU substrate preparation, pacman archive metadata admission and final candidate inventory belong to named linux_release adapters. The assembler adds only explicit container selection after sealing; focused native package contracts and actual managed makepkg byte-preservation rehearsal verify that boundary.",
-  "reviewed_commit": "79435515f3",
+  "reviewed_commit": "79435515f3a2f913618eb660e5909c4adc02eeba",
   "ceiling": 365,
   "boundaries": {
     "scripts/verification_tests/distribution/test_arch_package_execution.py": "ec38ba1e036119447c935a8e167dc8f6dc03ac45966d9d9ab55099e4442b8d57",
