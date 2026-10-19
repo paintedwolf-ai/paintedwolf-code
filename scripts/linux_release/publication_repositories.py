@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 import re
 
 from .installed_evidence import artifacts, object_fields
+from scripts.release_semver import linux_package_version, pacman_package_version, parse, parse_release_build
 
 FAMILIES = {"deb", "rpm", "pacman"}
 ARCHITECTURES = {"x86_64": "amd64", "aarch64": "arm64", "amd64": "amd64", "arm64": "arm64"}
@@ -20,7 +21,11 @@ def digest(value, *, inventory=False):
 
 
 def verify_repositories(plan, final_artifacts, expected_source, *, version, channel,
-                        signing_generation, key_fingerprint, verified_files):
+                        signing_generation, key_fingerprint, verified_files, release_build):
+    product = parse(version)
+    build = parse_release_build(str(release_build))
+    native_versions = {"deb": linux_package_version(product),
+                       "rpm": linux_package_version(product) + "-1"}
     selected = artifacts(final_artifacts, expected_source)
     measured = {row["id"]: row for row in verified_files}
     required = {name: row for name, row in selected.items() if row["installation"] in FAMILIES}
@@ -48,6 +53,8 @@ def verify_repositories(plan, final_artifacts, expected_source, *, version, chan
         family = manifest.get("family")
         if family not in FAMILIES:
             raise ValueError("unknown publication repository family")
+        if family == "pacman":
+            native_versions[family] = pacman_package_version(product) + "-" + str(build)
         channel_id = (family, manifest.get("architecture"))
         if channel_id in channels:
             raise ValueError("duplicate repository channel")
@@ -78,6 +85,7 @@ def verify_repositories(plan, final_artifacts, expected_source, *, version, chan
                 raise ValueError("repository package was not independently admitted or is duplicated")
             arch = ARCHITECTURES.get(package.get("architecture"))
             if (row["installation"] != family or arch != row["architecture"]
+                    or package.get("native_version") != native_versions[family]
                     or row["identity"]["kind"] != "file"
                     or package.get("sha256") != row["identity"]["sha256"]
                     or indexed.get(package["file"], {}).get("sha256") != package["sha256"]
