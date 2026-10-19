@@ -23,7 +23,7 @@ func TestLinuxNixCachedDevelopmentWorkflows(t *testing.T) {
 		arguments                         []string
 	}{
 		{"flake develop inherited", fixture.bin, "fixture", "person-value", []string{"develop", "--impure", "--no-write-lock-file", fixture.project, "--command", fixture.bash, "-c", probe}},
-		{"recorded develop pure", fixture.bin, "fixture", "", []string{"develop", "--ignore-env", "--keep-env-var", "HOME", "--keep-env-var", "TMPDIR", fixture.profile, "--command", fixture.bash, "-c", probe}},
+		{"recorded develop pure", fixture.bin, "fixture", "", []string{"develop", "--ignore-env", "--keep-env-var", "HOME", "--keep-env-var", "TMPDIR", "--keep-env-var", "PATH", fixture.profile, "--command", fixture.bash, "-c", probe}},
 		{"cached shell", fixture.bin, "", "person-value", []string{"shell", filepath.Dir(filepath.Dir(fixture.bash)), "--command", fixture.bash, "-c", probe}},
 		{"flake run", fixture.bin, "", "person-value", []string{"run", "--impure", "--no-write-lock-file", fixture.project, "--", "-c", probe}},
 		{"legacy shell inherited", legacy, "fixture", "person-value", []string{filepath.Join(fixture.project, "shell.nix"), "--run", command}},

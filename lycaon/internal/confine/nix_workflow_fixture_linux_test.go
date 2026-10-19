@@ -68,6 +68,11 @@ in builtins.derivation {
 	testutil.FailErr(t, "write local input-free flake", os.WriteFile(filepath.Join(project, "flake.nix"), []byte(flake), 0o600))
 	testutil.FailErr(t, "write fixed empty input lock", os.WriteFile(filepath.Join(project, "flake.lock"), []byte(`{"nodes":{"root":{}},"root":"root","version":7}`), 0o600))
 	profile := filepath.Join(project, "cached-environment")
+	for index, entry := range env {
+		if strings.HasPrefix(entry, "PATH=") {
+			env[index] = "PATH=" + filepath.Dir(bash) + ":" + filepath.Dir(coreutils) + ":" + strings.TrimPrefix(entry, "PATH=")
+		}
+	}
 	env = append(env, "NIX_BUILD_SHELL="+bash, "PW_NIX_INHERITED=person-value")
 	// Only this declared fixture is prepared outside the application boundary. No downloads or remote builders.
 	nativeNix(t, bin, env, "--offline", "--option", "max-jobs", "1", "--option", "cores", "1", "print-dev-env", "--impure", "--no-write-lock-file", "--profile", profile, project)

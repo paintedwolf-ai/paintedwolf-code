@@ -33,7 +33,7 @@ func nixFixture(t *testing.T) (string, []string) {
 	env := []string{
 		"PATH=" + filepath.Dir(bin) + ":/usr/bin:/bin", "HOME=" + home, "TMPDIR=" + home,
 		"XDG_CACHE_HOME=" + home, "NIX_USER_CONF_FILES=/dev/null",
-		"NIX_CONFIG=experimental-features = nix-command flakes read-only-local-store\naccept-flake-config = false\nsandbox = true\nsubstituters =\nbuilders =\n",
+		"NIX_CONFIG=experimental-features = nix-command flakes read-only-local-store\naccept-flake-config = false\nuse-registries = false\nsandbox = true\nsubstituters =\nbuilders =\n",
 	}
 	return bin, env
 }
@@ -66,6 +66,10 @@ func TestLinuxNixDaemonAuthorityIsActionScoped(t *testing.T) {
 		box := denyConfinement(t.TempDir())
 		box.HostExecution = hostExecution
 		if hostExecution {
+			boundary := confine.BoundaryOf(&box)
+			if !boundary.HostExecution || boundary.Applied {
+				t.Fatalf("explicit host action claimed confinement: %+v", boundary)
+			}
 			status, out := linuxConfinedRun(t, self, box, env, bin, args...)
 			if status.ExitStatus() != 0 {
 				t.Fatalf("explicit action host execution could not ping daemon: %v\n%s", status, out)
@@ -78,8 +82,8 @@ func TestLinuxNixDaemonAuthorityIsActionScoped(t *testing.T) {
 			t.Fatalf("unapproved daemon connection succeeded:\n%s", out)
 		}
 		settled := lease.SettledRefusals(context.Background())
-		if refusalTargets(settled)["network-outbound "+nixDaemonSocket] != confine.RecoverSocketPath {
-			t.Fatalf("daemon refusal lacked the structured socket recovery: %+v\n%s", settled, out)
+		if refusalTargets(settled)["host-service-delegation "+nixDaemonSocket] != confine.RecoverHostExecution {
+			t.Fatalf("daemon refusal lacked structured delegated-host recovery: %+v\n%s", settled, out)
 		}
 		lease.Close(context.Background())
 	}
