@@ -6,8 +6,13 @@ import json
 from pathlib import Path
 import re
 
+from release_semver import parse
+
 
 def inventory(directory, platform, architecture, version, source_commit):
+    parse(version)
+    if platform != "linux-" + architecture:
+        raise ValueError("candidate platform differs from its native architecture")
     if architecture not in {"x86_64", "aarch64"} or not re.fullmatch(r"[a-f0-9]{40}", source_commit):
         raise ValueError("candidate inventory requires its exact source and native architecture")
     stem = f"painted-wolf-code_v{version}_{platform}"

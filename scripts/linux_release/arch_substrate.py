@@ -34,7 +34,8 @@ def rootfs(root, row):
         with tempfile.TemporaryDirectory(prefix=".download-", dir=cache) as temporary:
             archive = Path(temporary) / "rootfs.tar.gz"
             download(row["rootfs_url"], archive, 2 << 30)
-            measured = hashlib.file_digest(archive.open("rb"), "sha256").hexdigest()
+            with archive.open("rb") as source:
+                measured = hashlib.file_digest(source, "sha256").hexdigest()
             if measured != row["rootfs_sha256"]:
                 raise ValueError("official Arch Linux ARM rootfs differs from its reviewed pin")
             archive.replace(selected)
