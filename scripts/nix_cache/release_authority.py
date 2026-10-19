@@ -4,6 +4,8 @@ from __future__ import annotations
 import base64
 import re
 
+from .admission import validate_request
+
 
 def nar_sha256(value: str) -> str:
     if not isinstance(value, str) or not value.startswith("sha256-"):
@@ -17,7 +19,10 @@ def nar_sha256(value: str) -> str:
     return digest.hex()
 
 
-def authorize(selection: dict, request: dict, verified_cache_report: dict) -> bool:
+def authorize(selection: dict, request: dict, verified_cache_report: dict, *, trust_policy: dict) -> bool:
+    validate_request(request, trust_policy)
+    if set(verified_cache_report["public_keys"]) != set(trust_policy["public_keys"]):
+        raise ValueError("Nix cache report differs from the protected controller's trust policy")
     # The protected controller supplies its selected inputs, never an accepted JSON receipt.
     from scripts.linux_release.release_admission import verify_release
     from scripts.linux_release.installed_evidence import artifacts

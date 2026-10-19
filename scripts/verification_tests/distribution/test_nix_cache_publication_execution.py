@@ -183,22 +183,25 @@ class CachePublicationTests(unittest.TestCase):
                    "scripts.linux_release.installed_evidence": types.SimpleNamespace(artifacts=evidence)}
         selection = {"source_commit": "a" * 40, "version": "1.0.0", "artifacts": {}}
         request = self.report["request"]
+        policy = {"schema_version": 1, "mode": "production", "public_keys": [PUBLIC]}
         with patch.dict(sys.modules, modules):
-            self.assertTrue(authorize(selection, request, self.report))
-            self.assertTrue(authorize(selection, request, self.report))
+            self.assertTrue(authorize(selection, request, self.report, trust_policy=policy))
+            self.assertTrue(authorize(selection, request, self.report, trust_policy=policy))
             self.assertEqual(verify.call_count, 2)
             for changed in [{**request, "version": "1.0.1"}, {**request, "application_commit": "c" * 40},
                             {**request, "flake_lock_sha256": "c" * 64}, {**request, "outputs": [OUTPUT + "-extra"]},
                             {**request, "system": "aarch64-linux"}]:
                 with self.subTest(request=changed), self.assertRaises(ValueError):
-                    authorize(selection, changed, {**self.report, "request": changed})
+                    authorize(selection, changed, {**self.report, "request": changed}, trust_policy=policy)
             wrong = copy.deepcopy(self.report)
             wrong["closure"][OUTPUT]["nar_hash"] = "sha256-" + base64.b64encode(b"x" * 32).decode()
             with self.assertRaises(ValueError):
-                authorize(selection, request, wrong)
+                authorize(selection, request, wrong, trust_policy=policy)
+            with self.assertRaises(ValueError):
+                authorize(selection, request, self.report, trust_policy={**policy, "public_keys": [PUBLIC.replace("cache-1", "cache-2")]})
             verify.return_value = {"accepted": False}
             with self.assertRaises(ValueError):
-                authorize(selection, request, self.report)
+                authorize(selection, request, self.report, trust_policy=policy)
         for value in ["sha256:" + "0" * 64, "sha512-" + SRI[7:], "sha256-AA==", "sha256-" + SRI[7:] + "="]:
             with self.subTest(hash=value), self.assertRaises(ValueError):
                 nar_sha256(value)
