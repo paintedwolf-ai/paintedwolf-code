@@ -138,18 +138,6 @@ func LaunchHeadless(ctx context.Context, opts LaunchOptions) (*rod.Browser, func
 	return b, cleanup, nil
 }
 
-// browserBoundary resolves confinement and rejects missing enforced boundaries.
-func browserBoundary(roots []string) (*confine.Confinement, bool, error) {
-	conf, confined := confine.BrowserConfinement(confine.Request{Roots: roots})
-	if err := confine.RequireApplied(confined); err != nil {
-		return nil, false, browserengine.Reject("BROWSER_UNAVAILABLE", map[string]any{
-			"reason": "confinement_unavailable",
-			"detail": err.Error(),
-		})
-	}
-	return conf, confined, nil
-}
-
 // newHeadlessLauncher configures the pinned browser. Its own sandbox is turned
 // off only inside the host boundary, which already confines every browser
 // process and forbids the namespace and profile calls that sandbox makes;
