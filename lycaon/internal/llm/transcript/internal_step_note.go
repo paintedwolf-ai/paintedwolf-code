@@ -12,12 +12,12 @@ func frameInternalStepNote(msg api.Message) api.Message {
 		return msg
 	}
 	loadContentAuthority()
-	parts := []api.MessageContentPart{{
+	textParts := api.MessageTextParts(msg)
+	msg.ContentParts = append([]api.MessageContentPart{{
 		Content: internalStepNoteNotice, Origin: api.MessageOriginHost,
 		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 		Source: "internal_step_note",
-	}}
-	msg.ContentParts = append(parts, api.MessageTextParts(msg)...)
+	}}, textParts...)
 	msg.Content = ProjectContentParts(msg.Role, msg.ContentParts)
 	return msg
 }
