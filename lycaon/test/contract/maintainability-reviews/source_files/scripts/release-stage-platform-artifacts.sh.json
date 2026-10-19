@@ -5,7 +5,7 @@
   "workstream": "linux-native-packages",
   "disposition": "retain",
   "reason": "Retain the measured 462-line cross-platform artifact staging transaction with a 480-line review ceiling. The script owns the existing complete payload/ELF audits and final publication filenames; pacman archive parsing, dependency identity and family inventory construction live in named Python adapters. The added orchestration reuses the complete tree audit rather than duplicating it. Focused package contracts and the actual native makepkg/extraction rehearsal support the format boundary.",
-  "reviewed_commit": "79435515f3",
+  "reviewed_commit": "79435515f3a2f913618eb660e5909c4adc02eeba",
   "ceiling": 480,
   "boundaries": {
     "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
