@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import platform
 import shlex
 import shutil
@@ -15,7 +14,7 @@ import tarfile
 import sys
 import tempfile
 
-from release_semver import parse, parse_release_build
+from release_semver import pacman_package_version, parse, parse_release_build
 
 PACKAGE = "painted-wolf-code"
 ARCHITECTURES = {"x86_64", "aarch64"}
@@ -37,20 +36,6 @@ def validate_resources(tree: Path) -> None:
                     "engine-root/decide/models/*/.complete"]:
         if not any(path.is_file() for path in app.glob(pattern)):
             raise ValueError(f"incomplete pacman payload: {pattern}")
-
-
-def package_version(product: str) -> str:
-    version = parse(product)
-    if version.prerelease is None:
-        return version.core
-    # The alphabetic component sorts below the final numeric core in libalpm.
-    # Restrict channel labels so numeric-vs-alphabetic SemVer ordering is preserved.
-    parts = version.prerelease
-    if not re.fullmatch(r"(?:alpha|beta|rc|preview|dev)[0-9]*", parts[0]) or any(
-        not part.isdigit() for part in parts[1:]
-    ):
-        raise ValueError("pacman prereleases require alpha/beta/rc/preview/dev followed by numeric identifiers")
-    return version.core + "pre." + ".".join(parts)
 
 
 def stream_digest(path: Path) -> str:
@@ -102,7 +87,7 @@ def recipe(root: Path, payload: Path, architecture: str, product: str) -> str:
         sources.append(shlex.quote(install.name))
         hashes.append(shlex.quote(stream_digest(install)))
     replacements = {
-        "PKGVER": package_version(product),
+        "PKGVER": pacman_package_version(parse(product)),
         "PKGREL": str(parse_release_build((root / "RELEASE_BUILD").read_text().strip())),
         "ARCH": shlex.quote(architecture),
         "DEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["depends"]),
@@ -125,7 +110,7 @@ def build(root: Path, tree: Path, architecture: str, output: Path) -> Path:
     if os.geteuid() == 0:
         raise ValueError("makepkg must run as an unprivileged build user")
     product = (root / "VERSION").read_text().strip()
-    version = package_version(product)
+    version = pacman_package_version(parse(product))
     validate_resources(tree)
     subprocess.run([sys.executable, str(root / "scripts/linux-package-manifest.py"), "verify-tree",
                     "--tree", str(tree), "--version", product, "--architecture", architecture], check=True)
