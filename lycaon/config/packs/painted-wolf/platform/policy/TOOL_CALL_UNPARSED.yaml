@@ -5,13 +5,27 @@ anchor: content.output
 requires:
   facts:
     - paintedwolf.reject_observation
+    - paintedwolf.json_unescaped_newline
+    - paintedwolf.json_unexpected_end
+    - paintedwolf.json_invalid_escape
 when: paintedwolf.reject_observation == "provider_tool_call_unparsed"
 effect: block
 copy:
   what: No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call.
-  cause: The tool call arguments were not valid JSON.
+  cause: >-
+    {% if paintedwolf.json_unescaped_newline %}The provider JSON parser encountered a literal newline inside a quoted string.
+    {% else %}{% if paintedwolf.json_unexpected_end %}The provider JSON parser reached the end before completing a JSON value.
+    {% else %}{% if paintedwolf.json_invalid_escape %}The provider JSON parser encountered an invalid escape inside a quoted string.
+    {% else %}The tool call arguments were not valid JSON.{% endif %}{% endif %}{% endif %}
   why: The host received no call to run.
-  fix: Submit the tool call again through the native tool channel with valid JSON arguments. Inside strings use \" for double quotes, \\ for backslashes, and \n for line breaks. Never put a literal newline inside a JSON string. Single quotes need no escape.
+  fix: >-
+    {% if paintedwolf.json_unescaped_newline %}Inside JSON string values, encode each line break as `\n` rather than a literal newline.
+    For example, `{"content":"first line\nsecond line\n"}` decodes to two lines.
+    Preserve the intended content after decoding; do not remove its line breaks.
+    {% endif %}{% if paintedwolf.json_unexpected_end %}Resubmit the complete argument object; check that string values and containers are closed.
+    {% endif %}{% if paintedwolf.json_invalid_escape %}Encode a literal backslash as `\\`; JSON escapes are `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\u` followed by four hexadecimal digits. Apostrophes need no JSON escape.
+    {% endif %}Submit the tool call again through the native tool channel with valid JSON arguments.
+    Escape double quotes, backslashes, and line breaks inside string values.
   instead: Do not assume the dropped call ran.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
@@ -23,3 +37,23 @@ x-paintedwolf-scenarios:
       - 'No tool executed.'
       - valid JSON arguments
       - 'Code: TOOL_CALL_UNPARSED'
+
+  - id: unescaped_newline
+    vars:
+      reason: unescaped_newline
+    expect_contains:
+      - literal newline inside a quoted string
+      - 'first line\nsecond line\n'
+      - Preserve the intended content after decoding
+  - id: unexpected_end
+    vars:
+      reason: unexpected_end
+    expect_contains:
+      - before completing a JSON value
+      - complete argument object
+  - id: invalid_escape
+    vars:
+      reason: invalid_escape
+    expect_contains:
+      - invalid escape inside a quoted string
+      - four hexadecimal digits

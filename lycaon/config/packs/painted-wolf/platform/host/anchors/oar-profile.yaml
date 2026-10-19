@@ -76,6 +76,12 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
+ - name: paintedwolf.json_unescaped_newline
+   type: bool
+ - name: paintedwolf.json_unexpected_end
+   type: bool
+ - name: paintedwolf.json_invalid_escape
+   type: bool
  - name: paintedwolf.rejection_reason
    type: string
  - name: paintedwolf.rejection_field

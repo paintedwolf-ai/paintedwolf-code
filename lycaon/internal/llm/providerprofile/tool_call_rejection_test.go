@@ -98,3 +98,30 @@ func TestToolCallRejectionPolicyUnofferedTool(t *testing.T) {
 		}
 	}
 }
+
+func TestToolCallDiagnosticRequiresDeclaredGrammar(t *testing.T) {
+	policy := ToolCallRejectionPolicy{Rules: []ToolCallRejectionRule{{Kind: ToolCallArgumentsUnparsed, Diagnostic: "unescaped_newline", Grammar: `invalid character '\\n' in string literal`, Source: "encoding/json scanner"}}}
+	if err := policy.Compile(); err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	message := `invalid character '\n' in string literal`
+	cause := errors.New(message)
+	got, ok := failure.AsProviderToolCallUnparsed(policy.Classify("p", "m", message, true, cause))
+	if !ok || got.Diagnostic != "unescaped_newline" || !errors.Is(got, cause) {
+		t.Fatalf("diagnostic lost: %+v", got)
+	}
+	for _, text := range []string{message + " trailing", "prefix " + message, `invalid character '$' in string literal`} {
+		if _, matched := policy.Match(text); matched {
+			t.Fatalf("unrecognized diagnostic matched: %q", text)
+		}
+	}
+	for _, rule := range []ToolCallRejectionRule{
+		{Kind: ToolCallArgumentsUnparsed, Diagnostic: "guess", Grammar: "x", Source: "s"},
+		{Kind: ToolCallNotOffered, Diagnostic: "unescaped_newline", Grammar: "tool '(x)' not found", Source: "s"},
+	} {
+		invalid := ToolCallRejectionPolicy{Rules: []ToolCallRejectionRule{rule}}
+		if err := invalid.Compile(); err == nil {
+			t.Fatalf("invalid diagnostic accepted: %+v", rule)
+		}
+	}
+}

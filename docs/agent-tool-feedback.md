@@ -128,6 +128,30 @@ argument values. Existing exact replacement guidance remains available.
 
 An argument validator can also report `inapplicable_fields` when named fields do not apply to the current host state. This is an observation of validation, published as the typed OAR fact `paintedwolf.inapplicable_fields`. The `TOOL_ARGS_INVALID` rule renders the instruction to omit those fields and preserve the remaining arguments; the host does not rewrite or execute a repaired call.
 
+## Bounded host diagnostics
+
+When generic feedback leaves the agent guessing, extend the failing subsystem's
+typed observations first. Useful details identify the failed operation, the
+observed constraint or parser state, and the smallest available recovery step.
+Unknown locations, effects, and causes remain unknown. Catalog copy consumes
+those facts through the existing OAR anchor; error prose never selects policy.
+
+Bound diagnostics before rendering: cap encoded bytes, item counts, nesting,
+and any source excerpt. Keep complete records and mark omitted details rather
+than cutting JSON or source tokens mid-value. Prefer a durable result reference
+over copying full arguments, schemas, documents, or logs into the prompt.
+Each producer needs an explicit bound; the outer feedback projection limit is
+not a target size for individual errors. Repeated delivery also needs a lifecycle
+bound, through the existing recovery allowance or OAR occurrence conditions.
+Do not silently drop resolved OAR occurrences or rewrite canonical history.
+
+Provider JSON recovery currently has three closed diagnostic categories:
+unescaped newline, unexpected end, and invalid escape. They render fixed-size
+copy with no provider text or argument contents interpolated. The provider
+does not supply the dropped arguments, so this feedback cannot identify a field,
+byte offset, container stack, or repaired call. Unknown parser errors retain
+generic guidance. Recovery retains its existing two-attempt allowance.
+
 ## Reachable-remedy rule
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
