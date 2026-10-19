@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 import xml.etree.ElementTree as ET
@@ -93,6 +94,9 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
     objects = receipt.get("objects")
     if not isinstance(objects, list) or not objects:
         raise ValueError("selected repository inventory is empty")
+    measured = hashlib.sha256(json.dumps(objects, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if receipt.get("inventory_sha256") != measured:
+        raise ValueError("repository inventory differs from its selected identity")
     names = [row["path"] for row in objects]
     if len(names) != len(set(names)):
         raise ValueError("repository inventory repeats an object")
@@ -102,6 +106,14 @@ def admit(receipt: dict, directory: Path, catalog: Path, rehearsal=False):
         raise ValueError("selected repository inventory is incomplete or contains unexpected files")
     for row in objects:
         check_bytes(selected_object(directory, row["path"]), row["sha256"], row["size"])
+    packages = receipt.get("packages")
+    if not isinstance(packages, list) or {row["file"] for row in packages} != {
+            name for name in names if name.endswith("." + receipt["family"])}:
+        raise ValueError("repository final package inventory is incomplete")
+    for row in packages:
+        selected = next(item for item in objects if item["path"] == row["file"])
+        if row["sha256"] != selected["sha256"]:
+            raise ValueError("repository final package hash differs from its inventory")
     if receipt["family"] == "deb":
         apt(directory, receipt["channel"], catalog, rehearsal)
     else:

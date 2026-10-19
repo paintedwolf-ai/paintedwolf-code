@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from .repository_validation import admit
 from .openpgp import selection
-from ..release_semver import compare, parse
+from scripts.release_semver import compare, parse
 
 
 def encoded(value):

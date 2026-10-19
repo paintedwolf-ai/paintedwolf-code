@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -100,12 +101,14 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
         subprocess.run(["createrepo_c", "--checksum", "sha256", "--unique-md-filenames", str(destination)], check=True)
         metadata = destination / "repodata/repomd.xml"
         sign("detached", metadata, metadata.with_suffix(".xml.asc"), catalog, private, rehearsal)
-    return {"format_version": 1, "family": family, "channel": channel, "rehearsal": rehearsal,
+    result = {"format_version": 1, "family": family, "channel": channel, "rehearsal": rehearsal,
             "source_commit": manifest["source_commit"], "version": manifest["version"], "packages": final,
             "activation": "not-published", "publication_order": "content-before-signed-metadata",
             "reader_consistency": "apt-inrelease-by-hash" if family == "deb" else "dnf-versioned-baseurl-mirrorlist",
             "objects": [{"path": path.relative_to(destination).as_posix(), "sha256": digest(path),
                          "size": path.stat().st_size} for path in sorted(destination.rglob("*")) if path.is_file()]}
+    result["inventory_sha256"] = hashlib.sha256(json.dumps(result["objects"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return result
 
 
 def main():

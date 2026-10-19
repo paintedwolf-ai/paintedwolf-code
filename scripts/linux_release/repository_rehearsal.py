@@ -136,6 +136,10 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix="paintedwolf-native-repository-rehearsal-") as directory:
             result = rehearse(Path(directory))
+        subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p",
+                        "test_native_repository_publication_execution.py"],
+                       cwd=Path(__file__).resolve().parents[2], check=True)
+        result["cases"].append("r2-publication-contracts")
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(result, indent=2) + "\n")
         print(f"Native repository rehearsal passed: {args.receipt}")
