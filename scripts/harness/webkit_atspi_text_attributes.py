@@ -21,7 +21,7 @@ import sys
 import threading
 import time
 
-from webkit_atspi_scenarios import HOME_OVERFLOW
+from webkit_atspi_scenarios import HOME_OVERFLOW, diagnostic_scenario
 
 # A person who finished first-run setup and turned tips off, so nothing covers the window.
 FIRST_RUN_DONE = """
@@ -101,7 +101,7 @@ def run_page(url: str) -> int:
     window.add(view)
     window.show_all()
     version = f"{WebKit2.get_major_version()}.{WebKit2.get_minor_version()}.{WebKit2.get_micro_version()}"
-    bodies = {name: body.replace("PAUSE", PAUSE).replace("WEBKIT_VERSION", version) for name, body in SURFACES}
+    bodies = {name: diagnostic_scenario(body.replace("PAUSE", PAUSE).replace("WEBKIT_VERSION", version)) for name, body in SURFACES}
 
     def report(line: str) -> None:
         print(line, flush=True)
@@ -274,6 +274,7 @@ def run_scan(url: str) -> int:
                 return unverified(f"{surface}: {state.get('error') or 'the page did not answer'}")
             if "attention" in state:
                 print(f"{surface}: attention overflow {json.dumps(state['attention'])}", flush=True)
+            print(surface + ": DOM " + json.dumps(state.get("diagnostics")), flush=True)
             app = application()
             if app is None:
                 return unverified("the page is not on the accessibility bus")
@@ -289,6 +290,8 @@ def run_scan(url: str) -> int:
                 inside = ancestry(node)
                 try:
                     text = node.get_text_iface()
+                    call = "GetNSelections"
+                    Atspi.Text.get_n_selections(text)
                     count = Atspi.Text.get_character_count(text)
                     label = f"{label} text={Atspi.Text.get_text(text, 0, -1)!r}"
                     for offset in range(0, count + 1):
@@ -298,8 +301,6 @@ def run_scan(url: str) -> int:
                             totals["calls"] += 1
                     call = "GetDefaultAttributes"
                     Atspi.Text.get_default_attributes(text)
-                    call = "GetNSelections"
-                    Atspi.Text.get_n_selections(text)
                 except Exception as error:  # noqa: BLE001
                     ended = web_process_ended()
                     if ended is None:

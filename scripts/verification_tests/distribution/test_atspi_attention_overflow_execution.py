@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import unittest
 
-from harness.webkit_atspi_scenarios import HOME_OVERFLOW
+from harness.webkit_atspi_scenarios import HOME_OVERFLOW, diagnostic_scenario
 
 
 class AtspiAttentionOverflowTests(unittest.TestCase):
@@ -47,3 +47,22 @@ global.setTimeout = callback => callback();
     def test_native_probe_imports_the_required_scenario(self):
         probe = Path(__file__).resolve().parents[2] / "harness/webkit_atspi_text_attributes.py"
         self.assertIn('(\"home\", HOME_OVERFLOW)', probe.read_text())
+
+    def test_diagnostic_preserves_scenario_outcome_and_captures_hidden_selection(self):
+        body = diagnostic_scenario("return {ok: true};")
+        script = r"""
+const anchor = {nodeType: 1, tagName: 'DIV', dataset: {testid: 'editor'},
+  className: 'cm-content', isConnected: true, getClientRects: () => [], closest: () => ({})};
+global.document = {getSelection: () => ({rangeCount: 1, isCollapsed: true,
+  anchorNode: anchor, focusNode: anchor, anchorOffset: 2, focusOffset: 2})};
+global.getComputedStyle = () => ({display: 'block', visibility: 'visible'});
+(async () => console.log(JSON.stringify(await (new Function('return (async () => {' + BODY + '})()'))())))();
+""".replace("BODY", json.dumps(body))
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertTrue(value["ok"])
+        selection = value["diagnostics"]["selection"]
+        self.assertEqual(selection["ranges"], 1)
+        self.assertEqual(selection["anchor"]["boxes"], 0)
+        self.assertTrue(selection["anchor"]["hiddenAncestor"])

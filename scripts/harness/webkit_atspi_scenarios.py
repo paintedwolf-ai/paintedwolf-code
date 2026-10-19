@@ -23,3 +23,24 @@ const shown = document.querySelectorAll('[data-testid="attention-band-row"]').le
 if (!more || shown === 0) return { ok: false, error: "Home attention overflow did not mount" };
 return { ok: true, attention: { seeded: 8, shown, overflow: more.textContent } };
 """
+
+
+def diagnostic_scenario(body: str) -> str:
+    """Capture the DOM selection before accessibility queries can end the process."""
+    return "const reached = await (async () => {" + body + r"""})();
+const selection = document.getSelection();
+const describe = (node) => {
+  const element = node?.nodeType === 1 ? node : node?.parentElement;
+  if (!element) return null;
+  const style = getComputedStyle(element);
+  return {tag: element.tagName, testId: element.dataset.testid ?? null,
+    classes: element.className, connected: element.isConnected,
+    boxes: element.getClientRects().length, display: style.display, visibility: style.visibility,
+    hiddenAncestor: !!element.closest('[hidden], [aria-hidden="true"], [inert]')};
+};
+return {...reached, diagnostics: {selection: selection ? {
+  ranges: selection.rangeCount, collapsed: selection.isCollapsed,
+  anchor: describe(selection.anchorNode), focus: describe(selection.focusNode),
+  anchorOffset: selection.anchorOffset, focusOffset: selection.focusOffset
+} : null}};
+"""
