@@ -1,0 +1,73 @@
+"""Select immutable campaign artifacts from the protected release controller."""
+
+from __future__ import annotations
+
+import re
+
+ARTIFACT = "linux-final-admission-inputs"
+WORKFLOW = ".github/workflows/release.yml"
+
+
+def select(api, repository: str, repository_id: int, run_id: int) -> dict:
+    """Read server-owned provenance before downloading or interpreting campaign data."""
+    if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+            or type(repository_id) is not int or repository_id < 1
+            or type(run_id) is not int or run_id < 1):
+        raise ValueError("select the controller repository and an exact workflow run")
+    prefix = f"repos/{repository}/actions"
+    run = api(f"{prefix}/runs/{run_id}")
+    commit = run.get("head_sha")
+    attempt = run.get("run_attempt")
+    if (type(run.get("id")) is not int or run["id"] != run_id
+            or run.get("repository", {}).get("id") != repository_id
+            or run.get("repository", {}).get("full_name") != repository
+            or run.get("head_repository", {}).get("id") != repository_id
+            or run.get("path") != WORKFLOW or run.get("head_branch") != "main"
+            or run.get("event") != "workflow_dispatch" or run.get("status") != "completed"
+            or run.get("conclusion") != "success" or type(attempt) is not int or attempt < 1
+            or not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit)):
+        raise ValueError("campaign inputs require a successful protected main release controller")
+    # Select by artifact ID. A name-based download can combine stale rerun artifacts.
+    matches, page = [], 1
+    while True:
+        response = api(f"{prefix}/runs/{run_id}/artifacts?per_page=100&page={page}")
+        rows = response.get("artifacts")
+        if not isinstance(rows, list) or len(rows) > 100:
+            raise ValueError("invalid controller artifact inventory")
+        matches.extend(row for row in rows if row.get("name") == ARTIFACT)
+        if len(rows) < 100:
+            break
+        if page >= 100:
+            raise ValueError("controller artifact inventory exceeds its bound")
+        page += 1
+    if len(matches) != 1:
+        raise ValueError("select exactly one retained final campaign artifact")
+    artifact = matches[0]
+    producer = artifact.get("workflow_run", {})
+    identity = artifact.get("id")
+    digest = artifact.get("digest")
+    if (type(identity) is not int or identity < 1 or artifact.get("expired") is not False
+            or type(artifact.get("size_in_bytes")) is not int or artifact["size_in_bytes"] < 1
+            or type(producer.get("id")) is not int or producer["id"] != run_id
+            or producer.get("head_sha") != commit
+            or type(producer.get("repository_id")) is not int or producer["repository_id"] != repository_id
+            or type(producer.get("head_repository_id")) is not int or producer["head_repository_id"] != repository_id
+            or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
+        raise ValueError("final campaign artifact has stale or mismatched server provenance")
+    return {"repository": repository, "repository_id": repository_id, "run_id": run_id,
+            "run_attempt": attempt, "controller_commit": commit, "artifact_id": identity,
+            "artifact_sha256": digest.removeprefix("sha256:")}
+
+
+def verify_producer(selected: dict, producer: dict, source_commit: str, source_tree: str) -> None:
+    """Bind the downloaded artifact to the selected attempt and immutable runtime source."""
+    expected = {"format_version": 1, "repository_id": selected["repository_id"],
+                "run_id": selected["run_id"], "run_attempt": selected["run_attempt"],
+                "controller_commit": selected["controller_commit"],
+                "source_commit": source_commit, "source_tree": source_tree}
+    if (not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)
+                for value in [source_commit, source_tree])
+            or not isinstance(producer, dict) or set(producer) != set(expected)
+            or any(type(producer[key]) is not type(value) or producer[key] != value
+                   for key, value in expected.items())):
+        raise ValueError("downloaded final campaign differs from its selected producer or source")
