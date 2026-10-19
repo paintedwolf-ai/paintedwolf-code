@@ -15,10 +15,10 @@ func TestNixRetentionReleasesOwnRootAndReclaimsOnlyDeadRoots(t *testing.T) {
 	t.Setenv("LYCAON_API_TOKEN", "engine-token-must-not-reach-nix")
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
-	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\n[ -z \"${LYCAON_API_TOKEN+x}\" ] || exit 1\n[ \"$1\" = --add-root ] || exit 1\nln -s \"$5\" \"$2\"\n"), 0o700))
+	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\n[ -z \"${LYCAON_API_TOKEN+x}\" ] || exit 1\n[ \"$3\" = --add-root ] || exit 1\nln -s \"$7\" \"$4\"\n"), 0o700))
 	layout := &NixLayout{Output: filepath.Join(root, "output"), NixStore: tool}
 	directory := filepath.Join(root, "roots")
-	releaseFirst, err := retainNix(context.Background(), layout, directory)
+	releaseFirst, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "retain first", err)
 	defer releaseFirst.Close()
 	dead := "session-" + strings.Repeat("0", 32)
@@ -26,7 +26,7 @@ func TestNixRetentionReleasesOwnRootAndReclaimsOnlyDeadRoots(t *testing.T) {
 	testutil.FailErr(t, "write dead root", os.Symlink("/old-generation", filepath.Join(directory, dead)))
 	foreign := filepath.Join(directory, "another-app")
 	testutil.FailErr(t, "write foreign root", os.Symlink("/foreign-generation", foreign))
-	releaseSecond, err := retainNix(context.Background(), layout, directory)
+	releaseSecond, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "retain second", err)
 	if _, err := os.Lstat(filepath.Join(directory, dead)); !os.IsNotExist(err) {
 		t.Fatal("dead own root was not removed")
@@ -51,7 +51,7 @@ func TestNixRetentionRefusesUnavailableDaemonAndUnsafeDirectories(t *testing.T) 
 	testutil.FailErr(t, "write unavailable registrar", os.WriteFile(tool, []byte("#!/bin/sh\necho 'daemon unavailable' >&2\nexit 1\n"), 0o700))
 	layout := &NixLayout{Output: "/generation", NixStore: tool}
 	directory := filepath.Join(root, "roots")
-	if _, err := retainNix(context.Background(), layout, directory); err == nil {
+	if _, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"}); err == nil {
 		t.Fatal("unavailable registration silently accepted")
 	}
 	entries, err := os.ReadDir(directory)
@@ -60,7 +60,7 @@ func TestNixRetentionRefusesUnavailableDaemonAndUnsafeDirectories(t *testing.T) 
 		t.Fatal("failed registration left a root/lock")
 	}
 	testutil.FailErr(t, "make directory public", os.Chmod(directory, 0o755))
-	if _, err := retainNix(context.Background(), layout, directory); err == nil {
+	if _, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"}); err == nil {
 		t.Fatal("public directory accepted")
 	}
 }
@@ -76,9 +76,9 @@ func TestDesktopLockRetainsTheRootAfterItsHelperDies(t *testing.T) {
 func testDesktopLockSurvivesHelperExit(t *testing.T, graceful bool) {
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
-	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\nln -s \"$5\" \"$2\"\n"), 0o700))
+	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\nln -s \"$7\" \"$4\"\n"), 0o700))
 	directory := filepath.Join(root, "roots")
-	retention, err := retainNix(context.Background(), &NixLayout{Output: "/selected-generation", NixStore: tool}, directory)
+	retention, err := retainNix(context.Background(), &NixLayout{Output: "/selected-generation", NixStore: tool}, directory, nixRegistrar{storeURI: "local?store=/nix/store"})
 	testutil.FailErr(t, "retain generation", err)
 	defer retention.Close()
 	desktop, err := os.OpenFile(retention.LockPath, os.O_RDWR, 0)
