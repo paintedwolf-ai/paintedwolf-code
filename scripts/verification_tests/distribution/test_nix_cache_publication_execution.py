@@ -125,6 +125,11 @@ class CachePublicationTests(unittest.TestCase):
         report["closure_sha256"] = hashlib.sha256(json.dumps(report["closure"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         with self.assertRaises(ValueError):
             verified_report(self.cache, report)
+        with self.assertRaises(ValueError):
+            verified_report(self.cache, {**self.report, "schema_version": True})
+        report["closure"][OUTPUT]["nar_bytes"] = True
+        with self.assertRaises(ValueError):
+            verified_report(self.cache, report)
 
     def test_source_changes_during_capture_refuse_before_transport_credentials(self):
         def changed(source, destination):

@@ -25,7 +25,7 @@ def plan(backend, cutoff: dt.datetime) -> list[dict]:
             retained.add(relative_name(urls[0]))
         elif name.startswith("release-records/") and name.endswith(".json"):
             receipt = json.loads(backend.read(name))
-            if receipt.get("schema_version") != 1 or not isinstance(receipt.get("objects"), list):
+            if type(receipt.get("schema_version")) is not int or receipt["schema_version"] != 1 or not isinstance(receipt.get("objects"), list):
                 raise ValueError("retained cache release record has an unsupported shape")
             for item in receipt["objects"]:
                 retained.add(relative_name(item["name"]))

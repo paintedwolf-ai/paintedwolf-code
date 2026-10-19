@@ -20,7 +20,8 @@ def encoded(value: dict) -> bytes:
 def verified_report(cache: Path, report: dict) -> dict:
     fields = {"schema_version", "status", "request", "public_keys", "nix_version", "closure_sha256", "closure",
               "derivations", "objects", "upstream_dependencies", "dependency_policy"}
-    if not isinstance(report, dict) or set(report) != fields or report["schema_version"] != 1 or report["status"] != "passed":
+    if (not isinstance(report, dict) or set(report) != fields or type(report["schema_version"]) is not int
+            or report["schema_version"] != 1 or report["status"] != "passed"):
         raise ValueError("cache publication requires a complete construction report")
     request = report["request"]
     validate_request(request, {"schema_version": 1, "mode": request["mode"], "public_keys": report["public_keys"]})
@@ -30,7 +31,8 @@ def verified_report(cache: Path, report: dict) -> dict:
     if not isinstance(closure, dict) or not set(request["outputs"]) <= closure.keys():
         raise ValueError("cache report omits a selected output")
     for row in closure.values():
-        if not isinstance(row, dict) or not set(row.get("references", [])) <= closure.keys():
+        if (not isinstance(row, dict) or type(row.get("nar_bytes")) is not int or row["nar_bytes"] <= 0
+                or not isinstance(row.get("references"), list) or not set(row["references"]) <= closure.keys()):
             raise ValueError("cache report omits a referenced closure path")
     digest = hashlib.sha256(json.dumps(closure, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if digest != report["closure_sha256"] or inventory(cache, closure, report["public_keys"]) != report["objects"]:

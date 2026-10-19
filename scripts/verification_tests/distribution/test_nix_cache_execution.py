@@ -47,13 +47,15 @@ class NixCacheAdmissionTests(unittest.TestCase):
             self.assertEqual(nix("path-info", "--store", "daemon"), "verified")
 
     def test_invalid_release_inputs_fail_before_private_key_access(self):
-        for field, value in [("system", "aarch64-darwin"), ("application_commit", "main"), ("flake_lock_sha256", "bad"),
+        for field, value in [("schema_version", True), ("system", "aarch64-darwin"), ("application_commit", "main"), ("flake_lock_sha256", "bad"),
                              ("outputs", [OUTPUT, OUTPUT]), ("outputs", ["nixpkgs#hello"]), ("cache_prefix", "release-system-tests/f/nix-cache")]:
             request = {**self.request, field: value}
             with self.subTest(field=field), patch("scripts.nix_cache.adapter.signing_identity") as read:
                 with self.assertRaises(ValueError):
                     construct(request, self.policy, Path("/missing/key"), Path("/missing/cache"))
                 read.assert_not_called()
+        with self.assertRaises(ValueError):
+            validate_request(self.request, {**self.policy, "schema_version": True})
 
     def test_private_keys_require_owner_only_regular_files_outside_cache(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +81,8 @@ class NixCacheAdmissionTests(unittest.TestCase):
                 DEPENDENCY: {"narHash": "sha256:dependency", "narSize": 9, "references": []}}
         projection = closure_projection(rows, [OUTPUT])
         self.assertEqual(projection[OUTPUT]["references"], [DEPENDENCY])
-        for modified in [{OUTPUT: rows[OUTPUT]}, {DEPENDENCY: rows[DEPENDENCY]}, {**rows, OUTPUT: {**rows[OUTPUT], "narSize": 0}}]:
+        for modified in [{OUTPUT: rows[OUTPUT]}, {DEPENDENCY: rows[DEPENDENCY]},
+                         {**rows, OUTPUT: {**rows[OUTPUT], "narSize": 0}}, {**rows, OUTPUT: {**rows[OUTPUT], "narSize": True}}]:
             with self.subTest(rows=modified), self.assertRaises(ValueError):
                 closure_projection(modified, [OUTPUT])
 

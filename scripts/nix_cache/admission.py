@@ -29,7 +29,7 @@ def public_key(value: str) -> str:
 
 def validate_request(request: dict, policy: dict) -> None:
     fields = {"schema_version", "mode", "version", "application_commit", "flake_lock_sha256", "system", "outputs", "cache_prefix"}
-    if not isinstance(request, dict) or set(request) != fields or request["schema_version"] != 1:
+    if not isinstance(request, dict) or set(request) != fields or type(request["schema_version"]) is not int or request["schema_version"] != 1:
         raise ValueError("Nix cache request has an unsupported shape")
     if request["mode"] not in {"production", "rehearsal"}:
         raise ValueError("Nix cache mode must be explicit")
@@ -50,7 +50,8 @@ def validate_request(request: dict, policy: dict) -> None:
             raise ValueError("production Nix cache requires its dedicated prefix")
     elif not isinstance(prefix, str) or not re.fullmatch(r"release-system-tests/[A-Za-z0-9_-]+/nix-cache", prefix):
         raise ValueError("rehearsal Nix cache requires an isolated test prefix")
-    if not isinstance(policy, dict) or set(policy) != {"schema_version", "mode", "public_keys"} or policy["schema_version"] != 1 or policy["mode"] != request["mode"]:
+    if (not isinstance(policy, dict) or set(policy) != {"schema_version", "mode", "public_keys"}
+            or type(policy["schema_version"]) is not int or policy["schema_version"] != 1 or policy["mode"] != request["mode"]):
         raise ValueError("Nix cache trust policy differs from the requested mode")
     keys = policy["public_keys"]
     if not isinstance(keys, list) or not keys or any(not isinstance(key, str) for key in keys) or len(keys) != len(set(keys)):
@@ -71,7 +72,7 @@ def closure_projection(value: dict, outputs: list[str]) -> dict:
         references = row.get("references")
         if not isinstance(references, list) or not set(references).issubset(value):
             raise ValueError("Nix closure omits a referenced dependency")
-        if not isinstance(row.get("narHash"), str) or not row["narHash"] or not isinstance(row.get("narSize"), int) or row["narSize"] <= 0:
+        if not isinstance(row.get("narHash"), str) or not row["narHash"] or type(row.get("narSize")) is not int or row["narSize"] <= 0:
             raise ValueError("Nix closure has an invalid content identity")
         result[path] = {"nar_hash": row["narHash"], "nar_bytes": row["narSize"],
                         "references": sorted(references), "derivation": row.get("deriver")}
