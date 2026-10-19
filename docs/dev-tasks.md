@@ -1020,6 +1020,20 @@ signed apt indexes, RPM signatures and metadata, inventory readback, retained ge
 stale activation refusal and explicit recovery. It does not qualify the application,
 perform installed application upgrades, or publish to R2.
 
+The same local mode can retain repositories for actual application candidates:
+`./task release:live-test -- --local-native-repositories --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
+The input directory contains exactly one DEB and RPM for each selected architecture.
+The output must be new and outside the input directory; the receipt must remain outside
+both. Native package names, versions and architectures must match the independent
+selection. This creates disposable test trust, retains the final signed RPM bytes,
+DEB and repository inventories, and a public-only trust catalog. Private keys are
+removed before retained objects are reverified. `candidate-repositories.json` records
+the runtime source, release build, package input and final hashes, generation identities,
+and relative retained paths. The separate receipt also records the publisher source
+revision and tree. Serve these retained directories only in an isolated qualification
+environment with their explicitly selected test trust. This mode performs no R2 request,
+installation, production signing or application qualification.
+
 `python3 -m scripts.linux_release.native_repositories` assembles selected native
 packages into a new generation. `python3 -m scripts.linux_release.repository_publication`
 accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
