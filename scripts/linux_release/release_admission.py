@@ -23,7 +23,7 @@ def document(path: Path) -> tuple[object, str]:
 
 
 def verify_release(catalog, artifacts, campaign, evidence_root, file_root, repositories,
-                   source_commit, *, version, channel, signing_generation, key_fingerprint):
+                   source_commit, *, version, channel, signing_generation, key_fingerprint, release_build):
     """Re-evaluate selected release inputs; the caller owns publication authority."""
     result = admit(catalog, campaign, artifacts, source_commit, evidence_root)
     verified_files, verified_repositories = [], []
@@ -32,7 +32,7 @@ def verify_release(catalog, artifacts, campaign, evidence_root, file_root, repos
         verified_repositories = verify_repositories(
             repositories, artifacts, source_commit, version=version, channel=channel,
             signing_generation=signing_generation, key_fingerprint=key_fingerprint,
-            verified_files=verified_files)
+            verified_files=verified_files, release_build=release_build)
     return {"accepted": result["accepted"], "result": result,
             "verified_files": verified_files, "verified_repositories": verified_repositories}
 
@@ -45,6 +45,7 @@ def main(argv=None):
     parser.add_argument("--file-root", type=Path, required=True)
     parser.add_argument("--repositories", type=Path, required=True)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--release-build", required=True, type=int)
     parser.add_argument("--channel", required=True)
     parser.add_argument("--signing-generation", type=int, required=True)
     parser.add_argument("--key-fingerprint", required=True)
@@ -66,7 +67,7 @@ def main(argv=None):
         verified = verify_release(
             catalog, artifacts, campaign, evidence, args.file_root, repositories, args.source_commit,
             version=args.version, channel=args.channel, signing_generation=args.signing_generation,
-            key_fingerprint=args.key_fingerprint)
+            key_fingerprint=args.key_fingerprint, release_build=args.release_build)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         verified = {"accepted": False, "result": {"accepted": False, "errors": [str(exc)]},
                     "verified_files": [], "verified_repositories": []}
