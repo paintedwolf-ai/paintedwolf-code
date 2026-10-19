@@ -6,11 +6,14 @@ let
     modules = [
       (nixpkgs + "/nixos/modules/virtualisation/qemu-vm.nix")
       (import ./nixos.nix { packageFor = _: package; })
-      ({ lib, pkgs, ... }: {
+      ({ config, lib, pkgs, ... }: {
         system.stateVersion = "26.05";
         nix.settings.experimental-features = [ "nix-command" "flakes" ];
         networking.hostName = "paintedwolf-${desktop}-qualification";
         services.painted-wolf-code.enable = true;
+        services.painted-wolf-code.extraRuntimePackages =
+          lib.optionals config.hardware.graphics.enable
+            ([ config.hardware.graphics.package ] ++ config.hardware.graphics.extraPackages);
         users.users.root.initialHashedPassword = "!";
         users.users.qualifier = {
           isNormalUser = true;
