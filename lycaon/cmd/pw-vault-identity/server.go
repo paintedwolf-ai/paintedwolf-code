@@ -69,7 +69,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		go func() {
 			defer s.wg.Done()
 			defer s.active.Add(-1)
-			s.serveConn(conn)
+			s.serveConn(ctx, conn)
 		}()
 	}
 }
@@ -110,8 +110,10 @@ type connection struct {
 	chain launchverify.Chain
 }
 
-func (s *Server) serveConn(conn net.Conn) {
+func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
+	stopClosing := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClosing()
 	peer, err := s.PeerOf(conn)
 	if err != nil {
 		s.Log.Warn("vault identity peer credentials unavailable", "error", err)
