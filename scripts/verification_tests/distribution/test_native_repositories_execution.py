@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.native_repositories import assemble, checked_input
+from linux_release.repository_validation import admit, check_bytes, selected_object
 
 
 class NativeRepositoryInputsTests(unittest.TestCase):
@@ -47,3 +48,29 @@ class NativeRepositoryInputsTests(unittest.TestCase):
                 with self.subTest(family=family, channel=channel), self.assertRaises(ValueError):
                     assemble(family, manifest, root, destination, channel, private=root / "key")
                 self.assertFalse(destination.exists())
+
+    def test_generation_inventory_refuses_duplicates_unlisted_bytes_and_wrong_trust(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, row = self.fixture(directory)
+            item = {"path": path.name, "sha256": row["sha256"], "size": path.stat().st_size}
+            receipt = {"format_version": 1, "family": "deb", "channel": "preview", "rehearsal": True,
+                       "objects": [item]}
+            for changed in [dict(receipt, objects=[item, item]), dict(receipt, objects=[]),
+                            dict(receipt, rehearsal=False), dict(receipt, objects=[dict(item, sha256="0" * 64)])]:
+                with self.subTest(changed=changed), patch("linux_release.repository_validation.apt") as crypto:
+                    with self.assertRaises(ValueError):
+                        admit(changed, path.parent, path.parent / "catalog", True)
+                    crypto.assert_not_called()
+            (path.parent / "unlisted").write_text("unexpected")
+            with self.assertRaisesRegex(ValueError, "inventory"):
+                admit(receipt, path.parent, path.parent / "catalog", True)
+
+    def test_object_verification_refuses_escape_symlinks_and_size_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, row = self.fixture(directory)
+            for name in ["../escape", str(path), "nested/../" + path.name]:
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    selected_object(path.parent, name)
+            for size in [True, -1, path.stat().st_size - 1, path.stat().st_size + 1]:
+                with self.subTest(size=size), self.assertRaises(ValueError):
+                    check_bytes(path, row["sha256"], size)
