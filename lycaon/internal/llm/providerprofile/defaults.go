@@ -154,6 +154,7 @@ func LocalInference(profile Profile) Profile {
 	profile.UtilityCallTimeout = LocalInferenceUtilityCallTimeout
 	profile.BackgroundUtilityCallTimeout = LocalInferenceBackgroundUtilityCallTimeout
 	profile.UtilitySingleFlight = true
+	profile.OmitToolsWhenNotCallable = true
 	return profile
 }
 

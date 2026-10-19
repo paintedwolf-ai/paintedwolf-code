@@ -177,7 +177,7 @@ func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, s
 	if stream {
 		wire.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
 	}
-	if len(req.Tools) > 0 {
+	if len(req.Tools) > 0 && (req.ToolsCallable() || !p.profile.OmitToolsWhenNotCallable) {
 		wire.Tools = ProjectTools(req.Tools)
 		if !req.ToolsCallable() {
 			wire.ToolChoice = toolChoiceNone

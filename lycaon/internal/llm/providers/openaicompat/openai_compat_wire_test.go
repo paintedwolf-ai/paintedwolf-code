@@ -228,3 +228,20 @@ func TestReasoningWireTextSupportsVendorResponseFields(t *testing.T) {
 		t.Fatalf("reasoning_content field = %q", got)
 	}
 }
+
+func TestEncodeLocalInferenceNoCallTurnOmitsToolDefinitions(t *testing.T) {
+	provider := New("local", "http://127.0.0.1:8080/v1", "", []modelinfo.Entry{
+		{ID: "local-instruct"},
+	}).WithProfile(providerprofile.LocalInference(providerprofile.OpenAI()))
+	req := modelcall.CompletionRequest{
+		Model:    "local-instruct",
+		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "close out"}},
+		Tools:    []tools.ToolMeta{{Name: "update_progress"}},
+		ToolUse:  modelcall.ToolUseForbidden,
+	}
+	body, err := encodeChatCompletionRequest(req, provider, true, controlOpts{})
+	testutil.FailErr(t, "encode", err)
+	if strings.Contains(string(body), `"tools"`) || strings.Contains(string(body), `"tool_choice"`) {
+		t.Fatalf("non-callable local turn must omit tools and tool_choice: %s", body)
+	}
+}
