@@ -1046,6 +1046,29 @@ caching for `generations/`, `pool/`, and `by-hash/`; channel metadata and mirror
 require no-store caching and zero negative-cache TTL. The deployment must serialize
 publishers across hosts; a filesystem lock covers publishers sharing this origin.
 
+**Explicit repository setup packages.** The native repository owner can construct
+`painted-wolf-code-repo` DEB/RPM packages with
+`python3 -m scripts.linux_release.repository_setup --directory /absolute/path/generation --catalog /absolute/path/keys.json --destination /absolute/path/new-setup-output --base-url https://reviewed-origin.example --private /absolute/path/owner-only-signing-key.asc`.
+The generation must first pass its full inventory/signature admission. Use
+`--rehearsal` only with disposable test trust. The output includes the setup package,
+signed `SHA256SUMS`, public key and generation-bound `setup.json`; no private key is
+copied. Verify the published full key fingerprint through the separately trusted
+release channel, verify `SHA256SUMS.asc` with that key and check `sha256sum -c SHA256SUMS`
+before installation. The explicit one-step setup is `sudo apt install ./painted-wolf-code-repo_<native-version>_all.deb`
+or `sudo dnf install ./painted-wolf-code-repo-<native-version>-1.noarch.rpm`.
+
+Setup installs only the selected channel configuration and public key. It does not
+install or restart the application, refresh repositories, import global RPM trust,
+or run scripts. Dnf prompts for the configured key when its repository is first used;
+verify that fingerprint explicitly. The configuration is a package-managed conffile:
+review package-manager prompts or `.rpmnew` files when changing channels or keys.
+Only one setup package/channel is selected at a time; feed preferences do not change it.
+Use `sudo apt purge painted-wolf-code-repo` or `sudo dnf remove painted-wolf-code-repo`
+to remove unmodified setup files. Locally modified configuration may remain for review;
+removing setup leaves the installed application and mutable user data intact. The
+local native rehearsal installs and removes both setup formats in isolated roots,
+checks exact owned bytes and preserves a mutable user-data sentinel.
+
 Every generation retains `client.conf`, the selected public key, exact inventory,
 source commit, and version. The configuration is an explicit setup artifact; installing
 the application does not add repositories or trust. For apt, verify the full catalog
