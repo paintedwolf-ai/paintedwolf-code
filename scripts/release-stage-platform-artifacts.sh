@@ -47,8 +47,8 @@ PACKAGE_EXTENSION="${PACKAGE_EXTENSION_LIST[0]}"
 case "${GOOS}" in
   linux)
     # Linux installs through the package manager: two package families, no updater artifact.
-    [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm" && -z "${UPDATER_EXTENSION}" ]] || {
-      echo "error: Linux stages exactly deb,rpm with no updater artifact" >&2
+    [[ ( "${PACKAGE_EXTENSIONS}" == "deb,rpm" || "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ) && -z "${UPDATER_EXTENSION}" ]] || {
+      echo "error: Linux stages deb,rpm and optional native pacman with no updater artifact" >&2
       exit 2
     }
     ;;
@@ -316,6 +316,19 @@ case "${GOOS}" in
     LYCAON_DOCUMENT_CORE_BINARY="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw-document-core" \
       LYCAON_ENGINE_ROOT="${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}" diagnostics document-core
     OPENGREP="$(verify_opengrep "${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}")"
+    if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
+      PACMAN_PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path '*/release/bundle/pacman/*.pkg.tar.zst' -print -quit)"
+      [[ -n "${PACMAN_PACKAGE}" ]] || { echo "error: missing native pacman package" >&2; exit 1; }
+      PACMAN_TREE="${EXTRACT}/pacman"
+      PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.arch_stage --package "${PACMAN_PACKAGE}" \
+        --destination "${PACMAN_TREE}" --root "${ROOT}" --architecture "${ARCH}" --version "${VERSION}"
+      audit_linux_tree ".pkg.tar.zst" "${PACMAN_TREE}"
+      PACMAN_RECEIPT="$(dirname "${PACMAN_PACKAGE}")/pacman-candidate.json"
+      [[ -f "${PACMAN_RECEIPT}" ]] || { echo "error: pacman candidate has no producer receipt" >&2; exit 1; }
+      jq -e --arg sha "$(sha256_hex "${PACMAN_PACKAGE}")" --arg arch "${ARCH}" --arg version "${VERSION}" \
+        '.format_version == 1 and .family == "pacman" and .sha256 == $sha and .architecture == $arch and .version == $version and .published == false' \
+        "${PACMAN_RECEIPT}" >/dev/null
+    fi
     PACKAGE="${DEB_PACKAGE}"
     RPM_OUTPUT="${RPM_PACKAGE}"
     ;;
@@ -458,6 +471,10 @@ stage_package() {
 stage_package "${PACKAGE}" "${PACKAGE_EXTENSION}"
 if [[ "${GOOS}" == linux ]]; then
   stage_package "${RPM_OUTPUT}" "rpm"
+  if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
+    stage_package "${PACMAN_PACKAGE}" "pkg.tar.zst"
+    cp "${PACMAN_RECEIPT}" "${OUTPUT}/${STEM}.pacman-candidate.json"
+  fi
   # Package-managed platforms publish no updater artifact and no feed fragment.
   exit 0
 fi
