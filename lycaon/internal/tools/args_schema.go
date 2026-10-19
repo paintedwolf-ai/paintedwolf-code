@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/tools/argdiag"
@@ -80,20 +79,6 @@ func ValidateToolArgs(schema map[string]any, args map[string]any) error {
 	return nil
 }
 
-func mutationRecoveryTool(tool string, offered []string) string {
-	switch strings.TrimSpace(tool) {
-	case "edit", "replace_lines", "code_rewrite":
-	default:
-		return ""
-	}
-	for _, name := range offered {
-		if name == "write" {
-			return "write"
-		}
-	}
-	return ""
-}
-
 // ValidateCallArguments checks transport integrity and argument shape before policy reads them.
 func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc ToolContext) *toolrejection.ToolReject {
 	if tc.Effects.ArgsTruncated {
@@ -123,9 +108,6 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 				data["missing_required_arguments"] = required
 			}
 			data["schema_issues"] = argdiag.SchemaIssues(invalid)
-			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnOfferedToolNames); sibling != "" {
-				data["suggested_tool"] = sibling
-			}
 			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)
 		}
 	}

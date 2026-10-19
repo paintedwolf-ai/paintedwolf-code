@@ -83,6 +83,19 @@ empty assistant text if no user update is needed. The host does not classify
 what the text means or demand notes on ordinary action calls. Workers and
 surfaces without `surface_note` are unaffected.
 
+## Argument and artifact recovery
+
+Schema rejection repairs the rejected argument object; it does not recommend a
+whole-file write merely because an edit is malformed. Source-read prerequisites
+from an earlier mismatch still apply. Explicit full-file writes remain available
+under their normal admission rules.
+
+Unknown visual IDs distinguish an empty current-turn inventory from available
+stills. Recovery names page capture or snapshot tools only when offered on the
+rejected request; otherwise it can suggest offered discovery or report the
+limitation. A source write is not a rendered capture, and discovering a tool does
+not execute it. Existing artifact provenance and note grounding remain enforced.
+
 ## Compact reject block (spec posture)
 
 The spec-posture template ([`reject/spec-posture-block.md`](../lycaon/config/packs/painted-wolf/platform/guidance/reject/spec-posture-block.md)) renders:
