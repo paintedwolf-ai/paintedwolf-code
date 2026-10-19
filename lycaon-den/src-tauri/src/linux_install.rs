@@ -10,6 +10,7 @@ use std::sync::OnceLock;
 
 mod source;
 pub use source::PackageSourceFacts;
+pub use source::refresh as refresh_source;
 
 pub const INSTALL_ROOT: &str = crate::installation_mode::LINUX_PACKAGE_ROOT;
 pub const PACKAGE_NAME: &str = "painted-wolf-code";
@@ -22,15 +23,17 @@ const ENGINE_MARKER: &str = "schemas/oar/oar.schema.json";
 pub enum PackageFamily {
     Deb,
     Rpm,
+    Pacman,
     Nix,
 }
 
 impl PackageFamily {
-    /// The exact command the person runs to move to the version the feed announces.
+    /// The package owner's general update workflow; it is not a source offer.
     pub fn update_command(self, package: &str) -> String {
         match self {
             Self::Deb => format!("sudo apt update && sudo apt install --only-upgrade {package}"),
             Self::Rpm => format!("sudo dnf upgrade {package}"),
+            Self::Pacman => "sudo pacman -Syu".into(),
             Self::Nix => "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation.".into(),
         }
     }
@@ -96,28 +99,17 @@ fn owner(executable: &Path) -> Option<InstalledPackage> {
     if !executable.is_absolute() {
         return None;
     }
-    query_dpkg(executable).or_else(|| query_rpm(executable))
+    query_dpkg(executable).or_else(|| query_rpm(executable)).or_else(|| query_pacman(executable))
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-        .env("LC_ALL", "C")
-        .stdin(std::process::Stdio::null())
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    source::read(program, args).ok()
 }
 
 fn query_dpkg(executable: &Path) -> Option<InstalledPackage> {
-    let search = run("dpkg-query", &["-S", &executable.to_string_lossy()])?;
+    let search = run("/usr/bin/dpkg-query", &["-S", &executable.to_string_lossy()])?;
     let name = parse_dpkg_owner(&search, executable)?;
-    let version = run("dpkg-query", &["-W", "-f=${Version}", &name])?;
+    let version = run("/usr/bin/dpkg-query", &["-W", "-f=${Version}", &name])?;
     let version = version.trim();
     (!version.is_empty())
         .then(|| InstalledPackage::new(PackageFamily::Deb, name, version.to_owned()))
@@ -139,7 +131,7 @@ fn parse_dpkg_owner(output: &str, executable: &Path) -> Option<String> {
 
 fn query_rpm(executable: &Path) -> Option<InstalledPackage> {
     let output = run(
-        "rpm",
+        "/usr/bin/rpm",
         &[
             "-qf",
             "--qf",
@@ -148,6 +140,16 @@ fn query_rpm(executable: &Path) -> Option<InstalledPackage> {
         ],
     )?;
     parse_rpm_owner(&output)
+}
+
+fn query_pacman(executable: &Path) -> Option<InstalledPackage> {
+    let name = run("/usr/bin/pacman", &["-Qoq", "--", &executable.to_string_lossy()])?;
+    let name = name.trim();
+    if !source::valid_package_name(name) { return None; }
+    let raw = run("/usr/bin/pacman", &["-Q", "--", name])?;
+    let fields: Vec<_> = raw.split_whitespace().collect();
+    if fields.len() != 2 || fields[0] != name { return None; }
+    Some(InstalledPackage::new(PackageFamily::Pacman, name.into(), fields[1].into()))
 }
 
 /// `rpm -qf --qf '%{NAME}\t%{VERSION}\n'` prints one line per owning package.

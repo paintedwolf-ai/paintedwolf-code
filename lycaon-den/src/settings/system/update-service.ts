@@ -5,8 +5,16 @@ const UPDATE_STATE_EVENT = "update-state-changed";
 type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "unknown";
 /** The running package and observed source facts; an upstream feed cannot establish ownership or a pin. */
 export type InstalledPackage = {
-  family: "deb" | "rpm" | "nix"; name: string; version: string; update_command: string;
-  source: { availability: "not_checked"; owner: "system_package_manager" | null; pinned: boolean | null };
+  family: "deb" | "rpm" | "pacman" | "nix"; name: string; version: string; update_command: string;
+  source: PackageSourceFacts;
+};
+export type PackageSourceFacts = {
+  availability: "not_checked" | "candidate_found" | "no_newer_candidate" | "blocked" | "unknown" | "failed";
+  owner: "system_package_manager" | null; pinned: boolean | null;
+  checked_at: number | null; database_version: string | null; architecture: string | null;
+  candidate: { version: string; architecture: string; repositories: { id: string; suite: string | null; trusted: boolean | null }[]; newer_than_installed: boolean } | null;
+  held: boolean | null; selection_priority: number | null; cached_only: boolean;
+  reason: "unsupported_owner" | "adapter_unavailable" | "not_installed" | "no_cached_candidate" | "policy_unobserved" | "held" | "untrusted_source" | "ambiguous_candidate" | "wrong_architecture" | "query_failed" | "timed_out" | "output_limit" | "cancelled" | "invalid_response" | null;
 };
 type UpdateChannel = "stable" | "preview";
 type UpdateCandidate = {
