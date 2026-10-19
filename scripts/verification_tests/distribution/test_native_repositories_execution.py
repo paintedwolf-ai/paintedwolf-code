@@ -1,6 +1,7 @@
 """Native repository inputs must retain selected hashes and package identities."""
 
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -53,17 +54,29 @@ class NativeRepositoryInputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path, row = self.fixture(directory)
             item = {"path": path.name, "sha256": row["sha256"], "size": path.stat().st_size}
+            signer = {"generation": 1, "fingerprint": "A" * 40}
             receipt = {"format_version": 1, "family": "deb", "channel": "preview", "rehearsal": True,
-                       "objects": [item]}
-            for changed in [dict(receipt, objects=[item, item]), dict(receipt, objects=[]),
-                            dict(receipt, rehearsal=False), dict(receipt, objects=[dict(item, sha256="0" * 64)])]:
-                with self.subTest(changed=changed), patch("linux_release.repository_validation.apt") as crypto:
-                    with self.assertRaises(ValueError):
-                        admit(changed, path.parent, path.parent / "catalog", True)
-                    crypto.assert_not_called()
-            (path.parent / "unlisted").write_text("unexpected")
-            with self.assertRaisesRegex(ValueError, "inventory"):
-                admit(receipt, path.parent, path.parent / "catalog", True)
+                       "source_commit": "f" * 40, "version": "1.0.2-rc6", "signing_generation": 1,
+                       "key_fingerprint": signer["fingerprint"], "objects": [item], "packages": [row]}
+
+            def inventory(value):
+                return dict(value, inventory_sha256=hashlib.sha256(
+                    json.dumps(value["objects"], sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+
+            receipt = inventory(receipt)
+            changes = [(dict(receipt, objects=[item, item]), "repeats an object"),
+                       (dict(receipt, objects=[]), "inventory is empty"),
+                       (dict(receipt, rehearsal=False), "cross-trust"),
+                       (dict(receipt, objects=[dict(item, sha256="0" * 64)]), "selected final bytes")]
+            with patch("linux_release.repository_validation.selection", return_value=(signer, Path("public"))):
+                for changed, reason in changes:
+                    with self.subTest(reason=reason), patch("linux_release.repository_validation.apt") as crypto:
+                        with self.assertRaisesRegex(ValueError, reason):
+                            admit(inventory(changed), path.parent, path.parent / "catalog", True)
+                        crypto.assert_not_called()
+                (path.parent / "unlisted").write_text("unexpected")
+                with self.assertRaisesRegex(ValueError, "inventory is incomplete"):
+                    admit(receipt, path.parent, path.parent / "catalog", True)
 
     def test_object_verification_refuses_escape_symlinks_and_size_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

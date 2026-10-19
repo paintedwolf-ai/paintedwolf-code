@@ -13,6 +13,7 @@ import tempfile
 import uuid
 
 from .native_repositories import assemble
+from .candidate_repositories import retain as retain_candidates, rehearse as rehearse_candidates
 from .openpgp import ephemeral
 from .repository_validation import admit
 from .repository_publication import publish
@@ -88,6 +89,8 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
         fixture_work = work / version
         fixture_work.mkdir()
         packages = fixtures(fixture_work, version)
+        if version == "0.0.1":
+            first_inputs = packages
         for family in ["deb", "rpm"]:
             source = packages[family]
             row = {"file": source.name, "sha256": digest(source), "architecture": packages["architecture"],
@@ -213,11 +216,13 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
             publish_r2(old_receipt, old_destination, catalog, storage_prefix, r2_origin,
                        remote["generation"], True, "recover")
         generations.append({"version": "0.0.3", "family": family, "objects": len(receipt["objects"]), "signing_generation": 2})
+    rehearse_candidates(work, first_inputs, PACKAGE)
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
             "architecture": platform.machine(), "published": False, "isolated_r2_published": r2_origin is not None,
             "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": generations,
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes", "apt-by-hash-without-mutable-fallback",
-                      "old-and-new-retained", "wrong-key", "production-refuses-fixture", "changed-package",
+                      "old-and-new-retained", "actual-candidate-retention", "post-signing-rpm-identity-retained",
+                      "public-only-candidate-trust", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
                       "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",
@@ -230,23 +235,45 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--r2", action="store_true")
+    parser.add_argument("--candidate-dir", type=Path)
+    parser.add_argument("--retain-repositories", type=Path)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--version")
+    parser.add_argument("--channel", choices=["stable", "preview"])
+    parser.add_argument("--release-build", type=int)
+    parser.add_argument("--architecture", choices=["amd64", "arm64"], action="append", default=[])
     args = parser.parse_args()
-    required = ["gpg", "gpgv", "gpgconf", "dpkg-deb", "apt-ftparchive", "rpm", "rpmkeys", "rpmsign", "rpmbuild", "createrepo_c", "openssl", "sudo", "apt-get", "dnf", "dpkg-query"]
+    candidate_options = [args.retain_repositories, args.source_commit, args.version, args.channel, args.release_build]
+    if args.candidate_dir:
+        if args.r2 or any(value is None for value in candidate_options):
+            parser.error("candidate mode requires retained output and independent source/version/channel/build, and excludes R2")
+        if (args.receipt.resolve().is_relative_to(args.candidate_dir.resolve())
+                or args.receipt.resolve().is_relative_to(args.retain_repositories.resolve())):
+            parser.error("candidate receipt must remain outside selected inputs and retained repository output")
+    elif any(value is not None for value in candidate_options) or args.architecture:
+        parser.error("candidate selection options require --candidate-dir")
+    required = ["git", "gpg", "gpgv", "gpgconf", "dpkg-deb", "apt-ftparchive", "rpm", "rpmkeys", "rpmsign", "rpmbuild", "createrepo_c", "openssl", "sudo", "apt-get", "dnf", "dpkg-query"]
+    if args.candidate_dir:
+        required = [name for name in required if name not in {"rpmbuild", "openssl", "sudo", "apt-get", "dnf", "dpkg-query"}]
     for executable in required:
         if shutil.which(executable) is None:
             parser.error(f"{executable} is required")
     try:
-        r2_origin = rehearsal_environment() if args.r2 else None
-        with tempfile.TemporaryDirectory(prefix="paintedwolf-native-repository-rehearsal-") as directory:
-            with serve(Path(directory)) as (origin, certificate):
-                result = rehearse(Path(directory), origin, certificate, r2_origin)
-        for pattern in ["test_native_repository_publication_execution.py", "test_repository_operations_execution.py"]:
-            subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", pattern],
-                           cwd=Path(__file__).resolve().parents[2], check=True)
-        result["cases"].append("r2-publication-contracts")
-        if args.r2:
-            result["cases"] += ["r2-negative-cache-recovery", "r2-staged-publication-resume",
-                                "r2-tampered-object-refused", "r2-missing-object-restored", "r2-package-manager-installation"]
+        if args.candidate_dir:
+            result = retain_candidates(args.candidate_dir, args.retain_repositories, args.source_commit,
+                                       args.version, args.channel, args.release_build, args.architecture)
+        else:
+            r2_origin = rehearsal_environment() if args.r2 else None
+            with tempfile.TemporaryDirectory(prefix="paintedwolf-native-repository-rehearsal-") as directory:
+                with serve(Path(directory)) as (origin, certificate):
+                    result = rehearse(Path(directory), origin, certificate, r2_origin)
+            for pattern in ["test_native_repository_publication_execution.py", "test_repository_operations_execution.py"]:
+                subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", pattern],
+                               cwd=Path(__file__).resolve().parents[2], check=True)
+            result["cases"].append("r2-publication-contracts")
+            if args.r2:
+                result["cases"] += ["r2-negative-cache-recovery", "r2-staged-publication-resume",
+                                    "r2-tampered-object-refused", "r2-missing-object-restored", "r2-package-manager-installation"]
         root = Path(__file__).resolve().parents[2]
         result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
         result["verification_source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
