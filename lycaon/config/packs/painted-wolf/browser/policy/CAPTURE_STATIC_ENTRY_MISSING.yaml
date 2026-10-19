@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CAPTURE_STATIC_ENTRY_MISSING
+kind: schema
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.missing
+  - paintedwolf.entry
+  - paintedwolf.path
+when: paintedwolf.rejection_code == "CAPTURE_STATIC_ENTRY_MISSING"
+effect: block
+copy:
+  what: Static entry {{ paintedwolf.entry }} was not found under project_dir {{ paintedwolf.path }}.
+  cause: The resolved entry path is not a regular file in the requested project_dir, and no active route fixture answers GET for that URL.
+  why: Static project_dir capture serves HTML and assets from disk; without a regular entry file (such as index.html), the browser would open a synthetic 404 page instead of the target surface.
+  fix: Write the intended HTML entry file before opening or capturing project_dir, or pass path / project_dir for an existing static entry file in the workspace.
+  instead: Branch on Code CAPTURE_STATIC_ENTRY_MISSING; write the static entry file or correct path / project_dir before retrying
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
+x-paintedwolf-message: Static project_dir capture entry file does not exist
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    detail: missing static entry
+    entry: index.html
+    path: /workspace/app
+    profile: coordinator
+    tool: page_open
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: CAPTURE_STATIC_ENTRY_MISSING'
+  - 'index.html'

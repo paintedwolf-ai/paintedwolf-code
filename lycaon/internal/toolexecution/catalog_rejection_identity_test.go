@@ -69,6 +69,7 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"page_open", "CAPTURE_NAVIGATION_DENIED"},
 		{"page_open", "CAPTURE_PROJECT_DIR_INVALID"},
 		{"page_open", "CAPTURE_PROJECT_DIR_MISSING"},
+		{"page_open", "CAPTURE_STATIC_ENTRY_MISSING"},
 		{"page_open", "CAPTURE_PROCESS_NOT_RUNNING"},
 		{"page_open", "CAPTURE_SERVE_FAILED"},
 		{"page_open", "CAPTURE_URL_NOT_LOOPBACK"},
