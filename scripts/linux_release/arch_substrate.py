@@ -79,6 +79,8 @@ def build(root, work, architecture, epoch):
     expected_platform = {"x86_64": "linux/amd64", "aarch64": "linux/arm64"}[architecture]
     if row["platform"] != expected_platform:
         raise ValueError("pacman substrate platform differs from its native CPU")
+    if command("docker", "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}") != expected_platform:
+        raise ValueError("Docker daemon must use the matching native Linux CPU")
     image = row.get("image")
     imported = image is None
     unique = "paintedwolf-pacman-" + uuid.uuid4().hex
