@@ -33,7 +33,7 @@ def rejected(action):
     raise ValueError("invalid pacman generation was admitted")
 
 
-def install(package: Path, root: Path, catalog: Path, expected: str, repository: Path | None = None):
+def install(package: Path, root: Path, catalog: Path, expected: str, repository: Path | str | None = None):
     root.mkdir(exist_ok=True)
     for name in ["db", "cache", "hooks"]:
         (root / name).mkdir(exist_ok=True)
@@ -42,7 +42,8 @@ def install(package: Path, root: Path, catalog: Path, expected: str, repository:
                       + "\nSigLevel = Required DatabaseRequired\nLocalFileSigLevel = Required\n")
     if repository is not None:
         with config.open("a") as output:
-            output.write("\n[painted-wolf-code-preview]\nServer = " + repository.as_uri() + "\n")
+            url = repository.as_uri() if isinstance(repository, Path) else repository
+            output.write("\n[painted-wolf-code-preview]\nServer = " + url + "\n")
     selected, public = selection(catalog, True)
     with keyring(public, selected["fingerprint"]) as home:
         run(["gpg", "--batch", "--import-ownertrust"], home,
@@ -60,7 +61,9 @@ def install(package: Path, root: Path, catalog: Path, expected: str, repository:
                             "--logfile", str(root / "pacman.log"), *action], check=True)
         finally:
             subprocess.run(["sudo", "-n", "chown", "-R", f"{os.getuid()}:{os.getgid()}", "--", str(root)], check=True)
-    owned = subprocess.check_output(["pacman", "--config", str(config), "--root", str(root), "--dbpath", str(root / "db"),
+    query = root / "query.conf"
+    query.write_text("[options]\nArchitecture = " + platform.machine() + "\n")
+    owned = subprocess.check_output(["pacman", "--config", str(query), "--root", str(root), "--dbpath", str(root / "db"),
                                      "-Qoq", "--", str(root / "usr/share" / PACKAGE / "value")], text=True).strip()
     if owned != expected:
         raise ValueError("installed fixture file has the wrong package owner")
@@ -168,14 +171,14 @@ package() {{
             altered = recipe / package.name
             original = altered.read_bytes()
             altered.write_bytes(original + b"changed")
-            invalid = subprocess.run(["makepkg", "--verifysource", "--noconfirm"], cwd=recipe,
+            invalid = subprocess.run(["makepkg", "--verifysource", "--force", "--noconfirm"], cwd=recipe,
                                      env={**os.environ, "GNUPGHOME": str(home)})
             altered.write_bytes(original)
             if invalid.returncode == 0:
                 raise ValueError("AUR makepkg accepted changed upstream package bytes")
         wrong_key, wrong_public = selection(wrong, True)
         with keyring(wrong_public, wrong_key["fingerprint"]) as home:
-            invalid = subprocess.run(["makepkg", "--verifysource", "--noconfirm"], cwd=recipe,
+            invalid = subprocess.run(["makepkg", "--verifysource", "--force", "--noconfirm"], cwd=recipe,
                                      env={**os.environ, "GNUPGHOME": str(home)})
             if invalid.returncode == 0:
                 raise ValueError("AUR makepkg accepted an unavailable upstream signing key")
@@ -219,6 +222,10 @@ package() {{
                 finally:
                     delete_fixture_object(key)
             remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True, operation)
+            remote_channel = (r2_origin + "/" + storage_prefix + "/channels/pacman/preview/" + architecture)
+            install(destination / package.name, work / "r2-root", catalog, PACKAGE, remote_channel)
+            if (work / "r2-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
+                raise ValueError("R2 pacman upgrade did not install the selected payload")
             if version == "0.0.2":
                 old_receipt, old_directory = retained
                 recovered = publish_r2(old_receipt, old_directory, original_catalog, storage_prefix, r2_origin,
@@ -237,6 +244,9 @@ package() {{
             if r2_origin is not None:
                 publish_r2(old_receipt, old_directory, original_catalog, storage_prefix, r2_origin,
                            remote_active, True, "recover")
+                install(destination / package.name, work / "r2-root", original_catalog, PACKAGE, remote_channel)
+                if (work / "r2-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
+                    raise ValueError("R2 repository recovery changed the installed package")
         results.append({"version": version, "objects": len(receipt["objects"])})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
             "architecture": platform.machine(), "published": False, "isolated_r2_published": r2_origin is not None,
@@ -249,7 +259,9 @@ package() {{
                       "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
                       "retained-repository-recovery", "withdrawal-preserves-installed-package",
                       "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused",
-                      "explicit-key-rotation", "installed-successor-key-refusal", "withdrawn-reoffer-refused"]}
+                      "explicit-key-rotation", "installed-successor-key-refusal", "withdrawn-reoffer-refused"]
+                     + (["r2-pacman-Syu-installed-upgrade", "r2-recovery-preserves-installed-package"]
+                        if r2_origin is not None else [])}
 
 
 def main():

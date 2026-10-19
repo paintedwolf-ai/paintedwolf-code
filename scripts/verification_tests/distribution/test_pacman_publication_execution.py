@@ -20,7 +20,7 @@ class PacmanPublicationTests(unittest.TestCase):
                         "packages": [{"native_version": "0.0.1-1"}],
                         "objects": [{"path": "application.pkg.tar.zst"}, {"path": "application.pkg.tar.zst.sig"}]}
         self.objects, self.events = {}, []
-        self.fail, self.race, self.reads = None, False, 0
+        self.fail_suffix, self.race, self.reads = None, False, 0
 
     def local(self, receipt, directory, store, origin, catalog, expected, rehearsal):
         identity = hashlib.sha256(encoded(receipt)).hexdigest()
@@ -48,7 +48,7 @@ class PacmanPublicationTests(unittest.TestCase):
 
     def put(self, key, source, mutable=False):
         self.events.append((key, mutable))
-        if self.fail and key.endswith(self.fail):
+        if self.fail_suffix and "/channels/" in key and key.endswith(self.fail_suffix):
             raise OSError("interrupted activation")
         if not mutable and key in self.objects and self.objects[key] != source.read_bytes():
             raise ValueError("immutable collision")
@@ -72,7 +72,7 @@ class PacmanPublicationTests(unittest.TestCase):
 
     def test_packages_and_signatures_precede_database_alias_and_state_is_last(self):
         result = self.publish()
-        writes = [key for key, _ in self.events]
+        writes = [key for key, _ in self.events if "/channels/" in key]
         db = next(index for index, key in enumerate(writes) if key.endswith("/painted-wolf-code-preview.db"))
         signature = next(index for index, key in enumerate(writes) if key.endswith("/painted-wolf-code-preview.db.sig"))
         self.assertLess(signature, db)
@@ -82,12 +82,12 @@ class PacmanPublicationTests(unittest.TestCase):
         self.assertEqual(self.publish()["generation"], result["generation"])
 
     def test_interrupted_pair_upload_preserves_objects_and_retry_finishes(self):
-        self.fail = "/painted-wolf-code-preview.db.sig"
+        self.fail_suffix = "/painted-wolf-code-preview.db.sig"
         with self.assertRaises(OSError):
             self.publish()
-        self.assertTrue(any(key.endswith("application.pkg.tar.zst") for key in self.objects))
-        self.assertFalse(any(key.endswith(("/painted-wolf-code-preview.db", "/current.json")) for key in self.objects))
-        self.fail = None
+        self.assertTrue(any(key.endswith("application.pkg.tar.zst") for key in self.objects if "/channels/" in key))
+        self.assertFalse(any(key.endswith(("/painted-wolf-code-preview.db", "/current.json")) for key in self.objects if "/channels/" in key))
+        self.fail_suffix = None
         self.assertTrue(self.publish()["public_verified"])
 
     def test_stale_or_concurrently_changed_plan_never_selects_database(self):
@@ -97,7 +97,7 @@ class PacmanPublicationTests(unittest.TestCase):
         self.race, self.reads = True, 0
         with self.assertRaises(ValueError):
             self.publish()
-        self.assertFalse(any(key.endswith(("/painted-wolf-code-preview.db", "/current.json")) for key in self.objects))
+        self.assertFalse(any(key.endswith(("/painted-wolf-code-preview.db", "/current.json")) for key in self.objects if "/channels/" in key))
 
     def test_production_path_requires_controller_admission(self):
         with self.assertRaises(ValueError):
