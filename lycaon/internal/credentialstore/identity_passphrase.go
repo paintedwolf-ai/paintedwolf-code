@@ -73,6 +73,7 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 		return identityDocument{}, fmt.Errorf("%w: password is incorrect or the wrapped identity is damaged", ErrVaultUnlockFailed)
 	}
 	plaintext, err := io.ReadAll(io.LimitReader(reader, maxIdentityBytes+1))
+	defer clear(plaintext)
 	if err != nil {
 		return identityDocument{}, fmt.Errorf("%w: read identity: %w", ErrVaultCorrupt, err)
 	}
@@ -91,6 +92,7 @@ func checkNewUnlockSecret(password []byte) error {
 
 func (p *passphraseIdentityProvider) commit(doc identityDocument, password []byte) error {
 	plaintext, err := encodeIdentityDocument(doc)
+	defer clear(plaintext)
 	if err != nil {
 		return err
 	}

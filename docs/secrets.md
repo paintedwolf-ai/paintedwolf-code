@@ -80,7 +80,7 @@ service-held identities remain in protected state when that service is disabled
 or its selected generation changes; a missing service never creates a replacement
 identity for an existing encrypted vault.
 
-The desktop retains a successful password only in process memory, so an engine restart in the same app session does not ask again; closing the app forgets it. A forgotten password cannot be recovered. The stop screen can reset the vault after destructive confirmation, removing saved credentials without deleting projects or history. A general store reset preserves the vault because it is device configuration; `pw credentials purge --yes` removes the vault and identity only when no engine is running.
+The app bounds transient identity reads and clears decrypted and encoded identity buffers on return, including errors. The desktop retains a successful password only in process memory, so an engine restart in the same app session does not ask again; closing the app forgets it. A forgotten password cannot be recovered. The stop screen can reset the vault after destructive confirmation, removing saved credentials without deleting projects or history. A general store reset preserves the vault because it is device configuration; `pw credentials purge --yes` removes the vault and identity only when no engine is running.
 
 This boundary protects secrets at rest and keeps plaintext out of ordinary files and backups. It does not protect an unlocked vault from code running with the same process authority, and a weak app password remains subject to offline guessing despite scrypt, which is why the UI asks for a passphrase-sized password and says it cannot be recovered.
 
