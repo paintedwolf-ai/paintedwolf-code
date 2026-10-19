@@ -5,17 +5,18 @@ let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
   sourcePath = /. + builtins.unsafeDiscardStringContext (toString source);
-in rust.buildRustPackage {
-  pname = "painted-wolf-code-bialy";
-  version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = lib.fileset.toSource {
+  componentSource = lib.fileset.toSource {
     root = sourcePath;
     fileset = lib.fileset.unions [
       (sourcePath + "/lycaon/internal/decide/native")
       (sourcePath + "/scripts/bialy/rank-rubric.json")
     ];
   };
-  cargoLock.lockFile = source + "/lycaon/internal/decide/native/Cargo.lock";
+in rust.buildRustPackage {
+  pname = "painted-wolf-code-bialy";
+  version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
+  src = componentSource;
+  cargoLock.lockFile = componentSource + "/lycaon/internal/decide/native/Cargo.lock";
   cargoRoot = "lycaon/internal/decide/native";
   buildAndTestSubdir = "lycaon/internal/decide/native";
   buildFeatures = [ "vulkan" ];

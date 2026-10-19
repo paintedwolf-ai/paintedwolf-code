@@ -4,11 +4,12 @@ let
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
   crate = (/. + builtins.unsafeDiscardStringContext (toString source))
     + "/lycaon/internal/documentcore/native";
+  componentSource = lib.fileset.toSource { root = crate; fileset = crate; };
 in rust.buildRustPackage {
   pname = "painted-wolf-code-document-core";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = lib.fileset.toSource { root = crate; fileset = crate; };
-  cargoLock.lockFile = source + "/lycaon/internal/documentcore/native/Cargo.lock";
+  src = componentSource;
+  cargoLock.lockFile = componentSource + "/Cargo.lock";
   cargoBuildFlags = [ "--bin" "pw-document-core" ];
   doCheck = false;
   meta = {
