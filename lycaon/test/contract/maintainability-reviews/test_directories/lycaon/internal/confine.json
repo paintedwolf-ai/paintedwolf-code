@@ -4,15 +4,16 @@
   "kind": "test_suite",
   "workstream": "linux-confinement-authority",
   "disposition": "retain",
-  "reason": "The 65 immediate test files qualify the shared authority boundary across platforms and actual Linux toolchain workflows. Added fixtures separate Nix preparation, environment behavior, daemon delegation, egress, protocol, and lifecycle without exporting production internals. Full native regression exercised the existing contracts; the corrected TLS control was verified independently. Retain this exact membership and reconsider further growth.",
-  "reviewed_commit": "104aa2452dbd72d6b2d1e4a696d256152b0ec2cb",
-  "ceiling": 65,
+  "reason": "The 70 immediate test files exercise the shared platform authority boundary, Nix preparation/environment/service-delegation/lifecycle contracts, and older-kernel file-mask construction without exporting production setup hooks. The added file-mask controls require allowed I/O, multiple unreadable read-only masks and read-only temporary roots; the Nix controls preserve explicit delegated-service refusal and per-action host execution. Retain this exact combined membership and reconsider further growth.",
+  "reviewed_commit": "1083ec523580dab4dc89623fef55e03eff955766",
+  "ceiling": 70,
   "boundaries": {
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
     "lycaon/internal/confine/nix_workflows_linux_test.go": "c972df3d9ec354df64369e820898de0da49151ec19ce84601f622d3b72d0e693",
-    "lycaon/internal/confine/nix_daemon_grant_linux_test.go": "7b8ce4ca97bb8a69e75af0e8064f5b59738b3780d0671b286dc7c9c73da252e8"
+    "lycaon/internal/confine/nix_daemon_grant_linux_test.go": "7b8ce4ca97bb8a69e75af0e8064f5b59738b3780d0671b286dc7c9c73da252e8",
+    "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126"
   },
-  "reviewed_shape": "47417a153626d8b56e52086afd8bea4d755ca39c67a91dfd58c8664c9e63da0c"
+  "reviewed_shape": "797a5970cc00abb9a5f2c8554433273e3d67af0c74cfbf1bb4d501fca034cbec"
 }

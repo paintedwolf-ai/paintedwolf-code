@@ -4,13 +4,15 @@
   "kind": "module",
   "workstream": "linux-confinement-authority",
   "disposition": "retain",
-  "reason": "The 58 production files expose one cross-platform confinement request, capability floor, launch report, and action-broker contract. Platform enforcement already has a private linuxsandbox owner; further movement solely for file count would fragment the shared authority contract or add forwarding APIs. This change adds no production member to this directory.",
-  "reviewed_commit": "104aa2452dbd72d6b2d1e4a696d256152b0ec2cb",
-  "ceiling": 58,
+  "reason": "Retain the measured 59-member shared confinement package: it owns one cross-platform request, capability floor, launch report and action-broker contract. The added admission.go separates required confinement from observed availability, preserving explicit host execution and refusing unavailable required boundaries; it is a real authority decision boundary. Platform enforcement and the sealed file-mask lifecycle remain private in linuxsandbox. Further movement solely for count would fragment the shared contract or add forwarding APIs. Focused admission, capability and applied file-mask controls protect these boundaries; reconsider further membership growth.",
+  "reviewed_commit": "1083ec523580dab4dc89623fef55e03eff955766",
+  "ceiling": 59,
   "boundaries": {
     "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
-    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad"
+    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
+    "lycaon/internal/confine/admission_test.go": "b2bef46c8146b262f1d9b7ebf7123f830671a939cce1c1b7330f9235a8853c00",
+    "lycaon/internal/confine/admission_linux_test.go": "b55f2b5f1756e1982590809c9774ef382300ecd5bd3ed55ee0204cd670f34a49"
   },
-  "reviewed_shape": "2b55b4064a4c20221de0ffcedc085398db0cab999b918d9cda67e859446ce679"
+  "reviewed_shape": "a9fc6679cbc75644044d6eb59588fee92240a32f520ef8ee14799aac64bab13a"
 }
