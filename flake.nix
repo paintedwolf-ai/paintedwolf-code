@@ -18,6 +18,7 @@
       systems = [ "x86_64-linux" "aarch64-linux" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
       hasNixOSModule = builtins.pathExists ./packaging/nix/nixos.nix;
+      hasNixOSVM = hasNixOSModule && builtins.pathExists ./packaging/nix/module-vm.nix;
       packagesFor = system: import nixpkgs {
         inherit system;
         overlays = [ rust-overlay.overlays.default ];
@@ -69,6 +70,17 @@
             cp ${self}/lycaon-den/bun.lock bun.lock
             bun2nix -o "$out"
           '';
+        } // nixpkgs.lib.optionalAttrs hasNixOSVM {
+          nixos-gnome-vm = import ./packaging/nix/module-vm.nix {
+            inherit nixpkgs system;
+            package = self.packages.${system}.default;
+            desktop = "gnome";
+          };
+          nixos-plasma-vm = import ./packaging/nix/module-vm.nix {
+            inherit nixpkgs system;
+            package = self.packages.${system}.default;
+            desktop = "plasma";
+          };
         });
       devShells = eachSystem (system:
         let pkgs = packagesFor system;
