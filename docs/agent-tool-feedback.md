@@ -27,6 +27,19 @@ program output are unaffected. Exact replacement calls require representable
 paths and known output bytes; uncertain quoting, expansion, or output options
 retain recovery guidance without synthesized file content.
 
+## Internal tool-step notes
+
+Assistant text accompanying native tool calls is an internal working note, hidden
+from the user. Model-facing transcript projection labels that visibility while
+preserving the note, tool calls, arguments, results, and model reasoning. The
+frame is catalog-authored and carries no instruction authority. It appears only
+on nonempty tool-step text; public agent notes and final no-tool replies retain
+their presentation.
+
+Framing happens after canonical history and reasoning rehydration. Repeated
+projection is idempotent. Stored messages and the user-facing transcript remain
+unchanged; execution and completion still come from tool results.
+
 ## Source text in model requests
 
 Successful native content, symbol, and range reads retain their structured result
