@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,7 +121,7 @@ for family, address in ((socket.AF_UNIX, sys.argv[4]), (socket.AF_INET, ('127.0.
 print('installed-boundary-applied')
 `
 	status, output = runInstalledHelper(t, helper, box, python, "-I", "-c", probe, string(namespaces), filepath.Join(outside, "escaped"), secret, agentPath, fmt.Sprint(port), secondSecret)
-	if status != 0 {
+	if status != 0 || !strings.Contains(output, "installed-boundary-applied") {
 		t.Fatalf("installed helper adversarial boundary failed: exit=%d output=%s", status, output)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "escaped")); !os.IsNotExist(err) {
@@ -133,9 +134,10 @@ for family, address in ((socket.AF_UNIX, sys.argv[1]), (socket.AF_INET, ('127.0.
     with socket.socket(family, socket.SOCK_STREAM) as channel:
         channel.settimeout(2)
         channel.connect(address)
+print('installed-grants-applied')
 `
 	status, output = runInstalledHelper(t, helper, box, python, "-I", "-c", granted, agentPath, fmt.Sprint(port))
-	if status != 0 {
+	if status != 0 || !strings.Contains(output, "installed-grants-applied") {
 		t.Fatalf("installed helper did not honor exact socket grants: exit=%d output=%s", status, output)
 	}
 	logInstalledResult(t, helper, "")
