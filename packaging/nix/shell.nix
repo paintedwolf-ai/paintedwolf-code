@@ -4,11 +4,25 @@
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
+  sourcePath = /. + builtins.unsafeDiscardStringContext (toString source);
+  componentSource = lib.fileset.toSource {
+    root = sourcePath;
+    fileset = lib.fileset.unions [
+      (sourcePath + "/lycaon-den/src-tauri")
+      (sourcePath + "/lycaon-den/shared")
+      (sourcePath + "/VERSION")
+      (sourcePath + "/lycaon/internal/backup/archive-limits.json")
+      (sourcePath + "/lycaon/internal/editoroutbox/format.json")
+      (sourcePath + "/packaging/update-limits.json")
+      (sourcePath + "/packaging/update-keys.json")
+      (sourcePath + "/packaging/release-platforms.json")
+    ];
+  };
 in rust.buildRustPackage {
   pname = "painted-wolf-code-shell";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = source;
-  cargoLock.lockFile = source + "/lycaon-den/src-tauri/Cargo.lock";
+  src = componentSource;
+  cargoLock.lockFileContents = builtins.readFile (source + "/lycaon-den/src-tauri/Cargo.lock");
   cargoRoot = "lycaon-den/src-tauri";
   buildAndTestSubdir = "lycaon-den/src-tauri";
   cargoBuildFlags = [ "--bin" "painted-wolf-code" ];

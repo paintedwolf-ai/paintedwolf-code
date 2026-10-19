@@ -1,9 +1,22 @@
 { lib, stdenv, callPackage, autoPatchelfHook, python3, bun2nix, source }:
 let
   tools = callPackage ./toolchains.nix { inherit source; };
+  sourcePath = /. + builtins.unsafeDiscardStringContext (toString source);
+  componentSource = lib.fileset.toSource {
+    root = sourcePath;
+    fileset = lib.fileset.unions [
+      (lib.fileset.difference (sourcePath + "/lycaon-den") (sourcePath + "/lycaon-den/src-tauri"))
+      (sourcePath + "/lycaon-den/src-tauri/tauri.conf.json")
+      (sourcePath + "/CHANGELOG.md")
+    ];
+  };
+  dependencyExpression = builtins.path { path = ./bun.nix; name = "bun.nix"; };
   package = lib.importJSON (source + "/lycaon-den/package.json");
   identity = lib.importJSON ./bun-lock.json;
-  patchFiles = lib.mapAttrs (_: path: source + "/lycaon-den/${path}")
+  patchFiles = lib.mapAttrs (_: path: builtins.path {
+    path = sourcePath + "/lycaon-den/${path}";
+    name = "painted-wolf-bun-dependency.patch";
+  })
     package.patchedDependencies;
 in
 assert lib.assertMsg
@@ -13,12 +26,12 @@ assert lib.assertMsg
 stdenv.mkDerivation {
   pname = "painted-wolf-code-frontend";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = source;
+  src = componentSource;
   nativeBuildInputs = [ tools.bun tools.nodejs bun2nix.hook autoPatchelfHook python3 ];
   buildInputs = [ stdenv.cc.cc.lib ];
   bunRoot = "lycaon-den";
   bunDeps = bun2nix.fetchBunDeps {
-    bunNix = ./bun.nix;
+    bunNix = dependencyExpression;
     patchShebangs = false;
     overrides = bun2nix.patchedDependenciesToOverrides { patchedDependencies = patchFiles; };
   };
