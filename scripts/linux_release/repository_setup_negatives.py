@@ -28,6 +28,7 @@ def rehearse(work, artifact, catalog, private, authority):
         for kind, error in [("script", "unsafe mode"), ("payload", "payload"), ("mode", "unsafe mode"),
                             ("conffile", "conffiles"), ("relationship", "relationships")]:
             stage = work / ("hostile-deb-" + kind)
+            stage.mkdir()
             tree = stage / "tree"
             subprocess.run(["dpkg-deb", "--raw-extract", str(artifact), str(tree)], check=True)
             config = tree / "etc/apt/sources.list.d/painted-wolf-code.sources"
