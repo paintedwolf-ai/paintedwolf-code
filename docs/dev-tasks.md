@@ -874,6 +874,8 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.

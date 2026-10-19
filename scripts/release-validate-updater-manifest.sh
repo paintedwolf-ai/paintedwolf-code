@@ -9,9 +9,10 @@ EXPECTED_VERSION=""
 # its packages need not be installable; a manifest about to publish must be,
 # unless it is withdrawn and offers nothing to install.
 EXISTING=0
+CATALOG="${ROOT}/packaging/release-platforms.json"
 
 usage() {
-  echo "Usage: release-validate-updater-manifest.sh --file PATH [--version VERSION] [--existing]" >&2
+  echo "Usage: release-validate-updater-manifest.sh --file PATH [--version VERSION] [--existing] [--catalog PATH]" >&2
   exit 2
 }
 
@@ -20,6 +21,7 @@ while [[ $# -gt 0 ]]; do
     --file) FILE="${2:-}"; shift 2 ;;
     --version) EXPECTED_VERSION="${2:-}"; shift 2 ;;
     --existing) EXISTING=1; shift ;;
+    --catalog) CATALOG="${2:-}"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "error: unknown argument: $1" >&2; usage ;;
   esac
@@ -46,20 +48,20 @@ if [[ -n "${EXPECTED_VERSION}" ]]; then
   }
 fi
 
-python3 - "${FILE}" "${ROOT}/packaging/release-platforms.json" "${DOWNLOAD_BASE_URL%/}" "${ROOT}/scripts" "${EXISTING}" <<'PY'
+python3 - "${FILE}" "${CATALOG}" "${DOWNLOAD_BASE_URL%/}" "${ROOT}/scripts" "${EXISTING}" <<'PY'
 import datetime
 import json
 import re
 import sys
+from pathlib import Path
 
 sys.path.insert(0, sys.argv[4])
 from update_keys import load_registry, validate_binding
 from updater_signature import require_version
+from release_distribution_contract.platforms import load_platforms, public_updaters
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     manifest = json.load(handle)
-with open(sys.argv[2], encoding="utf-8") as handle:
-    catalog = json.load(handle)
 if set(manifest) - {"withdrawn"} != {"notes", "platforms", "pub_date", "version", "update_keys"}:
     raise SystemExit("error: updater manifest has unsupported top-level fields")
 if "withdrawn" in manifest and manifest["withdrawn"] is not True:
@@ -67,21 +69,12 @@ if "withdrawn" in manifest and manifest["withdrawn"] is not True:
 validate_binding(load_registry(), manifest)
 if not isinstance(manifest["notes"], str) or not manifest["notes"].strip():
     raise SystemExit("error: updater manifest notes are empty")
-rows = catalog.get("platforms")
-if catalog.get("schema_version") != 2 or not isinstance(rows, list) or not rows:
-    raise SystemExit("error: release platform catalog has an unsupported shape")
-all_platforms = {row["updater_key"]: row for row in rows}
-if len(all_platforms) != len(rows):
-    raise SystemExit("error: release platform catalog repeats an updater key")
-expected = {
-    key: row for key, row in all_platforms.items()
-    if row.get("publication") == "public"
-}
+expected = public_updaters(load_platforms(Path(sys.argv[2])))
 if not expected:
     raise SystemExit("error: release platform catalog has no public updater platform")
 if set(manifest["platforms"]) != set(expected):
     raise SystemExit(
-        "error: updater manifest platforms do not equal the public platform catalog"
+        "error: updater manifest platforms do not equal the public updater platform catalog"
     )
 version = manifest["version"]
 for key, row in expected.items():

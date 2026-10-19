@@ -179,7 +179,7 @@ write_manifest() {
     --arg base "${DOWNLOAD_BASE_URL}" \
     --slurpfile catalog "${ROOT}/packaging/release-platforms.json" \
     '{version: $version, update_keys: $update_keys, notes: $notes, pub_date: $pub_date,
-      platforms: (reduce ($catalog[0].platforms[] | select(.publication == "public")) as $platform ({};
+      platforms: (reduce ($catalog[0].platforms[] | select(.publication == "public" and .updater_extension != null)) as $platform ({};
         .[$platform.updater_key] = {
           signature: $signature,
           url: ($base + "/releases/v" + $version + "/painted-wolf-code_v" +
@@ -246,7 +246,7 @@ for version in "${VERSIONS[@]}"; do
     immutable_put "${artifact_key}" "${artifact_file}" application/gzip
     public_equals "${artifact_rel}" "${artifact_file}" \
       "${WORKDIR}/public-artifact-${version}-${platform_artifact}"
-  done < <(jq -r '.platforms[] | select(.publication == "public") | [.updater_key, .updater_extension] | @tsv' \
+  done < <(jq -r '.platforms[] | select(.publication == "public" and .updater_extension != null) | [.updater_key, .updater_extension] | @tsv' \
     "${ROOT}/packaging/release-platforms.json")
   immutable_put "${manifest_key}" "${WORKDIR}/manifest-${version}.json" application/json
   public_equals "${manifest_rel}" "${WORKDIR}/manifest-${version}.json" \
