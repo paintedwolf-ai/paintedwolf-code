@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .installed_evidence import artifacts as validate_artifacts
 from .publication_bundle import download
+from .publication_generations import verify as verify_generations
 from .publication_provenance import select, verify_producer
 from .publication_source import facts
 from .release_admission import document, verify_release
@@ -42,6 +43,7 @@ class SelectedCampaign:
         report = verify_release(**inputs)
         if report["accepted"] is not True:
             raise ValueError("publication requires the complete freshly admitted final campaign")
+        verify_generations(self.root, inputs["repositories"])
         return inputs, report
 
 

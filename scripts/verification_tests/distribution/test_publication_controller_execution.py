@@ -12,6 +12,9 @@ from verification_tests.distribution import test_linux_release_admission_executi
 
 class PublicationControllerTests(unittest.TestCase):
     def fixture(self, directory):
+        crypto = patch("linux_release.publication_controller.verify_generations")
+        crypto.start()
+        self.addCleanup(crypto.stop)
         root, _, _ = fixtures.LinuxReleaseAdmissionTests().fixture(directory)
         (root / "final-artifacts.json").write_bytes((root / "artifacts.json").read_bytes())
         provenance = {"repository_id": 42, "run_id": 123, "run_attempt": 2,
@@ -65,3 +68,12 @@ class PublicationControllerTests(unittest.TestCase):
                     retain(None, "owner/repo", 42, 123, Path(directory), "a" * 40,
                            Path(directory) / "out", catalog={}, signing_generation=1, key_fingerprint="A" * 40)
                 download.assert_not_called()
+
+    def test_format_signature_refusal_cannot_be_replaced_with_accepted_campaign(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, selected = self.fixture(directory)
+            with patch("linux_release.publication_controller.verify_generations",
+                       side_effect=ValueError("invalid repository signature")) as crypto:
+                with self.assertRaisesRegex(ValueError, "repository signature"):
+                    selected.authorize()
+                crypto.assert_called_once_with(root, json.loads((root / "repositories.json").read_text()))
