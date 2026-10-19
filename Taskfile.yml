@@ -1033,7 +1033,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install Rust from https://rustup.rs
     cmds:
-      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh
+      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh {{.CLI_ARGS}}
 
   bundle:verify:
     desc: 'Audit a built .app/.dmg — arch slices, macOS floor, dylib paths, signing, hardened runtime, staple'
