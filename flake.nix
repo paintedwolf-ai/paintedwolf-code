@@ -17,11 +17,20 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
+      hasNixOSModule = builtins.pathExists ./packaging/nix/nixos.nix;
       packagesFor = system: import nixpkgs {
         inherit system;
         overlays = [ rust-overlay.overlays.default ];
       };
     in {
+      nixosModules = nixpkgs.lib.optionalAttrs hasNixOSModule {
+        default = import ./packaging/nix/nixos.nix {
+          packageFor = system: self.packages.${system}.default;
+        };
+      };
+      checks = eachSystem (system: nixpkgs.lib.optionalAttrs hasNixOSModule {
+        nixos-module = (packagesFor system).callPackage ./packaging/nix/module-check.nix { inherit nixpkgs; };
+      });
       packages = eachSystem (system:
         let
           pkgs = packagesFor system;
