@@ -1,6 +1,7 @@
 """Read the bounded, script-free payload of repository control packages without installing."""
 
 import io
+import hashlib
 from pathlib import PurePosixPath
 import stat
 import resource
@@ -133,6 +134,11 @@ def rpm(package, version, release, expected, config):
     provides = command(["rpm", "-qp", "--qf", "[%{PROVIDENAME}\t%{PROVIDEFLAGS}\t%{PROVIDEVERSION}\n]", str(package)])
     if provides.decode() != f"painted-wolf-code-repo\t8\t{version}-{release}\n":
         raise ValueError("setup RPM contains unexpected provided identities")
+    rpm_files(package, expected, config)
+    payload(cpio(command(["rpm2cpio", str(package)])), expected)
+
+
+def rpm_files(package, expected, config):
     for tag in ["FILECAPS", "FILECONTEXTS"]:
         values = command(["rpm", "-qp", "--qf", "%|" + tag + "?{[%{" + tag + "}\n]}:{}|", str(package)])
         if any(values.decode().splitlines()):
@@ -141,4 +147,9 @@ def rpm(package, version, release, expected, config):
     expected_rows = {f"/{path}\t{stat.S_IFREG | 0o644}\t{17 if path == config else 0}\troot\troot" for path in expected}
     if len(rows) != len(expected_rows) or set(rows) != expected_rows:
         raise ValueError("setup RPM header ownership, modes or configuration flags differ")
-    payload(cpio(command(["rpm2cpio", str(package)])), expected)
+    if command(["rpm", "-qp", "--qf", "%{FILEDIGESTALGO}", str(package)]) != b"8":
+        raise ValueError("setup RPM file headers require SHA-256 digests")
+    rows = command(["rpm", "-qp", "--qf", "[%{FILENAMES}\t%{FILESIZES}\t%{FILEDIGESTS}\n]", str(package)]).decode().splitlines()
+    expected_rows = {f"/{path}\t{len(data)}\t{hashlib.sha256(data).hexdigest()}" for path, data in expected.items()}
+    if len(rows) != len(expected_rows) or set(rows) != expected_rows:
+        raise ValueError("setup RPM file headers differ from selected payload sizes or digests")

@@ -86,7 +86,7 @@ cp -a {tree}/. %{{buildroot}}/
 %config(noreplace) /{config_path}
 /{key_path}
 """)
-            subprocess.run(["rpmbuild", "--define", "_topdir " + str(top), "-bb", str(spec)], check=True)
+            subprocess.run(["rpmbuild", "--define", "_topdir " + str(top), "--define", "_binary_filedigest_algorithm 8", "-bb", str(spec)], check=True)
             artifact = destination / native["file"]
             shutil.copyfile(next((top / "RPMS").rglob("*.rpm")), artifact)
             sign("rpm", artifact, artifact, catalog, private, rehearsal)

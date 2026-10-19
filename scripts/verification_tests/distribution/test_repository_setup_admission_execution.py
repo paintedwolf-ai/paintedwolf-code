@@ -1,15 +1,17 @@
 """Repository setup archive admission rejects executable and unowned surfaces."""
 
 import io
+import hashlib
 from pathlib import Path
 import stat
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.linux_release.repository_setup_admission import snapshot
 from scripts.linux_release.repository_setup_identity import package_identity
-from scripts.linux_release.repository_setup_archives import cpio, payload, tar_members
+from scripts.linux_release.repository_setup_archives import cpio, payload, tar_members, rpm_files
 
 
 def archive(name="etc/config", mode=0o644, kind=tarfile.REGTYPE, uid=0, duplicate=False):
@@ -92,3 +94,20 @@ class SetupArchiveAdmission(unittest.TestCase):
             package_identity("1.2.3", "pacman", "preview", 1)
         with self.assertRaises(ValueError):
             package_identity("1.2.3", "deb", "arbitrary", 1)
+
+    def test_rpm_header_file_digests_and_sizes_must_match_actual_selected_payload(self):
+        expected = {"etc/config": b"x", "etc/key": b"y"}
+        owned = b"/etc/config\t33188\t17\troot\troot\n/etc/key\t33188\t0\troot\troot\n"
+        metadata = "".join(f"/{name}\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\n"
+                           for name, data in expected.items()).encode()
+        responses = [b"", b"", owned, b"8", metadata]
+        with patch("scripts.linux_release.repository_setup_archives.command", side_effect=responses) as query:
+            rpm_files(Path("setup.rpm"), expected, "etc/config")
+            self.assertEqual(query.call_count, 5)
+        for altered in [[b"unexpected capability", *responses[1:]],
+                        [*responses[:3], b"1", metadata],
+                        [*responses[:4], metadata.replace(b"\t1\t", b"\t2\t", 1)],
+                        [*responses[:4], metadata.replace(hashlib.sha256(b"x").hexdigest().encode(), b"0" * 64)]]:
+            with self.subTest(altered=altered), patch(
+                    "scripts.linux_release.repository_setup_archives.command", side_effect=altered), self.assertRaises(ValueError):
+                rpm_files(Path("setup.rpm"), expected, "etc/config")

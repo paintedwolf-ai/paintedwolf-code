@@ -87,7 +87,7 @@ cp -a {tree}/. %{{buildroot}}/
 {config}/etc/yum.repos.d/painted-wolf-code.repo
 /etc/pki/rpm-gpg/painted-wolf-code.asc
 {script}""")
-        subprocess.run(["rpmbuild", "--define", "_topdir " + str(top), "-bb", str(spec)], check=True)
+        subprocess.run(["rpmbuild", "--define", "_topdir " + str(top), "--define", "_binary_filedigest_algorithm 8", "-bb", str(spec)], check=True)
         package = top / artifact.name
         shutil.copyfile(next((top / "RPMS").rglob("*.rpm")), package)
         sign("rpm", package, package, catalog, private, True)
