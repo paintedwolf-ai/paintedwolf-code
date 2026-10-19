@@ -95,7 +95,11 @@ class PublicationControllerTests(unittest.TestCase):
                 "--source-repository", str(source), "--retained-dir", str(root / "retained"),
                 "--publication-files", str(public), "--receipt", str(root / "receipt.json")]
             with patch.dict(sys.modules, {"scripts.linux_release.openpgp": key}), \
-                 patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo", "GITHUB_REPOSITORY_ID": "42"}), \
+                 patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo", "GITHUB_REPOSITORY_ID": "42",
+                    "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
+                    "GITHUB_WORKFLOW_REF": "owner/repo/.github/workflows/release.yml@refs/heads/main",
+                    "GITHUB_SHA": "b" * 40, "GITHUB_WORKFLOW_SHA": "b" * 40,
+                    "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"}), \
                  patch("linux_release.publication_controller.CATALOG", root / "catalog.json"), \
                  patch("linux_release.publication_controller.retain", return_value=selected):
                 self.assertEqual(main(arguments), 0)

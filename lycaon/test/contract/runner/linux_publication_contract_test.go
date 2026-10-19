@@ -44,7 +44,7 @@ func TestLinuxPublicationUsesProtectedAdmissionBeforeWriteCredentials(t *testing
 		switch step.ID {
 		case "linux-policy":
 			policy = index
-			if step.With["ref"] != "refs/heads/main" || step.With["persist-credentials"] != "false" || step.With["path"] != ".linux-publication-controller" {
+			if step.With["ref"] != "${{ github.workflow_sha }}" || step.With["persist-credentials"] != "false" || step.With["path"] != ".linux-publication-controller" {
 				t.Fatal("Linux admission must use protected main policy without persisted Git credentials")
 			}
 		case "linux-admission":

@@ -12,7 +12,7 @@ from .installed_evidence import artifacts as validate_artifacts
 from .publication_bundle import download
 from .publication_caches import verify as verify_caches
 from .publication_generations import verify as verify_generations
-from .publication_provenance import select, verify_producer
+from .publication_provenance import controller_context, select, verify_producer
 from .publication_source import facts
 from .release_admission import document, verify_release
 from .publication_files import verify_files
@@ -76,6 +76,7 @@ def main(argv=None):
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        controller_context(os.environ)
         from scripts.ci_policy.github import api
         from scripts.linux_release.openpgp import selection
         from .publication_generations import CATALOG as signing_catalog

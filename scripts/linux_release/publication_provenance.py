@@ -8,6 +8,25 @@ ARTIFACT = "linux-final-admission-inputs"
 WORKFLOW = ".github/workflows/release.yml"
 
 
+def controller_context(environment) -> dict:
+    """Bind current execution to the immutable protected main workflow revision."""
+    repository = environment.get("GITHUB_REPOSITORY", "")
+    commit = environment.get("GITHUB_SHA", "")
+    if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+            or environment.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+            or environment.get("GITHUB_REF") != "refs/heads/main"
+            or environment.get("GITHUB_WORKFLOW_REF") != f"{repository}/{WORKFLOW}@refs/heads/main"
+            or not re.fullmatch("[0-9a-f]{40}", commit)
+            or environment.get("GITHUB_WORKFLOW_SHA") != commit):
+        raise ValueError("campaign authority requires the protected main release controller")
+    identities = {key: int(environment[name]) for key, name in
+                  [("repository_id", "GITHUB_REPOSITORY_ID"), ("run_id", "GITHUB_RUN_ID"),
+                   ("run_attempt", "GITHUB_RUN_ATTEMPT")]}
+    if any(value < 1 for value in identities.values()):
+        raise ValueError("campaign controller IDs must be positive")
+    return {**identities, "controller_commit": commit}
+
+
 def select(api, repository: str, repository_id: int, run_id: int) -> dict:
     """Read server-owned provenance before downloading or interpreting campaign data."""
     if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)

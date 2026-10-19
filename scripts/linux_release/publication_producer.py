@@ -12,6 +12,7 @@ import stat
 from .publication_bundle import MAX_BYTES, MAX_FILES
 from .publication_controller import SelectedCampaign
 from .publication_source import facts
+from .publication_provenance import controller_context
 from .release_admission import document
 from .support_matrix import CATALOG
 
@@ -99,19 +100,9 @@ def main(argv=None):
     parser.add_argument("--source-commit", required=True)
     args = parser.parse_args(argv)
     try:
-        if (os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
-                or os.environ.get("GITHUB_REF") != "refs/heads/main"
-                or os.environ.get("GITHUB_WORKFLOW_REF") !=
-                f"{os.environ['GITHUB_REPOSITORY']}/.github/workflows/release.yml@refs/heads/main"):
-            raise ValueError("campaign retention requires the protected main release controller")
+        producer = controller_context(os.environ)
         from .openpgp import selection
         from .publication_generations import CATALOG as signing_catalog
-        producer = {"repository_id": int(os.environ["GITHUB_REPOSITORY_ID"]),
-                    "run_id": int(os.environ["GITHUB_RUN_ID"]),
-                    "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-                    "controller_commit": os.environ["GITHUB_SHA"]}
-        if any(producer[key] < 1 for key in ["repository_id", "run_id", "run_attempt"]):
-            raise ValueError("campaign producer IDs must be positive")
         source = facts(args.source_repository, args.source_commit)
         if args.output.resolve().is_relative_to(args.source_repository.resolve()):
             raise ValueError("campaign retention must not write into the immutable source checkout")
