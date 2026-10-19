@@ -18,7 +18,7 @@ from .repository_validation import admit
 from .repository_publication import publish
 from .repository_origin import serve
 from .repository_r2 import publish_r2
-from .r2_objects import rehearsal_environment
+from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object
 from .repository_installation import apt as install_apt, dnf as install_dnf
 from .signing import digest
 
@@ -116,20 +116,37 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
                                      catalog, "0" * 64, True))
             if family in retained:
                 old_receipt, old_destination = retained[family]
-                restored = publish(old_receipt, old_destination, store, "https://repository.example.invalid",
-                                   catalog, record["generation"], True, True)
+                restored = publish(old_receipt, old_destination, store, origin,
+                                   catalog, record["generation"], True, "recover")
                 record = publish(receipt, destination, store, origin, catalog,
                                  restored["generation"], True)
             else:
                 retained[family] = receipt, destination
             active[family] = record["generation"]
             if r2_origin is not None:
+                if family not in remote_active:
+                    authority = f"channels/{family}/preview/" + ("dists/preview/InRelease" if family == "deb" else "mirrorlist")
+                    warm_absence(r2_origin + "/" + storage_prefix + "/" + authority)
+                staged = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin,
+                                    remote_active.get(family), True, phase="stage")
+                if family not in remote_active:
+                    package_row = receipt["packages"][0]
+                    key = storage_prefix + "/generations/" + staged["generation"] + "/" + package_row["file"]
+                    tamper_fixture_object(key, destination / package_row["file"], work / (family + "-tampered"))
+                    try:
+                        publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, None, True)
+                    except subprocess.CalledProcessError:
+                        pass
+                    else:
+                        raise ValueError("R2 admitted a tampered immutable package object")
+                    finally:
+                        delete_fixture_object(key)
                 remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin,
                                     remote_active.get(family), True)
                 if family in remote_active:
                     old_receipt, old_destination = retained[family]
                     restored_remote = publish_r2(old_receipt, old_destination, catalog, storage_prefix,
-                                                 r2_origin, remote["generation"], True, True)
+                                                 r2_origin, remote["generation"], True, "recover")
                     remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin,
                                         restored_remote["generation"], True)
                 remote_active[family] = remote["generation"]
@@ -139,16 +156,71 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
             else:
                 install_dnf(work / "dnf-root", origin + "/channels/rpm/preview/mirrorlist", certificate,
                             catalog, PACKAGE, version)
+            if r2_origin is not None:
+                installer = install_apt if family == "deb" else install_dnf
+                uri = r2_origin + "/" + storage_prefix + ("/channels/deb/preview" if family == "deb" else "/channels/rpm/preview/mirrorlist")
+                installer(work / (family + "-r2-root"), uri, None, catalog, PACKAGE, version)
+            if version == "0.0.2":
+                old_receipt, old_destination = retained[family]
+                withdrawn = publish(old_receipt, old_destination, store, origin, catalog,
+                                    active[family], True, "withdraw")
+                active[family] = withdrawn["generation"]
+                rejected(lambda: publish(receipt, destination, store, origin, catalog, active[family], True))
+                if r2_origin is not None:
+                    withdrawn_remote = publish_r2(old_receipt, old_destination, catalog, storage_prefix,
+                                                  r2_origin, remote_active[family], True, "withdraw")
+                    remote_active[family] = withdrawn_remote["generation"]
+                    installer(work / (family + "-r2-root"), uri, None, catalog, PACKAGE, version)
+                    rejected(lambda: publish_r2(receipt, destination, catalog, storage_prefix,
+                                                r2_origin, remote_active[family], True))
             generations.append({"version": version, "family": family, "objects": len(receipt["objects"])})
+    rotation = ephemeral(work / "rotation-key")
+    trust = json.loads(rotation.read_text())
+    trust["signing_generation"] = trust["generations"][0]["generation"] = 2
+    rotation.write_text(json.dumps(trust))
+    third = work / "0.0.3"
+    third.mkdir()
+    packages = fixtures(third, "0.0.3")
+    for family in ["deb", "rpm"]:
+        source = packages[family]
+        manifest = {"format_version": 1, "source_commit": "f" * 40, "version": "0.0.3", "packages": [{
+            "file": source.name, "sha256": digest(source), "architecture": packages["architecture"], "native_version": "0.0.3-1"}]}
+        destination = work / (family + "-rotated")
+        receipt = assemble(family, manifest, source.parent, destination, "preview", rotation,
+                           rotation.parent / "rehearsal-secret.asc", True, PACKAGE)
+        rejected(lambda: publish(receipt, destination, work / "origin", origin, rotation, active[family], True))
+        record = publish(receipt, destination, work / "origin", origin, rotation, active[family], True, "rotate")
+        installer = install_apt if family == "deb" else install_dnf
+        uri = origin + ("/channels/deb/preview" if family == "deb" else "/channels/rpm/preview/mirrorlist")
+        installer(work / (family + "-rotated-root"), uri, certificate, rotation, PACKAGE, "0.0.3")
+        try:
+            installer(work / (family + "-wrong-key-root"), uri, certificate, catalog, PACKAGE, "0.0.3")
+        except subprocess.CalledProcessError:
+            pass
+        else:
+            raise ValueError("native package manager accepted an unavailable successor signing key")
+        old_receipt, old_destination = retained[family]
+        publish(old_receipt, old_destination, work / "origin", origin, catalog,
+                record["generation"], True, "recover")
+        installed = work / ("apt-root" if family == "deb" else "dnf-root")
+        installer(installed, uri, certificate, catalog, PACKAGE, "0.0.2")
+        if r2_origin is not None:
+            remote = publish_r2(receipt, destination, rotation, storage_prefix, r2_origin,
+                                remote_active[family], True, "rotate")
+            publish_r2(old_receipt, old_destination, catalog, storage_prefix, r2_origin,
+                       remote["generation"], True, "recover")
+        generations.append({"version": "0.0.3", "family": family, "objects": len(receipt["objects"]), "signing_generation": 2})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
-            "published": False, "isolated_r2_published": r2_origin is not None,
+            "architecture": platform.machine(), "published": False, "isolated_r2_published": r2_origin is not None,
             "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": generations,
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes",
                       "old-and-new-retained", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
                       "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",
-                      "explicit-fixture-TLS-trust"]}
+                      "explicit-fixture-TLS-trust", "explicit-signing-key-rotation",
+                      "installed-wrong-successor-key-refused", "withdrawn-generation-reoffer-refused",
+                      "withdrawal-and-recovery-preserve-installed-payload"]}
 
 
 def main():
@@ -165,10 +237,17 @@ def main():
         with tempfile.TemporaryDirectory(prefix="paintedwolf-native-repository-rehearsal-") as directory:
             with serve(Path(directory)) as (origin, certificate):
                 result = rehearse(Path(directory), origin, certificate, r2_origin)
-        subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p",
-                        "test_native_repository_publication_execution.py"],
-                       cwd=Path(__file__).resolve().parents[2], check=True)
+        for pattern in ["test_native_repository_publication_execution.py", "test_repository_operations_execution.py"]:
+            subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", pattern],
+                           cwd=Path(__file__).resolve().parents[2], check=True)
         result["cases"].append("r2-publication-contracts")
+        if args.r2:
+            result["cases"] += ["r2-negative-cache-recovery", "r2-staged-publication-resume",
+                                "r2-tampered-object-refused", "r2-missing-object-restored", "r2-package-manager-installation"]
+        root = Path(__file__).resolve().parents[2]
+        result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        result["verification_source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
+        result["verification_source_dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(result, indent=2) + "\n")
         print(f"Native repository rehearsal passed: {args.receipt}")

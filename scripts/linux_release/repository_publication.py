@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,7 +14,7 @@ from urllib.parse import urlsplit
 from .repository_objects import encoded, immutable, replace
 from .repository_validation import admit
 from .openpgp import selection
-from scripts.release_semver import compare, parse
+from .repository_operations import OPERATIONS, transition, retained, mark_withdrawal, archive_trust
 
 
 def configuration(receipt: dict, url: str, fingerprint: str) -> str:
@@ -28,14 +27,13 @@ def configuration(receipt: dict, url: str, fingerprint: str) -> str:
 
 
 def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog: Path,
-            expected: str | None, rehearsal=False, recover=False) -> dict:
+            expected: str | None, rehearsal=False, operation="publish") -> dict:
     """One lock owns immutable upload, compare-and-select, and recovery on a local origin."""
     url = urlsplit(base_url)
     if url.scheme != "https" or not url.netloc or url.query or url.fragment or url.username:
         raise ValueError("repository origin requires an HTTPS URL without credentials or query")
     admit(receipt, directory, catalog, rehearsal)
     key, public = selection(catalog, rehearsal)
-    identity = hashlib.sha256(encoded(receipt)).hexdigest()
     family, channel = receipt["family"], receipt["channel"]
     store.mkdir(parents=True, exist_ok=True)
     if store.is_symlink():
@@ -44,22 +42,16 @@ def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog:
         fcntl.flock(lock, fcntl.LOCK_EX)
         pointer = store / "channels" / family / channel / "current.json"
         current = json.loads(pointer.read_text()) if pointer.exists() else None
-        if current and current.get("rehearsal") is not rehearsal:
-            raise ValueError("repository channel trust mode cannot be changed")
-        if (current or {}).get("generation") != expected:
-            if not (current and current.get("generation") == identity and current.get("previous") == expected):
-                raise ValueError("active repository changed since the reviewed publication plan")
-        if current and not recover and compare(parse(receipt["version"]), parse(current["version"])) < 0:
-            raise ValueError("repository rollback requires explicit retained-generation recovery")
+        record = transition(receipt, current, expected, operation)
+        retained(store, receipt, operation)
+        identity = record["generation"]
         generation = store / "generations" / identity
-        retained = generation / "generation.json"
-        if recover and not retained.is_file():
-            raise ValueError("recovery requires a retained, previously published generation")
+        manifest = generation / "generation.json"
         # Nothing references the generation until all bytes have been copied and re-admitted.
         for row in receipt["objects"]:
             immutable(generation / row["path"], (directory / row["path"]).read_bytes())
-        immutable(retained, encoded(receipt))
-        immutable(generation / "package-key.asc", public.read_bytes())
+        immutable(manifest, encoded(receipt))
+        archive_trust(generation, key, public, rehearsal)
         # Re-admission excludes the separately distributed key from the format inventory.
         with tempfile.TemporaryDirectory(prefix="paintedwolf-publication-readback-") as temporary:
             readback = Path(temporary)
@@ -70,12 +62,8 @@ def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog:
             admit(receipt, readback, catalog, rehearsal)
         config = configuration(receipt, base_url.rstrip("/") + f"/channels/{family}/{channel}", key["fingerprint"])
         immutable(generation / "client.conf", config.encode())
-        record = {"format_version": 1, "generation": identity, "previous": expected,
-                  "family": family, "channel": channel, "version": receipt["version"],
-                  "source_commit": receipt["source_commit"], "key_fingerprint": key["fingerprint"],
-                  "inventory_sha256": receipt["inventory_sha256"], "packages": receipt["packages"],
-                  "rehearsal": rehearsal, "recovery": recover,
-                  "configuration": f"generations/{identity}/client.conf"}
+        record = {**record, "configuration": f"generations/{identity}/client.conf"}
+        mark_withdrawal(store, record)
         # The package manager consumes one final authority object. All objects reached by
         # an older authority remain available after promotion or recovery.
         if family == "deb":
@@ -110,12 +98,12 @@ def main():
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--expected-generation")
     parser.add_argument("--rehearsal", action="store_true")
-    parser.add_argument("--recover", action="store_true")
+    parser.add_argument("--operation", choices=sorted(OPERATIONS), default="publish")
     args = parser.parse_args()
     try:
         receipt = json.loads((args.directory / "generation.json").read_text())
         print(json.dumps(publish(receipt, args.directory, args.store, args.base_url, args.catalog,
-                                 args.expected_generation, args.rehearsal, args.recover), indent=2))
+                                 args.expected_generation, args.rehearsal, args.operation), indent=2))
     except (OSError, ValueError, KeyError) as exc:
         parser.exit(1, f"Native repository publication failed: {exc}\n")
 
