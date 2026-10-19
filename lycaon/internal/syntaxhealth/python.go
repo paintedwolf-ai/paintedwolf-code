@@ -81,12 +81,13 @@ func pythonStringLineFaults(node *gotreesitter.Node, language *gotreesitter.Lang
 
 func pythonUnescapedLineBreak(text string) bool {
 	for i := 0; i < len(text); i++ {
-		if text[i] == '\\' {
+		switch text[i] {
+		case '\\':
 			i++
 			if i+1 < len(text) && text[i] == '\r' && text[i+1] == '\n' {
 				i++
 			}
-		} else if text[i] == '\n' || text[i] == '\r' {
+		case '\n', '\r':
 			return true
 		}
 	}
