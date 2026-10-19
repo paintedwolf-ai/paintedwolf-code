@@ -998,6 +998,8 @@ host_facts:
    type: string
  - name: paintedwolf.page_key
    type: string
+ - name: paintedwolf.mutation_new_path
+   type: bool
  - name: paintedwolf.parse_reason
    type: string
  - name: paintedwolf.parse_language

@@ -1548,7 +1548,7 @@
       "summary": "The link at {{ paintedwolf.path }} does not resolve within the allowed move scope."
     },
     "MUTATION_BROKE_PARSE": {
-      "branch_instruction": "Branch on Code; re-read the seam and apply one atomic repair",
+      "branch_instruction": "Correct the candidate and retry one atomic mutation",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "{{ tool }} on {{ paintedwolf.path }} was not applied because the parser reports a syntax error in the proposed file ({{ paintedwolf.parse_error }})."
