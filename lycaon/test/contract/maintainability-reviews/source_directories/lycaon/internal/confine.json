@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "module",
+  "workstream": "linux-confinement-authority",
+  "disposition": "retain",
+  "reason": "The 58 production files expose one cross-platform confinement request, capability floor, launch report, and action-broker contract. Platform enforcement already has a private linuxsandbox owner; further movement solely for file count would fragment the shared authority contract or add forwarding APIs. This change adds no production member to this directory.",
+  "reviewed_commit": "104aa2452dbd72d6b2d1e4a696d256152b0ec2cb",
+  "ceiling": 58,
+  "boundaries": {
+    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
+    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad"
+  },
+  "reviewed_shape": "2b55b4064a4c20221de0ffcedc085398db0cab999b918d9cda67e859446ce679"
+}

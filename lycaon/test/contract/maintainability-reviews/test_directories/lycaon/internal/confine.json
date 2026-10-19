@@ -2,15 +2,17 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "verification-contracts",
+  "workstream": "linux-confinement-authority",
   "disposition": "retain",
-  "reason": "Confinement tests cover platform implementations and common capability contracts in the same package. Directory breadth reflects the security matrix; moving tests for a count target would require broader production visibility or obscure platform parity.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 51,
+  "reason": "The 65 immediate test files qualify the shared authority boundary across platforms and actual Linux toolchain workflows. Added fixtures separate Nix preparation, environment behavior, daemon delegation, egress, protocol, and lifecycle without exporting production internals. Full native regression exercised the existing contracts; the corrected TLS control was verified independently. Retain this exact membership and reconsider further growth.",
+  "reviewed_commit": "104aa2452dbd72d6b2d1e4a696d256152b0ec2cb",
+  "ceiling": 65,
   "boundaries": {
-    "lycaon/internal/confine/host_capability_test.go": "9f759c501a7688005b4069ee5430825d0744ba471ca80eee99121a33bc02bec0",
+    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
     "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
-    "lycaon/internal/confine/execution_capability_test.go": "7899c0f689c3e6c4433d91e6cc701fc6692789d734a8b80051159771588e802f"
+    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
+    "lycaon/internal/confine/nix_workflows_linux_test.go": "c972df3d9ec354df64369e820898de0da49151ec19ce84601f622d3b72d0e693",
+    "lycaon/internal/confine/nix_daemon_grant_linux_test.go": "7b8ce4ca97bb8a69e75af0e8064f5b59738b3780d0671b286dc7c9c73da252e8"
   },
-  "reviewed_shape": "2da67d87e901c61c2e55707bbeff29af1bac1218ffca918d6a32b92188ab5041"
+  "reviewed_shape": "47417a153626d8b56e52086afd8bea4d755ca39c67a91dfd58c8664c9e63da0c"
 }
