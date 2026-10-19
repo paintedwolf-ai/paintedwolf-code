@@ -2,7 +2,7 @@
 No folder is attached. File and shell tools stay off until the user attaches one (Folders button); chat and web research still work.
 {% elif root_count == 1 %}
 Workspace: {{ project_dir }}
-Use workspace-relative file paths, such as `.` or `src/main.py`, within this folder.
+Use workspace-relative paths in this folder (`src/main.py` for files, `.` for root).
 {% else %}
 This project spans {{ root_count }} folders:
 {% for r in workspace_roots %}
