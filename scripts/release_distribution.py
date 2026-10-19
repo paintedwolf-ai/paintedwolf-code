@@ -17,6 +17,7 @@ import urllib.request
 import urllib.parse
 
 from release_semver import compare, parse
+from release_distribution_contract.platforms import package_urls
 
 # Cloudflare refuses Python's default urllib agent on the public release domains.
 PUBLIC_READ_HEADERS = {"Cache-Control": "no-cache, no-store", "User-Agent": "painted-wolf-release/1"}
@@ -208,13 +209,12 @@ class WebsiteDownloads(HTMLParser):
             self.channels[channel].append(attrs.get("href"))
 
 
-def validate_website_downloads(html: str, expected: dict) -> None:
+def validate_website_downloads(html: str, expected: dict, *, catalog: Path | None = None) -> None:
     parser = WebsiteDownloads()
     parser.feed(html)
     version = expected["version"]
-    urls = [] if version is None else [
-        f"https://downloads.paintedwolf.dev/releases/v{version}/painted-wolf-code_v{version}_darwin-aarch64.dmg"]
-    if parser.channels[expected["channel"]] != urls:
+    urls = [] if version is None else package_urls(version, catalog or ROOT / "packaging/release-platforms.json")
+    if sorted(parser.channels[expected["channel"]], key=lambda value: value or "") != urls:
         raise ValueError("website download links do not match its publication confirmation")
 
 
@@ -235,7 +235,7 @@ def publication_channels(channel: str, version: str, generation: int) -> list[st
     return channels
 
 
-def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_newer: bool = False) -> None:
+def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_newer: bool = False, catalog: Path | None = None) -> None:
     if not base.startswith("https://") or expected["channel"] not in ("stable", "preview"):
         raise ValueError("website verification requires HTTPS and a release channel")
     deadline = time.monotonic() + seconds
@@ -264,7 +264,7 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                 raw = response.read(2 * 1024 * 1024 + 1)
                 if len(raw) > 2 * 1024 * 1024:
                     raise ValueError("website download page exceeds its bound")
-                validate_website_downloads(raw.decode(), accepted)
+                validate_website_downloads(raw.decode(), accepted, catalog=catalog)
             return
         except (OSError, ValueError) as error:
             last_error = str(error)
@@ -301,6 +301,7 @@ def main() -> None:
     website.add_argument("--withdrawn-version")
     website.add_argument("--verify-promotion", action="store_true")
     website.add_argument("--generation", type=int, default=1)
+    website.add_argument("--catalog", type=Path, default=ROOT / "packaging/release-platforms.json")
     args = parser.parse_args()
     if args.command == "storage-read":
         value = read_storage_bytes(args.key)
@@ -324,7 +325,7 @@ def main() -> None:
         for channel in channels:
             wait_for_website(args.base_url, {"channel": channel, "version": args.version,
                              "manifest_sha256": args.manifest_sha256, "withdrawn_version": args.withdrawn_version},
-                             allow_newer=args.verify_promotion and args.channel == "stable" and channel == "preview")
+                             allow_newer=args.verify_promotion and args.channel == "stable" and channel == "preview", catalog=args.catalog)
 
 
 if __name__ == "__main__":

@@ -941,6 +941,8 @@ Nix constructs and verifies the standard signed file cache. Admission requires t
 
 `./task release:live-test -- --local-nix-cache` uses disposable keys and private local stores to rehearse complete closure copying, cold-store import, wrong trust, altered NARs/metadata, missing dependencies, overlapping key rotation, and production refusal of rehearsal identity. It makes no R2 calls and changes no daemon trust. Standard cache layout and signing remain owned by [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html). Real HTTPS/R2 negative caching, interrupted uploads, both architecture installed substitution, source builds, and application qualification remain required before production cache publication.
 
+The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.
