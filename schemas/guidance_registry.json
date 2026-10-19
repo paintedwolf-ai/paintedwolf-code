@@ -2801,7 +2801,7 @@
       "branch_instruction": "Return partial through complete_leg and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "A claim about how a running UI or app behaves has no surface_snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+      "summary": "A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "SURFACE_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code SURFACE_NOTE_ARTIFACT_UNKNOWN; copy a producer artifact_id from this turn or capture one before presenting",
