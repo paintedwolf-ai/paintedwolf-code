@@ -5,13 +5,9 @@
   "workstream": "candidate-syntax-recovery",
   "disposition": "retain",
   "reason": "Retain the cohesive typed occurrence declaration table at 407 measured lines. The mutation observation joins existing parser facts without adding runtime state, authority, or evaluation logic. Splitting one declaration into a forwarding catalog would obscure the shared type contract. Producer tests cover new and existing paths; the production OAR recovery matrix covers present, false, and missing observations across mutation tools.",
-  "reviewed_commit": "ddf7eab0051a5264bacf791ffc1fe671edb82a70",
+  "reviewed_commit": "4776c06e8b8e397d45ddf6c42e03e02f18b4e539",
   "ceiling": 407,
   "boundaries": {
-    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
-    "lycaon/internal/toolfeedback/recovery_tools_test.go": "d1316e9e6510a090d3ff910cbabf6250dacb6a42c9b1ec27bfc166c7c7ed5e78",
-    "lycaon/internal/tools/native/recall_test.go": "9b99ac0675f258a3476d92cd3329846a513c9623b667707af17e8976be435459",
-    "lycaon/internal/toolfeedback/block_plane_reject_data_test.go": "3bbb56ccd41f25f325735ffae081c809c48fb87d935bb5f6837459b3bddc886c",
     "lycaon/internal/tools/native/edit_health_test.go": "a126e54f33c34e25aaa80fc0869c5455d821549294c85b74c55b425baa961ad2",
     "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138"
   }
