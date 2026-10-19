@@ -1080,3 +1080,12 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+Native pacman candidate packaging uses the shared sealed payload and matching native
+CPU. `packaging/linux/arch/substrates.json` pins the official Arch image and the
+Arch Linux ARM root filesystem. The ARM archive is authenticated by the pinned
+[Arch Linux ARM build key](https://archlinuxarm.org/about/package-signing) before
+container import; its SHA-256 is fixed independently of the mutable download URL.
+An upstream rootfs replacement fails until the reviewed pin is updated. A container
+package build establishes package construction only; installed Arch/Artix desktop
+and service qualification remains separate.
