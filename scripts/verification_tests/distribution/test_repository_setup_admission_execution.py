@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from scripts.linux_release.repository_setup_admission import snapshot
+from scripts.linux_release.repository_setup_identity import package_identity
 from scripts.linux_release.repository_setup_archives import cpio, payload, tar_members
 
 
@@ -71,3 +72,23 @@ class SetupArchiveAdmission(unittest.TestCase):
             (root / "link").symlink_to(source)
             with self.assertRaises(OSError):
                 snapshot(root / "link", root / "linked", 1)
+
+    def test_setup_identity_binds_channel_and_generation_without_changing_app_version(self):
+        deb = package_identity("1.2.3", "deb", "preview", 2)
+        rpm = package_identity("1.2.3", "rpm", "preview", 2)
+        self.assertEqual(deb["version"], "1.2.3+repo.2.preview")
+        self.assertEqual(deb["file"], "painted-wolf-code-repo_1.2.3+repo.2.preview_all.deb")
+        self.assertIsNone(deb["release"])
+        self.assertEqual((rpm["version"], rpm["release"], rpm["architecture"]), ("1.2.3", "2.preview", "noarch"))
+        self.assertEqual(rpm["file"], "painted-wolf-code-repo-1.2.3-2.preview.noarch.rpm")
+        for family in ["deb", "rpm"]:
+            first = package_identity("1.2.3", family, "preview", 1)
+            self.assertNotEqual(first["file"], package_identity("1.2.3", family, "preview", 2)["file"])
+            self.assertNotEqual(first["file"], package_identity("1.2.3", family, "stable", 1)["file"])
+        for generation in [True, 0, -1, 1.0, "1"]:
+            with self.subTest(generation=generation), self.assertRaises(ValueError):
+                package_identity("1.2.3", "deb", "preview", generation)
+        with self.assertRaises(ValueError):
+            package_identity("1.2.3", "pacman", "preview", 1)
+        with self.assertRaises(ValueError):
+            package_identity("1.2.3", "deb", "arbitrary", 1)

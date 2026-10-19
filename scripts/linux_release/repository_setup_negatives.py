@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 from .repository_setup_admission import admit_setup
+from .repository_setup_identity import package_identity
 from .repository_setup_archives import command, cpio
 from .signing import digest, sign
 
@@ -64,14 +65,15 @@ def rehearse(work, artifact, catalog, private, authority):
                 directory.chmod(0o755)
         for name in ["BUILD", "RPMS", "SOURCES", "SPECS", "SRPMS", "BUILDROOT"]:
             (top / name).mkdir(parents=True, exist_ok=True)
-        version = artifact.name.removeprefix("painted-wolf-code-repo-").removesuffix("-1.noarch.rpm")
+        native = package_identity(authority["version"], "rpm", authority["channel"], authority["signing_generation"])
+        version = native["version"]
         relation = "Obsoletes: unrelated-application\n" if kind == "relationship" else ""
         script = "\n%post\nexit 0\n" if kind == "script" else ""
         config = "%config(noreplace) " if kind != "flags" else ""
         spec = top / "SPECS/setup.spec"
         spec.write_text(f"""Name: painted-wolf-code-repo
 Version: {version}
-Release: 1
+Release: {native["release"]}
 Summary: Isolated hostile setup fixture
 License: Apache-2.0
 BuildArch: noarch

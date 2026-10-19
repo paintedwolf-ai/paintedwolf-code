@@ -1055,14 +1055,19 @@ signed `SHA256SUMS`, public key and generation-bound `setup.json`; no private ke
 copied. Verify the published full key fingerprint through the separately trusted
 release channel, verify `SHA256SUMS.asc` with that key and check `sha256sum -c SHA256SUMS`
 before installation. The explicit one-step setup is `sudo apt install ./painted-wolf-code-repo_<native-version>_all.deb`
-or `sudo dnf install ./painted-wolf-code-repo-<native-version>-1.noarch.rpm`.
+or `sudo dnf install ./painted-wolf-code-repo-<native-version>-<generation>.<channel>.noarch.rpm`.
 
 Setup installs only the selected channel configuration and public key. It does not
 install or restart the application, refresh repositories, import global RPM trust,
 or run scripts. Dnf prompts for the configured key when its repository is first used;
 verify that fingerprint explicitly. The configuration is a package-managed conffile:
 review package-manager prompts or `.rpmnew` files when changing channels or keys.
-Only one setup package/channel is selected at a time; feed preferences do not change it.
+The setup native identity includes its selected signing generation and channel, so a
+same-application-version trust upgrade replaces the previous key through ordinary
+package upgrades. Only one setup package/channel is selected at a time; feed
+preferences do not change it. Switching to a lower setup version/channel requires an
+explicit reviewed downgrade (`apt install --allow-downgrades ./<setup.deb>` or
+`dnf downgrade ./<setup.rpm>`).
 Use `sudo apt purge painted-wolf-code-repo` or `sudo dnf remove painted-wolf-code-repo`
 to remove unmodified setup files. Locally modified configuration may remain for review;
 removing setup leaves the installed application and mutable user data intact. The

@@ -9,15 +9,13 @@ import subprocess
 import tempfile
 from urllib.parse import urlsplit
 
-from scripts.release_semver import linux_package_version, parse
 from .openpgp import selection
 from .repository_objects import encoded, immutable
 from .repository_operations import identity
+from .repository_setup_identity import PACKAGE, package_identity
 from .repository_publication import configuration
 from .repository_validation import admit
 from .signing import digest, sign, verify
-
-PACKAGE = "painted-wolf-code-repo"
 
 
 def build(manifest, directory, catalog, destination, base_url, private=None, rehearsal=False):
@@ -29,7 +27,8 @@ def build(manifest, directory, catalog, destination, base_url, private=None, reh
         raise ValueError("repository setup requires an explicit HTTPS origin")
     admit(manifest, directory, catalog, rehearsal)
     selected, public = selection(catalog, rehearsal)
-    version = linux_package_version(parse(manifest["version"]))
+    native = package_identity(manifest["version"], manifest["family"], manifest["channel"], selected["generation"])
+    version = native["version"]
     if destination.resolve().is_relative_to(directory.resolve()):
         raise ValueError("setup output cannot modify its immutable repository generation")
     if destination.exists() or destination.is_symlink():
@@ -63,7 +62,7 @@ def build(manifest, directory, catalog, destination, base_url, private=None, reh
             (control / "conffiles").write_text("/" + config_path + "\n")
             for metadata in control.iterdir():
                 metadata.chmod(0o644)
-            artifact = destination / f"{PACKAGE}_{version}_all.deb"
+            artifact = destination / native["file"]
             subprocess.run(["dpkg-deb", "--build", "--root-owner-group", str(tree), str(artifact)], check=True)
         else:
             top = work / "rpmbuild"
@@ -73,7 +72,7 @@ def build(manifest, directory, catalog, destination, base_url, private=None, reh
             # A validated semantic version and private temporary paths are the only substitutions.
             spec.write_text(f"""Name: {PACKAGE}
 Version: {version}
-Release: 1
+Release: {native["release"]}
 Summary: Explicit Painted Wolf Code repository setup
 License: Apache-2.0
 BuildArch: noarch
@@ -88,7 +87,7 @@ cp -a {tree}/. %{{buildroot}}/
 /{key_path}
 """)
             subprocess.run(["rpmbuild", "--define", "_topdir " + str(top), "-bb", str(spec)], check=True)
-            artifact = destination / f"{PACKAGE}-{version}-1.noarch.rpm"
+            artifact = destination / native["file"]
             shutil.copyfile(next((top / "RPMS").rglob("*.rpm")), artifact)
             sign("rpm", artifact, artifact, catalog, private, rehearsal)
             verify("rpm", artifact, None, catalog, rehearsal)

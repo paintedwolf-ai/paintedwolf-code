@@ -4,7 +4,8 @@ from pathlib import Path
 import subprocess
 
 from .repository_installation import restore_owner
-from .repository_setup import build, PACKAGE
+from .repository_setup import build
+from .repository_setup_identity import PACKAGE
 from .repository_setup_admission import admit_setup
 from .repository_setup_negatives import rehearse as hostile_setup
 from .signing import digest, verify

@@ -16,6 +16,7 @@ from .native_repositories import assemble
 from .candidate_repositories import retain as retain_candidates, rehearse as rehearse_candidates
 from .openpgp import ephemeral
 from .repository_setup_rehearsal import rehearse as rehearse_setup
+from .repository_setup_upgrade import rehearse as rehearse_setup_upgrade
 from .repository_validation import admit
 from .repository_publication import publish
 from .repository_origin import serve
@@ -194,9 +195,12 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
         source = packages[family]
         manifest = {"format_version": 1, "source_commit": "f" * 40, "version": "0.0.3", "packages": [{
             "file": source.name, "sha256": digest(source), "architecture": packages["architecture"], "native_version": "0.0.3-1"}]}
+        setup_previous = work / (family + "-setup-before-rotation")
+        setup_manifest = assemble(family, manifest, source.parent, setup_previous, "preview", catalog, private, True, PACKAGE)
         destination = work / (family + "-rotated")
         receipt = assemble(family, manifest, source.parent, destination, "preview", rotation,
                            rotation.parent / "rehearsal-secret.asc", True, PACKAGE)
+        rehearse_setup_upgrade(work, (setup_manifest, setup_previous), (receipt, destination), catalog, rotation, origin)
         rejected(lambda: publish(receipt, destination, work / "origin", origin, rotation, active[family], True))
         record = publish(receipt, destination, work / "origin", origin, rotation, active[family], True, "rotate")
         installer = install_apt if family == "deb" else install_dnf
@@ -226,7 +230,7 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes", "apt-by-hash-without-mutable-fallback",
                       "old-and-new-retained", "actual-candidate-retention", "post-signing-rpm-identity-retained",
                       "public-only-candidate-trust", "opt-in-setup-package-install-and-remove",
-                      "setup-removal-preserves-user-data", "independent-setup-admission", "signed-hostile-setup-refused", "wrong-key", "production-refuses-fixture", "changed-package",
+                      "setup-removal-preserves-user-data", "independent-setup-admission", "signed-hostile-setup-refused", "same-version-setup-trust-upgrade", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
                       "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",

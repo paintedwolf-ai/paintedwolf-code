@@ -8,10 +8,9 @@ import stat
 import tempfile
 from urllib.parse import urlsplit
 
-from scripts.release_semver import linux_package_version, parse
 from .openpgp import selection
 from .repository_publication import configuration
-from .repository_setup import PACKAGE
+from .repository_setup_identity import package_identity
 from .repository_setup_archives import deb, rpm
 from .signing import digest, verify
 
@@ -48,9 +47,8 @@ def admit_setup(package: Path, checksums: Path, signature: Path, catalog: Path, 
     if (type(signing_generation) is not int or selected["generation"] != signing_generation
             or selected["fingerprint"] != key_fingerprint):
         raise ValueError("setup signer differs from independently selected trust")
-    native_version = linux_package_version(parse(version))
-    filename = (f"{PACKAGE}_{native_version}_all.deb" if family == "deb"
-                else f"{PACKAGE}-{native_version}-1.noarch.rpm")
+    native = package_identity(version, family, channel, signing_generation)
+    filename = native["file"]
     if package.name != filename:
         raise ValueError("setup filename differs from its selected native identity")
     config = ("etc/apt/sources.list.d/painted-wolf-code.sources" if family == "deb"
@@ -83,9 +81,9 @@ def admit_setup(package: Path, checksums: Path, signature: Path, catalog: Path, 
         verify("detached", work / "SHA256SUMS", work / "SHA256SUMS.asc", retained_catalog, rehearsal)
         if family == "rpm":
             verify("rpm", retained, None, retained_catalog, rehearsal)
-            rpm(retained, native_version, expected, config)
+            rpm(retained, native["version"], native["release"], expected, config)
         else:
-            deb(retained, native_version, expected, config)
+            deb(retained, native["version"], expected, config)
         size = retained.stat().st_size
     return {"format_version": 1, "family": family, "source_commit": source_commit, "version": version,
             "channel": channel, "repository_generation": repository_generation,

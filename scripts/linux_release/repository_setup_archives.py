@@ -111,9 +111,9 @@ def cpio(data):
         records[path] = body
 
 
-def rpm(package, version, expected, config):
+def rpm(package, version, release, expected, config):
     identity = command(["rpm", "-qp", "--qf", "%{NAME}\n%{VERSION}-%{RELEASE}\n%{ARCH}\n%{EPOCHNUM}\n", str(package)])
-    if identity.decode() != f"painted-wolf-code-repo\n{version}-1\nnoarch\n0\n":
+    if identity.decode() != f"painted-wolf-code-repo\n{version}-{release}\nnoarch\n0\n":
         raise ValueError("setup RPM identity differs from the selected version")
     tags = ["PREIN", "POSTIN", "PREUN", "POSTUN", "PRETRANS", "POSTTRANS", "VERIFYSCRIPT",
             "TRIGGERSCRIPTS", "FILETRIGGERSCRIPTS", "TRANSFILETRIGGERSCRIPTS",
@@ -131,7 +131,7 @@ def rpm(package, version, expected, config):
     if len(requirements) != len(set(requirements)) or set(requirements) != allowed:
         raise ValueError("setup RPM contains an unexpected dependency relationship")
     provides = command(["rpm", "-qp", "--qf", "[%{PROVIDENAME}\t%{PROVIDEFLAGS}\t%{PROVIDEVERSION}\n]", str(package)])
-    if provides.decode() != f"painted-wolf-code-repo\t8\t{version}-1\n":
+    if provides.decode() != f"painted-wolf-code-repo\t8\t{version}-{release}\n":
         raise ValueError("setup RPM contains unexpected provided identities")
     for tag in ["FILECAPS", "FILECONTEXTS"]:
         values = command(["rpm", "-qp", "--qf", "%|" + tag + "?{[%{" + tag + "}\n]}:{}|", str(package)])
