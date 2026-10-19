@@ -66,12 +66,15 @@ class RecipePublisher:
 
     def __init__(self, root: Path, origin: str, authorize, environment=None):
         self.root, self.origin, self.authorize = root, origin, authorize
-        self.environment = environment
+        selected_environment = os.environ if environment is None else environment
+        self.environment = {key: value for key, value in selected_environment.items()
+                            if not key.startswith("GIT_") or key == "GIT_SSH_COMMAND"}
+        self.environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GIT_TERMINAL_PROMPT="0")
         self.sequence = 0
 
-    def git(self, *arguments, capture=False):
+    def git(self, *arguments, capture=False, binary=False):
         return subprocess.run(["git", *map(str, arguments)], env=self.environment, check=True,
-                              capture_output=capture, text=capture)
+                              capture_output=capture, text=capture and not binary)
 
     def head(self):
         raw = self.git("ls-remote", self.origin, "refs/heads/master", capture=True).stdout.strip()
@@ -127,6 +130,10 @@ class RecipePublisher:
                  "-c", "user.email=release@paintedwolf.ai", "commit", "--allow-empty", "-m",
                  encoded({**selected, "previous": expected}).decode().strip())
         delivered = self.git("-C", checkout, "rev-parse", "HEAD", capture=True).stdout.strip()
+        for row in objects:
+            raw = self.git("-C", checkout, "show", "HEAD:" + row["path"], capture=True, binary=True).stdout
+            if len(raw) != row["size"] or hashlib.sha256(raw).hexdigest() != row["sha256"]:
+                raise ValueError("AUR committed recipe differs before publication")
         self.git("-C", checkout, "push", "origin", "HEAD:refs/heads/master")
         readback = self.root / ("readback-" + str(self.sequence))
         self.git("clone", "--no-hardlinks", self.origin, readback)
