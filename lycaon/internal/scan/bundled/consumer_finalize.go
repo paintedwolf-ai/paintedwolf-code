@@ -78,7 +78,8 @@ func FinalizeConsumerArtifact(ctx context.Context, producer *Manifest, root stri
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := verifyConsumerQualification(report, &identity); err != nil {
+	qualification, err := projectConsumerQualification(report, &identity)
+	if err != nil {
 		return nil, err
 	}
 	if err := producer.verifyReleaseSelection(ctx); err != nil {
@@ -88,7 +89,7 @@ func FinalizeConsumerArtifact(ctx context.Context, producer *Manifest, root stri
 		return nil, err
 	}
 	record := consumerRecord{SchemaVersion: 1, Producer: producer.identity, Recipe: recipe, Platform: platform,
-		Executable: consumerExecutable{GOOS: identity.GOOS, GOARCH: identity.GOARCH, SHA256: part.SHA256, Bytes: part.Bytes}, Qualification: report}
+		Executable: consumerExecutable{GOOS: identity.GOOS, GOARCH: identity.GOARCH, SHA256: part.SHA256, Bytes: part.Bytes}, Qualification: qualification}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return nil, err

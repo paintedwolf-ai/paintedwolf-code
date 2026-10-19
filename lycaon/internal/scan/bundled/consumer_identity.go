@@ -164,5 +164,6 @@ func verifyConsumerRecord(m *Manifest, directory string) error {
 	if !reflect.DeepEqual(platform, record.Platform) {
 		return fmt.Errorf("consumer platform observation differs from final executable")
 	}
-	return verifyConsumerQualification(record.Qualification, identity)
+	_, err = projectConsumerQualification(record.Qualification, identity)
+	return err
 }

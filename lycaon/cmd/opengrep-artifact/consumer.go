@@ -44,11 +44,15 @@ func finalizeConsumer(ctx context.Context, producer *bundled.Manifest, opts opti
 		}
 	}
 	selected, err := bundled.FinalizeConsumerArtifact(ctx, producer, opts.root, recipe, func(ctx context.Context, manifest *bundled.Manifest) (json.RawMessage, error) {
-		report, err := installed.VerifyArtifact(ctx, opts.root, manifest)
-		if err != nil {
-			return nil, err
+		report, qualificationErr := installed.VerifyArtifact(ctx, opts.root, manifest)
+		raw, err := json.Marshal(report)
+		if err == nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Consumer scanner qualification: %s\n", raw)
 		}
-		return json.Marshal(report)
+		if qualificationErr != nil {
+			return nil, qualificationErr
+		}
+		return raw, err
 	})
 	if err != nil {
 		return "", err
