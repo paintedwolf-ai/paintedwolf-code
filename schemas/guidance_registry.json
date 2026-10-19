@@ -3277,6 +3277,7 @@
       "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}."
     },
     "WAIT_HIDDEN_TEXT": {
+      "branch_instruction": "Retry with the same wait conditions after choosing either recovery path.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "`wait` has not started; this tool turn contains assistant text hidden from the user"
