@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/cmd/opengrep-artifact/main.options",
+  "kind": "construction",
+  "workstream": "linux-installed-scanner",
+  "disposition": "retain",
+  "reason": "Retain the closed 19-field command-line input projection. One parsed invocation selects a mutually exclusive artifact mode; validation rejects mixed producer, final-resource, candidate, release, and runtime authorities before execution. Separate release and consumer owners consume only the admitted fields; nesting these flags would hide the cross-mode refusal contract. No runtime service or mutable authority context is introduced.",
+  "reviewed_commit": "03591bc76deb23ccb2bd0f2f75219b20aaada1ba",
+  "ceiling": 19,
+  "boundaries": {
+    "lycaon/cmd/opengrep-artifact/main_test.go": "9495693cae09dc376b03e996839e915b07c258b031204dad019b8b6cf8684587",
+    "lycaon/cmd/opengrep-artifact/consumer_test.go": "7e9169ae9d6af8817de5115718108d5531e6840c7e862ffb4fa053d403509161",
+    "lycaon/internal/scan/bundled/consumer_finalize_linux_test.go": "307fd2c6fdee16097f5845b31cfcef538d22d2ab759e1e40920105616a3d9b92"
+  },
+  "reviewed_shape": "ce3a83ae4828c450760e9e91ad70d2bdb5e737c7fa35cd7d71780cebe9f43b0c"
+}
