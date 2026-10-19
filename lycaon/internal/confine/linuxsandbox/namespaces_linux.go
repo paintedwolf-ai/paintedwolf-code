@@ -81,7 +81,17 @@ func applyFilesystem(fs Filesystem) error {
 		ops = append(ops, mountOp{path: p, kind: opRestored, clone: fd})
 	}
 	sort.SliceStable(ops, func(i, j int) bool { return ops[i].path < ops[j].path })
-	var hiddenFiles *hiddenFileMount
+	var hiddenFiles *hiddenFileMask
+	for _, op := range ops {
+		if op.kind == opHidden && !isDir(op.path) {
+			var err error
+			hiddenFiles, err = newHiddenFileMask()
+			if err != nil {
+				return mountFailure("prepare private file mask", err)
+			}
+			break
+		}
+	}
 	defer func() {
 		if hiddenFiles != nil {
 			_ = hiddenFiles.close()
@@ -95,11 +105,9 @@ func applyFilesystem(fs Filesystem) error {
 				err = hideDirectory(op.path)
 			} else {
 				if hiddenFiles == nil {
-					hiddenFiles, err = newHiddenFileMount()
+					return mountFailure(op.path, errors.New("filesystem entry changed kind during setup"))
 				}
-				if err == nil {
-					err = hiddenFiles.hide(op.path)
-				}
+				err = hiddenFiles.hide(op.path)
 			}
 		case opReadOnly:
 			err = bindReadOnly(op.path)
@@ -115,7 +123,7 @@ func applyFilesystem(fs Filesystem) error {
 		err := hiddenFiles.close()
 		hiddenFiles = nil
 		if err != nil {
-			return mountFailure("remove private file-mask source", err)
+			return mountFailure("close private file-mask descriptor", err)
 		}
 	}
 	// Hidden directories become read-only only after anything restored beneath
