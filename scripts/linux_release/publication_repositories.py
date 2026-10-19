@@ -23,6 +23,8 @@ def digest(value, *, inventory=False):
 def verify_repositories(plan, final_artifacts, expected_source, *, version, channel,
                         signing_generation, key_fingerprint, verified_files, release_build):
     product = parse(version)
+    if channel != product.channel:
+        raise ValueError("publication channel differs from the selected product version")
     build = parse_release_build(str(release_build))
     native_versions = {"deb": linux_package_version(product),
                        "rpm": linux_package_version(product) + "-1"}
