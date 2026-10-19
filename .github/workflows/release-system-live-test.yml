@@ -98,7 +98,7 @@ jobs:
     steps:
       - name: Prepare the isolated native Arch toolchain
         run: |
-          pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo
+          pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo unzip
           useradd --create-home pw-repository
           printf '%s\n' 'pw-repository ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pw-repository
           chmod 0440 /etc/sudoers.d/pw-repository
