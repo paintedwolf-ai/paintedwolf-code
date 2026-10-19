@@ -325,8 +325,8 @@ case "${GOOS}" in
       audit_linux_tree ".pkg.tar.zst" "${PACMAN_TREE}"
       PACMAN_RECEIPT="$(dirname "${PACMAN_PACKAGE}")/pacman-candidate.json"
       [[ -f "${PACMAN_RECEIPT}" ]] || { echo "error: pacman candidate has no producer receipt" >&2; exit 1; }
-      jq -e --arg sha "$(sha256_hex "${PACMAN_PACKAGE}")" --arg arch "${ARCH}" --arg version "${VERSION}" \
-        '.format_version == 1 and .family == "pacman" and .sha256 == $sha and .architecture == $arch and .version == $version and .published == false' \
+      jq -e --arg sha "$(sha256_hex "${PACMAN_PACKAGE}")" --arg arch "${ARCH}" --arg version "${VERSION}" --arg source "$(git -C "${ROOT}" rev-parse HEAD)" \
+        '.source_commit == $source and .format_version == 1 and .family == "pacman" and .sha256 == $sha and .architecture == $arch and .version == $version and .published == false' \
         "${PACMAN_RECEIPT}" >/dev/null
     fi
     PACKAGE="${DEB_PACKAGE}"
@@ -473,7 +473,10 @@ if [[ "${GOOS}" == linux ]]; then
   stage_package "${RPM_OUTPUT}" "rpm"
   if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
     stage_package "${PACMAN_PACKAGE}" "pkg.tar.zst"
-    cp "${PACMAN_RECEIPT}" "${OUTPUT}/${STEM}.pacman-candidate.json"
+    jq --arg file "${STEM}.pkg.tar.zst" '.file = $file' "${PACMAN_RECEIPT}" > "${OUTPUT}/${STEM}.pacman-candidate.json"
+    PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.candidate_inventory --directory "${OUTPUT}" \
+      --platform "${PLATFORM}" --architecture "${ARCH}" --version "${VERSION}" \
+      --source-commit "$(git -C "${ROOT}" rev-parse HEAD)"
   fi
   # Package-managed platforms publish no updater artifact and no feed fragment.
   exit 0
