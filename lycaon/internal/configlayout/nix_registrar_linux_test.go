@@ -104,9 +104,9 @@ func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing
 	if tool == "" {
 		t.Skip("requires an explicitly selected native Nix client")
 	}
-	tool, err := filepath.EvalSymlinks(tool)
+	resolved, err := filepath.EvalSymlinks(tool)
 	testutil.FailErr(t, "resolve selected native client", err)
-	layout := &NixLayout{Output: filepath.Dir(filepath.Dir(tool)), NixStore: tool}
+	layout := &NixLayout{Output: filepath.Dir(filepath.Dir(resolved)), NixStore: tool}
 	registrar, err := runningNixRegistrar(layout)
 	testutil.FailErr(t, "select actual physical GC authority", err)
 	poisonNixCallerConfiguration(t)
