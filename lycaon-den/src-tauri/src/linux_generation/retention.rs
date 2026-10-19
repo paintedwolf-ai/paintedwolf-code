@@ -127,7 +127,8 @@ mod tests {
 
     #[test]
     fn desktop_retains_its_own_lock_when_the_helper_exits() {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = crate::test_support::TempDir::new("nix-root-lock");
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         let path = directory
             .path()
             .join(format!("session-{}.lock", "a".repeat(32)));
@@ -141,7 +142,11 @@ mod tests {
         );
         let desktop = hold_lock(&path, Path::new("/selected-generation")).unwrap();
         drop(helper);
-        let reclaimer = File::open(&path).unwrap();
+        let reclaimer = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
         // SAFETY: both descriptors remain live for the exclusive reclamation attempts.
         assert_ne!(
             unsafe { libc::flock(reclaimer.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
