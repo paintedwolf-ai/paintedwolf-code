@@ -82,6 +82,8 @@ host_facts:
    type: string
  - name: paintedwolf.mime
    type: string
+ - name: paintedwolf.missing_required_arguments
+   type: string
  - name: paintedwolf.worker_budget_at_max
    type: bool
  - name: paintedwolf.search_provider_statuses
