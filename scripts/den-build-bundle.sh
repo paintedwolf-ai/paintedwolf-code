@@ -5,6 +5,7 @@ PACKAGE_ARGS=()
 for argument in "$@"; do
   case "${argument}" in
     --pacman) PACKAGE_ARGS+=(--pacman) ;;
+    --pacman-container) PACKAGE_ARGS+=(--pacman-container) ;;
     *) echo "error: unsupported bundle argument ${argument}" >&2; exit 2 ;;
   esac
 done
