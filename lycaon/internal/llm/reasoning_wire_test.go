@@ -81,7 +81,9 @@ func TestLocalProviderKindsReplayReasoningContentAcrossMultiStepToolLoop(t *test
 	withThinkingRules(t, nil)
 	cfg, err := LoadProviderConfig()
 	testutil.FailErr(t, "load provider catalog", err)
-	ship := shipEntryMap(cfg.Providers)
+	templates, err := assembleProviderTemplates(cfg.Providers)
+	testutil.FailErr(t, "assemble provider templates", err)
+	ship := preferredProviderTemplates(templates)
 	for _, kind := range []string{"openai-compatible", "lmstudio", "omlx"} {
 		entry, err := resolveLocalEntry(ProviderEntry{
 			ID: "local-endpoint", Kind: kind, BaseURL: "https://example.test/v1",
