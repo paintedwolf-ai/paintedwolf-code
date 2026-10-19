@@ -73,6 +73,14 @@ class RepositoryOperationsTests(unittest.TestCase):
         first = self.receipt()
         current = transition(first, None, None)
         for mutation in [{"format_version": 2}, {"operation": "unknown"}, {"channel": "preview"},
-                         {"rehearsal": False}, {"key_fingerprint": "short"}]:
+                         {"rehearsal": False}, {"rehearsal": 1}, {"signing_generation": 0}, {"key_fingerprint": "short"}]:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 transition(self.receipt("1.0.1"), {**current, **mutation}, identity(first))
+
+    def test_idempotent_retry_requires_the_immutable_generation_facts(self):
+        first = self.receipt()
+        current = transition(first, None, None)
+        for mutation in [{"source_commit": "e" * 40}, {"inventory_sha256": "e" * 64},
+                         {"packages": []}, {"signing_generation": 2}, {"version": "2.0.0"}]:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                transition(first, {**current, **mutation}, None)

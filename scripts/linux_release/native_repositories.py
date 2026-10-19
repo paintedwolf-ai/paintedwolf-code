@@ -49,9 +49,11 @@ def apt_indexes(destination: Path, channel: str, architectures: list[str], catal
         (binary / "Packages").write_bytes(data)
         (binary / "Packages.gz").write_bytes(gzip.compress(data, mtime=0))
         for path in [binary / "Packages", binary / "Packages.gz"]:
-            hashed = binary / "by-hash/SHA256" / digest(path)
-            hashed.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, hashed)
+            for algorithm in ["SHA256", "SHA512"]:
+                value = hashlib.new(algorithm.lower(), path.read_bytes()).hexdigest()
+                hashed = binary / "by-hash" / algorithm / value
+                hashed.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, hashed)
     # InRelease is the one mutable signed object; detached pairs stay generation-local.
     release = distribution / "Release"
     data = subprocess.check_output(["apt-ftparchive", "-o", "APT::FTPArchive::Release::Acquire-By-Hash=yes",

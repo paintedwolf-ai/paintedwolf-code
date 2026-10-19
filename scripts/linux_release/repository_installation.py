@@ -26,6 +26,9 @@ def apt(root: Path, repository: str, certificate: Path | None, catalog: Path, pa
     _, public = selection(catalog, True)
     (root / "etc/apt/sources.list.d/fixture.sources").write_text(
         f"Types: deb\nURIs: {repository}/\nSuites: preview\nComponents: main\nSigned-By: {public}\n")
+    architecture = subprocess.check_output(["dpkg", "--print-architecture"], text=True).strip()
+    if architecture not in {"amd64", "arm64"}:
+        raise ValueError("unsupported isolated apt fixture architecture")
     config = root / "apt.conf"
     tls = f'Acquire::https::CaInfo "{certificate}";' if certificate is not None else ""
     config.write_text(f"""Dir::Etc "{root}/etc/apt";
@@ -34,6 +37,8 @@ Dir::State::status "{status}";
 Dir::Cache "{root}/var/cache/apt";
 Dir::Log "{root}/var/log/apt";
 APT::Sandbox::User "root";
+APT::Architecture "{architecture}";
+APT::Architectures {{ "{architecture}"; }};
 {tls}
 DPkg::Options {{ "--root={root}"; "--log={root}/dpkg.log"; }};
 """)
