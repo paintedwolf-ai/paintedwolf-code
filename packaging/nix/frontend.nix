@@ -8,6 +8,7 @@ let
       (lib.fileset.difference (sourcePath + "/lycaon-den") (sourcePath + "/lycaon-den/src-tauri"))
       (sourcePath + "/lycaon-den/src-tauri/tauri.conf.json")
       (sourcePath + "/CHANGELOG.md")
+      (sourcePath + "/lycaon/config/runtime/search/grammar.json")
     ];
   };
   dependencyExpression = import ./bun.nix;
