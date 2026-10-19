@@ -104,15 +104,35 @@ ARCHIVE_SHA="$(read_section "${PLATFORM_KEY}" sha256)"
 ARCHIVE_BYTES="$(read_section "${PLATFORM_KEY}" bytes)"
 BINARY_SHA="$(read_section "${PLATFORM_KEY}" binary_sha256)"
 BINARY_BYTES="$(read_section "${PLATFORM_KEY}" binary_bytes)"
-ENG_SHA="$(read_section eng_traineddata sha256)"
-ENG_BYTES="$(read_section eng_traineddata bytes)"
-OSD_SHA="$(read_section osd_traineddata sha256)"
-OSD_BYTES="$(read_section osd_traineddata bytes)"
-
-if [[ -z "${ENGINE_VERSION}" || -z "${URL_TMPL}" || -z "${ENG_SHA}" || -z "${OSD_SHA}" ]]; then
-  echo "error: incomplete pin in ${PIN}" >&2
+HAS_ENGLISH=0
+HAS_ORIENTATION=0
+DATA_LANGUAGES=()
+DATA_SHAS=()
+DATA_BYTES=()
+while IFS= read -r key; do
+  [[ "${key}" =~ ^([a-z]{3}(_[a-z]{3,4})?)_traineddata$ ]] || { echo "error: invalid trained-data key" >&2; exit 1; }
+  language="${key%_traineddata}"
+  for previous in "${DATA_LANGUAGES[@]}"; do
+    [[ "${previous}" != "${language}" ]] || { echo "error: duplicate trained data" >&2; exit 1; }
+  done
+  [[ "${language}" != eng ]] || HAS_ENGLISH=1
+  [[ "${language}" != osd ]] || HAS_ORIENTATION=1
+  digest="$(read_section "${key}" sha256)"
+  bytes="$(read_section "${key}" bytes)"
+  [[ "${digest}" =~ ^[0-9a-f]{64}$ && "${bytes}" =~ ^[1-9][0-9]*$ ]] || { echo "error: unpinned trained data" >&2; exit 1; }
+  DATA_LANGUAGES+=("${language}")
+  DATA_SHAS+=("${digest}")
+  DATA_BYTES+=("${bytes}")
+done < <(awk '
+  $0 == "trained_data:" { inside = 1; next }
+  inside && /^[^[:space:]]/ { exit }
+  inside && /^  [^[:space:]]+:/ { key = $1; sub(/:$/, "", key); print key }
+' "${PIN}")
+if [[ -z "${ENGINE_VERSION}" || -z "${URL_TMPL}" || "${HAS_ENGLISH}" != 1 || "${HAS_ORIENTATION}" != 1 || ${#DATA_LANGUAGES[@]} -lt 2 || ${#DATA_LANGUAGES[@]} -gt 9 ]]; then
+  echo "error: incomplete or oversized OCR pin in ${PIN}" >&2
   exit 1
 fi
+
 if [[ -z "${ARCHIVE_SHA}" || "${ARCHIVE_BYTES}" == "0" || -z "${BINARY_SHA}" ]]; then
   echo "error: the ${PLATFORM_KEY} OCR engine is not published: ${PIN} carries no archive digest for it" >&2
   exit 1
@@ -140,10 +160,12 @@ verify_payload() {
 
 verify_tree() {
   local root="$1"
-  verify_payload "${root}/bin/tesseract" "${BINARY_SHA}" "${BINARY_BYTES}" &&
-    verify_payload "${root}/tessdata/eng.traineddata" "${ENG_SHA}" "${ENG_BYTES}" &&
-    verify_payload "${root}/tessdata/osd.traineddata" "${OSD_SHA}" "${OSD_BYTES}" &&
-    [[ -x "${root}/bin/tesseract" ]]
+  verify_payload "${root}/bin/tesseract" "${BINARY_SHA}" "${BINARY_BYTES}" || return 1
+  local index
+  for ((index=0; index<${#DATA_LANGUAGES[@]}; index++)); do
+    verify_payload "${root}/tessdata/${DATA_LANGUAGES[index]}.traineddata" "${DATA_SHAS[index]}" "${DATA_BYTES[index]}" || return 1
+  done
+  [[ -x "${root}/bin/tesseract" ]]
 }
 
 if [[ -f "${DEST}/VERSION" && "$(tr -d '[:space:]' < "${DEST}/VERSION")" == "${ENGINE_VERSION}" ]] && verify_tree "${DEST}" 2>/dev/null; then

@@ -11,10 +11,11 @@ import (
 // Pin is the committed engine descriptor: the producer release it selects and
 // the exact payload the host accepts on each platform.
 type Pin struct {
-	EngineVersion string                 `yaml:"engine_version"`
-	Producer      pinProducer            `yaml:"producer"`
-	TrainedData   map[string]pinPayload  `yaml:"trained_data"`
-	Platforms     map[string]PlatformPin `yaml:"platforms"`
+	RecognitionLanguages []string               `yaml:"recognition_languages"`
+	EngineVersion        string                 `yaml:"engine_version"`
+	Producer             pinProducer            `yaml:"producer"`
+	TrainedData          map[string]pinPayload  `yaml:"trained_data"`
+	Platforms            map[string]PlatformPin `yaml:"platforms"`
 }
 
 type pinProducer struct {
@@ -88,13 +89,7 @@ func (p *Pin) validate() error {
 	if strings.TrimSpace(p.Producer.Repository) == "" || p.Producer.Tag != "v"+p.EngineVersion || !validCommit(p.Producer.Commit) {
 		return fmt.Errorf("ocrengine: pin.yaml must name the producer repository, its commit, and the tag v%s", p.EngineVersion)
 	}
-	for _, name := range []string{"eng_traineddata", "osd_traineddata"} {
-		data, ok := p.TrainedData[name]
-		if !ok || !validDigest(data.SHA256) || data.Bytes <= 0 {
-			return fmt.Errorf("ocrengine: pin.yaml needs a digest and size for %s", name)
-		}
-	}
-	return nil
+	return p.validateLanguages()
 }
 
 // Platform returns the pin for one GOOS/GOARCH, or false when the engine is
@@ -110,12 +105,12 @@ func (p *Pin) Platform(goos, goarch string) (PlatformPin, bool) {
 
 // Payloads lists the files the host verifies for one platform.
 func (p *Pin) Payloads(plat PlatformPin) []Payload {
-	eng, osd := p.TrainedData["eng_traineddata"], p.TrainedData["osd_traineddata"]
-	return []Payload{
-		{Rel: binaryRel, SHA256: plat.BinarySHA256, Bytes: plat.BinaryBytes},
-		{Rel: englishTrainedDataRel, SHA256: eng.SHA256, Bytes: eng.Bytes},
-		{Rel: osdTrainedDataRel, SHA256: osd.SHA256, Bytes: osd.Bytes},
+	payloads := []Payload{{Rel: binaryRel, SHA256: plat.BinarySHA256, Bytes: plat.BinaryBytes}}
+	for _, language := range append(append([]string{}, p.RecognitionLanguages...), "osd") {
+		data := p.TrainedData[language+"_traineddata"]
+		payloads = append(payloads, Payload{Rel: "tessdata/" + language + ".traineddata", SHA256: data.SHA256, Bytes: data.Bytes})
 	}
+	return payloads
 }
 
 func validDigest(s string) bool {
