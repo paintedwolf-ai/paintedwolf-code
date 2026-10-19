@@ -139,6 +139,18 @@ pass under confinement. The recipe is one closed JSON object with
 array. Declared inputs and observed ELF loader, dependencies, and RPATHs remain
 separate fields in the consumer record.
 
+The existing managed preparation entry point forwards these explicit build
+modes to that same tool:
+
+```sh
+./task scan:opengrep:stage -- --finalize-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --audit-consumer -artifact-directory "$ORIGINAL" -packaged-directory "$FINAL_ARTIFACT_DIRECTORY" -consumer-identity-file "$IDENTITY" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+```
+
+These modes refuse development overrides and do not fetch or repair resources.
+The Nix build graph uses the built artifact command as a derivation dependency;
+it performs the same offline admission before compiling the engine.
+
 Package assembly must transform its own writable staged copy first, run this
 native finalizer, inject the emitted identity into the engine build, and then
 preserve every finalized resource byte. A later audit uses the original
