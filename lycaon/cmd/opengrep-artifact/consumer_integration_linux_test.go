@@ -1,4 +1,4 @@
-//go:build integration && linux
+//go:build integration && linux && consumer_scanners
 
 package main
 
@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,7 +22,7 @@ import (
 func TestConsumerFinalizationNativeScanner(t *testing.T) {
 	input := os.Getenv("PW_SCANNER_CONSUMER_RECIPE")
 	if input == "" {
-		testutil.MissingScannerResource(t, "native consumer relocation recipe", fmt.Errorf("PW_SCANNER_CONSUMER_RECIPE is required for consumer qualification"))
+		t.Fatal("PW_SCANNER_CONSUMER_RECIPE is required for selected consumer qualification")
 	}
 	raw, err := readConsumerInput(input, 64<<10)
 	testutil.FailErr(t, "read native relocation recipe", err)

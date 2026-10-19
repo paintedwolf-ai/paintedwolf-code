@@ -163,6 +163,12 @@ library fallback is refused. Ordinary `patchelf` on the complete scanner breaks
 its attached-data layout. Relocation alone grants no qualification authority;
 the same invocation runs the product cases before emitting an identity.
 
+The native consumer integration uses the existing scoped digest with
+`-tags integration,consumer_scanners -run '^TestConsumerFinalizationNativeScanner$'`
+for `./cmd/opengrep-artifact`. It requires `PW_SCANNER_CONSUMER_RECIPE` and
+`PW_SCANNER_PRODUCER_DIRECTORY`; absent inputs fail that selected campaign.
+Ordinary scanner tests continue to qualify unchanged producer resources.
+
 Package assembly must transform its own writable staged copy first, run this
 native finalizer, inject the emitted identity into the engine build, and then
 preserve every finalized resource byte. A later audit uses the original
