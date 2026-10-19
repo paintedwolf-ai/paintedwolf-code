@@ -1,6 +1,7 @@
 { lib, buildGoModule, callPackage, binutils, source
 , scannerBuildIdentityBase64 ? ""
 , scannerIdentityFile ? null
+, gsettingsExecutable ? null
 }:
 let
   tools = callPackage ./toolchains.nix { inherit source; };
@@ -27,7 +28,9 @@ assert lib.assertMsg
     "-s" "-w"
     "-X github.com/lycaon/lycaon/internal/version.Version=${version}"
   ] ++ lib.optional (scannerBuildIdentityBase64 != "")
-    "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${scannerBuildIdentityBase64}";
+    "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${scannerBuildIdentityBase64}"
+    ++ lib.optional (gsettingsExecutable != null)
+      "-X github.com/lycaon/lycaon/internal/exec/hostread.gsettingsExecutable=${gsettingsExecutable}";
   preBuild = lib.optionalString (scannerIdentityFile != null) ''
     test -f ${lib.escapeShellArg (toString scannerIdentityFile)}
     identity_bytes="$(stat -c %s ${lib.escapeShellArg (toString scannerIdentityFile)})"
@@ -41,6 +44,13 @@ assert lib.assertMsg
     printf '%s' "$scanner_identity" | base64 --decode > /dev/null
     concatTo scanner_ldflags ldflags
     ldflags=("''${scanner_ldflags[@]}" "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=$scanner_identity")
+  '' + lib.optionalString (gsettingsExecutable != null) ''
+    test -f internal/exec/hostread/desktop_linux.go || {
+      echo "The final Nix engine requires the native host proxy integration source" >&2; exit 1;
+    }
+    test -f internal/configlayout/nix.go || {
+      echo "The final Nix engine requires running-generation resource integration source" >&2; exit 1;
+    }
   '';
   nativeBuildInputs = [ binutils ];
   doCheck = false;
