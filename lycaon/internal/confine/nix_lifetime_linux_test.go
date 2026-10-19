@@ -22,7 +22,7 @@ import (
 
 func TestLinuxNixTerminalAndBackgroundToolchains(t *testing.T) {
 	fixture := prepareNixWorkflows(t)
-	args := []string{"--offline", "--store", fixture.store, "shell", filepath.Dir(filepath.Dir(fixture.bash)), "--command", fixture.bash, "-c", `printf '%s\n' "$BASH"`}
+	args := []string{"--log-format", "raw", "--offline", "--store", fixture.store, "shell", filepath.Dir(filepath.Dir(fixture.bash)), "--command", fixture.bash, "-c", `printf '%s\n' "$BASH"`}
 	launch := execpkg.AgentLaunch(execpkg.LaunchAgentCommand, "nix_terminal_fixture", &fixture.boundary)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
