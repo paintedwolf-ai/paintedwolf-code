@@ -4,6 +4,6 @@ schema:
   properties:
     need:
       type: string
-      description: "Use the exact tool name when known, especially when feedback names it (for example, write). Otherwise describe one concrete operation and target, not the whole task."
+      description: "Describe one concrete operation and target (for example, create a file, edit code, or run a command), not the whole task, or pass the exact tool name when feedback names it."
   required: [need]
   additionalProperties: false

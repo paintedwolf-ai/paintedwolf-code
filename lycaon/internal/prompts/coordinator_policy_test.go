@@ -169,30 +169,32 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 	}
 }
 
-func TestRequestableOperationHintsFollowActualLoadingState(t *testing.T) {
+func TestRequestableToolsTeachesOperationFirstWithoutHardcodedNames(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	for _, tc := range []struct {
-		name              string
-		offered, deferred []string
-		wantHints         bool
-	}{
-		{"loadable", []string{"request_tools"}, []string{"write", "edit", "command"}, true},
-		{"already loaded", []string{"request_tools", "write", "edit", "command"}, nil, false},
-		{"not requestable", []string{"read"}, []string{"write", "edit", "command"}, false},
-		{"unavailable", []string{"request_tools"}, []string{"http_request"}, false},
+	vars := prompts.CoordinatorPolicyTemplateVars([]string{"request_tools"}, []string{"write", "edit", "command"})
+	vars["requestable_capabilities"] = []string{"file and git changes"}
+	out, err := engine.Render(t.Context(), "partials/requestable-tools.md", vars)
+	testutil.FailErr(t, "render requestable operations", err)
+	for _, want := range []string{
+		"### More tools",
+		"Only a starting set of tools is offered.",
+		"file and git changes",
+		"call `request_tools` with `need` describing one concrete operation and target",
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			vars := prompts.CoordinatorPolicyTemplateVars(tc.offered, tc.deferred)
-			vars["requestable_capabilities"] = []string{"file and git changes"}
-			out, err := engine.Render(t.Context(), "partials/requestable-tools.md", vars)
-			testutil.FailErr(t, "render requestable operations", err)
-			for _, tool := range []string{"write", "edit", "command"} {
-				hint := `request_tools({"need":"` + tool + `"})`
-				if strings.Contains(out, hint) != tc.wantHints {
-					t.Fatalf("loading hint %s presence must be %v: %s", hint, tc.wantHints, out)
-				}
-			}
-		})
+		if !strings.Contains(out, want) {
+			t.Fatalf("requestable-tools.md missing %q: %s", want, out)
+		}
+	}
+	for _, forbidden := range []string{`request_tools({`, `"write"`, `"edit"`, `"command"`} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("requestable-tools.md must not contain %q: %s", forbidden, out)
+		}
+	}
+
+	emptyOut, err := engine.Render(t.Context(), "partials/requestable-tools.md", map[string]any{})
+	testutil.FailErr(t, "render empty requestable operations", err)
+	if strings.TrimSpace(emptyOut) != "" {
+		t.Fatalf("expected empty output without requestable_capabilities, got %q", emptyOut)
 	}
 }
 
