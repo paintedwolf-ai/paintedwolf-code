@@ -80,6 +80,6 @@ let
 in evaluation.config.system.build.vm.overrideAttrs (previous: {
   passthru = (previous.passthru or {}) // {
     inherit desktop;
-    system = evaluation.config.system.build.toplevel;
+    guestSystem = evaluation.config.system.build.toplevel;
   };
 })
