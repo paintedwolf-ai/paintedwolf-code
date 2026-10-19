@@ -132,17 +132,25 @@ jobs:
       - name: Install frontend dependencies
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
-      - name: Build the Linux packages
-        run: ./task den:bundle -- --pacman-container
+      - name: Build the declared Linux package families
+        env:
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
+        run: |
+          case "${PACKAGE_EXTENSIONS}" in
+            deb,rpm) ./task den:bundle ;;
+            deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;
+            *) echo "Unsupported candidate package-family contract" >&2; exit 1 ;;
+          esac
       - name: Verify and stage platform artifacts
         env:
           VERSION: ${{ needs.source.outputs.version }}
           PLATFORM: ${{ matrix.updater_key }}
           ARCH: ${{ matrix.artifact_arch }}
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
         run: |
           bash scripts/release-stage-platform-artifacts.sh \
             --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
-            --version "${VERSION}" --package-extensions deb,rpm,pkg.tar.zst \
+            --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
             --output "${RUNNER_TEMP}/candidate"
           printf '%s\n' "$GITHUB_SHA" > "${RUNNER_TEMP}/candidate/controller-commit.txt"
           git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"

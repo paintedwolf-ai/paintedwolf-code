@@ -31,7 +31,7 @@ def verify(catalog: dict, key: str, runner: str, architecture: str) -> dict:
             or row.get("goarch") != architecture or row.get("artifact_arch") != expected[architecture]
             or row.get("runner") != runner or not isinstance(runner, str) or not runner
             or row.get("publication") not in ("candidate", "public")
-            or row.get("package_extensions") != ["deb", "rpm", "pkg.tar.zst"]
+            or row.get("package_extensions") not in (["deb", "rpm"], ["deb", "rpm", "pkg.tar.zst"])
             or row.get("updater_extension") is not None):
         raise ValueError(f"candidate {key!r} disagrees with its native package contract")
     return row
