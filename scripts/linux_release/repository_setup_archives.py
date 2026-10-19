@@ -121,13 +121,11 @@ def rpm(package, version, expected, config):
             "VERIFYSCRIPTPROG", "TRIGGERSCRIPTPROG", "FILETRIGGERSCRIPTPROG", "TRANSFILETRIGGERSCRIPTPROG",
             "CONFLICTNAME", "OBSOLETENAME", "RECOMMENDNAME", "SUGGESTNAME", "SUPPLEMENTNAME", "ENHANCENAME",
             "PREFIXES"]
-    query = "".join("%|" + tag + "?{1}:{0}|" for tag in tags)
-    present = command(["rpm", "-qp", "--qf", query, str(package)])
-    if len(present) != len(tags) or any(value not in b"01" for value in present):
-        raise ValueError("setup RPM script header query has an invalid shape: " + repr(present))
-    if present != b"0" * len(tags):
-        rejected = [tag for tag, value in zip(tags, present) if value == ord("1")]
-        raise ValueError("setup RPM contains scripts or triggers: " + ", ".join(rejected))
+    query = "".join(tag + "=%|" + tag + "?{1}:{0}|\n" for tag in tags)
+    present = command(["rpm", "-qp", "--qf", query, str(package)]).decode().splitlines()
+    absent = [tag + "=0" for tag in tags]
+    if present != absent:
+        raise ValueError("setup RPM contains scripts or triggers: " + repr(present))
     requirements = command(["rpm", "-qp", "--qf", "[%{REQUIRENAME}\n]", str(package)]).decode().splitlines()
     allowed = {"rpmlib(CompressedFileNames)", "rpmlib(FileDigests)", "rpmlib(PayloadFilesHavePrefix)"}
     if len(requirements) != len(set(requirements)) or set(requirements) != allowed:
