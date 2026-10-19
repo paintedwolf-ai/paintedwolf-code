@@ -17,7 +17,7 @@ When building or changing a user-facing interface (pages, interactive terminals,
 {% endif %}{% if visual_show_terminal %}{% if agent_has_skill_verify_terminal_change %}Read `verify-terminal-change` before terminal verification.{% endif %}
 {% if profile_has_terminal_capture %}- One-shot terminal proof: `command` with `terminal_capture: {}` and the exact process's `capability_request` in the same call. One program only: no command chains, pipes, or redirects.
 {% endif %}{% if profile_has_terminal_open and profile_has_terminal_snapshot %}- Continuing interaction: `terminal_open`, `terminal_send`, `terminal_read`, and `terminal_snapshot` at material states.
-{% endif %}- Run the actual program; never replay saved output to manufacture a screen. Flat stdout is not `surface_snapshot{tui}` evidence.
+{% endif %}- Run the actual program; never replay saved output to manufacture a screen. Flat stdout is not `tui#` terminal screen evidence.
 {% endif %}{% if profile_has_view_image %}- Image assets: inspect authored SVGs, raster graphics, or handles with `view_image`.
 {% endif %}{% if profile_has_view_video %}- Recordings: see the moments a user's screen recording shows with `view_video`.
 {% endif %}
