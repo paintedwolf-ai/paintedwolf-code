@@ -37,7 +37,13 @@ def rehearse(work):
     document.write_text("explicit nonapplication fixture\n")
     link = document.parent / "native-link"
     link.symlink_to("../../../opt/painted-wolf-code/bin/pw")
-    sealed = {path.relative_to(tree).as_posix(): stream_digest(path) for path in [executable, document]}
+    resources = []
+    for name in ["usr/share/man/man1/fixture.1", "usr/lib/fixture.a", "usr/lib/fixture.la"]:
+        path = tree / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("sealed nonapplication resource\n")
+        resources.append(path)
+    sealed = {path.relative_to(tree).as_posix(): stream_digest(path) for path in [executable, document, *resources]}
     product = (ROOT / "VERSION").read_text().strip()
     revision = parse_release_build((ROOT / "RELEASE_BUILD").read_text().strip())
     payload = recipe_dir / "fixture-payload.tar.xz"
@@ -70,7 +76,7 @@ def rehearse(work):
             "sealed_fixture": sealed,
             "cases": ["actual-native-makepkg", "authenticated-ARM-rootfs-preparation", "pinned-official-substrate", "signed-toolchain-preparation",
                       "offline-unprivileged-packaging", "native-ELF-bytes-preserved", "final-PKGINFO-admission",
-                      "exact-dependency-catalog", "native-BUILDINFO-and-MTREE", "unicode-modes-and-links-preserved"]}
+                      "exact-dependency-catalog", "native-BUILDINFO-and-MTREE", "unicode-modes-and-links-preserved", "manual-static-and-libtool-resources-preserved"]}
 
 
 def main():
