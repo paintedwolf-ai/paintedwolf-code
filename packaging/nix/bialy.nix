@@ -4,11 +4,19 @@
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
+  sourcePath = /. + toString source;
 in rust.buildRustPackage {
   pname = "painted-wolf-code-bialy";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = source + "/lycaon/internal/decide/native";
+  src = lib.fileset.toSource {
+    root = sourcePath;
+    fileset = lib.fileset.unions [
+      (sourcePath + "/lycaon/internal/decide/native")
+      (sourcePath + "/scripts/bialy/rank-rubric.json")
+    ];
+  };
   cargoLock.lockFile = source + "/lycaon/internal/decide/native/Cargo.lock";
+  buildAndTestSubdir = "lycaon/internal/decide/native";
   buildFeatures = [ "vulkan" ];
   cargoBuildFlags = [ "--bin" "bialy" ];
   nativeBuildInputs = [ pkg-config cmake patchelf ];

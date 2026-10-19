@@ -80,3 +80,11 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_EXIT','0')))
         with self.assertRaises(ValueError):
             self.invoke("check")
         self.assertFalse(self.calls.exists())
+
+    def test_module_fixture_build_uses_checks_and_keeps_native_architecture(self):
+        for machine, system in [("x86_64", "x86_64-linux"), ("aarch64", "aarch64-linux")]:
+            with self.subTest(machine=machine), patch.object(nix.platform, "system", return_value="Linux"), \
+                    patch.object(nix.platform, "machine", return_value=machine):
+                command = nix.command("build", self.root, "nixos-module")
+                self.assertEqual(command[-1], "git+file://" + str(self.root) + "#checks." + system + ".nixos-module")
+                self.assertIn("--no-write-lock-file", command)

@@ -2,10 +2,11 @@
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
+  crate = (/. + toString source) + "/lycaon/internal/documentcore/native";
 in rust.buildRustPackage {
   pname = "painted-wolf-code-document-core";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
-  src = source + "/lycaon/internal/documentcore/native";
+  src = lib.fileset.toSource { root = crate; fileset = crate; };
   cargoLock.lockFile = source + "/lycaon/internal/documentcore/native/Cargo.lock";
   cargoBuildFlags = [ "--bin" "pw-document-core" ];
   doCheck = false;

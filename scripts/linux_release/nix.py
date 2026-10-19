@@ -17,7 +17,9 @@ from ..artifact_paths import artifact_root
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
-COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bialy", "document-core", "resources")
+COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
+              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "notices", "notice-tools",
+              "nixos-module")
 
 
 def command(operation: str, root: Path, component: str = "default") -> list[str]:
@@ -27,9 +29,10 @@ def command(operation: str, root: Path, component: str = "default") -> list[str]
     if platform.system() != "Linux" or platform.machine() not in SYSTEMS:
         raise ValueError("native Nix package builds require Linux amd64 or arm64")
     system = SYSTEMS[platform.machine()]
+    section = "checks" if component == "nixos-module" else "packages"
     return NIX + ["build", "--json", "--no-link", "--no-write-lock-file",
                   "--option", "sandbox", "true", "--max-jobs", "1", "--cores", "1",
-                  source + "#packages." + system + "." + component]
+                  source + "#" + section + "." + system + "." + component]
 
 
 def execute(operation: str, root: Path = ROOT, component: str = "default") -> int:

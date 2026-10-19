@@ -1,6 +1,7 @@
-{ lib, stdenvNoCC, python3, makeWrapper, wrapGAppsHook3, gtk3
+{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
+, scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
 }:
 let
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
@@ -20,7 +21,8 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     root="$out/lib/painted-wolf-code"
-    mkdir -p "$root/bin" "$out/bin" "$out/share/applications" "$out/share/icons/hicolor/128x128/apps"
+    mkdir -p "$root/bin" "$out/bin" "$out/share/applications" "$out/share/icons/hicolor/128x128/apps" \
+      "$out/share/polkit-1/actions"
     cp -r ${resources}/engine-root "$root/"
     cp ${resources}/THIRD-PARTY-NOTICES.md "$root/"
     cp ${source}/VERSION "$root/release-version"
@@ -34,20 +36,20 @@ stdenvNoCC.mkDerivation {
       makeWrapper "$root/bin/$executable" "$out/bin/$executable"
     done
     install -m644 ${source}/lycaon-den/src-tauri/icons/128x128.png "$out/share/icons/hicolor/128x128/apps/painted-wolf-code.png"
-    cat > "$out/share/applications/painted-wolf-code.desktop" <<EOF
-    [Desktop Entry]
-    Type=Application
-    Name=Painted Wolf Code
-    Exec=$out/bin/painted-wolf-code %U
-    Icon=painted-wolf-code
-    Terminal=false
-    Categories=Development;IDE;
-    StartupWMClass=dev.paintedwolf.code
-    MimeType=x-scheme-handler/paintedwolf;
-    EOF
+    substitute ${source}/packaging/linux/dev.paintedwolf.code.desktop \
+      "$out/share/applications/dev.paintedwolf.code.desktop" \
+      --replace-fail /opt/painted-wolf-code/bin/painted-wolf-code "$out/bin/painted-wolf-code"
+    install -m644 ${source}/packaging/linux/polkit/dev.paintedwolf.code.policy \
+      "$out/share/polkit-1/actions/dev.paintedwolf.code.policy"
     runHook postInstall
   '';
   postFixup = ''
+    ${scannerTools}/bin/opengrep-artifact -mode audit \
+      -artifact-directory ${resources.inputs.scannerOriginal}/artifact \
+      -packaged-directory "$out/lib/painted-wolf-code/engine-root/bundled/opengrep-${resources.inputs.pins.scannerVersion}" \
+      -consumer-identity-file ${resources}/scanner-identity.base64 \
+      -evidence-root ${source}/lycaon/config/runtime/scanners \
+      -audit-output "$out/lib/painted-wolf-code/scanner-audit.json" > /dev/null
     python3 ${source}/scripts/linux_release/nix_layout.py \
       --output "$out" --architecture ${lib.escapeShellArg architecture} \
       --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store

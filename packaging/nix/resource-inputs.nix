@@ -25,6 +25,10 @@ let
     url = "https://huggingface.co/${pins.model.id}/resolve/${pins.model.revision}/${path}";
     inherit sha256;
   }) pins.model.files;
+  ocrDataFiles = lib.mapAttrs (language: sha256: fetchurl {
+    url = "https://raw.githubusercontent.com/${pins.ocrData.repository}/${pins.ocrData.revision}/${language}.traineddata";
+    inherit sha256;
+  }) pins.ocrData.files;
 in {
   inherit pins scannerArchive;
   browser = stdenv.mkDerivation {
@@ -55,7 +59,13 @@ in {
     pname = "painted-wolf-code-gitengine";
     version = "${pins.gitVersion}+${pins.gitBuild}";
     src = gitArchive;
-    sourceRoot = ".";
+    unpackPhase = ''
+      runHook preUnpack
+      mkdir source
+      tar -xzf "$src" -C source
+      sourceRoot=source
+      runHook postUnpack
+    '';
     nativeBuildInputs = [ autoPatchelfHook ];
     buildInputs = [ stdenv.cc.cc.lib ];
     dontConfigure = true;
@@ -92,8 +102,10 @@ in {
     nativeBuildInputs = [ binutils ];
     installPhase = ''
       runHook preInstall
+      mkdir trained-data
+      ${lib.concatStringsSep "\n" (lib.mapAttrsToList (language: file: ''cp ${file} trained-data/${language}.traineddata'') ocrDataFiles)}
       OCRENGINE_DEST="$out/ocr" bash ${source}/scripts/ocrengine-fetch.sh \
-        --target ${pins.target} --archive ${ocrArchive}
+        --target ${pins.target} --archive ${ocrArchive} --trained-data-dir "$PWD/trained-data"
       if readelf -l "$out/ocr/bin/tesseract" | grep -q INTERP; then
         echo "Refusing a nonstatic pinned OCR engine" >&2; exit 1
       fi
