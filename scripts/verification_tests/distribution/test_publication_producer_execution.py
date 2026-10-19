@@ -1,6 +1,8 @@
 """Campaign upload retains verified inputs, with no reusable receipt authority."""
 
 import json
+import io
+from contextlib import redirect_stderr
 import os
 from pathlib import Path
 import tempfile
@@ -101,8 +103,10 @@ class PublicationProducerTests(unittest.TestCase):
     def test_branch_or_unprotected_workflow_cannot_stamp_production_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             source, output, *_ = self.fixture(directory)
-            with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_REF": "refs/heads/work"}), \
+            errors = io.StringIO()
+            with redirect_stderr(errors), patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_REF": "refs/heads/work"}), \
                  self.assertRaises(SystemExit):
                 main(["--inputs", str(source), "--output", str(output),
                       "--source-repository", str(source), "--source-commit", "a" * 40])
             self.assertFalse(output.exists())
+            self.assertIn("protected main release controller", errors.getvalue())

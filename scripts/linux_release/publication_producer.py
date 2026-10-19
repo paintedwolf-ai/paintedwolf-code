@@ -99,13 +99,13 @@ def main(argv=None):
     parser.add_argument("--source-commit", required=True)
     args = parser.parse_args(argv)
     try:
-        from .openpgp import selection
-        from .publication_generations import CATALOG as signing_catalog
         if (os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
                 or os.environ.get("GITHUB_REF") != "refs/heads/main"
                 or os.environ.get("GITHUB_WORKFLOW_REF") !=
                 f"{os.environ['GITHUB_REPOSITORY']}/.github/workflows/release.yml@refs/heads/main"):
             raise ValueError("campaign retention requires the protected main release controller")
+        from .openpgp import selection
+        from .publication_generations import CATALOG as signing_catalog
         producer = {"repository_id": int(os.environ["GITHUB_REPOSITORY_ID"]),
                     "run_id": int(os.environ["GITHUB_RUN_ID"]),
                     "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
