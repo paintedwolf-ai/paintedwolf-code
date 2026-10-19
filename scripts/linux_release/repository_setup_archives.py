@@ -124,7 +124,7 @@ def rpm(package, version, expected, config):
     query = "".join("%|" + tag + "?{1}:{0}|" for tag in tags)
     present = command(["rpm", "-qp", "--qf", query, str(package)])
     if len(present) != len(tags) or any(value not in b"01" for value in present):
-        raise ValueError("setup RPM script header query has an invalid shape")
+        raise ValueError("setup RPM script header query has an invalid shape: " + repr(present))
     if present != b"0" * len(tags):
         rejected = [tag for tag, value in zip(tags, present) if value == ord("1")]
         raise ValueError("setup RPM contains scripts or triggers: " + ", ".join(rejected))
