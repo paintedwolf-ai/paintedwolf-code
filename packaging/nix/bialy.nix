@@ -4,7 +4,7 @@
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
-  sourcePath = /. + toString source;
+  sourcePath = /. + builtins.unsafeDiscardStringContext (toString source);
 in rust.buildRustPackage {
   pname = "painted-wolf-code-bialy";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
