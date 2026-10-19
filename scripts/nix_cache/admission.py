@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 import stat
@@ -78,10 +79,13 @@ def closure_projection(value: dict, outputs: list[str]) -> dict:
 
 
 def derivation_projection(value: dict, closure: dict, request: dict) -> dict:
+    if not isinstance(value, dict) or set(value) != {"version", "derivations"} or value["version"] != 4 or not isinstance(value["derivations"], dict):
+        raise ValueError("Nix derivation document requires supported schema 4")
+    derivations = value["derivations"]
     result = {}
     for output in request["outputs"]:
         path = closure[output]["derivation"]
-        row = value.get(path, value.get(Path(path).name))
+        row = derivations.get(Path(path).name)
         if not isinstance(row, dict) or row.get("version") != 4 or row.get("system") != request["system"]:
             raise ValueError("Nix output derivation differs from the selected system or supported schema")
         outputs = row.get("outputs")
@@ -89,7 +93,6 @@ def derivation_projection(value: dict, closure: dict, request: dict) -> dict:
             isinstance(spec, dict) and spec.get("path") in {output, Path(output).name} for spec in outputs.values()
         ):
             raise ValueError("Nix derivation does not declare the selected application output")
-        import json
         digest = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         result[path] = {"sha256": digest, "system": row["system"], "outputs": outputs}
     return result

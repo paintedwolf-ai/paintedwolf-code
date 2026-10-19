@@ -101,7 +101,10 @@ class NixCacheAdmissionTests(unittest.TestCase):
         path = OUTPUT + ".drv"
         closure = {OUTPUT: {"derivation": path}}
         row = {"version": 4, "system": "x86_64-linux", "outputs": {"out": {"path": Path(OUTPUT).name}}}
-        self.assertEqual(derivation_projection({Path(path).name: row}, closure, self.request)[path]["system"], "x86_64-linux")
+        document = {"version": 4, "derivations": {Path(path).name: row}}
+        self.assertEqual(derivation_projection(document, closure, self.request)[path]["system"], "x86_64-linux")
         for changed in [{**row, "system": "aarch64-linux"}, {**row, "outputs": {"out": {"path": DEPENDENCY}}}, {**row, "version": 5}]:
             with self.subTest(row=changed), self.assertRaises(ValueError):
-                derivation_projection({path: changed}, closure, self.request)
+                derivation_projection({"version": 4, "derivations": {Path(path).name: changed}}, closure, self.request)
+        with self.assertRaises(ValueError):
+            derivation_projection({**document, "version": 5}, closure, self.request)
