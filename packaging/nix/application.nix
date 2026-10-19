@@ -1,6 +1,7 @@
-{ lib, stdenvNoCC, python3, makeWrapper, wrapGAppsHook3, gtk3
+{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
+, scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
 }:
 let
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
@@ -43,6 +44,12 @@ stdenvNoCC.mkDerivation {
     runHook postInstall
   '';
   postFixup = ''
+    ${scannerTools}/bin/opengrep-artifact -mode audit \
+      -artifact-directory ${resources.inputs.scannerOriginal}/artifact \
+      -packaged-directory "$out/lib/painted-wolf-code/engine-root/bundled/opengrep-${resources.inputs.pins.scannerVersion}" \
+      -consumer-identity-file ${resources}/scanner-identity.base64 \
+      -evidence-root ${source}/lycaon/config/runtime/scanners \
+      -audit-output "$out/lib/painted-wolf-code/scanner-audit.json" > /dev/null
     python3 ${source}/scripts/linux_release/nix_layout.py \
       --output "$out" --architecture ${lib.escapeShellArg architecture} \
       --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store
