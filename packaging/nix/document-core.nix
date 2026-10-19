@@ -9,7 +9,7 @@ in rust.buildRustPackage {
   pname = "painted-wolf-code-document-core";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
   src = componentSource;
-  cargoLock.lockFile = componentSource + "/Cargo.lock";
+  cargoLock.lockFileContents = builtins.readFile (source + "/lycaon/internal/documentcore/native/Cargo.lock");
   cargoBuildFlags = [ "--bin" "pw-document-core" ];
   doCheck = false;
   meta = {
