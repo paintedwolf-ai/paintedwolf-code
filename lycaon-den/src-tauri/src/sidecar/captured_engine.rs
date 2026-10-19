@@ -56,13 +56,26 @@ struct CapturedEngine {
 
 /// Capture before package replacement can change the path used by a later check.
 pub(super) fn setup() {
-    let result = match crate::installation_mode::InstallationMode::current() {
-        crate::installation_mode::InstallationMode::Package { root } => {
-            capture(&root, Path::new("/proc/self/exe"), true)
+    let result = capture_installation(
+        &crate::installation_mode::InstallationMode::current(),
+        Path::new("/proc/self/exe"),
+    );
+    let _ = ENGINE.set(result);
+}
+
+fn capture_installation(
+    installation: &crate::installation_mode::InstallationMode,
+    running: &Path,
+) -> Result<CapturedEngine, AdmissionError> {
+    match installation {
+        crate::installation_mode::InstallationMode::Package { root } => capture(root, running, true),
+        crate::installation_mode::InstallationMode::Nix { root, .. } => {
+            // Generation layout permits this user's helper execution. The vault
+            // service separately enforces administrator-selected custody trust.
+            capture(root, running, false)
         }
         _ => Err(AdmissionError::UnqualifiedInstallation),
-    };
-    let _ = ENGINE.set(result);
+    }
 }
 
 pub(crate) fn command() -> Result<tokio::process::Command, AdmissionError> {
