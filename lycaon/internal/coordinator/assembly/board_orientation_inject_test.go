@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
@@ -45,4 +46,35 @@ type orientationStubBoardBuilder struct{ hash string }
 
 func (s orientationStubBoardBuilder) BuildBoardSnapshot(_ context.Context, _, _, _ string, _ api.BoardDetailLevel, _ []projectroot.RootRef) (*api.BoardSnapshot, error) {
 	return &api.BoardSnapshot{PackContentHash: s.hash}, nil
+}
+
+func TestBoardEngineReplacesEmptyOrientationWhenFreshnessChanges(t *testing.T) {
+	snapshot := &api.BoardSnapshot{Repo: api.RepoBrief{GeneratedAt: time.Unix(1, 0)}}
+	engine := NewBoardEngine(changingOrientationBuilder{snapshot}, nil, nil)
+	engine.SetInjectRenderer(promptstest.InjectRenderer(t))
+	sess := &api.Session{ID: "freshness", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
+	run := api.CoordinatorRunContext{CurrentPhase: "work"}
+	block, ok := engine.PrependBoardIfChanged(t.Context(), sess, run)
+	if !ok || !strings.Contains(block, packboard.RepoEmptyOrientationLine) {
+		t.Fatalf("initial empty orientation: ok=%v block=%q", ok, block)
+	}
+	snapshot.Repo.Incomplete, snapshot.Repo.Refreshing = true, true
+	block, ok = engine.PrependBoardIfChanged(t.Context(), sess, run)
+	if !ok || !strings.Contains(block, "Repo: file inventory incomplete") || strings.Contains(block, packboard.RepoEmptyOrientationLine) {
+		t.Fatalf("stale empty orientation not replaced: ok=%v block=%q", ok, block)
+	}
+	if block, ok = engine.PrependBoardIfChanged(t.Context(), sess, run); ok {
+		t.Fatalf("unchanged freshness reinjected: %q", block)
+	}
+	snapshot.Repo.Incomplete, snapshot.Repo.Refreshing = false, false
+	block, ok = engine.PrependBoardIfChanged(t.Context(), sess, run)
+	if !ok || !strings.Contains(block, packboard.RepoEmptyOrientationLine) {
+		t.Fatalf("settled empty orientation not restored: ok=%v block=%q", ok, block)
+	}
+}
+
+type changingOrientationBuilder struct{ snapshot *api.BoardSnapshot }
+
+func (b changingOrientationBuilder) BuildBoardSnapshot(context.Context, string, string, string, api.BoardDetailLevel, []projectroot.RootRef) (*api.BoardSnapshot, error) {
+	return b.snapshot, nil
 }

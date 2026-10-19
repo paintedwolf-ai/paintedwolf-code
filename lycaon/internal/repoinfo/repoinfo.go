@@ -168,7 +168,8 @@ func (p *fileProvider) Brief(ctx context.Context, projectDir string) (*Brief, er
 	shown := cloneBrief(cached)
 	if coverageErr != nil || files.failed {
 		shown.Partial, shown.Refreshing = true, false
-	} else if files.pending {
+	} else if files.pending || files.generation != 0 && files.generation != cached.Generation {
+		// Measurement pacing must not preserve a current claim across generations.
 		shown.Partial, shown.Refreshing = true, true
 	}
 	return shown, nil
