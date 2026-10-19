@@ -34,7 +34,7 @@ func TestLinuxNixTerminalAndBackgroundToolchains(t *testing.T) {
 		t.Fatalf("read selected Nix terminal: %v", readErr)
 	}
 	testutil.FailErr(t, "wait actual selected Nix terminal", terminal.Wait())
-	if strings.TrimSpace(string(output)) != fixture.bash {
+	if !strings.HasSuffix(string(output), fixture.bash+"\r\n") {
 		t.Fatalf("terminal selected shell=%q; want %s", output, fixture.bash)
 	}
 	var stdout, stderr bytes.Buffer
