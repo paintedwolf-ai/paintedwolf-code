@@ -27,14 +27,18 @@ func RetainRunningNix(ctx context.Context) (*NixRetention, error) {
 	if layout == nil {
 		return &NixRetention{}, nil
 	}
+	registrar, err := runningNixRegistrar(layout)
+	if err != nil {
+		return nil, err
+	}
 	cache, err := os.UserCacheDir()
 	if err != nil || !filepath.IsAbs(cache) {
 		return nil, errors.New("Nix retention cache directory unavailable")
 	}
-	return retainNix(ctx, layout, filepath.Join(cache, "paintedwolf", "nix-running"))
+	return retainNix(ctx, layout, filepath.Join(cache, "paintedwolf", "nix-running"), registrar)
 }
 
-func retainNix(ctx context.Context, layout *NixLayout, directory string) (*NixRetention, error) {
+func retainNix(ctx context.Context, layout *NixLayout, directory string, registrar nixRegistrar) (*NixRetention, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
@@ -92,13 +96,15 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string) (*NixRe
 	}
 	operation, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(operation, layout.NixStore, "--add-root", link, "--indirect", "--realise", layout.Output) // #nosec G204 -- exact package-owned Nix executable; no PATH lookup
-	command.Env = []string{}
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "LYCAON_") {
-			command.Env = append(command.Env, value)
-		}
+	config, err := os.MkdirTemp(directory, "config-")
+	if err != nil {
+		release()
+		return nil, err
 	}
+	defer os.RemoveAll(config)
+	command := exec.CommandContext(operation, layout.NixStore, "--store", registrar.storeURI,
+		"--add-root", link, "--indirect", "--realise", layout.Output) // #nosec G204 -- exact package-owned Nix executable; no PATH lookup
+	command.Env = registrar.environment(config, directory)
 	command.Stdin = nil
 	var diagnostic boundedNixOutput
 	command.Stdout, command.Stderr = &diagnostic, &diagnostic
