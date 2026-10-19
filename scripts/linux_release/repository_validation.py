@@ -61,9 +61,14 @@ def apt(directory: Path, channel: str, catalog: Path, rehearsal: bool):
     for digest, size, name in checksums:
         index = selected_object(distribution, name)
         check_bytes(index, digest, size)
-        if index.name == "Packages":
+        if index.name in {"Packages", "Packages.gz"}:
             check_bytes(selected_object(index.parent, "by-hash/SHA256/" + digest), digest, size)
-            package_indexes.append(index)
+            sha512 = hashlib.sha512(index.read_bytes()).hexdigest()
+            alias = selected_object(index.parent, "by-hash/SHA512/" + sha512)
+            if alias.read_bytes() != index.read_bytes():
+                raise ValueError("apt SHA512 by-hash alias differs from its signed index")
+            if index.name == "Packages":
+                package_indexes.append(index)
     if not package_indexes:
         raise ValueError("signed apt generation has no package index")
     for index in package_indexes:

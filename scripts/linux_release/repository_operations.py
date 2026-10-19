@@ -28,11 +28,17 @@ def transition(receipt: dict, current: dict | None, expected: str | None, operat
         if (current.get("format_version") != 1 or current.get("operation") not in OPERATIONS
                 or not re.fullmatch(r"[0-9a-f]{64}", current.get("generation", ""))
                 or type(current.get("signing_generation")) is not int
+                or current["signing_generation"] < 1
+                or type(current.get("rehearsal")) is not bool
                 or not re.fullmatch(r"[0-9A-F]{40}", current.get("key_fingerprint", ""))):
             raise ValueError("active repository state has an unsupported shape")
         if any(current.get(name) != receipt.get(name) for name in ["family", "channel", "architecture", "rehearsal"]):
             raise ValueError("repository channel identity or trust mode differs from active state")
         if current["generation"] == selected:
+            facts = ["version", "source_commit", "inventory_sha256", "packages",
+                     "signing_generation", "key_fingerprint"]
+            if any(current.get(name) != receipt[name] for name in facts):
+                raise ValueError("active generation facts differ from its immutable manifest")
             if (current["operation"] == operation
                     and expected in {current["generation"], current.get("previous")}):
                 return current

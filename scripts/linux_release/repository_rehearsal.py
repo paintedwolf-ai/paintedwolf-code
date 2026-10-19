@@ -151,6 +151,9 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
                                         restored_remote["generation"], True)
                 remote_active[family] = remote["generation"]
             if family == "deb":
+                # Force actual apt to consume retained by-hash indexes, with no mutable fallback.
+                for index in (work / "origin/channels/deb/preview/dists/preview/main").glob("binary-*/Packages*"):
+                    index.unlink()
                 install_apt(work / "apt-root", origin + "/channels/deb/preview", certificate,
                             catalog, PACKAGE, version)
             else:
@@ -213,7 +216,7 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
             "architecture": platform.machine(), "published": False, "isolated_r2_published": r2_origin is not None,
             "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": generations,
-            "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes",
+            "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes", "apt-by-hash-without-mutable-fallback",
                       "old-and-new-retained", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
