@@ -414,3 +414,40 @@ identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
+
+### Current execution observations
+
+The coordinator receives a bounded information anchor after its board, from paired invocation
+receipts in the current user intent's retained history. Catalog instructions retain
+system authority; receipt fields and arguments remain separately marked data. It distinguishes tool
+completion from a command owner's source-bound verdict. It does not infer task
+completion, execute retries, or change the selected verification method.
+
+Unexecuted file mutations and progress-gated calls remain visible after tool loading
+or a checklist update. A later
+successful call with the same tool and argument digest retires that reminder;
+other operations may supersede the work without being treated as an exact retry.
+A new user intent clears the projection. Three rejected calls and three execution
+receipts are shown, with explicit omitted counts. Oversized argument values are
+omitted rather than rewritten into partial commands. The selected project check
+is included when execution observations exist.
+
+Recorded verdicts describe their original source, not a new freshness assertion.
+Full results and arguments remain in history. Live-job command previews are
+limited to 64 runes; stable handles and output controls retain access to details.
+
+Live evaluation uses captured provider requests and independent artifact checks.
+A better next action in a replay is insufficient to establish reliable recovery
+through an entire task.
+
+The execution projection is silent on successful execution paths without pending
+rejected operations. Output retrieval alone does not clear a failed execution
+observation. Each rejected operation records only prerequisite calls completed
+after that rejection; those historical events do not assert current tool availability,
+permission, or task completion. Rebuilding the projection never modifies canonical
+messages or invocation receipts.
+
+Rejected source mutations remain in these observations even when their handler
+started. The summary distinguishes rejection after invocation from a call that
+never executed; it does not infer whether a file exists, remains unchanged, or
+has partial effects. This distinction applies across supported languages.
