@@ -8,9 +8,7 @@
       "goos": "darwin",
       "goarch": "arm64",
       "publication": "public",
-      "package_extensions": [
-        "dmg"
-      ],
+      "package_extensions": ["dmg"],
       "updater_extension": "app.tar.gz"
     },
     {
@@ -20,11 +18,7 @@
       "goos": "linux",
       "goarch": "amd64",
       "publication": "candidate",
-      "package_extensions": [
-        "deb",
-        "rpm",
-        "pkg.tar.zst"
-      ],
+      "package_extensions": ["deb", "rpm", "pkg.tar.zst"],
       "updater_extension": null
     },
     {
@@ -34,11 +28,7 @@
       "goos": "linux",
       "goarch": "arm64",
       "publication": "candidate",
-      "package_extensions": [
-        "deb",
-        "rpm",
-        "pkg.tar.zst"
-      ],
+      "package_extensions": ["deb", "rpm", "pkg.tar.zst"],
       "updater_extension": null
     },
     {
@@ -48,9 +38,7 @@
       "goos": "windows",
       "goarch": "amd64",
       "publication": "candidate",
-      "package_extensions": [
-        "exe"
-      ],
+      "package_extensions": ["exe"],
       "updater_extension": "exe"
     }
   ]
