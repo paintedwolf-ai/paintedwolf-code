@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -135,6 +134,12 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	if !target.valid() {
 		return 0, unix.EINTR
 	}
+	endpoint := pinnedUnixEndpoint{fd: -1}
+	if req.Op == OpConnect && req.Unix != "" {
+		endpoint = pinUnixEndpoint(req.Unix, delegatedSystemEndpoints)
+		defer endpoint.close()
+		req.Delegated = endpoint.delegated
+	}
 	decision := s.network.Decide(req)
 	if decision.Refusal != nil {
 		decision.Refusal.Process = target.comm()
@@ -164,9 +169,7 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return bind()
 	default:
 		if req.Unix != "" {
-			// The resolved path is what the grant names and what is connected.
-			sa := &unix.SockaddrUnix{Name: req.Unix}
-			return 0, errnoOf(unix.Connect(sock, sa), 0)
+			return 0, errnoOf(endpoint.connect(sock), 0)
 		}
 		if len(raw) == 0 {
 			return 0, unix.EINVAL
@@ -218,23 +221,6 @@ func indexByte(b []byte, c byte) int {
 		}
 	}
 	return -1
-}
-
-// resolveSocketPath gives a path-socket address the meaning the target's
-// working directory gives it, with symbolic links resolved, so a grant matches
-// the socket it names whatever spelling reaches it.
-func resolveSocketPath(path string, target *targetProcess) string {
-	if !filepath.IsAbs(path) {
-		cwd, err := os.Readlink("/proc/" + strconv.Itoa(target.pid) + "/cwd")
-		if err != nil {
-			return ""
-		}
-		path = filepath.Join(cwd, path)
-	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved
-	}
-	return filepath.Clean(path)
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's

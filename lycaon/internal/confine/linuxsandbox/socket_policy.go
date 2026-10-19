@@ -9,6 +9,12 @@ import (
 // SocketOp is a socket syscall the supervisor decides and performs.
 type SocketOp string
 
+// DelegatedService identifies host effects a client boundary cannot constrain.
+type DelegatedService string
+
+// DelegatedNixDaemon performs store, build, and network effects outside its client.
+const DelegatedNixDaemon DelegatedService = "nix_daemon"
+
 const (
 	OpConnect SocketOp = "connect"
 	OpBind    SocketOp = "bind"
@@ -24,6 +30,8 @@ type SocketRequest struct {
 	Op SocketOp
 	// Unix is a path-socket address, already resolved to its real path.
 	Unix string
+	// Delegated is observed from the host endpoint's path and socket identity.
+	Delegated DelegatedService
 	// Abstract marks an abstract or unnamed Unix-domain address.
 	Abstract bool
 	// IP is an internet address; zero when the call named none.
@@ -108,6 +116,8 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 		return Decision{Action: Perform}
 	case r.Op == OpBind:
 		return refuse("network-bind", r.Unix)
+	case r.Delegated != "":
+		return refuse("host-service-delegation", r.Unix)
 	case slices.Contains(n.SocketPaths, filepath.Clean(r.Unix)):
 		return Decision{Action: Perform}
 	default:

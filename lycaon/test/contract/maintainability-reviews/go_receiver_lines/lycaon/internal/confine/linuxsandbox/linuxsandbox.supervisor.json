@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/confine/linuxsandbox/linuxsandbox.supervisor",
+  "kind": "runtime_service",
+  "workstream": "linux-confinement-authority",
+  "disposition": "retain",
+  "reason": "The supervisor has 308 receiver lines spanning one network namespace and seccomp listener lifetime. Forwarding setup, exact descriptor operations, refusal settlement, and socket cleanup share that lifetime; the new endpoint owner contains path and inode policy without duplicating supervision state. Keep this bounded lifecycle in one receiver.",
+  "reviewed_commit": "104aa2452dbd72d6b2d1e4a696d256152b0ec2cb",
+  "ceiling": 315,
+  "boundaries": {
+    "lycaon/internal/confine/linuxsandbox/relay_linux_test.go": "c2226b18ddf0a0402fda7323fd2314eaf8f1008a55d42955bff85166099225c4",
+    "lycaon/internal/confine/linuxsandbox/unix_endpoint_linux_test.go": "90ea1ed4194dd6f9cd639d1913595b76a53682af636ba52b272fdcf778e8bd29",
+    "lycaon/internal/confine/nix_daemon_grant_linux_test.go": "7b8ce4ca97bb8a69e75af0e8064f5b59738b3780d0671b286dc7c9c73da252e8"
+  },
+  "reviewed_shape": "234b02cfb92e0d46d5733bf8b8d87acbd41bc58e2b6a2eaac1a2cacb2a4e29c1"
+}
