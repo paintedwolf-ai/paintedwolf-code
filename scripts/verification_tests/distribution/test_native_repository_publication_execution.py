@@ -58,14 +58,14 @@ class RepositoryR2Tests(unittest.TestCase):
         if self.objects.get(key) != source.read_bytes():
             raise ValueError("public bytes differ")
 
-    def publish(self, expected=None, rehearsal=True, prefix="release-system-tests/native-contract"):
+    def publish(self, expected=None, rehearsal=True, prefix="release-system-tests/native-contract", authorize=None):
         with tempfile.TemporaryDirectory() as temporary:
             with patch("linux_release.repository_r2.publish", side_effect=self.local), \
                     patch("linux_release.repository_r2.current", side_effect=self.current), \
                     patch("linux_release.repository_r2.put", side_effect=self.put), \
                     patch("linux_release.repository_r2.public_bytes", side_effect=self.public):
                 return publish_r2(self.receipt, Path(temporary), Path(temporary) / "keys.json", prefix,
-                                  "https://repository.example.invalid", expected, rehearsal)
+                                  "https://repository.example.invalid", expected, rehearsal, authorize=authorize)
 
     def test_content_and_readback_precede_the_single_apt_authority(self):
         result = self.publish()
@@ -114,3 +114,62 @@ class RepositoryR2Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 immutable(path, b"changed")
             self.assertEqual(path.read_bytes(), b"selected")
+
+    def test_production_denial_precedes_every_transport_read_or_write(self):
+        self.receipt["rehearsal"] = False
+        for value in [False, None, 1, {"accepted": True}]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.publish(rehearsal=False, authorize=lambda request: value)
+            self.assertFalse(self.events)
+            self.assertEqual(self.reads, 0)
+
+    def test_production_authority_is_freshly_checked_before_activation(self):
+        self.receipt["rehearsal"] = False
+        requests = []
+
+        def authorize(request):
+            self.assertEqual(set(request), {"manifest", "directory", "catalog", "storage_prefix",
+                                           "base_url", "expected", "operation", "phase"})
+            self.assertEqual(request["manifest"], self.receipt)
+            self.assertIsNot(request["manifest"], self.receipt)
+            self.assertEqual(request["base_url"], "https://repository.example.invalid")
+            self.assertEqual(request["operation"], "publish")
+            self.assertEqual(request["phase"], "activate")
+            self.assertIsNone(request["expected"])
+            self.assertTrue(request["directory"].is_dir())
+            self.assertEqual(request["catalog"], request["directory"] / "keys.json")
+            requests.append(self.reads)
+            return len(requests) == 1
+
+        with self.assertRaisesRegex(ValueError, "authorization was refused"):
+            self.publish(rehearsal=False, authorize=authorize)
+        self.assertEqual(requests, [0, 2])
+        self.assertTrue(self.events)
+        self.assertFalse(any(key.endswith(("/current.json", "/InRelease")) for key in self.objects))
+
+    def test_production_authority_can_admit_both_bound_checkpoints(self):
+        self.receipt["rehearsal"] = False
+        requests = []
+
+        def authorize(request):
+            requests.append(request)
+            return True
+
+        result = self.publish(rehearsal=False, authorize=authorize)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0], requests[1])
+        self.assertEqual(result["publication_phase"], "activated")
+
+    def test_changed_predecessor_refuses_before_activation_authorization(self):
+        self.receipt["rehearsal"] = False
+        self.race = True
+        calls = []
+
+        def authorize(request):
+            calls.append(request)
+            return True
+
+        with self.assertRaisesRegex(ValueError, "changed while"):
+            self.publish(rehearsal=False, authorize=authorize)
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(any(key.endswith("/current.json") for key in self.objects))

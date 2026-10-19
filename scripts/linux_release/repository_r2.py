@@ -14,21 +14,29 @@ from .r2_objects import prefix, public_bytes, current, put
 from .repository_operations import OPERATIONS, transition, identity, withdrawal, version_marker
 
 def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: str,
-               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate") -> dict:
+               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate", *, authorize=None) -> dict:
     """The release workflow owns cross-host serialization and final production admission."""
     if phase not in {"stage", "activate"}:
         raise ValueError("unsupported repository publication phase")
     prefix(storage_prefix, rehearsal)
-    # Until the release controller supplies final-artifact admission, this entry point
-    # exposes only the isolated rehearsal namespace.
-    if not rehearsal:
+    if not rehearsal and not callable(authorize):
         raise ValueError("production repository publication requires release-controller admission")
+    receipt = json.loads(encoded(receipt))
+    def permission():
+        request = {"manifest": json.loads(encoded(receipt)), "directory": directory, "catalog": catalog,
+                   "storage_prefix": storage_prefix, "base_url": base_url, "expected": expected,
+                   "operation": operation, "phase": phase}
+        if not rehearsal and authorize(request) is not True:
+            raise ValueError("production repository publication authorization was refused")
+
     origin = base_url.rstrip("/") + "/" + storage_prefix
     with tempfile.TemporaryDirectory(prefix="paintedwolf-r2-repository-") as temporary:
         work = Path(temporary)
         channel = f"channels/{receipt['family']}/{receipt['channel']}"
         state_key = storage_prefix + "/" + channel + "/current.json"
         record = publish(receipt, directory, work / "origin", origin, catalog, None, rehearsal)
+        generation = work / "origin/generations" / identity(receipt)
+        permission()
         active = current(state_key, work)
         record = {**transition(receipt, active, expected, operation), "configuration": record["configuration"]}
         selected = identity(receipt)
@@ -36,7 +44,6 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             raise ValueError("a withdrawn R2 generation cannot be offered again")
         if current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
             raise ValueError("a withdrawn repository version cannot be offered again")
-        generation = work / "origin/generations" / selected
         if operation in {"recover", "withdraw"}:
             retained_key = storage_prefix + "/generations/" + selected + "/generation.json"
             if current(retained_key, work) != receipt:
@@ -68,6 +75,7 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "staged"}
         if current(state_key, work) != active:
             raise ValueError("R2 repository changed while its generation was uploading")
+        permission()
         marker = withdrawal(record)
         if marker is not None:
             tombstone = work / "withdrawal.json"
