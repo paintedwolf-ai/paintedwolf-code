@@ -103,6 +103,11 @@ def _publish_objects(cache: Path, checked: dict, backend, operation: str | None)
                     or stable(old["objects"]) != stable(receipt["objects"])):
                 raise ValueError("cache release identity changed instead of adding rotation signatures")
             name = name.removesuffix(".json") + "-rotation-" + hashlib.sha256(encoded(receipt)).hexdigest() + ".json"
+        # A lost connection does not cancel an in-flight object write. Keep its
+        # full plan as a retention root before exposing any object from that plan.
+        backend.put_bytes(f"publication-plans/{operation}.json",
+                          encoded({"schema_version": 1, "request": request, "objects": checked["objects"]}),
+                          "application/json", "no-cache, no-store, must-revalidate")
         for record in checked["objects"]:
             relative = record["name"]
             previous = backend.read(relative) if record["phase"] != "nar" else None

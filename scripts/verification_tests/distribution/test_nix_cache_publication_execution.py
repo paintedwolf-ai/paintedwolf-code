@@ -182,6 +182,18 @@ class CachePublicationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             collect(request, dt.datetime(2021, 1, 1, tzinfo=dt.timezone.utc), authorize=lambda *args: True, backend_factory=self.factory)
 
+    def test_interrupted_plan_roots_objects_before_a_metadata_write_can_finish(self):
+        self.store.fail = "nar/content.nar.xz"
+        with self.assertRaises(ValueError):
+            self.publish()
+        self.assertIsNone(self.store.read(self.metadata))
+        self.assertTrue(any(name.startswith("publication-plans/") for _, name in self.store.events))
+        self.store.put_bytes("nar/orphan.nar.xz", b"unplanned")
+        removed = collect(self.report["request"], dt.datetime(2021, 1, 1, tzinfo=dt.timezone.utc),
+                          authorize=lambda *args: True, backend_factory=self.factory)
+        self.assertEqual(removed, ["nar/orphan.nar.xz"])
+        self.assertIsNotNone(self.store.read("nar/content.nar.xz"))
+
     def test_collection_and_recovery_refuse_before_backend_without_explicit_authority(self):
         with self.assertRaises(ValueError):
             collect({}, dt.datetime.now(dt.timezone.utc), authorize=lambda *args: False, backend_factory=self.factory)

@@ -23,16 +23,18 @@ def plan(backend, cutoff: dt.datetime) -> list[dict]:
             if len(urls) != 1 or not urls[0].startswith("nar/"):
                 raise ValueError("retained cache metadata lacks its exact NAR reference")
             retained.add(relative_name(urls[0]))
-        elif name.startswith("release-records/") and name.endswith(".json"):
+        elif name.startswith(("release-records/", "publication-plans/")) and name.endswith(".json"):
             receipt = json.loads(backend.read(name))
             if type(receipt.get("schema_version")) is not int or receipt["schema_version"] != 1 or not isinstance(receipt.get("objects"), list):
                 raise ValueError("retained cache release record has an unsupported shape")
             for item in receipt["objects"]:
-                retained.add(relative_name(item["name"]))
+                target = relative_name(item["name"])
+                if not name.startswith("publication-plans/") or target in names:
+                    retained.add(target)
     if not retained <= names:
         raise ValueError("retained cache closure has missing objects; garbage collection refused")
     # Published narinfo is permanent, including withdrawn releases and old pins.
-    # Only never-advertised debris from interrupted uploads can become garbage.
+    # Interrupted plans retain their objects because old writes may still commit.
     return [row for row in rows if row["name"] not in retained
             and re.fullmatch(r"nar/[A-Za-z0-9+._-]+\.nar(?:\.(?:xz|zst|bz2|gz))?", row["name"])
             and row["modified"].tzinfo is not None and row["modified"] < cutoff]
