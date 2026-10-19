@@ -914,6 +914,8 @@ The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifac
 
 Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
 
+The final release admission consumer also requires a separate publication file root. A file artifact ID is its basename in that root; the consumer hashes its actual final bytes through a stable regular-file descriptor, refuses symlinks or replacement during verification, and records the verified sizes and hashes. The receipt cannot replace a package or retained evidence. Repository signing changes package bytes, so qualification and publication must use the final signed package identity. Closure admission remains a separate Nix store/NAR contract.
+
 The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
 
 ### Updates
