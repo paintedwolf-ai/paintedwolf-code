@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/release-r2-live-test.sh",
+  "kind": "construction",
+  "workstream": "release-system-rehearsals",
+  "disposition": "retain",
+  "reason": "The existing R2 rehearsal owns isolated remote object lifecycle and cleanup. This change adds only explicit local-mode dispatch before credentials are read; cryptographic rehearsal behavior and key custody are owned by linux_release/signing_rehearsal.py and openpgp.py. Retain this bounded dispatcher and existing R2 transaction owner. The native local signature rehearsal and its admission fixtures passed.",
+  "reviewed_commit": "b6d0ba8c6b0d1b2b5d46ef1b88e080dde9cc7a3d",
+  "ceiling": 390,
+  "boundaries": {
+    "scripts/verification_tests/distribution/test_linux_signing_execution.py": "21901c119b896f2c9a01ec47746e141340775db53b6ced30b3cd5e379db0e841"
+  }
+}

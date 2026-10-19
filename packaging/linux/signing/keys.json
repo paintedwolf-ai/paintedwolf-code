@@ -1,0 +1,14 @@
+{
+  "format_version": 1,
+  "signing_generation": 1,
+  "generations": [
+    {
+      "generation": 1,
+      "fingerprint": "64DC3B3D654A7C7BDCE74B26A479EE01C490232B",
+      "algorithm": "rsa4096",
+      "public_key": "painted-wolf-code-packages-1.asc",
+      "secret": "LINUX_PACKAGE_SIGNING_KEY",
+      "created": "2026-10-15"
+    }
+  ]
+}
