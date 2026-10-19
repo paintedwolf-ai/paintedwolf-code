@@ -13,10 +13,7 @@ let
   dependencyExpression = import ./bun.nix;
   package = lib.importJSON (source + "/lycaon-den/package.json");
   identity = lib.importJSON ./bun-lock.json;
-  patchFiles = lib.mapAttrs (_: path: builtins.path {
-    path = sourcePath + "/lycaon-den/${path}";
-    name = "painted-wolf-bun-dependency.patch";
-  })
+  patchFiles = lib.mapAttrs (_: path: sourcePath + "/lycaon-den/${path}")
     package.patchedDependencies;
 in
 assert lib.assertMsg
