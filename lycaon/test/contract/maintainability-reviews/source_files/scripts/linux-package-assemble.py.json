@@ -4,10 +4,11 @@
   "kind": "construction",
   "workstream": "linux-native-packages",
   "disposition": "retain",
-  "reason": "The assembler owns common tree sealing and invokes native format adapters. Pacman archive, recipe and makepkg behavior live in linux_release/arch.py; this file adds only the explicit optional dispatch after the shared sealed tree is complete. Keep this bounded orchestration owner while package families are extended.",
-  "reviewed_commit": "20cd91fcb03c99f783c6a1086dee19e0bb07e4b8",
+  "reason": "Retain the measured 355-line common tree sealing and native format dispatch owner under its existing 365-line ceiling. Native CPU substrate preparation, pacman archive metadata admission and final candidate inventory belong to named linux_release adapters. The assembler adds only explicit container selection after sealing; focused native package contracts and actual managed makepkg byte-preservation rehearsal verify that boundary.",
+  "reviewed_commit": "79435515f3",
   "ceiling": 365,
   "boundaries": {
-    "scripts/verification_tests/distribution/test_arch_package_execution.py": "cb0871c0558a481e7d3f40638eb54f5d1fc383484fe5955c70e19ea359c85bed"
+    "scripts/verification_tests/distribution/test_arch_package_execution.py": "ec38ba1e036119447c935a8e167dc8f6dc03ac45966d9d9ab55099e4442b8d57",
+    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "507a51ee4edaa661eb1157817f0d8ec0525b59c3e30676a80ada198534348cb9"
   }
 }
