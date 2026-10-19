@@ -10,6 +10,7 @@ import type { SidecarStatus } from "../store/app-state-model.ts";
 import { CLIENT_NOTICES, type ClientNoticeCopy } from "./client-notices.generated.ts";
 
 export type CriticalStopRecovery =
+  | "quit_desktop"
   | "reconnect"
   | "recheck"
   | "restore_snapshot"
@@ -39,6 +40,8 @@ export function criticalStopRecoveryLabel(
   recovery: CriticalStopRecovery,
 ): string {
   switch (recovery) {
+    case "quit_desktop":
+      return "Quit app";
     case "reconnect":
       return "Try again";
     case "recheck":
@@ -98,6 +101,10 @@ const NAMED_START_FAILURES: Record<
     code: "credential_vault_unlock_failed",
     copy: CLIENT_NOTICES.credential_vault_unlock_failed,
   },
+  desktop_restart_required: {
+    code: "desktop_restart_required",
+    copy: CLIENT_NOTICES.desktop_restart_required,
+  },
   credential_vault_custodian_unavailable: {
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,
@@ -122,7 +129,9 @@ function offlineCriticalStop(
 ): CriticalStopSpec {
   const named = startFailure ? NAMED_START_FAILURES[startFailure] : undefined;
   const copy = named?.copy ?? CLIENT_NOTICES.offline;
-  const recovery: CriticalStopRecovery = startFailure === "credential_vault_uninitialized"
+  const recovery: CriticalStopRecovery = startFailure === "desktop_restart_required"
+    ? "quit_desktop"
+    : startFailure === "credential_vault_uninitialized"
     ? "create_credential_vault"
     : startFailure === "credential_vault_locked" ||
         startFailure === "credential_vault_unlock_failed"
@@ -152,6 +161,9 @@ export const ENGINE_STOPPED_STOP_CODE = "engine_stopped";
 export function engineStoppedCriticalStop(
   engine: Extract<EngineState, { state: "stopped" }>,
 ): CriticalStopSpec {
+  if (engine.restart_required) {
+    return offlineCriticalStop("desktop_restart_required");
+  }
   const copy = CLIENT_NOTICES.engine_stopped;
   const exited = `The engine ${engine.exit.description}.`;
   return {

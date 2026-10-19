@@ -135,6 +135,7 @@ describe("resolveCriticalStop", () => {
     ["credential_vault_unlock_failed", "unlock_credential_vault"],
     ["credential_vault_uninitialized", "create_credential_vault"],
     ["credential_vault_corrupt", "reset_credential_vault"],
+    ["desktop_restart_required", "quit_desktop"],
     ["credential_vault_custodian_unavailable", "reconnect"],
     ["credential_vault_launcher_refused", "reconnect"],
     ["credential_vault_identity_missing", "reconnect"],
@@ -397,4 +398,14 @@ describe("store incompatible critical stop", () => {
       expect(src, fragment).not.toContain(fragment);
     }
   });
+});
+
+
+it("keeps a native restart requirement when automatic engine recovery stops", () => {
+  const stop = resolveCriticalStop({
+    sidecarStatus: "disconnected",
+    engine: { state: "stopped", exit: { code: 1, description: "exited" }, restart_required: true },
+  });
+  expect(stop?.code).toBe("desktop_restart_required");
+  expect(stop?.recovery).toBe("quit_desktop");
 });

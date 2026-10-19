@@ -71,6 +71,20 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
+        file: "src/sidecar/installation.rs",
+        rust_type: "Manifest",
+        binding: Binding::NotHostWire {
+            reason: "reads the package manager's on-disk manifest for restart admission, never engine output",
+        },
+    },
+    Entry {
+        file: "src/sidecar/installation.rs",
+        rust_type: "Executable",
+        binding: Binding::NotHostWire {
+            reason: "reads an executable entry from the package manager's on-disk manifest, never engine output",
+        },
+    },
+    Entry {
         file: "src/presence.rs",
         rust_type: "HostError",
         binding: Binding::Mirror {

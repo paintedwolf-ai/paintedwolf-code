@@ -4,7 +4,7 @@ import { listenHostEvent } from "../../platform/windows/window-channel.ts";
 const UPDATE_STATE_EVENT = "update-state-changed";
 type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "unknown";
 /** Package identity for a .deb or .rpm installation; the host owns the exact upgrade command. */
-export type InstalledPackage = { family: "deb" | "rpm"; name: string; version: string; update_command: string };
+export type InstalledPackage = { family: "deb" | "rpm" | "nix"; name: string; version: string; update_command: string };
 type UpdateChannel = "stable" | "preview";
 type UpdateCandidate = {
   release_id: string; version: string; channel: UpdateChannel; platform: string;

@@ -74,6 +74,15 @@ describe("update settings", () => {
     expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
     expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
   });
+  it("leaves Nix update ownership with the selected profile or configuration", async () => {
+    const state = packageFixture();
+    state.package = { ...state.package!, family: "nix", update_command: "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation." };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    const upgrade = await screen.findByTestId("updates-package-upgrade");
+    expect(upgrade.textContent).toContain("Nix profile, Home Manager configuration, or NixOS configuration");
+    expect(upgrade.querySelector("code")).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
     const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });
