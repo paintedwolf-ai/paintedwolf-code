@@ -8,14 +8,14 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.publication_producer import copy_inputs, main, produce
-from verification_tests.distribution.test_linux_release_admission_execution import LinuxReleaseAdmissionTests
+from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
 class PublicationProducerTests(unittest.TestCase):
     def fixture(self, directory):
         source = Path(directory) / "inputs"
         source.mkdir()
-        root, _, _ = LinuxReleaseAdmissionTests().fixture(source)
+        root, _, _ = fixtures.LinuxReleaseAdmissionTests().fixture(source)
         catalog = json.loads((root / "catalog.json").read_text())
         (root / "catalog.json").unlink()
         (root / "artifacts.json").rename(root / "final-artifacts.json")
