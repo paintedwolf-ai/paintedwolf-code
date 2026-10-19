@@ -35,8 +35,14 @@ pub(super) fn project(raw: &str, facts: &mut PackageSourceFacts) -> Result<(), Q
     let report: Apt = serde_json::from_str(raw).map_err(|_| QueryReason::InvalidResponse)?;
     if report.schema != 1 { return Err(QueryReason::InvalidResponse); }
     if !report.adapter_available { return Err(QueryReason::AdapterUnavailable); }
-    let (Some(installed), Some(architecture), Some(held)) = (report.installed, report.architecture, report.held) else {
+    let Some(installed) = report.installed else {
+        if report.architecture.is_some() || report.held.is_some() || report.candidate.is_some() {
+            return Err(QueryReason::InvalidResponse);
+        }
         select(facts, None, Some(QueryReason::NotInstalled)); return Ok(());
+    };
+    let (Some(architecture), Some(held)) = (report.architecture, report.held) else {
+        return Err(QueryReason::InvalidResponse);
     };
     if !field(&installed) || !field(&architecture) { return Err(QueryReason::InvalidResponse); }
     facts.database_version = Some(installed);

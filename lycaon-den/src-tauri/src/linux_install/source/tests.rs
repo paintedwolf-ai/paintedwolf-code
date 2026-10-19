@@ -82,8 +82,10 @@ fn apt_hold_untrusted_and_missing_cache_are_explicit_outcomes() {
 fn apt_current_missing_install_and_wrong_architecture_cannot_become_an_upgrade() {
     let mut report = apt_report(); report["candidate"]["newer"] = false.into();
     assert_eq!(apt_facts(report).availability, SourceAvailability::NoNewerCandidate);
-    let mut report = apt_report(); report["installed"] = serde_json::Value::Null;
+    let report = serde_json::json!({"schema":1,"adapter_available":true,"installed":null,"architecture":null,"held":null,"candidate":null});
     assert_eq!(apt_facts(report).reason, Some(QueryReason::NotInstalled));
+    let mut report = apt_report(); report["held"] = serde_json::Value::Null;
+    assert_eq!(apt_facts(report).reason, Some(QueryReason::InvalidResponse));
     let mut report = apt_report(); report["candidate"]["architecture"] = "arm64".into();
     let facts = apt_facts(report);
     assert_eq!((facts.availability, facts.reason), (SourceAvailability::Failed, Some(QueryReason::WrongArchitecture)));
