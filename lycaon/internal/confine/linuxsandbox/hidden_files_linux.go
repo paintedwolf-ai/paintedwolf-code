@@ -37,15 +37,19 @@ func newHiddenFileMount() (*hiddenFileMount, error) {
 		_ = os.Remove(anchor)
 		return nil, err
 	}
-	return &hiddenFileMount{fd: fd, anchor: anchor}, nil
+	mask := &hiddenFileMount{fd: fd, anchor: anchor}
+	file, err := unix.Openat(fd, "hidden", unix.O_CREAT|unix.O_EXCL|unix.O_WRONLY|unix.O_CLOEXEC, 0)
+	if err == nil {
+		err = unix.Close(file)
+	}
+	if err != nil {
+		_ = mask.close()
+		return nil, err
+	}
+	return mask, nil
 }
 
 func (m *hiddenFileMount) hide(path string) error {
-	fd, err := unix.Openat(m.fd, "hidden", unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return err
-	}
-	_ = unix.Close(fd)
 	clone, err := unix.OpenTree(m.fd, "hidden", unix.OPEN_TREE_CLONE|unix.O_CLOEXEC)
 	if err != nil {
 		return err
