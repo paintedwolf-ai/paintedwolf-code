@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 
 	"golang.org/x/sys/unix"
 )
@@ -63,8 +64,10 @@ func readDedicatedProtection() (dedicatedProtection, error) {
 
 func (facts dedicatedProtection) validate() error {
 	const ptrace = uint64(1) << unix.CAP_SYS_PTRACE
-	if facts.uid == 0 || facts.gid == 0 || len(facts.groups) != 0 || facts.noNewPrivileges != 1 || facts.effective != ptrace || facts.permitted != ptrace || facts.inheritable != ptrace || facts.bounding != ptrace || facts.ambient != ptrace {
-		return errors.New("dedicated service requires non-root uid/gid, no supplementary groups, no-new-privileges and only CAP_SYS_PTRACE in every capability set")
+	// systemd repeats the primary group; it grants no additional group authority.
+	extraGroup := slices.ContainsFunc(facts.groups, func(group int) bool { return group != facts.gid })
+	if facts.uid == 0 || facts.gid == 0 || extraGroup || facts.noNewPrivileges != 1 || facts.effective != ptrace || facts.permitted != ptrace || facts.inheritable != ptrace || facts.bounding != ptrace || facts.ambient != ptrace {
+		return errors.New("dedicated service requires non-root uid/gid, no group authority beyond its primary group, no-new-privileges and only CAP_SYS_PTRACE in every capability set")
 	}
 	return nil
 }

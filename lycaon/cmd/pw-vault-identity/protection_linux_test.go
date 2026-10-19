@@ -13,10 +13,14 @@ func TestDedicatedServiceRequiresExactlyTheVerificationCapability(t *testing.T) 
 	const ptrace = uint64(1) << unix.CAP_SYS_PTRACE
 	safe := dedicatedProtection{uid: 999, gid: 999, effective: ptrace, permitted: ptrace, inheritable: ptrace, bounding: ptrace, ambient: ptrace, noNewPrivileges: 1}
 	testutil.FailErr(t, "accept dedicated service", safe.validate())
+	primaryOnly := safe
+	primaryOnly.groups = []int{safe.gid}
+	testutil.FailErr(t, "accept systemd primary group membership", primaryOnly.validate())
 	cases := map[string]func(*dedicatedProtection){
 		"root user":            func(f *dedicatedProtection) { f.uid = 0 },
 		"root group":           func(f *dedicatedProtection) { f.gid = 0 },
 		"supplementary group":  func(f *dedicatedProtection) { f.groups = []int{10} },
+		"primary and foreign":  func(f *dedicatedProtection) { f.groups = []int{f.gid, 10} },
 		"privilege escalation": func(f *dedicatedProtection) { f.noNewPrivileges = 0 },
 		"missing effective":    func(f *dedicatedProtection) { f.effective = 0 },
 		"extra permitted":      func(f *dedicatedProtection) { f.permitted |= 1 << unix.CAP_DAC_OVERRIDE },
