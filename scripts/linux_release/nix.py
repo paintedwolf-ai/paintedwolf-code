@@ -17,7 +17,7 @@ from ..artifact_paths import artifact_root
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
-COMPONENTS = ("default", "bun-lock", "frontend", "engine", "bialy", "document-core", "resources")
+COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bialy", "document-core", "resources")
 
 
 def command(operation: str, root: Path, component: str = "default") -> list[str]:
