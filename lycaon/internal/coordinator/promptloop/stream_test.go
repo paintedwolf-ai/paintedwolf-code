@@ -67,7 +67,7 @@ func TestCoordinatorLLMLoopProgressGuardedOnAllCoordinatorTurns(t *testing.T) {
 	}
 }
 
-const unparsedSyntaxError = "invalid character '$' after object key:value pair"
+const unparsedSyntaxError = `invalid character '\n' in string literal`
 
 type unparsedRequestRecorder struct {
 	modelcall.LLMClient
@@ -170,6 +170,12 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 						t.Fatalf("request %d carries a tool call or result: %+v", i, msg)
 					}
 					if strings.Contains(msg.Content, "Code: TOOL_CALL_UNPARSED") {
+						if len(msg.Content) > 1024 {
+							t.Fatalf("parser feedback exceeds 1 KiB: %d bytes", len(msg.Content))
+						}
+						if !strings.Contains(msg.Content, "literal newline inside a quoted string") {
+							t.Fatalf("missing parser-specific OAR feedback: %s", msg.Content)
+						}
 						feedback++
 						if msg.Role == api.MessageRoleAssistant || !strings.Contains(msg.Content, "valid JSON arguments") {
 							t.Fatalf("request %d feedback is not host repair copy: %+v", i, msg)

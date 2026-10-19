@@ -13,6 +13,8 @@ type ProviderToolCallUnparsedError struct {
 	ProviderID string
 	Model      string
 	Cause      error
+	// Diagnostic is a catalog-declared parser observation, never raw provider text.
+	Diagnostic string
 }
 
 func (e *ProviderToolCallUnparsedError) Error() string {

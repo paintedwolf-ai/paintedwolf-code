@@ -38,8 +38,9 @@ func (l *modelTurn) recoverUnparsedToolCall(
 		completion.Content, completion.Reasoning, completion.ReasoningDetails = partial.Content, partial.Reasoning, partial.ReasoningDetails
 	}
 	reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{
-		Segments:         oarModelOutputSegments(completion.Content),
-		ToolCallUnparsed: true,
+		Segments:          oarModelOutputSegments(completion.Content),
+		ToolCallUnparsed:   true,
+		ToolCallDiagnostic: unparsed.Diagnostic,
 	}, "", nil)
 	if !blocked || reject == nil {
 		return nil, cause

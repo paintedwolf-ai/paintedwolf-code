@@ -41,6 +41,17 @@ func TestFactsFromDataReasonFlags(t *testing.T) {
 	}
 }
 
+func TestParserReasonFlagsRemainExact(t *testing.T) {
+	for _, reason := range []string{"unescaped_newline", "unexpected_end", "invalid_escape", "unknown", "unescaped_newline trailing"} {
+		got := FactsFromData(map[string]any{"reason": reason})
+		for _, candidate := range []string{"unescaped_newline", "unexpected_end", "invalid_escape"} {
+			if (got["paintedwolf.json_"+candidate] == true) != (candidate == reason) {
+				t.Fatalf("reason %q produced wrong parser flag %q: %#v", reason, candidate, got)
+			}
+		}
+	}
+}
+
 func TestFactsFromDataPreservesMeasuredCapabilityFields(t *testing.T) {
 	got := FactsFromData(map[string]any{"capability_request_fields": []string{"loopback_connect.ports"}})
 	fields, ok := got["paintedwolf.capability_request_fields"].([]string)
