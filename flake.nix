@@ -66,6 +66,12 @@
           scanner-original = resources.inputs.scannerOriginal;
           notices = resources.notices;
           notice-tools = resources.notices.cargoAbout;
+          nix-workflow-fixture = pkgs.writeText "painted-wolf-nix-workflow-inputs.json" (builtins.toJSON {
+            schema = 1;
+            bash = "${pkgs.bash}/bin/bash";
+            coreutils = "${pkgs.coreutils}/bin/mkdir";
+            stdenv = "${pkgs.stdenv}";
+          });
           bun-lock = pkgs.runCommand "painted-wolf-bun-lock" { nativeBuildInputs = [ converter ]; } ''
             cp ${self}/lycaon-den/bun.lock bun.lock
             bun2nix -o "$out"
