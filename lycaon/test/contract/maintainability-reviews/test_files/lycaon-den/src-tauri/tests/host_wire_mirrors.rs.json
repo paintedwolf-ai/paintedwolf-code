@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src-tauri/tests/host_wire_mirrors.rs",
+  "kind": "test_suite",
+  "workstream": "linux-native-proxy",
+  "disposition": "retain",
+  "reason": "One source-discovery owner binds every Go-produced Rust structure to its writer fixture, including the private proxy child protocol. Keeping discovery, bindings and field comparison together preserves the completeness invariant; the new protocol needs one explicit file classification. Measured baseline756 nonblank lines; retain this cohesive contract under760.",
+  "reviewed_commit": "c5eeaef1465f5871cd7fe00292cba4af7d093594",
+  "ceiling": 760,
+  "boundaries": {
+    "lycaon-den/src-tauri/tests/host_wire_mirrors.rs": "6ba847b1907cd356d52ffed217d32f38570058c6fe62790ca12273707e5a0dc1",
+    "lycaon/test/contract/wire/rust_host_wire_fixtures_contract_test.go": "cf31aed2ac5c0f16447d6fab2fdb15761712bbc5fe12b2cc710ba793df050c51"
+  }
+}
