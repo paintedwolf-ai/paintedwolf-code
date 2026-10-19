@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.repository_publication import encoded, immutable
+from linux_release.repository_objects import encoded, immutable
 from linux_release.repository_r2 import publish_r2
 
 

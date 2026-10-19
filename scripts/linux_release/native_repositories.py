@@ -12,6 +12,7 @@ import shutil
 import subprocess
 
 from .signing import CATALOG, digest, sign
+from .openpgp import selection
 
 SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9+._~-]*\Z")
 ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
@@ -78,6 +79,7 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
     rows = manifest.get("packages")
     if not isinstance(rows, list) or not rows or len({row["file"] for row in rows}) != len(rows):
         raise ValueError("repository input receipt requires distinct packages")
+    signer, _ = selection(catalog, rehearsal)
     sources = [(row, checked_input(row, inputs, family, package)) for row in rows]
     destination.mkdir(parents=True, exist_ok=False)
     architectures = sorted({row["architecture"] for row in rows})
@@ -101,7 +103,8 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
         subprocess.run(["createrepo_c", "--checksum", "sha256", "--unique-md-filenames", str(destination)], check=True)
         metadata = destination / "repodata/repomd.xml"
         sign("detached", metadata, metadata.with_suffix(".xml.asc"), catalog, private, rehearsal)
-    result = {"format_version": 1, "family": family, "channel": channel, "rehearsal": rehearsal,
+    result = {"format_version": 1, "family": family,
+            "signing_generation": signer["generation"], "key_fingerprint": signer["fingerprint"], "channel": channel, "rehearsal": rehearsal,
             "source_commit": manifest["source_commit"], "version": manifest["version"], "packages": final,
             "activation": "not-published", "publication_order": "content-before-signed-metadata",
             "reader_consistency": "apt-inrelease-by-hash" if family == "deb" else "dnf-versioned-baseurl-mirrorlist",
