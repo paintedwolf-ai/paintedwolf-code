@@ -1,0 +1,142 @@
+name: Linux Nix qualification
+run-name: Linux Nix qualification ${{ inputs.source_commit }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Frozen commit available at refs/qualification/<commit>
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-nix-qualification-${{ inputs.source_commit }}
+  cancel-in-progress: false
+
+jobs:
+  closure:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            machine: x86_64
+            architecture: amd64
+            installer_sha256: 6ce3ce3703fdc241b560cba401c5d338042122fe5b1a81e07bf1a623f259eba0
+          - runner: ubuntu-24.04-arm
+            machine: aarch64
+            architecture: arm64
+            installer_sha256: 4a770896faa4d308806d0b4516575e0581443dc817d634b951a219a280554c09
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select the frozen qualification source
+        id: source
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
+          git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          source_root="$RUNNER_TEMP/qualification-source"
+          git worktree add --detach "$source_root" "$SOURCE_COMMIT"
+          printf 'path=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
+          printf 'tree=%s\n' "$(git -C "$source_root" rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: ${{ steps.source.outputs.path }}/lycaon/go.mod
+          cache: false
+
+      - name: Prepare the ephemeral runner for the pinned Nix toolchain
+        env:
+          MACHINE: ${{ matrix.machine }}
+          INSTALLER_SHA256: ${{ matrix.installer_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_ENVIRONMENT" == github-hosted ]]
+          test ! -e /nix
+          # These SDKs are unused by the isolated Linux Nix build, on this job's disposable VM.
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+          install_root="$RUNNER_TEMP/nix-installer"
+          mkdir "$install_root"
+          archive="nix-2.35.3-$MACHINE-linux.tar.xz"
+          curl --fail --location --connect-timeout 15 --max-time 300 \
+            "https://releases.nixos.org/nix/nix-2.35.3/$archive" --output "$install_root/$archive"
+          printf '%s  %s\n' "$INSTALLER_SHA256" "$install_root/$archive" | sha256sum --check
+          tar -xJf "$install_root/$archive" -C "$install_root"
+          printf 'sandbox = true\ntrusted-users = root\n' > "$install_root/nix.conf"
+          "$install_root/nix-2.35.3-$MACHINE-linux/install" --daemon --yes \
+            --daemon-user-count 4 --no-channel-add --no-modify-profile \
+            --nix-extra-conf-file "$install_root/nix.conf"
+          printf '%s\n' /nix/var/nix/profiles/default/bin >> "$GITHUB_PATH"
+
+      - name: Evaluate and build the native application closure
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: |
+          set -euo pipefail
+          ./task nix:check
+          ./task nix:build -- --archive-dir "$RUNNER_TEMP/nix-closure"
+
+      - name: Bind the retained closure to the selected source
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          EXPECTED_TREE: ${{ steps.source.outputs.tree }}
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: |
+          set -euo pipefail
+          python3 - <<'CI_PY'
+          import hashlib, json, os, platform
+          from pathlib import Path
+          evidence = Path(os.environ['PW_ARTIFACT_ROOT'])
+          paths = list((evidence/'nix').glob('build-*.json'))
+          if len(paths) != 1:
+              raise SystemExit('Expected exactly one native closure build report')
+          report = json.loads(paths[0].read_text())
+          expected = {'source_commit': os.environ['SOURCE_COMMIT'],
+                      'source_tree': os.environ['EXPECTED_TREE'],
+                      'lock_sha256': hashlib.sha256(Path('flake.lock').read_bytes()).hexdigest()}
+          if not report.get('passed') or any(report.get(key) != value for key,value in expected.items()):
+              raise SystemExit('Closure build does not match the frozen source and lock')
+          if report.get('archive', {}).get('publication') != 'nonrelease':
+              raise SystemExit('Missing nonrelease closure export')
+          manifest = {**expected, 'architecture': platform.machine(),
+                      'controller_commit': os.environ['GITHUB_SHA'],
+                      'execution': 'native', 'publication': 'nonrelease',
+                      'scope': 'Nix closure build; installed desktop qualification is separate'}
+          (evidence/'qualification-source.json').write_text(json.dumps(manifest, indent=2)+'\n')
+          CI_PY
+          uname -a > "$PW_ARTIFACT_ROOT/kernel.txt"
+          cp /etc/os-release "$PW_ARTIFACT_ROOT/os-release"
+          nix --version > "$PW_ARTIFACT_ROOT/nix-version.txt"
+
+      - name: Retain the nonrelease native closure
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-closure-${{ matrix.architecture }}-${{ inputs.source_commit }}
+          path: ${{ runner.temp }}/nix-closure
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Retain qualification receipts and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-qualification-${{ matrix.architecture }}-${{ inputs.source_commit }}
+          path: ${{ runner.temp }}/qualification-evidence
+          if-no-files-found: warn
+          retention-days: 14
