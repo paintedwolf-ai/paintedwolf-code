@@ -11,15 +11,17 @@ import (
 
 func TestCustodyErrorCodesAreStable(t *testing.T) {
 	for err, want := range map[error]string{
-		nil:                    "ok",
-		ErrVaultUnlockFailed:   "password_incorrect",
-		ErrVaultLocked:         "password_required",
-		ErrUnlockSecretInvalid: "password_invalid",
-		ErrCustodyUnchanged:    "unchanged",
-		ErrServiceUnverified:   "service_unavailable",
-		ErrLauncherRefused:     "service_unavailable",
-		ErrCustodyUnsupported:  "service_unavailable",
-		ErrVaultCorrupt:        "failed",
+		nil:                     "ok",
+		ErrVaultUnlockFailed:    "password_incorrect",
+		ErrVaultLocked:          "password_required",
+		ErrUnlockSecretInvalid:  "password_invalid",
+		ErrCustodyUnchanged:     "unchanged",
+		ErrCustodianUnavailable: "service_unavailable",
+		ErrIdentityMissing:      "failed",
+		ErrServiceUnverified:    "service_unavailable",
+		ErrLauncherRefused:      "service_unavailable",
+		ErrCustodyUnsupported:   "service_unavailable",
+		ErrVaultCorrupt:         "failed",
 	} {
 		if got := CustodyErrorCode(err); got != want {
 			t.Fatalf("CustodyErrorCode(%v) = %q, want %q", err, got, want)

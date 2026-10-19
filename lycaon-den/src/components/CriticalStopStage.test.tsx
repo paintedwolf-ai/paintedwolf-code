@@ -261,6 +261,25 @@ describe("createCriticalStop", () => {
     expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "credential_vault_custodian_unavailable",
+    "credential_vault_launcher_refused",
+    "credential_vault_identity_missing",
+  ] as const)("preserves credentials for %s and retries without a password", async (failure) => {
+    startFailure = failure;
+    connectAppBackend.mockResolvedValue({});
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
+  });
+
   it("resets a forgotten credential vault only after confirmation", async () => {
     startFailure = "credential_vault_locked";
     connectAppBackend.mockRejectedValue(new Error("password required"));
