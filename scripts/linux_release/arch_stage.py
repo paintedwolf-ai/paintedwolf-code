@@ -20,7 +20,7 @@ def extract(package, destination, root, architecture, version):
             for member in archive:
                 name = PurePosixPath(member.name)
                 if (name.is_absolute() or ".." in name.parts or member.name in seen or
-                        member.mode & 0o6002 or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
+                        (member.mode & 0o6000 or member.isfile() and member.mode & 0o002) or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
                     raise ValueError("pacman package contains an unsafe or repeated payload object")
                 seen.add(member.name)
                 total += member.size
