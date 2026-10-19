@@ -6,6 +6,7 @@ import subprocess
 from .repository_installation import restore_owner
 from .repository_setup import build, PACKAGE
 from .repository_setup_admission import admit_setup
+from .repository_setup_negatives import rehearse as hostile_setup
 from .signing import digest, verify
 
 
@@ -54,6 +55,7 @@ def rehearse(work, manifest, directory, catalog, origin):
     else:
         raise ValueError("setup admission accepted a symlink package")
     linked.unlink()
+    hostile_setup(work, artifact, catalog, private, authority)
     root = work / (family + "-setup-root")
     root.mkdir()
     data = root / "home/fixture/.local/share/paintedwolf/preserve"

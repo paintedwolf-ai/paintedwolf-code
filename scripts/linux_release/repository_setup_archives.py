@@ -39,8 +39,8 @@ def tar_members(data):
         for member in archive:
             path = name(member.name)
             if not path:
-                if not member.isdir():
-                    raise ValueError("setup archive root is not a directory")
+                if not member.isdir() or member.uid or member.gid or member.mode != 0o755:
+                    raise ValueError("setup archive root has an unexpected identity or mode")
                 continue
             if path in records or member.uid != 0 or member.gid != 0:
                 raise ValueError("setup archive duplicates a path or has a foreign owner")
@@ -131,6 +131,10 @@ def rpm(package, version, expected, config):
     provides = command(["rpm", "-qp", "--qf", "[%{PROVIDENAME}\t%{PROVIDEFLAGS}\t%{PROVIDEVERSION}\n]", str(package)])
     if provides.decode() != f"painted-wolf-code-repo\t8\t{version}-1\n":
         raise ValueError("setup RPM contains unexpected provided identities")
+    for tag in ["FILECAPS", "FILECONTEXTS"]:
+        values = command(["rpm", "-qp", "--qf", "%|" + tag + "?{[%{" + tag + "}\n]}:{}|", str(package)])
+        if any(values.decode().splitlines()):
+            raise ValueError("setup RPM carries unexpected capabilities or security contexts")
     rows = command(["rpm", "-qp", "--qf", "[%{FILENAMES}\t%{FILEMODES}\t%{FILEFLAGS}\t%{FILEUSERNAME}\t%{FILEGROUPNAME}\n]", str(package)]).decode().splitlines()
     expected_rows = {f"/{path}\t{stat.S_IFREG | 0o644}\t{17 if path == config else 0}\troot\troot" for path in expected}
     if len(rows) != len(expected_rows) or set(rows) != expected_rows:

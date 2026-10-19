@@ -1069,6 +1069,17 @@ removing setup leaves the installed application and mutable user data intact. Th
 local native rehearsal installs and removes both setup formats in isolated roots,
 checks exact owned bytes and preserves a mutable user-data sentinel.
 
+The protected controller admits this control/trust surface separately from application
+packages through `scripts.linux_release.repository_setup_admission.admit_setup`.
+It supplies independently selected source, version, channel, generation inventory,
+origin and signer facts after verifying retained server artifact provenance. The API
+freezes regular input files and trust, verifies the exact signed checksum and native
+RPM signature, then reads native identity, script/trigger declarations, conffiles,
+relationship headers and exact root-owned payload bytes without installing anything.
+A producer's `setup.json` or accepted receipt does not authorize publication. Source
+and generation binding remain the controller's independent responsibility; the setup
+package carries configuration and trust rather than an application artifact identity.
+
 Every generation retains `client.conf`, the selected public key, exact inventory,
 source commit, and version. The configuration is an explicit setup artifact; installing
 the application does not add repositories or trust. For apt, verify the full catalog

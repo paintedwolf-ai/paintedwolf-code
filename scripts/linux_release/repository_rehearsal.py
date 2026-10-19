@@ -226,7 +226,7 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes", "apt-by-hash-without-mutable-fallback",
                       "old-and-new-retained", "actual-candidate-retention", "post-signing-rpm-identity-retained",
                       "public-only-candidate-trust", "opt-in-setup-package-install-and-remove",
-                      "setup-removal-preserves-user-data", "wrong-key", "production-refuses-fixture", "changed-package",
+                      "setup-removal-preserves-user-data", "independent-setup-admission", "signed-hostile-setup-refused", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
                       "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",
