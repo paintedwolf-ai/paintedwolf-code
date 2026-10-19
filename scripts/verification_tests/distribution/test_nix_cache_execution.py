@@ -1,12 +1,11 @@
 """Nix cache admission fails before private-key use when release trust is invalid."""
 import base64
-import copy
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.nix_cache.admission import closure_projection, inventory, validate_request
+from scripts.nix_cache.admission import closure_projection, derivation_projection, inventory, validate_request
 from scripts.nix_cache.adapter import construct, signing_identity
 
 
@@ -97,3 +96,12 @@ class NixCacheAdmissionTests(unittest.TestCase):
             nar.unlink()
             with self.assertRaises(OSError):
                 inventory(cache, {OUTPUT: {}}, [PUBLIC])
+
+    def test_derivation_requires_the_actual_system_and_output(self):
+        path = OUTPUT + ".drv"
+        closure = {OUTPUT: {"derivation": path}}
+        row = {"version": 4, "system": "x86_64-linux", "outputs": {"out": {"path": Path(OUTPUT).name}}}
+        self.assertEqual(derivation_projection({Path(path).name: row}, closure, self.request)[path]["system"], "x86_64-linux")
+        for changed in [{**row, "system": "aarch64-linux"}, {**row, "outputs": {"out": {"path": DEPENDENCY}}}, {**row, "version": 5}]:
+            with self.subTest(row=changed), self.assertRaises(ValueError):
+                derivation_projection({path: changed}, closure, self.request)

@@ -77,6 +77,24 @@ def closure_projection(value: dict, outputs: list[str]) -> dict:
     return dict(sorted(result.items()))
 
 
+def derivation_projection(value: dict, closure: dict, request: dict) -> dict:
+    result = {}
+    for output in request["outputs"]:
+        path = closure[output]["derivation"]
+        row = value.get(path, value.get(Path(path).name))
+        if not isinstance(row, dict) or row.get("version") != 4 or row.get("system") != request["system"]:
+            raise ValueError("Nix output derivation differs from the selected system or supported schema")
+        outputs = row.get("outputs")
+        if not isinstance(outputs, dict) or not any(
+            isinstance(spec, dict) and spec.get("path") in {output, Path(output).name} for spec in outputs.values()
+        ):
+            raise ValueError("Nix derivation does not declare the selected application output")
+        import json
+        digest = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        result[path] = {"sha256": digest, "system": row["system"], "outputs": outputs}
+    return result
+
+
 def object_record(cache: Path, relative: str, phase: str) -> dict:
     path = PurePosixPath(relative)
     if path.is_absolute() or str(path) != relative or ".." in path.parts or not path.parts:

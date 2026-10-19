@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import urllib.parse
 
-from .admission import STORE_PATH, closure_projection, inventory, validate_request
+from .admission import STORE_PATH, closure_projection, derivation_projection, inventory, validate_request
 
 
 def nix(*arguments: str, stdin: str | None = None) -> str:
@@ -60,12 +60,15 @@ def construct(request: dict, policy: dict, key_file: Path, cache: Path, *, sourc
     if request["mode"] == "production" and source_store != "daemon":
         raise ValueError("production cache construction requires the explicit local daemon store")
     public = signing_identity(key_file, cache)
+    key_file = key_file.resolve(strict=True)
     if public not in policy["public_keys"]:
         raise ValueError("Nix signing identity is outside the selected public trust policy")
     outputs = request["outputs"]
     source = closure_projection(path_info(source_store, outputs), outputs)
     if any(not re.fullmatch(STORE_PATH, source[path]["derivation"] or "") for path in outputs):
         raise ValueError("Nix application outputs require their build derivation identity")
+    derivations = derivation_projection(json.loads(nix("derivation", "show", "--store", source_store, "--stdin",
+                                                       stdin="\n".join(sorted({source[path]["derivation"] for path in outputs})) + "\n")), source, request)
     temporary = Path(tempfile.mkdtemp(prefix=".nix-cache-stage-", dir=cache.parent))
     try:
         query = urllib.parse.urlencode({"secret-key": str(key_file), "compression": "xz", "parallel-compression": "false"})
@@ -80,7 +83,7 @@ def construct(request: dict, policy: dict, key_file: Path, cache: Path, *, sourc
         objects = inventory(temporary, source, policy["public_keys"])
         closure_digest = hashlib.sha256(json.dumps(source, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         report = {"schema_version": 1, "status": "passed", "request": request, "public_keys": policy["public_keys"],
-                  "nix_version": nix("--version"), "closure_sha256": closure_digest, "closure": source, "objects": objects,
+                  "nix_version": nix("--version"), "closure_sha256": closure_digest, "closure": source, "derivations": derivations, "objects": objects,
                   "upstream_dependencies": [], "dependency_policy": "complete-closure-in-this-cache"}
         temporary.rename(cache)
         return report
@@ -97,9 +100,12 @@ def main() -> None:
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    if args.report.exists() or args.report.is_symlink() or args.report.resolve().is_relative_to(args.cache.resolve()):
+        raise ValueError("Nix cache report requires a new destination outside the cache")
     request, policy = [json.loads(path.read_text()) for path in (args.request, args.trust_policy)]
     report = construct(request, policy, args.signing_key_file, args.cache)
-    args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    with args.report.open("x") as destination:
+        destination.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

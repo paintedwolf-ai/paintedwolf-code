@@ -57,6 +57,8 @@ def main() -> None:
         policy = {"schema_version": 1, "mode": "rehearsal", "public_keys": [keys[0]]}
         cache = work / "cache"
         report = construct(request, policy, files[0], cache, source_store=source)
+        wrong_system = "aarch64-linux" if system == "x86_64-linux" else "x86_64-linux"
+        must_refuse(lambda: construct({**request, "system": wrong_system}, policy, files[0], work / "wrong-system", source_store=source), "a mislabeled architecture")
         if len(report["closure"]) < 2 or not report["closure"][output]["references"]:
             raise ValueError("Nix cache rehearsal did not construct a dependent closure")
         must_refuse(lambda: verify(cache, [output], [keys[1]]), "a wrong signature key")
@@ -96,7 +98,7 @@ def main() -> None:
         print(json.dumps({"schema_version": 1, "mode": "rehearsal", "status": "passed", "nix_version": report["nix_version"],
                           "system": system, "closure_paths": len(report["closure"]), "objects": len(report["objects"]),
                           "cold_copy": True, "checks": ["wrong-key", "wrong-key-cold-copy", "rotation-overlap", "rotation-new-key",
-                                                          "altered-nar", "altered-metadata", "missing-nar", "missing-dependency", "production-refusal"]}, sort_keys=True))
+                                                          "altered-nar", "altered-metadata", "missing-nar", "missing-dependency", "wrong-system", "production-refusal"]}, sort_keys=True))
 
 
 if __name__ == "__main__":
