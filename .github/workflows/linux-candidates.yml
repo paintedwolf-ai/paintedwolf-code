@@ -116,7 +116,7 @@ jobs:
       - name: Install Linux bundle and audit dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio gnupg
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio gnupg libarchive-tools
       - name: Verify the catalog row for this candidate
         env:
           PLATFORM: ${{ matrix.updater_key }}
@@ -133,7 +133,7 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
       - name: Build the Linux packages
-        run: ./task den:bundle
+        run: ./task den:bundle -- --pacman-container
       - name: Verify and stage platform artifacts
         env:
           VERSION: ${{ needs.source.outputs.version }}
@@ -142,7 +142,7 @@ jobs:
         run: |
           bash scripts/release-stage-platform-artifacts.sh \
             --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
-            --version "${VERSION}" --package-extensions deb,rpm \
+            --version "${VERSION}" --package-extensions deb,rpm,pkg.tar.zst \
             --output "${RUNNER_TEMP}/candidate"
           printf '%s\n' "$GITHUB_SHA" > "${RUNNER_TEMP}/candidate/controller-commit.txt"
           git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"
