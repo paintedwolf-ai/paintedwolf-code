@@ -1104,6 +1104,8 @@ host_facts:
    type: string
  - name: paintedwolf.type
    type: string
+ - name: paintedwolf.directory_change
+   type: bool
  - name: paintedwolf.env_assignment
    type: bool
  - name: paintedwolf.reissue_via_command
