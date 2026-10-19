@@ -52,6 +52,12 @@ def extract(package, destination, root, architecture, version):
     for key, catalog in [("depend", "depends"), ("optdepend", "recommends")]:
         if sorted(fields.get(key, [])) != sorted(value.format(**floors) for value in dependencies[catalog]):
             raise ValueError("pacman dependencies differ from the shared native catalog")
+    hook = root / "packaging/linux/arch/painted-wolf-code.install"
+    installed_hook = destination / ".INSTALL"
+    if hook.is_file() and (not installed_hook.is_file() or installed_hook.read_bytes() != hook.read_bytes()):
+        raise ValueError("pacman lifecycle script differs from the maintained package hook")
+    if not hook.is_file() and installed_hook.exists():
+        raise ValueError("pacman package contains an undeclared lifecycle script")
     if not (destination / ".BUILDINFO").is_file() or not (destination / ".MTREE").is_file():
         raise ValueError("pacman package lacks native build or file inventory metadata")
     return fields
