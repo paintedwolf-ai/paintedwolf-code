@@ -1099,3 +1099,13 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+The existing `release:live-test -- --local-pacman-construction --receipt /absolute/new-receipt.json`
+mode exercises actual native makepkg construction in the pinned official substrate with
+a tiny sealed nonapplication payload, then admits package metadata and exact extracted
+ELF/data/link/mode identities. It requires matching native Linux CPU, Docker, GnuPG and
+bsdtar. Toolchain preparation uses signed repositories; package construction then runs
+as the invoking unprivileged user without network or container capabilities. It adds
+no repository or trust to the host and does not install the application. This mode
+requires the finished pacman producer dependency; default credentialed rehearsals are
+separate and are not invoked by it.
