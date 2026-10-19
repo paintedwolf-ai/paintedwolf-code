@@ -80,6 +80,20 @@ A block answers four questions without narrating implementation: which transitio
 
 ### Typed detail conventions
 
+Oversized feedback preserves a small set of actionable host observations
+through the shared transcript projection: identities, parser locations, failed
+fields, and bounded issue or browser-state inventories. Ordinary diagnostic
+fallbacks have a 2 KiB encoded limit; review fallbacks retain their 12 KiB limit.
+Each selected value is at most 1 KiB, lists retain at most eight entries, and
+nested repairs stop after two levels. Values deeper than ten JSON containers
+are omitted. Bounds include JSON escaping and omission metadata.
+
+Selected values remain complete; a replacement call is never trimmed into a
+different executable operation. The original result stays unchanged, with
+omission markers and its durable result reference on the projected fallback.
+This presentation boundary does not alter OAR facts, selection, copy grammar,
+or occurrence delivery.
+
 - Browser action failures retain the original zero-based `index` and a bounded `completed_actions` prefix (index, type, locators per completed step). Those effects remain applied; the failing step may also have taken effect before settling failed. `interactive_controls` retains observed control names, text, and disabled state; `interactive_truncated` says the inventory is partial. An absent disabled value is unknown, not enabled. Successful idle waits return the settled control state.
 - Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/toolrejection/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
 
