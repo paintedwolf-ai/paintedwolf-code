@@ -119,6 +119,9 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 				"tool":   qualifiedName,
 			}
 			diag.AddFacts(data)
+			if required := argdiag.MissingRequiredSummary(invalid, schema, args); required != "" {
+				data["missing_required_arguments"] = required
+			}
 			data["schema_issues"] = argdiag.SchemaIssues(invalid)
 			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnOfferedToolNames); sibling != "" {
 				data["suggested_tool"] = sibling

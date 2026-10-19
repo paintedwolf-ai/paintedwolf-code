@@ -12,6 +12,7 @@ requires:
   - paintedwolf.rejection_field
   - paintedwolf.misplaced_fields
   - paintedwolf.inapplicable_fields
+  - paintedwolf.missing_required_arguments
   - paintedwolf.found_under
   - paintedwolf.belongs_under
   - paintedwolf.close_before
@@ -34,6 +35,9 @@ copy:
   cause: '{% if paintedwolf.json_malformed %}{% if paintedwolf.json_open_paths %}The text ends with `{{ paintedwolf.json_open_paths }}` still open{% else %}{% if paintedwolf.json_unterminated_string_at %}The string starting at byte {{ paintedwolf.json_unterminated_string_at }} is never closed{% else %}{% if paintedwolf.json_trailing_text_at %}{% if paintedwolf.json_trailing_members %}`{{ paintedwolf.rejection_field }}` closes at byte {{ paintedwolf.json_trailing_text_at }}; the text continues with `{{ paintedwolf.json_trailing_members }}`, which the schema declares under {% if paintedwolf.json_trailing_belongs_under %}`{{ paintedwolf.json_trailing_belongs_under }}`{% else %}the top level{% endif %}{% else %}Text continues after the complete value, at byte {{ paintedwolf.json_trailing_text_at }}{% endif %}{% else %}Parsing stops at byte {{ paintedwolf.json_unexpected_token_at }} on a token JSON does not allow there{% endif %}{% endif %}{% endif %}.{% if paintedwolf.misplaced_fields %} As written, `{{ paintedwolf.misplaced_fields }}` sit inside {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; the schema declares them under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.json_encoded %}The tool schema expects a structured JSON {{ paintedwolf.expected_type }}, but received a string literal containing escaped JSON.{% if paintedwolf.misplaced_fields %} The schema also declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}, not {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% endif %}{% else %}{% if paintedwolf.misplaced_fields %}The schema declares `{{ paintedwolf.misplaced_fields }}` under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %} and does not accept them under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}.{% else %}{% if paintedwolf.did_you_mean %}The property `{{ paintedwolf.rejection_field }}` is not defined on this tool; `{{ paintedwolf.did_you_mean }}` is declared.{% else %}{% if paintedwolf.conflict_keys %}The supplied arguments violate mutual exclusivity.{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
   why: The published tool schema defines field names, types, required values, and structure. Intrinsic diagnostics identify the violated field, misplaced nesting, or conflicting parameters.
   fix: |
+    {% if paintedwolf.missing_required_arguments %}Required argument observations: {{ paintedwolf.missing_required_arguments }}
+    Supply the missing arguments using the offered schema; the rejected call did not execute.
+    {% endif %}
     {% if paintedwolf.inapplicable_fields %}Omit `{{ paintedwolf.inapplicable_fields }}`: these fields do not apply in the current host state. Preserve the other arguments and retry only the rejected call.
     {% else %}{% if paintedwolf.replacement_args_json %}Reissue the call with repaired arguments:
     ```json
@@ -134,3 +138,11 @@ x-paintedwolf-scenarios:
   - 'Code: TOOL_ARGS_INVALID'
   - 'Omit `workflow_work_id`'
   - 'Preserve the other arguments'
+- id: missing-required-arguments
+  vars:
+    tool: update_progress
+    missing_required_arguments: '{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}'
+  expect_contains:
+  - '"missing_required":["content"]'
+  - '"content":"string"'
+  - rejected call did not execute

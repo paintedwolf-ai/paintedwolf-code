@@ -350,6 +350,12 @@
       "emit": "guard:visual_capture",
       "summary": "The host could not prepare browser request interception for {{ tool }}."
     },
+    "CAPTURE_STATIC_ENTRY_MISSING": {
+      "branch_instruction": "Branch on Code CAPTURE_STATIC_ENTRY_MISSING; write the static entry file or correct path / project_dir before retrying",
+      "category": "recoverable",
+      "emit": "guard:visual_capture",
+      "summary": "Static entry {{ paintedwolf.entry }} was not found under project_dir {{ paintedwolf.path }}."
+    },
     "CAPTURE_TARGET_INVALID": {
       "branch_instruction": "Branch on Code CAPTURE_TARGET_INVALID; correct the indicated binding or actions without restarting unrelated work",
       "category": "recoverable",
@@ -525,7 +531,7 @@
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
     "COMMAND_NOT_ARGV": {
-      "branch_instruction": "{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_surface",
       "summary": "{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}"
@@ -849,7 +855,7 @@
       "summary": "{{ paintedwolf.fruitless_search_run }} consecutive {{ tool }} searches for `{{ paintedwolf.pattern }}` returned nothing — if the scope was searched and the pattern was literal, that is the answer: the name is not there"
     },
     "DOOM_LOOP_REPEAT": {
-      "branch_instruction": "{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}{% if paintedwolf.can_complete_leg %}If no available prerequisite or corrected call can resolve the question, call complete_leg with `leg_status: partial`, name the unanswered question in `remaining_risk`, and put the next step in `suggested_next_task`. A partial leg with cited evidence is a result; more calls against this block are not.{% else %}Report the unresolved question through the actual completion channel.{% endif %}{% else %}Resume the current next action. For a rejected call, correct the arguments or complete its named prerequisite before retrying. {% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}{% if paintedwolf.can_complete_leg %}If no available prerequisite or corrected call can resolve the question, call complete_leg with `leg_status: partial`, name the unanswered question in `remaining_risk`, and put the next step in `suggested_next_task`. A partial leg with cited evidence is a result; more calls against this block are not.{% else %}Report the unresolved question through the actual completion channel.{% endif %}{% else %}Resume the current next action. {% if paintedwolf.code %}Correct the arguments or complete the named prerequisite before retrying.{% else %}Reuse the completed result. If all work is complete, send the final answer with no tool calls.{% endif %} {% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:doom_loop",
       "summary": "Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with Code: {{ paintedwolf.code }}, so unchanged retries remain blocked{% else %} after {{ paintedwolf.count }} repeats{% endif %}."
@@ -1548,7 +1554,7 @@
       "summary": "The link at {{ paintedwolf.path }} does not resolve within the allowed move scope."
     },
     "MUTATION_BROKE_PARSE": {
-      "branch_instruction": "Branch on Code; re-read the seam and apply one atomic repair",
+      "branch_instruction": "Correct the candidate and retry one atomic mutation",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "{{ tool }} on {{ paintedwolf.path }} was not applied because the parser reports a syntax error in the proposed file ({{ paintedwolf.parse_error }})."
@@ -2795,7 +2801,7 @@
       "branch_instruction": "Return partial through complete_leg and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "A claim about how a running UI or app behaves has no surface_snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+      "summary": "A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "SURFACE_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code SURFACE_NOTE_ARTIFACT_UNKNOWN; copy a producer artifact_id from this turn or capture one before presenting",
