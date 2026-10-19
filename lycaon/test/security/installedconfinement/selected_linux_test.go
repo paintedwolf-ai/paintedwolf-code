@@ -57,7 +57,7 @@ func requireSelectedHelper(t *testing.T) selectedHelper {
 		t.Fatal("selected installed helper is not an ordinary native executable")
 	}
 	capabilities, err := unix.Getxattr(helper.path, "security.capability", nil)
-	if capabilities != 0 || err != nil && err != unix.ENODATA && err != unix.ENOTSUP {
+	if capabilities > 0 || err != nil && err != unix.ENODATA && err != unix.ENOTSUP {
 		t.Fatalf("selected helper has file capabilities or uninspectable privilege metadata: size=%d error=%v", capabilities, err)
 	}
 	native, err := elf.Open(helper.path)
