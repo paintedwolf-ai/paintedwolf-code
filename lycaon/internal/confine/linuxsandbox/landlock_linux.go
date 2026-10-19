@@ -144,7 +144,7 @@ func fdIsDir(fd int) bool {
 type landlockProbe struct{ fd int }
 
 func newLandlockProbe() (landlockProbe, error) {
-	fd, err := newTmpfs("0700")
+	fd, err := newTmpfs("0700", maskTmpfsSize)
 	if err != nil {
 		return landlockProbe{fd: -1}, err
 	}
