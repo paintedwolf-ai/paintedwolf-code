@@ -28,6 +28,31 @@ fn fixture() -> (crate::test_support::TempDir, std::path::PathBuf) {
 }
 
 #[tokio::test]
+async fn nix_layout_captures_its_running_generation_without_claiming_custody_authority() {
+    let (root, desktop) = fixture();
+    let mode = crate::installation_mode::InstallationMode::Nix {
+        root: root.path().to_path_buf(),
+        output: root.path().to_path_buf(),
+    };
+    let captured = capture_installation(&mode, &desktop).unwrap();
+    std::fs::rename(root.join("bin/pw"), root.join("old-engine")).unwrap();
+    std::fs::write(root.join("bin/pw"), b"another profile generation").unwrap();
+    let output = captured
+        .command()
+        .unwrap()
+        .arg("nix-generation")
+        .output()
+        .await
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"nix-generation\n");
+    assert!(matches!(
+        capture_installation(&crate::installation_mode::InstallationMode::Developer, &desktop),
+        Err(AdmissionError::UnqualifiedInstallation)
+    ));
+}
+
+#[tokio::test]
 async fn retained_engine_executes_after_its_installed_path_is_replaced() {
     let (root, desktop) = fixture();
     let captured = capture(&root, &desktop, false).unwrap();
