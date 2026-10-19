@@ -15,12 +15,20 @@ from .repository_operations import OPERATIONS, transition, withdrawal, version_m
 
 
 def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: str,
-               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate") -> dict:
+               base_url: str, expected: str | None, rehearsal=False, operation="publish", phase="activate", *, authorize=None) -> dict:
     if phase not in {"stage", "activate"}:
         raise ValueError("unsupported repository publication phase")
     prefix(storage_prefix, rehearsal)
-    if not rehearsal:
-        raise ValueError("production pacman publication requires release-controller admission")
+    if not rehearsal and not callable(authorize):
+        raise ValueError("production repository publication requires release-controller admission")
+    receipt = json.loads(encoded(receipt))
+    def permission():
+        request = {"manifest": json.loads(encoded(receipt)), "directory": directory, "catalog": catalog,
+                   "storage_prefix": storage_prefix, "base_url": base_url, "expected": expected,
+                   "operation": operation, "phase": phase}
+        if not rehearsal and authorize(request) is not True:
+            raise ValueError("production repository publication authorization was refused")
+
     origin = base_url.rstrip("/") + "/" + storage_prefix
     with tempfile.TemporaryDirectory(prefix="paintedwolf-r2-pacman-") as temporary:
         work = Path(temporary)
@@ -28,6 +36,8 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         identity = record["generation"]
         channel = f"channels/pacman/{receipt['channel']}/{receipt['architecture']}"
         state_key = storage_prefix + "/" + channel + "/current.json"
+        generation = work / "origin/generations" / identity
+        permission()
         active = current(state_key, work)
         record = transition(receipt, active, expected, operation)
         if current(storage_prefix + "/withdrawn/" + identity + ".json", work) is not None:
@@ -37,7 +47,6 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             raise ValueError("R2 pacman recovery requires the exact retained healthy generation")
         if current(storage_prefix + "/" + version_marker(receipt).as_posix(), work) is not None:
             raise ValueError("a withdrawn repository version cannot be offered again")
-        generation = work / "origin/generations" / identity
         for source in sorted(generation.iterdir()):
             relative = "generations/" + identity + "/" + source.name
             put(storage_prefix + "/" + relative, source)
@@ -56,6 +65,7 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "staged"}
         if current(state_key, work) != active:
             raise ValueError("R2 pacman repository changed while objects were uploading")
+        permission()
         marker = withdrawal(record)
         if marker is not None:
             tombstone = work / "withdrawal.json"
