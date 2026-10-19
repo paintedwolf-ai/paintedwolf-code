@@ -1103,6 +1103,22 @@ origin rehearsal does not establish custom-domain CDN convergence or both-archit
 installed package qualification; the release controller must admit that evidence before
 production publication.
 
+The protected Python API requires a keyword-only `authorize` callback returning
+exact `True` before the first credentialed transport access and again after predecessor
+recheck, immediately before client authority activation. The callback receives the
+selected manifest, raw directory, protected catalog, namespace, origin, predecessor,
+operation and phase; accepted JSON is not authority. The CLI supplies no callback and
+keeps production closed.
+
+Repository R2 activation retains a per-channel `pending.json` before changing mutable
+client authority. The plan binds the exact generation, activation record, reviewed
+predecessor, operation, phase, origin and namespace. An interrupted plan permits only
+an exact retry; it has no time-based expiry. The publisher verifies authority and
+`current.json` readback before marking the plan complete. A different release or
+recovery must wait for that exact operation to converge, even when the client authority
+was already written before a crash. Protected workflow serialization remains required;
+this recovery record does not grant independent writers or replace predecessor checks.
+
 `python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
 through the existing R2 immutable-object helper and serialized release owner. Its
 current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`

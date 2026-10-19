@@ -18,6 +18,7 @@ class RepositoryR2Tests(unittest.TestCase):
                         "signing_generation": 1, "key_fingerprint": "A" * 40,
                         "inventory_sha256": "b" * 64, "packages": [{"file": "application.deb"}]}
         self.objects = {}
+        self.crash_after = None
         self.events = []
         self.fail = None
         self.reads = 0
@@ -51,6 +52,8 @@ class RepositoryR2Tests(unittest.TestCase):
         if not mutable and key in self.objects and self.objects[key] != source.read_bytes():
             raise ValueError("immutable collision")
         self.objects[key] = source.read_bytes()
+        if self.crash_after and "/channels/" in key and key.endswith(self.crash_after):
+            raise OSError("crash after committed authority bytes")
 
     def public(self, url, source, mutable=False):
         key = url.removeprefix("https://repository.example.invalid/")
@@ -70,8 +73,9 @@ class RepositoryR2Tests(unittest.TestCase):
     def test_content_and_readback_precede_the_single_apt_authority(self):
         result = self.publish()
         writes = [key for event, key, _ in self.events if event == "put"]
-        self.assertTrue(writes[-2].endswith("/InRelease"))
-        self.assertTrue(writes[-1].endswith("/current.json"))
+        self.assertTrue(writes[-3].endswith("/InRelease"))
+        self.assertTrue(writes[-2].endswith("/current.json"))
+        self.assertTrue(writes[-1].endswith("/pending.json"))
         authority = next(index for index, item in enumerate(self.events) if item[1].endswith("/InRelease"))
         self.assertTrue(any(event == "readback" and "/generations/" in key
                             for event, key, _ in self.events[:authority]))
@@ -145,7 +149,7 @@ class RepositoryR2Tests(unittest.TestCase):
             self.publish(rehearsal=False, authorize=authorize)
         self.assertEqual(requests, [0, 2])
         self.assertTrue(self.events)
-        self.assertFalse(any(key.endswith(("/current.json", "/InRelease")) for key in self.objects))
+        self.assertFalse(any(key.endswith(("/current.json", "/InRelease")) for key in self.objects if "/channels/" in key))
 
     def test_production_authority_can_admit_both_bound_checkpoints(self):
         self.receipt["rehearsal"] = False
@@ -173,3 +177,29 @@ class RepositoryR2Tests(unittest.TestCase):
             self.publish(rehearsal=False, authorize=authorize)
         self.assertEqual(len(calls), 1)
         self.assertFalse(any(key.endswith("/current.json") for key in self.objects))
+
+    def test_crashes_require_exact_operation_recovery_and_preserve_old_objects(self):
+        for crash in ["/InRelease", "/current.json"]:
+            with self.subTest(crash=crash):
+                self.objects, self.events, self.reads = {}, [], 0
+                self.receipt["version"] = "0.0.1"
+                original = hashlib.sha256(encoded(self.receipt)).hexdigest()
+                self.crash_after = crash
+                with self.assertRaisesRegex(OSError, "crash after"):
+                    self.publish()
+                pending_key = next(key for key in self.objects if key.endswith("/pending.json"))
+                self.assertEqual(json.loads(self.objects[pending_key])["state"], "pending")
+                retained = {key: value for key, value in self.objects.items() if "/generations/" in key}
+                before = dict(self.objects)
+                self.crash_after = None
+                self.receipt["version"] = "0.0.2"
+                predecessor = original if crash == "/current.json" else None
+                with self.assertRaisesRegex(ValueError, "pending activation"):
+                    self.publish(expected=predecessor)
+                self.assertEqual(self.objects, before)
+                self.receipt["version"] = "0.0.1"
+                self.assertEqual(self.publish()["generation"], original)
+                self.assertEqual(json.loads(self.objects[pending_key])["state"], "completed")
+                self.receipt["version"] = "0.0.2"
+                self.assertEqual(self.publish(expected=original)["version"], "0.0.2")
+                self.assertTrue(all(self.objects[key] == value for key, value in retained.items()))

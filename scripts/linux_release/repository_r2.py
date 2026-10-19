@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from .repository_pending import activation_plan, marker as activation_marker_record
 from .repository_objects import encoded
 from .repository_publication import publish
 from .r2_objects import prefix, public_bytes, current, put
@@ -39,6 +40,17 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         permission()
         active = current(state_key, work)
         record = {**transition(receipt, active, expected, operation), "configuration": record["configuration"]}
+        pending_key = storage_prefix + "/" + channel + "/pending.json"
+        plan = activation_plan(record, expected, storage_prefix, base_url, phase, active, current(pending_key, work))
+
+        def retain_activation(state):
+            payload = activation_marker_record(plan, state)
+            target = work / "pending-state.json"
+            target.write_bytes(encoded(payload))
+            put(pending_key, target, True)
+            public_bytes(base_url.rstrip("/") + "/" + pending_key, target, True)
+            return payload
+
         selected = identity(receipt)
         if current(storage_prefix + "/withdrawn/" + selected + ".json", work) is not None:
             raise ValueError("a withdrawn R2 generation cannot be offered again")
@@ -56,6 +68,8 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
                 public_bytes(origin + "/" + relative, source)
         authority = f"dists/{receipt['channel']}/InRelease" if receipt["family"] == "deb" else "mirrorlist"
         channels = work / "origin" / channel
+        if phase == "activate":
+            pending = retain_activation("pending")
         for source in sorted(channels.rglob("*")):
             if not source.is_file():
                 continue
@@ -75,6 +89,8 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
             return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "staged"}
         if current(state_key, work) != active:
             raise ValueError("R2 repository changed while its generation was uploading")
+        if current(pending_key, work) != pending:
+            raise ValueError("repository pending activation changed during publication")
         permission()
         marker = withdrawal(record)
         if marker is not None:
@@ -94,6 +110,7 @@ def publish_r2(receipt: dict, directory: Path, catalog: Path, storage_prefix: st
         state.write_bytes(encoded(record))
         put(state_key, state, True)
         public_bytes(base_url.rstrip("/") + "/" + state_key, state, True)
+        retain_activation("completed")
         return {**record, "storage_prefix": storage_prefix, "public_verified": True, "publication_phase": "activated"}
 
 
