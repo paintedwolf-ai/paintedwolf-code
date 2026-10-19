@@ -144,6 +144,7 @@ jobs:
             --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
             --version "${VERSION}" --package-extensions deb,rpm \
             --output "${RUNNER_TEMP}/candidate"
+          printf '%s\n' "$GITHUB_SHA" > "${RUNNER_TEMP}/candidate/controller-commit.txt"
           git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"
           git rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/candidate/source-tree.txt"
           printf '%s\n' 'nonrelease; installed qualification is required' > "${RUNNER_TEMP}/candidate/qualification-scope.txt"
