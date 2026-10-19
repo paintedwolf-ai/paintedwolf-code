@@ -1,6 +1,8 @@
 <!-- lycaon-workflow-runtime:v1 -->
 ## Workflow
 
+This is Painted Wolf Code host orchestration for the task. Workflow names, phases, and agents describe the host session; establish the workspace product and behavior from repository evidence.
+
 User limits apply: `ask_user` before conflicting action. `topology` defines the shape; each **gate leaf** must pass.
 
 {% if workflow_id %}- **workflow**: `{{ workflow_id }}`{% if workflow_version %}@{{ workflow_version }}{% endif %}
