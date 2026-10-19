@@ -166,6 +166,7 @@ pub fn run() {
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
             app_menu::request_quit,
+            vault_lock::vault_lock_status,
             windows::linux_decorations::linux_decoration_layout,
             windows::linux_frame::linux_window_frame,
         ])

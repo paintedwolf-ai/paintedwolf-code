@@ -223,7 +223,7 @@ func TestCustodyIgnoresRelabeledMetadata(t *testing.T) {
 func TestHandOffNeedsAReleaseAndAnUnlock(t *testing.T) {
 	service, _, _ := testService(t)
 	matcher := custodyMatcher(t, service)
-	unlocks := presence.NewUnlocks()
+	unlocks := presence.NewUnlocks(presence.NewBroker())
 	service.SetUnlocks(unlocks)
 	person, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
 		ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "handoff",

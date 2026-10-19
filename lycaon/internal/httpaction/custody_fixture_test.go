@@ -64,7 +64,7 @@ func TestHeldValueLeavesOnlyWhileItsChatIsUnlocked(t *testing.T) {
 					return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 				},
 			}))
-			unlocks := presence.NewUnlocks()
+			unlocks := presence.NewUnlocks(presence.NewBroker())
 			if unlocked {
 				unlocks.Open(presence.NewUnlock("chat-1", presence.Verified{
 					ChallengeID: "11111111-1111-4111-8111-111111111111", PersonID: owner,
