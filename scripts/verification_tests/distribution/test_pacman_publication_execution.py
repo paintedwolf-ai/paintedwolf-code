@@ -20,6 +20,7 @@ class PacmanPublicationTests(unittest.TestCase):
                         "packages": [{"native_version": "0.0.1-1"}],
                         "objects": [{"path": "application.pkg.tar.zst"}, {"path": "application.pkg.tar.zst.sig"}]}
         self.objects, self.events = {}, []
+        self.crash_after = None
         self.fail_suffix, self.race, self.reads = None, False, 0
 
     def local(self, receipt, directory, store, origin, catalog, expected, rehearsal):
@@ -53,6 +54,8 @@ class PacmanPublicationTests(unittest.TestCase):
         if not mutable and key in self.objects and self.objects[key] != source.read_bytes():
             raise ValueError("immutable collision")
         self.objects[key] = source.read_bytes()
+        if self.crash_after and "/channels/" in key and key.endswith(self.crash_after):
+            raise OSError("crash after committed authority bytes")
 
     def public(self, url, source, mutable=False):
         key = url.removeprefix("https://repository.example.invalid/")
@@ -76,7 +79,8 @@ class PacmanPublicationTests(unittest.TestCase):
         db = next(index for index, key in enumerate(writes) if key.endswith("/painted-wolf-code-preview.db"))
         signature = next(index for index, key in enumerate(writes) if key.endswith("/painted-wolf-code-preview.db.sig"))
         self.assertLess(signature, db)
-        self.assertTrue(writes[-1].endswith("/current.json"))
+        self.assertTrue(writes[-2].endswith("/current.json"))
+        self.assertTrue(writes[-1].endswith("/pending.json"))
         self.assertTrue(all(not mutable for key, mutable in self.events if "/generations/" in key))
         self.assertTrue(result["public_verified"])
         self.assertEqual(self.publish()["generation"], result["generation"])
@@ -134,7 +138,7 @@ class PacmanPublicationTests(unittest.TestCase):
             self.publish(rehearsal=False, authorize=authorize)
         self.assertEqual(requests, [0, 2])
         self.assertTrue(self.events)
-        self.assertFalse(any(key.endswith(("/current.json", "/painted-wolf-code-preview.db")) for key in self.objects))
+        self.assertFalse(any(key.endswith(("/current.json", "/painted-wolf-code-preview.db")) for key in self.objects if "/channels/" in key))
 
     def test_production_authority_can_admit_both_bound_checkpoints(self):
         self.receipt["rehearsal"] = False
@@ -162,3 +166,29 @@ class PacmanPublicationTests(unittest.TestCase):
             self.publish(rehearsal=False, authorize=authorize)
         self.assertEqual(len(calls), 1)
         self.assertFalse(any(key.endswith("/current.json") for key in self.objects))
+
+    def test_crashes_require_exact_operation_recovery_and_preserve_old_objects(self):
+        for crash in ["/painted-wolf-code-preview.db", "/current.json"]:
+            with self.subTest(crash=crash):
+                self.objects, self.events, self.reads = {}, [], 0
+                self.receipt["version"] = "0.0.1"
+                original = hashlib.sha256(encoded(self.receipt)).hexdigest()
+                self.crash_after = crash
+                with self.assertRaisesRegex(OSError, "crash after"):
+                    self.publish()
+                pending_key = next(key for key in self.objects if key.endswith("/pending.json"))
+                self.assertEqual(json.loads(self.objects[pending_key])["state"], "pending")
+                retained = {key: value for key, value in self.objects.items() if "/generations/" in key}
+                before = dict(self.objects)
+                self.crash_after = None
+                self.receipt["version"] = "0.0.2"
+                predecessor = original if crash == "/current.json" else None
+                with self.assertRaisesRegex(ValueError, "pending activation"):
+                    self.publish(expected=predecessor)
+                self.assertEqual(self.objects, before)
+                self.receipt["version"] = "0.0.1"
+                self.assertEqual(self.publish()["generation"], original)
+                self.assertEqual(json.loads(self.objects[pending_key])["state"], "completed")
+                self.receipt["version"] = "0.0.2"
+                self.assertEqual(self.publish(expected=original)["version"], "0.0.2")
+                self.assertTrue(all(self.objects[key] == value for key, value in retained.items()))
