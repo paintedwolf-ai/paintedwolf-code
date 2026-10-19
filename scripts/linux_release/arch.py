@@ -14,6 +14,8 @@ import tarfile
 import sys
 import tempfile
 
+from .arch_substrate import build as build_in_substrate
+
 from release_semver import pacman_package_version, parse, parse_release_build
 
 PACKAGE = "painted-wolf-code"
@@ -102,10 +104,10 @@ def recipe(root: Path, payload: Path, architecture: str, product: str) -> str:
     return text
 
 
-def build(root: Path, tree: Path, architecture: str, output: Path) -> Path:
+def build(root: Path, tree: Path, architecture: str, output: Path, container=False) -> Path:
     if platform.system() != "Linux" or platform.machine() != architecture:
         raise ValueError("pacman construction requires the matching native Linux architecture")
-    if shutil.which("makepkg") is None:
+    if not container and shutil.which("makepkg") is None:
         raise ValueError("makepkg is required for native pacman construction")
     if os.geteuid() == 0:
         raise ValueError("makepkg must run as an unprivileged build user")
@@ -126,14 +128,23 @@ def build(root: Path, tree: Path, architecture: str, output: Path) -> Path:
         shutil.copyfile(install, work / install.name)
     env = dict(os.environ, SOURCE_DATE_EPOCH=str(epoch), PKGDEST=str(work.resolve()),
                CARCH=architecture, PKGEXT=".pkg.tar.zst")
-    info = subprocess.check_output(["makepkg", "--printsrcinfo"], cwd=work, env=env, text=True)
-    (work / ".SRCINFO").write_text(info)
-    # All compilation and dependency admission happened in the shared producer path.
-    # This packaging step neither installs dependencies nor invokes the package manager.
-    subprocess.run(["makepkg", "--nodeps", "--noconfirm"], cwd=work, env=env, check=True)
+    if container:
+        substrate = build_in_substrate(root, work, architecture, epoch)
+    else:
+        info = subprocess.check_output(["makepkg", "--printsrcinfo"], cwd=work, env=env, text=True)
+        (work / ".SRCINFO").write_text(info)
+        subprocess.run(["makepkg", "--nodeps", "--noconfirm"], cwd=work, env=env, check=True)
+        substrate = {"distribution": "native host", "native_cpu": architecture, "desktop_qualified": False}
     package = work / f"{PACKAGE}-{version}-{revision}-{architecture}.pkg.tar.zst"
     if not package.is_file():
         raise ValueError(f"makepkg did not produce {package.name}")
     destination = output / package.name
     package.replace(destination)
+    report = {"format_version": 1, "family": "pacman", "source_commit": subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(), "version": product,
+        "native_version": version + "-" + str(revision), "architecture": architecture,
+        "file": destination.name, "sha256": stream_digest(destination), "bytes": destination.stat().st_size,
+        "sealed_payload_sha256": stream_digest(payload), "substrate": substrate,
+        "qualification_status": "unverified", "published": False}
+    (output / "pacman-candidate.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
     return destination
