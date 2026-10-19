@@ -30,6 +30,7 @@ type terminalSnapshotState struct {
 	Busy      bool `json:"busy"`
 	AltScreen bool `json:"alt_screen"`
 	Running   bool `json:"running"`
+	ExitCode  *int `json:"exit_code,omitempty"`
 }
 
 // SnapshotResult is the terminal_snapshot tool payload.
@@ -150,6 +151,7 @@ func captureTerminalSnapshot(
 			Busy:      res.Running,
 			AltScreen: res.Screen.AltScreen,
 			Running:   res.Running,
+			ExitCode:  res.ExitCode,
 		},
 		Caption: caption,
 	}
