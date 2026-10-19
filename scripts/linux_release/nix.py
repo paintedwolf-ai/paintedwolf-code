@@ -20,7 +20,7 @@ SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
               "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "notices", "notice-tools",
-              "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm")
+              "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
 
 
 def command(operation: str, root: Path, component: str = "default") -> list[str]:
