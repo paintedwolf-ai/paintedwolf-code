@@ -116,10 +116,21 @@ def rpm(package, version, expected, config):
     if identity.decode() != f"painted-wolf-code-repo\n{version}-1\nnoarch\n0\n":
         raise ValueError("setup RPM identity differs from the selected version")
     tags = ["PREIN", "POSTIN", "PREUN", "POSTUN", "PRETRANS", "POSTTRANS", "VERIFYSCRIPT",
-            "TRIGGERSCRIPTS", "FILETRIGGERSCRIPTS", "TRANSFILETRIGGERSCRIPTS"]
+            "TRIGGERSCRIPTS", "FILETRIGGERSCRIPTS", "TRANSFILETRIGGERSCRIPTS",
+            "PREINPROG", "POSTINPROG", "PREUNPROG", "POSTUNPROG", "PRETRANSPROG", "POSTTRANSPROG",
+            "VERIFYSCRIPTPROG", "TRIGGERSCRIPTPROG", "FILETRIGGERSCRIPTPROG", "TRANSFILETRIGGERSCRIPTPROG",
+            "CONFLICTNAME", "OBSOLETENAME", "RECOMMENDNAME", "SUGGESTNAME", "SUPPLEMENTNAME", "ENHANCENAME",
+            "PREFIXES"]
     query = "".join("%|" + tag + "?{1}:{0}|" for tag in tags)
     if command(["rpm", "-qp", "--qf", query, str(package)]) != b"0" * len(tags):
         raise ValueError("setup RPM contains scripts or triggers")
+    requirements = command(["rpm", "-qp", "--qf", "[%{REQUIRENAME}\n]", str(package)]).decode().splitlines()
+    allowed = {"rpmlib(CompressedFileNames)", "rpmlib(FileDigests)", "rpmlib(PayloadFilesHavePrefix)"}
+    if len(requirements) != len(set(requirements)) or set(requirements) != allowed:
+        raise ValueError("setup RPM contains an unexpected dependency relationship")
+    provides = command(["rpm", "-qp", "--qf", "[%{PROVIDENAME}\t%{PROVIDEFLAGS}\t%{PROVIDEVERSION}\n]", str(package)])
+    if provides.decode() != f"painted-wolf-code-repo\t8\t{version}-1\n":
+        raise ValueError("setup RPM contains unexpected provided identities")
     rows = command(["rpm", "-qp", "--qf", "[%{FILENAMES}\t%{FILEMODES}\t%{FILEFLAGS}\t%{FILEUSERNAME}\t%{FILEGROUPNAME}\n]", str(package)]).decode().splitlines()
     expected_rows = {f"/{path}\t{stat.S_IFREG | 0o644}\t{17 if path == config else 0}\troot\troot" for path in expected}
     if len(rows) != len(expected_rows) or set(rows) != expected_rows:

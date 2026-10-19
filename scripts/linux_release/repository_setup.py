@@ -50,14 +50,19 @@ def build(manifest, directory, catalog, destination, base_url, private=None, reh
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
             target.chmod(0o644)
+        for parent in [tree, *tree.rglob("*")]:
+            if parent.is_dir():
+                parent.chmod(0o755)
         if family == "deb":
             control = tree / "DEBIAN"
-            control.mkdir()
+            control.mkdir(mode=0o755)
             (control / "control").write_text(
                 f"Package: {PACKAGE}\nVersion: {version}\nArchitecture: all\nSection: admin\nPriority: optional\n"
                 "Maintainer: Painted Wolf Code\nDescription: Explicit Painted Wolf Code repository setup\n"
                 f" Installs the reviewed {channel} repository and public signing key.\n")
             (control / "conffiles").write_text("/" + config_path + "\n")
+            for metadata in control.iterdir():
+                metadata.chmod(0o644)
             artifact = destination / f"{PACKAGE}_{version}_all.deb"
             subprocess.run(["dpkg-deb", "--build", "--root-owner-group", str(tree), str(artifact)], check=True)
         else:
