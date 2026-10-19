@@ -44,6 +44,11 @@ func prepareNixWorkflows(t *testing.T) nixWorkflowFixture {
 	bin, env := nixFixture(t)
 	bash := nixStoreFixtureInput(t, "PW_NIX_FIXTURE_BASH", "/bin/bash")
 	coreutils := nixStoreFixtureInput(t, "PW_NIX_FIXTURE_COREUTILS", "/bin/mkdir")
+	stdenv := os.Getenv("PW_NIX_FIXTURE_STDENV")
+	info, err := os.Stat(filepath.Join(stdenv, "setup"))
+	if !strings.HasPrefix(stdenv, "/nix/store/") || err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("PW_NIX_FIXTURE_STDENV must identify the prepared locked standard environment: %v", err)
+	}
 	project := t.TempDir()
 	system := map[string]string{"amd64": "x86_64-linux", "arm64": "aarch64-linux"}[runtime.GOARCH]
 	if system == "" {
@@ -56,6 +61,7 @@ in builtins.derivation {
   system = %q;
   builder = "${bash}/bin/bash";
   outputs = [ "out" ];
+  stdenv = builtins.storePath %q;
   args = [ "-c" "printf fixture > \"$out\"" ];
   PATH = "${bash}/bin:${coreutils}/bin";
   shellHook = ''
@@ -64,7 +70,7 @@ in builtins.derivation {
   '';
 }
 `
-	source := fmt.Sprintf(expression, filepath.Dir(filepath.Dir(bash)), filepath.Dir(filepath.Dir(coreutils)), system, filepath.Join(project, "hook-invoked"))
+	source := fmt.Sprintf(expression, filepath.Dir(filepath.Dir(bash)), filepath.Dir(filepath.Dir(coreutils)), system, stdenv, filepath.Join(project, "hook-invoked"))
 	testutil.FailErr(t, "write closed non-flake fixture", os.WriteFile(filepath.Join(project, "shell.nix"), []byte(source), 0o600))
 	flake := fmt.Sprintf(`{ outputs = { self }: { devShells.%s.default = import ./shell.nix {}; apps.%s.default = { type = "app"; program = %q; }; }; }`, system, system, bash)
 	testutil.FailErr(t, "write local input-free flake", os.WriteFile(filepath.Join(project, "flake.nix"), []byte(flake), 0o600))
@@ -95,7 +101,7 @@ in builtins.derivation {
 		}
 	}
 	box.ReadRoots = []string{state, "/nix/store"}
-	return nixWorkflowFixture{bin: bin, bash: bash, project: project, flake: metadata.Path, profile: profile, store: store, env: env, boundary: box}
+	return nixWorkflowFixture{bin: bin, bash: bash, project: project, flake: "path:" + metadata.Path, profile: profile, store: store, env: env, boundary: box}
 }
 
 func (fixture nixWorkflowFixture) run(t *testing.T, ctx context.Context, kind execpkg.LaunchKind, bin string, arguments ...string) (*execpkg.PipelineResult, error) {
