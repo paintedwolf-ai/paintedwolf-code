@@ -55,8 +55,11 @@ func TestLinuxNixTLSCacheRequiresGrantedEgressAndVerifiedCertificate(t *testing.
 	badCertificate := filepath.Join(fixture.project, "wrong-ca.pem")
 	testutil.FailErr(t, "write invalid cache trust control", os.WriteFile(badCertificate, []byte("not a certificate"), 0o600))
 	args[9] = badCertificate
+	// The successful cache-info response must not satisfy this trust control.
+	args[11] = cache.URL + "/uncached-trust-control"
+	beforeInvalidTrust := requests.Load()
 	result, err = fixture.run(t, t.Context(), execpkg.LaunchAgentCommand, fixture.bin, args...)
-	if err == nil && result != nil && result.ExitCode == 0 {
+	if err == nil && result != nil && result.ExitCode == 0 || requests.Load() != beforeInvalidTrust {
 		t.Fatal("granted cache access bypassed TLS verification")
 	}
 }
