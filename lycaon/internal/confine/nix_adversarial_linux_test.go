@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -40,7 +41,12 @@ func TestLinuxNixColdDaemonBuildCannotInheritSocketAuthority(t *testing.T) {
 
 func TestLinuxNixSelectedToolchainCannotWriteHostProfilesOrStore(t *testing.T) {
 	fixture := prepareNixWorkflows(t)
-	outside := filepath.Join(t.TempDir(), "profile")
+	account, err := user.Current()
+	testutil.FailErr(t, "read OS account home", err)
+	outsideRoot, err := os.MkdirTemp(account.HomeDir, ".pwc-nix-profile-") //nolint:usetesting // Must be outside the runner's writable temporary root.
+	testutil.FailErr(t, "create private ungranted profile fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(outsideRoot) })
+	outside := filepath.Join(outsideRoot, "profile")
 	storeWrite := filepath.Join("/nix/store", "pw-refused-"+filepath.Base(t.TempDir()))
 	t.Cleanup(func() { _ = os.Remove(storeWrite) })
 	testutil.FailErr(t, "write fixture-owned host profile sentinel", os.WriteFile(outside, []byte("unchanged"), 0o600))
