@@ -35,6 +35,12 @@
       "sites": [
         "styling/ui-chrome.css"
       ]
+    },
+    "hidden-surface-selection": {
+      "summary": "When a retained surface becomes inaccessible, release its browser DOM selection so accessibility text queries cannot use a range in a hidden editor. Logical editor selection stays with the editor.",
+      "sites": [
+        "platform/desktop/webkit-atspi-selection.ts"
+      ]
     }
   }
 }

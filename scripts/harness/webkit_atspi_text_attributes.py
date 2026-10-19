@@ -290,8 +290,6 @@ def run_scan(url: str) -> int:
                 inside = ancestry(node)
                 try:
                     text = node.get_text_iface()
-                    call = "GetNSelections"
-                    Atspi.Text.get_n_selections(text)
                     count = Atspi.Text.get_character_count(text)
                     label = f"{label} text={Atspi.Text.get_text(text, 0, -1)!r}"
                     for offset in range(0, count + 1):
@@ -301,6 +299,8 @@ def run_scan(url: str) -> int:
                             totals["calls"] += 1
                     call = "GetDefaultAttributes"
                     Atspi.Text.get_default_attributes(text)
+                    call = "GetNSelections"
+                    Atspi.Text.get_n_selections(text)
                 except Exception as error:  # noqa: BLE001
                     ended = web_process_ended()
                     if ended is None:
