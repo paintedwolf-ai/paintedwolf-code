@@ -19,6 +19,7 @@ requires:
     - paintedwolf.syntax_diagnostics_truncated
     - paintedwolf.parse_error
     - paintedwolf.path
+    - paintedwolf.mutation_new_path
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
 copy:
@@ -30,14 +31,17 @@ copy:
     {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
   why: A successful-looking broken mutation makes later locations and verification evidence unreliable. The host keeps the previous bytes, or leaves a rejected new path absent.
   fix: >-
-    Read the reported lines and surrounding code. Use one exact `edit`, a complete
-    `write`, or one atomic `replace_lines.operations` batch; `shift_indent` can
-    add or remove an exact whitespace prefix across a range without re-emitting
-    its body. Python rejects also include indentation columns around the changed
-    seam. If the proposed syntax is intentional, intermediate, or the parser
-    diagnostic is inaccurate, supply `syntax_override_reason` on the mutation call
-    to proceed.
-  instead: Branch on Code; re-read the seam and apply one atomic repair
+    The reported locations refer to the rejected candidate, not saved file contents.
+    {% if paintedwolf.mutation_new_path %}This path was absent before this mutation;
+    the rejected candidate was not created. Correct the candidate and retry a complete
+    `write`. If the path has since been created, read its current contents before replacing it.
+    {% else %}Read the current file before repairing it; rejected candidate text is not
+    a saved edit base. Correct the candidate with an exact `edit`, a complete `write`,
+    or one atomic `replace_lines.operations` batch.{% endif %}
+    Resolve this rejected source mutation before running checks that require its proposed contents.
+    If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
+    supply `syntax_override_reason` on the mutation call to proceed.
+  instead: Correct the candidate and retry one atomic mutation
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
 x-paintedwolf-message: mutation would break parse; not applied
