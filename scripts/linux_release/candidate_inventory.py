@@ -21,10 +21,12 @@ def inventory(directory, platform, architecture, version, source_commit):
         path = directory / (stem + "." + extension)
         if path.is_symlink() or not path.is_file():
             raise ValueError("candidate inventory requires every native package family")
+        digest = hashlib.sha256()
         with path.open("rb") as source:
-            digest = hashlib.file_digest(source, "sha256").hexdigest()
+            for block in iter(lambda: source.read(1 << 20), b""):
+                digest.update(block)
         packages.append({"family": family, "file": path.name, "architecture": architecture,
-                         "sha256": digest, "bytes": path.stat().st_size})
+                         "sha256": digest.hexdigest(), "bytes": path.stat().st_size})
     return {"format_version": 1, "source_commit": source_commit, "version": version,
             "platform": platform, "architecture": architecture, "packages": packages,
             "qualification_status": "unverified", "published": False}

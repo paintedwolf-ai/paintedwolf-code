@@ -26,6 +26,14 @@ def download(url, destination, limit):
             output.write(block)
 
 
+def checksum(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def rootfs(root, row):
     cache = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "paintedwolf/arch-substrates"
     cache.mkdir(parents=True, exist_ok=True)
@@ -34,14 +42,12 @@ def rootfs(root, row):
         with tempfile.TemporaryDirectory(prefix=".download-", dir=cache) as temporary:
             archive = Path(temporary) / "rootfs.tar.gz"
             download(row["rootfs_url"], archive, 2 << 30)
-            with archive.open("rb") as source:
-                measured = hashlib.file_digest(source, "sha256").hexdigest()
+            measured = checksum(archive)
             if measured != row["rootfs_sha256"]:
                 raise ValueError("official Arch Linux ARM rootfs differs from its reviewed pin")
             archive.replace(selected)
-    with selected.open("rb") as source:
-        if selected.is_symlink() or hashlib.file_digest(source, "sha256").hexdigest() != row["rootfs_sha256"]:
-            raise ValueError("cached Arch Linux ARM substrate differs from its reviewed pin")
+    if selected.is_symlink() or checksum(selected) != row["rootfs_sha256"]:
+        raise ValueError("cached Arch Linux ARM substrate differs from its reviewed pin")
     with tempfile.TemporaryDirectory(prefix="paintedwolf-arch-root-trust-") as temporary:
         home = Path(temporary)
         home.chmod(0o700)

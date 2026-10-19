@@ -19,10 +19,10 @@ def extract(package, destination, root, architecture, version):
         with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
             for member in archive:
                 name = PurePosixPath(member.name)
-                if (name.is_absolute() or ".." in name.parts or member.name in seen or
+                if (name.is_absolute() or ".." in name.parts or name.as_posix() in seen or
                         (member.mode & 0o6000 or member.isfile() and member.mode & 0o002) or not (member.isfile() or member.isdir() or member.issym() or member.islnk())):
                     raise ValueError("pacman package contains an unsafe or repeated payload object")
-                seen.add(member.name)
+                seen.add(name.as_posix())
                 total += member.size
                 if len(seen) > 200000 or total > 16 << 30:
                     raise ValueError("pacman package exceeds its audited payload bounds")
