@@ -24,7 +24,7 @@ schema:
           type:
             type: string
             enum: [click, hover, drag, scroll, fill, type, select, press, route, wait_for, wait]
-            description: "Step kind. click, hover, drag, and scroll move the pointer; fill, type, select, and press use keys or a control; route swaps request fixtures; wait_for and wait pause."
+            description: "Step kind. click, hover, drag, scroll move the pointer; fill, type, select, press use keys/controls; route swaps fixtures; wait_for awaits a target; wait pauses."
           testid: {type: string, description: "data-testid of the target."}
           selector: {type: string, description: "CSS selector of the target."}
           role: {type: string, description: "ARIA role or implicit native role (button, link); pair with label or text."}

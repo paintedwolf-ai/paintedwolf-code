@@ -33,7 +33,7 @@ type CloseoutRead struct {
 // it. Plain Markdown is a report without fields. pinnedSynthesis is the body a
 // fence-only repair belongs to. ok is false for a draft with no answer.
 func ReadCloseoutReport(content, pinnedSynthesis string) (CloseoutRead, bool) {
-	content = strings.TrimSpace(content)
+	content = unwrapOuterMarkdownFence(strings.TrimSpace(content))
 	if content == "" {
 		return CloseoutRead{}, false
 	}
@@ -130,24 +130,41 @@ func readReportFence(fence string) CloseoutRead {
 // reportFenceMembers are the members a report fence may carry.
 var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[CoordinatorCompletionReport]())
 
-// splitReportFence separates a closeout's Markdown from its report fence: the
-// last block, fenced as `json` or untagged, holding a JSON object with at
-// least one report member. Any other trailing block is part of the answer.
+// splitReportFence recognizes metadata only at the terminal block boundary.
+// Earlier JSON blocks remain answer content even when their keys overlap.
 func splitReportFence(content string) (body, fence string, ok bool) {
-	before, block, ok := jsonfence.Trailing(content)
-	if !ok || (block.Language != "" && !strings.EqualFold(block.Language, "json")) {
-		return "", "", false
+	if before, block, ok := jsonfence.Trailing(content); ok && isReportFenceBlock(block) {
+		return strings.TrimSpace(before), block.Payload, true
+	}
+	return "", "", false
+}
+
+func isReportFenceBlock(block jsonfence.Block) bool {
+	if block.Language != "" && !strings.EqualFold(block.Language, "json") {
+		return false
 	}
 	var members map[string]json.RawMessage
 	if json.Unmarshal([]byte(block.Payload), &members) != nil {
-		return "", "", false
+		return false
 	}
 	for name := range members {
 		if slices.Contains(reportFenceMembers, name) {
-			return strings.TrimSpace(before), block.Payload, true
+			return true
 		}
 	}
-	return "", "", false
+	return false
+}
+
+func unwrapOuterMarkdownFence(content string) string {
+	lines, blocks := jsonfence.Blocks(content)
+	if len(blocks) == 1 && blocks[0].StartLine == 0 && blocks[0].EndLine == len(lines)-1 && isMarkdownFenceLang(blocks[0].Language) {
+		return strings.TrimSpace(blocks[0].Payload)
+	}
+	return content
+}
+
+func isMarkdownFenceLang(lang string) bool {
+	return strings.EqualFold(lang, "markdown") || strings.EqualFold(lang, "md")
 }
 
 // UnreadReportFields sample the unread members for a refusal, one entry per

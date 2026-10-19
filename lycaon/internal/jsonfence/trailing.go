@@ -11,14 +11,16 @@ type Block struct {
 	Payload  string
 }
 
-// Trailing splits Markdown whose last block is a closed fenced code block into
-// the Markdown above it and that block. Fences follow CommonMark: a run of at
-// least three backticks or tildes indented at most three spaces, closed by a
-// run of the same character at least as long with nothing after it. Fences
-// inside earlier blocks are tracked, so a fence line quoted inside a code
-// block never opens or closes one.
-func Trailing(markdown string) (before string, block Block, ok bool) {
-	lines := strings.Split(strings.ReplaceAll(strings.TrimRight(markdown, " \t\r\n"), "\r\n", "\n"), "\n")
+// Span locates a closed top-level fenced code block by 0-based line indices.
+type Span struct {
+	Block
+	StartLine int
+	EndLine   int
+}
+
+// Blocks returns the normalized lines and every closed top-level fenced block.
+func Blocks(markdown string) (lines []string, blocks []Span) {
+	lines = strings.Split(strings.ReplaceAll(strings.TrimRight(markdown, " \t\r\n"), "\r\n", "\n"), "\n")
 	var (
 		open     fence
 		inside   bool
@@ -35,14 +37,34 @@ func Trailing(markdown string) (before string, block Block, ok bool) {
 			continue
 		}
 		inside = false
-		if i == len(lines)-1 {
-			return strings.Join(lines[:openLine], "\n"), Block{
+		blocks = append(blocks, Span{
+			Block: Block{
 				Language: open.language,
 				Payload:  strings.Join(lines[openLine+1:i], "\n"),
-			}, true
-		}
+			},
+			StartLine: openLine,
+			EndLine:   i,
+		})
 	}
-	return "", Block{}, false
+	return lines, blocks
+}
+
+// Trailing splits Markdown whose last block is a closed fenced code block into
+// the Markdown above it and that block. Fences follow CommonMark: a run of at
+// least three backticks or tildes indented at most three spaces, closed by a
+// run of the same character at least as long with nothing after it. Fences
+// inside earlier blocks are tracked, so a fence line quoted inside a code
+// block never opens or closes one.
+func Trailing(markdown string) (before string, block Block, ok bool) {
+	lines, blocks := Blocks(markdown)
+	if len(blocks) == 0 {
+		return "", Block{}, false
+	}
+	last := blocks[len(blocks)-1]
+	if last.EndLine != len(lines)-1 {
+		return "", Block{}, false
+	}
+	return strings.Join(lines[:last.StartLine], "\n"), last.Block, true
 }
 
 type fence struct {
