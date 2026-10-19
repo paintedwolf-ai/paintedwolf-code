@@ -30,6 +30,8 @@ stdenv.mkDerivation {
     runHook preBuild
     test "$(bun --version)" = "${tools.bun.version}"
     test "$(node --version)" = "v${tools.nodejs.version}"
+    chmod -R u+w lycaon-den/node_modules
+    patchShebangs lycaon-den/node_modules
     python3 ${./native-modules.py} lycaon-den/node_modules ${stdenv.hostPlatform.parsed.cpu.name} > native-modules.list
     while IFS= read -r -d "" native; do
       chmod u+w "$native"
