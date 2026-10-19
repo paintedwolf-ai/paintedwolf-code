@@ -51,7 +51,7 @@ run_leg() {
   local browser
   case "$1" in
     nix)
-      bash "${ROOT}/scripts/go-test-digest.sh" --full --tags nixworkflow --name test:confine:linux-nix -- ./internal/confine -run '^(TestLinuxNixDaemonAuthorityIsActionScoped|TestLinuxNixImmutableCachedShell)$' -count=1
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --tags nixworkflow --name test:confine:linux-nix -- ./internal/confine -run '^(TestLinuxNixDaemonAuthorityIsActionScoped|TestLinuxNixImmutableCachedShell|TestLinuxNixCachedDevelopmentWorkflows)$' -count=1
       ;;
     sandbox)
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-sandbox -- ./internal/confine/... -count=1
