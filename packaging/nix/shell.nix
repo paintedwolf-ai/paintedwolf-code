@@ -9,6 +9,7 @@ in rust.buildRustPackage {
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
   src = source;
   cargoLock.lockFile = source + "/lycaon-den/src-tauri/Cargo.lock";
+  cargoRoot = "lycaon-den/src-tauri";
   buildAndTestSubdir = "lycaon-den/src-tauri";
   cargoBuildFlags = [ "--bin" "painted-wolf-code" ];
   nativeBuildInputs = [ pkg-config ];
