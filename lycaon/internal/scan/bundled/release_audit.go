@@ -23,6 +23,7 @@ type releaseAudit struct {
 	Identity      *BuildIdentity             `json:"build_identity"`
 	Selection     *ReleaseSelectionReference `json:"selection,omitempty"`
 	Evidence      []byte                     `json:"evidence_bytes,omitempty"`
+	Consumer      json.RawMessage            `json:"consumer_finalization,omitempty"`
 }
 
 // WriteReleaseAudit checks packaged bytes and links offline evidence through its pinned digest.
@@ -43,6 +44,13 @@ func WriteReleaseAudit(ctx context.Context, m *Manifest, packagedDirectory, evid
 		return fmt.Errorf("packaged engine differs from selected release: %w", err)
 	}
 	audit := releaseAudit{SchemaVersion: 1, Mode: "reviewed-pin-only", Engine: m.OpenGrep, Identity: m.identity, Selection: m.OpenGrepSelection}
+	if m.identity.Consumer != nil {
+		raw, err := readConsumerRecord(m, packagedDirectory)
+		if err != nil {
+			return err
+		}
+		audit.SchemaVersion, audit.Consumer = 2, raw
+	}
 	if m.OpenGrepSelection != nil {
 		raw, err := readSelectionEvidence(m, evidenceRoot)
 		if err != nil {

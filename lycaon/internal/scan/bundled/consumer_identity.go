@@ -128,11 +128,21 @@ func verifyConsumerRecord(m *Manifest, directory string) error {
 	if producer.GOOS != identity.GOOS || producer.GOARCH != identity.GOARCH || producer.BinarySHA256 != identity.Consumer.ProducerSHA256 || producer.BinaryBytes != identity.Consumer.ProducerBytes || !reflect.DeepEqual(producer.Payload, identity.Payload) {
 		return fmt.Errorf("consumer finalization changed original producer authority")
 	}
+	if m.consumerSource != nil && !reflect.DeepEqual(producer, m.consumerSource.identity) {
+		return fmt.Errorf("consumer record differs from the independently admitted producer")
+	}
 	if record.Executable != (consumerExecutable{GOOS: identity.GOOS, GOARCH: identity.GOARCH, SHA256: identity.BinarySHA256, Bytes: identity.BinaryBytes}) {
 		return fmt.Errorf("consumer finalization does not bind the final packaged executable")
 	}
 	if err := record.Recipe.validate(); err != nil {
 		return err
+	}
+	platform, err := inspectConsumerELF(filepath.Join(directory, "opengrep"), identity.GOARCH)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(platform, record.Platform) {
+		return fmt.Errorf("consumer platform observation differs from final executable")
 	}
 	return verifyConsumerQualification(record.Qualification, identity)
 }
