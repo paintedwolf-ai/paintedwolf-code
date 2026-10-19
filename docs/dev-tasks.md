@@ -906,6 +906,49 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
 
+#### Nix installations
+
+Nix package sources and the NixOS module are versioned with this repository. Consume an exact release source commit from `paintedwolf-ai/paintedwolf-code`, including its committed `flake.lock`; a nixpkgs submission is not required. The flake exposes `packages.x86_64-linux.default`, `packages.aarch64-linux.default` and `nixosModules.default`. The package version comes from the same `VERSION` as the other platforms. These interfaces are being implemented in [#927](https://github.com/paintedwolf-ai/paintedwolf-code/issues/927) and [#929](https://github.com/paintedwolf-ai/paintedwolf-code/issues/929); use a release that contains them. Publication of the first such exact release pin remains pending those changes.
+
+Replace `<source-commit>` with the full source commit named by the selected release. Check its release/tag provenance and review the source and lock changes before changing your pin. `flake.lock` records dependency revisions and NAR hashes; language lock files and the derivations' fixed-output dependency hashes describe the remaining fetched inputs. A hash detects a changed input; it does not identify a publisher or authorize unattended vault access. The package manifest describes final installed ELF bytes after Nix fixups; [custody trust](secrets.md#credential-vault) is an explicit administrator decision about that generation.
+
+The following examples require Nix's `nix-command` and `flakes` features. Set `PW_NIX_SOURCE` to `github:paintedwolf-ai/paintedwolf-code/<source-commit>`. A read-only source inspection and a package build do not select an installation owner:
+
+```sh
+nix flake metadata "$PW_NIX_SOURCE"
+nix build --no-link --no-write-lock-file "$PW_NIX_SOURCE#default"
+```
+
+Choose the configuration that already owns the installation. Do not create a second owner merely because the upstream feed reports a newer version.
+
+| Owner | Install and update | Rollback and remove |
+|---|---|---|
+| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Before disabling custody, move service-held identities to an app password, or restore the service later to access its retained state. Removing the module/package does not erase credentials. |
+| Home Manager | Add the pinned input's `packages.${pkgs.stdenv.hostPlatform.system}.default` to `home.packages`, then use the existing Home Manager activation procedure. Update that input explicitly; do not replace its pin from the app. | Select the intended retained Home Manager generation or restore the prior input and activate. Remove the package from the same `home.packages`. System custody still needs an administrator's NixOS module; a standalone Home Manager activation does not install it. |
+| User profile | Choose the actual profile, inspect it with `nix profile list --profile "$PW_NIX_PROFILE"`, and add the selected source with `nix profile add --profile "$PW_NIX_PROFILE" "$PW_NIX_SOURCE#default"`. An exact commit remains pinned. To replace it, record `nix profile history`, remove the observed element name, then add the reviewed new source to that same profile. | Use `nix profile rollback` with that profile and the intended retained generation. Remove the observed element using `nix profile remove`; never guess an element name or profile path. |
+| Temporary build | Use `nix build --out-link "$PW_NIX_OUTPUT" "$PW_NIX_SOURCE#default"` with a chosen output link, then launch its `bin/painted-wolf-code`. A temporary build has no profile to upgrade. | Choose another exact source/output and relaunch when ready. Removing the chosen output link releases that root; Nix garbage collection owns unused outputs. |
+| Unknown | Find the configuration/profile where the package was selected, or ask its administrator. The running executable identifies a Nix generation and layout; it does not identify NixOS, Home Manager, a profile or an intentional pin. | Do not guess an upgrade, rollback, removal command or configuration path. |
+
+A configuration without a top-level flake can consume the same pinned package through [`builtins.getFlake`](https://nix.dev/manual/nix/2.35/language/builtins.html#builtins-getFlake). This still requires the flakes feature; use a locked commit reference rather than a mutable branch:
+
+```nix
+let
+  paintedWolf = builtins.getFlake "github:paintedwolf-ai/paintedwolf-code/<source-commit>";
+in paintedWolf.packages.${pkgs.stdenv.hostPlatform.system}.default
+```
+
+Use that expression in the existing `home.packages` or `environment.systemPackages`. For protected system custody, import `paintedWolf.nixosModules.default` in the administrator's NixOS configuration and set `services.painted-wolf-code.enable = true`. Neither recipe needs a global registry entry, a guessed configuration file path, a broad Nix `trusted-users` grant or a permissive polkit rule.
+
+The app's update check reads the signed upstream release feed only. Its native package facts report source availability as `not_checked`, and Nix ownership and pin state as unknown. The selected source may deliberately retain an older version, lack the announced release, or be unavailable. Stable/preview selection changes the upstream feed, not a Nix input or lock file. A failed check labels a retained offer as previously seen; withdrawal removes the current offer without modifying an installed output. No check changes a profile, switches a system generation, edits a lock file, modifies the store or restarts the desktop.
+
+The optional product binary cache is owned by [#945](https://github.com/paintedwolf-ai/paintedwolf-code/issues/945). Its endpoint and separate Nix public key must be published before it can be configured; existing feed and package signing keys are not Nix cache keys. Administrators explicitly add the published endpoint to `extra-substituters` and its reviewed Nix key to `extra-trusted-public-keys`; selecting a cache changes neither source pins nor custody trust. Keep a source-build path with the product cache absent. Rotation publishes the replacement key before switching signatures, then withdraws the retired key after the announced overlap; revoke a compromised key and substituter from the owning configuration and rebuild from reviewed sources. Cache substitution, rotation and source-build qualification remain tracked in #945 and #932.
+
+Removing an offered release or cache object cannot revoke a pinned source or an already retained closure. Review withdrawal notices, select a supported replacement explicitly and retain any generation needed for recovery. Running desktops retain their own Nix generation until they exit; switching a profile does not change their engine/helper identity. The system custodian accepts only its explicitly selected generations, so a switch can require a full desktop restart or a deliberate administrator-selected transition.
+
+A Nix generation rollback changes application/package files, not the live database or vault. A newer or unknown database schema is refused without mutation; [compatibility](compatibility.md#main-store-durable-db) requires a verified recovery snapshot before migration. Restore a selected compatible snapshot explicitly through the existing recovery flow; history returns to its capture point. Keep device credentials and service identities intact. A pinned old closure is not a database recovery point.
+
+See the [update qualification matrix](operations/update-qualification.md#nix-owner-and-recovery-qualification) for owner-specific installed checks. The recipes above describe the package contract; the first released-pin, owner switching and both-architecture qualification remain pending the package/cache foundation.
+
 ### Updates
 
 Before broad activation, use the [update qualification matrix](operations/update-qualification.md)
