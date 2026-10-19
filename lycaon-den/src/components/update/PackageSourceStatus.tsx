@@ -22,6 +22,7 @@ export function PackageSourceStatus(props: { facts: PackageSourceFacts }) {
   return <Show when={props.facts.availability !== "not_checked"}>
     <div data-testid="updates-package-source">
       <Show when={props.facts.database_version}>{(version) => <p data-testid="updates-database-version">Package database version: {version()}{props.facts.architecture ? ` (${props.facts.architecture})` : ""}. The running version is shown separately above.</p>}</Show>
+      <Show when={props.facts.selection_priority !== null}><p data-testid="updates-source-priority">Package selection priority: {props.facts.selection_priority}. Whether this expresses an intentional pin is unknown.</p></Show>
       <Show when={props.facts.candidate}>{(candidate) => <>
         <p data-testid="updates-source-candidate">Cached package candidate: {candidate().version} ({candidate().architecture}){candidate().newer_than_installed ? ". The package manager reports it as newer than the database version." : ". It is not newer than the database version."}</p>
         <For each={candidate().repositories}>{(repository) => <p>Source: {repository.id}{repository.suite ? `; suite: ${repository.suite}` : ""}. Its release channel is independent of your upstream feed preference.</p>}</For>

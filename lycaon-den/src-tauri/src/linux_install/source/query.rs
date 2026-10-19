@@ -14,11 +14,16 @@ pub async fn refresh(package: Option<InstalledPackage>) -> Option<InstalledPacka
     let _cancel = CancelOnDrop(cancelled.clone());
     let family = package.family;
     let name = package.name.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut reader = OsReader::new(Duration::from_secs(8), cancelled);
+    let timeout = Duration::from_secs(8);
+    let mut reader = OsReader::new(timeout, cancelled);
+    let result = tokio::time::timeout(timeout, tauri::async_runtime::spawn_blocking(move || {
         observe(family, &name, &mut reader)
-    }).await;
-    package.source = result.unwrap_or_else(|_| PackageSourceFacts::for_family(family).fail(QueryReason::QueryFailed));
+    })).await;
+    package.source = match result {
+        Ok(Ok(facts)) => facts,
+        Ok(Err(_)) => PackageSourceFacts::for_family(family).fail(QueryReason::QueryFailed),
+        Err(_) => PackageSourceFacts::for_family(family).fail(QueryReason::TimedOut),
+    };
     Some(package)
 }
 

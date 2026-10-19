@@ -52,7 +52,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
           <div class="den-settings-pref-copy">
             <span class="den-settings-pref-label">{settingLabel("update-checks")}</span>
             <Show when={state()?.install_source === "system_package"} fallback={<p class="den-settings-hint">Downloads updates in the background and installs them when you quit or next open Painted Wolf Code. The app never restarts automatically while you’re using it.</p>}>
-              <p class="den-settings-hint" data-testid="updates-package-hint">{nix() ? "Checks upstream releases in the background. The Nix configuration or profile that selected this build controls its version; this check does not change its input or pin." : "Checks upstream releases in the background. Your system package manager controls which versions your configured sources can install."}</p>
+              <p class="den-settings-hint" data-testid="updates-package-hint">{nix() ? "Checks upstream releases in the background. The Nix configuration or profile that selected this build controls its version; this check does not change its input or pin." : "Checks upstream releases and local package-source metadata in the background. Your system package manager controls which versions your configured sources can install."}</p>
             </Show>
             <p class="den-settings-hint">Checks shortly after launch and every six hours. New releases reach devices gradually over their first two days; Check now always offers the newest version. Requests carry no device identifier or account information. Homebrew installations update through Homebrew.</p>
           </div>

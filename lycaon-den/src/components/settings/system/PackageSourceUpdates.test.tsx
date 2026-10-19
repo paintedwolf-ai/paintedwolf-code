@@ -12,12 +12,13 @@ const renderSource = (over: Partial<PackageSourceFacts>) => {
 };
 describe("package-source observations", () => {
   it("separates an upgraded database and cached native candidate from the running product and upstream feed", async () => {
-    renderSource({ availability: "candidate_found", candidate: { version: "1.2.0~rc.1", architecture: "amd64", newer_than_installed: true,
+    renderSource({ availability: "candidate_found", selection_priority: 700, candidate: { version: "1.2.0~rc.1", architecture: "amd64", newer_than_installed: true,
       repositories: [{ id: "Painted Wolf Code", suite: "preview", trusted: true }] } });
     expect((await screen.findByTestId("updates-source-candidate")).textContent).toContain("Cached package candidate: 1.2.0~rc.1");
     expect(screen.getByTestId("updates-database-version").textContent).toContain("1.1.0-1");
     expect(screen.getByTestId("updates-current-version").textContent).toBe("Version 1.0.2");
     expect(screen.getByTestId("updates-package-source").textContent).toContain("suite: preview");
+    expect(screen.getByTestId("updates-source-priority").textContent).toContain("700");
     expect(screen.getByTestId("updates-package-source").textContent).toContain("without refreshing");
     expect(screen.getByTestId("updates-package-upgrade").textContent).toContain("Upstream version 1.1.0");
     expect(screen.queryByTestId("updates-install")).toBeNull();
