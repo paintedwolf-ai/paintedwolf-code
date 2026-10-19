@@ -89,10 +89,15 @@ pub fn installed() -> Option<&'static InstalledPackage> {
             if !cfg!(target_os = "linux") {
                 return None;
             }
-            let executable = std::env::current_exe().ok()?;
-            owner(&executable)
+            owner(running_executable()?)
         })
         .as_ref()
+}
+
+/// Preserve the executable's original installed path even after replacement unlinks it.
+fn running_executable() -> Option<&'static Path> {
+    static EXECUTABLE: OnceLock<Option<PathBuf>> = OnceLock::new();
+    EXECUTABLE.get_or_init(|| std::env::current_exe().ok()).as_deref()
 }
 
 fn owner(executable: &Path) -> Option<InstalledPackage> {
@@ -118,15 +123,20 @@ fn query_dpkg(executable: &Path) -> Option<InstalledPackage> {
 /// `dpkg-query -S` prints `name[:arch][, name...]: path` per owning package.
 fn parse_dpkg_owner(output: &str, executable: &Path) -> Option<String> {
     let wanted = executable.to_string_lossy();
-    output.lines().find_map(|line| {
-        let (owners, path) = line.rsplit_once(": ")?;
+    let mut names = std::collections::BTreeSet::new();
+    for line in output.lines() {
+        let Some((owners, path)) = line.rsplit_once(": ") else { continue; };
         if path.trim() != wanted {
-            return None;
+            continue;
         }
-        let first = owners.split(',').next()?.trim();
-        let name = first.split(':').next()?.trim();
-        (!name.is_empty()).then(|| name.to_owned())
-    })
+        for owner in owners.split(',') {
+            let name = owner.trim().split(':').next()?.trim();
+            if !source::valid_package_name(name) { return None; }
+            names.insert(name.to_owned());
+        }
+    }
+    if names.len() != 1 { return None; }
+    names.into_iter().next()
 }
 
 fn query_rpm(executable: &Path) -> Option<InstalledPackage> {
@@ -154,10 +164,12 @@ fn query_pacman(executable: &Path) -> Option<InstalledPackage> {
 
 /// `rpm -qf --qf '%{NAME}\t%{VERSION}\n'` prints one line per owning package.
 fn parse_rpm_owner(output: &str) -> Option<InstalledPackage> {
-    let line = output.lines().find(|line| !line.trim().is_empty())?;
+    let lines: Vec<_> = output.lines().filter(|line| !line.trim().is_empty()).collect();
+    if lines.len() != 1 { return None; }
+    let line = lines[0];
     let (name, version) = line.split_once('\t')?;
     let (name, version) = (name.trim(), version.trim());
-    (!name.is_empty() && !version.is_empty())
+    (source::valid_package_name(name) && !version.is_empty() && !version.chars().any(char::is_control))
         .then(|| InstalledPackage::new(PackageFamily::Rpm, name.to_owned(), version.to_owned()))
 }
 
@@ -182,7 +194,7 @@ mod tests {
                 exe
             )
             .as_deref(),
-            Some("painted-wolf-code")
+            None
         );
         assert_eq!(
             parse_dpkg_owner(
@@ -190,7 +202,7 @@ mod tests {
                 exe
             )
             .as_deref(),
-            Some("diversion by foo from")
+            None
         );
         assert!(parse_dpkg_owner("other: /usr/bin/other\n", exe).is_none());
         assert!(parse_dpkg_owner("dpkg-query: no path found matching pattern\n", exe).is_none());

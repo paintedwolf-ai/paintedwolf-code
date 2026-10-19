@@ -13,7 +13,7 @@ export const updateServiceFixture = (over: Partial<UpdateService> = {}): UpdateS
 export const stagedFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({ offer_confirmed_at: 1800000000, installation: "staged", staged_release_id: "release-1", capabilities: { can_check: true, can_download: false, can_restart_to_update: true, can_install_automatically: true, blocked_reason: null }, ...over });
 export const packageSourceFixture = (over: Partial<PackageSourceFacts> = {}): PackageSourceFacts => ({
   availability: "not_checked", owner: "system_package_manager", pinned: null, checked_at: null,
-  database_version: null, architecture: null, candidate: null, held: null, selection_priority: null,
+  database_version: null, database_owner: null, architecture: null, candidate: null, held: null, selection_priority: null,
   cached_only: false, reason: null, ...over,
 });
 export const packageFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({

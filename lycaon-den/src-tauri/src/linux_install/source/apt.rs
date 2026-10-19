@@ -60,8 +60,8 @@ pub(super) fn project(raw: &str, facts: &mut PackageSourceFacts) -> Result<(), Q
     facts.selection_priority = Some(candidate.priority);
     let mut repositories = Vec::new();
     for origin in candidate.origins {
-        if !field(&origin.id) || !field(&origin.suite) { return Err(QueryReason::InvalidResponse); }
-        repositories.push(Repository { id: origin.id, suite: Some(origin.suite), trusted: Some(origin.trusted) });
+        if (!origin.id.is_empty() && !field(&origin.id)) || (!origin.suite.is_empty() && !field(&origin.suite)) { return Err(QueryReason::InvalidResponse); }
+        repositories.push(Repository { id: origin.id, suite: (!origin.suite.is_empty()).then_some(origin.suite), trusted: Some(origin.trusted) });
     }
     let reason = if held { Some(QueryReason::Held) }
         else if repositories.is_empty() { Some(QueryReason::NoCachedCandidate) }

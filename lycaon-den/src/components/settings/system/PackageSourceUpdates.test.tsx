@@ -7,7 +7,7 @@ import type { PackageSourceFacts } from "../../../settings/system/update-service
 afterEach(cleanup);
 const renderSource = (over: Partial<PackageSourceFacts>) => {
   const state = packageFixture();
-  state.package!.source = packageSourceFixture({ cached_only: true, checked_at: 100, database_version: "1.1.0-1", architecture: "amd64", ...over });
+  state.package!.source = packageSourceFixture({ cached_only: true, checked_at: 100, database_owner: "painted-wolf-code", database_version: "1.1.0-1", architecture: "amd64", ...over });
   render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
 };
 describe("package-source observations", () => {
@@ -16,6 +16,7 @@ describe("package-source observations", () => {
       repositories: [{ id: "Painted Wolf Code", suite: "preview", trusted: true }] } });
     expect((await screen.findByTestId("updates-source-candidate")).textContent).toContain("Cached package candidate: 1.2.0~rc.1");
     expect(screen.getByTestId("updates-database-version").textContent).toContain("1.1.0-1");
+    expect(screen.getByTestId("updates-database-owner").textContent).toContain("painted-wolf-code");
     expect(screen.getByTestId("updates-current-version").textContent).toBe("Version 1.0.2");
     expect(screen.getByTestId("updates-package-source").textContent).toContain("suite: preview");
     expect(screen.getByTestId("updates-source-priority").textContent).toContain("700");
@@ -47,9 +48,24 @@ describe("package-source observations", () => {
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
   });
   it("reports an unknown owner without claiming that repository metadata was read", async () => {
-    renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_version: null, architecture: null });
+    renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_owner: null, database_version: null, architecture: null });
     expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("owns this source is unknown");
     expect(screen.queryByTestId("updates-database-version")).toBeNull();
     expect(screen.getByTestId("updates-package-source").textContent).not.toContain("local cached metadata");
+  });
+  it("reports a changed database owner without claiming an update for the old running package", async () => {
+    renderSource({ availability: "blocked", reason: "owner_changed", cached_only: false, database_owner: "replacement-package", database_version: null, architecture: null });
+    expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("ownership on disk changed");
+    expect(screen.getByTestId("updates-database-owner").textContent).toContain("replacement-package");
+    expect(screen.getByTestId("updates-package-identity").textContent).toContain("painted-wolf-code 1.0.2");
+    expect(screen.queryByTestId("updates-source-candidate")).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
+  it("keeps an absent repository identity or suite unknown", async () => {
+    renderSource({ availability: "candidate_found", candidate: { version: "1.2.0", architecture: "amd64", newer_than_installed: true,
+      repositories: [{ id: "", suite: null, trusted: true }] } });
+    const source = await screen.findByTestId("updates-package-source");
+    expect(source.textContent).toContain("Unknown repository");
+    expect(source.textContent).not.toContain("suite:");
   });
 });

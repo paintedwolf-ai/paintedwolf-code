@@ -11,10 +11,10 @@ export type InstalledPackage = {
 export type PackageSourceFacts = {
   availability: "not_checked" | "candidate_found" | "no_newer_candidate" | "blocked" | "unknown" | "failed";
   owner: "system_package_manager" | null; pinned: boolean | null;
-  checked_at: number | null; database_version: string | null; architecture: string | null;
+  checked_at: number | null; database_version: string | null; database_owner: string | null; architecture: string | null;
   candidate: { version: string; architecture: string; repositories: { id: string; suite: string | null; trusted: boolean | null }[]; newer_than_installed: boolean } | null;
   held: boolean | null; selection_priority: number | null; cached_only: boolean;
-  reason: "unsupported_owner" | "adapter_unavailable" | "not_installed" | "no_cached_candidate" | "policy_unobserved" | "held" | "untrusted_source" | "ambiguous_candidate" | "wrong_architecture" | "query_failed" | "timed_out" | "output_limit" | "cancelled" | "invalid_response" | null;
+  reason: "unsupported_owner" | "adapter_unavailable" | "not_installed" | "no_cached_candidate" | "policy_unobserved" | "held" | "untrusted_source" | "ambiguous_candidate" | "wrong_architecture" | "query_failed" | "timed_out" | "output_limit" | "cancelled" | "invalid_response" | "owner_changed" | null;
 };
 type UpdateChannel = "stable" | "preview";
 type UpdateCandidate = {

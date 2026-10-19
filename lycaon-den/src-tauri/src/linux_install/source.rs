@@ -8,6 +8,7 @@ mod apt;
 mod command;
 mod dnf;
 mod pacman;
+mod ownership;
 mod query;
 #[cfg(test)]
 mod tests;
@@ -49,6 +50,7 @@ pub enum QueryReason {
     OutputLimit,
     Cancelled,
     InvalidResponse,
+    OwnerChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -83,6 +85,7 @@ pub struct PackageSourceFacts {
     pub checked_at: Option<u64>,
     /// A fresh package-database observation; the captured running version is unchanged.
     pub database_version: Option<String>,
+    pub database_owner: Option<String>,
     pub architecture: Option<String>,
     pub candidate: Option<PackageCandidate>,
     pub held: Option<bool>,

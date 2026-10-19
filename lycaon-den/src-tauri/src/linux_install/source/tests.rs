@@ -64,6 +64,54 @@ fn apt_uses_the_native_policy_candidate_and_preserves_package_version_and_suite(
 }
 
 #[test]
+fn absent_apt_origin_names_or_suites_remain_unknown_instead_of_becoming_channels() {
+    let mut report = apt_report();
+    report["candidate"]["origins"][0]["id"] = "".into();
+    report["candidate"]["origins"][0]["suite"] = "".into();
+    let facts = apt_facts(report);
+    assert_eq!(facts.availability, SourceAvailability::CandidateFound);
+    let candidate = facts.candidate.unwrap();
+    let repository = &candidate.repositories[0];
+    assert_eq!(repository.id, "");
+    assert_eq!(repository.suite, None);
+}
+
+#[test]
+fn fresh_path_ownership_is_separate_from_the_captured_running_package() {
+    let path = std::path::Path::new("/opt/painted-wolf-code/bin/painted-wolf-code");
+    let mut fake = Fake::new(vec![output("painted-wolf-code: /opt/painted-wolf-code/bin/painted-wolf-code\n"), output(&apt_report().to_string())]);
+    let facts = query::observe_installation(PackageFamily::Deb, "painted-wolf-code", Some(path), &mut fake);
+    assert_eq!(facts.database_owner.as_deref(), Some("painted-wolf-code"));
+    assert_eq!(facts.database_version.as_deref(), Some("1.0.2~rc.1"));
+    assert_eq!(facts.availability, SourceAvailability::CandidateFound);
+    assert_eq!(fake.calls[0].1[1], path.to_str().unwrap());
+    let mut fake = Fake::new(vec![output("replacement-package: /opt/painted-wolf-code/bin/painted-wolf-code\n")]);
+    let facts = query::observe_installation(PackageFamily::Deb, "painted-wolf-code", Some(path), &mut fake);
+    assert_eq!(facts.database_owner.as_deref(), Some("replacement-package"));
+    assert_eq!((facts.availability, facts.reason), (SourceAvailability::Blocked, Some(QueryReason::OwnerChanged)));
+    assert!(facts.candidate.is_none() && facts.database_version.is_none());
+    assert_eq!(fake.calls.len(), 1, "ownership change must stop candidate queries for the old package");
+}
+
+#[test]
+fn fresh_rpm_and_pacman_owner_queries_refuse_ambiguity_and_database_failure() {
+    let path = std::path::Path::new("/opt/painted-wolf-code/bin/painted-wolf-code");
+    for family in [PackageFamily::Rpm, PackageFamily::Pacman] {
+        let mut fake = Fake::new(vec![output("other-package\n")]);
+        let facts = query::observe_installation(family, "painted-wolf-code", Some(path), &mut fake);
+        assert_eq!(facts.reason, Some(QueryReason::OwnerChanged));
+        assert_eq!(facts.database_owner.as_deref(), Some("other-package"));
+        let mut fake = Fake::new(vec![output("painted-wolf-code\nother-package\n")]);
+        assert_eq!(query::observe_installation(family, "painted-wolf-code", Some(path), &mut fake).reason, Some(QueryReason::InvalidResponse));
+        let mut fake = Fake::new(vec![Ok(Output { code: 1, stdout: "no package owns this file".into() })]);
+        assert_eq!(query::observe_installation(family, "painted-wolf-code", Some(path), &mut fake).reason, Some(QueryReason::QueryFailed));
+    }
+    let mut fake = Fake::new(vec![]);
+    assert_eq!(query::observe_installation(PackageFamily::Deb, "painted-wolf-code", None, &mut fake).reason, Some(QueryReason::InvalidResponse));
+    assert!(fake.calls.is_empty());
+}
+
+#[test]
 fn apt_hold_untrusted_and_missing_cache_are_explicit_outcomes() {
     let mut report = apt_report(); report["held"] = true.into();
     let facts = apt_facts(report);
