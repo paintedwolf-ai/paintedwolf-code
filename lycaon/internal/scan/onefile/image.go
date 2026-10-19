@@ -47,7 +47,7 @@ func Read(raw []byte) (*Image, error) {
 	if err := validateLauncher(raw[:start]); err != nil {
 		return nil, err
 	}
-	decoder, err := zstd.NewReader(bytes.NewReader(raw[start+3:len(raw)-8]), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(64<<20), zstd.WithDecoderMaxWindow(64<<20))
+	decoder, err := zstd.NewReader(bytes.NewReader(raw[start+3:len(raw)-8]), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(256<<20), zstd.WithDecoderMaxWindow(128<<20))
 	if err != nil {
 		return nil, err
 	}
@@ -109,19 +109,22 @@ func Read(raw []byte) (*Image, error) {
 
 func readName(reader *bufio.Reader) (string, error) {
 	raw, err := reader.ReadSlice(0)
-	if err != nil || len(raw) > 1024 || !utf8.Valid(raw[:len(raw)-1]) {
+	if err != nil {
+		return "", fmt.Errorf("read onefile name: %w", err)
+	}
+	if len(raw) > 1024 || !utf8.Valid(raw[:len(raw)-1]) {
 		return "", fmt.Errorf("onefile name is unterminated or exceeds its bound")
 	}
 	return string(raw[:len(raw)-1]), nil
 }
 
 func validName(name string) bool {
-	return name != "" && name != "." && name != ".." && path.Clean(name) == name && !path.IsAbs(name) && !strings.HasPrefix(name, "../") && !strings.ContainsAny(name, "\\\x00")
+	return name != "" && name != "." && name != ".." && utf8.ValidString(name) && path.Clean(name) == name && !path.IsAbs(name) && !strings.HasPrefix(name, "../") && !strings.ContainsAny(name, "\\\x00")
 }
 
 func validLink(name, target string) bool {
 	resolved := path.Join(path.Dir(name), target)
-	return target != "" && !path.IsAbs(target) && !strings.ContainsAny(target, "\\\x00") && validName(resolved)
+	return target != "" && utf8.ValidString(target) && !path.IsAbs(target) && !strings.ContainsAny(target, "\\\x00") && validName(resolved)
 }
 
 func dataChecksum(raw []byte) uint32 {
