@@ -1,6 +1,7 @@
 package commandsurface_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -85,7 +86,7 @@ func TestCommandRejectVarsDirectoryChange(t *testing.T) {
 	}{
 		{"typed", commandsurface.ErrDirectoryChangeCommand, true},
 		{"wrapped", fmt.Errorf("stage 0: %w", commandsurface.ErrDirectoryChangeCommand), true},
-		{"prose", fmt.Errorf("%s", commandsurface.ErrDirectoryChangeCommand), false},
+		{"prose", errors.New(commandsurface.ErrDirectoryChangeCommand.Error()), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vars := commandsurface.CommandRejectVars("implement", "cd src && tool --check", "cd src && tool --check", commandFields, tc.err)
