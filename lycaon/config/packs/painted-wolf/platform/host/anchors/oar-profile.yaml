@@ -76,13 +76,13 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
- - name: paintedwolf.missing_required_arguments
-   type: string
  - name: paintedwolf.rejection_reason
    type: string
  - name: paintedwolf.rejection_field
    type: string
  - name: paintedwolf.mime
+   type: string
+ - name: paintedwolf.missing_required_arguments
    type: string
  - name: paintedwolf.worker_budget_at_max
    type: bool

@@ -53,7 +53,10 @@ func MissingRequiredSummary(invalid *jsonschema.ValidationError, schema, args ma
 		out.Received = append(out.Received, name)
 	}
 	for len(out.Missing) > 0 {
-		encoded, _ := json.Marshal(out)
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			return ""
+		}
 		if len(encoded) <= maxRequiredSummaryBytes {
 			return string(encoded)
 		}
@@ -81,9 +84,7 @@ func rootMissingRequired(root *jsonschema.ValidationError) []string {
 		if required, ok := e.ErrorKind.(*kind.Required); ok {
 			return slices.Clone(required.Missing)
 		}
-		for _, child := range e.Causes[:min(len(e.Causes), 32-len(pending))] {
-			pending = append(pending, child)
-		}
+		pending = append(pending, e.Causes[:min(len(e.Causes), 32-len(pending))]...)
 	}
 	return nil
 }
