@@ -14,6 +14,7 @@ import tempfile
 from .native_repositories import assemble
 from .openpgp import ephemeral
 from .repository_validation import admit
+from .repository_publication import publish
 from .signing import digest
 
 PACKAGE = "paintedwolf-repository-fixture"
@@ -74,6 +75,8 @@ def rehearse(work: Path):
     wrong = ephemeral(work / "wrong-key")
     private = catalog.parent / "rehearsal-secret.asc"
     generations = []
+    active = {}
+    retained = {}
     for version in ["0.0.1", "0.0.2"]:
         fixture_work = work / version
         fixture_work.mkdir()
@@ -98,12 +101,28 @@ def rehearse(work: Path):
             rejected(lambda: admit(receipt, destination, catalog, True))
             missing.rename(package)
             admit(receipt, destination, catalog, True)
+            store = work / "origin"
+            previous = active.get(family)
+            record = publish(receipt, destination, store, "https://repository.example.invalid", catalog,
+                             previous, True)
+            rejected(lambda: publish(receipt, destination, store, "https://repository.example.invalid",
+                                     catalog, "0" * 64, True))
+            if family in retained:
+                old_receipt, old_destination = retained[family]
+                restored = publish(old_receipt, old_destination, store, "https://repository.example.invalid",
+                                   catalog, record["generation"], True, True)
+                record = publish(receipt, destination, store, "https://repository.example.invalid", catalog,
+                                 restored["generation"], True)
+            else:
+                retained[family] = receipt, destination
+            active[family] = record["generation"]
             generations.append({"version": version, "family": family, "objects": len(receipt["objects"])})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
             "published": False, "generations": generations,
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes",
                       "old-and-new-retained", "wrong-key", "production-refuses-fixture", "changed-package",
-                      "missing-object", "restored-generation"]}
+                      "missing-object", "restored-generation", "immutable-publication",
+                      "stale-activation-refused", "retained-generation-recovery"]}
 
 
 def main():

@@ -1012,6 +1012,49 @@ credential or R2 request is needed. The default credentialed R2 rehearsal remain
 a separate invocation. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
+**Native apt/dnf repository rehearsals.**
+`./task release:live-test -- --local-native-repositories --receipt /absolute/path/result.json`
+uses disposable keys and two tiny native package versions. It requires `apt-ftparchive`,
+`createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
+signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
+stale activation refusal and explicit recovery. It does not qualify the application,
+perform installed application upgrades, or publish to R2.
+
+`python3 -m scripts.linux_release.native_repositories` assembles selected native
+packages into a new generation. `python3 -m scripts.linux_release.repository_publication`
+accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
+`--expected-generation` (omit only for a new channel). This publisher owns a local
+origin directory; it does not upload to R2. All referenced objects are copied and
+reverified before activation. Apt retains package objects and by-hash indexes and
+replaces `InRelease` last. Dnf replaces a mirrorlist containing an immutable generation
+URL, so metadata and its signature share a versioned base URL. Configure immutable
+caching for `generations/`, `pool/`, and `by-hash/`; channel metadata and mirrorlists
+require no-store caching and zero negative-cache TTL. The deployment must serialize
+publishers across hosts; a filesystem lock covers publishers sharing this origin.
+
+Every generation retains `client.conf`, the selected public key, exact inventory,
+source commit, and version. The configuration is an explicit setup artifact; installing
+the application does not add repositories or trust. For apt, verify the full catalog
+fingerprint with `gpg --show-keys --with-colons package-key.asc`, install the reviewed
+public key as `/etc/apt/keyrings/painted-wolf-code.asc`, and install `client.conf` with a
+`.sources` extension in `/etc/apt/sources.list.d/`. For dnf, verify the same fingerprint,
+install the reviewed key as `/etc/pki/rpm-gpg/painted-wolf-code.asc`, import it explicitly
+with `sudo rpm --import /etc/pki/rpm-gpg/painted-wolf-code.asc`, and install the reviewed
+configuration with a `.repo` extension in `/etc/yum.repos.d/`. Keep `gpgcheck=1` and
+`repo_gpgcheck=1`. Run the package manager's normal refresh/upgrade after setup.
+Stable and Preview use separate configurations; changing an app preference does not
+change repository selection, holds, pinning, or priorities.
+
+For recovery, select a retained verified generation and pass `--recover` with the
+currently active generation identity. This restores offers only; it does not modify
+installed packages or mutable application data. A withdrawn offer is replaced by the
+retained last-good index. Keep every referenced object while any supported index may
+still be cached. Rotation requires explicit verification/import of the successor key;
+keep predecessor public keys and generations for skipped-release recovery. This local
+origin rehearsal does not establish custom-domain CDN convergence or both-architecture
+installed package qualification; the release controller must admit that evidence before
+production publication.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
