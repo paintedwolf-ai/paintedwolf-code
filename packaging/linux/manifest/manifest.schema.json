@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://paintedwolf.ai/schemas/linux-package-manifest.json",
   "title": "Painted Wolf Code Linux package manifest",
-  "description": "Root-owned digest list of every executable the package installs, written at bundle time and installed at /opt/painted-wolf-code/manifest.json. Reader: lycaon/internal/pkgmanifest.",
+  "description": "Digest list of final installed executable bytes, sealed after fixups beside the native or immutable Nix application. Reader: lycaon/internal/pkgmanifest. Installation identity and privileged trust are established separately.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format_version", "package", "version", "architecture", "install_root", "executables"],
@@ -11,7 +11,12 @@
     "package": { "const": "painted-wolf-code" },
     "version": { "type": "string", "minLength": 1 },
     "architecture": { "enum": ["x86_64", "aarch64"] },
-    "install_root": { "const": "/opt/painted-wolf-code" },
+    "install_root": {
+      "anyOf": [
+        { "const": "/opt/painted-wolf-code" },
+        { "type": "string", "pattern": "^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+/lib/painted-wolf-code$" }
+      ]
+    },
     "executables": {
       "type": "array",
       "minItems": 1,
