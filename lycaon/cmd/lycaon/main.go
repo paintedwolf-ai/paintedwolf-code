@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
@@ -59,6 +60,14 @@ func runCLI(args []string) int {
 }
 
 func run(ctx context.Context, args []string) error {
+	retention, err := configlayout.RetainRunningNix(ctx)
+	if err != nil {
+		return err
+	}
+	defer retention.Close()
+	if len(args) == 1 && args[0] == "internal-nix-retain" {
+		return runNixRetainer(ctx, retention.LockPath, os.Stdin, os.Stdout)
+	}
 	kind, verb, rest := classifyArgs(args)
 	if kind == dispatchOpen {
 		return runOpen(ctx, rest)

@@ -45,6 +45,11 @@ struct Executable {
 /// This is an admission refusal for mutable native packages, never launcher trust.
 /// Nix closures need their resolved generation facts rather than this native root.
 pub(super) fn ensure_current() -> Result<(), RestartReason> {
+    match crate::linux_generation::running() {
+        Ok(Some(_)) => return Ok(()),
+        Err(_) => return Err(RestartReason::RunningImageUnavailable),
+        Ok(None) => {}
+    }
     if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
         let root = Path::new(crate::linux_install::INSTALL_ROOT);
         let manifest = std::fs::File::open(root.join("manifest.json"))

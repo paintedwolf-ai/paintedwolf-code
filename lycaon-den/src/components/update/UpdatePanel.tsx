@@ -72,7 +72,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
       <Show when={installationStatus(current())}>{(status) => <p role="status" aria-live="polite" aria-atomic="true" data-testid="updates-installation-status">{status()}{current().installation === "downloading" ? progress() : ""}</p>}</Show>
       <Show when={current().install_source === "system_package" && current().package}>{(pkg) => <>
         <p data-testid="updates-package-identity">Installed from the {pkg().name} {pkg().version} package ({pkg().family}). Your package manager owns this installation.</p>
-        <Show when={candidate()}>{(release) => <p data-testid="updates-package-upgrade">Version {release().version} is available. Run <code>{pkg().update_command}</code> to update.</p>}</Show>
+        <Show when={candidate()}>{(release) => <p data-testid="updates-package-upgrade">Version {release().version} is available. <Show when={pkg().family === "nix"} fallback={<>Run <code>{pkg().update_command}</code> to update.</>}>{pkg().update_command}</Show></p>}</Show>
       </>}</Show>
       <Show when={current().install_source === "unpackaged"}><p data-testid="updates-unpackaged">This copy was not installed from a package, so no update command is available. Install the .deb or .rpm package to receive update notices.</p></Show>
       <Show when={current().install_source === "homebrew_cask"}><p data-testid="updates-brew-upgrade">You installed this with Homebrew — run <code>brew upgrade --cask {current().channel === "preview" ? "painted-wolf-code@preview" : "painted-wolf-code"}</code> to update.</p></Show>
