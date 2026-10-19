@@ -303,6 +303,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"surface_card":                                 true,
 	"more_tools_loadable":                          true,
 	"pending_overlay_promote":                      true,
+	"progress_missing":                             true,
+	"profile_has_update_progress":                  true,
 	"verify_required":                              true,
 	"verify_command":                               true,
 	"has_file_tools":                               true,
@@ -488,11 +490,6 @@ var allowedKickTriggerClasses = map[string]bool{
 }
 
 var forbiddenKickFiresInSubstrings = []string{
-	"greenfield",
-	"user message contains",
-	"strings.Contains",
-	"phrase list",
-	"chat yes",
-	"lgtm",
-	"nl intent",
+	"greenfield", "user message contains", "strings.Contains", "phrase list",
+	"chat yes", "lgtm", "nl intent",
 }

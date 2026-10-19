@@ -97,6 +97,7 @@ func RenderPromptDump(
 		},
 		prompts.CoordinatorPromptGates{
 			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
+			ProgressMissing:       implState.ProgressMissing,
 			VerifyRequired:        frame.RequiresEvidence("verify"),
 			VerifyCommand:         implState.VerifyCommand,
 		},
