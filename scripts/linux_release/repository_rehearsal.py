@@ -15,6 +15,7 @@ import uuid
 from .native_repositories import assemble
 from .candidate_repositories import retain as retain_candidates, rehearse as rehearse_candidates
 from .openpgp import ephemeral
+from .repository_setup_rehearsal import rehearse as rehearse_setup
 from .repository_validation import admit
 from .repository_publication import publish
 from .repository_origin import serve
@@ -179,6 +180,8 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
                     installer(work / (family + "-r2-root"), uri, None, catalog, PACKAGE, version)
                     rejected(lambda: publish_r2(receipt, destination, catalog, storage_prefix,
                                                 r2_origin, remote_active[family], True))
+            if version == "0.0.1":
+                rehearse_setup(work, receipt, destination, catalog, origin)
             generations.append({"version": version, "family": family, "objects": len(receipt["objects"])})
     rotation = ephemeral(work / "rotation-key")
     trust = json.loads(rotation.read_text())
@@ -222,7 +225,8 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
             "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": generations,
             "cases": ["native-package-identity", "signed-metadata", "content-addressed-indexes", "apt-by-hash-without-mutable-fallback",
                       "old-and-new-retained", "actual-candidate-retention", "post-signing-rpm-identity-retained",
-                      "public-only-candidate-trust", "wrong-key", "production-refuses-fixture", "changed-package",
+                      "public-only-candidate-trust", "opt-in-setup-package-install-and-remove",
+                      "setup-removal-preserves-user-data", "wrong-key", "production-refuses-fixture", "changed-package",
                       "missing-object", "restored-generation", "immutable-publication",
                       "stale-activation-refused", "retained-generation-recovery",
                       "apt-signed-repository-installed-upgrade", "dnf-signed-mirrorlist-installed-upgrade",
