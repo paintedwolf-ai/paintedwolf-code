@@ -1,7 +1,7 @@
 # Anchor catalog SSOT, validated by schemas/anchors.schema.json.
 # Host code emits catalog ids only. Spec: docs/agent-prompt-template.md
 
-schema_version: "2.0"
+schema_version: "2.1"
 
 anchors:
   # ── Inform plane ────────────────────────────────────────────────────────────
