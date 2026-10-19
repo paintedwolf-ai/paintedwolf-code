@@ -100,9 +100,8 @@ function App() {
     const unmountNotifications = subject
       ? () => {}
       : mountNotificationService({
-          appStore,
-          waitingCount: () =>
-            attentionStore.state.rows.filter((row) => row.class === "needs_you").length,
+          attention: attentionStore,
+          getClient: getLycaonClient,
         });
     const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
