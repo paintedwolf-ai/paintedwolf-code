@@ -27,6 +27,9 @@
           pkgs = packagesFor system;
           converter = bun2nix.packages.${system}.default;
         in {
+          engine = pkgs.callPackage ./packaging/nix/engine.nix {
+            source = self;
+          };
           frontend = pkgs.callPackage ./packaging/nix/frontend.nix {
             source = self;
             bun2nix = converter;
