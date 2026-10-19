@@ -1045,7 +1045,7 @@ configuration with a `.repo` extension in `/etc/yum.repos.d/`. Keep `gpgcheck=1`
 Stable and Preview use separate configurations; changing an app preference does not
 change repository selection, holds, pinning, or priorities.
 
-For recovery, select a retained verified generation and pass `--recover` with the
+For recovery, select a retained verified generation and pass `--operation recover` with the
 currently active generation identity. This restores offers only; it does not modify
 installed packages or mutable application data. A withdrawn offer is replaced by the
 retained last-good index. Keep every referenced object while any supported index may
@@ -1071,6 +1071,31 @@ custom-domain rehearsal. Use only explicitly supplied test credentials; no crede
 lookup or automatic production fallback occurs. Repository manifests bind the exact
 source commit, final signed package hashes and a canonical `inventory_sha256` over
 their selected object rows for final-controller admission.
+
+Repository generation operations are explicit: `--operation publish` advances a
+version under its existing signing identity; `rotate` requires a distinct key and
+strictly newer signing generation; `recover` selects an exact retained healthy
+manifest; `withdraw` selects that retained replacement and permanently marks the
+previous generation and version as withdrawn. Reoffering either identity refuses.
+Operation receipts carry `operation`, `previous`, source, signer and final inventory
+facts; an ordinary release campaign cannot authorize another operation. Retained
+`key-catalog.json` contains only the selected public key facts, so private or unknown
+catalog fields never enter the origin. Existing installations and mutable data are
+outside this publication owner's mutation scope.
+
+The existing protected `release-system-live-test` workflow accepts explicit dispatch
+modes `native-repositories` and `pacman-repositories`; the scheduled/default updater
+rehearsal remains unchanged. Native mode uses amd64 and arm64 Ubuntu runners; pacman
+uses an official digest-pinned Arch base-devel container and an unprivileged fixture
+owner. Both use only the existing `release-rehearsal` test environment. No secret
+values need to be loaded locally. The `--r2` fixture mode stages immutable objects,
+exercises a warmed missing authority, a deliberately corrupted test object and its
+restoration, retries, rotation, withdrawal and retained recovery under a unique
+`release-system-tests/` prefix. `--phase stage` supports interruption before activation;
+the exact source can resume with `--phase activate`. Public byte/cache-role readback
+precedes activation, and no cache purge is used. Test generation objects remain under
+the receipt's owned prefix for inspection and recovery; test private keys are removed.
+Receipts distinguish these format fixtures from a qualified application campaign.
 
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 

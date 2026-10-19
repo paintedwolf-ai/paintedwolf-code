@@ -16,7 +16,7 @@ def restore_owner(root: Path):
         subprocess.run(["sudo", "-n", "gpgconf", "--homedir", str(home), "--kill", "gpg-agent"], check=True)
 
 
-def apt(root: Path, repository: str, certificate: Path, catalog: Path, package: str, version: str):
+def apt(root: Path, repository: str, certificate: Path | None, catalog: Path, package: str, version: str):
     root.mkdir(exist_ok=True)
     for name in ["etc/apt/apt.conf.d", "etc/apt/sources.list.d", "var/lib/dpkg", "var/lib/apt/lists/partial",
                  "var/cache/apt/archives/partial", "var/log/apt"]:
@@ -27,13 +27,14 @@ def apt(root: Path, repository: str, certificate: Path, catalog: Path, package: 
     (root / "etc/apt/sources.list.d/fixture.sources").write_text(
         f"Types: deb\nURIs: {repository}/\nSuites: preview\nComponents: main\nSigned-By: {public}\n")
     config = root / "apt.conf"
+    tls = f'Acquire::https::CaInfo "{certificate}";' if certificate is not None else ""
     config.write_text(f"""Dir::Etc "{root}/etc/apt";
 Dir::State "{root}/var/lib/apt";
 Dir::State::status "{status}";
 Dir::Cache "{root}/var/cache/apt";
 Dir::Log "{root}/var/log/apt";
 APT::Sandbox::User "root";
-Acquire::https::CaInfo "{certificate}";
+{tls}
 DPkg::Options {{ "--root={root}"; "--log={root}/dpkg.log"; }};
 """)
     command = ["sudo", "-n", "env", "APT_CONFIG=" + str(config), "apt-get", "--assume-yes",
@@ -52,12 +53,13 @@ DPkg::Options {{ "--root={root}"; "--log={root}/dpkg.log"; }};
         raise ValueError("isolated apt upgrade installed the wrong payload")
 
 
-def dnf(root: Path, mirrorlist: str, certificate: Path, catalog: Path, package: str, version: str):
+def dnf(root: Path, mirrorlist: str, certificate: Path | None, catalog: Path, package: str, version: str):
     root.mkdir(exist_ok=True)
     for name in ["repos", "vars", "cache", "persist", "logs"]:
         (root / name).mkdir(exist_ok=True)
     _, public = selection(catalog, True)
     config = root / "dnf.conf"
+    tls = f"sslcacert={certificate}" if certificate is not None else ""
     config.write_text(f"""[main]
 plugins=0
 install_weak_deps=False
@@ -71,7 +73,7 @@ repo_gpgcheck=1
 [paintedwolf-fixture]
 name=Disposable Painted Wolf Code repository fixture
 mirrorlist={mirrorlist}
-sslcacert={certificate}
+{tls}
 sslverify=1
 gpgkey={public.as_uri()}
 enabled=1

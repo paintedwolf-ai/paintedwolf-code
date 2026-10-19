@@ -14,7 +14,9 @@ from linux_release.repository_r2 import publish_r2
 class RepositoryR2Tests(unittest.TestCase):
     def setUp(self):
         self.receipt = {"format_version": 1, "family": "deb", "channel": "preview",
-                        "source_commit": "f" * 40, "version": "0.0.1", "rehearsal": True}
+                        "source_commit": "f" * 40, "version": "0.0.1", "rehearsal": True,
+                        "signing_generation": 1, "key_fingerprint": "A" * 40,
+                        "inventory_sha256": "b" * 64, "packages": [{"file": "application.deb"}]}
         self.objects = {}
         self.events = []
         self.fail = None
@@ -33,10 +35,11 @@ class RepositoryR2Tests(unittest.TestCase):
             path = channel / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(name.encode())
-        return {"generation": identity, "version": receipt["version"], "rehearsal": True}
+        return {"generation": identity, "version": receipt["version"], "rehearsal": True, "configuration": "client.conf"}
 
     def current(self, key, directory):
-        self.reads += 1
+        if key.endswith("current.json"):
+            self.reads += 1
         if self.race and self.reads == 2:
             return {"generation": "other publisher", "version": "0.0.2", "rehearsal": True}
         return json.loads(self.objects[key]) if key in self.objects else None

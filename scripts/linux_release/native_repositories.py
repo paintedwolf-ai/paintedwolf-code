@@ -94,7 +94,8 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
         target = destination / "pool" / digest(stage) / source.name
         target.parent.mkdir(parents=True)
         stage.replace(target)
-        final.append({**row, "input_sha256": row["sha256"], "sha256": digest(target),
+        final.append({"architecture": row["architecture"], "native_version": row["native_version"],
+                      "input_sha256": row["sha256"], "sha256": digest(target),
                       "file": target.relative_to(destination).as_posix()})
     (destination / ".signing").rmdir()
     if family == "deb":
@@ -106,7 +107,7 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
     result = {"format_version": 1, "family": family,
             "signing_generation": signer["generation"], "key_fingerprint": signer["fingerprint"], "channel": channel, "rehearsal": rehearsal,
             "source_commit": manifest["source_commit"], "version": manifest["version"], "packages": final,
-            "activation": "not-published", "publication_order": "content-before-signed-metadata",
+            "publication_order": "content-before-signed-metadata",
             "reader_consistency": "apt-inrelease-by-hash" if family == "deb" else "dnf-versioned-baseurl-mirrorlist",
             "objects": [{"path": path.relative_to(destination).as_posix(), "sha256": digest(path),
                          "size": path.stat().st_size} for path in sorted(destination.rglob("*")) if path.is_file()]}
