@@ -48,3 +48,30 @@ func TestEveryRecognitionLanguageIsVerifiedBeforeItsArgumentIsExposed(t *testing
 		}
 	}
 }
+
+func TestSupplementalModelsRequireImmutableSourceAndPreserveProducerBase(t *testing.T) {
+	base := pinPayload{SHA256: strings.Repeat("a", 64), Bytes: 1}
+	supplement := base
+	supplement.Source = "tessdata-fast"
+	p := Pin{RecognitionLanguages: []string{"eng", "deu"},
+		TrainedDataSource: pinDataSource{Repository: "tesseract-ocr/tessdata_fast", Commit: strings.Repeat("a", 40)},
+		TrainedData:       map[string]pinPayload{"eng_traineddata": base, "osd_traineddata": base, "deu_traineddata": supplement}}
+	testutil.FailErr(t, "validate supplemental model pin", p.validateLanguages())
+	for _, mutate := range []func(*Pin){
+		func(p *Pin) { p.TrainedDataSource.Commit = "main" },
+		func(p *Pin) { p.TrainedDataSource.Repository = "other/models" },
+		func(p *Pin) { p.TrainedData["eng_traineddata"] = supplement },
+		func(p *Pin) { p.TrainedData["osd_traineddata"] = supplement },
+		func(p *Pin) { data := supplement; data.Source = "system"; p.TrainedData["deu_traineddata"] = data },
+	} {
+		candidate := p
+		candidate.TrainedData = make(map[string]pinPayload)
+		for key, value := range p.TrainedData {
+			candidate.TrainedData[key] = value
+		}
+		mutate(&candidate)
+		if err := candidate.validateLanguages(); err == nil {
+			t.Fatal("invalid supplemental model source accepted")
+		}
+	}
+}

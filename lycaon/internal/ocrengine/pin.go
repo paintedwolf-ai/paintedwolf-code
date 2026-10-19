@@ -14,8 +14,14 @@ type Pin struct {
 	RecognitionLanguages []string               `yaml:"recognition_languages"`
 	EngineVersion        string                 `yaml:"engine_version"`
 	Producer             pinProducer            `yaml:"producer"`
+	TrainedDataSource    pinDataSource          `yaml:"trained_data_source,omitempty"`
 	TrainedData          map[string]pinPayload  `yaml:"trained_data"`
 	Platforms            map[string]PlatformPin `yaml:"platforms"`
+}
+
+type pinDataSource struct {
+	Repository string `yaml:"repository"`
+	Commit     string `yaml:"commit"`
 }
 
 type pinProducer struct {
@@ -25,6 +31,7 @@ type pinProducer struct {
 }
 
 type pinPayload struct {
+	Source string `yaml:"source,omitempty"`
 	SHA256 string `yaml:"sha256"`
 	Bytes  int64  `yaml:"bytes"`
 }

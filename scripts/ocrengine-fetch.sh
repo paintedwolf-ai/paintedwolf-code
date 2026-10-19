@@ -13,11 +13,15 @@ PIN="${ROOT}/lycaon/config/runtime/ocrengine/pin.yaml"
 DEST="${OCRENGINE_DEST:-${ROOT}/lycaon-den/src-tauri/engine-root/ocr}"
 TARGET=""
 ARCHIVE="${OCRENGINE_ARCHIVE:-}"
+TRAINED_DATA_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)
       [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --target requires a platform triple" >&2; exit 2; }
       TARGET="$2"; shift ;;
+    --trained-data-dir)
+      [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --trained-data-dir requires a directory" >&2; exit 2; }
+      TRAINED_DATA_DIR="$2"; shift ;;
     --archive)
       [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --archive requires a release archive" >&2; exit 2; }
       ARCHIVE="$2"; shift ;;
@@ -109,6 +113,7 @@ HAS_ORIENTATION=0
 DATA_LANGUAGES=()
 DATA_SHAS=()
 DATA_BYTES=()
+DATA_SOURCES=()
 while IFS= read -r key; do
   [[ "${key}" =~ ^([a-z]{3}(_[a-z]{3,4})?)_traineddata$ ]] || { echo "error: invalid trained-data key" >&2; exit 1; }
   language="${key%_traineddata}"
@@ -120,6 +125,12 @@ while IFS= read -r key; do
   digest="$(read_section "${key}" sha256)"
   bytes="$(read_section "${key}" bytes)"
   [[ "${digest}" =~ ^[0-9a-f]{64}$ && "${bytes}" =~ ^[1-9][0-9]*$ ]] || { echo "error: unpinned trained data" >&2; exit 1; }
+  source="$(read_section "${key}" source)"
+  [[ -z "${source}" || "${source}" == tessdata-fast ]] || { echo "error: unknown trained-data source" >&2; exit 1; }
+  if [[ "${language}" == eng || "${language}" == osd ]]; then
+    [[ -z "${source}" ]] || { echo "error: base OCR models must come from the producer archive" >&2; exit 1; }
+  fi
+  DATA_SOURCES+=("${source}")
   DATA_LANGUAGES+=("${language}")
   DATA_SHAS+=("${digest}")
   DATA_BYTES+=("${bytes}")
@@ -209,6 +220,25 @@ if [[ "$(tr -d '[:space:]' < "${STAGE}/VERSION")" != "${ENGINE_VERSION}" ]]; the
   echo "error: archive VERSION $(cat "${STAGE}/VERSION") differs from the pin ${ENGINE_VERSION}" >&2
   exit 1
 fi
+MODEL_REPOSITORY="$(read_mapping trained_data_source repository)"
+MODEL_COMMIT="$(read_mapping trained_data_source commit)"
+for ((index=0; index<${#DATA_LANGUAGES[@]}; index++)); do
+  [[ "${DATA_SOURCES[index]}" == tessdata-fast ]] || continue
+  if [[ "${MODEL_REPOSITORY}" != tesseract-ocr/tessdata_fast || ! "${MODEL_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "error: supplemental OCR models require an immutable tessdata_fast source" >&2
+    exit 1
+  fi
+  model="${DATA_LANGUAGES[index]}.traineddata"
+  payload="${TMP_DIR}/${model}"
+  if [[ -n "${TRAINED_DATA_DIR}" ]]; then
+    cp "${TRAINED_DATA_DIR}/${model}" "${payload}"
+  else
+    curl -fsSL --max-filesize "${DATA_BYTES[index]}" -o "${payload}" \
+      "https://raw.githubusercontent.com/${MODEL_REPOSITORY}/${MODEL_COMMIT}/${model}"
+  fi
+  verify_payload "${payload}" "${DATA_SHAS[index]}" "${DATA_BYTES[index]}"
+  mv "${payload}" "${STAGE}/tessdata/${model}"
+done
 verify_tree "${STAGE}"
 chmod -R u+rwX,go+rX "${STAGE}"
 
