@@ -19,8 +19,9 @@ let
       runHook preBuild
       packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
       ignored=(--ignore=github.com/lycaon/lycaon --ignore=github.com/deitch/magic
-        --ignore=github.com/alecthomas/chroma/v2 --ignore=github.com/spdx/tools-golang)
-      go-licenses check "''${packages[@]}" "''${ignored[@]}" --disallowed_types=forbidden,restricted,unknown
+        --ignore=github.com/alecthomas/chroma/v2)
+      go-licenses check "''${packages[@]}" "''${ignored[@]}" \
+        --ignore=github.com/spdx/tools-golang --disallowed_types=forbidden,restricted,unknown
       go-licenses csv "''${packages[@]}" --ignore=github.com/lycaon/lycaon > go.csv
       go-licenses save "''${packages[@]}" "''${ignored[@]}" --save_path=go-save --force
       runHook postBuild
