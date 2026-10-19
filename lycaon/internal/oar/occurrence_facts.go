@@ -308,6 +308,7 @@ var occurrenceFactDecls = []factDecl{
 	{"overlap_job_ids", oarcore.TypeListString, FactTierHost, ""},
 	{"overlay_id", oarcore.TypeString, FactTierHost, ""},
 	{"page_key", oarcore.TypeString, FactTierHost, ""},
+	{"mutation_new_path", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_timed_out", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_canceled", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_syntax_error", oarcore.TypeBool, FactTierHost, ""},

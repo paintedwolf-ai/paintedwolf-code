@@ -28,6 +28,9 @@ func TestMutationHealthFlagsRegression(t *testing.T) {
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
+	if reject.Data["mutation_new_path"] != false {
+		t.Fatalf("existing path reported as new: %+v", reject.Data)
+	}
 	got, err := os.ReadFile(filepath.Join(tmpDir, "a.go"))
 	testutil.FailErr(t, "read", err)
 	if string(got) != cleanGoFixture {
@@ -70,6 +73,9 @@ func TestMutationHealthRejectsBrokenNewFile(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
+	}
+	if reject.Data["mutation_new_path"] != true {
+		t.Fatalf("missing new-path observation: %+v", reject.Data)
 	}
 	if _, statErr := os.Stat(filepath.Join(tmpDir, "new.py")); !os.IsNotExist(statErr) {
 		t.Fatalf("broken new file was applied: %v", statErr)

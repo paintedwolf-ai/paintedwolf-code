@@ -254,6 +254,16 @@ pending and directs the coordinator to continue with tools. Completed work is
 recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
 continuing progress updates use `surface_note`.
 
+### Rejected source candidates
+
+`MUTATION_BROKE_PARSE` locations describe the proposed candidate, which was not saved
+at the rejected path. The mutation producer supplies `mutation_new_path` from
+its observed before-state. OAR uses that fact to distinguish retrying creation
+from reading the saved file before repair. This observation does not establish
+that the path is still absent: a later writer may have created it. Multi-file
+rewrite feedback remains scoped to each rejected path; successful siblings may
+already have been saved.
+
 ### Editing after source discovery
 
 Summary and grep windows locate source but do not establish an editor read base.
