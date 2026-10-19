@@ -62,6 +62,17 @@ def admit_setup(package: Path, checksums: Path, signature: Path, catalog: Path, 
                 key: public.read_bytes()}
     with tempfile.TemporaryDirectory(prefix="paintedwolf-setup-admission-") as temporary:
         work = Path(temporary)
+        # Freeze trust inputs too: all crypto and payload comparisons use the same selected key.
+        retained_catalog = work / "keys.json"
+        snapshot(catalog, retained_catalog, 65536)
+        frozen, frozen_public = selection(retained_catalog, rehearsal)
+        if frozen != selected:
+            raise ValueError("setup catalog changed during admission")
+        if frozen_public.name in {"keys.json", filename, "SHA256SUMS", "SHA256SUMS.asc"}:
+            raise ValueError("setup trust filename conflicts with retained admission inputs")
+        snapshot(public, frozen_public, 65536)
+        if frozen_public.read_bytes() != expected[key]:
+            raise ValueError("setup public trust changed during admission")
         retained = work / filename
         snapshot(package, retained, 2 * 1024 * 1024)
         snapshot(checksums, work / "SHA256SUMS", 4096)
@@ -69,9 +80,9 @@ def admit_setup(package: Path, checksums: Path, signature: Path, catalog: Path, 
         sha = digest(retained)
         if (work / "SHA256SUMS").read_bytes() != (sha + "  " + filename + "\n").encode():
             raise ValueError("setup checksums differ from the exact selected package")
-        verify("detached", work / "SHA256SUMS", work / "SHA256SUMS.asc", catalog, rehearsal)
+        verify("detached", work / "SHA256SUMS", work / "SHA256SUMS.asc", retained_catalog, rehearsal)
         if family == "rpm":
-            verify("rpm", retained, None, catalog, rehearsal)
+            verify("rpm", retained, None, retained_catalog, rehearsal)
             rpm(retained, native_version, expected, config)
         else:
             deb(retained, native_version, expected, config)
