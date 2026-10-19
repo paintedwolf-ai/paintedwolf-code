@@ -256,7 +256,7 @@ export function KeyboardSettingsPanel() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       swallow(event);
-      if (event.repeat || event.isComposing) return;
+      if (event.repeat || event.isComposing || event.keyCode === 229) return;
 
       if (event.key === "Escape") {
         setRefuseReason(null);

@@ -33,7 +33,7 @@ export function buildEditorCommandBridge(
   const customBindings = resolved.bindings.filter(binding => overrides?.[binding.bindingId]);
   return [Prec.highest(EditorView.domEventHandlers({
     keydown(event, view) {
-      if (event.isComposing || view.composing) return false;
+      if (event.isComposing || event.keyCode === 229 || view.composing) return false;
       const chord = eventToChord(event, platform);
       if (pendingLeaderChord() || chord && leaderIsPrefix(resolved, chord)) return dispatchKeyboardEvent(event).handled;
       const binding = customBindings.find(candidate => candidate.chord === chord);

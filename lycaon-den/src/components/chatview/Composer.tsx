@@ -562,7 +562,7 @@ export function Composer(props: Props) {
   const onSlashSuggestionKeyDown = (event: KeyboardEvent) => {
     if (
       !showSlashSuggestions() ||
-      event.isComposing ||
+      event.isComposing || event.keyCode === 229 ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||
