@@ -32,7 +32,7 @@ fn a_generation_does_not_establish_an_owner_pin_or_package_source() {
     assert_eq!(facts.reason, Some(QueryReason::UnsupportedOwner));
     assert_eq!(facts.owner, None);
     assert_eq!(facts.pinned, None);
-    assert!(facts.cached_only);
+    assert!(!facts.cached_only);
     assert!(fake.calls.is_empty());
 }
 
@@ -144,7 +144,7 @@ fn pacman_holds_globs_groups_and_missing_candidates_remain_distinct() {
     assert_eq!(facts.held, None);
     assert_eq!(facts.reason, Some(QueryReason::PolicyUnobserved));
     let (facts, _) = pacman_facts("", "", "");
-    assert_eq!(facts.availability, SourceAvailability::NoNewerCandidate);
+    assert_eq!(facts.reason, Some(QueryReason::NoCachedCandidate));
     assert_eq!(facts.candidate, None);
     let (facts, _) = pacman_facts("", "", "painted-wolf-code\t1.1-1\taarch64\tcore\n");
     assert_eq!(facts.reason, Some(QueryReason::WrongArchitecture));
@@ -162,6 +162,16 @@ fn failed_fresh_query_does_not_retain_an_old_positive_candidate() {
     let mut fake = Fake::new(vec![]);
     assert_eq!(observe(PackageFamily::Rpm, "--option", &mut fake).reason, Some(QueryReason::InvalidResponse));
     assert!(fake.calls.is_empty());
+}
+
+#[test]
+fn generic_package_database_exit_codes_do_not_claim_that_a_package_is_absent() {
+    for family in [PackageFamily::Rpm, PackageFamily::Pacman] {
+        let mut fake = Fake::new(vec![Ok(Output { code: 1, stdout: "not installed, held or database failed".into() })]);
+        let facts = observe(family, "painted-wolf-code", &mut fake);
+        assert_eq!(facts.reason, Some(QueryReason::QueryFailed));
+        assert_eq!(facts.database_version, None);
+    }
 }
 
 #[cfg(target_os = "linux")]

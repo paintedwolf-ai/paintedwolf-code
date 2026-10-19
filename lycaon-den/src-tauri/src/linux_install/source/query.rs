@@ -32,6 +32,7 @@ pub(super) fn observe(family: PackageFamily, name: &str, reader: &mut impl comma
         PackageFamily::Rpm => dnf::observe(name, reader, &mut facts),
         PackageFamily::Pacman => pacman::observe(name, reader, &mut facts),
         PackageFamily::Nix => {
+            facts.cached_only = false;
             facts.availability = SourceAvailability::Unknown;
             facts.reason = Some(QueryReason::UnsupportedOwner);
             Ok(())

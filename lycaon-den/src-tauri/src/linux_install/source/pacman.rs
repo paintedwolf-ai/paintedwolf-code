@@ -2,7 +2,7 @@ use super::{command::{field, success, Reader}, query::select, *};
 
 pub(super) fn observe(name: &str, reader: &mut impl Reader, facts: &mut PackageSourceFacts) -> Result<(), QueryReason> {
     let installed = reader.read("/usr/bin/pacman", &["-Q", "--", name])?;
-    if installed.code != 0 { select(facts, None, Some(QueryReason::NotInstalled)); return Ok(()); }
+    if installed.code != 0 { return Err(QueryReason::QueryFailed); }
     let fields: Vec<_> = installed.stdout.split_whitespace().collect();
     if fields.len() != 2 || fields[0] != name || !field(fields[1]) { return Err(QueryReason::InvalidResponse); }
     facts.database_version = Some(fields[1].into());
@@ -27,7 +27,8 @@ pub(super) fn observe(name: &str, reader: &mut impl Reader, facts: &mut PackageS
         candidate = Some(PackageCandidate { version: fields[1].into(), architecture: fields[2].into(),
             repositories: vec![Repository { id: fields[3].into(), suite: None, trusted: None }], newer_than_installed: true });
     }
-    let reason = if held { Some(QueryReason::Held) } else if facts.held.is_none() { Some(QueryReason::PolicyUnobserved) } else { None };
+    let reason = if held { Some(QueryReason::Held) } else if facts.held.is_none() { Some(QueryReason::PolicyUnobserved) }
+        else if candidate.is_none() { Some(QueryReason::NoCachedCandidate) } else { None };
     select(facts, candidate, reason);
     Ok(())
 }

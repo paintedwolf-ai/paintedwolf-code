@@ -13,9 +13,7 @@ struct DnfCandidate {
 
 pub(super) fn observe(name: &str, reader: &mut impl Reader, facts: &mut PackageSourceFacts) -> Result<(), QueryReason> {
     let installed = reader.read("/usr/bin/rpm", &["-q", "--qf", "%{NAME}\t%{EVR}\t%{ARCH}\n", "--", name])?;
-    if installed.code != 0 {
-        select(facts, None, Some(QueryReason::NotInstalled)); return Ok(());
-    }
+    if installed.code != 0 { return Err(QueryReason::QueryFailed); }
     let records: Vec<_> = installed.stdout.lines().collect();
     if records.len() != 1 { return Err(QueryReason::AmbiguousCandidate); }
     let fields: Vec<_> = records[0].split('\t').collect();
@@ -51,16 +49,18 @@ fn parse_dnf4(raw: &str) -> Result<Vec<DnfCandidate>, QueryReason> {
 
 fn project(name: &str, architecture: &str, candidates: Vec<DnfCandidate>, facts: &mut PackageSourceFacts) -> Result<(), QueryReason> {
     let mut selected = None;
+    let mut wrong_architecture = false;
     for candidate in candidates {
         if candidate.name != name { continue; }
         if ![&candidate.evr, &candidate.arch, &candidate.repository].iter().all(|f| field(f)) {
             return Err(QueryReason::InvalidResponse);
         }
-        if candidate.arch != architecture && candidate.arch != "noarch" { continue; }
+        if candidate.arch != architecture && candidate.arch != "noarch" { wrong_architecture = true; continue; }
         if selected.is_some() { return Err(QueryReason::AmbiguousCandidate); }
         selected = Some(PackageCandidate { version: candidate.evr, architecture: candidate.arch,
             repositories: vec![Repository { id: candidate.repository, suite: None, trusted: None }], newer_than_installed: true });
     }
+    if selected.is_none() && wrong_architecture { return Err(QueryReason::WrongArchitecture); }
     select(facts, selected, Some(QueryReason::PolicyUnobserved));
     Ok(())
 }
