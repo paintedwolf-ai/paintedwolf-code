@@ -21,6 +21,8 @@ let
           extraGroups = [ "wheel" ];
         };
         services.displayManager.autoLogin = { enable = true; user = "qualifier"; };
+        services.xserver.enable = true;
+        hardware.graphics.enable = true;
         services.displayManager.gdm.enable = desktop == "gnome";
         services.desktopManager.gnome.enable = desktop == "gnome";
         services.gnome.gnome-initial-setup.enable = lib.mkIf (desktop == "gnome") false;
