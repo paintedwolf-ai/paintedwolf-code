@@ -1,0 +1,5 @@
+{
+  "format_version": 1,
+  "helpers": ["pw", "pw-logs", "pw-document-core", "bialy", "pw-vault-identity"],
+  "entry_points": ["pw", "pw-logs"]
+}

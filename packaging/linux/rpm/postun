@@ -9,9 +9,6 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hic
   gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || :
 fi
 if [ "$1" -eq 0 ]; then
-  if command -v semodule >/dev/null 2>&1 && semodule -l 2>/dev/null | grep -qx painted-wolf-code; then
-    semodule -n -r painted-wolf-code || :
-  fi
   if [ -d /opt/painted-wolf-code ]; then
     find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || :
   fi
