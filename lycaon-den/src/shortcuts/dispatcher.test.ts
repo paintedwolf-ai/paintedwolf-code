@@ -69,8 +69,9 @@ describe("composition keys", () => {
       key: "Enter", code: "Enter", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, keyCode: 229,
     });
     expect(result.handled).toBe(false);
-    expect(shortcutCommandMatchesEvent("composer.send", { ...evt({ key: "Enter", code: "Enter" }), keyCode: 229 })).toBe(false);
-    expect(shortcutCommandMatchesEvent("composer.send", evt({ key: "Enter", code: "Enter" }))).toBe(true);
+    const local = evt({ key: ",", code: "Comma", ctrlKey: true });
+    expect(shortcutCommandMatchesEvent("settings.open", { ...local, keyCode: 229 })).toBe(false);
+    expect(shortcutCommandMatchesEvent("settings.open", local)).toBe(true);
     expect(handler).not.toHaveBeenCalled();
     release();
   });

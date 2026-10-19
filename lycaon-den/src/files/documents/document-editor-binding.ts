@@ -35,7 +35,7 @@ export function documentEditorBinding(replica: DocumentReplica): Extension {
     };
   }), Prec.highest(EditorView.domEventHandlers({
     // Ahead of every keymap, including the stock undo bindings an editable view carries.
-    keydown(event) {
+    keydown(event, view) {
       const direction = event.isComposing || event.keyCode === 229 || view.composing ? null : documentHistoryKey(event);
       if (!direction) return false;
       event.preventDefault();
