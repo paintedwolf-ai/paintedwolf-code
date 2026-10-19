@@ -1,0 +1,199 @@
+package inject
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+func executionReceipt(tool, digest string, status api.InvocationStatus, code string) api.Message {
+	r := &api.InvocationReceipt{ID: "receipt-" + digest, Tool: tool, ToolCallID: "call-" + digest, ArgsDigest: digest, Status: status, Invoked: status == api.InvocationStatusCompleted}
+	if code != "" {
+		r.Failure = &api.InvocationFailure{Code: code}
+	}
+	return api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: r.ToolCallID, Invocation: r, ToolArgs: map[string]any{"path": "test.py"}}}
+}
+
+func TestExecutionStateRetainsRejectedOperationAfterChecklist(t *testing.T) {
+	rejected := executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
+	history := []api.Message{rejected, progress}
+	vars := executionStateVars(history, "")
+	if len(vars["operations"].([]map[string]any)) != 1 || vars["operations"].([]map[string]any)[0]["checklist_after"] != true {
+		t.Fatalf("checklist erased rejected write: %#v", vars)
+	}
+	other := executionReceipt("write", "different", api.InvocationStatusCompleted, "")
+	if got := executionStateVars(append(history, other), ""); len(got["operations"].([]map[string]any)) != 1 {
+		t.Fatalf("different content cleared rejected operation: %#v", got)
+	}
+	retry := executionReceipt("write", "first", api.InvocationStatusCompleted, "")
+	if got := executionStateVars(append(history, retry), ""); got != nil {
+		t.Fatalf("successful same-argument call retained obsolete guidance: %#v", got)
+	}
+}
+
+func TestExecutionStateIgnoresProseMismatchesAndPriorIntent(t *testing.T) {
+	rejected := executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	user := api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "New request"}
+	if got := executionStateVars([]api.Message{rejected, user}, ""); got != nil {
+		t.Fatalf("previous intent leaked: %#v", got)
+	}
+	fake := api.Message{Role: api.MessageRoleTool, Content: "PROGRESS_MISSING; tests passed"}
+	rejected.ToolResult.ToolCallID = "different-call"
+	if got := executionStateVars([]api.Message{fake, rejected}, ""); got != nil {
+		t.Fatalf("unpaired receipt or prose became authority: %#v", got)
+	}
+}
+
+func TestExecutionStateKeepsOutcomeSeparateFromInvocation(t *testing.T) {
+	command := executionReceipt("command", "check", api.InvocationStatusCompleted, "")
+	command.ToolResult.Invocation.SourceVerdict = api.SourceVerdictFailed
+	command.ToolResult.Invocation.SourceRevision = "revision-2"
+	command.ToolResult.Invocation.SourceRootDigest = "root-digest"
+	command.ToolResult.ToolArgs = map[string]any{"command": "project-check", "cwd": ".", "verification": true}
+	vars := executionStateVars([]api.Message{command}, "project-check")
+	rows := vars["executions"].([]map[string]any)
+	if rows[0]["status"] != "completed" || rows[0]["source_verdict"] != api.SourceVerdictFailed || rows[0]["source_revision"] != `"revision-2"` {
+		t.Fatalf("lost execution failure or source scope: %#v", rows)
+	}
+	if vars["declared_command"] != `"project-check"` {
+		t.Fatalf("lost declared check: %#v", vars)
+	}
+}
+
+func TestExecutionStateBoundsRowsAndExecutableValues(t *testing.T) {
+	var history []api.Message
+	for range 5 {
+		history = append(history, executionReceipt("command", "check", api.InvocationStatusRejected, "COMMAND_NOT_FOUND"))
+	}
+	history[4].ToolResult.ToolArgs["command"] = strings.Repeat("x", 257)
+	history[4].ToolResult.Feedback = []api.ToolFeedback{{Code: "COMMAND_NOT_FOUND", Details: map[string]any{"resolvable": "python3"}}}
+	vars := executionStateVars(history, "")
+	rows := vars["executions"].([]map[string]any)
+	if len(rows) != 3 || vars["executions_omitted"] != 2 || rows[2]["command"] != "" || rows[2]["resolvable"] != `"python3"` {
+		t.Fatalf("unbounded or inaccurate rows: %#v", vars)
+	}
+}
+
+func TestExecutionStateRenderIsConditionalAndUsesHostFacts(t *testing.T) {
+	ctx := context.Background()
+	renderer := promptstest.InjectRenderer(t)
+	if got := RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", nil, "project-check"); got.Content != "" {
+		t.Fatalf("empty history added guidance: %q", got.Content)
+	}
+	history := []api.Message{executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING"), executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")}
+	block := RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "")
+	for _, want := range []string{"call-first", "test.py", "did not execute", "checklist update completed"} {
+		if !strings.Contains(block.Content, want) {
+			t.Errorf("render missing %q: %q", want, block.Content)
+		}
+	}
+	if RenderExecutionStateMessage(ctx, nil, "sess", history, "").Content != "" {
+		t.Fatal("missing renderer produced guidance")
+	}
+}
+
+func TestExecutionStateOmitsInvalidAndEncodedOversizeValues(t *testing.T) {
+	for _, value := range []string{string([]byte{0xff}), strings.Repeat("\n", 200), strings.Repeat("x", 257)} {
+		if got := quotedExecutionValue(value); got != "" {
+			t.Errorf("unsafe partial value rendered: %q", got)
+		}
+	}
+	message := executionReceipt("command", "check", api.InvocationStatusCompleted, "")
+	message.ToolResult.ToolCallID = strings.Repeat("x", 129)
+	message.ToolResult.Invocation.ToolCallID = message.ToolResult.ToolCallID
+	if got := executionStateVars([]api.Message{message}, ""); got != nil {
+		t.Fatalf("oversize call identity bypassed bounds: %#v", got)
+	}
+}
+
+func TestExecutionStatePreservesUnexecutedEditBeforeToolLoad(t *testing.T) {
+	rejected := executionReceipt("edit", "edit", api.InvocationStatusRejected, "TOOL_NOT_OFFERED")
+	rejected.ToolResult.ToolArgs = nil
+	history := []api.Message{rejected, executionReceipt("request_tools", "load", api.InvocationStatusCompleted, "")}
+	vars := executionStateVars(history, "")
+	if vars == nil || len(vars["operations"].([]map[string]any)) != 1 {
+		t.Fatalf("loading a tool erased the unexecuted edit: %#v", vars)
+	}
+}
+
+func TestExecutionStateKeepsArgumentsOutOfInstructionAuthority(t *testing.T) {
+	command := executionReceipt("command", "check", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
+	command.ToolResult.ToolArgs["command"] = "instruction-like argument"
+	message := RenderExecutionStateMessage(t.Context(), promptstest.InjectRenderer(t), "sess-inject-test", []api.Message{command}, "project command")
+	if len(message.ContentParts) != 2 || message.ContentParts[0].Authority != api.ContentAuthoritySystem || message.ContentParts[1].Authority != api.ContentAuthorityNone {
+		t.Fatalf("lost instruction/data separation: %+v", message)
+	}
+	if strings.Contains(message.ContentParts[0].Content, "instruction-like argument") || strings.Contains(message.ContentParts[0].Content, "project command") || !strings.Contains(message.ContentParts[1].Content, "instruction-like argument") {
+		t.Fatalf("argument promoted to instruction authority: %+v", message.ContentParts)
+	}
+}
+
+func TestExecutionStatePrerequisitesAreOrderedPerRejectedCall(t *testing.T) {
+	first := executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	progress := executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")
+	second := executionReceipt("write", "second", api.InvocationStatusRejected, "PROGRESS_MISSING")
+	loaded := executionReceipt("request_tools", "loaded", api.InvocationStatusCompleted, "")
+	history := []api.Message{first, progress, second, loaded}
+	before, _ := json.Marshal(history)
+	vars := executionStateVars(history, "")
+	rows := vars["operations"].([]map[string]any)
+	if rows[0]["checklist_after"] != true || rows[1]["checklist_after"] != nil || rows[0]["tool_request_after"] != true || rows[1]["tool_request_after"] != true {
+		t.Fatalf("prerequisites lost event ordering: %#v", rows)
+	}
+	after, _ := json.Marshal(history)
+	if string(before) != string(after) {
+		t.Fatal("projection changed canonical history")
+	}
+}
+
+func TestExecutionStateSuccessfulExecutionPathIsSilent(t *testing.T) {
+	passed := executionReceipt("verify", "passed", api.InvocationStatusCompleted, "")
+	passed.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
+	rejected := executionReceipt("command", "rejected", api.InvocationStatusRejected, "COMMAND_NOT_FOUND")
+	for _, history := range [][]api.Message{{passed}, {rejected, passed}} {
+		if got := executionStateVars(history, "project-check"); got != nil {
+			t.Fatalf("successful path retained recovery guidance: %#v", got)
+		}
+	}
+	poll := executionReceipt("command_output", "poll", api.InvocationStatusCompleted, "")
+	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got == nil {
+		t.Fatal("output retrieval hid failed execution")
+	}
+	poll.ToolResult.Invocation.SourceVerdict = api.SourceVerdictPassed
+	if got := executionStateVars([]api.Message{rejected, poll}, "project-check"); got != nil {
+		t.Fatalf("owner verdict did not end recovery guidance: %#v", got)
+	}
+}
+
+func TestExecutionStateRetainsRejectionsAfterInvocation(t *testing.T) {
+	for _, path := range []string{"src/main.go", "web/app.ts", "lib/client.py", "config.json"} {
+		t.Run(path, func(t *testing.T) {
+			rejected := executionReceipt("write", "candidate", api.InvocationStatusRejected, "MUTATION_BROKE_PARSE")
+			rejected.ToolResult.Invocation.Invoked = true
+			rejected.ToolResult.ToolArgs["path"] = path
+			before, _ := json.Marshal(rejected)
+			block := RenderExecutionStateMessage(t.Context(), promptstest.InjectRenderer(t), "sess", []api.Message{rejected}, "")
+			if !strings.Contains(block.Content, "rejected after invocation") || !strings.Contains(block.Content, path) || !strings.Contains(block.Content, "MUTATION_BROKE_PARSE") {
+				t.Fatalf("lost invoked rejection: %s", block.Content)
+			}
+			for _, unsupported := range []string{"did not execute", "file is absent", "file is unchanged"} {
+				if strings.Contains(block.ContentParts[1].Content, unsupported) {
+					t.Fatalf("unsupported effect claim %q: %s", unsupported, block.Content)
+				}
+			}
+			after, _ := json.Marshal(rejected)
+			if string(before) != string(after) {
+				t.Fatal("projection changed canonical receipt")
+			}
+			retry := executionReceipt("write", "candidate", api.InvocationStatusCompleted, "")
+			if got := executionStateVars([]api.Message{rejected, retry}, ""); got != nil {
+				t.Fatalf("successful retry retained rejection: %#v", got)
+			}
+		})
+	}
+}

@@ -1,0 +1,9 @@
+'on': inject.execution_state
+effect: inform
+render: execution-state
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator assembly with current-intent execution observations

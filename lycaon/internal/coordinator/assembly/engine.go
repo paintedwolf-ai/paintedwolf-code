@@ -332,6 +332,8 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		out = append(out, api.Message{Role: api.MessageRoleSystem, Content: boardBlock})
 	}
 
+	out = contextAssembler.appendExecutionState(ctx, sess, coordinatorSurface, frame, history, turn, out)
+
 	markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
 
 	turn.Iteration++
