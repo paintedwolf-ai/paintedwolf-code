@@ -19,6 +19,9 @@ export type ClientNoticeAction = "retry_contribution_frame";
 export type ClientNoticeKind =
   | "contribution_frame_unavailable"
   | "credential_vault_corrupt"
+  | "credential_vault_custodian_unavailable"
+  | "credential_vault_identity_missing"
+  | "credential_vault_launcher_refused"
   | "credential_vault_locked"
   | "credential_vault_uninitialized"
   | "credential_vault_unlock_failed"
@@ -67,6 +70,24 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Credential vault needs to be reset",
     message: "The encrypted credential vault or the key that opens it is damaged. Resetting removes saved credentials but does not delete projects or conversation history.",
     suggestedAction: "The credential vault could not be reset. Quit and reopen the app, then try again.",
+    scope: "app",
+  },
+  credential_vault_custodian_unavailable: {
+    title: "Credential custodian is unavailable",
+    message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app. An app password can open this vault only after its key has been exported to password custody.",
+    suggestedAction: "The custodian is still unavailable. Restore the service and reopen the installed app.",
+    scope: "app",
+  },
+  credential_vault_identity_missing: {
+    title: "Credential vault key is missing",
+    message: "The key for this credential vault is missing from its custodian. Your encrypted credentials are preserved. Restore the matching key or the original configuration root, then try again. A new password cannot replace a missing key.",
+    suggestedAction: "The matching credential vault key is still missing. Restore it before trying again.",
+    scope: "app",
+  },
+  credential_vault_launcher_refused: {
+    title: "Open the installed desktop app",
+    message: "The vault identity service refused this launcher. Your encrypted credentials are preserved. Quit this copy and open the installed Painted Wolf Code desktop app. Moving to an app password requires a verified connection to the service first.",
+    suggestedAction: "The launcher is still refused. Open the installed desktop app and try again.",
     scope: "app",
   },
   credential_vault_locked: {

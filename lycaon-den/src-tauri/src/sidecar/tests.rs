@@ -735,3 +735,26 @@ fn the_engine_log_records_each_unexpected_exit_once() {
     );
     assert!(supervisor::log_line(&supervisor::EngineState::Running { generation: 1 }).is_none());
 }
+
+#[test]
+fn custody_failures_keep_distinct_startup_tags() {
+    for (failure, code) in [
+        (
+            SidecarStartError::CredentialVaultCustodianUnavailable("preserved".into()),
+            "credential_vault_custodian_unavailable",
+        ),
+        (
+            SidecarStartError::CredentialVaultLauncherRefused("preserved".into()),
+            "credential_vault_launcher_refused",
+        ),
+        (
+            SidecarStartError::CredentialVaultIdentityMissing("preserved".into()),
+            "credential_vault_identity_missing",
+        ),
+    ] {
+        assert_eq!(failure.message(), "preserved");
+        let serialized = serde_json::to_value(failure).expect("startup failure");
+        assert_eq!(serialized["code"], code);
+        assert_eq!(serialized["message"], "preserved");
+    }
+}

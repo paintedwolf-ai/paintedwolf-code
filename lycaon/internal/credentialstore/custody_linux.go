@@ -71,6 +71,17 @@ func (c custody) report(path string) (CustodyReport, error) {
 	switch c.mode {
 	case custodyRefused:
 		return CustodyReport{Mode: CustodyRefused, Detail: c.refusal.Error()}, nil
+	case custodyUnavailable:
+		if _, err := os.Lstat(identityPath(path)); os.IsNotExist(err) {
+			if _, err := os.Lstat(path); err == nil {
+				return CustodyReport{Mode: CustodyUnavailable}, nil
+			} else if !os.IsNotExist(err) {
+				return CustodyReport{}, err
+			}
+		} else if err != nil {
+			return CustodyReport{}, err
+		}
+		return CustodyReport{Mode: CustodyAppPassword}, nil
 	case custodyPassword:
 		return CustodyReport{Mode: CustodyAppPassword}, nil
 	case custodyService:
