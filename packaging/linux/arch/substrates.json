@@ -14,6 +14,7 @@
     "key_file": "archlinuxarm-build-key.asc",
     "key_fingerprint": "68B3537F39A313B3E574D06777193F152BDBE6A6",
     "rootfs_signed_date": "2026-08-05",
-    "producer": "https://archlinuxarm.org/about/downloads"
+    "producer": "https://archlinuxarm.org/about/downloads",
+    "signature_file": "archlinuxarm-rootfs-20260805.sig"
   }
 }
