@@ -13,6 +13,7 @@ import sys
 import time
 
 from ..artifact_paths import artifact_root
+from . import nix_archive
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
@@ -35,10 +36,14 @@ def command(operation: str, root: Path, component: str = "default") -> list[str]
                   source + "#" + section + "." + system + "." + component]
 
 
-def execute(operation: str, root: Path = ROOT, component: str = "default") -> int:
+def execute(operation: str, root: Path = ROOT, component: str = "default",
+            archive_dir: Path | None = None) -> int:
     lock = root / "flake.lock"
     if not lock.is_file():
         raise ValueError("flake.lock is required; evaluation/build must not create or update it")
+    if archive_dir is not None and operation != "build":
+        raise ValueError("closure archives require a build operation")
+    archive = nix_archive.destination(root, archive_dir)
     invocation = command(operation, root, component)
     environment = dict(os.environ)
     for name in ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY",
@@ -64,6 +69,10 @@ def execute(operation: str, root: Path = ROOT, component: str = "default") -> in
             report["closure"] = json.loads(closure.stdout)
         else:
             result = closure
+        if report["passed"] and archive is not None:
+            result = nix_archive.copy_closure(NIX, outputs, archive, environment)
+            report["archive"] = {"path": str(archive), "publication": "nonrelease"}
+            report["passed"] = result.returncode == 0
     directory = artifact_root(root) / "nix"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{operation}-{time.time_ns()}.json"
@@ -76,9 +85,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("check", "build"))
     parser.add_argument("--component", choices=COMPONENTS, default="default")
+    parser.add_argument("--archive-dir", type=Path)
     args = parser.parse_args()
     try:
-        return execute(args.operation, component=args.component)
+        return execute(args.operation, component=args.component, archive_dir=args.archive_dir)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

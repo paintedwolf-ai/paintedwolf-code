@@ -26,7 +26,7 @@ with pathlib.Path(os.environ['NIX_FIXTURE_CALLS']).open('a') as output:
  output.write(json.dumps({'args':sys.argv[1:], 'credentials':any(name in os.environ for name in ['GH_TOKEN','LINUX_PACKAGE_SIGNING_KEY','FEED_SIGNING_KEYS_JSON','TAURI_SIGNING_PRIVATE_KEY'])})+'\\n')
 if 'build' in sys.argv: print(json.dumps([{'drvPath':'/nix/store/fixture.drv','outputs':{'out':'/nix/store/fixture'}}]))
 if 'path-info' in sys.argv: print(json.dumps({'/nix/store/fixture':{'references':[],'narHash':'sha256-fixture'}}))
-sys.exit(int(os.environ.get('NIX_FIXTURE_EXIT','0')))
+sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv else os.environ.get('NIX_FIXTURE_EXIT','0')))
 ''')
         tool.chmod(0o755)
         (self.root / "flake.lock").write_text('{"version":7}')
@@ -40,10 +40,10 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_EXIT','0')))
                             "GH_TOKEN": "private", "LINUX_PACKAGE_SIGNING_KEY": "private",
                             "FEED_SIGNING_KEYS_JSON": "private", "TAURI_SIGNING_PRIVATE_KEY": "private"}
 
-    def invoke(self, operation):
+    def invoke(self, operation, archive_dir=None):
         with patch.dict(os.environ, self.environment), patch.object(nix.platform, "system", return_value="Linux"), \
                 patch.object(nix.platform, "machine", return_value="x86_64"):
-            return nix.execute(operation, self.root)
+            return nix.execute(operation, self.root, archive_dir=archive_dir)
 
     def reports(self):
         return [json.loads(path.read_text()) for path in (self.root / "artifacts/nix").glob("*.json")]
@@ -88,3 +88,28 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_EXIT','0')))
                 command = nix.command("build", self.root, "nixos-module")
                 self.assertEqual(command[-1], "git+file://" + str(self.root) + "#checks." + system + ".nixos-module")
                 self.assertIn("--no-write-lock-file", command)
+
+    def test_archive_exports_only_after_build_and_keeps_credentials_out(self):
+        with tempfile.TemporaryDirectory() as parent:
+            archive = Path(parent) / "closure"
+            self.assertEqual(self.invoke("build", archive), 0)
+            calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
+            self.assertEqual(calls[-1]["args"][-4:], ["copy", "--to", archive.as_uri(), "/nix/store/fixture"])
+            self.assertTrue(all(not call["credentials"] for call in calls))
+            self.assertEqual(self.reports()[0]["archive"]["publication"], "nonrelease")
+            with self.assertRaises(ValueError):
+                self.invoke("build", archive)
+
+    def test_archive_failure_is_failed_and_unsafe_destinations_never_run_nix(self):
+        with tempfile.TemporaryDirectory() as parent:
+            archive = Path(parent) / "closure"
+            self.environment["NIX_FIXTURE_COPY_EXIT"] = "31"
+            self.assertEqual(self.invoke("build", archive), 31)
+            self.assertFalse(self.reports()[0]["passed"])
+        self.calls.unlink()
+        for path in (self.root / "archive", Path("/nix/store/fixture-new-archive")):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.invoke("build", path)
+        with self.assertRaises(ValueError):
+            self.invoke("check", self.root / "archive")
+        self.assertFalse(self.calls.exists())
