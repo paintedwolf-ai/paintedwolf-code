@@ -81,10 +81,10 @@ def publish(cache: Path, report: dict, *, authorize, backend_factory, operation:
         if authorize(checked["request"], checked) is not True:
             raise ValueError("cache controller did not authorize this exact release")
         # External I/O uses private captured bytes after fresh controller admission.
-        return publish_objects(snapshot, checked, backend_factory(checked["request"]), operation)
+        return _publish_objects(snapshot, checked, backend_factory(checked["request"]), operation)
 
 
-def publish_objects(cache: Path, checked: dict, backend, operation: str | None) -> dict:
+def _publish_objects(cache: Path, checked: dict, backend, operation: str | None) -> dict:
     request = checked["request"]
     operation = operation or uuid.uuid4().hex
     with backend.serialized(operation):
