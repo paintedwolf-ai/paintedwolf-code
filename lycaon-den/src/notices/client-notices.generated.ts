@@ -26,6 +26,7 @@ export type ClientNoticeKind =
   | "credential_vault_uninitialized"
   | "credential_vault_unlock_failed"
   | "den_version_skew"
+  | "desktop_restart_required"
   | "engine_already_running"
   | "engine_not_started"
   | "engine_restarting"
@@ -111,6 +112,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   den_version_skew: {
     title: "Update Painted Wolf Code",
     message: "This version is older than the rest of the app expects. Update for full compatibility.",
+    scope: "app",
+  },
+  desktop_restart_required: {
+    title: "Restart the installed desktop app",
+    message: "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.",
+    suggestedAction: "Quit the app from its menu, then open the installed desktop launcher.",
     scope: "app",
   },
   engine_already_running: {
