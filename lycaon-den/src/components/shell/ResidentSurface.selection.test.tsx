@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -61,6 +61,19 @@ describe("retained surface selection", () => {
     } finally {
       editor.destroy();
     }
+  });
+
+  it("releases a surface-owned range before the surface is removed", async () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    const [visible, setVisible] = createSignal(true);
+    render(() => <Show when={visible()}><ResidentSurface surfaceKey="files" presence="active">
+      <div data-testid="editor">Selected text</div>
+    </ResidentSurface></Show>);
+    await waitFor(() => expect(screen.getByTestId("resident-surface").dataset.presentation).toBe("published"));
+    const selection = select(screen.getByTestId("editor"));
+    setVisible(false);
+    expect(screen.queryByTestId("editor")).toBeNull();
+    expect(selection.rangeCount).toBe(0);
   });
 
   it("preserves a selection owned by another visible surface", async () => {

@@ -42,6 +42,10 @@ export function ResidentSurface(props: Props) {
     return parent === "pending" || props.presence === "pending" ? "pending" : "active";
   });
   const [root, setRoot] = createSignal<HTMLDivElement | undefined>();
+  onCleanup(() => {
+    const el = root();
+    if (el) releaseInaccessibleWebKitSelection(el);
+  });
   const preparation = createPreparation();
   const [publishedGeneration, setPublishedGeneration] = createSignal<number>();
   const published = () => publishedGeneration() === (props.generation ?? 0);
