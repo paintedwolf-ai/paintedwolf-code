@@ -42,7 +42,7 @@ class AurDeliveryTests(unittest.TestCase):
                                evidence_root=self.root, file_root=self.root,
                                repositories={'generations': [{'manifest': self.manifest}]},
                                source_commit='f' * 40, version='1.0.0', channel='stable',
-                               signing_generation=1, key_fingerprint='A' * 40)
+                               signing_generation=1, key_fingerprint='A' * 40, release_build=14)
         return result, calls
 
     def test_fresh_campaign_reevaluation_precedes_recipe_authority(self):
@@ -51,6 +51,7 @@ class AurDeliveryTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0][1], json.loads(self.artifacts))
         self.assertEqual(calls[0][1]['signing_generation'], 1)
+        self.assertEqual(calls[0][1]['release_build'], 14)
         with self.assertRaises(ValueError):
             self.admit(report={'accepted': False})
         with self.assertRaises(ValueError):

@@ -1097,7 +1097,8 @@ retained plan and remote commit before retrying and report each source's actual 
 Do not label a prepared recipe as published. Public transport requires owner-only SSH
 identity/known-host files and strict host verification. The protected controller must
 call `aur_release_authority.authorize` to freshly reevaluate the complete campaign,
-actual final files and repository inventories with independently selected release facts.
+actual final files and repository inventories with independently selected release facts,
+including the immutable source's `RELEASE_BUILD` for native package revisions.
 A caller-provided accepted JSON receipt is insufficient. The public CLI remains closed
 until that controller integration supplies separate `publish-aur` authorization; no
 AUR workflow or external push is invoked by the fixture rehearsal.

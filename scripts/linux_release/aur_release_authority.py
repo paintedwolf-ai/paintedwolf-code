@@ -9,7 +9,7 @@ from .repository_operations import identity
 
 
 def authorize(selected, recipe, *, catalog, artifacts_bytes, campaign, evidence_root, file_root,
-              repositories, source_commit, version, channel, signing_generation, key_fingerprint):
+              repositories, source_commit, version, channel, signing_generation, key_fingerprint, release_build):
     # This callable must run inside the controller that selected the trusted workflow
     # bundle; a retained accepted receipt never substitutes for this reevaluation.
     from .release_admission import verify_release
@@ -17,7 +17,7 @@ def authorize(selected, recipe, *, catalog, artifacts_bytes, campaign, evidence_
     artifacts = json.loads(artifacts_bytes)
     report = verify_release(catalog, artifacts, campaign, evidence_root, file_root, repositories,
                             source_commit, version=version, channel=channel,
-                            signing_generation=signing_generation, key_fingerprint=key_fingerprint)
+                            signing_generation=signing_generation, key_fingerprint=key_fingerprint, release_build=release_build)
     if report.get("accepted") is not True:
         raise ValueError("AUR publication requires the complete freshly admitted Linux campaign and final files")
     expected = {"format_version": 1, "operation": "publish-aur", "source_commit": source_commit,
