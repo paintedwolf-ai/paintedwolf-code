@@ -356,6 +356,9 @@
     ],
     "release:live-test": [
       "release:live-test"
+    ],
+    "test:linux:installed": [
+      "test:linux:installed"
     ]
   },
   "private": [
@@ -381,7 +384,8 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "nix:build": "passthrough",
-    "release:live-test": "passthrough"
+    "release:live-test": "passthrough",
+    "test:linux:installed": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -717,6 +721,10 @@
       "locks": [
         "*"
       ],
+      "workers": 1
+    },
+    "test:linux:installed": {
+      "locks": [],
       "workers": 1
     }
   },
