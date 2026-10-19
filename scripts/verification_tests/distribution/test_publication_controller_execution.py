@@ -1,12 +1,15 @@
 """Protected publication reevaluates the retained campaign and actual package bytes."""
 
 import json
+import os
+import sys
+import types
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from linux_release.publication_controller import SelectedCampaign, retain
+from linux_release.publication_controller import SelectedCampaign, main, retain
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
@@ -77,3 +80,30 @@ class PublicationControllerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "repository signature"):
                     selected.authorize()
                 crypto.assert_called_once_with(root, json.loads((root / "repositories.json").read_text()))
+
+    def test_managed_controller_checks_actual_publication_files_and_retains_a_fresh_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, selected = self.fixture(directory)
+            source = root / "source"
+            source.mkdir()
+            public = root / "current"
+            public.mkdir()
+            (public / "app").write_bytes(b"final package")
+            key = types.ModuleType("openpgp")
+            key.selection = Mock(return_value=({"generation": 1, "fingerprint": "A" * 40}, b"public"))
+            arguments = ["--campaign-run-id", "123", "--source-commit", "a" * 40,
+                "--source-repository", str(source), "--retained-dir", str(root / "retained"),
+                "--publication-files", str(public), "--receipt", str(root / "receipt.json")]
+            with patch.dict(sys.modules, {"scripts.linux_release.openpgp": key}), \
+                 patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo", "GITHUB_REPOSITORY_ID": "42"}), \
+                 patch("linux_release.publication_controller.CATALOG", root / "catalog.json"), \
+                 patch("linux_release.publication_controller.retain", return_value=selected):
+                self.assertEqual(main(arguments), 0)
+                receipt = json.loads((root / "receipt.json").read_text())
+                self.assertEqual(receipt["publication_files"][0]["id"], "app")
+                with self.assertRaises(SystemExit):
+                    main(arguments)
+                (public / "app").write_bytes(b"rebuilt different bytes")
+                with self.assertRaises(SystemExit):
+                    main([*arguments[:-1], str(root / "refused.json")])
+                self.assertFalse((root / "refused.json").exists())

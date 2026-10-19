@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == "--admit-linux-publication" ]]; then
+  shift
+  exec python3 -m scripts.linux_release.publication_controller "$@"
+fi
+
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)
