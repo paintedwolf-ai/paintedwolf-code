@@ -126,4 +126,17 @@ func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing
 	if !found {
 		t.Fatal("Nix did not register the root with the actual physical GC authority")
 	}
+	missing := filepath.Join(nixPhysicalStore, strings.Repeat("0", 32)+"-paintedwolf-retention-missing-"+filepath.Base(t.TempDir()))
+	if _, err := os.Lstat(missing); !os.IsNotExist(err) {
+		t.Fatal("missing-output fixture unexpectedly exists")
+	}
+	missingLayout := &NixLayout{Output: missing, NixStore: tool}
+	if _, err := runningNixRegistrar(missingLayout); err == nil {
+		t.Fatal("missing output accepted before registration")
+	}
+	// Simulate collection after the directory check: the registrar must refuse
+	// rather than substitute or build that path during root registration.
+	if _, err := retainNix(context.Background(), missingLayout, filepath.Join(t.TempDir(), "roots"), registrar); err == nil {
+		t.Fatal("missing output was silently realised during registration")
+	}
 }

@@ -36,6 +36,9 @@ func runningNixRegistrar(layout *NixLayout) (nixRegistrar, error) {
 		return nixRegistrar{}, errors.New("Nix retention requires an explicitly supported physical store")
 	}
 	uid := uint32(os.Getuid())
+	if !nixStorageStat(layout.Output).directory(uid, false) {
+		return nixRegistrar{}, errors.New("The running Nix output is missing or unsafe; retention cannot recreate it")
+	}
 	for _, parent := range []string{"/nix", "/nix/var"} {
 		st := nixStorageStat(parent)
 		if !st.directory(uid, false) {
