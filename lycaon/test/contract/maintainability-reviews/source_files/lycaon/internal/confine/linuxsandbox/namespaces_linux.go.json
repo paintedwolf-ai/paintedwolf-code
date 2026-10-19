@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/confine/linuxsandbox/namespaces_linux.go",
+  "kind": "construction",
+  "workstream": "linux-private-filesystem-mounts",
+  "disposition": "retain",
+  "reason": "The namespace bootstrap composes ordered filesystem masks, explicit restorations, read-only sealing and the curated device mount as one pre-target transaction. Individual file-mask source preparation now has its own descriptor lifecycle in hidden_files_linux.go. Retain this 304-line mount composer within 310 lines; further splitting would scatter the operation ordering that makes parent masks and child restorations safe. Focused live controls require multiple unreadable read-only file masks, allowed I/O, read-only temporary roots, unchanged host files and the existing device/namespace floor.",
+  "reviewed_commit": "95cc72c3e76ba49fc96cb81f09648a771488869a",
+  "ceiling": 310,
+  "boundaries": {
+    "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
+    "lycaon/internal/confine/boundary_linux_live_test.go": "5006fc974c536141cadc75a5063e25f77e745a0f4e71dde96e4728520466796e"
+  }
+}
