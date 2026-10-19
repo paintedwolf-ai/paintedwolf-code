@@ -54,6 +54,7 @@ in builtins.derivation {
   name = "paintedwolf-offline-workflow-fixture";
   system = %q;
   builder = "${bash}/bin/bash";
+  outputs = [ "out" ];
   args = [ "-c" "printf fixture > \"$out\"" ];
   PATH = "${bash}/bin:${coreutils}/bin";
   shellHook = ''

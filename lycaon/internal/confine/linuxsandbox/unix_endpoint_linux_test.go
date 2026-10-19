@@ -23,8 +23,16 @@ func fixtureUnixListener(t *testing.T, path string) *net.UnixListener {
 	return listener
 }
 
+func endpointDirectory(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("/tmp", "pw-endpoint-") //nolint:usetesting // Unix socket path limit.
+	testutil.FailErr(t, "create short socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
+}
+
 func TestDelegatedServiceSocketIdentityIncludesAliases(t *testing.T) {
-	root := t.TempDir()
+	root := endpointDirectory(t)
 	service, alias, hardlink, ordinary := filepath.Join(root, "daemon"), filepath.Join(root, "alias"), filepath.Join(root, "hardlink"), filepath.Join(root, "agent")
 	fixtureUnixListener(t, service)
 	fixtureUnixListener(t, ordinary)
@@ -47,7 +55,7 @@ func TestDelegatedServiceSocketIdentityIncludesAliases(t *testing.T) {
 }
 
 func TestPinnedUnixEndpointCannotFollowRecipientReplacement(t *testing.T) {
-	root := t.TempDir()
+	root := endpointDirectory(t)
 	ordinary, service, alias := filepath.Join(root, "agent"), filepath.Join(root, "daemon"), filepath.Join(root, "alias")
 	allowed, delegated := fixtureUnixListener(t, ordinary), fixtureUnixListener(t, service)
 	testutil.FailErr(t, "create approved recipient alias", os.Symlink(ordinary, alias))
