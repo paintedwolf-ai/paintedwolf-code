@@ -3,6 +3,7 @@
 package installed
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -16,6 +17,29 @@ import (
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestSelectedScannerRequiresExplicitBuildAuthority(t *testing.T) {
+	manifest, root := selectedFixture(t)
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	for name, input := range map[string]struct {
+		ctx      context.Context
+		root     string
+		manifest *bundled.Manifest
+		code     string
+	}{
+		"absent authority": {t.Context(), root, nil, "artifact_refused"},
+		"relative root":    {t.Context(), "relative", manifest, "root_invalid"},
+		"canceled":         {canceled, root, manifest, "canceled"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			report, err := VerifyArtifact(input.ctx, input.root, input.manifest)
+			if err == nil || report.Code != input.code || report.Confined || report.Error == "" {
+				t.Fatalf("invalid build authority report=%+v error=%v", report, err)
+			}
+		})
+	}
+}
 
 func fixtureDigest(raw []byte) string {
 	digest := sha256.Sum256(raw)

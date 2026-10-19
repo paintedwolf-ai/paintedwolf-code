@@ -129,10 +129,23 @@ probe does not establish an installed-package result.
 
 The selected producer qualification binds the original scanner bytes. Changing
 the ELF loader for Nix changes those bytes and requires a separate consumer
-finalization identity and qualification. Replacing the digest in an otherwise
-unchanged producer report cannot represent that transformation; the current
-consumer audit refuses it. Preserve the original descriptor and evidence while
-that finalization contract is implemented under #49 and #927.
+finalization identity and qualification. The artifact build tool supports
+`-mode finalize-consumer -artifact-directory ORIGINAL -root FINAL_ROOT
+-consumer-recipe RECIPE.json -evidence-root SCANNER_CONFIG -audit-output AUDIT.json`.
+It emits the final base64 build identity only after the required product cases
+pass under confinement. The recipe is one closed JSON object with
+`schema_version: 1`, `kind: "nix-elf-relocation"`, the full `source_commit`,
+`flake_lock_sha256`, absolute `tool_path`, `tool_sha256`, and an `arguments`
+array. Declared inputs and observed ELF loader, dependencies, and RPATHs remain
+separate fields in the consumer record.
+
+Package assembly must transform its own writable staged copy first, run this
+native finalizer, inject the emitted identity into the engine build, and then
+preserve every finalized resource byte. A later audit uses the original
+`-artifact-directory`, final `-packaged-directory`, and
+`-consumer-identity-file IDENTITY.txt` together. The original pinned archive
+and selection evidence remain required. Nix package caller integration and
+installed qualification for both architectures are tracked under #49 and #927.
 
 Development executables run under the hardened runtime releases ship with:
 `scripts/sign-dev-binary.sh` signs them with the stable development identity

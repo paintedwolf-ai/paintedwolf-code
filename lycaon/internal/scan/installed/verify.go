@@ -65,7 +65,24 @@ func Verify(ctx context.Context, root string) (report Report, err error) {
 
 // VerifyArtifact qualifies explicit build-selected authority without runtime configuration overrides.
 func VerifyArtifact(ctx context.Context, root string, manifest *bundled.Manifest) (report Report, err error) {
-	report = Report{SchemaVersion: 1, Status: "failed", Code: "artifact_refused", GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, EngineRoot: root, EngineVersion: manifest.OpenGrep.Version}
+	report = Report{SchemaVersion: 1, Status: "failed", Code: "artifact_refused", GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, EngineRoot: root}
+	defer func() {
+		if err != nil {
+			report.Error = err.Error()
+		}
+	}()
+	if err := bundled.ValidateManifest(manifest); err != nil {
+		return report, err
+	}
+	if err := ctx.Err(); err != nil {
+		report.Code = "canceled"
+		return report, err
+	}
+	if !filepath.IsAbs(root) {
+		report.Code = "root_invalid"
+		return report, fmt.Errorf("selected scanner root must be absolute")
+	}
+	report.EngineVersion = manifest.OpenGrep.Version
 	if manifest.OpenGrepSelection != nil {
 		report.ProducerCommit = manifest.OpenGrepSelection.ProducerCommit
 	}
