@@ -27,6 +27,7 @@ func rejectIfSyntaxUnhealthy(ctx context.Context, tool, path string, before *str
 		return nil
 	}
 	data := syntaxRejectData(tool, path, change, []byte(after), seam)
+	data["mutation_new_path"] = !beforeExists
 	switch change.Transition {
 	case syntaxhealth.TransitionNewFileBroken, syntaxhealth.TransitionBrokeClean:
 		return &toolrejection.ToolReject{Code: "MUTATION_BROKE_PARSE", Data: data}
