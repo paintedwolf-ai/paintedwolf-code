@@ -39,6 +39,27 @@ def prefix(value: str, rehearsal: bool):
         raise ValueError("repository storage prefix is invalid for the selected trust mode")
 
 
+def warm_absence(url: str):
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "painted-wolf-release/1"}), timeout=30):
+            raise ValueError("isolated rehearsal authority unexpectedly exists")
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+
+
+def delete_fixture_object(key: str):
+    prefix(key, True)
+    subprocess.run(["bunx", "wrangler@4.115.0", "r2", "object", "delete",
+                    os.environ["R2_BUCKET"] + "/" + key, "--remote"], check=True)
+
+
+def tamper_fixture_object(key: str, source: Path, destination: Path):
+    prefix(key, True)
+    destination.write_bytes(source.read_bytes() + b"changed fixture bytes")
+    put(key, destination, True)
+
+
 def public_bytes(url: str, source: Path, mutable=False):
     local = hashlib.sha256()
     with source.open("rb") as stream:

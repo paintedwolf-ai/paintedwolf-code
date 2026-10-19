@@ -10,12 +10,15 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import uuid
 
 from .openpgp import ephemeral, keyring, selection, run
 from .pacman_repository import assemble, package_info, binary_signature
 from .aur_recipe import generate
 from .pacman_validation import admit
 from .pacman_publication import publish
+from .pacman_r2 import publish_r2
+from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object
 from .repository_objects import replace
 from .signing import digest
 
@@ -45,7 +48,11 @@ def install(package: Path, root: Path, catalog: Path, expected: str, repository:
         run(["gpg", "--batch", "--import-ownertrust"], home,
             (selected["fingerprint"] + ":6:\n").encode())
         run(["gpg", "--batch", "--check-trustdb"], home)
-        action = ["-Syu", "--noconfirm", expected] if repository is not None else ["-U", "--noconfirm", str(package)]
+        action = ["-U", "--noconfirm", str(package)]
+        if repository is not None:
+            action = ["-Syu", "--noconfirm"]
+            if not (root / "usr/share" / PACKAGE / "value").exists():
+                action.append(expected)
         try:
             subprocess.run(["sudo", "-n", "pacman", "--config", str(config), "--root", str(root),
                             "--dbpath", str(root / "db"), "--cachedir", str(root / "cache"),
@@ -59,15 +66,24 @@ def install(package: Path, root: Path, catalog: Path, expected: str, repository:
         raise ValueError("installed fixture file has the wrong package owner")
 
 
-def rehearse(work: Path):
+def rehearse(work: Path, r2_origin: str | None = None):
     os.environ.pop("LINUX_PACKAGE_SIGNING_KEY", None)
     architecture = platform.machine()
     catalog = ephemeral(work / "key")
     wrong = ephemeral(work / "wrong")
+    original_catalog = catalog
+    rotation = ephemeral(work / "rotation")
+    trust = json.loads(rotation.read_text())
+    trust["signing_generation"] = trust["generations"][0]["generation"] = 2
+    rotation.write_text(json.dumps(trust))
     results = []
     active = None
     retained = None
-    for version in ["0.0.1", "0.0.2"]:
+    remote_active = None
+    storage_prefix = "release-system-tests/pacman-repositories-" + uuid.uuid4().hex
+    for version in ["0.0.1", "0.0.2", "0.0.3"]:
+        catalog = rotation if version == "0.0.3" else original_catalog
+        operation = "rotate" if version == "0.0.3" else "publish"
         source = work / version
         source.mkdir()
         (source / "PKGBUILD").write_text(f"""pkgname={PACKAGE}
@@ -110,7 +126,7 @@ package() {{
         admit(receipt, destination, catalog, True)
         origin = work / "origin"
         channel = origin / "channels/pacman/preview" / architecture
-        if retained is not None:
+        if retained is not None and version == "0.0.2":
             # The package manager must refuse a detached signature for another database.
             alias = channel / (receipt["repository"] + ".db.sig")
             previous_signature = alias.read_bytes()
@@ -122,11 +138,20 @@ package() {{
             else:
                 raise ValueError("pacman accepted a database/signature mismatch")
             replace(alias, previous_signature)
-        selected = publish(receipt, destination, origin, "https://repository.example.invalid", catalog, active, True)
+        if operation == "rotate":
+            rejected(lambda: publish(receipt, destination, origin, "https://repository.example.invalid", catalog, active, True))
+        selected = publish(receipt, destination, origin, "https://repository.example.invalid", catalog, active, True, operation)
         rejected(lambda: publish(receipt, destination, origin, "https://repository.example.invalid", catalog, "0" * 64, True))
         if retained is None:
             retained = receipt, destination
         active = selected["generation"]
+        if operation == "rotate":
+            try:
+                install(destination / package.name, work / "wrong-successor-root", original_catalog, PACKAGE, channel)
+            except subprocess.CalledProcessError:
+                pass
+            else:
+                raise ValueError("pacman accepted an unavailable successor signing key")
         install(destination / package.name, work / "native-root", catalog, PACKAGE, channel)
         if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
             raise ValueError("native pacman upgrade did not install the selected payload")
@@ -171,16 +196,51 @@ package() {{
             raise ValueError("generated SRCINFO differs from the selected AUR package")
         if version == "0.0.2":
             old_receipt, old_directory = retained
-            restored = publish(old_receipt, old_directory, origin, "https://repository.example.invalid", catalog,
-                               active, True, True)
+            restored = publish(old_receipt, old_directory, origin, "https://repository.example.invalid", original_catalog,
+                               active, True, "withdraw")
             if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
                 raise ValueError("repository withdrawal changed an installed fixture")
-            selected = publish(receipt, destination, origin, "https://repository.example.invalid", catalog,
-                               restored["generation"], True)
-            active = selected["generation"]
+            active = restored["generation"]
+            rejected(lambda: publish(receipt, destination, origin, "https://repository.example.invalid", catalog, active, True))
+        if r2_origin is not None:
+            if remote_active is None:
+                warm_absence(r2_origin + "/" + storage_prefix + "/channels/pacman/preview/" + architecture + "/" + receipt["repository"] + ".db")
+            staged = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True, operation, "stage")
+            if remote_active is None:
+                package_row = receipt["packages"][0]
+                key = storage_prefix + "/generations/" + staged["generation"] + "/" + package_row["file"]
+                tamper_fixture_object(key, destination / package_row["file"], work / "tampered-object")
+                try:
+                    publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, None, True)
+                except subprocess.CalledProcessError:
+                    pass
+                else:
+                    raise ValueError("R2 admitted a tampered pacman package object")
+                finally:
+                    delete_fixture_object(key)
+            remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True, operation)
+            if version == "0.0.2":
+                old_receipt, old_directory = retained
+                recovered = publish_r2(old_receipt, old_directory, original_catalog, storage_prefix, r2_origin,
+                                       remote["generation"], True, "withdraw")
+                remote_active = recovered["generation"]
+                rejected(lambda: publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True))
+            else:
+                remote_active = remote["generation"]
+        if version == "0.0.3":
+            old_receipt, old_directory = retained
+            publish(old_receipt, old_directory, origin, "https://repository.example.invalid", original_catalog,
+                    active, True, "recover")
+            install(destination / package.name, work / "native-root", original_catalog, PACKAGE, channel)
+            if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
+                raise ValueError("repository recovery changed the installed version")
+            if r2_origin is not None:
+                publish_r2(old_receipt, old_directory, original_catalog, storage_prefix, r2_origin,
+                           remote_active, True, "recover")
         results.append({"version": version, "objects": len(receipt["objects"])})
     return {"format_version": 1, "rehearsal": True, "application_qualified": False,
-            "published": False, "generations": results,
+            "architecture": platform.machine(), "published": False, "isolated_r2_published": r2_origin is not None,
+            "storage_prefix": storage_prefix if r2_origin is not None else None, "generations": results,
             "cases": ["native-makepkg", "signed-database-and-files", "embedded-package-signature",
                       "wrong-key", "production-refuses-fixture", "changed-package", "missing-object",
                       "channel-mismatch", "retained-generations", "pinned-aur-makepkg",
@@ -188,16 +248,29 @@ package() {{
                       "native-repository-Syu-upgrade", "aur-installed-upgrade", "actual-pacman-file-ownership",
                       "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
                       "retained-repository-recovery", "withdrawal-preserves-installed-package",
-                      "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused"]}
+                      "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused",
+                      "explicit-key-rotation", "installed-successor-key-refusal", "withdrawn-reoffer-refused"]}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--r2", action="store_true")
     args = parser.parse_args()
+    if args.r2 and shutil.which("bunx") is None:
+        parser.error("bunx is required for the isolated R2 rehearsal")
     try:
+        r2_origin = rehearsal_environment() if args.r2 else None
         with tempfile.TemporaryDirectory(prefix="paintedwolf-pacman-rehearsal-") as temporary:
-            result = rehearse(Path(temporary))
+            result = rehearse(Path(temporary), r2_origin)
+        if args.r2:
+            result["cases"] += ["r2-negative-cache-recovery", "r2-staged-publication-resume",
+                                "r2-tampered-object-refused", "r2-missing-object-restored"]
+        root = Path(__file__).resolve().parents[2]
+        if (root / ".git").exists():
+            result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+            result["verification_source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
+            result["verification_source_dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(result, indent=2) + "\n")
         print(f"Pacman repository rehearsal passed: {args.receipt}")

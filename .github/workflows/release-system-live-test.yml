@@ -4,6 +4,16 @@ on:
   schedule:
     - cron: "17 9 * * 1"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Isolated release surface to rehearse
+        type: choice
+        required: true
+        default: updater
+        options:
+          - updater
+          - native-repositories
+          - pacman-repositories
 
 permissions:
   contents: read
@@ -15,7 +25,11 @@ concurrency:
 
 jobs:
   r2-release-controls:
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'pacman-repositories' }}
+    strategy:
+      matrix:
+        runner: ${{ fromJSON(inputs.mode == 'native-repositories' && '["ubuntu-24.04","ubuntu-24.04-arm"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.runner }}
     environment: release-rehearsal
     timeout-minutes: 30
     steps:
@@ -34,15 +48,97 @@ jobs:
           no-cache: true
 
       - name: Install the pinned Tauri CLI for pointer signing
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'updater' }}
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
-      - name: Install minisign for cryptographic feed verification
-        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Prepare the selected native verification tools
+        env:
+          MODE: ${{ inputs.mode || 'updater' }}
+        run: |
+          case "$MODE" in
+            updater) packages=(minisign) ;;
+            native-repositories) packages=(apt-utils rpm createrepo-c dnf libarchive-tools gnupg openssl) ;;
+            *) echo 'Unsupported release rehearsal mode' >&2; exit 2 ;;
+          esac
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
 
       - name: Exercise isolated R2 release system
+        env:
+          MODE: ${{ inputs.mode || 'updater' }}
+          RECEIPT: ${{ runner.temp }}/native-repositories.json
+          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
+          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
+          RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
+          RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
+        run: |
+          case "$MODE" in
+            updater) ./task release:live-test ;;
+            native-repositories)
+              ./task release:live-test -- --local-native-repositories --r2 --receipt "$RECEIPT"
+              ;;
+            *) echo 'Unsupported release rehearsal mode' >&2; exit 2 ;;
+          esac
+
+      - name: Retain the native repository rehearsal receipt
+        if: ${{ always() && inputs.mode == 'native-repositories' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-repository-rehearsal-${{ matrix.runner }}
+          path: ${{ runner.temp }}/native-repositories.json
+          if-no-files-found: warn
+
+  r2-pacman-repositories:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'pacman-repositories' }}
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: release-rehearsal
+    timeout-minutes: 30
+    steps:
+      - name: Prepare the isolated native Arch toolchain
+        run: |
+          pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo
+          useradd --create-home pw-repository
+          printf '%s\n' 'pw-repository ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pw-repository
+          chmod 0440 /etc/sudoers.d/pw-repository
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+
+      - name: Prepare the unprivileged rehearsal owner
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          install -m 0755 "$(command -v bun)" /usr/local/bin/bun
+          ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+          chown -R pw-repository:pw-repository "$WORKSPACE"
+
+      - name: Exercise isolated signed pacman and AUR delivery
         env:
           RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
           RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
           RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
-        run: ./task release:live-test
+        run: |
+          sudo -H --preserve-env=PATH,RELEASE_TEST_R2_ACCOUNT_ID,RELEASE_TEST_R2_API_TOKEN,RELEASE_TEST_R2_BUCKET,RELEASE_TEST_DOWNLOAD_BASE_URL \
+            -u pw-repository ./task release:live-test -- --local-pacman-repositories --r2 --receipt /tmp/pacman-repositories.json
+
+      - name: Retain the pacman repository rehearsal receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pacman-repository-rehearsal
+          path: /tmp/pacman-repositories.json
+          if-no-files-found: warn

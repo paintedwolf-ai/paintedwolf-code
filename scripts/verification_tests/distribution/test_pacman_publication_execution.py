@@ -15,7 +15,8 @@ class PacmanPublicationTests(unittest.TestCase):
     def setUp(self):
         self.receipt = {"format_version": 1, "channel": "preview", "architecture": "x86_64",
                         "version": "0.0.1", "source_commit": "f" * 40, "rehearsal": True,
-                        "repository": "painted-wolf-code-preview",
+                        "repository": "painted-wolf-code-preview", "family": "pacman",
+                        "signing_generation": 1, "key_fingerprint": "A" * 40, "inventory_sha256": "b" * 64,
                         "packages": [{"native_version": "0.0.1-1"}],
                         "objects": [{"path": "application.pkg.tar.zst"}, {"path": "application.pkg.tar.zst.sig"}]}
         self.objects, self.events = {}, []
@@ -39,7 +40,8 @@ class PacmanPublicationTests(unittest.TestCase):
                 "rehearsal": True}
 
     def current(self, key, directory):
-        self.reads += 1
+        if key.endswith("current.json"):
+            self.reads += 1
         if self.race and self.reads == 2:
             return {"generation": "other"}
         return json.loads(self.objects[key]) if key in self.objects else None

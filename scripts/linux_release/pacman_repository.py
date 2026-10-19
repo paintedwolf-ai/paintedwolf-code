@@ -102,8 +102,8 @@ def assemble(manifest: dict, inputs: Path, destination: Path, channel: str,
             "packages": [{"file": path.name, "sha256": digest(path), "native_version": package_info(path)["pkgver"], "architecture": architecture}
                          for path in packages], "version": version,
             "architecture": architecture, "channel": channel, "repository": repository,
-            "rehearsal": rehearsal, "activation": "not-published", "objects": objects,
-            "reader_consistency": "immutable-generation-config", "aur_published": False}
+            "rehearsal": rehearsal, "objects": objects,
+            "reader_consistency": "required-signature-fail-closed-retry"}
 
 
 def main():

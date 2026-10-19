@@ -1064,7 +1064,7 @@ It retains immutable package bytes and complete signed generations, then activat
 required-signature databases. Pacman fetches database/signature pairs in separate
 requests: signatures publish first, mismatched pairs fail closed, and a refresh retry
 after both no-store objects converge recovers. Preserve packages referenced by older
-cached databases. `--recover` selects a previously retained healthy index and does not
+cached databases. `--operation recover` selects a previously retained healthy index and does not
 change an installed package. The native rehearsal exercises configured `pacman -Syu`,
 a deliberately mismatched database/signature refusal, restoration and retained-index
 recovery, plus the separate AUR-built package upgrades. Cache immutable generation and
@@ -1092,6 +1092,31 @@ wipe. Keep Artix's actual service/dependency choice; the AUR recipe preserves th
 verified shared native install script rather than inventing a systemd-only lifecycle.
 Both manifest families bind their selected signing generation/fingerprint, source,
 final package hashes and canonical object inventory identity for release admission.
+
+Repository generation operations are explicit: `--operation publish` advances a
+version under its existing signing identity; `rotate` requires a distinct key and
+strictly newer signing generation; `recover` selects an exact retained healthy
+manifest; `withdraw` selects that retained replacement and permanently marks the
+previous generation and version as withdrawn. Reoffering either identity refuses.
+Operation receipts carry `operation`, `previous`, source, signer and final inventory
+facts; an ordinary release campaign cannot authorize another operation. Retained
+`key-catalog.json` contains only the selected public key facts, so private or unknown
+catalog fields never enter the origin. Existing installations and mutable data are
+outside this publication owner's mutation scope.
+
+The existing protected `release-system-live-test` workflow accepts explicit dispatch
+modes `native-repositories` and `pacman-repositories`; the scheduled/default updater
+rehearsal remains unchanged. Native mode uses amd64 and arm64 Ubuntu runners; pacman
+uses an official digest-pinned Arch base-devel container and an unprivileged fixture
+owner. Both use only the existing `release-rehearsal` test environment. No secret
+values need to be loaded locally. The `--r2` fixture mode stages immutable objects,
+exercises a warmed missing authority, a deliberately corrupted test object and its
+restoration, retries, rotation, withdrawal and retained recovery under a unique
+`release-system-tests/` prefix. `--phase stage` supports interruption before activation;
+the exact source can resume with `--phase activate`. Public byte/cache-role readback
+precedes activation, and no cache purge is used. Test generation objects remain under
+the receipt's owned prefix for inspection and recovery; test private keys are removed.
+Receipts distinguish these format fixtures from a qualified application campaign.
 
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
