@@ -253,6 +253,8 @@ The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user name
 
 Namespace creation failures distinguish exhausted per-user quotas (`namespace_limit_reached`, `review_namespace_limits`) from a host-policy denial (`user_namespaces_denied`, `review_host_policy`). Inspect the reported quota or host policy before choosing a narrowly scoped repair. Only a directly observed disabled namespace sysctl carries `enable_user_namespaces`; a permission error alone does not establish that cause. AppArmor-restricted hosts continue to name the packaged profile and its installation remedy. These diagnostics never retry the launch unconfined or change host policy.
 
+Individual read-denied files use empty, unreadable, read-only file mounts. The helper prepares their shared inode inside its private mount namespace, removes the temporary writable source before applying the filesystem plan, and clones subsequent masks from the first sealed file mount. This also supports kernels that cannot clone a file from a detached filesystem. Preparation or cleanup failure refuses the target; the original host files remain unchanged.
+
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
 - A datagram the gateway does not carry is dropped there rather than refused at the call: an unconnected `sendto`, `sendmsg`, or `sendmmsg` to a destination no `udp` permit covers succeeds and reaches nothing, and the drop is reported as a refusal. A connect to such a destination is refused with `EACCES`, as macOS refuses it. The filter can read neither address `sendmsg` and `sendmmsg` carry, and refusing the unconnected sends it can read would make one call answer differently from the other two.
