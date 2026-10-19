@@ -35,6 +35,14 @@ func TestLeadingActions(t *testing.T) {
 		{"scalar", `"read"`, nil},
 		{"empty", "", nil},
 		{"bounded", `{"tool":"read","args":"` + strings.Repeat("x", 65536) + `"}`, nil},
+		{"xml function tag", "<tool_call>\n<function=write>\n<parameter=path>\nindex.html\n</parameter>\n</function>\n</tool_call>", []string{"write"}},
+		{"prose before xml function tag", "Great — we have the full picture. Let's create the files now.\n\n<tool_call>\n<function=write>\n<parameter=content>\n<!DOCTYPE html>\n</parameter>\n<parameter=path>\nindex.html\n</parameter>\n</function>\n</tool_call>", []string{"write"}},
+		{"prose before json tool_call tag", "Let me read the file first.\n\n<tool_call>{\"name\":\"read\",\"arguments\":{\"path\":\"main.go\"}}</tool_call>", []string{"read"}},
+		{"prose before mistral marker", "Let me read the file first.\n[TOOL_CALLS][{\"name\":\"read\",\"arguments\":{\"path\":\"main.go\"}}]", []string{"read"}},
+		{"unclosed xml tool_call tag", "Creating the file now.\n<tool_call>\n<function=write>\n<parameter=path>\nindex.html\n</parameter>", []string{"write"}},
+		{"deferred tool in explicit tag", `<tool_call>{"name":"edit","arguments":{"path":"main.go"}}</tool_call>`, []string{"edit"}},
+		{"deferred tool in xml tag", "I'll update the file now.\n<tool_call>\n<function=edit>\n<parameter=path>\nmain.go\n</parameter>\n</function>\n</tool_call>", []string{"edit"}},
+		{"fenced xml tag", "```\n<tool_call>\n<function=write>\n<parameter=path>\nindex.html\n</parameter>\n</function>\n</tool_call>\n```", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Names(tc.text, []string{"read", "write"}); !reflect.DeepEqual(got, tc.want) {
