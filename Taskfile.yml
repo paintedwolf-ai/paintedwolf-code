@@ -613,6 +613,7 @@ tasks:
     dir: lycaon-den/src-tauri
     sources:
       - 'src/**/*.rs'
+      - src/linux_install/source/apt_probe.py
       - 'examples/**/*.rs'
       - 'crates/**/*.rs'
       - 'crates/**/Cargo.toml'

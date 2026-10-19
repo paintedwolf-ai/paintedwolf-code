@@ -1,12 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdatesSettingsPanel } from "./UpdatesSettingsPanel.tsx";
-import { packageFixture, updateServiceFixture } from "../../../settings/system/update-test-fixture.ts";
+import { packageFixture, packageSourceFixture, updateServiceFixture } from "../../../settings/system/update-test-fixture.ts";
 import type { NativeUpdateState } from "../../../settings/system/update-service.ts";
 
 afterEach(cleanup);
 const nix = (over: Partial<NativeUpdateState> = {}) => packageFixture({
-  package: { family: "nix", name: "painted-wolf-code", version: "1.0.2", update_command: "Review the owning Nix source.", source: { availability: "not_checked", owner: null, pinned: null } },
+  package: { family: "nix", name: "painted-wolf-code", version: "1.0.2", update_command: "Review the owning Nix source.", source: packageSourceFixture({ owner: null }) },
   ...over,
 });
 

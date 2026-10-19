@@ -8,6 +8,7 @@ import { settingAnchor, settingLabel } from "../../settings/settings-registry.ts
 import { createUpdateState, nativeUpdateState } from "../../settings/system/update-state.ts";
 import { UPDATE_ERROR_MESSAGES } from "../../settings/system/update-error.ts";
 import type { NativeUpdateState, UpdateService } from "../../settings/system/update-service.ts";
+import { PackageSourceStatus } from "./PackageSourceStatus.tsx";
 export type UpdatePanelProps = { preferences?: boolean; updateService?: UpdateService };
 
 /** One line describing where the installation stands; empty when nothing is in progress. */
@@ -51,7 +52,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
           <div class="den-settings-pref-copy">
             <span class="den-settings-pref-label">{settingLabel("update-checks")}</span>
             <Show when={state()?.install_source === "system_package"} fallback={<p class="den-settings-hint">Downloads updates in the background and installs them when you quit or next open Painted Wolf Code. The app never restarts automatically while you’re using it.</p>}>
-              <p class="den-settings-hint" data-testid="updates-package-hint">{nix() ? "Checks upstream releases in the background. The Nix configuration or profile that selected this build controls its version; this check does not change its input or pin." : "Checks upstream releases in the background. Your system package manager controls which versions your configured sources can install."}</p>
+              <p class="den-settings-hint" data-testid="updates-package-hint">{nix() ? "Checks upstream releases in the background. The Nix configuration or profile that selected this build controls its version; this check does not change its input or pin." : "Checks upstream releases and local package-source metadata in the background. Your system package manager controls which versions your configured sources can install."}</p>
             </Show>
             <p class="den-settings-hint">Checks shortly after launch and every six hours. New releases reach devices gradually over their first two days; Check now always offers the newest version. Requests carry no device identifier or account information. Homebrew installations update through Homebrew.</p>
           </div>
@@ -68,7 +69,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
     <Show when={state()}>{(current) => <div class="den-settings-hint" data-testid="updates-status">
       <p data-testid="updates-current-version">Version {current().running_version}</p>
       <Show when={current().capabilities.blocked_reason === "development_build"}><p data-testid="updates-development-build">Updates are unavailable in development builds. Install a packaged release to use automatic updates.</p></Show>
-      <Show when={current().discovery === "up_to_date"}><p>{current().install_source === "system_package" ? "The selected upstream release channel has no newer version. Package-source availability has not been checked." : "You’re using the latest version."}</p></Show>
+      <Show when={current().discovery === "up_to_date"}><p>{current().install_source === "system_package" ? `The selected upstream release channel has no newer version.${current().package?.source.availability === "not_checked" ? " Package-source availability has not been checked." : ""}` : "You’re using the latest version."}</p></Show>
       <Show when={current().discovery === "held_back"}><p data-testid="updates-rollout-eligibility">A newer release is rolling out gradually. Check now to get it sooner.</p></Show>
       <Show when={current().install_source !== "system_package" && candidate()}>{(release) => <p>Version {release().version} is available.</p>}</Show>
       <Show when={installationStatus(current())}>{(status) => <p role="status" aria-live="polite" aria-atomic="true" data-testid="updates-installation-status">{status()}{current().installation === "downloading" ? progress() : ""}</p>}</Show>
@@ -78,7 +79,8 @@ export function UpdatePanel(props: UpdatePanelProps) {
           <p data-testid="updates-nix-owner">Use the NixOS configuration, Home Manager configuration or user profile where you chose this package. A temporary launch may have no installed profile. This app cannot choose an upgrade command for you.</p>
           <p data-testid="updates-nix-pin">{pkg().source.pinned === true ? "This installation is pinned; an upstream release check does not change its pin." : pkg().source.pinned === false ? "This installation is not pinned. Its selected source still controls the available version." : "Whether this installation is intentionally pinned is unknown."}</p>
         </Show>
-        <Show when={candidate()}>{(release) => <p data-testid="updates-package-upgrade">{nix() ? `${current().discovery === "failed" ? "Previously seen upstream" : "Upstream"} version ${release().version}${current().discovery === "failed" ? ". Recheck the upstream feed before acting on this notice." : " is available."} Availability through your selected Nix source has not been checked. Review the owning input and pin before upgrading.` : `Upstream version ${release().version} is available. Availability through your configured package source is unknown. Review your package repositories, holds and pins before upgrading.`}</p>}</Show>
+        <PackageSourceStatus facts={pkg().source} />
+        <Show when={candidate()}>{(release) => <p data-testid="updates-package-upgrade">{`${current().discovery === "failed" ? "Previously seen upstream" : "Upstream"} version ${release().version}${current().discovery === "failed" ? ". Recheck the upstream feed before acting on this notice." : " is available."} ${nix() ? "Availability through your selected Nix source has not been checked. Review the owning input and pin before upgrading." : pkg().source.availability === "not_checked" ? "Availability through your configured package source is unknown. Review your package repositories, holds and pins before upgrading." : "Package-source results are reported separately."}`}</p>}</Show>
         <Show when={pkg().family === "pacman"}><p>For an AUR installation, update with the AUR workflow you selected after a full system upgrade. Package ownership does not identify an AUR helper.</p></Show>
       </>}</Show>
       <Show when={current().install_source === "unpackaged"}><p data-testid="updates-unpackaged">This copy was not installed from a package, so no update command is available. Install the .deb or .rpm package to receive update notices.</p></Show>

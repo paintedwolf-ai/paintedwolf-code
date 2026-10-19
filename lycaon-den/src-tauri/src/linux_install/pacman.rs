@@ -2,9 +2,9 @@ use super::{run, InstalledPackage, PackageFamily};
 use std::path::Path;
 
 pub(super) fn owner(executable: &Path) -> Option<InstalledPackage> {
-    let output = run("pacman", &["-Qoq", "--", &executable.to_string_lossy()])?;
+    let output = run("/usr/bin/pacman", &["-Qoq", "--", &executable.to_string_lossy()])?;
     let name = package_name(&output)?;
-    let version = run("pacman", &["-Q", "--", name])?;
+    let version = run("/usr/bin/pacman", &["-Q", "--", name])?;
     parse_version(name, &version)
 }
 
