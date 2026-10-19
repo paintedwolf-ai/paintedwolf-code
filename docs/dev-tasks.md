@@ -985,6 +985,9 @@ in #927/#928/#929; evaluation does not establish installed support.
 
 The native pacman adapter is available with `./task den:bundle -- --pacman` on
 an unprivileged Linux builder with `makepkg` and its packaging prerequisites.
+`./task den:bundle -- --pacman-container` instead prepares the pinned official Arch
+or Arch Linux ARM substrate on the matching native CPU, then runs makepkg offline
+as the invoking user. Docker is required; no QEMU or cross-CPU packaging is admitted.
 It consumes the same sealed application tree as deb/rpm, removes Debian-only
 policy fragments, validates required resources and the final executable manifest,
 and emits a `.pkg.tar.zst`, its payload archive, generated `PKGBUILD` and `.SRCINFO`
@@ -992,7 +995,12 @@ under `bundle/pacman`. Package-time stripping/debug extraction is disabled so th
 launcher manifest continues to describe the final bytes. Checksums bind the
 recipe to its payload. This build path does not install packages or configure
 repositories; the native Arch/Artix owner/service and delivery work is #941/#942.
-Native amd64 and Arch Linux ARM aarch64 qualification remains #943.
+`pacman-candidate.json` records the selected source, final package SHA-256/size,
+sealed payload hash, native CPU, official substrate identity and installed packaging
+toolchain. Staging checks native package identity, exact dependency declarations,
+safe archive contents and the same complete payload/ELF audits as deb/rpm. Retained
+`candidate-packages.json` binds all three families to exact source, architecture and
+final hashes. Native amd64 and Arch Linux ARM aarch64 installed qualification remains #943.
 
 Pacman uses the shared product version, mapping supported preview labels to
 `<core>pre.<label>` (for example `1.2.3-rc6` becomes `1.2.3pre.rc6`) and the shared
@@ -1000,7 +1008,7 @@ Pacman uses the shared product version, mapping supported preview labels to
 `release-version` and executable manifest. Unsupported prerelease labels fail
 construction rather than risk an incorrect package upgrade order.
 
-Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and an `.rpm` for Fedora and RHEL-compatible families, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
+Linux ships native `.deb` packages for Debian/Ubuntu, `.rpm` packages for Fedora/RHEL-compatible families, and `.pkg.tar.zst` packages for Arch and Arch Linux ARM, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
 
 | Path | Contents |
 |------|----------|
@@ -1401,3 +1409,12 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+Native pacman candidate packaging uses the shared sealed payload and matching native
+CPU. `packaging/linux/arch/substrates.json` pins the official Arch image and the
+Arch Linux ARM root filesystem. The ARM archive is authenticated by the pinned
+[Arch Linux ARM build key](https://archlinuxarm.org/about/package-signing) before
+container import; its SHA-256 is fixed independently of the mutable download URL.
+An upstream rootfs replacement fails until the reviewed pin is updated. A container
+package build establishes package construction only; installed Arch/Artix desktop
+and service qualification remains separate.

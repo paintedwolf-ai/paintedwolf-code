@@ -8,7 +8,7 @@ url='https://paintedwolf.ai'
 license=('Apache-2.0')
 depends=(@DEPENDS@)
 optdepends=(@OPTDEPENDS@)
-options=('!strip' '!debug' '!lto')
+options=('!strip' '!debug' '!lto' '!zipman' '!purge' 'libtool' 'staticlibs' 'emptydirs' 'docs')
 @INSTALL@
 source=(@PAYLOAD@)
 sha256sums=(@SHA256@)

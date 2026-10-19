@@ -70,6 +70,7 @@ class ArchPackageTests(unittest.TestCase):
             self.assertIn(before, text)
             self.assertIn("'!strip' '!debug' '!lto'", text)
             self.assertIn("arch=(aarch64)", text)
+            self.assertIn("'!zipman' '!purge' 'libtool' 'staticlibs' 'emptydirs' 'docs'", text)
             with self.assertRaises(ValueError):
                 recipe(ROOT, payload, "any", "1.2.3")
 

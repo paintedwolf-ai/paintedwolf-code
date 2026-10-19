@@ -1,14 +1,16 @@
 {
   "category": "source_files",
   "artifact": "scripts/release-stage-platform-artifacts.sh",
-  "kind": "module",
+  "kind": "construction",
   "workstream": "linux-release-staging",
   "disposition": "retain",
-  "reason": "This entry point owns immutable artifact staging across the release platforms. ELF structure and Linux ABI policy now have a separate package and focused behavior tests; the shell retains only platform staging orchestration and shrinks its previous all-ELF loop. Keep this boundary while native package formats are extended.",
-  "reviewed_commit": "7047bea62ae5f8f0fb922e754d15223c6c0fce92",
-  "ceiling": 450,
+  "reason": "Retain the measured 465-line cross-platform final-artifact staging transaction under a bounded 480-line ceiling. The composed source delegates ELF structure and ABI policy to its audit adapter, and native pacman archive parsing, dependency identity and family inventory to named adapters. Its added orchestration preserves complete-tree audit and immutable final filenames. The ABI and pacman behavior suites plus release-channel invariant contract support the boundary; the changed reusable-workflow contract pin remains stale until focused verification, rather than being renewed automatically. Reconsider further growth.",
+  "reviewed_commit": "0dad2dd4a7c3be3ad4ccd9ab46a41ab201930d4e",
+  "ceiling": 480,
   "boundaries": {
     "scripts/verification_tests/distribution/test_linux_abi_execution.py": "8c1ff7423a3075089c9906ad0f628d6d57c046d8036414d6fe1e833fb1116965",
-    "lycaon/test/contract/runner/release_channel_invariants_test.go": "4c71e5079c6c3e5b05cc033b5ec4a1f0e9591eb7af2b164583a5f5a48d9eb84d"
+    "lycaon/test/contract/runner/release_channel_invariants_test.go": "4c71e5079c6c3e5b05cc033b5ec4a1f0e9591eb7af2b164583a5f5a48d9eb84d",
+    "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
+    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "507a51ee4edaa661eb1157817f0d8ec0525b59c3e30676a80ada198534348cb9"
   }
 }
