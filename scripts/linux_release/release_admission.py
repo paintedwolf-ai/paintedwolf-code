@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 from .installed_results import admit
+from .publication_files import verify_files
 from .support_matrix import CATALOG
 
 
@@ -25,25 +26,30 @@ def main(argv=None):
     parser.add_argument("--catalog", type=Path, default=CATALOG)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--final-artifacts", type=Path, required=True)
+    parser.add_argument("--file-root", type=Path, required=True)
     parser.add_argument("--campaign", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args(argv)
     evidence = args.evidence_root.resolve(strict=True)
     output = args.receipt.resolve()
-    if output.is_relative_to(evidence) or output in {
+    if output.is_relative_to(args.file_root.resolve()) or output.is_relative_to(evidence) or output in {
             args.catalog.resolve(), args.final_artifacts.resolve(), args.campaign.resolve()}:
         parser.error("admission receipt must not replace its inputs or retained evidence")
     inputs = {}
+    verified_files = []
     try:
         catalog, inputs["catalog_sha256"] = document(args.catalog)
         artifacts, inputs["final_artifacts_sha256"] = document(args.final_artifacts)
         campaign, inputs["campaign_sha256"] = document(args.campaign)
         result = admit(catalog, campaign, artifacts, args.source_commit, evidence)
+        if result["accepted"]:
+            verified_files = verify_files(artifacts, args.source_commit, args.file_root)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         result = {"accepted": False, "errors": [str(exc)]}
     report = {"format_version": 1, "source_commit": args.source_commit,
-              "inputs": inputs, "accepted": result["accepted"], "result": result}
+              "inputs": inputs, "accepted": result["accepted"], "result": result,
+              "verified_files": verified_files}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n")
     if not report["accepted"]:

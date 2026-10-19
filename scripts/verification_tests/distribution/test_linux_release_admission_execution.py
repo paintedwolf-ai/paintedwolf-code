@@ -24,8 +24,11 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
                    "environments": [{"id": "fixture", "distribution": "fixture", "release": "1", "architectures": ["amd64"], "installations": ["deb"],
                                      "desktop": "fixture", "display": "Wayland", "session": "fixture", "portal": "fixture", "security": "fixture",
                                      "scaling": "100%", "coverage": "native fixture", "issues": [457]}]}
+        files = root / "packages"
+        files.mkdir()
+        (files / "app").write_bytes(b"final package")
         artifact = {"id": "app", "installation": "deb", "architecture": "amd64", "source_commit": source,
-                    "identity": {"kind": "file", "sha256": "b" * 64}}
+                    "identity": {"kind": "file", "sha256": hashlib.sha256(b"final package").hexdigest()}}
         artifacts = {"format_version": 1, "source_commit": source, "artifacts": [artifact]}
         campaign = {**artifacts, "results": [{"row_id": "fixture/deb/amd64/workflow", "source_commit": source, "artifact_id": "app",
                     "tier": "native-security", "execution": "native", "status": "passed", "environment_facts": {"environment": "fixture only"},
@@ -34,7 +37,7 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
             (root / (name + ".json")).write_text(json.dumps(value))
         arguments = ["--catalog", str(root / "catalog.json"), "--source-commit", source,
                      "--final-artifacts", str(root / "artifacts.json"), "--campaign", str(root / "campaign.json"),
-                     "--evidence-root", str(evidence), "--receipt", str(root / "admission.json")]
+                     "--evidence-root", str(evidence), "--file-root", str(files), "--receipt", str(root / "admission.json")]
         return root, campaign, arguments
 
     def test_complete_fixture_binds_the_separately_selected_input_files(self):
@@ -78,3 +81,29 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main(arguments)
             self.assertEqual((root / "evidence/probe.json").read_text(), '{"fixture":true}')
+
+    def test_different_missing_or_symlinked_publication_file_refuses_admission(self):
+        for mutation in ("changed", "missing", "symlink"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root, _, arguments = self.fixture(directory)
+                package = root / "packages/app"
+                if mutation == "changed":
+                    package.write_bytes(b"different package")
+                else:
+                    package.unlink()
+                    if mutation == "symlink":
+                        (root / "outside").write_bytes(b"final package")
+                        package.symlink_to(root / "outside")
+                self.assertEqual(main(arguments), 1)
+                self.assertFalse(json.loads((root / "admission.json").read_text())["accepted"])
+
+    def test_receipt_binds_actual_final_file_bytes_and_cannot_replace_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _, arguments = self.fixture(directory)
+            self.assertEqual(main(arguments), 0)
+            receipt = json.loads((root / "admission.json").read_text())
+            self.assertEqual(receipt["verified_files"], [{"id": "app", "sha256": hashlib.sha256(b"final package").hexdigest(), "bytes": 13}])
+            arguments[-1] = str(root / "packages/app")
+            with self.assertRaises(SystemExit):
+                main(arguments)
+            self.assertEqual((root / "packages/app").read_bytes(), b"final package")
