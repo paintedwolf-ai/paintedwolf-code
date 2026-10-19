@@ -87,7 +87,7 @@ def publish(cache: Path, report: dict, *, authorize, backend_factory, operation:
             if previous is not None and previous != (cache / relative).read_bytes():
                 if record["phase"] != "narinfo" or not metadata_upgrade(previous, (cache / relative).read_bytes()):
                     raise ValueError("cache metadata would change retained contents or remove signatures")
-                backend.replace(relative, cache / relative, record)
+                backend.replace(relative, cache / relative, record, previous)
             else:
                 backend.put(relative, cache / relative, record)
             backend.verify_public(relative, record)

@@ -51,6 +51,8 @@ class R2Transport:
         if not re.fullmatch(r"[a-f0-9]{32}", self.account) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", self.bucket):
             raise ValueError("cache storage account or bucket is invalid")
         self.public = os.environ["DOWNLOAD_BASE_URL"].rstrip("/") + "/" + self.prefix
+        if request["mode"] == "production" and self.public != "https://downloads.paintedwolf.dev/nix-cache":
+            raise ValueError("production cache delivery must use the selected product domain")
         parsed = urllib.parse.urlsplit(self.public)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("cache delivery requires an explicit HTTPS domain")
@@ -138,16 +140,22 @@ class R2Transport:
     def put(self, name: str, path: Path, record: dict):
         if digest_file(path) != (record["bytes"], record["sha256"]):
             raise ValueError("cache source changed before upload")
+        if record["phase"] != "nar":
+            self.put_bytes(name, path.read_bytes(), record["content_type"], record["cache_control"])
+            return
         result = subprocess.run(["bash", str(ROOT / "scripts/release-r2-immutable-put.sh"), "--key", self._key(name),
                                  "--file", str(path), "--content-type", record["content_type"], "--cache-control", record["cache_control"]],
                                 capture_output=True, env=self.environment, timeout=1800)
         if result.returncode:
             raise ValueError("immutable cache upload failed")
 
-    def replace(self, name: str, path: Path, record: dict):
+    def replace(self, name: str, path: Path, record: dict, previous: bytes):
         if digest_file(path) != (record["bytes"], record["sha256"]):
             raise ValueError("cache metadata changed before upload")
-        self._write(name, path, record["content_type"], record["cache_control"])
+        observed = self._read(name)
+        if observed is None or observed[0] != previous:
+            raise ValueError("cache metadata changed since rotation was admitted")
+        self._write(name, path, record["content_type"], record["cache_control"], "--if-match", observed[1])
 
     def verify_public(self, name: str, record: dict):
         request = urllib.request.Request(self.public + "/" + relative_name(name), headers={"User-Agent": "painted-wolf-release/1"})

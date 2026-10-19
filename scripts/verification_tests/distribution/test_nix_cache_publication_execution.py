@@ -55,7 +55,9 @@ class DirectoryStore:
     def put(self, name, path, record):
         self.put_bytes(name, path.read_bytes())
 
-    def replace(self, name, path, record):
+    def replace(self, name, path, record, previous):
+        if self.read(name) != previous:
+            raise ValueError("rotation metadata changed")
         (self.root / name).write_bytes(path.read_bytes())
         self.events.append(("rotate", name))
 

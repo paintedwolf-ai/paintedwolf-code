@@ -47,7 +47,9 @@ class FixtureStore:
     def put(self, name, path, record):
         self.put_bytes(name, path.read_bytes(), record["content_type"], record["cache_control"])
 
-    def replace(self, name, path, record):
+    def replace(self, name, path, record, previous):
+        if self.read(name) != previous:
+            raise ValueError("fixture rotation metadata changed")
         (self.root / relative_name(name)).write_bytes(path.read_bytes())
         self.headers[name] = record["cache_control"]
 
