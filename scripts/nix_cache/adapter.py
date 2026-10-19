@@ -17,10 +17,12 @@ from .admission import STORE_PATH, closure_projection, derivation_projection, in
 
 
 def nix(*arguments: str, stdin: str | None = None) -> str:
-    environment = {key: value for key, value in os.environ.items() if key not in {"NIX_CONFIG", "NIX_REMOTE", "NIX_USER_CONF_FILES"}}
-    result = subprocess.run(["nix", "--extra-experimental-features", "nix-command", "--option", "substituters", "",
-                             "--option", "extra-substituters", "", "--option", "builders", "", *arguments],
-                            input=stdin, capture_output=True, text=True, env=environment, timeout=1800)
+    with tempfile.TemporaryDirectory(prefix="nix-cache-client-") as configuration:
+        environment = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C", "HOME": configuration,
+                       "NIX_CONF_DIR": configuration, "NIX_USER_CONF_FILES": "/dev/null"}
+        result = subprocess.run(["nix", "--extra-experimental-features", "nix-command", "--option", "substituters", "",
+                                 "--option", "extra-substituters", "", "--option", "builders", "", *arguments],
+                                input=stdin, capture_output=True, text=True, env=environment, timeout=1800)
     if result.returncode:
         # Key conversion failures can include secret input in diagnostics.
         raise ValueError(f"Nix {arguments[0]} failed with status {result.returncode}")

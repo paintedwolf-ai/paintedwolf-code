@@ -1,12 +1,14 @@
 """Nix cache admission fails before private-key use when release trust is invalid."""
 import base64
+import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from scripts.nix_cache.admission import closure_projection, derivation_projection, inventory, validate_request
-from scripts.nix_cache.adapter import construct, signing_identity
+from scripts.nix_cache.adapter import construct, nix, signing_identity
 
 
 OUTPUT = "/nix/store/" + "0" * 32 + "-application"
@@ -30,6 +32,19 @@ class NixCacheAdmissionTests(unittest.TestCase):
                             (request, {**policy, "public_keys": [PUBLIC]}), ({**request, "cache_prefix": "nix-cache"}, policy)]:
             with self.subTest(request=left, policy=right), self.assertRaises(ValueError):
                 validate_request(left, right)
+
+    def test_client_configuration_cannot_redirect_store_or_load_caller_plugins(self):
+        def inspect(command, **kwargs):
+            environment = kwargs["env"]
+            self.assertEqual(set(environment), {"PATH", "LC_ALL", "HOME", "NIX_CONF_DIR", "NIX_USER_CONF_FILES"})
+            self.assertTrue(Path(environment["NIX_CONF_DIR"]).is_dir())
+            self.assertEqual(environment["NIX_CONF_DIR"], environment["HOME"])
+            self.assertEqual(environment["NIX_USER_CONF_FILES"], "/dev/null")
+            self.assertIn("--store", command)
+            return SimpleNamespace(returncode=0, stdout="verified\n")
+        with patch.dict(os.environ, {"NIX_REMOTE": "ssh://foreign", "NIX_STORE_DIR": "/foreign", "NIX_CONFIG": "plugin-files = /foreign/plugin"}), \
+                patch("scripts.nix_cache.adapter.subprocess.run", side_effect=inspect):
+            self.assertEqual(nix("path-info", "--store", "daemon"), "verified")
 
     def test_invalid_release_inputs_fail_before_private_key_access(self):
         for field, value in [("system", "aarch64-darwin"), ("application_commit", "main"), ("flake_lock_sha256", "bad"),
