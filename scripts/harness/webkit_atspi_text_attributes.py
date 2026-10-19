@@ -21,6 +21,8 @@ import sys
 import threading
 import time
 
+from webkit_atspi_scenarios import HOME_OVERFLOW, diagnostic_scenario
+
 # A person who finished first-run setup and turned tips off, so nothing covers the window.
 FIRST_RUN_DONE = """
 localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ firstRunSetupCompleted: true }));
@@ -76,12 +78,7 @@ if (settings?.ok !== true) return { ok: false, error: "settings: " + JSON.string
 PAUSE
 return { ok: true };
 """),
-    ("home", r"""
-const home = await __harness.goHome();
-if (home?.ok !== true) return { ok: false, error: "home: " + JSON.stringify(home) };
-PAUSE
-return { ok: true };
-"""),
+    ("home", HOME_OVERFLOW),
 ]
 
 
@@ -104,7 +101,7 @@ def run_page(url: str) -> int:
     window.add(view)
     window.show_all()
     version = f"{WebKit2.get_major_version()}.{WebKit2.get_minor_version()}.{WebKit2.get_micro_version()}"
-    bodies = {name: body.replace("PAUSE", PAUSE).replace("WEBKIT_VERSION", version) for name, body in SURFACES}
+    bodies = {name: diagnostic_scenario(body.replace("PAUSE", PAUSE).replace("WEBKIT_VERSION", version)) for name, body in SURFACES}
 
     def report(line: str) -> None:
         print(line, flush=True)
@@ -275,6 +272,9 @@ def run_scan(url: str) -> int:
             state = json.loads(line.split(" ", 1)[1]) if line.startswith("ready") else {}
             if not state.get("ok"):
                 return unverified(f"{surface}: {state.get('error') or 'the page did not answer'}")
+            if "attention" in state:
+                print(f"{surface}: attention overflow {json.dumps(state['attention'])}", flush=True)
+            print(surface + ": DOM " + json.dumps(state.get("diagnostics")), flush=True)
             app = application()
             if app is None:
                 return unverified("the page is not on the accessibility bus")
