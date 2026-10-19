@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import platform
 import re
@@ -40,10 +41,11 @@ def single(fields: dict, key: str) -> str:
 
 
 def read(path: Path, limit=16 << 20) -> bytes:
-    info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
-        raise ValueError("ALPM evidence must be a bounded regular file")
-    data = path.read_bytes()
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as source:
+        info = os.fstat(source.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            raise ValueError("ALPM evidence must be a bounded regular file")
+        data = source.read(limit + 1)
     if len(data) > limit:
         raise ValueError("ALPM evidence exceeds its size bound")
     return data
