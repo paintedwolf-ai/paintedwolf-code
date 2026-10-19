@@ -83,6 +83,15 @@ describe("update settings", () => {
     expect(upgrade.querySelector("code")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
+  it("uses a full pacman upgrade and leaves the AUR workflow explicit", async () => {
+    const state = packageFixture();
+    state.package = { ...state.package!, family: "pacman", update_command: "sudo pacman -Syu" };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    const upgrade = await screen.findByTestId("updates-package-upgrade");
+    expect(upgrade.querySelector("code")?.textContent).toBe("sudo pacman -Syu");
+    expect(screen.getByText(/For an AUR installation/).textContent).toContain("workflow you selected");
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
     const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });

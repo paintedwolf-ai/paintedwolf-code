@@ -41,6 +41,25 @@ On Linux the identity service is the custodian ([`pw-vault-identity`](../lycaon/
 
 Native Linux package upgrades replace files while a running desktop may still hold the previous executable inode. Before starting another engine or vault-custody helper, the shell compares its open `/proc/self/exe` image with the current package manifest. A mismatch or unavailable manifest requests a full desktop restart and preserves a running engine before incompatible work is attempted. Quit through the app menu or the stop screen's **Quit app** action, finish the package operation, and open the installed desktop launcher again. The identity service still verifies each new chain; it accepts no old executable or deleted mapping as a restart workaround. Package-manager upgrades do not use the macOS application-managed activation lifecycle.
 
+On Artix/OpenRC the same verified identity server runs under `supervise-daemon`
+with a dedicated `paintedwolf-vault` account whose shell is `nologin`. Its
+protected state is `/var/lib/paintedwolf-vault-openrc`; its public socket keeps
+the same path and peer-credential checks. `setpriv` clears supplementary groups,
+sets no-new-privileges and grants only `CAP_SYS_PTRACE` in the bounding,
+inheritable and ambient sets. The server reads back every capability set and
+its uid/gid before listening. The supervisor PID file stays in root-owned
+`/run`, outside the service-writable socket directory. There is no idle exit
+in supervised mode.
+
+Move custody to an app password in Settings before disabling or removing either
+service integration. Pacman removal stops the selected service and removes its
+runlevel registration while retaining the OpenRC service account and all identity
+state for reinstall. Startup refuses existing state owned by a different account;
+an administrator must restore the original ownership or migrate custody explicitly.
+It never reassigns or erases those identities to make startup succeed. OpenRC
+custody does not depend on systemd; session presence and step-away invalidation
+use the separate desktop, elogind and portal protocol adapters.
+
 Both the engine and the desktop shell are non-dumpable on Linux (`PR_SET_DUMPABLE` cleared and read back at startup before engine command dispatch or desktop initialization, except in development builds), so a same-user process cannot ptrace them or read their memory, environment, or maps through the process filesystem; no host effect restores dumpability, and diagnostics bundles are built from logs. A protection failure stops the process before it handles vault identities or app passwords, including custody helpers. The shipped Linux engine is statically linked, and the stage script refuses an executable that asks for a program interpreter.
 
 Nix layout discovery does not authorize unattended custody. Its receipt and
