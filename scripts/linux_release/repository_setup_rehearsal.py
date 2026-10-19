@@ -5,6 +5,7 @@ import subprocess
 
 from .repository_installation import restore_owner
 from .repository_setup import build, PACKAGE
+from .repository_setup_admission import admit_setup
 from .signing import digest, verify
 
 
@@ -25,6 +26,34 @@ def rehearse(work, manifest, directory, catalog, origin):
     receipt = build(manifest, directory, catalog, output, origin, private, True)
     artifact = output / receipt["package"]["file"]
     verify("detached", output / "SHA256SUMS", output / "SHA256SUMS.asc", catalog, True)
+    authority = {name: receipt[name] for name in ["family", "source_commit", "version", "channel",
+                 "repository_generation", "inventory_sha256", "signing_generation", "key_fingerprint"]}
+    authority["base_url"] = origin
+    verified = admit_setup(artifact, output / "SHA256SUMS", output / "SHA256SUMS.asc", catalog,
+                           **authority, rehearsal=True)
+    if verified["package"] != receipt["package"] or verified["installed_files"] != receipt["installed_files"]:
+        raise ValueError("setup admission failed to reconstruct its native control surface")
+    for changed in [{"base_url": "https://wrong-origin.invalid"}, {"channel": "stable"},
+                    {"signing_generation": receipt["signing_generation"] + 1},
+                    {"source_commit": "arbitrary"}, {"repository_generation": "arbitrary"},
+                    {"inventory_sha256": "arbitrary"}, {"key_fingerprint": "0" * 40}]:
+        try:
+            admit_setup(artifact, output / "SHA256SUMS", output / "SHA256SUMS.asc", catalog,
+                        **{**authority, **changed}, rehearsal=True)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("setup admission accepted a mismatched independent authority")
+    linked = work / artifact.name
+    linked.symlink_to(artifact)
+    try:
+        admit_setup(linked, output / "SHA256SUMS", output / "SHA256SUMS.asc", catalog,
+                    **authority, rehearsal=True)
+    except (OSError, ValueError):
+        pass
+    else:
+        raise ValueError("setup admission accepted a symlink package")
+    linked.unlink()
     root = work / (family + "-setup-root")
     root.mkdir()
     data = root / "home/fixture/.local/share/paintedwolf/preserve"
