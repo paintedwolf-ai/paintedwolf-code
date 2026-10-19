@@ -24,6 +24,7 @@ mod sidecar;
 mod test_support;
 pub mod update_service;
 mod diagnostic_log;
+mod process_protection;
 mod vault_lock;
 pub mod webkit_features;
 mod webview_policy;
@@ -34,7 +35,10 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    harden_process();
+    if let Err(error) = process_protection::harden_release() {
+        eprintln!("Could not protect desktop process memory: {error}");
+        std::process::exit(1);
+    }
     let _generation_root = match linux_generation::retain() {
         Ok(root) => root,
         Err(error) => {
@@ -219,20 +223,6 @@ pub fn run() {
         });
 }
 
-
-/// The shell holds the vault password and the presence signing key, so on
-/// Linux it is non-dumpable: no same-user process can ptrace it or read its
-/// memory through the process filesystem. Debug builds stay debuggable.
-fn harden_process() {
-    #[cfg(all(target_os = "linux", not(debug_assertions)))]
-    {
-        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
-        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
-        if status != 0 {
-            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
-        }
-    }
-}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

@@ -39,6 +39,12 @@ func main() {
 
 // runCLI manages the signal-aware process context.
 func runCLI(args []string) int {
+	if !configdir.IsDevelopmentBuild() {
+		if err := osprocess.DisableDumps(); err != nil {
+			fmt.Fprintf(os.Stderr, "pw: protect process memory: %v\n", err)
+			return 1
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -143,13 +149,6 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
-	// The serving engine holds the decrypted vault; development builds stay
-	// debuggable.
-	if !configdir.IsDevelopmentBuild() {
-		if err := osprocess.DisableDumps(); err != nil {
-			return fmt.Errorf("disable process dumps: %w", err)
-		}
-	}
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context
@@ -188,20 +187,7 @@ func runServe(signals context.Context, dbPath string) error {
 	}
 	if err != nil {
 		if startup != nil {
-			code := "build_failed"
-			switch {
-			case errors.Is(err, hostlock.ErrStoreInstanceLocked):
-				code = "store_locked"
-			case errors.Is(err, credentialstore.ErrVaultLocked):
-				code = "credential_vault_locked"
-			case errors.Is(err, credentialstore.ErrVaultUninitialized):
-				code = "credential_vault_uninitialized"
-			case errors.Is(err, credentialstore.ErrVaultUnlockFailed):
-				code = "credential_vault_unlock_failed"
-			case errors.Is(err, credentialstore.ErrVaultCorrupt):
-				code = "credential_vault_corrupt"
-			}
-			_ = startup.Failed(code)
+			_ = startup.Failed(startupFailureCode(err))
 		}
 		return err
 	}
