@@ -16,7 +16,7 @@ assert lib.assertMsg
   inherit version;
   src = source;
   modRoot = "lycaon";
-  vendorHash = lib.fakeHash;
+  vendorHash = "sha256-CiQwCiZ+2Fp67G0Fnjbs2hiPrDeTOwz3RIjkPWpBEFc=";
   subPackages = [ "cmd/lycaon" "cmd/pw-logs" "cmd/pw-vault-identity" ];
   env.CGO_ENABLED = "0";
   tags = [ "paintedwolf_release" ];
