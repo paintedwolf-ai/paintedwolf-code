@@ -144,12 +144,24 @@ modes to that same tool:
 
 ```sh
 ./task scan:opengrep:stage -- --finalize-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --relocate-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
 ./task scan:opengrep:stage -- --audit-consumer -artifact-directory "$ORIGINAL" -packaged-directory "$FINAL_ARTIFACT_DIRECTORY" -consumer-identity-file "$IDENTITY" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
 ```
 
 These modes refuse development overrides and do not fetch or repair resources.
 The Nix build graph uses the built artifact command as a derivation dependency;
 it performs the same offline admission before compiling the engine.
+
+For the pinned Linux Nuitka onefile scanner, use `--relocate-consumer` with
+`kind: "nix-nuitka-relocation"` and exactly four `arguments` entries:
+`["--set-interpreter", "/nix/store/…/lib/ld-linux-….so", "--set-rpath", "/nix/store/…-glibc/lib:/nix/store/…-libgcc/lib"]`.
+Start with an exact staged producer copy. The build tool patches its separated
+launcher and embedded ELF images, retains safe relative library paths, and
+rebuilds per-file checksums, compression, and the attached-data trailer. Each
+native dependency must have a declared payload or Nix store provider; host
+library fallback is refused. Ordinary `patchelf` on the complete scanner breaks
+its attached-data layout. Relocation alone grants no qualification authority;
+the same invocation runs the product cases before emitting an identity.
 
 Package assembly must transform its own writable staged copy first, run this
 native finalizer, inject the emitted identity into the engine build, and then

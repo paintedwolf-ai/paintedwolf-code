@@ -60,6 +60,10 @@ func (relocator consumerELFRelocator) relocate(name string, raw []byte) ([]byte,
 				if entry != "$ORIGIN" && !strings.HasPrefix(entry, "$ORIGIN/") {
 					return nil, fmt.Errorf("embedded ELF has an uncontrolled original RPATH: %s", name)
 				}
+				inside := path.Join(path.Dir(name), strings.TrimPrefix(strings.TrimPrefix(entry, "$ORIGIN"), "/"))
+				if inside == ".." || strings.HasPrefix(inside, "../") {
+					return nil, fmt.Errorf("embedded ELF RPATH escapes its payload: %s", name)
+				}
 				search = append(search, entry)
 			}
 		}
