@@ -166,3 +166,37 @@ func TestWriteGoWithoutFinalNewlinePreservesSourceAndParseGuard(t *testing.T) {
 		})
 	}
 }
+
+func TestWritePythonShortStringRejectsBeforeMutation(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		name := "new"
+		if existing {
+			name = "existing"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "app.py")
+			original := "print('ready')\n"
+			if existing {
+				testutil.FailErr(t, "seed valid Python", os.WriteFile(path, []byte(original), 0600))
+			}
+			tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
+			_, err := tool.Run(t.Context(), map[string]any{
+				"path": "app.py", "content": "print(f\"Words: {words}\nCharacters: {chars}\")\n",
+			}, nativefixture.Context(root))
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
+				t.Fatalf("invalid Python rejection = %v", err)
+			}
+			got, err := os.ReadFile(path)
+			if existing {
+				testutil.FailErr(t, "read preserved Python", err)
+				if string(got) != original {
+					t.Fatalf("rejected write changed source: %q", got)
+				}
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("rejected new file exists: %q, err=%v", got, err)
+			}
+		})
+	}
+}
