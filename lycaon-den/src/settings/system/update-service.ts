@@ -3,8 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listenHostEvent } from "../../platform/windows/window-channel.ts";
 const UPDATE_STATE_EVENT = "update-state-changed";
 type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "unknown";
-/** Package identity for a .deb or .rpm installation; the host owns the exact upgrade command. */
-export type InstalledPackage = { family: "deb" | "rpm" | "nix" | "pacman"; name: string; version: string; update_command: string };
+/** The running package and observed source facts; an upstream feed cannot establish ownership or a pin. */
+export type InstalledPackage = {
+  family: "deb" | "rpm" | "nix" | "pacman"; name: string; version: string; update_command: string;
+  source: { availability: "not_checked"; owner: "system_package_manager" | null; pinned: boolean | null };
+};
 type UpdateChannel = "stable" | "preview";
 type UpdateCandidate = {
   release_id: string; version: string; channel: UpdateChannel; platform: string;
