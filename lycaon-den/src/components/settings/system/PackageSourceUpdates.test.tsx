@@ -50,6 +50,6 @@ describe("package-source observations", () => {
     renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_version: null, architecture: null });
     expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("owns this source is unknown");
     expect(screen.queryByTestId("updates-database-version")).toBeNull();
-    expect(screen.getByTestId("updates-package-source").textContent).not.toContain("Repository metadata was read");
+    expect(screen.getByTestId("updates-package-source").textContent).not.toContain("local cached metadata");
   });
 });

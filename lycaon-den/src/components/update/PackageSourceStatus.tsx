@@ -29,7 +29,7 @@ export function PackageSourceStatus(props: { facts: PackageSourceFacts }) {
       </>}</Show>
       <Show when={props.facts.availability === "no_newer_candidate"}><p>No newer package was selected from the local repository metadata.</p></Show>
       <Show when={props.facts.reason}>{(reason) => <p data-testid="updates-source-reason">{REASONS[reason()]}</p>}</Show>
-      <Show when={props.facts.cached_only}><p>Repository metadata was read from the local cache without refreshing it. Remote freshness and successful installation are not established. Review these results with your package manager before updating.</p></Show>
+      <Show when={props.facts.cached_only}><p>Package-source queries use only local cached metadata without refreshing repositories. Remote freshness and successful installation are not established. Review these results with your package manager before updating.</p></Show>
     </div>
   </Show>;
 }
