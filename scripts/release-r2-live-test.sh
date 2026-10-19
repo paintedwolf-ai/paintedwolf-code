@@ -11,6 +11,12 @@ if [[ "${1:-}" == --local-native-repositories ]]; then
   shift
   cd "${ROOT}"
   exec python3 -m scripts.linux_release.repository_rehearsal "$@"
+
+fi
+if [[ "${1:-}" == --local-pacman-construction ]]; then
+  shift
+  cd "${ROOT}"
+  PYTHONPATH="${ROOT}/scripts" exec python3 -m linux_release.arch_substrate_rehearsal "$@"
 fi
 if [[ "${1:-}" == --local-linux-signing ]]; then
   shift

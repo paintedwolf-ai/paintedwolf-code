@@ -14,6 +14,15 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class LinuxCandidateTests(unittest.TestCase):
+    def test_pacman_family_is_declared_without_changing_native_runner_identity(self):
+        catalog = copy.deepcopy(self.catalog)
+        for row in catalog["platforms"]:
+            if row.get("goos") == "linux":
+                row["package_extensions"] = ["deb", "rpm", "pkg.tar.zst"]
+        result = matrix(catalog)
+        self.assertEqual(len(result["include"]), 2)
+        self.assertTrue(all(row["package_extensions"] == ["deb", "rpm", "pkg.tar.zst"] for row in result["include"]))
+
     def setUp(self):
         self.catalog = json.loads((ROOT / "packaging/release-platforms.json").read_text())
 

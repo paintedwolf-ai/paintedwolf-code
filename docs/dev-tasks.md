@@ -1418,3 +1418,14 @@ container import; its SHA-256 is fixed independently of the mutable download URL
 An upstream rootfs replacement fails until the reviewed pin is updated. A container
 package build establishes package construction only; installed Arch/Artix desktop
 and service qualification remains separate.
+
+
+The existing `release:live-test -- --local-pacman-construction --receipt /absolute/new-receipt.json`
+mode exercises actual native makepkg construction in the pinned official substrate with
+a tiny sealed nonapplication payload, then admits package metadata and exact extracted
+ELF/data/link/mode identities. It requires matching native Linux CPU, Docker, GnuPG and
+bsdtar. Toolchain preparation uses signed repositories; package construction then runs
+as the invoking unprivileged user without network or container capabilities. It adds
+no repository or trust to the host and does not install the application. This mode
+requires the finished pacman producer dependency; default credentialed rehearsals are
+separate and are not invoked by it.
