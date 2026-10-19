@@ -74,7 +74,7 @@ implement_investigate:
   mode_ref: implement-investigate
   card:
     label: investigate
-    rule: Empty assistant text while tools run.
+    rule: Text alongside tool calls is hidden from the user.
   exit: report
   prose_finish: true
   floor:
