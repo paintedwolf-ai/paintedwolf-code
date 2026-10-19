@@ -52,6 +52,9 @@ func TestLinuxPublicationUsesProtectedAdmissionBeforeWriteCredentials(t *testing
 			if step.If != "needs.classify.outputs.linux_public == 'true'" || step.Uses != "./.linux-publication-controller/.github/actions/admit-linux-publication" {
 				t.Fatal("public Linux must enter the protected admission action")
 			}
+			if step.Env["LINUX_REPOSITORY_ORIGIN"] != "${{ vars.LINUX_REPOSITORY_ORIGIN }}" {
+				t.Fatal("repository origin must come from protected controller configuration")
+			}
 			if step.With["source_commit"] != "${{ needs.classify.outputs.source_sha }}" || step.With["campaign_run_id"] != "${{ inputs.linux_campaign_run_id }}" || step.With["publication_files"] != "${{ github.workspace }}/release-artifacts" {
 				t.Fatal("Linux admission must bind the selected source, retained campaign and imminent files")
 			}

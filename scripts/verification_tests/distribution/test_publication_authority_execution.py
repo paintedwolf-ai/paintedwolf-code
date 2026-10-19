@@ -65,3 +65,10 @@ class PublicationAuthorityTests(unittest.TestCase):
         for expected in [{}, {"invalid": None}, {"a" * 64: True}]:
             with self.subTest(expected=expected), self.assertRaises(ValueError):
                 RepositoryAuthority(Mock(), base_url="https://downloads.example.test", expected=expected)
+
+    def test_protected_origin_cannot_supply_credentials_path_query_or_fragment(self):
+        for origin in [None, "http://downloads.example.test", "https://user:password@downloads.example.test",
+                       "https://downloads.example.test/other", "https://downloads.example.test?key=value",
+                       "https://downloads.example.test#fragment"]:
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                RepositoryAuthority(Mock(), base_url=origin, expected={"a" * 64: None})
