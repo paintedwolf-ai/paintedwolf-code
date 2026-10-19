@@ -307,7 +307,7 @@ func TestEncodeLiteLLMMarksOnlyRoutesThatReportCaching(t *testing.T) {
 		PromptCaching: modelinfo.Evidence(modelinfo.CapabilitySupported, "litellm"),
 	}}
 	s := encode(t, caching)
-	if !strings.Contains(s, `{"role":"tool","content":[{"type":"text","text":"result","cache_control":{"type":"ephemeral"}}],"tool_call_id":"call-1"}`) {
+	if !strings.Contains(s, `{"role":"tool","content":[{"type":"text","text":"result\n\nvolatile board","cache_control":{"type":"ephemeral"}}],"tool_call_id":"call-1"}`) {
 		t.Fatalf("tool result part not marked: %s", s)
 	}
 	if strings.Count(s, `"cache_control"`) != 1 || strings.Contains(s, "prompt_cache_key") || strings.Contains(s, "prompt_cache_retention") || strings.Contains(s, "prompt_cache_breakpoint") {
