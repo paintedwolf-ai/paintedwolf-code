@@ -1748,12 +1748,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
-    preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+    desc: 'Isolated release:live-test rehearsal; --local-linux-signing uses disposable local keys, default uses test R2 credentials'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
