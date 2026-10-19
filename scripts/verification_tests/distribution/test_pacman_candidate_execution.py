@@ -44,6 +44,15 @@ class PacmanCandidateTests(unittest.TestCase):
             build(ROOT, Path("unused"), "aarch64", 123)
         runner.assert_not_called()
 
+    def test_remote_daemon_cannot_route_a_native_request_through_another_cpu(self):
+        with patch("linux_release.arch_substrate.platform.system", return_value="Linux"), patch(
+                "linux_release.arch_substrate.platform.machine", return_value="x86_64"), patch(
+                "linux_release.arch_substrate.command", return_value="linux/arm64") as runner:
+            with self.assertRaisesRegex(ValueError, "daemon must use"):
+                build(ROOT, Path("unused"), "x86_64", 123)
+            self.assertEqual(runner.call_count, 1)
+            self.assertEqual(runner.call_args.args[:2], ("docker", "version"))
+
     def test_corrupt_cached_rootfs_never_reaches_signature_or_docker(self):
         with tempfile.TemporaryDirectory() as temporary:
             row = json.loads((ROOT / "packaging/linux/arch/substrates.json").read_text())["aarch64"]
