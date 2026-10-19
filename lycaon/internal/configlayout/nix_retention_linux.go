@@ -78,8 +78,15 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string) (*NixRe
 	var once sync.Once
 	release := func() {
 		once.Do(func() {
-			_ = removeNixLink(link)
-			_ = os.Remove(lockPath)
+			registry, err := lockNixRegistry(directory)
+			if err == nil {
+				// A desktop can outlive graceful helper shutdown as well as a crash.
+				if unix.Flock(int(file.Fd()), unix.LOCK_EX|unix.LOCK_NB) == nil {
+					_ = removeNixLink(link)
+					_ = os.Remove(lockPath)
+				}
+				_ = registry.Close()
+			}
 			_ = file.Close()
 		})
 	}

@@ -66,6 +66,14 @@ func TestNixRetentionRefusesUnavailableDaemonAndUnsafeDirectories(t *testing.T) 
 }
 
 func TestDesktopLockRetainsTheRootAfterItsHelperDies(t *testing.T) {
+	for _, graceful := range []bool{false, true} {
+		t.Run(map[bool]string{false: "abrupt", true: "graceful"}[graceful], func(t *testing.T) {
+			testDesktopLockSurvivesHelperExit(t, graceful)
+		})
+	}
+}
+
+func testDesktopLockSurvivesHelperExit(t *testing.T, graceful bool) {
 	root := t.TempDir()
 	tool := filepath.Join(root, "nix-store")
 	testutil.FailErr(t, "write registrar", os.WriteFile(tool, []byte("#!/bin/sh\nln -s \"$5\" \"$2\"\n"), 0o700))
@@ -77,7 +85,11 @@ func TestDesktopLockRetainsTheRootAfterItsHelperDies(t *testing.T) {
 	testutil.FailErr(t, "open desktop lock", err)
 	defer func() { _ = desktop.Close() }()
 	testutil.FailErr(t, "hold desktop lock", unix.Flock(int(desktop.Fd()), unix.LOCK_SH|unix.LOCK_NB))
-	testutil.FailErr(t, "simulate helper death", retention.lock.Close())
+	if graceful {
+		retention.Close()
+	} else {
+		testutil.FailErr(t, "simulate helper death", retention.lock.Close())
+	}
 	testutil.FailErr(t, "prune while desktop lives", pruneNixRoots(directory))
 	link := strings.TrimSuffix(retention.LockPath, ".lock")
 	if _, err := os.Readlink(link); err != nil {
