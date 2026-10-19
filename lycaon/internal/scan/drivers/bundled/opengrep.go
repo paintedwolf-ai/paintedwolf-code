@@ -191,7 +191,7 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 
 	report, err := openOpenGrepJSONOutput(runFiles.jsonPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w (exit=%d)%s", err, exitCode, o.consoleTail(console))
 	}
 	parsed, parseErr := scanoutput.ParseOpengrepJSON(report)
 	closeErr := report.Close()
