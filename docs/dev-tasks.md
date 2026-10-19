@@ -1015,10 +1015,11 @@ are verified by the format-specific publication work.
 **Pacman repositories and AUR recipe rehearsal.**
 `./task release:live-test -- --local-pacman-repositories --receipt /absolute/path/result.json`
 runs on an Arch-family environment with `makepkg`, `repo-add`, `bsdtar`, `gpg`,
-`fakeroot`, and passwordless sudo for disposable installation roots. It builds two
+`fakeroot`, `git`, `yay`, and passwordless sudo for disposable installation roots. It builds three
 tiny native fixtures, checks signed databases and embedded package signatures, then
 generates and builds release-pinned AUR recipes and checks actual pacman ownership
-and N-to-N+1 upgrades in separate native and AUR roots. It neither installs the
+and N-to-N+1 upgrades in separate native, AUR and yay roots. Yay consumes a clean local
+Git recipe origin with isolated configuration, signing trust and package database. It neither installs the
 application on the desktop nor publishes to AUR or R2.
 
 For an owned SSH VM, the same managed target accepts `--vm-pacman-repositories`
@@ -1055,8 +1056,8 @@ neither an upstream release nor an enabled config proves a source offers that ve
 Keep package holds, stale databases, source unavailability and channel choice visible.
 Removing an offer changes future availability; it does not uninstall packages or erase
 mutable data. Retain signed generations and keys for explicit manual recovery.
-The fixture rehearsal does not qualify yay delivery, custom-domain CDN activation,
-Artix services, arm64 or installed application workflows.
+The fixture rehearsal covers the local yay recipe client; public AUR availability,
+Artix services, arm64 and installed application workflows require their own evidence.
 
 `python3 -m scripts.linux_release.pacman_publication` accepts the selected generation,
 local `--store`, `--base-url`, trust `--catalog`, and reviewed `--expected-generation`.
@@ -1078,8 +1079,28 @@ serialization owns cross-host publishers; expected-generation checks before and 
 upload refuse stale competing plans. The VM rehearsal also runs local R2 publication
 contracts for ordering, interrupted pairs and retries. Real CDN convergence remains a
 separate credentialed qualification. Neither the generated recipe nor these tools
-publish an AUR Git repository. AUR delivery needs a separately reviewed credentialed
-workflow and its own observed availability after binary publication.
+publish an AUR Git repository. AUR availability has a separate delivery owner and never becomes atomic with binary
+publication. The separate `release-aur-delivery` workflow consumes the fixed
+`linux-aur-delivery-inputs` artifact from a successful main `release.yml` dispatch.
+Its `delivery.json` selects source, HTTPS base URL and relative generation directories;
+`final-artifacts.json` retains the independently selected final input inventory. The
+managed `release:live-test -- --prepare-aur-delivery` mode validates native generations
+and emits exact recipe/source/signer/generation bindings. It stages only generated
+`PKGBUILD`, `.SRCINFO` and the native lifecycle declaration; it never includes binary
+packages or private key material in an AUR Git commit.
+
+The Git transport uses a normal fast-forward push, reviewed predecessor commit and
+independent clone/readback; stale or modified recipes refuse. An interrupted delivery
+can replay the same exact recipe plan and predecessor without creating another commit.
+Binary publication can succeed while recipe delivery remains unavailable: inspect the
+retained plan and remote commit before retrying and report each source's actual state.
+Do not label a prepared recipe as published. Public transport requires owner-only SSH
+identity/known-host files and strict host verification. The protected controller must
+call `aur_release_authority.authorize` to freshly reevaluate the complete campaign,
+actual final files and repository inventories with independently selected release facts.
+A caller-provided accepted JSON receipt is insufficient. The public CLI remains closed
+until that controller integration supplies separate `publish-aur` authorization; no
+AUR workflow or external push is invoked by the fixture rehearsal.
 
 For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
 then use `sudo pacman-key --add /path/to/package-key.asc`, inspect

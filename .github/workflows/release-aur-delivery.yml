@@ -1,0 +1,95 @@
+name: AUR recipe delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful protected main release controller run
+        required: true
+        type: string
+      source_commit:
+        description: Exact selected release source commit
+        required: true
+        type: string
+      operation:
+        description: Prepare a recipe or request separately authorized AUR delivery
+        type: choice
+        options: [prepare, publish-aur]
+        default: prepare
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aur-recipe-delivery
+  cancel-in-progress: false
+
+jobs:
+  recipe:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: release-aur
+    timeout-minutes: 30
+    steps:
+      - name: Prepare the recipe owner
+        run: |
+          pacman -Syu --noconfirm --needed base-devel python git gnupg github-cli sudo
+          useradd --create-home pw-aur
+          printf '%s\n' 'pw-aur ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pw-aur
+          chmod 0440 /etc/sudoers.d/pw-aur
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+
+      - name: Select the trusted controller artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not re.fullmatch(r'[1-9][0-9]*', os.environ['RELEASE_RUN_ID']):
+              raise SystemExit('select a numeric controller run')
+          if not re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_COMMIT']):
+              raise SystemExit('select an exact source commit')
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > /tmp/controller-run.json
+          python3 - <<'PY'
+          import json, os
+          from scripts.linux_release.aur_delivery_workflow import verify_provenance
+          verify_provenance(json.load(open('/tmp/controller-run.json')), int(os.environ['GITHUB_REPOSITORY_ID']))
+          PY
+          mkdir /tmp/aur-inputs /tmp/aur-output
+          gh run download "$RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name linux-aur-delivery-inputs --dir /tmp/aur-inputs
+          chown -R pw-aur:pw-aur "$WORKSPACE" /tmp/aur-inputs /tmp/aur-output
+
+      - name: Prepare the separately bound recipe
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          case "$OPERATION" in prepare|publish-aur) ;; *) exit 1 ;; esac
+          sudo -H --preserve-env=PATH -u pw-aur ./task release:live-test -- \
+            --prepare-aur-delivery --input-root /tmp/aur-inputs --source-commit "$SOURCE_COMMIT" \
+            --operation "$OPERATION" --receipt /tmp/aur-output/delivery.json
+          # Public transport remains closed until the controller reevaluates the retained
+          # campaign and files and authorizes publish-aur separately from binary activation.
+
+      - name: Retain the prepared recipe and delivery facts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: aur-recipe-delivery-plan
+          path: /tmp/aur-output
+          if-no-files-found: warn

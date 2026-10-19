@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --prepare-aur-delivery ]]; then
+  shift
+  cd "${ROOT}"
+  exec python3 -m scripts.linux_release.aur_delivery_workflow "$@"
+fi
 if [[ "${1:-}" == --local-pacman-repositories ]]; then
   shift
   cd "${ROOT}"

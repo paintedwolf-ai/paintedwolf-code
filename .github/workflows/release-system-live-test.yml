@@ -99,6 +99,11 @@ jobs:
       - name: Prepare the isolated native Arch toolchain
         run: |
           pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo unzip
+          curl --fail --location --retry 3 --output /tmp/yay.tar.gz \
+            https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_x86_64.tar.gz
+          printf '%s\n' '1fdfcb5f7f387bc858d3a5754bdf4e4575bfbddac9560535a716d0ed7189c057  /tmp/yay.tar.gz' | sha256sum --check
+          tar -xzf /tmp/yay.tar.gz -C /tmp yay_13.0.1_x86_64/yay
+          install -m 0755 /tmp/yay_13.0.1_x86_64/yay /usr/local/bin/yay
           useradd --create-home pw-repository
           printf '%s\n' 'pw-repository ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/pw-repository
           chmod 0440 /etc/sudoers.d/pw-repository

@@ -59,7 +59,7 @@ def main():
                             + " && python3 -m scripts.linux_release.pacman_rehearsal --receipt result.json"],
                            check=True)
         raw = subprocess.check_output([*ssh, "cat " + shlex.quote(remote + "/result.json")], timeout=60)
-        for pattern in ["test_pacman_publication_execution.py", "test_repository_operations_execution.py"]:
+        for pattern in ["test_pacman_publication_execution.py", "test_repository_operations_execution.py", "test_aur_delivery_execution.py"]:
             subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", pattern], cwd=root, check=True)
         result = json.loads(raw)
         if result.get("rehearsal") is not True or result.get("application_qualified") is not False:
@@ -67,6 +67,7 @@ def main():
         result["cases"].append("r2-pacman-publication-contracts")
         result["module_bundle_sha256"] = bundle_sha256
         result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        result["verification_source_dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))
         result["verification_source_tree"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(result, indent=2) + "\n")

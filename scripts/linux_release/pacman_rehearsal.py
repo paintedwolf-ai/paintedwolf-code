@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,12 +16,14 @@ import uuid
 from .openpgp import ephemeral, keyring, selection, run
 from .pacman_repository import assemble, package_info, binary_signature
 from .aur_recipe import generate
+from .aur_delivery import FixturePublisher, plan as aur_delivery_plan
 from .pacman_validation import admit
 from .pacman_publication import publish
 from .pacman_r2 import publish_r2
-from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object
-from .repository_objects import replace
+from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object, put, public_bytes
+from .repository_objects import replace, encoded
 from .signing import digest
+from .yay_rehearsal import install as install_yay
 
 PACKAGE = "paintedwolf-repository-fixture"
 
@@ -80,6 +83,10 @@ def rehearse(work: Path, r2_origin: str | None = None):
     trust["signing_generation"] = trust["generations"][0]["generation"] = 2
     rotation.write_text(json.dumps(trust))
     results = []
+    delivery_root = work / "aur-delivery"
+    delivery_root.mkdir()
+    delivery = FixturePublisher(delivery_root)
+    aur_head = None
     active = None
     retained = None
     remote_active = None
@@ -164,6 +171,18 @@ package() {{
         for row in receipt["objects"]:
             if row["path"].endswith((".pkg.tar.zst", ".pkg.tar.zst.sig")):
                 shutil.copyfile(destination / row["path"], recipe / row["path"])
+        selected_delivery = aur_delivery_plan(generated, [receipt], recipe,
+                                             hashlib.sha256(encoded(manifest)).hexdigest())
+        rejected(lambda: delivery.publish(selected_delivery, recipe, "0" * 40))
+        pkgbuild = recipe / "PKGBUILD"
+        original_recipe = pkgbuild.read_bytes()
+        pkgbuild.write_bytes(original_recipe + b"# changed after selection\n")
+        rejected(lambda: delivery.publish(selected_delivery, recipe, aur_head))
+        pkgbuild.write_bytes(original_recipe)
+        delivered = delivery.publish(selected_delivery, recipe, aur_head)
+        if delivery.publish(selected_delivery, recipe, aur_head)["commit"] != delivered["commit"]:
+            raise ValueError("AUR delivery retry did not retain its exact selected recipe commit")
+        aur_head = delivered["commit"]
         selected_key, public = selection(catalog, True)
         with keyring(public, selected_key["fingerprint"]) as home:
             subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force", "--nosign"],
@@ -188,6 +207,7 @@ package() {{
             raise ValueError("AUR recipe did not preserve the selected release identity")
         binary_signature(rebuilt[0], rebuilt[0].with_name(rebuilt[0].name + ".sig"), catalog,
                          catalog.parent / "rehearsal-secret.asc", True)
+        install_yay(recipe, work / "yay-root", catalog, generated["package"], version)
         install(rebuilt[0], work / "aur-root", catalog, generated["package"])
         if (work / "aur-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
             raise ValueError("AUR pacman upgrade did not install the selected payload")
@@ -208,6 +228,22 @@ package() {{
         if r2_origin is not None:
             if remote_active is None:
                 warm_absence(r2_origin + "/" + storage_prefix + "/channels/pacman/preview/" + architecture + "/" + receipt["repository"] + ".db")
+            remote_channel = r2_origin + "/" + storage_prefix + "/channels/pacman/preview/" + architecture
+            if version == "0.0.2":
+                signature = receipt["repository"] + ".db.sig"
+                key = storage_prefix + "/channels/pacman/preview/" + architecture + "/" + signature
+                put(key, destination / signature, True)
+                public_bytes(remote_channel + "/" + signature, destination / signature, True)
+                try:
+                    install(destination / package.name, work / "r2-mismatched-root", catalog, PACKAGE, remote_channel)
+                except subprocess.CalledProcessError:
+                    pass
+                else:
+                    raise ValueError("R2 pacman accepted a database/signature mismatch")
+                finally:
+                    old_signature = retained[1] / signature
+                    put(key, old_signature, True)
+                    public_bytes(remote_channel + "/" + signature, old_signature, True)
             staged = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True, operation, "stage")
             if remote_active is None:
                 package_row = receipt["packages"][0]
@@ -222,7 +258,7 @@ package() {{
                 finally:
                     delete_fixture_object(key)
             remote = publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, remote_active, True, operation)
-            remote_channel = (r2_origin + "/" + storage_prefix + "/channels/pacman/preview/" + architecture)
+            rejected(lambda: publish_r2(receipt, destination, catalog, storage_prefix, r2_origin, "0" * 64, True, operation))
             install(destination / package.name, work / "r2-root", catalog, PACKAGE, remote_channel)
             if (work / "r2-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
                 raise ValueError("R2 pacman upgrade did not install the selected payload")
@@ -254,13 +290,15 @@ package() {{
             "cases": ["native-makepkg", "signed-database-and-files", "embedded-package-signature",
                       "wrong-key", "production-refuses-fixture", "changed-package", "missing-object",
                       "channel-mismatch", "retained-generations", "pinned-aur-makepkg",
-                      "aur-input-signature-and-checksum", "aur-srcinfo", "aur-payload-identity",
-                      "native-repository-Syu-upgrade", "aur-installed-upgrade", "actual-pacman-file-ownership",
+                      "aur-input-signature-and-checksum", "aur-srcinfo", "aur-fixture-Git-delivery", "aur-stale-delivery-refused",
+                      "aur-selected-recipe-tamper-refused", "aur-delivery-independent-availability", "aur-payload-identity",
+                      "native-repository-Syu-upgrade", "aur-installed-upgrade", "yay-local-recipe-installed-upgrade", "actual-pacman-file-ownership",
                       "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
                       "retained-repository-recovery", "withdrawal-preserves-installed-package",
                       "aur-makepkg-tamper-refused", "aur-makepkg-wrong-key-refused",
                       "explicit-key-rotation", "installed-successor-key-refusal", "withdrawn-reoffer-refused"]
-                     + (["r2-pacman-Syu-installed-upgrade", "r2-recovery-preserves-installed-package"]
+                     + (["r2-pacman-Syu-installed-upgrade", "r2-recovery-preserves-installed-package",
+                         "r2-database-signature-mismatch-refused", "r2-stale-publisher-refused"]
                         if r2_origin is not None else [])}
 
 
