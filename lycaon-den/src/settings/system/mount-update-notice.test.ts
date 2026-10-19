@@ -59,16 +59,23 @@ describe("update notices", () => {
       expect(f.rows().map(row => row.code)).toEqual(["update_ready"]);
     } finally { f.stop(); }
   });
-  it("announces a newer system package even though nothing can be downloaded", async () => {
+  it("announces a newer package-managed release even though nothing can be downloaded", async () => {
     const f = await fixture();
     try {
       await f.send(packageFixture());
       expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
       await f.send(packageFixture({ automatic_updates_enabled: false }));
       expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
+      const brew = updateFixture({ install_source: "homebrew_cask", capabilities: { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_managed" } });
+      await f.send(brew);
+      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
+      await f.send({ ...brew, automatic_updates_enabled: false });
+      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
       const held = packageFixture();
       held.candidate!.rollout_eligibility = "held_back";
       await f.send(held);
+      expect(f.rows()).toHaveLength(0);
+      await f.send({ ...brew, candidate: { ...brew.candidate!, rollout_eligibility: "held_back" } });
       expect(f.rows()).toHaveLength(0);
       await f.send(packageFixture({ candidate: null, discovery: "up_to_date" }));
       expect(f.rows()).toHaveLength(0);
