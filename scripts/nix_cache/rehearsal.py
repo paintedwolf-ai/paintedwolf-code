@@ -31,6 +31,7 @@ def main() -> None:
     system = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}.get(platform.machine())
     if system is None or platform.system() != "Linux":
         raise ValueError("Nix cache rehearsal requires a supported native Linux architecture")
+    from .rehearsal_transport import run as rehearse_transport
     with tempfile.TemporaryDirectory(prefix="paintedwolf-nix-cache-rehearsal-") as directory:
         work = Path(directory)
         keys, files = [], []
@@ -76,6 +77,7 @@ def main() -> None:
         verify(rotated, [output], keys)
         verify(rotated, [output], [keys[1]])
         inventory(rotated, report["closure"], [keys[1]])
+        transport_checks = rehearse_transport(cache, report, rotated, keys)
         for label in ("altered-nar", "altered-metadata", "missing-nar", "missing-dependency"):
             broken = work / label
             shutil.copytree(cache, broken)
@@ -98,7 +100,7 @@ def main() -> None:
         print(json.dumps({"schema_version": 1, "mode": "rehearsal", "status": "passed", "nix_version": report["nix_version"],
                           "system": system, "closure_paths": len(report["closure"]), "objects": len(report["objects"]),
                           "cold_copy": True, "checks": ["wrong-key", "wrong-key-cold-copy", "rotation-overlap", "rotation-new-key",
-                                                          "altered-nar", "altered-metadata", "missing-nar", "missing-dependency", "wrong-system", "production-refusal"]}, sort_keys=True))
+                                                          "altered-nar", "altered-metadata", "missing-nar", "missing-dependency", "wrong-system", "production-refusal", *transport_checks]}, sort_keys=True))
 
 
 if __name__ == "__main__":
