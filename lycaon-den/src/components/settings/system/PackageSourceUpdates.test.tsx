@@ -38,4 +38,17 @@ describe("package-source observations", () => {
     expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("Earlier source results are no longer current");
     expect(screen.queryByTestId("updates-source-candidate")).toBeNull();
   });
+  it("does not turn a current cached policy candidate into a latest-release claim", async () => {
+    renderSource({ availability: "no_newer_candidate", candidate: { version: "1.1.0-1", architecture: "amd64", newer_than_installed: false,
+      repositories: [{ id: "Painted Wolf Code", suite: "stable", trusted: true }] } });
+    expect((await screen.findByTestId("updates-source-candidate")).textContent).toContain("not newer than the database version");
+    expect(screen.getByTestId("updates-package-source").textContent).toContain("No newer package was selected from the local repository metadata");
+    expect(screen.queryByText("You’re using the latest version.")).toBeNull();
+  });
+  it("reports an unknown owner without claiming that repository metadata was read", async () => {
+    renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_version: null, architecture: null });
+    expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("owns this source is unknown");
+    expect(screen.queryByTestId("updates-database-version")).toBeNull();
+    expect(screen.getByTestId("updates-package-source").textContent).not.toContain("Repository metadata was read");
+  });
 });
