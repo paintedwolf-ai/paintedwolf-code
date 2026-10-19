@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -139,3 +140,20 @@ class PacmanInstalledFactsTests(unittest.TestCase):
             with patch.object(pacman_facts.os, "fstat", side_effect=replaced):
                 with self.assertRaisesRegex(ValueError, "changed"):
                     pacman_facts.executable_identity(executable, fixture[-1][0])
+
+    def test_cli_cannot_write_evidence_over_inputs_or_inside_the_alpm_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.fixture(directory)
+            manifest = fixture[0] / "selected.json"
+            manifest.write_text(json.dumps({"executables": fixture[-1]}))
+            for destination in [manifest, fixture[2] / "desc", fixture[1] / "new-record"]:
+                argv = ["pacman_facts", "--database", str(fixture[1]), "--version", "1.0.2pre.rc6-1",
+                        "--manifest", str(manifest), "--output", str(destination)]
+                with self.subTest(destination=destination), patch("sys.argv", argv):
+                    with patch.object(pacman_facts.platform, "system", return_value="Linux"):
+                        with patch.object(pacman_facts, "installed") as collect:
+                            with self.assertRaises(SystemExit) as failure:
+                                pacman_facts.main()
+                            self.assertEqual(failure.exception.code, 1)
+                            collect.assert_not_called()
+            self.assertFalse((fixture[1] / "new-record").exists())

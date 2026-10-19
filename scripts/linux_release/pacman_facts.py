@@ -147,9 +147,13 @@ def main():
     try:
         if platform.system() != "Linux":
             raise ValueError("installed pacman facts require a Linux system")
+        destination = args.output.resolve()
+        if destination == args.manifest.resolve() or destination.is_relative_to(args.database.resolve()):
+            raise ValueError("evidence output must be separate from selected inputs and the ALPM database")
         manifest = json.loads(args.manifest.read_text())
         result = installed(args.database, args.package, args.version, platform.machine(), manifest["executables"])
-        args.output.write_text(json.dumps(result, indent=2) + "\n")
+        with args.output.open("x") as output:
+            output.write(json.dumps(result, indent=2) + "\n")
     except (OSError, ValueError, KeyError) as exc:
         parser.exit(1, f"Installed pacman facts remain unverified: {exc}\n")
 
