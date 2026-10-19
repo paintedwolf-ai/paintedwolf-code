@@ -22,6 +22,21 @@ def document(path: Path) -> tuple[object, str]:
     return json.loads(data), hashlib.sha256(data).hexdigest()
 
 
+def verify_release(catalog, artifacts, campaign, evidence_root, file_root, repositories,
+                   source_commit, *, version, channel, signing_generation, key_fingerprint):
+    """Re-evaluate selected release inputs; the caller owns publication authority."""
+    result = admit(catalog, campaign, artifacts, source_commit, evidence_root)
+    verified_files, verified_repositories = [], []
+    if result["accepted"]:
+        verified_files = verify_files(artifacts, source_commit, file_root)
+        verified_repositories = verify_repositories(
+            repositories, artifacts, source_commit, version=version, channel=channel,
+            signing_generation=signing_generation, key_fingerprint=key_fingerprint,
+            verified_files=verified_files)
+    return {"accepted": result["accepted"], "result": result,
+            "verified_files": verified_files, "verified_repositories": verified_repositories}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=CATALOG)
@@ -43,25 +58,20 @@ def main(argv=None):
             args.catalog.resolve(), args.final_artifacts.resolve(), args.campaign.resolve(), args.repositories.resolve()}:
         parser.error("admission receipt must not replace its inputs or retained evidence")
     inputs = {}
-    verified_files = []
-    verified_repositories = []
     try:
         catalog, inputs["catalog_sha256"] = document(args.catalog)
         artifacts, inputs["final_artifacts_sha256"] = document(args.final_artifacts)
         campaign, inputs["campaign_sha256"] = document(args.campaign)
         repositories, inputs["repositories_sha256"] = document(args.repositories)
-        result = admit(catalog, campaign, artifacts, args.source_commit, evidence)
-        if result["accepted"]:
-            verified_files = verify_files(artifacts, args.source_commit, args.file_root)
-            verified_repositories = verify_repositories(
-                repositories, artifacts, args.source_commit, version=args.version, channel=args.channel,
-                signing_generation=args.signing_generation, key_fingerprint=args.key_fingerprint,
-                verified_files=verified_files)
+        verified = verify_release(
+            catalog, artifacts, campaign, evidence, args.file_root, repositories, args.source_commit,
+            version=args.version, channel=args.channel, signing_generation=args.signing_generation,
+            key_fingerprint=args.key_fingerprint)
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        result = {"accepted": False, "errors": [str(exc)]}
+        verified = {"accepted": False, "result": {"accepted": False, "errors": [str(exc)]},
+                    "verified_files": [], "verified_repositories": []}
     report = {"format_version": 1, "source_commit": args.source_commit,
-              "inputs": inputs, "accepted": result["accepted"], "result": result,
-              "verified_files": verified_files, "verified_repositories": verified_repositories}
+              "inputs": inputs, **verified}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n")
     if not report["accepted"]:
