@@ -15,15 +15,22 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def repository_origin(value):
+    if not isinstance(value, str):
+        raise ValueError("controller repository publication requires a protected HTTPS origin")
+    url = urlsplit(value)
+    if (url.scheme != "https" or not url.hostname or url.username or url.password
+            or url.path not in {"", "/"} or url.query or url.fragment
+            or any(character.isspace() for character in value)):
+        raise ValueError("controller repository publication requires a protected HTTPS origin")
+    return value.rstrip("/")
+
+
 class RepositoryAuthority:
     """The protected controller independently selects origin and predecessor pins."""
 
     def __init__(self, selected, *, base_url, expected):
-        url = urlsplit(base_url)
-        if (url.scheme != "https" or not url.hostname or url.username or url.password
-                or url.path not in {"", "/"} or url.query or url.fragment
-                or any(character.isspace() for character in base_url)):
-            raise ValueError("controller repository publication requires a protected HTTPS origin")
+        self.base_url = repository_origin(base_url)
         if (not isinstance(expected, dict) or not expected
                 or any(not isinstance(key, str) or not re.fullmatch("[0-9a-f]{64}", key)
                        or (value is not None and (not isinstance(value, str)
@@ -31,7 +38,6 @@ class RepositoryAuthority:
                        for key, value in expected.items())):
             raise ValueError("controller must independently pin every repository predecessor")
         self.selected = selected
-        self.base_url = base_url.rstrip("/")
         self.expected = dict(expected)
 
     def __call__(self, request):

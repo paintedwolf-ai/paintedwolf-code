@@ -28,7 +28,8 @@ class PublicationProducerTests(unittest.TestCase):
 
     def run_producer(self, fixture):
         source, output, immutable, producer, catalog = fixture
-        with patch("linux_release.publication_controller.verify_generations"):
+        with patch("linux_release.publication_controller.verify_generations"), \
+             patch("linux_release.publication_controller.verify_setups", return_value=[]):
             return produce(source, output, immutable, producer, catalog=catalog,
                            signing_generation=1, key_fingerprint="A" * 40)
 

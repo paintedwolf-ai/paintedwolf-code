@@ -11,6 +11,8 @@ import subprocess
 from .installed_evidence import artifacts as validate_artifacts
 from .publication_bundle import download
 from .publication_caches import verify as verify_caches
+from .publication_setups import verify as verify_setups
+from .publication_authority import PREFIX, repository_origin
 from .publication_generations import verify as verify_generations
 from .publication_provenance import controller_context, select, verify_producer
 from .publication_source import facts
@@ -22,9 +24,10 @@ from .support_matrix import CATALOG
 class SelectedCampaign:
     """Keep selected inputs, rather than a reusable accepted-receipt authority."""
 
-    def __init__(self, root, provenance, source, catalog, signing_generation, key_fingerprint):
+    def __init__(self, root, provenance, source, catalog, signing_generation, key_fingerprint, *, repository_base_url=None):
         self.root, self.provenance, self.source = root, provenance, source
         self.catalog = catalog
+        self.repository_base_url = repository_base_url
         self.signing_generation, self.key_fingerprint = signing_generation, key_fingerprint
 
     def inputs(self):
@@ -52,16 +55,18 @@ class SelectedCampaign:
             raise ValueError("publication requires the complete freshly admitted final campaign")
         verify_generations(self.root, inputs["repositories"])
         report["verified_caches"] = verify_caches(self.root, inputs)
+        report["verified_setups"] = verify_setups(self.root, inputs, base_url=self.repository_base_url)
         return inputs, report
 
 
 def retain(api, repository: str, repository_id: int, run_id: int, source_repository: Path,
-           source_commit: str, destination: Path, *, catalog, signing_generation, key_fingerprint):
+           source_commit: str, destination: Path, *, catalog, signing_generation, key_fingerprint, repository_base_url=None):
     """The main controller supplies its policy, selected source and production signer."""
     source = facts(source_repository, source_commit)
     provenance = select(api, repository, repository_id, run_id)
     download(provenance, destination)
-    selected = SelectedCampaign(destination, provenance, source, catalog, signing_generation, key_fingerprint)
+    selected = SelectedCampaign(destination, provenance, source, catalog, signing_generation, key_fingerprint,
+                                repository_base_url=repository_base_url)
     selected.inputs()
     return selected
 
@@ -92,7 +97,8 @@ def main(argv=None):
         catalog, _ = document(CATALOG)
         selected = retain(api, os.environ["GITHUB_REPOSITORY"], int(os.environ["GITHUB_REPOSITORY_ID"]),
                           args.campaign_run_id, args.source_repository, args.source_commit, destination,
-                          catalog=catalog, signing_generation=signer["generation"], key_fingerprint=signer["fingerprint"])
+                          catalog=catalog, signing_generation=signer["generation"], key_fingerprint=signer["fingerprint"],
+                          repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX)
         inputs, report = selected.authorize()
         current = verify_files(inputs["artifacts"], inputs["source_commit"], args.publication_files)
         with output.open("x") as stream:

@@ -685,6 +685,7 @@ jobs:
           publication_files: ${{ github.workspace }}/release-artifacts
         env:
           GH_TOKEN: ${{ github.token }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
 
       - name: Validate channel monotonicity
         env:

@@ -17,6 +17,9 @@ class PublicationControllerTests(unittest.TestCase):
     def fixture(self, directory):
         crypto = patch("linux_release.publication_controller.verify_generations")
         crypto.start()
+        setups = patch("linux_release.publication_controller.verify_setups", return_value=[])
+        setups.start()
+        self.addCleanup(setups.stop)
         self.addCleanup(crypto.stop)
         root, _, _ = fixtures.LinuxReleaseAdmissionTests().fixture(directory)
         (root / "final-artifacts.json").write_bytes((root / "artifacts.json").read_bytes())
@@ -99,7 +102,8 @@ class PublicationControllerTests(unittest.TestCase):
                     "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
                     "GITHUB_WORKFLOW_REF": "owner/repo/.github/workflows/release.yml@refs/heads/main",
                     "GITHUB_SHA": "b" * 40, "GITHUB_WORKFLOW_SHA": "b" * 40,
-                    "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"}), \
+                    "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
+                    "LINUX_REPOSITORY_ORIGIN": "https://downloads.example.test"}), \
                  patch("linux_release.publication_controller.CATALOG", root / "catalog.json"), \
                  patch("linux_release.publication_controller.retain", return_value=selected):
                 self.assertEqual(main(arguments), 0)
