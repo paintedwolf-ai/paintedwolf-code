@@ -1758,7 +1758,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Isolated release rehearsal; --local-nix-cache uses disposable local keys, default uses test R2 credentials'
+    desc: 'Isolated release rehearsal; local modes use disposable keys, default uses test R2 credentials'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 

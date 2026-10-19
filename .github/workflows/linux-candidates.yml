@@ -116,7 +116,7 @@ jobs:
       - name: Install Linux bundle and audit dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio gnupg
       - name: Verify the catalog row for this candidate
         env:
           PLATFORM: ${{ matrix.updater_key }}
@@ -148,6 +148,12 @@ jobs:
           git rev-parse HEAD > "${RUNNER_TEMP}/candidate/source-commit.txt"
           git rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/candidate/source-tree.txt"
           printf '%s\n' 'nonrelease; installed qualification is required' > "${RUNNER_TEMP}/candidate/qualification-scope.txt"
+      - name: Rehearse Linux signatures with a disposable local key
+        run: |
+          ./task release:live-test -- --local-linux-signing \
+            --candidate-dir "${RUNNER_TEMP}/candidate" \
+            --require-architectures "${{ matrix.artifact_arch }}" \
+            --receipt "${RUNNER_TEMP}/candidate/signing-rehearsal.json"
       - name: Retain candidate packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

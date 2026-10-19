@@ -7,6 +7,11 @@ if [[ "${1:-}" == --local-nix-cache && $# -eq 1 ]]; then
   cd "${ROOT}"
   exec python3 -m scripts.nix_cache.rehearsal
 fi
+if [[ "${1:-}" == --local-linux-signing ]]; then
+  shift
+  cd "${ROOT}"
+  exec python3 -m scripts.linux_release.signing_rehearsal "$@"
+fi
 [[ $# -eq 0 ]] || { echo "error: unsupported release rehearsal arguments" >&2; exit 2; }
 for need in bun curl jq python3 ruby; do
   command -v "${need}" >/dev/null 2>&1 || { echo "error: ${need} is required for the R2 rehearsal" >&2; exit 1; }
