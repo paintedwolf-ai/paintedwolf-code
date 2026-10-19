@@ -906,6 +906,16 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
 
+### Installed Linux result admission
+
+The shared [`support-matrix.json`](../packaging/linux/support-matrix.json) defines required environment/installation/architecture/capability rows. `scripts.linux_release.installed_results` admits a collector campaign against that catalog, an exact source commit, and the final artifact manifest supplied by the release owner. It emits JSON with `accepted`, every row's `passed`/`failed`/`unverified` outcome, errors and a checklist for native observations. Missing rows or cases, unknown/duplicate identities, skipped results, stale source/artifact identities and emulation of native-only tiers refuse admission. A file digest checks retained evidence bytes; the collector still owns the truth of each observation.
+
+The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifact carries `id`, `installation`, `architecture`, `source_commit` and `identity`. File identity is `{ "kind": "file", "sha256": "<final payload digest>" }`. Nix identity is `{ "kind": "nix-closure", "sha256": "<NAR digest>", "store_path": "<exact output>", "lock_sha256": "<lock digest>" }`. Digests are lowercase SHA-256 hex; source commits are full lowercase Git SHAs. The campaign repeats the exact final manifest and adds `results`.
+
+Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
+
 ### Updates
 
 Before broad activation, use the [update qualification matrix](operations/update-qualification.md)
