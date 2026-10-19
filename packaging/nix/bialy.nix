@@ -16,6 +16,7 @@ in rust.buildRustPackage {
     ];
   };
   cargoLock.lockFile = source + "/lycaon/internal/decide/native/Cargo.lock";
+  cargoRoot = "lycaon/internal/decide/native";
   buildAndTestSubdir = "lycaon/internal/decide/native";
   buildFeatures = [ "vulkan" ];
   cargoBuildFlags = [ "--bin" "bialy" ];
