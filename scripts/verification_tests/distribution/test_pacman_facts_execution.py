@@ -23,7 +23,7 @@ class PacmanInstalledFactsTests(unittest.TestCase):
         executable.parent.mkdir(parents=True)
         executable.write_bytes(b"selected final executable")
         executable.chmod(0o755)
-        manifest = [{"path": "/opt/painted-wolf-code/bin/pw", "size": executable.stat().st_size,
+        manifest = [{"path": "/opt/painted-wolf-code/bin/pw", "size": executable.stat().st_size, "mode": 0o755,
                      "sha256": hashlib.sha256(executable.read_bytes()).hexdigest()}]
         return root, database, record, executable, manifest
 
@@ -44,7 +44,7 @@ class PacmanInstalledFactsTests(unittest.TestCase):
             self.assertFalse(report["desktop_qualified"])
 
     def test_changed_bytes_modes_and_missing_ownership_fail(self):
-        for change in ["bytes", "mode", "owner", "symlink"]:
+        for change in ["bytes", "mode", "executable_mode", "owner", "symlink"]:
             with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
                 fixture = self.fixture(directory)
                 _, _, record, executable, _ = fixture
@@ -52,6 +52,8 @@ class PacmanInstalledFactsTests(unittest.TestCase):
                     executable.write_bytes(b"different final executable")
                 elif change == "mode":
                     executable.chmod(0o644)
+                elif change == "executable_mode":
+                    executable.chmod(0o775)
                 elif change == "owner":
                     (record / "files").write_text("%FILES%\nother/file\n")
                 else:
@@ -114,6 +116,26 @@ class PacmanInstalledFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.fixture(directory)
             manifest = deepcopy(fixture[-1])
-            for rows in [manifest + manifest, [dict(manifest[0], path="/opt/../escape")]]:
+            for rows in [manifest + manifest, [dict(manifest[0], path="/opt/../escape")],
+                         [dict(manifest[0], path="//opt/painted-wolf-code/bin/pw")]]:
                 with self.subTest(rows=rows), self.assertRaises(ValueError):
                     self.collect(fixture, executables=rows)
+
+    def test_descriptor_and_named_executable_must_remain_the_same_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.fixture(directory)
+            executable = fixture[3]
+            original = pacman_facts.os.fstat
+            calls = 0
+            def replaced(descriptor):
+                nonlocal calls
+                result = original(descriptor)
+                calls += 1
+                if calls == 2:
+                    executable.rename(executable.with_suffix(".old"))
+                    executable.write_bytes(b"selected final executable")
+                    executable.chmod(0o755)
+                return result
+            with patch.object(pacman_facts.os, "fstat", side_effect=replaced):
+                with self.assertRaisesRegex(ValueError, "changed"):
+                    pacman_facts.executable_identity(executable, fixture[-1][0])

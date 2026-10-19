@@ -51,6 +51,32 @@ def read(path: Path, limit=16 << 20) -> bytes:
     return data
 
 
+def executable_identity(path: Path, entry: dict) -> dict:
+    size, mode = entry["size"], entry["mode"]
+    if (type(size) is not int or not 0 <= size <= 2 << 30 or type(mode) is not int
+            or not 0 <= mode <= 0o7777 or not mode & 0o111
+            or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])):
+        raise ValueError("selected executable manifest has an invalid identity")
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+        before = os.fstat(source.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size != size or stat.S_IMODE(before.st_mode) != mode:
+            raise ValueError("installed executable size or mode differs from the selected final manifest")
+        digest, measured = hashlib.sha256(), 0
+        while chunk := source.read(min(1 << 20, size + 1 - measured)):
+            digest.update(chunk)
+            measured += len(chunk)
+            if measured > size:
+                raise ValueError("installed executable grew while evidence was collected")
+        after, named = os.fstat(source.fileno()), path.lstat()
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    if identity(before) != identity(after) or identity(after) != identity(named):
+        raise ValueError("installed executable changed while evidence was collected")
+    if digest.hexdigest() != entry["sha256"] or measured != size:
+        raise ValueError("installed executable differs from the selected final manifest")
+    return {"path": entry["path"], "sha256": digest.hexdigest(), "size": size, "mode": mode}
+
+
 def installed(database: Path, package: str, expected_version: str, architecture: str,
               executables: list[dict], root: Path = Path("/")) -> dict:
     """Verify selected installed bytes and retain the corresponding ALPM records."""
@@ -88,24 +114,16 @@ def installed(database: Path, package: str, expected_version: str, architecture:
     measured, seen = [], set()
     for entry in executables:
         name = entry["path"]
-        if not name.startswith("/") or ".." in PurePosixPath(name).parts or name in seen:
+        if (not name.startswith("/") or name.startswith("//") or PurePosixPath(name).as_posix() != name
+                or ".." in PurePosixPath(name).parts or name in seen):
             raise ValueError("selected executable manifest contains an invalid or repeated path")
         seen.add(name)
         if name[1:] not in owned:
             raise ValueError(f"selected executable is not owned by the package: {name}")
         path = root / name[1:]
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or not info.st_mode & 0o111:
+        if not stat.S_ISREG(path.lstat().st_mode):
             raise ValueError(f"selected executable is not an executable regular file: {name}")
-        digest = hashlib.sha256()
-        size = 0
-        with path.open("rb") as source:
-            while chunk := source.read(1 << 20):
-                digest.update(chunk)
-                size += len(chunk)
-        if digest.hexdigest() != entry["sha256"] or size != entry["size"]:
-            raise ValueError(f"installed executable differs from the selected final manifest: {name}")
-        measured.append({"path": name, "sha256": digest.hexdigest(), "size": size})
+        measured.append(executable_identity(path, entry))
     if (lock.exists() or read(descriptor) != description or read(file_record) != files
             or read(local / "ALPM_DB_VERSION", 128) != version
             or sorted(path.name for path in local.iterdir() if path.is_dir()) != directories):
