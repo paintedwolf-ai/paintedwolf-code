@@ -370,6 +370,7 @@ fn production_source(path: &Path) -> Option<String> {
 
 fn is_host_facing(relative: &str, source: &str) -> bool {
     relative.starts_with("src/sidecar/")
+        || relative == "src/http_transport/linux_proxy.rs"
         || HOST_FACING_MARKERS.iter().any(|marker| source.contains(marker))
 }
 
