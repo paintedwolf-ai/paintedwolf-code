@@ -46,9 +46,11 @@ let
           path = [ pkgs.coreutils pkgs.gnugrep pkgs.openssh ];
           script = ''
             set -euo pipefail
+            umask 077
             key=/sys/firmware/qemu_fw_cfg/by_name/opt/paintedwolf/ssh-public-key/raw
             if ! test -r "$key"; then exit 0; fi
             candidate="$RUNTIME_DIRECTORY/candidate"
+            trap 'rm -f "$candidate"' EXIT
             head -c 4097 "$key" > "$candidate"
             test "$(wc -c < "$candidate")" -le 4096
             test "$(grep -ac '^' "$candidate")" -eq 1
@@ -56,7 +58,6 @@ let
             ssh-keygen -l -f "$candidate" > /dev/null
             install -m0644 "$candidate" "$RUNTIME_DIRECTORY/root"
             install -m0644 "$candidate" "$RUNTIME_DIRECTORY/qualifier"
-            rm "$candidate"
           '';
         };
         environment.etc."paintedwolf-qualification.json".text = builtins.toJSON {
