@@ -13,7 +13,7 @@ export const updateServiceFixture = (over: Partial<UpdateService> = {}): UpdateS
 export const stagedFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({ offer_confirmed_at: 1800000000, installation: "staged", staged_release_id: "release-1", capabilities: { can_check: true, can_download: false, can_restart_to_update: true, can_install_automatically: true, blocked_reason: null }, ...over });
 export const packageFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({
   install_source: "system_package", running_version: "1.0.2",
-  package: { family: "deb", name: "painted-wolf-code", version: "1.0.2", update_command: "sudo apt update && sudo apt install --only-upgrade painted-wolf-code" },
+  package: { family: "deb", name: "painted-wolf-code", version: "1.0.2", update_command: "sudo apt update && sudo apt install --only-upgrade painted-wolf-code", source: { availability: "not_checked", owner: "system_package_manager", pinned: null } },
   capabilities: { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_managed" },
   candidate: { release_id: "release-1", version: "1.1.0", channel: "stable", platform: "linux-x86_64", signing_generation: 1, artifact_url: "", artifact_signature: "", notes: null, rollout_eligibility: "eligible" },
   ...over,
