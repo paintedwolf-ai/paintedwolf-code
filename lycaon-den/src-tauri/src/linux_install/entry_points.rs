@@ -65,7 +65,7 @@ fn verify(root: &Path, entry_point: &Path) -> Option<()> {
     if entries.next().is_some() || expected.size > WRAPPER_LIMIT || expected.sha256.len() != 64 {
         return None;
     }
-    let mut file = File::open(entry_point).ok()?;
+    let file = File::open(entry_point).ok()?;
     if file.metadata().ok()?.len() != expected.size {
         return None;
     }
