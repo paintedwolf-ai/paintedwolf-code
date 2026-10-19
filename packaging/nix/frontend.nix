@@ -22,7 +22,7 @@ stdenv.mkDerivation {
     patchShebangs = false;
     overrides = bun2nix.patchedDependenciesToOverrides { patchedDependencies = patchFiles; };
   };
-  bunInstallFlags = [ "--frozen-lockfile" "--linker=hoisted" ];
+  bunInstallFlags = [ "--frozen-lockfile" "--linker=hoisted" "--backend=copyfile" ];
   dontRunLifecycleScripts = true;
   dontUseBunCheck = true;
   dontConfigure = true;
@@ -32,6 +32,7 @@ stdenv.mkDerivation {
     test "$(node --version)" = "v${tools.nodejs.version}"
     python3 ${./native-modules.py} lycaon-den/node_modules ${stdenv.hostPlatform.parsed.cpu.name} > native-modules.list
     while IFS= read -r -d "" native; do
+      chmod u+w "$native"
       autoPatchelf "$native"
     done < native-modules.list
     cd lycaon-den
