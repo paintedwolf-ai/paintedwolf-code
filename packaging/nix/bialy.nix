@@ -16,7 +16,7 @@ in rust.buildRustPackage {
   pname = "painted-wolf-code-bialy";
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
   src = componentSource;
-  cargoLock.lockFile = componentSource + "/lycaon/internal/decide/native/Cargo.lock";
+  cargoLock.lockFileContents = builtins.readFile (source + "/lycaon/internal/decide/native/Cargo.lock");
   cargoRoot = "lycaon/internal/decide/native";
   buildAndTestSubdir = "lycaon/internal/decide/native";
   buildFeatures = [ "vulkan" ];
