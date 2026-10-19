@@ -2,7 +2,7 @@
 let
   fingerprints = {
     "lycaon/config/gitengine/pin.yaml" = "c010337a856abbca84ea89afb86ab88315a1c98b6d02d0003fd5d351b7e3f9d4";
-    "lycaon/config/runtime/ocrengine/pin.yaml" = "c662e51f2b11eb9cac8027be44ab530f9dc0b8d7418dea2db3abe9e21e202592";
+    "lycaon/config/runtime/ocrengine/pin.yaml" = "4d4b2645f091ab1f02c8920c5043c68fd53d5bde7b4e6ff0fafb1942a1e82d6f";
     "lycaon/internal/browserengine/chrome_pin.go" = "813f9b921a0f99911926d9dfc8b31cd99c1011bc66dc18e32c46cb95de06a9bf";
     "lycaon/internal/decide/bialy/models.go" = "e1d59b931389b1b8edd1dd54a497eb9fde89476ca62742e8087d7a9e1d0d59b9";
     "lycaon/config/runtime/scanners/bundled-manifest.yaml" = "df0565f03d60c4aaffaef3f8647da63293fe683c7cc1792d7e1f5ad71c6e19b9";
@@ -38,6 +38,19 @@ platforms.${system} // {
   gitBuild = "paintedwolf.1";
   lfsVersion = "3.7.1";
   ocrVersion = "5.5.3+paintedwolf.1";
+  ocrData = {
+    repository = "tesseract-ocr/tessdata_fast";
+    revision = "87416418657359cb625c412a48b6e1d6d41c29bd";
+    files = {
+      deu = "19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22d";
+      fra = "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445ca";
+      spa = "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b464";
+      rus = "e16e5e036cce1d9ec2b00063cf8b54472625b9e14d893a169e2b0dedeb4df225";
+      ara = "e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729";
+      chi_sim = "a5fcb6f0db1e1d6d8522f39db4e848f05984669172e584e8d76b6b3141e1f730";
+      jpn = "1f5de9236d2e85f5fdf4b3c500f2d4926f8d9449f28f5394472d9e8d83b91b4d";
+    };
+  };
   scannerVersion = "1.30.0+paintedwolf.40";
   model = {
     id = "convaiinnovations/laya-multilingual";
