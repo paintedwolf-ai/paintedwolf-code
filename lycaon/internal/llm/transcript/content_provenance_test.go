@@ -146,3 +146,19 @@ func TestProjectModelMessagesMarksNonModelDataMixedIntoAssistantTurn(t *testing.
 		t.Fatalf("mixed non-model data lost its boundary: %q", got)
 	}
 }
+
+func TestProjectModelMessagesDataMarksInternalStepNoteModelText(t *testing.T) {
+	out := Project([]api.Message{{
+		Role:      api.MessageRoleAssistant,
+		Content:   "Inspecting the parser.\nChecking edge cases.",
+		ToolCalls: []api.ToolCall{{ID: "call-1", Name: "read"}},
+	}})
+	if len(out) != 2 {
+		t.Fatalf("projected messages = %+v", out)
+	}
+	got := out[1].Content
+	want := internalStepNoteNotice + "\n\n⟦D:model:internal_step_note⟧\n⟦D⟧Inspecting the parser.\n⟦D⟧Checking edge cases."
+	if got != want {
+		t.Fatalf("internal step note projection = %q, want %q", got, want)
+	}
+}

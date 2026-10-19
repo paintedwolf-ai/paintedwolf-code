@@ -90,6 +90,7 @@ var (
 
 const (
 	contentAuthorityNoticeSource = "content_authority_notice"
+	internalStepNoteSource       = "internal_step_note"
 	checkpointDenialSource       = "checkpoint_denial"
 	checkpointGuidanceSource     = "checkpoint_guidance"
 	checkpointDecisionSource     = "checkpoint_decision"
@@ -265,7 +266,8 @@ func ProjectContentParts(role api.MessageRole, parts []api.MessageContentPart) s
 // Assistant roles structurally identify model output without a transport label.
 func contentPartUsesNativeRole(role api.MessageRole, part api.MessageContentPart) bool {
 	return role == api.MessageRoleAssistant &&
-		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone
+		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone &&
+		strings.TrimSpace(part.Source) != internalStepNoteSource
 }
 
 func contentPartIsInstruction(authority api.ContentAuthority) bool {
