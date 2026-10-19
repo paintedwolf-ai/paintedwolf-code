@@ -12,6 +12,16 @@ def rehearse(work, manifest, directory, catalog, origin):
     family = manifest["family"]
     output = work / (family + "-setup-package")
     private = catalog.parent / "rehearsal-secret.asc"
+    for url, destination in [("https://example.invalid/\nenabled=0", output),
+                             ("http://example.invalid", output), (origin, directory / "setup")]:
+        try:
+            build(manifest, directory, catalog, destination, url, private, True)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("setup accepted an unsafe origin or mutable generation destination")
+        if destination.exists():
+            raise ValueError("refused setup allocated an output directory")
     receipt = build(manifest, directory, catalog, output, origin, private, True)
     artifact = output / receipt["package"]["file"]
     verify("detached", output / "SHA256SUMS", output / "SHA256SUMS.asc", catalog, True)
@@ -29,6 +39,9 @@ def rehearse(work, manifest, directory, catalog, origin):
         owned = ["dpkg-query", "--admindir=" + str(state), "--listfiles", PACKAGE]
     else:
         subprocess.run(["sudo", "-n", "rpm", "--root", str(root), "--initdb"], check=True)
+        public = output / "package-key.asc"
+        subprocess.run(["sudo", "-n", "rpm", "--root", str(root), "--import", str(public)], check=True)
+        subprocess.run(["sudo", "-n", "rpmkeys", "--root", str(root), "--checksig", str(artifact)], check=True)
         install = ["rpm", "--root", str(root), "--nodeps", "--install", str(artifact)]
         remove = ["rpm", "--root", str(root), "--erase", PACKAGE]
         owned = ["sudo", "-n", "rpm", "--root", str(root), "--query", "--list", PACKAGE]
