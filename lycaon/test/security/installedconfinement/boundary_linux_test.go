@@ -74,7 +74,10 @@ func TestLinuxInstalledHelperAppliedBoundary(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(outside) })
 	secret := filepath.Join(project, "denied-secret")
 	testutil.FailErr(t, "write controlled denied input", os.WriteFile(secret, []byte("must-not-cross"), 0o600))
-	box.ReadDenyPaths = []string{secret}
+	secondSecret := filepath.Join(project, "second-denied-secret")
+	testutil.FailErr(t, "write second controlled denied input", os.WriteFile(secondSecret, []byte("must-not-cross-either"), 0o600))
+	box.ReadDenyPaths = []string{secret, secondSecret}
+	box.ReadRoots = []string{"/tmp"}
 	sockets, err := os.MkdirTemp("/tmp", "pw-installed-") //nolint:usetesting // Linux Unix-socket address limit.
 	testutil.FailErr(t, "create short installed-helper socket fixture", err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockets) })
@@ -98,7 +101,7 @@ status = dict(line.split(':', 1) for line in open('/proc/self/status') if ':' in
 assert status['NoNewPrivs'].strip() == '1'
 for kind in ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb'):
     assert int(status[kind].strip(), 16) == 0, kind
-for operation in (lambda: open(sys.argv[2], 'w'), lambda: open(sys.argv[3], 'r')):
+for operation in (lambda: open(sys.argv[2], 'w'), lambda: open(sys.argv[3], 'r'), lambda: open(sys.argv[6], 'r')):
     try:
         operation()
     except OSError as error:
@@ -116,7 +119,7 @@ for family, address in ((socket.AF_UNIX, sys.argv[4]), (socket.AF_INET, ('127.0.
             raise RuntimeError('installed helper admitted an ungranted host socket')
 print('installed-boundary-applied')
 `
-	status, output = runInstalledHelper(t, helper, box, python, "-I", "-c", probe, string(namespaces), filepath.Join(outside, "escaped"), secret, agentPath, fmt.Sprint(port))
+	status, output = runInstalledHelper(t, helper, box, python, "-I", "-c", probe, string(namespaces), filepath.Join(outside, "escaped"), secret, agentPath, fmt.Sprint(port), secondSecret)
 	if status != 0 {
 		t.Fatalf("installed helper adversarial boundary failed: exit=%d output=%s", status, output)
 	}
