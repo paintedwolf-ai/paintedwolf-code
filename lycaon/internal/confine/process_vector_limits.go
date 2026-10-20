@@ -3,6 +3,7 @@ package confine
 import (
 	"fmt"
 	"strings"
+	"syscall"
 )
 
 // LaunchVectorLimits comes from the compiled language ceilings. This necessary
@@ -24,6 +25,13 @@ type LaunchVectorLimitError struct {
 func (e *LaunchVectorLimitError) Error() string {
 	return fmt.Sprintf("launch %s exceeds bound", e.Dimension)
 }
+
+// PlatformLaunchLimitError distinguishes a native OS vector ceiling from a
+// compiled language resource limit. The native errno remains inspectable.
+type PlatformLaunchLimitError struct{ Maximum, Observed int64 }
+
+func (e *PlatformLaunchLimitError) Error() string { return "native argv/environment bound exceeded" }
+func (e *PlatformLaunchLimitError) Unwrap() error { return syscall.E2BIG }
 
 func (l LaunchVectorLimits) validate() error {
 	if l.ArgumentBytes <= 0 || l.ArgvBytes <= 0 || l.EnvironmentBytes <= 0 || l.ExpandedFields <= 0 {

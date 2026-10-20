@@ -116,7 +116,7 @@ func FreezePinnedLaunch(cmd *exec.Cmd) error {
 	}
 	bytes += int64(len(state.arguments)+len(cmd.Env)+2) * int64(unsafe.Sizeof(uintptr(0)))
 	if bytes > int64(state.maximumBytes) {
-		return &LaunchVectorLimitError{"platform_argv_environment_bytes", int64(state.maximumBytes), bytes}
+		return &PlatformLaunchLimitError{int64(state.maximumBytes), bytes}
 	}
 	state.environment = cloneVector(cmd.Env)
 	state.frozen = true

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,5 +162,32 @@ func TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand(t *testing.T) {
 	}
 	if cmd != nil || !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("held image granted another operand: %v", err)
+	}
+}
+
+func TestPinnedHostExecutionPreservesSetuidProcessInspection(t *testing.T) {
+	paths := pinnedLaunchFixture{t.TempDir(), map[string]bool{"/bin/ps": true}}
+	pins, err := confine.CaptureProcessPins(t.Context(), "/bin/ps", paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pins.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic privileged inspection", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+	pid := strconv.Itoa(os.Getpid())
+	cmd, cleanup, err := PrepareCommand(ctx, "/bin/ps", []string{"-p", pid, "-o", "pid="}, ExecOpts{Launch: plan, Env: []string{"PATH=/usr/bin:/bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	var output, diagnostic bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &diagnostic
+	if err := RunInOwnGroup(cmd); err != nil {
+		t.Fatalf("privileged launch: %v; diagnostic %s", err, diagnostic.String())
+	}
+	if strings.TrimSpace(output.String()) != pid {
+		t.Fatalf("process inspection output %q", output.String())
 	}
 }
