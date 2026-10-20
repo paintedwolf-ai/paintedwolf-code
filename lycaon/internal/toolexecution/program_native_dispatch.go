@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
+	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -36,7 +37,7 @@ type NativeInvocationResult struct {
 // any typed owner executes. Failure prevents dispatch. Settlement remains with
 // the recorder and cannot overwrite the returned domain outcome.
 type NativeEffectStart interface {
-	BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string) error
+	BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
 }
 
 // PreparedNativeEffect binds actual reviewed/resolved inputs into one complete
@@ -137,6 +138,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
+	reviewedJSON, err := authzcontext.CanonicalJSON(canonical)
+	if err != nil {
+		return result, err
+	}
+	reviewedDigest, err := authzcontext.CanonicalDigest(canonical)
+	if err != nil {
+		return result, err
+	}
+	reviewed := toolcontract.ReviewedOperationInputs{ArgumentsDigest: reviewedDigest, CanonicalArguments: string(reviewedJSON)}
+	tc.Invocation.ArgsDigest = reviewedDigest
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
 	if err != nil {
 		return result, err
@@ -171,7 +182,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err = ctx.Err(); err != nil {
 		return result, err
 	}
-	if err = observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID); err != nil {
+	if err = observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
 	ownerStarted, result.OwnerInvoked = true, true

@@ -24,10 +24,10 @@ func (p nativeProgressFixture) ProgramProgressState(ctx context.Context, id stri
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
 }
 
-type nativeStartFunc func(context.Context, toolcontract.BoundOperation, string) error
+type nativeStartFunc func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
 
-func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.BoundOperation, call string) error {
-	return f(ctx, b, call)
+func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
+	return f(ctx, b, call, review)
 }
 
 func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t *testing.T) {
@@ -78,7 +78,10 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 		}}, nil
 	}
 	starts := 0
-	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string) error {
+	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
+		if review.CanonicalArguments != `{"path":"input"}` || len(review.ArgumentsDigest) != 64 {
+			t.Fatalf("unfrozen review: %+v", review)
+		}
 		if !prepared || invoked || actual.Invocation().Identity.ExecutionID != "child" || call != "actual-model-call" {
 			t.Fatal("start marker ordering/identity changed")
 		}
@@ -93,7 +96,9 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 	}
 	invoked = false
 	denial := errors.New("start record refused")
-	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string) error { return denial }), effect, tc)
+	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+		return denial
+	}), effect, tc)
 	if !errors.Is(err, denial) || result.OwnerInvoked || invoked {
 		t.Fatalf("owner dispatched without start record: %+v %v", result, err)
 	}
