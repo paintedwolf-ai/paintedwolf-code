@@ -10,6 +10,23 @@ from linux_release.installed_input import focus as focus_owner
 
 
 class InstalledWorkspaceTests(unittest.TestCase):
+    def test_passive_focus_retry_never_mutates_and_respects_one_operation_deadline(self):
+        actor = focus_owner.EntryFocus.__new__(focus_owner.EntryFocus)
+        actor.deadline = 90
+        retry = focus_owner._FocusUnavailable('typed missing focus')
+        with patch.object(actor, '_observe_once', side_effect=[retry, {'focused': True}]) as observe, \
+                patch.object(focus_owner.time, 'monotonic', side_effect=[0, 1]), \
+                patch.object(focus_owner.time, 'sleep'):
+            self.assertEqual(actor.observe(), {'focused': True})
+            self.assertEqual(observe.call_count, 2)
+        with patch.object(actor, '_observe_once', side_effect=retry) as observe, \
+                patch.object(focus_owner.time, 'monotonic', side_effect=[89, 90]), \
+                patch.object(focus_owner.time, 'sleep') as sleep:
+            with self.assertRaises(focus_owner._FocusUnavailable):
+                actor.observe()
+            observe.assert_called_once_with()
+            sleep.assert_not_called()
+
     def test_native_observer_exception_preserves_partial_delivery_evidence(self):
         ui = MagicMock()
         ui.__enter__.return_value = ui

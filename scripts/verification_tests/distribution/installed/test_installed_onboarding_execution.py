@@ -191,3 +191,61 @@ class InstalledOnboardingTests(unittest.TestCase):
         bound = app.observations['native_accessibility_error']['bound']
         self.assertEqual(bound, {'visited': 4097, 'depth': 4, 'child_count': 0,
                                  'max_visited': 4096, 'max_depth': 64, 'max_children': 1024})
+
+    def test_invalidated_accessible_aborts_the_whole_form_inventory_without_actions(self):
+        class Invalidated(Node):
+            reads = 0
+            @property
+            def childCount(self):
+                self.reads += 1
+                return -1
+        window, fields, button = form()
+        stale = Invalidated(0)
+        window.children.append(stale)
+        with self.assertRaises(onboarding._InventoryChanged) as changed:
+            onboarding.controls(window, API)
+        self.assertEqual(changed.exception.counts, {'visited': 2, 'depth': 1, 'child_count': -1})
+        self.assertEqual(stale.reads, 1)
+        for field in fields:
+            field.editor.setTextContents.assert_not_called()
+        button.action.doAction.assert_not_called()
+
+    def test_invalidated_inventory_passively_retries_only_the_same_owned_process(self):
+        for owned in (True, False):
+            with self.subTest(owned=owned):
+                changed = onboarding._InventoryChanged(14, 9)
+                changed.identity = IDENTITY
+                app = SimpleNamespace(timeout=1, observations={'session': {}},
+                    try_ready=Mock(side_effect=[False, True]), require_running=Mock())
+                with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                        onboarding, 'load_api', return_value=API), patch.object(
+                        onboarding, 'form', side_effect=changed) as inventory, patch.object(
+                        onboarding, 'owned_process', return_value=owned), patch.object(
+                        onboarding, 'complete') as action, patch.object(onboarding.time, 'sleep'):
+                    if owned:
+                        onboarding.onboard(app)
+                        self.assertEqual(app.observations['native_accessibility_inventory_retries'], 1)
+                        self.assertEqual(app.observations['native_accessibility_last_retry']['counts'], changed.counts)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'owner changed'):
+                            onboarding.onboard(app)
+                        self.assertNotIn('native_accessibility_inventory_retries', app.observations)
+                    inventory.assert_called_once()
+                    app.require_running.assert_called_once()
+                    action.assert_not_called()
+                    self.assertIsNone(onboarding._password)
+
+    def test_invalidated_inventory_cannot_extend_the_original_startup_deadline(self):
+        changed = onboarding._InventoryChanged(1, 0)
+        changed.identity = IDENTITY
+        app = SimpleNamespace(timeout=1, observations={'session': {}},
+            try_ready=lambda: False, require_running=Mock())
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=API), patch.object(
+                onboarding, 'form', side_effect=changed) as inventory, patch.object(
+                onboarding, 'owned_process', return_value=True), patch.object(
+                onboarding.time, 'monotonic', side_effect=[0, 0, 2]), patch.object(onboarding.time, 'sleep'):
+            with self.assertRaises(CaseUnavailable):
+                onboarding.onboard(app)
+        inventory.assert_called_once()
+        self.assertEqual(app.require_running.call_count, 2)

@@ -1,5 +1,6 @@
 """Bind native input to the selected focused entry and its actual owned active frame."""
 from __future__ import annotations
+import time
 
 from ..installed_cases.app import process_identity
 from ..installed_cases.desktop_ui import owned_process
@@ -7,9 +8,14 @@ from ..installed_cases.records import CaseFailed, CaseUnavailable
 from .protocol import focus
 
 
+class _FocusUnavailable(CaseUnavailable):
+    pass
+
+
 class EntryFocus:
     def __init__(self, app, ui, label: str):
         self.app, self.ui, self.label = app, ui, label
+        self.deadline = time.monotonic() + 90
         self.node = ui.find(ui.api.ROLE_ENTRY, label)
         self.entry = process_identity(self.node.get_process_id())
         self.launch = dict(app.observations['launch_identity'])
@@ -28,6 +34,19 @@ class EntryFocus:
             raise CaseFailed('selected native input process identity changed before its required interaction')
 
     def observe(self) -> dict:
+        now = time.monotonic()
+        if now >= self.deadline:
+            raise CaseUnavailable('fixed native input exceeded its operation observation deadline')
+        deadline = min(self.deadline, now + 2)
+        while True:
+            try:
+                return self._observe_once()
+            except _FocusUnavailable:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
+
+    def _observe_once(self) -> dict:
         self.app.require_running()
         self._stable(self.launch)
         self._stable(self.entry)
@@ -45,7 +64,7 @@ class EntryFocus:
                 visible = bool(ui.visible(node))
                 focused = bool(node.getState().contains(ui.api.STATE_FOCUSED))
         if not owned_process(self.entry['pid'], self.app) or not visible or not focused:
-            error = CaseUnavailable('normal-owned-editor-focus-unavailable')
+            error = _FocusUnavailable('normal-owned-editor-focus-unavailable')
             error.observations = {'native_input_focus': {'entry_identity': self.entry,
                 'entry_visible': visible, 'entry_focused': focused}}
             raise error
@@ -62,12 +81,12 @@ class EntryFocus:
                 frame = parent
                 break
         if frame is None:
-            raise CaseUnavailable('normal-owned-editor-container-unavailable')
+            raise _FocusUnavailable('normal-owned-editor-container-unavailable')
         frame_identity = process_identity(frame.get_process_id())
         active, visible = frame.getState().contains(ui.api.STATE_ACTIVE), bool(ui.visible(frame))
         if (frame_identity != self.launch or not owned_process(frame_identity['pid'], self.app)
                 or not active or not visible):
-            refusal = CaseUnavailable('normal-owned-editor-active-frame-unavailable')
+            refusal = _FocusUnavailable('normal-owned-editor-active-frame-unavailable')
             refusal.observations = {'editor_focus': {'entry_identity': self.entry,
                 'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
             raise refusal
