@@ -131,3 +131,5 @@ reservations only after proving how many candidate arrays were allocated;
 actual capacities and conservative growth envelopes remain charged. The source
 selection and exact upstream omissions/checksums are recorded in
 [gitleaks.upstream.json](gitleaks.upstream.json).
+
+The gitleaks patch uses zero-context hunks to record exact selected-source changes without treating upstream patch context indentation as repository whitespace.

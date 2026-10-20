@@ -25,13 +25,17 @@ func boundedLimits() budget.Limits {
 func TestBoundedPolicy(t *testing.T) {
 	value := "fixture_123456abcdef"
 	unicode := ""
+	unicodePoints := ""
+	doubleEscapes := ""
 	percent := ""
 	for _, b := range []byte(value) {
 		const digits = "0123456789abcdef"
 		unicode += `\u00` + string(digits[b>>4]) + string(digits[b&15])
+		unicodePoints += "U+00" + string(digits[b>>4]) + string(digits[b&15]) + " "
+		doubleEscapes += `\\u00` + string(digits[b>>4]) + string(digits[b&15])
 		percent += "%" + string(digits[b>>4]) + string(digits[b&15])
 	}
-	for _, raw := range []string{"inert", value, strings.ToUpper(value), hex.EncodeToString([]byte(value)), base64.StdEncoding.EncodeToString([]byte(value)), unicode, percent, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString([]byte(value)))), value + " # gitleaks:allow"} {
+	for _, raw := range []string{"inert", value, strings.ToUpper(value), hex.EncodeToString([]byte(value)), base64.StdEncoding.EncodeToString([]byte(value)), unicode, unicodePoints, doubleEscapes, percent, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString([]byte(value)))), value + " # gitleaks:allow"} {
 		t.Run(raw, func(t *testing.T) {
 			d := boundedFixture()
 			fragment := Fragment{Raw: raw}

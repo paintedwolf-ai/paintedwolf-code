@@ -38,7 +38,7 @@
 +}
 --- /dev/null
 +++ b/detect/bounded_test.go
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,155 @@
 +package detect
 +
 +import (
@@ -66,13 +66,17 @@
 +func TestBoundedPolicy(t *testing.T) {
 +	value := "fixture_123456abcdef"
 +	unicode := ""
++	unicodePoints := ""
++	doubleEscapes := ""
 +	percent := ""
 +	for _, b := range []byte(value) {
 +		const digits = "0123456789abcdef"
 +		unicode += `\u00` + string(digits[b>>4]) + string(digits[b&15])
++		unicodePoints += "U+00" + string(digits[b>>4]) + string(digits[b&15]) + " "
++		doubleEscapes += `\\u00` + string(digits[b>>4]) + string(digits[b&15])
 +		percent += "%" + string(digits[b>>4]) + string(digits[b&15])
 +	}
-+	for _, raw := range []string{"inert", value, strings.ToUpper(value), hex.EncodeToString([]byte(value)), base64.StdEncoding.EncodeToString([]byte(value)), unicode, percent, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString([]byte(value)))), value + " # gitleaks:allow"} {
++	for _, raw := range []string{"inert", value, strings.ToUpper(value), hex.EncodeToString([]byte(value)), base64.StdEncoding.EncodeToString([]byte(value)), unicode, unicodePoints, doubleEscapes, percent, base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString([]byte(value)))), value + " # gitleaks:allow"} {
 +		t.Run(raw, func(t *testing.T) {
 +			d := boundedFixture()
 +			fragment := Fragment{Raw: raw}
@@ -357,26 +361,11 @@
 +}
 --- a/detect/codec/decoder.go
 +++ b/detect/codec/decoder.go
-@@ -2,6 +2,7 @@
- 
- import (
- 	"bytes"
+@@ -4,0 +5 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- 
- 	"github.com/zricethezav/gitleaks/v8/logging"
- )
-@@ -9,6 +10,7 @@
- // Decoder decodes various types of data in place
- type Decoder struct {
- 	decodedMap map[string]string
+@@ -11,0 +13 @@
 +	meter      *budget.Meter
- }
- 
- // NewDecoder creates a default decoder struct
-@@ -18,12 +20,22 @@
- 	}
- }
- 
+@@ -20,0 +23,8 @@
 +// NewDecoderWithBudget retains the codec policy with explicit allocation/work admission.
 +func NewDecoderWithBudget(meter *budget.Meter) *Decoder {
 +	meter.Allocate(128)
@@ -385,31 +374,17 @@
 +	return d
 +}
 +
- // Decode returns the data with the values decoded in place along with the
- // encoded segment meta data for the next pass of decoding
- func (d *Decoder) Decode(data string, predecessors []*EncodedSegment) (string, []*EncodedSegment) {
+@@ -23,0 +34 @@
 +	d.meter.Check()
- 	segments := d.findEncodedSegments(data, predecessors)
- 
- 	if len(segments) > 0 {
+@@ -26,0 +38 @@
 +		d.meter.Allocate(int64(len(data))*4 + 128)
- 		result := bytes.NewBuffer(make([]byte, 0, len(data)))
- 		encodedStart := 0
- 		for _, segment := range segments {
-@@ -46,14 +58,22 @@
- 	}
- 
- 	decodedShift := 0
+@@ -49 +61,2 @@
 -	encodingMatches := findEncodingMatches(data)
 +	encodingMatches := findEncodingMatchesBudget(data, d.meter)
 +	d.meter.Allocate(int64(len(encodingMatches)) * 512)
- 	segments := make([]*EncodedSegment, 0, len(encodingMatches))
- 	for _, m := range encodingMatches {
+@@ -51,0 +65 @@
 +		d.meter.Check()
- 		encodedValue := data[m.start:m.end]
- 		decodedValue, alreadyDecoded := d.decodedMap[encodedValue]
- 
- 		if !alreadyDecoded {
+@@ -56 +70,7 @@
 -			decodedValue = m.encoding.decode(encodedValue)
 +			d.meter.Allocate(int64(len(encodedValue))*8 + 128)
 +			d.meter.Work(int64(len(encodedValue)))
@@ -418,327 +393,160 @@
 +			} else {
 +				decodedValue = m.encoding.decode(encodedValue)
 +			}
- 			d.decodedMap[encodedValue] = decodedValue
- 		}
- 
-@@ -63,7 +83,7 @@
- 
- 		segment := &EncodedSegment{
- 			predecessors: predecessors,
+@@ -66 +86 @@
 -			original:     toOriginal(predecessors, m.startEnd),
 +			original:     toOriginalBudget(predecessors, m.startEnd, d.meter),
- 			encoded:      m.startEnd,
- 			decoded: startEnd{
- 				m.start + decodedShift,
-@@ -83,6 +103,7 @@
- 			segment.depth = 1 + segment.predecessors[0].depth
- 			// Adjust encodings
- 			for _, p := range segment.predecessors {
+@@ -85,0 +106 @@
 +				d.meter.Work(1)
- 				if segment.encoded.overlaps(p.decoded) {
- 					segment.encodings |= p.encodings
- 				}
 --- a/detect/codec/encodings.go
 +++ b/detect/codec/encodings.go
-@@ -2,6 +2,7 @@
- 
- import (
- 	"fmt"
+@@ -4,0 +5 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- 	"math"
- 	"strings"
- 
-@@ -117,9 +118,14 @@
- }
- 
- // findEncodingMatches finds as many encodings as it can for this pass
+@@ -120 +121,2 @@
 -func findEncodingMatches(data string) []encodingMatch {
 +func findEncodingMatches(data string) []encodingMatch { return findEncodingMatchesBudget(data, nil) }
 +func findEncodingMatchesBudget(data string, meter *budget.Meter) []encodingMatch {
- 	var all []encodingMatch
+@@ -122 +124,5 @@
 -	for _, matchIndex := range encodingsRe.FindAllStringSubmatchIndex(data, -1) {
 +	indices := meter.StringSubmatchIndices(encodingsRe, data)
 +	meter.Count(len(indices))
 +	meter.Allocate(int64(len(indices)) * 256)
 +	for _, matchIndex := range indices {
 +		meter.Check()
- 		// Add the encodingMatch with its proper encoding
- 		for i, j := 2, 0; i < len(matchIndex); i, j = i+2, j+1 {
- 			if matchIndex[i] > -1 {
 --- a/detect/codec/segment.go
 +++ b/detect/codec/segment.go
-@@ -2,6 +2,7 @@
- 
- import (
- 	"fmt"
+@@ -4,0 +5 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- )
- 
- // EncodedSegment represents a portion of text that is encoded in some way.
-@@ -100,6 +101,9 @@
- // AdjustMatchIndex maps a match index from the current decode pass back to
- // its location in the original text
- func AdjustMatchIndex(segments []*EncodedSegment, matchIndex []int) []int {
+@@ -102,0 +104,3 @@
 +	return AdjustMatchIndexBudget(segments, matchIndex, nil)
 +}
 +func AdjustMatchIndexBudget(segments []*EncodedSegment, matchIndex []int, meter *budget.Meter) []int {
- 	// Don't adjust if we're not provided any segments
- 	if len(segments) == 0 {
- 		return matchIndex
-@@ -109,7 +113,7 @@
- 	match := startEnd{matchIndex[0], matchIndex[1]}
- 
- 	// Map the match to its orignal location
+@@ -112 +116 @@
 -	adjusted := toOriginal(segments, match)
 +	adjusted := toOriginalBudget(segments, match, meter)
- 
- 	// Return the adjusted match index
- 	return []int{
-@@ -136,6 +140,10 @@
- // toOriginal maps a start/end to its start/end in the original text
- // the provided start/end should be relative to the segment's decoded value
- func toOriginal(predecessors []*EncodedSegment, decoded startEnd) startEnd {
+@@ -138,0 +143,4 @@
 +	return toOriginalBudget(predecessors, decoded, nil)
 +}
 +func toOriginalBudget(predecessors []*EncodedSegment, decoded startEnd, meter *budget.Meter) startEnd {
 +	meter.Work(1)
- 	if len(predecessors) == 0 {
- 		return decoded
- 	}
-@@ -144,6 +152,7 @@
- 	encoded := startEnd{}
- 
- 	for _, p := range predecessors {
+@@ -146,0 +155 @@
 +		meter.Work(1)
- 		if !p.decoded.overlaps(decoded) {
- 			continue // Not in scope
- 		}
-@@ -169,5 +178,5 @@
- 
- 	// Climb up another level
- 	// (NOTE: each segment references all the predecessors)
+@@ -172 +181 @@
 -	return toOriginal(predecessors[0].predecessors, encoded)
 +	return toOriginalBudget(predecessors[0].predecessors, encoded, meter)
- }
 --- a/detect/codec/unicode.go
 +++ b/detect/codec/unicode.go
-@@ -2,6 +2,7 @@
- 
- import (
- 	"bytes"
+@@ -4,0 +5 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- 	"strconv"
- 	"strings"
- 	"unicode/utf8"
-@@ -28,12 +29,22 @@
- 
- // decodeUnicode decodes Unicode escape sequences in the given string
- func decodeUnicode(encodedValue string) string {
+@@ -30,0 +32,6 @@
 +	return decodeUnicodeBudget(encodedValue, nil)
 +}
 +func decodeUnicodeBudget(encodedValue string, meter *budget.Meter) string {
 +	meter.Check()
 +	meter.Allocate(int64(len(encodedValue))*32 + 128)
 +	meter.Work(int64(len(encodedValue)))
- 	// First, check if we have a continuous sequence of Unicode code points
+@@ -32 +39 @@
 -	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, -1); len(matches) > 0 {
 +	if matches := meter.Strings(unicodeMultiCodePointPat, encodedValue); len(matches) > 0 {
- 		// For each detected sequence of code points
+@@ -33,0 +41 @@
 +		meter.Count(len(matches))
- 		for _, match := range matches {
+@@ -34,0 +43,3 @@
 +			meter.Check()
 +			meter.Allocate(int64(len(encodedValue)) * 2)
 +			meter.Work(int64(len(encodedValue)))
- 			// Decode the entire sequence at once
+@@ -36 +47 @@
 -			decodedSequence := decodeMultiCodePoint(match)
 +			decodedSequence := decodeMultiCodePointBudget(match, meter)
- 
- 			// If we successfully decoded something, replace it in the original string
- 			if decodedSequence != "" && decodedSequence != match {
-@@ -44,11 +55,15 @@
- 	}
- 
- 	// Next, check if we have a continuous sequence of escape sequences
+@@ -47 +58 @@
 -	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, -1); len(matches) > 0 {
 +	if matches := meter.Strings(unicodeMultiEscapePat, encodedValue); len(matches) > 0 {
- 		// For each detected sequence of escape sequences
+@@ -48,0 +60 @@
 +		meter.Count(len(matches))
- 		for _, match := range matches {
+@@ -49,0 +62,3 @@
 +			meter.Check()
 +			meter.Allocate(int64(len(encodedValue)) * 2)
 +			meter.Work(int64(len(encodedValue)))
- 			// Decode the entire sequence at once
+@@ -51 +66 @@
 -			decodedSequence := decodeMultiEscape(match)
 +			decodedSequence := decodeMultiEscapeBudget(match, meter)
- 
- 			// If we successfully decoded something, replace it in the original string
- 			if decodedSequence != "" && decodedSequence != match {
-@@ -69,7 +84,7 @@
- 
- 	// Check and decode Unicode code points (U+1234 format)
- 	if unicodeCodePointPat.Match(data) {
+@@ -72 +87 @@
 -		result = decodeIndividualCodePoints(data)
 +		result = decodeIndividualCodePointsBudget(data, meter)
- 	}
- 
- 	// If no code points were found or we have a mix of formats,
-@@ -78,9 +93,9 @@
- 		// If we already have some result from code point decoding,
- 		// continue decoding escape sequences on that result
- 		if len(result) > 0 {
+@@ -81 +96 @@
 -			result = decodeIndividualEscapes(result)
 +			result = decodeIndividualEscapesBudget(result, meter)
- 		} else {
+@@ -83 +98 @@
 -			result = decodeIndividualEscapes(data)
 +			result = decodeIndividualEscapesBudget(data, meter)
- 		}
- 	}
- 
-@@ -94,6 +109,12 @@
- 
- // decodeMultiCodePoint decodes a continuous sequence of Unicode code points (U+XXXX format)
- func decodeMultiCodePoint(sequence string) string {
+@@ -96,0 +112,6 @@
 +	return decodeMultiCodePointBudget(sequence, nil)
 +}
 +func decodeMultiCodePointBudget(sequence string, meter *budget.Meter) string {
 +	meter.Check()
 +	meter.Allocate(int64(len(sequence))*32 + 128)
 +	meter.Work(int64(len(sequence)))
- 	// If the sequence is empty, return empty string
- 	if sequence == "" {
- 		return ""
-@@ -108,6 +129,7 @@
- 	// Decode each code point and build the result
- 	var decodedRunes []rune
- 	for _, cp := range codePoints {
+@@ -110,0 +132 @@
 +		meter.Check()
- 		// Check if it follows the U+XXXX pattern
- 		if !strings.HasPrefix(cp, "U+") || len(cp) < 6 {
- 			continue
-@@ -137,13 +159,20 @@
- 
- // decodeMultiEscape decodes a continuous sequence of Unicode escape sequences (\uXXXX format)
- func decodeMultiEscape(sequence string) string {
+@@ -139,0 +162,6 @@
 +	return decodeMultiEscapeBudget(sequence, nil)
 +}
 +func decodeMultiEscapeBudget(sequence string, meter *budget.Meter) string {
 +	meter.Check()
 +	meter.Allocate(int64(len(sequence))*32 + 128)
 +	meter.Work(int64(len(sequence)))
- 	// If the sequence is empty, return empty string
- 	if sequence == "" {
- 		return ""
- 	}
- 
- 	// Find all escape sequences
+@@ -146 +174,2 @@
 -	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, -1)
 +	escapes := meter.StringSubmatches(unicodeEscapePat, sequence)
 +	meter.Count(len(escapes))
- 	if len(escapes) == 0 {
- 		return sequence
- 	}
-@@ -151,6 +180,7 @@
- 	// Decode each escape sequence and build the result
- 	var decodedRunes []rune
- 	for _, esc := range escapes {
+@@ -153,0 +183 @@
 +		meter.Check()
- 		// Extract the hexadecimal value
- 		hexValue := esc[1]
- 
-@@ -176,10 +206,17 @@
- // decodeIndividualCodePoints decodes individual Unicode code points (U+1234 format)
- // This is a fallback for when we don't have a continuous sequence of code points
- func decodeIndividualCodePoints(input []byte) []byte {
+@@ -178,0 +209,6 @@
 +	return decodeIndividualCodePointsBudget(input, nil)
 +}
 +func decodeIndividualCodePointsBudget(input []byte, meter *budget.Meter) []byte {
 +	meter.Check()
 +	meter.Allocate(int64(len(input))*32 + 128)
 +	meter.Work(int64(len(input)))
- 	// Find all Unicode code point sequences in the input byte slice
+@@ -180 +216 @@
 -	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, -1)
 +	indices := meter.SubmatchIndices(unicodeCodePointPat, input)
- 
- 	// If none found, return original input
+@@ -182,0 +219 @@
 +	meter.Count(len(indices))
- 	if len(indices) == 0 {
- 		return input
- 	}
-@@ -187,6 +224,8 @@
- 	// Iterate over found indices in reverse order to avoid modifying the slice length
- 	utf8Bytes := make([]byte, maxBytesPerRune)
- 	for i := len(indices) - 1; i >= 0; i-- {
+@@ -189,0 +227,2 @@
 +		meter.Allocate(int64(len(input))*4 + 32)
 +		meter.Work(int64(len(input)))
- 		matches := indices[i]
- 
- 		startIndex := matches[0]
-@@ -223,10 +262,17 @@
- // decodeIndividualEscapes decodes individual Unicode escape sequences (\u1234 format)
- // This is a fallback for when we don't have a continuous sequence of escape sequences
- func decodeIndividualEscapes(input []byte) []byte {
+@@ -225,0 +265,6 @@
 +	return decodeIndividualEscapesBudget(input, nil)
 +}
 +func decodeIndividualEscapesBudget(input []byte, meter *budget.Meter) []byte {
 +	meter.Check()
 +	meter.Allocate(int64(len(input))*32 + 128)
 +	meter.Work(int64(len(input)))
- 	// Find all Unicode escape sequences in the input byte slice
+@@ -227 +272 @@
 -	indices := unicodeEscapePat.FindAllSubmatchIndex(input, -1)
 +	indices := meter.SubmatchIndices(unicodeEscapePat, input)
- 
- 	// If none found, return original input
+@@ -229,0 +275 @@
 +	meter.Count(len(indices))
- 	if len(indices) == 0 {
- 		return input
- 	}
-@@ -234,6 +280,8 @@
- 	// Iterate over found indices in reverse order to avoid modifying the slice length
- 	utf8Bytes := make([]byte, maxBytesPerRune)
- 	for i := len(indices) - 1; i >= 0; i-- {
+@@ -236,0 +283,2 @@
 +		meter.Allocate(int64(len(input))*4 + 32)
 +		meter.Work(int64(len(input)))
- 		matches := indices[i]
- 
- 		startIndex := matches[0]
 --- a/detect/detect.go
 +++ b/detect/detect.go
-@@ -11,6 +11,7 @@
- 	"time"
- 
- 	"github.com/zricethezav/gitleaks/v8/config"
+@@ -13,0 +14 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- 	"github.com/zricethezav/gitleaks/v8/detect/codec"
- 	"github.com/zricethezav/gitleaks/v8/logging"
- 	"github.com/zricethezav/gitleaks/v8/regexp"
-@@ -274,6 +275,12 @@
- // DetectContext is the same as Detect but supports passing in a
- // context to use for timeouts
- func (d *Detector) DetectContext(ctx context.Context, fragment Fragment) []report.Finding {
+@@ -276,0 +278,6 @@
 +	return d.detectContext(ctx, fragment, nil)
 +}
 +
 +func (d *Detector) detectContext(ctx context.Context, fragment Fragment, meter *budget.Meter) []report.Finding {
 +	meter.Check()
 +	meter.Allocate(int64(len(fragment.Raw))*4 + 1024 + int64(len(d.Config.Allowlists))*256)
- 	if fragment.Bytes == nil {
- 		d.TotalBytes.Add(uint64(len(fragment.Raw)))
- 	}
-@@ -308,7 +315,7 @@
- 	currentRaw := fragment.Raw
- 	encodedSegments := []*codec.EncodedSegment{}
- 	currentDecodeDepth := 0
+@@ -311 +318 @@
 -	decoder := codec.NewDecoder()
 +	decoder := codec.NewDecoderWithBudget(meter)
- 
- ScanLoop:
- 	for {
-@@ -318,10 +325,22 @@
- 		default:
- 			// build keyword map for prefiltering rules
- 			keywords := make(map[string]bool)
+@@ -320,0 +328 @@
 +			meter.Allocate(int64(len(currentRaw)) * 4)
- 			normalizedRaw := strings.ToLower(currentRaw)
+@@ -322,3 +330,14 @@
 -			matches := d.prefilter.MatchString(normalizedRaw)
 -			for _, m := range matches {
 -				keywords[normalizedRaw[m.Pos():int(m.Pos())+len(m.Match())]] = true
@@ -756,96 +564,46 @@
 +						keywords[key] = true
 +					}
 +				}
- 			}
- 
- 			for _, rule := range d.Config.Rules {
-@@ -332,14 +351,14 @@
- 					if len(rule.Keywords) == 0 {
- 						// if no keywords are associated with the rule always scan the
- 						// fragment using the rule
+@@ -335 +354 @@
 -						findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
 +						findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
- 						continue
- 					}
- 
- 					// check if keywords are in the fragment
- 					for _, k := range rule.Keywords {
- 						if _, ok := keywords[strings.ToLower(k)]; ok {
+@@ -342 +361 @@
 -							findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
 +							findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
- 							break
- 						}
- 					}
-@@ -364,11 +383,19 @@
- 		}
- 	}
- 
+@@ -367 +386,3 @@
 -	return filter(findings, d.Redact)
 +	meter.Check()
 +	meter.Allocate(int64(len(findings)) * 2048)
 +	return filterBudget(findings, d.Redact, meter)
- }
- 
- // detectRule scans the given fragment for the given rule and returns a list of findings
- func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment) []report.Finding {
+@@ -371,0 +393,6 @@
 +	return d.detectRuleBudget(fragment, currentRaw, r, encodedSegments, nil)
 +}
 +func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, meter *budget.Meter) []report.Finding {
 +	meter.Check()
 +	meter.Work(int64(len(currentRaw)))
 +	meter.Allocate(int64(len(r.Allowlists)) * 256)
- 	var (
- 		findings []report.Finding
- 		logger   = func() zerolog.Logger {
-@@ -410,6 +437,7 @@
- 					finding.Link = createScmLink(fragment.CommitInfo.Remote, finding)
- 					finding.Message = fragment.CommitInfo.Message
- 				}
+@@ -412,0 +440 @@
 +				meter.Allocate(4096)
- 				return append(findings, finding)
- 			}
- 		} else {
-@@ -439,17 +467,24 @@
- 		}
- 	}
- 
+@@ -442 +470,2 @@
 -	matches := r.Regex.FindAllStringIndex(currentRaw, -1)
 +	matches := meter.StringIndices(r.Regex, currentRaw)
 +	meter.Count(len(matches))
- 	if len(matches) == 0 {
- 		return findings
- 	}
- 
- 	// TODO profile this, probably should replace with something more efficient
+@@ -448 +477,4 @@
 -	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
 +	var newlineIndices [][]int
 +	if meter == nil {
 +		newlineIndices = newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
 +	}
- 
- 	// use currentRaw instead of fragment.Raw since this represents the current
- 	// decoding pass on the text
+@@ -452 +484,4 @@
 -	for _, matchIndex := range r.Regex.FindAllStringIndex(currentRaw, -1) {
 +	for _, matchIndex := range matches {
 +		meter.Check()
 +		meter.Allocate(4096 + int64(len(r.Tags))*64 + int64(len(encodedSegments))*256 + int64(len(currentRaw))*4)
 +		meter.Work(int64(len(fragment.Raw)) + int64(len(currentRaw)))
- 		// Extract secret from match
- 		secret := strings.Trim(currentRaw[matchIndex[0]:matchIndex[1]], "\n")
- 
-@@ -466,7 +501,7 @@
- 				continue
- 			}
- 
+@@ -469 +504 @@
 -			matchIndex = codec.AdjustMatchIndex(segments, matchIndex)
 +			matchIndex = codec.AdjustMatchIndexBudget(segments, matchIndex, meter)
- 			metaTags = append(metaTags, codec.Tags(segments)...)
- 			currentLine = codec.CurrentLine(segments, currentRaw)
- 		} else {
-@@ -479,7 +514,12 @@
- 		// in the finding will be the line/column numbers of the _match_
- 		// not the _secret_, which will be different if the secretGroup
- 		// value is set for this rule
+@@ -482 +517,6 @@
 -		loc := location(newlineIndices, fragment.Raw, matchIndex)
 +		var loc Location
 +		if meter == nil {
@@ -853,97 +611,38 @@
 +		} else {
 +			loc = locationRaw(fragment.Raw, matchIndex, meter)
 +		}
- 
- 		if matchIndex[1] > loc.endLineIndex {
- 			loc.endLineIndex = matchIndex[1]
-@@ -520,6 +560,7 @@
- 
- 		// Set the value of |secret|, if the pattern contains at least one capture group.
- 		// (The first element is the full match, hence we check >= 2.)
+@@ -522,0 +563 @@
 +		meter.Allocate(int64(r.Regex.NumSubexp()+1) * 64)
- 		groups := r.Regex.FindStringSubmatch(finding.Secret)
- 		if len(groups) >= 2 {
- 			if r.SecretGroup > 0 {
-@@ -540,6 +581,7 @@
- 		}
- 
- 		// check entropy
+@@ -542,0 +584 @@
 +		meter.Allocate(int64(len(finding.Secret))*64 + 128)
- 		entropy := shannonEntropy(finding.Secret)
- 		finding.Entropy = float32(entropy)
- 		if r.Entropy != 0.0 {
-@@ -553,6 +595,8 @@
- 			}
- 		}
- 
+@@ -555,0 +598,2 @@
 +		// Admit stopword normalization and allowlist result bookkeeping before checks.
 +		meter.Allocate(int64(len(d.Config.Allowlists)+len(r.Allowlists)) * (int64(len(finding.Secret))*4 + 256))
- 		// check if the result matches any of the global allowlists.
- 		if isAllowed, event := checkFindingAllowed(logger, finding, fragment, currentLine, d.Config.Allowlists); isAllowed {
- 			event.Msg("skipping finding: global allowlist")
-@@ -573,17 +617,18 @@
- 	}
- 
- 	// Process required rules and create findings with auxiliary findings
+@@ -576 +620 @@
 -	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger)
 +	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger, meter)
- }
- 
- // processRequiredRules handles the logic for multi-part rules with auxiliary findings
+@@ -580 +624 @@
 -func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger) []report.Finding {
 +func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger, meter *budget.Meter) []report.Finding {
- 	if len(primaryFindings) == 0 {
- 		logger.Debug().Msg("no primary findings to process for required rules")
- 		return primaryFindings
- 	}
- 
- 	// Pre-collect all required rule findings once
+@@ -586,0 +631 @@
 +	meter.Allocate(int64(len(r.RequiredRules)) * 128)
- 	allRequiredFindings := make(map[string][]report.Finding)
- 
- 	for _, requiredRule := range r.RequiredRules {
-@@ -598,7 +643,7 @@
- 		inheritedFragment.InheritedFromFinding = true
- 
- 		// Call detectRule once for each required rule
+@@ -601 +646 @@
 -		requiredFindings := d.detectRule(inheritedFragment, currentRaw, rule, encodedSegments)
 +		requiredFindings := d.detectRuleBudget(inheritedFragment, currentRaw, rule, encodedSegments, meter)
- 		allRequiredFindings[requiredRule.RuleID] = requiredFindings
- 
- 		logger.Debug().
-@@ -621,6 +666,8 @@
- 
- 			// Filter findings that are within proximity of the primary finding
- 			for _, requiredFinding := range foundRequiredFindings {
+@@ -623,0 +669,2 @@
 +				meter.Work(1)
 +				meter.Allocate(1024)
- 				if d.withinProximity(primaryFinding, requiredFinding, requiredRule) {
- 					req := &report.RequiredFinding{
- 						RuleID:      requiredFinding.RuleID,
-@@ -641,6 +688,7 @@
- 		if len(requiredFindings) > 0 && d.hasAllRequiredRules(requiredFindings, r.RequiredRules) {
- 			// Create a finding with auxiliary findings
- 			newFinding := primaryFinding // Copy the primary finding
+@@ -643,0 +691 @@
 +			meter.Allocate(int64(len(requiredFindings)) * 4096)
- 			newFinding.AddRequiredFindings(requiredFindings)
- 			finalFindings = append(finalFindings, newFinding)
- 
 --- a/detect/location.go
 +++ b/detect/location.go
-@@ -1,4 +1,9 @@
- package detect
+@@ -1,0 +2,5 @@
 +
 +import (
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
 +	"strings"
 +)
- 
- // Location represents a location in a file
- type Location struct {
-@@ -11,6 +16,44 @@
- }
- 
- func location(newlineIndices [][]int, raw string, matchIndex []int) Location {
+@@ -13,0 +19,38 @@
 +	if len(newlineIndices) == 0 {
 +		newlineIndices = [][]int{{len(raw), len(raw) + 1}}
 +	}
@@ -982,13 +681,7 @@
 +
 +func locationNext(raw string, matchIndex []int, next func() (int, bool)) Location {
 +
- 	var (
- 		prevNewLine int
- 		location    Location
-@@ -24,19 +67,12 @@
- 	// default startLineIndex to 0
- 	location.startLineIndex = 0
- 
+@@ -27,7 +70,4 @@
 -	// Fixes: https://github.com/zricethezav/gitleaks/issues/1037
 -	// When a fragment does NOT have any newlines, a default "newline"
 -	// will be counted to make the subsequent location calculation logic work
@@ -1000,50 +693,26 @@
 +		newLineByteIndex, ok := next()
 +		if !ok {
 +			break
- 		}
+@@ -35,3 +74,0 @@
 -	}
 -
 -	for lineNum, pair := range newlineIndices {
- 		_lineNum = lineNum
+@@ -39 +75,0 @@
 -		newLineByteIndex := pair[0]
- 		if prevNewLine <= start && start < newLineByteIndex {
- 			lineSet = true
- 			location.startLine = lineNum
-@@ -51,7 +87,7 @@
- 			location.endLineIndex = newLineByteIndex
- 		}
- 
+@@ -54 +90 @@
 -		prevNewLine = pair[0]
 +		prevNewLine = newLineByteIndex
- 	}
- 
- 	if !lineSet {
 --- a/detect/utils.go
 +++ b/detect/utils.go
-@@ -8,6 +8,7 @@
- 	"strings"
- 
- 	"github.com/zricethezav/gitleaks/v8/cmd/scm"
+@@ -10,0 +11 @@
 +	"github.com/zricethezav/gitleaks/v8/detect/budget"
- 	"github.com/zricethezav/gitleaks/v8/logging"
- 	"github.com/zricethezav/gitleaks/v8/report"
- 	"github.com/zricethezav/gitleaks/v8/sources"
-@@ -135,11 +136,18 @@
- 
- // filter will dedupe and redact findings
- func filter(findings []report.Finding, redact uint) []report.Finding {
+@@ -137,0 +139,3 @@
 +	return filterBudget(findings, redact, nil)
 +}
 +func filterBudget(findings []report.Finding, redact uint, meter *budget.Meter) []report.Finding {
- 	var retFindings []report.Finding
- 	for _, f := range findings {
+@@ -139,0 +144,2 @@
 +		meter.Check()
 +		meter.Allocate(2048 + int64(len(f.RuleID))*4 + int64(len(f.Match)+len(f.Line)+len(f.Secret))*4)
- 		include := true
- 		if strings.Contains(strings.ToLower(f.RuleID), "generic") {
- 			for _, fPrime := range findings {
+@@ -142,0 +149,2 @@
 +				meter.Work(int64(len(fPrime.Secret)+len(f.Secret)) + 1)
 +				meter.Allocate(int64(len(fPrime.RuleID)) * 4)
- 				if f.StartLine == fPrime.StartLine &&
- 					f.Commit == fPrime.Commit &&
- 					f.RuleID != fPrime.RuleID &&
