@@ -56,7 +56,7 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
                 raise CaseFailed('installed CLI refused the owned fixture project')
             ui.click('Files')
             ui.click(path.name)
-            ui.fill(ui.api.ROLE_TEXT, 'Contents of ' + path.name, AFTER)
+            ui.fill(ui.api.ROLE_ENTRY, 'Contents of ' + path.name, AFTER)
             ui.click('Save')
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
