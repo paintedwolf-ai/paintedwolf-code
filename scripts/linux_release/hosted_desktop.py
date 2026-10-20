@@ -18,7 +18,8 @@ USER = 'paintedwolf-test'
 INSTALL_PARENT = Path('/opt')
 SHARED_PARENT = Path('/usr/share')
 DESKTOP_PARENTS = tuple(Path('/usr/share') / part for part in (
-    'applications', 'icons', 'icons/hicolor', 'icons/hicolor/32x32', 'icons/hicolor/32x32/apps',
+    'applications', 'polkit-1', 'polkit-1/actions', 'lintian', 'lintian/overrides',
+    'icons', 'icons/hicolor', 'icons/hicolor/32x32', 'icons/hicolor/32x32/apps',
     'icons/hicolor/128x128', 'icons/hicolor/128x128/apps',
     'icons/hicolor/256x256', 'icons/hicolor/256x256/apps'))
 PACKAGES = ['gdm3', 'gnome-session', 'gnome-shell', 'gnome-settings-daemon', 'gnome-keyring',
