@@ -52,6 +52,9 @@ type ProgramProgressResult struct {
 // PrepareProgramEnvelope validates both complete syntax and progress before
 // either owner may apply an effect. A missing update preserves existing progress.
 func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFrame, program ValidatedProgramIdentity, update *ProgramProgressUpdate, admission ProgramStateAdmission, tc tools.ToolContext) (*PreparedProgramEnvelope, error) {
+	if err := frame.alive(); err != nil {
+		return nil, err
+	}
 	if e == nil || program == nil {
 		return nil, fmt.Errorf("sealed program and executor required")
 	}
@@ -122,6 +125,9 @@ func (p *PreparedProgramEnvelope) Close() {
 func (p *PreparedProgramEnvelope) validate(ctx context.Context) error {
 	if p == nil || p.closed || p.program == nil {
 		return fmt.Errorf("program envelope is closed")
+	}
+	if err := p.frame.alive(); err != nil {
+		return err
 	}
 	source, catalog, err := p.program.ValidatedProgramIdentity(ctx)
 	if err != nil {

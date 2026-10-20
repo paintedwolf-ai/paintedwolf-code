@@ -76,8 +76,9 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	definition, err := toolcontract.ToolOperation("write", encoded, contract)
 	testutil.FailErr(t, "compile actual write declaration", err)
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "unit", ExecutionID: "parent"}, ActorID: "fixture-person", SessionID: "s1", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	frame, err := toolexecution.FreezeProgramFrame(parent, tc)
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &programDoorMemory{})
 	testutil.FailErr(t, "capture actual tree", err)
+	t.Cleanup(frame.Close)
 	child := parent
 	child.Identity.ExecutionID = "write-child"
 	child.Identity.ParentExecutionID = "parent"
