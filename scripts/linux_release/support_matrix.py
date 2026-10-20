@@ -10,6 +10,8 @@ import sys
 
 CATALOG = Path(__file__).resolve().parents[2] / "packaging/linux/support-matrix.json"
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]*\Z")
+from .support_variants import qualification
+
 TIERS = {"installed-functional", "native-desktop", "native-security", "native-performance"}
 
 
@@ -79,6 +81,7 @@ def expand(catalog: dict) -> list[dict]:
         text_fields(environment, ("distribution", "release", "desktop", "display", "session",
                                   "portal", "security", "scaling", "coverage"))
         issues(environment)
+        qualification(environment, set(capabilities))
         arches = references(environment, "architectures", architectures)
         modes = references(environment, "installations", installations)
         used_architectures.update(arches)

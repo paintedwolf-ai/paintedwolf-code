@@ -66,13 +66,14 @@ class LinuxSupportMatrixTests(unittest.TestCase):
 
     def test_command_emits_rows_and_rejects_unknown_catalog_version(self):
         script = Path(__file__).resolve().parents[2] / "linux_release" / "support_matrix.py"
-        result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=10)
+        command = [sys.executable, "-m", "scripts.linux_release.support_matrix"]
+        result = subprocess.run(command, cwd=script.parents[2], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["rows"], expand(self.catalog))
         with tempfile.TemporaryDirectory() as directory:
             bad = Path(directory) / "unsupported.json"
             bad.write_text('{"format_version": 0}', encoding="utf-8")
-            result = subprocess.run([sys.executable, str(script), "--catalog", str(bad)],
+            result = subprocess.run([*command, "--catalog", str(bad)], cwd=script.parents[2],
                                     capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
