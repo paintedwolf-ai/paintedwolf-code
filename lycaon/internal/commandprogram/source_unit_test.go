@@ -99,3 +99,7 @@ type fixtureScratch struct{}
 func (fixtureScratch) ReserveParserScratch(context.Context, int64) (func(), error) {
 	return func() {}, nil
 }
+
+func (fixtureScratch) ReserveProgramState(context.Context, int64) (func(), error) {
+	return func() {}, nil
+}

@@ -29,10 +29,15 @@ func compressAt(r io.Reader, opts []zstd.EOption) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// StreamMemoryReservation is the conservative reservation for the selected
+// single-worker 64 KiB-window encoder and its staging-copy buffers. It excludes
+// retained bodies, which remain in the storage quota, and is not a Go heap cap.
+const StreamMemoryReservation int64 = 32 << 20
+
 // CompressTo streams a bounded-window frame without retaining its encoded body.
 // Storage callers account staging bytes separately from encoder working memory.
 func CompressTo(w io.Writer, r io.Reader) error {
-	return compressTo(w, r, []zstd.EOption{zstd.WithEncoderConcurrency(1), zstd.WithWindowSize(64 << 10)})
+	return compressTo(w, r, []zstd.EOption{zstd.WithEncoderConcurrency(1), zstd.WithWindowSize(64 << 10), zstd.WithLowerEncoderMem(true)})
 }
 
 func compressTo(w io.Writer, r io.Reader, opts []zstd.EOption) error {

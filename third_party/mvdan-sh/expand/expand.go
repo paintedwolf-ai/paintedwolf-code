@@ -558,22 +558,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			}
 			if (ql == quoteDouble || ql == quoteHeredoc) && strings.Contains(s, "\\") {
 				sb := cfg.strBuilder()
-				for i := 0; i < len(s); i++ {
-					b := s[i]
-					if b == '\\' && i+1 < len(s) {
-						switch s[i+1] {
-						case '"':
-							if ql != quoteDouble {
-								break
-							}
-							fallthrough
-						case '\\', '$', '`': // special chars
-							i++
-							b = s[i] // write the special char, skipping the backslash
-						}
-					}
-					sb.WriteByte(b)
-				}
+				literalText(s, ql, func(text string, _ bool) { sb.WriteString(text) })
 				s = sb.String()
 			}
 			s, _, _ = strings.Cut(s, "\x00") // TODO: why is this needed?
@@ -685,21 +670,13 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				})
 				s = rest
 			}
-			// Escaped characters are quoted, so that they aren't
-			// treated as metacharacters when globbing.
-			for {
-				i := strings.IndexByte(s, '\\')
-				if i < 0 || i == len(s)-1 {
-					break // a trailing backslash is kept as-is
+			literalText(s, quoteNone, func(text string, escaped bool) {
+				part := fieldPart{val: text}
+				if escaped {
+					part.quote = quoteSingle
 				}
-				_, size := utf8.DecodeRuneInString(s[i+1:])
-				curField = append(curField,
-					fieldPart{val: s[:i]},
-					fieldPart{quote: quoteSingle, val: s[i+1 : i+1+size]},
-				)
-				s = s[i+1+size:]
-			}
-			curField = append(curField, fieldPart{val: s})
+				curField = append(curField, part)
+			})
 		case *syntax.SglQuoted:
 			allowEmpty = true
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}

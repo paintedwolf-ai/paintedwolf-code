@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -42,14 +43,28 @@ func (d *SyntaxDiagnostic) Error() string {
 // ParsedProgram retains a private validated tree; Snapshot returns detached data.
 // Neither parsing nor a snapshot grants permission to dispatch an operation.
 type ParsedProgram struct {
-	plan   ProgramSnapshot
-	source []byte
+	plan         ProgramSnapshot
+	source       []byte
+	stateBytes   int64
+	releaseState func()
+	mu           sync.RWMutex
+	closed       bool
 }
 
-func (p *ParsedProgram) Snapshot() ProgramSnapshot { return cloneProgram(p.plan) }
+// Snapshot is a detached inspection copy. Execution uses SnapshotWithMemory so
+// simultaneous copies remain charged to the enclosing aggregate state.
+func (p *ParsedProgram) Snapshot() ProgramSnapshot {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return cloneProgram(p.plan)
+}
 
 // Source returns the original unit bytes for exact span inspection, not replay.
-func (p *ParsedProgram) Source() []byte { return bytes.Clone(p.source) }
+func (p *ParsedProgram) Source() []byte {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return bytes.Clone(p.source)
+}
 
 var programLanguage = sync.OnceValues(toolcontract.LanguageV1)
 
@@ -71,10 +86,10 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 // reserve scratch against its enclosing program before capture or parsing.
 // It only uses the upstream syntax package, never its interpreter or executor.
 func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	return parseProgram(context.Background(), source, options)
+	return parseProgram(context.Background(), source, options, nil)
 }
 
-func parseProgram(ctx context.Context, source []byte, options ParseOptions) (*ParsedProgram, error) {
+func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission) (*ParsedProgram, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -99,25 +114,72 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions) (*Pa
 	if options.CatalogDigest != "" && options.CatalogDigest != toolcontract.LanguageCatalogDigest() {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "the frozen compiled language/catalog identity"}
 	}
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{MaxBytes: languageLimit(catalog, "evaluation_memory_bytes")})).Parse(contextSource{ctx: ctx, reader: bytes.NewReader(source)}, options.SourceName)
+	pool, err := syntax.NewAllocationBudget(languageLimit(catalog, "evaluation_memory_bytes"))
+	if err != nil {
+		return nil, err
+	}
+	// A source label is a path operand or an inline label. Reuse the declared
+	// per-argument byte ceiling; never retain a caller's large substring backing.
+	labelMaximum := languageLimit(catalog, "argument_bytes")
+	if int64(len(options.SourceName)) > labelMaximum {
+		return nil, &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: unitStart(), Expected: "a bounded source-unit label", Limit: "argument_bytes", Unit: "bytes", Maximum: labelMaximum, Observed: int64(len(options.SourceName))}
+	}
+	if err := pool.ReserveHeap(int64(len(options.SourceName)), syntax.Pos{}); err != nil {
+		return nil, parserDiagnostic(err, len(source))
+	}
+	sourceName := strings.Clone(options.SourceName)
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(contextSource{ctx: ctx, reader: bytes.NewReader(source)}, sourceName)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 	if err != nil {
 		return nil, parserDiagnostic(err, len(source))
 	}
-	c := programCompiler{catalog: catalog, source: source}
+	c := programCompiler{catalog: catalog, source: source, pool: pool}
 	c.validate(file)
 	if c.err != nil {
+		return nil, c.err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// This envelope bounds the selected host representations, including boxed
+	// union values, old/new slice backing storage, node IDs and cloned strings.
+	// The 2 KiB/node allowance exceeds the largest host union (BinaryCommand),
+	// its slice-growth overlap and synthesized declaration words. Source text is
+	// cloned at most eight times across capture/lowering metadata. Host recursion
+	// shares the selected parser's conservative 4 KiB active-frame envelope.
+	hostBytes := c.nodeCount*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
+	var releaseState func()
+	retained := false
+	if memory != nil {
+		releaseState, err = memory.ReserveProgramState(ctx, hostBytes)
+		if err != nil {
+			return nil, err
+		}
+		if releaseState == nil {
+			return nil, fmt.Errorf("program state admission returned no release")
+		}
+		defer func() {
+			if !retained {
+				releaseState()
+			}
+		}()
+	}
+	if !c.reserveHeap(hostBytes, file) {
 		return nil, c.err
 	}
 	statements := c.statements(file.Stmts)
 	if c.err != nil {
 		return nil, c.err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sourceHash := sha256.Sum256(source)
 	digest := toolcontract.LanguageCatalogDigest()
-	return &ParsedProgram{source: bytes.Clone(source), plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: options.SourceName, Statements: statements}}, nil
+	retained = true
+	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
 }
 
 func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {
@@ -168,6 +230,10 @@ type programCompiler struct {
 	sequence       int
 	literalContext map[*syntax.Word]bool
 	testWords      map[*syntax.Word]bool
+	staticProof    map[*syntax.Word]bool
+	nodeCount      int64
+	maximumDepth   int64
+	pool           *syntax.AllocationBudget
 	err            error
 }
 
@@ -206,25 +272,38 @@ func (c *programCompiler) nativeName(name string) bool {
 	return false
 }
 func (c *programCompiler) literal(w *syntax.Word) (string, bool) {
-	var out strings.Builder
-	for _, part := range w.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit:
-			out.WriteString(p.Value)
-		case *syntax.SglQuoted:
-			if p.Dollar {
-				return "", false
-			}
-			out.WriteString(p.Value)
-		case *syntax.DblQuoted:
-			text, ok := c.literal(&syntax.Word{Parts: p.Parts})
-			if !ok || p.Dollar {
-				return "", false
-			}
-			out.WriteString(text)
-		default:
+	if w == nil {
+		return "", true
+	}
+	value, known, err := expand.StaticLiteral(w, c.pool)
+	if err != nil {
+		c.err = parserDiagnostic(err, len(c.source))
+		return "", false
+	}
+	if known && !c.staticProof[w] {
+		// Reserve a conservative map-entry/growth envelope before inserting proof.
+		if !c.reserveHeap(256, w) {
 			return "", false
 		}
+		if c.staticProof == nil {
+			c.staticProof = make(map[*syntax.Word]bool)
+		}
+		c.staticProof[w] = true
 	}
-	return out.String(), true
+	return value, known
+}
+
+func (c *programCompiler) reserveHeap(bytes int64, node syntax.Node) bool {
+	if c.err != nil {
+		return false
+	}
+	pos := syntax.Pos{}
+	if node != nil {
+		pos = node.Pos()
+	}
+	if err := c.pool.ReserveHeap(bytes, pos); err != nil {
+		c.err = parserDiagnostic(err, len(c.source))
+		return false
+	}
+	return true
 }

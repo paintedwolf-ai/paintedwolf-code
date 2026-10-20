@@ -215,3 +215,15 @@ func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 		t.Fatalf("foreign dialect diagnostic lost offending span: %+v %v", diagnostic, err)
 	}
 }
+
+func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T) {
+	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `s\et`} {
+		source := "printf changed > ./output; " + name + " data"
+		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		var diagnostic *commandsurface.SyntaxDiagnostic
+		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || diagnostic.Span.StartByte != strings.Index(source, name) {
+			t.Fatalf("excluded literal bypassed complete-unit admission: %q %+v %v", name, diagnostic, err)
+		}
+	}
+	parseProgram(t, `printf '%s' 'e\val' "ev\al"`)
+}

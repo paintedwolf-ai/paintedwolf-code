@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/bytebound"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
 // ScreenedStream admits a reader whose bytes have crossed durable screening.
@@ -24,17 +25,36 @@ func ScreenedReader(reader io.ReadCloser) ScreenedStream { return ScreenedStream
 
 // SpillAdmission reserves staging and retained output against invocation/session
 // quotas before storage starts. The caller retains the lease while this output
-// is reachable; it must separately account the codec's working memory.
+// is reachable; WorkingMemory supplies the codec reservation independently.
 type SpillAdmission interface {
 	ReserveSpill(context.Context, int64) (release func(), err error)
 }
 
+type StreamMemoryAdmission interface {
+	Reserve(context.Context, int64) (release func(), err error)
+}
+
+// StreamStateAdmission keeps retained preview and metadata charged separately
+// from transient screening/codec scratch until the spill reference is released.
+type StreamStateAdmission interface {
+	ReserveProgramState(context.Context, int64) (release func(), err error)
+}
+
 type StreamSpillOptions struct {
-	Store        blobstore.Store
-	ClaimID      string
-	MaximumBytes int64
-	PreviewBytes int
-	Admission    SpillAdmission
+	Store         blobstore.Store
+	ClaimID       string
+	MaximumBytes  int64
+	PreviewBytes  int
+	Admission     SpillAdmission
+	WorkingMemory StreamMemoryAdmission
+	RetainedState StreamStateAdmission
+}
+
+// StreamSpillLimitError reports an attempted byte admission before disk writes.
+type StreamSpillLimitError struct{ Maximum, Observed int64 }
+
+func (e *StreamSpillLimitError) Error() string {
+	return fmt.Sprintf("screened stream spill byte ceiling exceeded: %d > %d", e.Observed, e.Maximum)
 }
 
 // StreamSpill separates retained bytes, a display prefix and stream settlement.
@@ -53,12 +73,15 @@ type StreamSpill struct {
 	mu            sync.Mutex
 	closed        bool
 	active        int
+	memory        StreamMemoryAdmission
+	releaseState  func()
 }
 
 func RetainScreenedStream(ctx context.Context, input ScreenedStream, options StreamSpillOptions) (*StreamSpill, error) {
-	if ctx == nil || input.reader == nil || options.Admission == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
+	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
 		return nil, fmt.Errorf("screened stream spill requires explicit bounded input, claim and quota admission")
 	}
+	defer input.reader.Close()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -72,7 +95,21 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if release == nil {
 		return nil, fmt.Errorf("spill admission returned no release")
 	}
-	defer input.reader.Close()
+	releaseState, err := options.RetainedState.ReserveProgramState(ctx, int64(options.PreviewBytes)+int64(len(options.ClaimID))+4096)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	if releaseState == nil {
+		release()
+		return nil, fmt.Errorf("stream state admission returned no release")
+	}
+	retained := false
+	defer func() {
+		if !retained {
+			releaseState()
+		}
+	}()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -86,7 +123,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store.Dir = ToolOutputSpillDir
 	store.StagedTTL = 7 * 24 * time.Hour
 	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, digest: sha256.New()}
-	blob, err := store.Put("command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes))
+	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
 	if err != nil {
 		release()
 		return nil, err
@@ -95,25 +132,49 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 		reader.failure = ctx.Err()
 		reader.eof = false
 	}
+	out := &StreamSpill{Blob: blob, Preview: reader.preview, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, store: store, claim: strings.Clone(options.ClaimID), release: release, memory: options.WorkingMemory, releaseState: releaseState}
+	retained = true
 	if _, err := store.Retain(options.ClaimID, []string{blob.ID}); err != nil {
+		out.Complete = false
+		out.Failure = err
+		return out, errors.Join(err, out.Close())
+	}
+	return out, nil
+}
+
+func (s *StreamSpill) Open(ctx context.Context) (io.ReadCloser, error) {
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return nil, fmt.Errorf("stream spill has been released")
+	}
+	// Admission may wait for another reader's lease. Never retain the spill
+	// mutex while waiting: that reader needs it to finish closing.
+	release, err := s.memory.Reserve(ctx, zstdcodec.StreamMemoryReservation)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, fmt.Errorf("stream reader memory admission returned no release")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
 		release()
 		return nil, err
 	}
-	return &StreamSpill{Blob: blob, Preview: reader.preview, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, store: store, claim: options.ClaimID, release: release}, nil
-}
-
-func (s *StreamSpill) Open() (io.ReadCloser, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		release()
 		return nil, fmt.Errorf("stream spill has been released")
 	}
 	reader, err := s.store.Open(s.Blob)
 	if err != nil {
+		release()
 		return nil, err
 	}
 	s.active++
-	return &spillReader{ReadCloser: reader, spill: s}, nil
+	return &spillReader{ReadCloser: reader, spill: s, release: release}, nil
 }
 
 // Close relinquishes this claim and asks the blob store to discard an unclaimed
@@ -140,7 +201,9 @@ func (s *StreamSpill) Close() error {
 		return fmt.Errorf("stream spill still retained; accounting remains reserved")
 	}
 	s.closed = true
+	s.Preview = nil
 	s.release()
+	s.releaseState()
 	return nil
 }
 
@@ -169,7 +232,7 @@ func (r *spillInput) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if int64(n) > r.maximum-r.received {
-		r.failure = fmt.Errorf("screened stream spill exceeds %d bytes", r.maximum)
+		r.failure = &StreamSpillLimitError{Maximum: r.maximum, Observed: r.received + int64(n)}
 		return 0, io.EOF
 	}
 	r.received += int64(n)
@@ -189,14 +252,16 @@ func (r *spillInput) Read(b []byte) (int, error) {
 
 type spillReader struct {
 	io.ReadCloser
-	spill *StreamSpill
-	once  sync.Once
-	err   error
+	spill   *StreamSpill
+	once    sync.Once
+	err     error
+	release func()
 }
 
 func (r *spillReader) Close() error {
 	r.once.Do(func() {
 		r.err = r.ReadCloser.Close()
+		r.release()
 		r.spill.mu.Lock()
 		r.spill.active--
 		r.spill.mu.Unlock()
