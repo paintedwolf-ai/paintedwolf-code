@@ -179,4 +179,7 @@ def interactive_window(app, timeout=30) -> dict:
         raise
     except Exception:
         raise CaseUnavailable('normal-interactive-desktop-observation-unavailable') from None
+    code = app.process.poll()
+    if code is not None:
+        raise ValueError('selected installed desktop exited before interactive readiness: ' + str(code))
     raise CaseUnavailable('installed-desktop-did-not-become-interactive')
