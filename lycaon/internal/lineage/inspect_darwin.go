@@ -41,29 +41,6 @@ static int pw_pipe_matches(int pid, const uint64_t *wanted, int count, uint64_t 
  return *found != 0;
 }
 
-// pw_owns_socket reports whether pid holds the TCP socket with these ports.
-static int pw_owns_socket(int pid, uint16_t lport, uint16_t fport) {
- int size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
- if (size <= 0) return 0;
- struct proc_fdinfo *fds = (struct proc_fdinfo *)malloc((size_t)size);
- if (fds == NULL) return 0;
- int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fds, size);
- int count = n > 0 ? n / (int)sizeof(struct proc_fdinfo) : 0;
- int found = 0;
- for (int i = 0; i < count && !found; i++) {
-  if (fds[i].proc_fdtype != PROX_FDTYPE_SOCKET) continue;
-  struct socket_fdinfo info;
-  // The kernel may return fewer bytes than the struct declares; anything that
-  // covers the address block is enough to match a connection.
-  int n2 = proc_pidfdinfo(pid, fds[i].proc_fd, PROC_PIDFDSOCKETINFO, &info, sizeof(info));
-  if (n2 <= 0) continue;
-  if (info.psi.soi_kind != SOCKINFO_TCP) continue;
-  struct in_sockinfo *in = &info.psi.soi_proto.pri_tcp.tcpsi_ini;
-  if (ntohs((uint16_t)in->insi_lport) == lport && ntohs((uint16_t)in->insi_fport) == fport) found = 1;
- }
- free(fds);
- return found;
-}
 */
 import "C"
 
@@ -155,14 +132,18 @@ func peerPID(local, remote netip.AddrPort) (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	self := os.Getpid()
 	for _, pid := range pids {
-		if pid <= 0 || pid == self {
+		if pid <= 0 || pid == os.Getpid() {
 			continue
 		}
-		// The peer's local port is the connection's remote port.
-		if C.pw_owns_socket(C.int(pid), C.uint16_t(remote.Port()), C.uint16_t(local.Port())) != 0 {
-			return pid, true
+		sockets, err := SocketsOf(pid)
+		if err != nil {
+			continue
+		}
+		for _, socket := range sockets {
+			if sameEndpoint(socket.Local, remote) && sameEndpoint(socket.Remote, local) && socket.Holder.Current() {
+				return pid, true
+			}
 		}
 	}
 	return 0, false
