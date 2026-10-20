@@ -9,7 +9,7 @@ from .protocol import focus
 
 class EntryFocus:
     def __init__(self, app, ui, label: str):
-        self.app, self.ui = app, ui
+        self.app, self.ui, self.label = app, ui, label
         self.node = ui.find(ui.api.ROLE_ENTRY, label)
         self.entry = process_identity(self.node.get_process_id())
         self.launch = dict(app.observations['launch_identity'])
@@ -32,9 +32,23 @@ class EntryFocus:
         self._stable(self.launch)
         self._stable(self.entry)
         node, ui = self.node, self.ui
-        if (not owned_process(self.entry['pid'], self.app) or not ui.visible(node)
-                or not node.getState().contains(ui.api.STATE_FOCUSED)):
-            raise CaseUnavailable('normal-owned-editor-focus-unavailable')
+        visible = bool(ui.visible(node))
+        focused = bool(node.getState().contains(ui.api.STATE_FOCUSED))
+        if not visible or not focused:
+            # WebKit can replace the accessible entry during a normal editor render.
+            # Re-observe the exact owned label; never refocus or replay delivered input.
+            replacement = ui.find(ui.api.ROLE_ENTRY, self.label)
+            replacement_identity = process_identity(replacement.get_process_id())
+            if replacement_identity == self.entry:
+                node = replacement
+                self.node = replacement
+                visible = bool(ui.visible(node))
+                focused = bool(node.getState().contains(ui.api.STATE_FOCUSED))
+        if not owned_process(self.entry['pid'], self.app) or not visible or not focused:
+            error = CaseUnavailable('normal-owned-editor-focus-unavailable')
+            error.observations = {'native_input_focus': {'entry_identity': self.entry,
+                'entry_visible': visible, 'entry_focused': focused}}
+            raise error
         parent, seen, frame = node, set(), None
         for _ in range(64):
             parent = parent.get_parent()
