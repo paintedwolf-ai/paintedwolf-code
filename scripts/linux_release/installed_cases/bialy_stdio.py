@@ -11,6 +11,12 @@ from .process import launch, LIMIT
 LINE_LIMIT = 256 << 10
 
 
+class ExchangeFailure(ValueError):
+    def __init__(self, diagnostic: str, observations: dict, streams: dict):
+        super().__init__(diagnostic)
+        self.observations, self.streams = observations, streams
+
+
 def exchange(binding: dict, arguments: list[str], requests: list[dict]) -> dict:
     if not 1 <= len(requests) <= 22:
         raise ValueError('installed Bialy exchange exceeds its fixed request bound')
@@ -19,6 +25,7 @@ def exchange(binding: dict, arguments: list[str], requests: list[dict]) -> dict:
         pipes = {process.stdout.fileno(): stdout, process.stderr.fileno(): stderr}
         for pipe in [process.stdin, process.stdout, process.stderr]:
             os.set_blocking(pipe.fileno(), False)
+        index, phase = 0, 'startup'
         try:
             for index, request in enumerate(requests, 1):
                 if not isinstance(request, dict) or 'id' in request:
@@ -26,6 +33,7 @@ def exchange(binding: dict, arguments: list[str], requests: list[dict]) -> dict:
                 encoded = json.dumps(dict(request, id=index), allow_nan=False).encode() + b'\n'
                 if len(encoded) > LINE_LIMIT:
                     raise ValueError('installed Bialy request exceeds its line bound')
+                phase = 'request-response'
                 started = time.monotonic()
                 deadline = started + (120 if index == 1 else 15)
                 pending, response = memoryview(encoded), None
@@ -67,6 +75,7 @@ def exchange(binding: dict, arguments: list[str], requests: list[dict]) -> dict:
                                 raise ValueError('installed Bialy response differs from its owned request')
                 samples.append((time.monotonic() - started) * 1000)
                 responses.append(response)
+            phase = 'shutdown'
             process.stdin.close()
             deadline = time.monotonic() + 5
             while pipes:
@@ -87,6 +96,11 @@ def exchange(binding: dict, arguments: list[str], requests: list[dict]) -> dict:
             process.wait(timeout=max(0.001, deadline - time.monotonic()))
             if process.returncode != 0:
                 raise ValueError('installed Bialy exited unsuccessfully after its responses')
+        except Exception as error:
+            raise ExchangeFailure(str(error), {'phase': phase, 'request_id': index,
+                'completed_responses': len(responses), 'launch_identity': identity,
+                'exit_code': process.poll()},
+                {'bialy-turn-stdout': bytes(stdout), 'bialy-turn-stderr': bytes(stderr)}) from error
         finally:
             for pipe in [process.stdin, process.stdout, process.stderr]:
                 pipe.close()

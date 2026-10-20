@@ -112,12 +112,17 @@ class BialyLatencyTests(unittest.TestCase):
             for raw in [b'{"probe_ms": true}', b'{"probe_ms": -1}', b'{"probe_ms": NaN}',
                         b'{"probe_ms": 1, "unexpected": 2}', b'[]']:
                 result['stdout'] = raw
-                with self.subTest(raw=raw), self.assertRaises(ValueError):
-                    bialy_performance.reference({})
+                with self.subTest(raw=raw):
+                    failed, retained = bialy_performance.reference({})
+                    self.assertEqual(failed['failure']['code'], 'invalid-probe-response')
+                    self.assertEqual(retained['bialy-stdout'], raw)
             result['stdout'] = b'{"probe_ms": 1}'
             result['timed_out'] = True
-            with self.assertRaisesRegex(ValueError, 'complete'):
-                bialy_performance.reference({})
+            failed, retained = bialy_performance.reference({})
+            self.assertEqual(failed['status'], 'failed')
+            self.assertTrue(failed['failure']['timed_out'])
+            self.assertNotIn('reference_ms', failed)
+            self.assertEqual(retained['bialy-stdout'], result['stdout'])
 
     def test_turn_latency_excludes_hello_and_warmup_without_a_quality_claim(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -174,9 +179,32 @@ class BialyLatencyTests(unittest.TestCase):
             for invalid in ["print('{\"id\":2}',flush=True)",
                             "print('{\"id\":1}\\n{\"id\":2}',flush=True)",
                             "print('{\"id\":true}',flush=True)"]:
-                with self.subTest(program=invalid), self.assertRaises(ValueError):
+                with self.subTest(program=invalid), self.assertRaises(bialy_stdio.ExchangeFailure) as failure:
                     bialy_stdio.exchange({}, [invalid], [{'method': 'hello'}])
+                self.assertEqual(failure.exception.observations['request_id'], 1)
+                self.assertEqual(failure.exception.observations['completed_responses'], 0)
+                self.assertIn('bialy-turn-stdout', failure.exception.streams)
             with patch.object(bialy_stdio, 'LIMIT', 16):
                 with self.assertRaisesRegex(ValueError, 'bound'):
                     bialy_stdio.exchange({}, ["import sys;sys.stderr.write('x'*100);sys.stderr.flush()"], [{'method': 'hello'}])
         self.assertTrue(all(child.poll() is not None for child in processes))
+
+    def test_failed_exchange_preserves_evidence_without_a_latency_or_quality_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'heads').mkdir()
+            (root / 'heads/release.json').write_text(json.dumps({'preload': {'encoding': 'independent',
+                'options': {str(i): str(i) for i in range(16)}}}))
+            data = {'root': str(root), 'model': '/sealed/model',
+                    'files': {'heads/release.json': {}, 'heads/turn-load.safetensors': {}}}
+            failure = bialy_stdio.ExchangeFailure('fixture failure', {'phase': 'request-response', 'request_id': 3},
+                {'bialy-turn-stdout': b'partial', 'bialy-turn-stderr': b'diagnostic'})
+            with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                    patch.object(bialy_performance, 'policy', return_value={'turn': {'tools': {'question': 'fixed'}}}), \
+                    patch.object(bialy_performance, 'exchange', side_effect=failure):
+                report, streams = bialy_performance.turn_latency({})
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['failure']['request_id'], 3)
+            self.assertNotIn('measurements_ms', report)
+            self.assertFalse(report['quality_baseline_qualified'])
+            self.assertEqual(streams['bialy-turn-stderr'], b'diagnostic')

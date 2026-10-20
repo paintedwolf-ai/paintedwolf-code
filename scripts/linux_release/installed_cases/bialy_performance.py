@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .bialy_data import unchanged
 from .process import run
-from .bialy_stdio import exchange
+from .bialy_stdio import exchange, ExchangeFailure
 
 POLICY = Path(__file__).resolve().parents[3] / 'lycaon/config/packs/painted-wolf/platform/host/decisions.yaml'
 
@@ -37,20 +37,25 @@ def reference(binding: dict) -> tuple[dict, dict]:
     # CPU is explicitly observed; it is not the application's automatically selected device.
     result = run(binding, 'bialy', ['probe', '--model', data['model'], '--device', 'cpu'], timeout=120)
     unchanged(binding)
+    report = {'device': 'cpu', 'absolute_limits': absolute, 'launch_identity': result['launch_identity'],
+              'model_data': data, 'selected_application_device_qualified': False,
+              'quality_baseline_qualified': False,
+              'remaining_requirements': ['selected-device-reference', 'uncached-turn-latency',
+                                         'independent-quality-baseline', 'qualified-macos-reference']}
+    streams = {'bialy-stdout': result['stdout'], 'bialy-stderr': result['stderr']}
     if result['timed_out'] or result['output_limit'] or result['exit_code'] != 0:
-        raise ValueError('selected installed Bialy reference probe did not complete')
-    observed = json.loads(result['stdout'])
+        return dict(report, status='failed', failure={'code': 'probe-process-failed',
+            **{key: result[key] for key in ('exit_code', 'timed_out', 'output_limit')}}), streams
+    try:
+        observed = json.loads(result['stdout'])
+    except ValueError:
+        observed = None
     value = observed.get('probe_ms') if isinstance(observed, dict) and set(observed) == {'probe_ms'} else None
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
-        raise ValueError('installed Bialy reference probe returned an invalid measurement')
-    return {'device': 'cpu', 'reference_ms': value, 'absolute_limits': absolute,
-            'reference_within_existing_budget': value <= absolute['reference_ms'],
-            'probe_semantics': 'shipped-reference-task-untimed-warmup-median-three',
-            'launch_identity': result['launch_identity'], 'model_data': data,
-            'selected_application_device_qualified': False, 'quality_baseline_qualified': False,
-            'remaining_requirements': ['selected-device-reference', 'uncached-turn-latency',
-                                       'independent-quality-baseline', 'qualified-macos-reference']}, \
-           {'bialy-stdout': result['stdout'], 'bialy-stderr': result['stderr']}
+        return dict(report, status='failed', failure={'code': 'invalid-probe-response'}), streams
+    return dict(report, status='observed', reference_ms=value,
+                reference_within_existing_budget=value <= absolute['reference_ms'],
+                probe_semantics='shipped-reference-task-untimed-warmup-median-three'), streams
 
 
 def turn_latency(binding: dict) -> tuple[dict, dict]:
@@ -79,8 +84,14 @@ def turn_latency(binding: dict) -> tuple[dict, dict]:
     for index in range(21):
         calls.append({'method': 'decide', 'head': 'turn-load', 'questions': questions,
                       'state': {'host': 'coordinator', 'user': STATES[index % len(STATES)]}})
-    result = exchange(binding, ['serve', '--model', data['model'], '--device', 'cpu',
-                               '--head', 'turn-load=' + str(head)], calls)
+    try:
+        result = exchange(binding, ['serve', '--model', data['model'], '--device', 'cpu',
+                                   '--head', 'turn-load=' + str(head)], calls)
+    except ExchangeFailure as error:
+        unchanged(binding)
+        return {'device': 'cpu', 'status': 'failed', 'failure': error.observations,
+                'diagnostic': str(error), 'quality_baseline_qualified': False,
+                'selected_application_device_qualified': False}, error.streams
     unchanged(binding)
     if len(result['responses']) != 22 or 'engine' not in result['responses'][0]:
         raise ValueError('installed Bialy did not identify the actual serving engine')
