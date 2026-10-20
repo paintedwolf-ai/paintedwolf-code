@@ -184,7 +184,10 @@ def run(tree, *, lease=None, output=None, require_baseline_refusal=False):
             if baseline.returncode == 0:
                 raise ValueError('unprofiled baseline already succeeds; no differential qualification claimed')
         if before == '1':
-            # --add refuses another owner's existing profile; never replace it.
+            if any(line.startswith(name + ' (') for line in profiles()):
+                raise ValueError('the exact transient profile already belongs to another operation')
+            # Retain attempt authority before parser effects: a timeout may follow a load.
+            report['profile_add_attempted'] = True
             subprocess.run(['sudo', '-n', 'apparmor_parser', '--add'], input=source, check=True, capture_output=True, timeout=30)
             report['profile_loaded'] = True
             if not any(line in {name + ' (unconfined)', name + ' (enforce)'} for line in profiles()):
@@ -199,9 +202,12 @@ def run(tree, *, lease=None, output=None, require_baseline_refusal=False):
     except Exception as error:
         report.update({'status': 'failed', 'error': {'type': type(error).__name__, 'message': str(error)}})
     finally:
-        if report['profile_loaded']:
+        if report.get('profile_add_attempted'):
             try:
-                subprocess.run(['sudo', '-n', 'apparmor_parser', '--remove'], input=source, check=True, capture_output=True, timeout=30)
+                observed = any(line.startswith(name + ' (') for line in profiles())
+                report['profile_loaded'] = report['profile_loaded'] or observed
+                if observed:
+                    subprocess.run(['sudo', '-n', 'apparmor_parser', '--remove'], input=source, check=True, capture_output=True, timeout=30)
                 report['profile_removed'] = not any(line.startswith(name + ' (') for line in profiles())
                 if not report['profile_removed']:
                     raise ValueError('owned transient package profile remained loaded')

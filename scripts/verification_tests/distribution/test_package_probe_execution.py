@@ -83,7 +83,8 @@ class PackageProbeTests(unittest.TestCase):
             commands.append(arguments)
             if arguments[:3] == ['sudo', '-n', 'cat']:
                 removed = any(command[-1] == '--remove' for command in commands)
-                return subprocess.CompletedProcess(arguments, 0, b'' if removed else (name + ' (unconfined)\n').encode(), b'')
+                added = any(command[-1] == '--add' for command in commands)
+                return subprocess.CompletedProcess(arguments, 0, (name + ' (unconfined)\n').encode() if added and not removed else b'', b'')
             if arguments[-2:] == ['diagnostics', 'document-core']:
                 return subprocess.CompletedProcess(arguments, 1, b'', b'controlled diagnostic failure')
             return subprocess.CompletedProcess(arguments, 0, b'', b'')
@@ -104,14 +105,29 @@ class PackageProbeTests(unittest.TestCase):
         self.assertIn(['sudo', '-n', 'apparmor_parser', '--remove'], commands)
         self.assertFalse(any('--replace' in command for command in commands))
 
-    def test_refused_add_never_removes_another_owners_existing_profile(self):
-        binding, policy, commands, _ = self.fixture()
-        def refuse(arguments, **kwargs):
-            commands.append(arguments)
-            raise subprocess.CalledProcessError(1, arguments)
+    def test_preexisting_profile_refuses_before_add_or_remove(self):
+        binding, policy, commands, execute = self.fixture()
+        name, _ = owner.profile_source(binding['pw']['path'])
         with patch.object(owner, 'selected', return_value=binding), patch.object(owner, 'authority', return_value={'owned': True}), \
-                patch.object(owner, 'POLICY', policy), patch.object(owner.subprocess, 'run', side_effect=refuse):
+                patch.object(owner, 'POLICY', policy), patch.object(owner, 'profiles', return_value=[name + ' (unconfined)']), \
+                patch.object(owner.subprocess, 'run', side_effect=execute):
             report = owner.run(Path('/tmp/package'))
         self.assertEqual(report['status'], 'failed')
         self.assertFalse(report['profile_loaded'])
-        self.assertEqual(commands, [['sudo', '-n', 'apparmor_parser', '--add']])
+        self.assertEqual(commands, [])
+
+    def test_parser_timeout_after_load_removes_only_its_attempted_profile(self):
+        binding, policy, commands, execute = self.fixture()
+        def timeout_after_effect(arguments, **kwargs):
+            if arguments[-1] == '--add':
+                commands.append(arguments)
+                raise subprocess.TimeoutExpired(arguments, 30)
+            return execute(arguments, **kwargs)
+        with patch.object(owner, 'selected', return_value=binding), patch.object(owner, 'authority', return_value={'owned': True}), \
+                patch.object(owner, 'POLICY', policy), patch.object(owner.subprocess, 'run', side_effect=timeout_after_effect):
+            report = owner.run(Path('/tmp/package'))
+        self.assertEqual(report['status'], 'failed')
+        self.assertTrue(report['profile_add_attempted'])
+        self.assertTrue(report['profile_loaded'])
+        self.assertTrue(report['profile_removed'])
+        self.assertIn(['sudo', '-n', 'apparmor_parser', '--remove'], commands)
