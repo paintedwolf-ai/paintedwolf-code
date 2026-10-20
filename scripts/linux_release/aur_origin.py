@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import platform
 import re
-import resource
 import selectors
 import shutil
 import signal
@@ -19,6 +18,7 @@ MAX_REPOSITORY = 64 << 20
 
 
 def child_limits():
+    import resource
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_REPOSITORY, MAX_REPOSITORY))
 
 
