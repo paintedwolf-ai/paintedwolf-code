@@ -95,3 +95,25 @@ func TestProgramSurfaceFreezesProductionProfileAndWorkerOverlayTogether(t *testi
 		t.Fatal("later overlay leaked hidden write into frozen surface")
 	}
 }
+
+func TestCoordinatorCommandSurfaceIntersectsActualPostureDeclaration(t *testing.T) {
+	all, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
+	executor := NewExecutor(programEffectPolicy{effects: all}, tools.NewDefaultRegistry(), "coordinator")
+	read, write := nativeDefinition(t, "read"), nativeDefinition(t, "write")
+	invocation, _ := frameFixture(t)
+	for _, surfaceID := range []string{"observe_investigate", "observe_plan", "observe_synthesis"} {
+		t.Run(surfaceID, func(t *testing.T) {
+			surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "coordinator", SurfaceID: surfaceID}, []toolcontract.OperationDefinition{read, write})
+			testutil.FailErr(t, "capture actual read-only posture", err)
+			testutil.FailErr(t, "admit native read", surface.ValidateBound(read, invocation, "cat", read.Facts().Commands[0].Effects[0].Mode, nil))
+			if err := surface.ValidateBound(write, invocation, "tee", write.Facts().Commands[0].Effects[0].Mode, nil); err == nil {
+				t.Fatal("coordinator profile widened read-only posture")
+			}
+		})
+	}
+	for _, surfaceID := range []string{"", "invented-surface"} {
+		if _, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "coordinator", SurfaceID: surfaceID}, []toolcontract.OperationDefinition{read}); err == nil {
+			t.Fatal("missing coordinator posture admitted")
+		}
+	}
+}

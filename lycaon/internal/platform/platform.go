@@ -93,6 +93,8 @@ type PolicyEngine interface {
 
 // ToolFilter limits listed tools for a profile.
 type ToolFilter struct {
+	// SurfaceID pins the coordinator declaration for typed native operations.
+	SurfaceID        string
 	ProfileID        string
 	ToolAccess       sandbox.ToolAccess
 	Namespace        string

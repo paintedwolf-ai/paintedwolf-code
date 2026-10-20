@@ -82,6 +82,16 @@ P03 introduces internal compiled declarations and consumer ports only. It adds n
 
 Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
 
+P09's compiled native selection, program attribution frame and conditional
+listener admission are ephemeral, with no serialized interpreter or new database
+shape. `command_effects` on tool profiles, coordinator surfaces and posture
+catalogs is additive configuration vocabulary; absent declarations close the new
+native surface. Posture overlays intersect their shipped restriction. The new
+operation/effect refusal codes are agent-public and keep actual owner and source
+facts. Existing egress endpoint records may carry the additive
+`authority_refused` outcome after a later payload refusal; prior connected facts
+remain distinct. These changes add no OpenAPI fields or generated DTOs.
+
 ## Workflow definitions
 
 A run pins its definition by id and version (`durable-db` state). Released

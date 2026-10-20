@@ -19,6 +19,7 @@ type ProgramFrame struct {
 	identity   tools.InvocationIdentity
 	roots      map[string]programRoot
 	workerRoot string
+	surfaceID  string
 }
 
 type programRoot struct {
@@ -35,7 +36,7 @@ func FreezeProgramFrame(parent toolcontract.OperationInvocation, tc tools.ToolCo
 	if parent.Kind != toolcontract.ProgramChildInvocation || tc.Identity.ToolCallID == "" || parent.SessionID != tc.Identity.SessionID || parent.Scope.ProjectID != tc.Identity.ProjectID {
 		return ProgramFrame{}, fmt.Errorf("program frame requires matching host session, project and initiating call")
 	}
-	frame := ProgramFrame{parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot}
+	frame := ProgramFrame{parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot, surfaceID: tc.Turn.TurnSurfaceID}
 	for _, root := range tc.Source.Roots {
 		if root.ID == "" || root.Path == "" {
 			return ProgramFrame{}, fmt.Errorf("program frame requires addressed root identity")
@@ -92,7 +93,7 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 	if err := child.Validate(); err != nil {
 		return tools.ToolContext{}, err
 	}
-	if f.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.parent.Identity.ProgramID || child.ActorID != f.parent.ActorID || child.SessionID != f.parent.SessionID || child.CatalogDigest != f.parent.CatalogDigest || tc.Identity != f.identity || tc.Source.WorkerBranchRoot != f.workerRoot {
+	if f.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.parent.Identity.ProgramID || child.ActorID != f.parent.ActorID || child.SessionID != f.parent.SessionID || child.CatalogDigest != f.parent.CatalogDigest || tc.Identity != f.identity || tc.Source.WorkerBranchRoot != f.workerRoot || tc.Turn.TurnSurfaceID != f.surfaceID {
 		return tools.ToolContext{}, fmt.Errorf("program child attribution changed")
 	}
 	if err := f.validateScope(child.Scope, tc); err != nil {

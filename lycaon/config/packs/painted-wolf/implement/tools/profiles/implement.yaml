@@ -1,5 +1,6 @@
 id: implement
 description: Implementer — product edits and command execution via command
+command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
   read: sticky

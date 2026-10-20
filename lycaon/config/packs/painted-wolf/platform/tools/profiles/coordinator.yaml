@@ -1,5 +1,6 @@
 id: coordinator
 description: Coordinator tool surface — orchestration without product repo writes
+command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   recall: sticky
   read: sticky

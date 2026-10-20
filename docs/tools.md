@@ -191,6 +191,41 @@ A tool profile is a declared capability surface for an agent role: allowed tools
 
 Open-world `tools: all` means all effective registered tools admitted to that workflow surface, including enabled extensions and MCP definitions. Restricted profiles remain closed and do not gain a tool merely because it registered at runtime.
 
+### Native command admission
+
+Typed command operations are selected explicitly from immutable native definitions.
+Retained structured schema registration and discovery do not expose a native
+binding. The effective profile declares the set-valued `command_effects` axes
+(`read_only`, `mutation`, `external_exec`, `network_egress`); an absent declaration
+admits none. Coordinator surface and session posture declarations further
+intersect that set. Project posture overlays can tighten their shipped set.
+These declarations do not activate the replacement command entry or remove
+current structured tools and shell restrictions.
+
+Each program frame pins the real initiating model call, actor, session, addressed
+roots and source branches. A child has its own host execution identity, fresh
+one-call capability state and owner contract; its identity does not replace the
+model call used for checkpoint correlation. Binding and effect-class admission
+supply no filesystem, network, revision, content-review or person authority.
+Those existing boundaries still admit each reached effect, including resumption.
+
+Progress requirements belong to immutable operation metadata. Retained operations
+use the existing progress-gated catalog; native definitions declare `required` or
+`not_required`. The shared progress predicate preserves worker and review-loop
+exemptions. The introducing command entry must validate the complete syntax unit
+and optional owner-prepared progress before applying that progress, then check
+known prerequisites and recheck reached effects against current progress. A
+progress update remains separate from program success and is never inferred
+from utility output.
+
+A listen request alone grants no connection. Automatic paired loopback access
+requires narrowed per-action conditional admission, current policy, and a fresh
+exact native listener/resource observation before dialing and before payload
+writes. Incomplete platform ownership observations use ordinary approval.
+Separately approved connect grants retain their existing authority. Resource
+identity changes stop later writes without rewriting earlier delivered effects;
+these checks do not claim kernel-atomic ownership across observation and write.
+
 ### Turn tool plans
 
 Each model call compiles one typed tool plan from the active surface, profile, attached roots, live resources, session activations, web-research state, and current MCP definitions. Every consumer for that call reads the same plan: the provider receives its immediate schemas, invocation reachability sees its complete addressable set, and `request_tools` sees its deferred set. A named surface without a successful compile is closed, not an unrestricted turn.

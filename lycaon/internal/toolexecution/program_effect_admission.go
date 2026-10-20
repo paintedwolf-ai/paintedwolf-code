@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -34,6 +35,24 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 	frozen, allowed, err := source.FreezeCommandProfile(ctx, filter.ProfileID)
 	if err != nil {
 		return ProgramSurface{}, err
+	}
+	if filter.ProfileID == toolcontract.CoordinatorProfileID && filter.SurfaceID == "" {
+		return ProgramSurface{}, fmt.Errorf("coordinator program requires captured surface")
+	}
+	if filter.SurfaceID != "" {
+		catalog, err := surfacecatalog.Load()
+		if err != nil {
+			return ProgramSurface{}, err
+		}
+		row, err := catalog.Surface(filter.SurfaceID)
+		if err != nil {
+			return ProgramSurface{}, err
+		}
+		restriction, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+		if err != nil {
+			return ProgramSurface{}, err
+		}
+		allowed &= restriction
 	}
 	selection, err := e.SelectNativeOperations(frozen, filter, active)
 	if err != nil {

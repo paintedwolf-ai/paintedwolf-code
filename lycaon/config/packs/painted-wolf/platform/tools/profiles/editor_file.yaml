@@ -3,6 +3,7 @@ description: >
   Editor selection turns — file tools plus bounded readiness probes. No shell,
   network content fetch, MCP, or spawn/delegate. Used by inline edit and the
   seven selection verbs.
+command_effects: [read_only, mutation]
 tools:
   recall: sticky
   read: sticky

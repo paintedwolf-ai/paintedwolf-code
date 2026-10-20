@@ -12,6 +12,7 @@
 # mode_ref selects the base coordinator prompt.
 
 implement_routing:
+  command_effects: [read_only]
   activity_label: Planning next steps
   mode_ref: implement-routing
   card:
@@ -22,6 +23,7 @@ implement_routing:
   floor: [recall, task, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, promote_overlay, pack_board, list_dir, web_search, fetch_url, wait, scan_query, scan_summary, scan_list, scan_compare, ask_user, surface_note, request_tools]
 
 implement_dispatch:
+  command_effects: [read_only]
   activity_label: Starting workers
   mode_ref: implement-dispatch
   card:
@@ -32,6 +34,7 @@ implement_dispatch:
 
 # Report assembly surface.
 implement_synthesis:
+  command_effects: [read_only]
   activity_label: Putting it together
   mode_ref: implement-synthesis
   card:
@@ -42,6 +45,7 @@ implement_synthesis:
   floor: [recall, read, grep, find, jq, list_dir, survey_repo, summarize, scan_pack, web_search, fetch_url, render_view, view_image, view_video, update_progress, scan_query, scan_summary, scan_list, scan_compare]
 
 orchestrate_plan:
+  command_effects: [read_only]
   activity_label: Planning worker legs
   mode_ref: workflow-orchestrate
   exit: plan
@@ -49,6 +53,7 @@ orchestrate_plan:
 
 # Reconcile chooses report or deeper investigation.
 recon_reconcile:
+  command_effects: [read_only]
   activity_label: Reconciling scout findings
   mode_ref: workflow-orchestrate
   exit: none
@@ -56,6 +61,7 @@ recon_reconcile:
 
 # Pending overlays block new overlapping writes.
 implement_overlay_promote:
+  command_effects: [read_only, mutation, external_exec, network_egress]
   activity_label: Combining results
   mode_ref: implement-overlay-promote
   card:
@@ -70,6 +76,7 @@ implement_overlay_promote:
 # The open-intent surface: read the project on the floor, load everything
 # else per turn.
 implement_investigate:
+  command_effects: [read_only, mutation, external_exec, network_egress]
   activity_label: Exploring the project
   mode_ref: implement-investigate
   card:
@@ -174,6 +181,7 @@ implement_investigate:
 # Worker-wait surface. The wait loop re-enters on every worker event, so the
 # floor stays closed: no request_tools, nothing loadable, no eager MCP.
 implement_park:
+  command_effects: [read_only]
   activity_label: Waiting for workers
   mode_ref: implement-park
   card:
@@ -182,6 +190,7 @@ implement_park:
   floor: [recall, task, pack_board, wait, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, ask_user, surface_note]
 
 workflow_compose:
+  command_effects: [read_only]
   activity_label: Setting up the workflow
   mode_ref: compose
   card:
@@ -191,6 +200,7 @@ workflow_compose:
   floor: [recall, workflow_compose, workflow_compose_from_template, workflow_catalog_summaries, workflow_persist, state_start, ask_user, surface_note]
 
 plan_stub:
+  command_effects: [read_only]
   activity_label: Writing the plan
   mode_ref: plan-stub
   exit: plan
@@ -198,6 +208,7 @@ plan_stub:
 
 # Research tracks worker and checklist progress.
 plan_research:
+  command_effects: [read_only]
   activity_label: Researching the project
   mode_ref: plan-research
   exit: none
@@ -205,6 +216,7 @@ plan_research:
 
 # workflow_transition enters critique.
 plan_approve:
+  command_effects: [read_only]
   activity_label: Getting the plan ready
   mode_ref: workflow-orchestrate
   exit: plan
@@ -212,6 +224,7 @@ plan_approve:
 
 # submit_verdict leaves review; ask_user parks it.
 plan_review:
+  command_effects: [read_only]
   activity_label: Reviewing the plan
   mode_ref: review-adjudicate
   exit: verdict
@@ -219,6 +232,7 @@ plan_review:
 
 # Survey dispatch surface.
 survey_execute:
+  command_effects: [read_only]
   activity_label: Dispatching survey legs
   mode_ref: workflow-orchestrate
   exit: none
@@ -226,6 +240,7 @@ survey_execute:
 
 # Review loop surface.
 review_adjudicate:
+  command_effects: [read_only]
   activity_label: Weighing the evidence
   mode_ref: review-adjudicate
   exit: verdict
@@ -233,6 +248,7 @@ review_adjudicate:
 
 # Decision review may write its blueprint.
 decision_adjudicate:
+  command_effects: [read_only]
   activity_label: Recording the decision
   mode_ref: review-adjudicate
   exit: verdict
@@ -240,6 +256,7 @@ decision_adjudicate:
 
 # Waiting surface permits questions and workflow resumption.
 await_user:
+  command_effects: [read_only]
   activity_label: Waiting for your answer
   mode_ref: await-user-input
   card:
@@ -250,6 +267,7 @@ await_user:
 # Host-held phase surface. The host owns the phase's work and advances it; a
 # turn here answers the person, reading that work's status when asked.
 await_host:
+  command_effects: [read_only]
   activity_label: Answering while the host works
   mode_ref: await-host
   card:
@@ -259,6 +277,7 @@ await_host:
   floor: [recall, read, grep, find, list_dir, scan_query, scan_summary, scan_list, scan_compare, pack_board, answer_decision, ask_user, surface_note]
 
 plan_execute:
+  command_effects: [read_only]
   activity_label: Building the changes
   mode_ref: plan-execute
   exit: none
@@ -269,6 +288,7 @@ plan_execute:
 # compile to load or request.
 # Contract: test/contract/workflows/readonly_surface_contract_test.go
 observe_investigate:
+  command_effects: [read_only]
   activity_label: Inspecting the project
   mode_ref: observe-investigate
   card:
@@ -321,6 +341,7 @@ observe_investigate:
 # No fetch_url: a remote body written to dest changes the project, and fetching
 # belongs to the researcher leg.
 observe_plan:
+  command_effects: [read_only]
   activity_label: Reviewing worker legs
   mode_ref: workflow-orchestrate
   exit: plan
@@ -328,6 +349,7 @@ observe_plan:
 
 # No fetch_url, for the reason above.
 observe_synthesis:
+  command_effects: [read_only]
   activity_label: Reviewing findings
   mode_ref: implement-synthesis
   card:

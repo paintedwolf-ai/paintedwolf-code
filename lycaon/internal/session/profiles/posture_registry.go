@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -16,10 +17,11 @@ import (
 // and its invoke rules; the tool surface comes from the workflow manifest or the
 // session's agent.
 type PostureSpec struct {
-	ID          api.SessionPosture `yaml:"-"`
-	Description string             `yaml:"description"`
-	Rules       []string           `yaml:"rules"`
-	Label       string             `yaml:"label"`
+	CommandEffects toolcontract.CommandEffects `yaml:"-"`
+	ID             api.SessionPosture          `yaml:"-"`
+	Description    string                      `yaml:"description"`
+	Rules          []string                    `yaml:"rules"`
+	Label          string                      `yaml:"label"`
 }
 
 type posturesFile struct {
@@ -27,9 +29,10 @@ type posturesFile struct {
 }
 
 type postureEntryYAML struct {
-	Description string   `yaml:"description"`
-	Rules       []string `yaml:"rules"`
-	Label       string   `yaml:"label"`
+	CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
+	Description    string                            `yaml:"description"`
+	Rules          []string                          `yaml:"rules"`
+	Label          string                            `yaml:"label"`
 }
 
 // PostureRegistry resolves posture id → default rules.
@@ -57,11 +60,16 @@ func LoadPostureRegistry() (*PostureRegistry, error) {
 			return nil, fmt.Errorf("session-postures: unknown posture %q", id)
 		}
 		posture := api.SessionPosture(id)
+		effects, err := toolcontract.NewCommandEffects(entry.CommandEffects...)
+		if err != nil {
+			return nil, fmt.Errorf("posture %q command effects: %w", id, err)
+		}
 		entries[posture] = PostureSpec{
-			ID:          posture,
-			Description: strings.TrimSpace(entry.Description),
-			Rules:       append([]string(nil), entry.Rules...),
-			Label:       strings.TrimSpace(entry.Label),
+			ID:             posture,
+			CommandEffects: effects,
+			Description:    strings.TrimSpace(entry.Description),
+			Rules:          append([]string(nil), entry.Rules...),
+			Label:          strings.TrimSpace(entry.Label),
 		}
 	}
 	for _, p := range sessionposture.AllSessionPostures() {
@@ -106,6 +114,13 @@ func mergePostureOverlay(base *PostureRegistry, projectDir string) (*PostureRegi
 		}
 		posture := api.SessionPosture(id)
 		cur := out.entries[posture]
+		if entry.CommandEffects != nil {
+			restriction, err := toolcontract.NewCommandEffects(entry.CommandEffects...)
+			if err != nil {
+				return nil, err
+			}
+			cur.CommandEffects &= restriction
+		}
 		if len(entry.Rules) > 0 {
 			cur.Rules = append([]string(nil), entry.Rules...)
 		}
