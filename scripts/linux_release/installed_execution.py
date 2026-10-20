@@ -102,7 +102,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     facts, observations = collect(environments[environment_id], binding, guest)
     if facts.keys() != set(catalog["recorded_environment_facts"]):
         raise ValueError("installed environment collector differs from the selected catalog")
-    output.mkdir(parents=True, exist_ok=False)
+    output.mkdir(parents=True, mode=0o700, exist_ok=False)
     retained = output / "evidence"
     retained.mkdir()
     for name, document in (("binding.json", binding), ("environment.json", observations),

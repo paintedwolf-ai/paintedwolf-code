@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import re
 import subprocess
 import threading
 import time
@@ -25,6 +26,30 @@ def process_identity(pid: int) -> dict:
     if len(row) < 20:
         raise ValueError("installed process identity is unavailable")
     return {"pid": pid, "parent_pid": int(row[1]), "start_time_ticks": int(row[19])}
+
+
+
+def engine_image(pid: int) -> tuple:
+    before = process_identity(pid)
+    try:
+        observed = Path(f"/proc/{pid}/exe").stat()
+        identity = observed.st_dev, observed.st_ino, observed.st_size
+    except PermissionError:
+        # Nondumpable engines can hide proc-exe even from the actual launcher UID.
+        try:
+            result = subprocess.run(["/usr/bin/sudo", "-n", "/usr/bin/stat", "-L", "-c", "%d:%i:%s", f"/proc/{pid}/exe"],
+                                    capture_output=True, timeout=10, check=False,
+                                    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+        except (OSError, subprocess.SubprocessError) as error:
+            raise CaseUnavailable("selected engine image observer is unavailable") from error
+        if result.returncode:
+            raise CaseUnavailable("selected engine image observer is unavailable")
+        if not re.fullmatch(rb"[0-9]+:[0-9]+:[0-9]+\n", result.stdout):
+            raise ValueError("selected engine image observer returned malformed identity")
+        identity = tuple(int(value) for value in result.stdout.strip().split(b":"))
+    if process_identity(pid) != before:
+        raise ValueError("selected engine changed during image observation")
+    return identity
 
 
 def private_json(path: Path) -> dict:
@@ -93,6 +118,12 @@ class InstalledApp:
         self.stop()
 
     def start(self):
+        self.launch()
+        return self.wait_ready()
+
+    def launch(self):
+        if self.process is not None:
+            raise ValueError("installed application was already launched")
         require_owned_guest(self.binding)
         session = graphical_session()
         environment = session_environment(session)
@@ -126,6 +157,13 @@ class InstalledApp:
                          for name, stream in (("app-stdout", "stdout"), ("app-stderr", "stderr"))]
         for reader in self._readers:
             reader.start()
+        return self
+
+    def wait_ready(self):
+        if self.process is None:
+            raise ValueError("installed application must be launched before readiness capture")
+        config = Path.home() / ".config/paintedwolf"
+        daemon = config / "daemon.json"
         deadline = time.monotonic() + self.timeout
         try:
             while time.monotonic() < deadline and self.process.poll() is None and not self._overflow.is_set():
@@ -153,8 +191,7 @@ class InstalledApp:
         if engine["parent_pid"] != self.process.pid:
             raise ValueError("installed engine is not the captured application's child")
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
-        image = Path(f"/proc/{pid}/exe").stat()
-        if (image.st_dev, image.st_ino, image.st_size) != (expected["device"], expected["inode"], expected["bytes"]):
+        if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
         token_path = config / "api.token"
         descriptor = os.open(token_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)

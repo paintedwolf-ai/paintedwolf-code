@@ -1,0 +1,93 @@
+name: Installed Linux qualification
+
+on:
+  workflow_call:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+      source_tree:
+        type: string
+        required: true
+      control_run_id:
+        type: string
+        required: true
+      control_artifact_id:
+        type: string
+        required: true
+      qualification_plan_run_id:
+        type: string
+        required: true
+      qualification_plan_artifact_id:
+        type: string
+        required: true
+    outputs:
+      raw_artifact_id:
+        value: ${{ jobs.qualify.outputs.raw_artifact_id }}
+      raw_artifact_name:
+        value: linux-installed-raw-campaign
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qualify:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'paintedwolf-ai/paintedwolf-code' &&
+      github.workflow_ref == 'paintedwolf-ai/paintedwolf-code/.github/workflows/release.yml@refs/heads/main'
+    # This runner owns the explicitly provisioned disposable native guest fleet.
+    # A hosted runner or an arbitrary uploaded campaign cannot replace it.
+    runs-on: [self-hosted, linux, paintedwolf-qualification]
+    timeout-minutes: 1440
+    outputs:
+      raw_artifact_id: ${{ steps.retain.outputs.artifact-id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      SOURCE_TREE: ${{ inputs.source_tree }}
+      CONTROL_RUN_ID: ${{ inputs.control_run_id }}
+      CONTROL_ARTIFACT_ID: ${{ inputs.control_artifact_id }}
+      PLAN_RUN_ID: ${{ inputs.qualification_plan_run_id }}
+      PLAN_ARTIFACT_ID: ${{ inputs.qualification_plan_artifact_id }}
+    steps:
+      - name: Check out the immutable qualification controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Select independently retained controls and guest plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./task release:live-test -- --prepare-linux-qualification \
+            --source-commit "$SOURCE_COMMIT" --source-tree "$SOURCE_TREE" \
+            --control-run-id "$CONTROL_RUN_ID" --control-artifact-id "$CONTROL_ARTIFACT_ID" \
+            --qualification-plan-run-id "$PLAN_RUN_ID" --qualification-plan-artifact-id "$PLAN_ARTIFACT_ID" \
+            --output "$RUNNER_TEMP/linux-qualification-prepared"
+      - name: Execute the declared native guest campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./task test:linux:installed -- --execute-plan \
+            --plan "$RUNNER_TEMP/linux-qualification-prepared/plan/qualification-plan.json" \
+            --final-artifacts "$RUNNER_TEMP/linux-qualification-prepared/controls/final-artifacts.json" \
+            --output "$RUNNER_TEMP/linux-qualification-executed"
+      - name: Retain a complete executed campaign with controller provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./task release:live-test -- --retain-linux-qualification \
+            --prepared "$RUNNER_TEMP/linux-qualification-prepared" \
+            --execution "$RUNNER_TEMP/linux-qualification-executed" \
+            --output "$RUNNER_TEMP/linux-qualification-raw"
+      - name: Upload the raw installed campaign
+        id: retain
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: linux-installed-raw-campaign
+          path: ${{ runner.temp }}/linux-qualification-raw
+          if-no-files-found: error
+          retention-days: 30

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import zipfile
 
 from scripts.linux_release.installed_cases.app_api import EngineAPI
+from scripts.linux_release.installed_campaign import command
 from scripts.linux_release.installed_cases.desktop import execute
 from scripts.linux_release.installed_cases.records import retain
 from scripts.linux_release.installed_execution import driver_family, execute_case
@@ -59,3 +60,24 @@ class InstalledHelperTests(unittest.TestCase):
                 stream.writestr("../escape", "unsafe")
             with self.assertRaises(ValueError):
                 receive(archive, root / "unsafe")
+
+    def test_guest_command_pins_ssh_identity_and_quotes_paths(self):
+        target = {"id": "noble", "host": "127.0.0.1", "port": 45557, "user": "tester",
+                  "identity_file": "/private/key", "known_hosts": "/private/known_hosts",
+                  "checkout": "/checkout with spaces", "runtime_bin_dirs": ["/toolchain/bin"],
+                  "artifact_id": "deb-amd64", "environment_id": "ubuntu-24-gnome",
+                  "final_artifacts": "/control/final.json", "file_root": "/packages",
+                  "install_root": "/opt/painted-wolf-code", "output": "/fresh/output",
+                  "nix_program": None, "case_inputs": None}
+        result = command(target, ["./task", "test:linux:installed", "--", "--run-cases"])
+        self.assertIn("StrictHostKeyChecking=yes", result)
+        self.assertIn("IdentitiesOnly=yes", result)
+        self.assertIn("cd '/checkout with spaces'", result[-1])
+        self.assertIn("exec env PATH=/toolchain/bin:/usr/local/bin:/usr/bin:/bin ./task", result[-1])
+        for field, value in (("host", "-oProxyCommand=untrusted"), ("port", True),
+                             ("runtime_bin_dirs", ["/bin:untrusted"])):
+            invalid = {**target, field: value}
+            with self.assertRaises(ValueError):
+                command(invalid, ["./task"])
+        with self.assertRaises(ValueError):
+            command({**target, "command": "untrusted"}, ["./task"])

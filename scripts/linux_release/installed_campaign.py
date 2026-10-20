@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from . import installed_evidence as evidence
-from .installed_execution import read
+from .installed_execution import read, registry
 from .installed_results import admit
 from .installed_transfer import receive
 from .support_matrix import CATALOG, expand
@@ -69,7 +69,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     return leaf
 
 
-def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
+def validate_plan(plan: dict, final: dict) -> tuple:
     evidence.object_fields(plan, {"format_version", "source_commit", "driver_tree", "targets"})
     if type(plan["format_version"]) is not int or plan["format_version"] != 1:
         raise ValueError("unsupported installed guest plan")
@@ -84,9 +84,16 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
         if target["id"] in seen or target["artifact_id"] not in expected:
             raise ValueError("guest plan repeats a target or selects an undeclared artifact")
         seen.add(target["id"])
+    return source, tree, targets
+
+
+def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
+    source, tree, targets = validate_plan(plan, final)
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     root = output / "evidence"
     root.mkdir(mode=0o700)
+    registrations = {"format_version": 1, "installations": {item["id"]: registry(catalog, item["id"]) for item in catalog["installations"]}}
+    (output / "driver-registry.json").write_text(json.dumps(registrations, sort_keys=True, separators=(",", ":")) + "\n")
     rows, row_ids = [], set()
     known = {row["id"]: row for row in expand(catalog)}
     for target in targets:
