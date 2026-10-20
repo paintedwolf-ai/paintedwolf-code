@@ -35,6 +35,8 @@ class InstalledWorkspaceTests(unittest.TestCase):
                     patch.object(workspace, 'interactive_window', return_value={'visible': True}):
                 result = workspace.edit_and_find(None, path)
             self.assertTrue(result['saved_file']['expected_content'])
+            self.assertTrue(result['normal_optional_setup_skip'])
+            self.assertEqual(ui.click.call_args_list[0].args, ('Skip',))
             self.assertEqual(ui.fill.call_args_list[0].args, (1, 'Contents of ' + str(path), workspace.AFTER))
             self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Editor command or search', 'qualification needle'))
             self.assertIn('applied-edit-review-interaction', result['remaining_requirements'])

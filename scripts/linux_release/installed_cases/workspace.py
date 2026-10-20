@@ -10,7 +10,7 @@ import time
 
 from .app import InstalledApp
 from .desktop_ui import DesktopUI, interactive_window
-from .records import retain
+from .records import CaseUnavailable, retain
 
 BEFORE = 'Installed editor fixture.\nFind the qualification needle.\n'
 AFTER = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
@@ -36,6 +36,12 @@ def observed_file(path: Path) -> dict:
 def edit_and_find(app, path: Path) -> dict:
     interactive = interactive_window(app)
     with DesktopUI(app) as ui:
+        skipped = False
+        try:
+            ui.click('Skip')
+            skipped = True
+        except CaseUnavailable:
+            pass
         ui.fill(ui.api.ROLE_TEXT, 'Contents of ' + str(path), AFTER)
         ui.click('Save')
         deadline = time.monotonic() + 30
@@ -49,7 +55,7 @@ def edit_and_find(app, path: Path) -> dict:
         ui.click('Find in file')
         ui.fill(ui.api.ROLE_ENTRY, 'Editor command or search', 'qualification needle')
     return {'interactive': interactive, 'saved_file': disk,
-            'normal_find_input_action': True,
+            'normal_find_input_action': True, 'normal_optional_setup_skip': skipped,
             'remaining_requirements': ['search-result-and-navigation-witness', 'applied-edit-review-interaction']}
 
 
