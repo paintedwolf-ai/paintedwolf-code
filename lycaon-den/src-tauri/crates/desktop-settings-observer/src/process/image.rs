@@ -57,12 +57,14 @@ impl Image {
         let manifest_path = root.join("manifest.json");
         secure(&manifest_path)?;
         let mut raw = Vec::new();
-        OpenOptions::new()
+        let manifest_file = OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
-            .open(manifest_path)?
-            .take((4 << 20) + 1)
-            .read_to_end(&mut raw)?;
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(manifest_path)?;
+        if !manifest_file.metadata()?.is_file() {
+            return Err(invalid());
+        }
+        manifest_file.take((4 << 20) + 1).read_to_end(&mut raw)?;
         if raw.len() > 4 << 20 {
             return Err(invalid());
         }
@@ -87,7 +89,7 @@ impl Image {
         let expected = entries[0];
         let mut file = OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
             .open(path)?;
         let before = file.metadata()?;
         if !before.is_file()
