@@ -41,7 +41,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("FEED_SIGNING_KEYS_JSON:", prepare)
         self.assertIn("./task upgrade:rehearse -- --prepare-bundle", prepare)
         self.assertIn("bundle-upgrade-preparation-evidence", prepare)
-        self.assertIn("if: failure()", prepare)
+        self.assertIn("if: ${{ failure() || cancelled() }}", prepare)
         self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)
         self.assertNotIn("secrets.", execution)
         self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)
