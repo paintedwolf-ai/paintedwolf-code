@@ -66,6 +66,42 @@ class GuestInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'counts differ'):
                 controller.verify_deliveries(root, self.execution, selected)
 
+    def test_both_fixed_transactions_and_partial_search_match_one_host_log(self):
+        import copy, json
+        actor = Mock()
+        actor.observe.return_value = self.focus
+        edit = guest.perform(self.execution, 'owned', actor, self.mailbox())
+        search = guest.perform(self.execution, 'owned', actor, self.mailbox(), operation='editor-find-needle-v1')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            leaf = root / 'leaf/evidence/files/edit-search-review'
+            leaf.mkdir(parents=True)
+            selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+            def write(second, partial=False):
+                observations = {'editor_keyboard': {'physical_vm_keyboard': edit}}
+                observations['native_input' if partial else 'editor_search_keyboard'] = second if partial else {'physical_vm_keyboard': second}
+                (leaf / 'execution.json').write_text(json.dumps({'observations': observations}))
+                rows = []
+                for event in edit['events'] + second['events']:
+                    rows.append(protocol.canonical({'request': event['request'], 'acknowledgment': {
+                        'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']), 'delivery': event['delivery']}}))
+                (root / 'native-input.jsonl').write_bytes(b''.join(rows))
+            write(search)
+            controller.verify_deliveries(root, self.execution, selected)
+            partial = {**copy.deepcopy(search), 'events': search['events'][:3], 'completed': False}
+            write(partial, True)
+            controller.verify_deliveries(root, self.execution, selected)
+            for changed in ({**partial, 'completed': True}, {**search, 'operation': 'editor-replace-save-v1'},
+                            {**search, 'transaction_id': edit['transaction_id']}):
+                write(changed)
+                with self.assertRaises(ValueError):
+                    controller.verify_deliveries(root, self.execution, selected)
+            mixed = copy.deepcopy(search)
+            mixed['events'][1]['request']['operation'] = 'editor-replace-save-v1'
+            write(mixed)
+            with self.assertRaises(ValueError):
+                controller.verify_deliveries(root, self.execution, selected)
+
     def test_stale_ack_and_focus_change_never_clear_or_retry_mutating_request(self):
         for stale in (True, False):
             box, actor = self.mailbox(stale), Mock()
