@@ -136,10 +136,18 @@ The plaintext and compressed staging overlap is admitted against spill quota;
 codec scratch is admitted after input EOF, when upstream screening can release
 its scratch. Preview and metadata have a separate retained-state lease. A
 readable failure prefix remains incomplete. Canceling input closes its source;
-copy/compression cancellation refuses a not-yet-committed body. Closing a spill
-releases accounting only after active readers and other recovery claims permit
-physical collection. Callers keep all applicable leases until their references
-are no longer used. These are logical capacity reservations, not process RSS.
+copy/compression cancellation refuses a not-yet-committed body. Each live body
+reference has its own retention claim, separate from its initiating operation.
+Closing a spill releases its display preview and refuses future opens; body/disk
+accounting remains until active readers and recovery claims permit physical
+collection. `TransferBody` first durably attaches the exact reference, then moves
+the same claim and body leases into the existing invocation/output lifecycle.
+A failed attachment leaves the wrapper responsible. Preview closure cannot
+release a transferred body's quota. Bounded spill reads use one decoder worker,
+an8MiB history ceiling and admitted32MiB scratch; complete bodies may exceed
+that history size. Generic blob readers retain their existing profile. Callers
+keep applicable leases while their references remain reachable. These are
+logical capacity reservations, not process RSS.
 
 `StreamSourceMapping` carries only candidate ranges beside exact bytes. Its
 capture pin and digest stay unchanged when an exact presentation slice narrows

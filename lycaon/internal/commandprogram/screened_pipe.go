@@ -13,12 +13,17 @@ import (
 // byte endpoint. Raw source bytes never enter the pipe or its retained output.
 // Source.Close must unblock a pending Read, as with a process output pipe.
 type ScreenedPipe struct {
-	pipe     *BytePipe
-	source   io.ReadCloser
-	done     chan struct{}
-	once     sync.Once
-	metadata captureprojection.StreamMetadata
-	err      error
+	pipe        *BytePipe
+	source      io.ReadCloser
+	done        chan struct{}
+	once        sync.Once
+	sourceOnce  sync.Once
+	sourceError error
+	mu          sync.Mutex
+	settled     bool
+	cancel      context.CancelCauseFunc
+	metadata    captureprojection.StreamMetadata
+	err         error
 }
 
 func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector, scope captureprojection.Scope, label string, source io.ReadCloser, options captureprojection.StreamOptions, budget *ByteBudget) (*ScreenedPipe, error) {
@@ -29,20 +34,34 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 	if err != nil {
 		return nil, err
 	}
-	out := &ScreenedPipe{pipe: pipe, source: source, done: make(chan struct{})}
+	screenCtx, cancel := context.WithCancelCause(ctx)
+	out := &ScreenedPipe{pipe: pipe, source: source, done: make(chan struct{}), cancel: cancel}
 	go func() {
 		select {
-		case <-ctx.Done():
-			_ = source.Close()
+		case <-screenCtx.Done():
+			_ = out.closeSource()
 		case <-out.done:
 		}
 	}()
 	go func() {
 		defer close(out.done)
-		defer source.Close()
-		out.metadata, out.err = projector.ScreenStream(ctx, scope, label, source, pipe, options)
+		defer out.closeSource()
+		metadata, err := projector.ScreenStream(screenCtx, scope, label, source, pipe, options)
+		termination := StreamScreeningFailed
+		out.mu.Lock()
+		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			err = cause
+			metadata.Complete = false
+			termination = StreamCanceled
+			if errors.Is(cause, ErrConsumerClosed) {
+				termination = StreamConsumerClosed
+			}
+		}
+		out.metadata, out.err, out.settled = metadata, err, true
+		out.mu.Unlock()
+		defer cancel(nil)
 		if out.err != nil {
-			pipe.finish(StreamScreeningFailed, out.err)
+			pipe.finish(termination, out.err)
 		} else {
 			_ = pipe.CloseProducer(nil)
 		}
@@ -56,8 +75,21 @@ func (s *ScreenedPipe) Read(p []byte) (int, error) { return s.pipe.Read(p) }
 // the producing screen separately; downstream closure does not prove its success.
 func (s *ScreenedPipe) Close() error {
 	var err error
-	s.once.Do(func() { _ = s.pipe.CloseConsumer(); err = s.source.Close() })
+	s.once.Do(func() {
+		s.mu.Lock()
+		_ = s.pipe.CloseConsumer()
+		if !s.settled {
+			s.cancel(ErrConsumerClosed)
+		}
+		s.mu.Unlock()
+		err = s.closeSource()
+	})
 	return err
+}
+
+func (s *ScreenedPipe) closeSource() error {
+	s.sourceOnce.Do(func() { s.sourceError = s.source.Close() })
+	return s.sourceError
 }
 
 // Wait returns the capture owner's final hashes and revision facts separately

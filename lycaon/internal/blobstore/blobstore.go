@@ -833,25 +833,7 @@ func (s Store) hasRetentions(id string) (bool, error) {
 
 // Open returns a reader over a resolved blob's plaintext bytes, transparently
 // decompressing the on-disk zstd body as it is read.
-func (s Store) Open(b Blob) (io.ReadCloser, error) {
-	if !s.Available() {
-		return nil, ErrNoStore
-	}
-	rel, _, err := s.findEntry(b.ID)
-	if err != nil {
-		return nil, err
-	}
-	f, err := os.Open(filepath.Join(s.Root, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil, err
-	}
-	dec, err := zstd.NewReader(f)
-	if err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("blobstore: open blob decoder: %w", err)
-	}
-	return &decompressingBlob{file: f, dec: dec}, nil
-}
+func (s Store) Open(b Blob) (io.ReadCloser, error) { return s.openReader(b, false) }
 
 // decompressingBlob streams a zstd decoder over its backing file, closing
 // both together.
