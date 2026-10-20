@@ -13,14 +13,21 @@ import (
 type OperationFacts struct {
 	Identity          string
 	Version           int
+	CatalogDigest     string
 	Contract          Contract
 	Arguments         json.RawMessage
 	Commands          []CommandSpecification
 	Streams           StreamContract
 	Resources         []ResourceLimit
-	ProgressGate      string
+	ProgressGate      ProgressPolicy
 	RejectionContract string
 }
+
+// ProgressExistingAdmission preserves the invoked interface's existing progress
+// owner gate. Admission is separately attributed and is never an effect grant.
+type ProgressPolicy string
+
+const ProgressExistingAdmission ProgressPolicy = "existing_owner_admission"
 
 // StreamContract distinguishes complete byte streams from display projections.
 type StreamContract struct {
@@ -38,7 +45,13 @@ type OperationDefinition struct {
 }
 
 func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
-	if facts.Identity == "" || facts.Version < 1 || facts.Contract.Owner == "" || facts.ProgressGate == "" || facts.RejectionContract == "" {
+	if facts.CatalogDigest == "" {
+		facts.CatalogDigest = LanguageCatalogDigest()
+	}
+	if facts.CatalogDigest != LanguageCatalogDigest() {
+		return OperationDefinition{}, fmt.Errorf("operation catalog digest mismatch")
+	}
+	if facts.Identity == "" || facts.Version < 1 || facts.Contract.Owner == "" || facts.ProgressGate != ProgressExistingAdmission || facts.RejectionContract == "" {
 		return OperationDefinition{}, fmt.Errorf("operation identity, version, owner, progress and rejection contract required")
 	}
 	if strings.TrimSpace(facts.Identity) != facts.Identity || strings.TrimSpace(facts.Contract.Owner) != facts.Contract.Owner || facts.Contract.Lifecycle > LifecycleEphemeralControl {
@@ -47,6 +60,9 @@ func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
 	var schema map[string]json.RawMessage
 	if err := DecodeLanguageJSON(facts.Arguments, &schema); err != nil || string(schema["type"]) != `"object"` {
 		return OperationDefinition{}, fmt.Errorf("operation %s requires an object argument schema", facts.Identity)
+	}
+	if err := ValidateArgumentSchema(facts.Arguments); err != nil {
+		return OperationDefinition{}, err
 	}
 	if facts.Streams.Output == "" || facts.Streams.Error == "" || len(facts.Streams.Statuses) == 0 {
 		return OperationDefinition{}, fmt.Errorf("operation %s requires stream and status contracts", facts.Identity)

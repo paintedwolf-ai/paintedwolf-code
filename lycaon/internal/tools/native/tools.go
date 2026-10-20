@@ -41,7 +41,7 @@ func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
 	appendMode, _ := args["append"].(bool)
-	result, err := t.Apply(ctx, WriteInput{Path: path, Content: content, Append: appendMode}, tctx)
+	result, err := t.Apply(ctx, WriteInput{Path: path, Content: content, Append: appendMode, Admission: WriteConversational}, tctx)
 	if err != nil {
 		return "", err
 	}
