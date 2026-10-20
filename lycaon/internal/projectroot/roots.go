@@ -96,7 +96,7 @@ func ResolveAbs(roots []RootRef, activeRootID, path string) (abs string, root Ro
 	if strings.ContainsRune(path, 0) {
 		return "", RootRef{}, fmt.Errorf("path contains NUL byte")
 	}
-	raw := strings.TrimSpace(path)
+	raw := path
 	if raw == "" {
 		return "", RootRef{}, ErrNoProjectRoots
 	}
