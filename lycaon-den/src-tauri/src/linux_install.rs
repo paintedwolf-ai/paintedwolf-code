@@ -93,13 +93,14 @@ fn owner(executable: &Path) -> Option<InstalledPackage> {
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new(program)
-        .args(args)
+    let mut command = std::process::Command::new(program);
+    command.args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("LC_ALL", "C")
-        .stdin(std::process::Stdio::null())
-        .output()
+        .stdin(std::process::Stdio::null());
+    crate::child_credentials::prepare(&mut command);
+    let output = command.output()
         .ok()?;
     output
         .status
