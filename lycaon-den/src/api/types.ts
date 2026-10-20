@@ -6189,13 +6189,13 @@ export interface components {
             tool: string;
             /** @description Arguments accepted directly by the named tool */
             args: {
+                /** @description Complete portable command program for an inspection action */
+                command?: string;
                 path?: string;
                 paths?: string[];
                 task?: string;
                 pattern?: string;
                 cursor?: string;
-                offset?: number;
-                limit?: number;
             };
             /** @enum {string} */
             kind: "inspect" | "continue";

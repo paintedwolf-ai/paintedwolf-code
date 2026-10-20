@@ -27,6 +27,9 @@ components:
           type: object
           description: Arguments accepted directly by the named tool
           properties:
+            command:
+              type: string
+              description: Complete portable command program for an inspection action
             path:
               type: string
             paths:
@@ -39,10 +42,6 @@ components:
               type: string
             cursor:
               type: string
-            offset:
-              type: integer
-            limit:
-              type: integer
         kind:
           type: string
           enum: [inspect, continue]

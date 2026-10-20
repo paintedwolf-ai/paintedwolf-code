@@ -7,8 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 func TestBriefingRetainsRelevantSectionAcrossDefinitionDensity(t *testing.T) {
@@ -46,13 +49,12 @@ func TestNextActionArgumentsAreExecutableReadRange(t *testing.T) {
 	var action struct {
 		Tool string
 		Args struct {
-			Path          string
-			Offset, Limit int
+			Command string
 		}
 		Kind string
 	}
 	testutil.FailErr(t, "decode read action", json.Unmarshal(raw, &action))
-	if action.Tool != "read" || action.Args.Path != "source.go" || action.Args.Offset != 40 || action.Args.Limit != 24 || action.Kind != "inspect" {
+	if action.Tool != "command" || action.Args.Command != "sed -n '40,63p' -- 'source.go'" || action.Kind != "inspect" {
 		t.Fatalf("action=%s", raw)
 	}
 }
@@ -140,5 +142,48 @@ func TestSourceFocusUsesCodeIdentifiersForBroadQuestion(t *testing.T) {
 	candidate = FocusSource(context.Background(), noRerank, "How are principal types organized and used for access checks?", candidate, body, 24)
 	if candidate.StartLine < 42 || candidate.StartLine > 43 {
 		t.Fatalf("broad question source=%+v", candidate)
+	}
+}
+
+func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
+	path := "src/quote'$(touch marker);\\native\nfile.go"
+	for _, tool := range []string{"read", "grep", "find", "list_dir"} {
+		raw, err := json.Marshal(NextAction{Tool: tool, Path: path, Pattern: "a'$(false)"})
+		testutil.FailErr(t, "encode actual inspection action", err)
+		var wire actionWire
+		testutil.FailErr(t, "decode command action", json.Unmarshal(raw, &wire))
+		if wire.Tool != "command" || wire.Args.Command == "" || wire.Args.Path != "" {
+			t.Fatalf("retired tool schema leaked: %s", raw)
+		}
+		program, err := commandsurface.ParseProgram([]byte(wire.Args.Command), commandsurface.ParseOptions{})
+		testutil.FailErr(t, "admit generated portable command", err)
+		if len(program.Snapshot().Statements) != 1 {
+			t.Fatal("literal operand injected another statement")
+		}
+		parsed, err := syntax.NewParser().Parse(strings.NewReader(wire.Args.Command), "fixture")
+		testutil.FailErr(t, "parse literal operand using selected parser", err)
+		call := parsed.Stmts[0].Cmd.(*syntax.CallExpr)
+		pool, err := syntax.NewAllocationBudget(1 << 20)
+		testutil.FailErr(t, "admit literal decoding", err)
+		got, static, err := expand.StaticLiteral(call.Args[len(call.Args)-1], pool)
+		testutil.FailErr(t, "decode selected literal operation", err)
+		if !static || got != path {
+			t.Fatalf("operand changed: %q", got)
+		}
+		var restored NextAction
+		testutil.FailErr(t, "restore actual command action", json.Unmarshal(raw, &restored))
+		again, err := json.Marshal(restored)
+		testutil.FailErr(t, "reencode actual command action", err)
+		if string(raw) != string(again) {
+			t.Fatal("command action roundtrip changed")
+		}
+	}
+	for _, path := range []string{"bad\x00path", "bad\xffpath"} {
+		if _, err := json.Marshal(NextAction{Tool: "read", Path: path}); err == nil {
+			t.Fatal("unrepresentable command source silently changed")
+		}
+	}
+	if _, err := json.Marshal(NextAction{Tool: "read", Path: "source", Lines: "1-2;false"}); err == nil {
+		t.Fatal("invalid range admitted")
 	}
 }
