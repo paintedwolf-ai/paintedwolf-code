@@ -110,8 +110,10 @@ class InstalledPerformanceTreeTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == 'linux', 'actual /proc process-tree observation requires Linux')
     def test_actual_owned_descendants_and_separate_control_process(self):
-        script = ('import subprocess,sys; p=subprocess.Popen([sys.executable,"-c",'
-                  '"import time;print(123,flush=True);time.sleep(60)"],stdout=subprocess.PIPE,text=True);'
+        script = ('import subprocess,sys,ctypes;assert ctypes.CDLL(None).prctl(4,0,0,0,0)==0;'
+                  'p=subprocess.Popen([sys.executable,"-c",'
+                  '"import time,ctypes;assert ctypes.CDLL(None).prctl(4,0,0,0,0)==0;'
+                  'print(123,flush=True);time.sleep(60)"],stdout=subprocess.PIPE,text=True);'
                   'assert p.stdout.readline()=="123\\n";print(p.pid,flush=True);'
                   'sys.stdin.read();p.terminate();p.wait();p.stdout.close()')
         root = subprocess.Popen([sys.executable, '-c', script], stdin=subprocess.PIPE,
