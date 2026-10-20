@@ -14,11 +14,11 @@ SERVICE = 'paintedwolf-vault-identity.service'
 
 
 class NativeServiceLifecycle(unittest.TestCase):
-    def transaction(self, family, arguments, *, enabled=False, active=False, masked=False):
+    def transaction(self, family, arguments, *, enabled=False, active=False, masked=False, socket_active=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             state = root / 'state.json'
-            state.write_text(json.dumps({'enabled': enabled, 'active': active, 'masked': masked, 'calls': []}))
+            state.write_text(json.dumps({'enabled': enabled, 'active': active, 'masked': masked, 'socket_active': socket_active, 'calls': []}))
             manager = root / 'systemctl'
             manager.write_text(f'#!{sys.executable}\n' + '''import json,os,sys
 from pathlib import Path
@@ -27,7 +27,7 @@ s=json.loads(p.read_text()); a=sys.argv[1:]; s['calls'].append(a)
 code=0
 if a==['enable','--now','paintedwolf-vault-identity.socket']:
     if s['masked']: code=1
-    else: s.update(enabled=True,active=True)
+    else: s.update(enabled=True,socket_active=True)
 elif a==['try-restart','paintedwolf-vault-identity.service']:
     if s['active']: s['restarts']=s.get('restarts',0)+1
 elif a!=['daemon-reload']: raise SystemExit('unexpected service operation')
@@ -57,11 +57,13 @@ set -- ''' + ' '.join(shlex.quote(value) for value in arguments) + '\n. ' + shle
             with self.subTest(family=family):
                 installed = self.transaction(family, arguments)
                 self.assertTrue(installed['enabled'])
-                self.assertTrue(installed['active'])
+                self.assertTrue(installed['socket_active'])
+                self.assertFalse(installed['active'])
                 masked = self.transaction(family, arguments, masked=True)
                 self.assertTrue(masked['masked'])
                 self.assertFalse(masked['enabled'])
                 self.assertFalse(masked['active'])
+                self.assertFalse(masked['socket_active'])
 
     def test_upgrades_preserve_enablement_and_restart_only_an_active_service(self):
         for family, arguments in [('deb', ['configure', '1.0.1']), ('rpm', ['2']), ('rpm', ['3'])]:
@@ -69,8 +71,9 @@ set -- ''' + ' '.join(shlex.quote(value) for value in arguments) + '\n. ' + shle
                                            (True, False, False), (True, True, False),
                                            (False, True, False)]:
                 with self.subTest(family=family, enabled=enabled, active=active, masked=masked):
-                    result = self.transaction(family, arguments, enabled=enabled, active=active, masked=masked)
+                    result = self.transaction(family, arguments, enabled=enabled, active=active, masked=masked, socket_active=active)
                     self.assertEqual((result['enabled'], result['active'], result['masked']), (enabled, active, masked))
+                    self.assertEqual(result['socket_active'], active)
                     self.assertEqual(result.get('restarts', 0), int(active))
                     self.assertNotIn(['enable', '--now', SOCKET], result['calls'])
                     self.assertIn(['try-restart', SERVICE], result['calls'])
