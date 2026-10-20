@@ -160,7 +160,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                    "--campaign", str(self.root / "campaign.json"),
                    "--final-artifacts", str(self.root / "artifacts.json"),
                    "--source-commit", SOURCE, "--evidence-root", str(self.root)]
-        result = subprocess.run(command, cwd=Path(__file__).resolve().parents[3],
+        result = subprocess.run(command, cwd=Path(__file__).resolve().parents[4],
                                 text=True, capture_output=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         report = json.loads(result.stdout)
@@ -176,7 +176,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                    "--campaign", str(self.root / "campaign.json"),
                    "--final-artifacts", str(self.root / "artifacts.json"),
                    "--source-commit", SOURCE, "--evidence-root", str(self.root), "--report"]
-        cwd = Path(__file__).resolve().parents[3]
+        cwd = Path(__file__).resolve().parents[4]
         with tempfile.TemporaryDirectory() as output_directory:
             output = Path(output_directory) / "report.json"
             result = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)

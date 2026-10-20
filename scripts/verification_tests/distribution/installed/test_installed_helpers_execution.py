@@ -8,7 +8,7 @@ from unittest.mock import patch
 import zipfile
 
 from scripts.linux_release.installed_cases.app_api import EngineAPI
-from scripts.linux_release.installed_campaign import command
+from scripts.linux_release.installed_campaign import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
 from scripts.linux_release.installed_cases.records import retain
 from scripts.linux_release.installed_execution import driver_family, execute_case
@@ -46,7 +46,7 @@ class InstalledHelperTests(unittest.TestCase):
             root = Path(directory)
             leaf = root / "leaf"
             leaf.mkdir()
-            for name in ("campaign.json", "binding.json", "driver-registry.json"):
+            for name in ("campaign.json", "binding.json", "driver-registry.json", "execution.json"):
                 (leaf / name).write_text("{}")
             archive = root / "leaf.zip"
             with archive.open("wb") as stream:
@@ -81,3 +81,18 @@ class InstalledHelperTests(unittest.TestCase):
                 command(invalid, ["./task"])
         with self.assertRaises(ValueError):
             command({**target, "command": "untrusted"}, ["./task"])
+
+    def test_stale_leaf_output_cannot_replace_a_fresh_execution(self):
+        target = {"artifact_id": "selected", "environment_id": "guest"}
+        request = {"format_version": 1, "execution_nonce": "a" * 32, "source_commit": "b" * 40,
+                   "driver_tree": "c" * 40, **target, "variant_id": None}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "leaf").mkdir()
+            (root / "execution-request.json").write_text(json.dumps(request))
+            (root / "leaf/execution.json").write_text(json.dumps(request))
+            self.assertEqual(verify_execution_receipt(root, target, "b" * 40, "c" * 40), request)
+            for name, value in (("execution_nonce", "d" * 32), ("driver_tree", "e" * 40), ("format_version", True)):
+                (root / "leaf/execution.json").write_text(json.dumps({**request, name: value}))
+                with self.assertRaises(ValueError):
+                    verify_execution_receipt(root, target, "b" * 40, "c" * 40)

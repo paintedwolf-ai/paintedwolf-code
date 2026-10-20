@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -79,7 +80,9 @@ def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
 
 def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root: Path,
             install_root: Path, environment_id: str, output: Path, driver_tree: str,
-            nix_program: Path | None = None, case_inputs: dict | None = None) -> dict:
+            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None) -> dict:
+    if not isinstance(execution_nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", execution_nonce):
+        raise ValueError("installed execution requires its fresh controller nonce")
     expected = evidence.artifacts(final, source)
     if artifact_id not in expected:
         raise ValueError("installed execution selected an undeclared final artifact")
@@ -136,6 +139,11 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
                         "cases": cases, "environment_facts": facts})
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": results}
     (output / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True) + "\n")
+    execution = {"format_version": 1, "execution_nonce": execution_nonce, "source_commit": source,
+                 "driver_tree": driver_tree, "artifact_id": artifact_id, "environment_id": environment_id, "variant_id": None}
+    with (output / "execution.json").open("x") as stream:
+        json.dump(execution, stream, sort_keys=True)
+        stream.write("\n")
     return campaign
 
 
@@ -150,13 +158,14 @@ def main(arguments: list[str]) -> int:
     parser.add_argument("--environment-id", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--driver-tree", required=True)
+    parser.add_argument("--execution-nonce", required=True)
     parser.add_argument("--nix-program", type=Path)
     parser.add_argument("--case-inputs", type=Path)
     args = parser.parse_args(arguments)
     try:
         campaign = execute(read(args.catalog), read(args.final_artifacts), args.source_commit,
                            args.artifact_id, args.file_root, args.install_root, args.environment_id,
-                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None)
+                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
         print("Installed case execution refused: " + str(error), file=sys.stderr)
         return 2

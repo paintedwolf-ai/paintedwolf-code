@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -47,8 +48,10 @@ def command(target: dict, arguments: list[str]) -> list[str]:
 
 
 def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
+    request = {"format_version": 1, "execution_nonce": secrets.token_hex(16), "source_commit": source,
+               "driver_tree": tree, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": None}
     arguments = ["./task", "test:linux:installed", "--", "--run-cases", "--source-commit", source,
-                 "--driver-tree", tree, "--artifact-id", target["artifact_id"], "--environment-id", target["environment_id"]]
+                 "--driver-tree", tree, "--execution-nonce", request["execution_nonce"], "--artifact-id", target["artifact_id"], "--environment-id", target["environment_id"]]
     for field in ("final_artifacts", "file_root", "install_root", "output", "nix_program", "case_inputs"):
         value = target[field]
         if value is None and field in {"nix_program", "case_inputs"}:
@@ -56,6 +59,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
         arguments.extend(["--" + field.replace("_", "-"), absolute(value)])
     directory = output / target["id"]
     directory.mkdir(mode=0o700)
+    (directory / "execution-request.json").write_text(json.dumps(request, sort_keys=True) + "\n")
     with (directory / "managed-execution.log").open("xb") as log:
         result = subprocess.run(command(target, arguments), stdout=log, stderr=subprocess.STDOUT, check=False)
     if result.returncode not in {0, 1}:
@@ -66,7 +70,23 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
                        stdout=stream, stderr=log, check=True)
     leaf = directory / "leaf"
     receive(archive, leaf)
+    verify_execution_receipt(directory, target, source, tree)
     return leaf
+
+
+def verify_execution_receipt(directory: Path, target: dict, source: str, tree: str) -> dict:
+    request = read(directory / "execution-request.json")
+    nonce = request.get("execution_nonce") if isinstance(request, dict) else None
+    expected = {"format_version": 1, "execution_nonce": nonce, "source_commit": source,
+                "driver_tree": tree, "artifact_id": target["artifact_id"],
+                "environment_id": target["environment_id"], "variant_id": target.get("variant_id")}
+    if (not isinstance(nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", nonce)
+            or type(request.get("format_version")) is not int or request != expected):
+        raise ValueError("installed execution request differs from its independently selected plan")
+    receipt = read(directory / "leaf/execution.json")
+    if not isinstance(receipt, dict) or type(receipt.get("format_version")) is not int or receipt != expected:
+        raise ValueError("retained guest output is stale or differs from the fresh managed execution request")
+    return receipt
 
 
 def validate_plan(plan: dict, final: dict) -> tuple:
@@ -112,8 +132,14 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
                 for record in case["evidence"]:
                     evidence.retained_file(record, leaf / "evidence")
                     record["path"] = target["id"] + "/" + record["path"]
+            for case in row["cases"]:
+                for name, path in (("execution.json", leaf / "execution.json"),
+                                   ("execution-request.json", output / target["id"] / "execution-request.json")):
+                    case["evidence"].append({"path": target["id"] + "/" + name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
             rows.append(row)
         shutil.copytree(leaf / "evidence", root / target["id"], symlinks=False)
+        shutil.copyfile(leaf / "execution.json", root / target["id"] / "execution.json")
+        shutil.copyfile(output / target["id"] / "execution-request.json", root / target["id"] / "execution-request.json")
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": rows}
     report = admit(catalog, campaign, final, source, root)
     for name, value in (("campaign.json", campaign), ("admission.json", report), ("plan.json", plan)):
