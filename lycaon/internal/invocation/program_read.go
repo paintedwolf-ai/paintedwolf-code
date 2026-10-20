@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -50,6 +51,10 @@ func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID,
 	}
 	defer func() { _ = tx.Rollback() }()
 	out.Program, err = readProgram(ctx, tx, sessionID, programID)
+	if err != nil {
+		return out, err
+	}
+	out.Progress, err = readProgramProgress(ctx, tx, programID)
 	if err != nil {
 		return out, err
 	}
@@ -105,7 +110,7 @@ func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.
 }
 
 func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64, limit int) ([]api.CommandExecutionReceipt, int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,program_id,node_id,parent_execution_id,owner,lifecycle,definition_digest,arguments_digest,reviewed_arguments_digest,arguments_ref,canonical,state,owner_started,owner_invoked,status_code,stop_code,host_stop_code,complete,publication_eligible,output_publishable,effect_certainty,evidence_kind,evidence_ref,owner_ref,recovery_ref,held_version_id,accepted_revision,published_revision,detail_ref,approval_ref,ordinal FROM invocation_program_executions WHERE program_id=? AND ordinal>? ORDER BY ordinal LIMIT ?`, program, after, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT id,program_id,node_id,parent_execution_id,owner,lifecycle,definition_digest,arguments_digest,reviewed_arguments_digest,reviewed_arguments_ref,native_command,effect_mode,effect_classes_json,arguments_ref,canonical,state,owner_started,owner_invoked,status_code,stop_code,host_stop_code,complete,publication_eligible,output_publishable,effect_certainty,evidence_kind,evidence_ref,owner_ref,recovery_ref,held_version_id,accepted_revision,published_revision,detail_ref,approval_ref,ordinal FROM invocation_program_executions WHERE program_id=? AND ordinal>? ORDER BY ordinal LIMIT ?`, program, after, limit)
 	if err != nil {
 		return nil, after, err
 	}
@@ -114,8 +119,12 @@ func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64
 	for rows.Next() {
 		var value api.CommandExecutionReceipt
 		var status sql.NullInt64
-		err = rows.Scan(&value.ID, &value.ProgramID, &value.NodeID, &value.ParentExecutionID, &value.Owner, &value.Lifecycle, &value.DefinitionDigest, &value.ArgumentsDigest, &value.ReviewedArgumentsDigest, &value.ArgumentsRef, &value.Command, &value.State, &value.OwnerStarted, &value.OwnerInvoked, &status, &value.StopCode, &value.HostStopCode, &value.Complete, &value.PublicationEligible, &value.OutputPublishable, &value.EffectCertainty, &value.EvidenceKind, &value.EvidenceRef, &value.OwnerRef, &value.RecoveryRef, &value.HeldVersionID, &value.AcceptedRevision, &value.PublishedRevision, &value.DetailRef, &value.ApprovalRef, &after)
+		var classes string
+		err = rows.Scan(&value.ID, &value.ProgramID, &value.NodeID, &value.ParentExecutionID, &value.Owner, &value.Lifecycle, &value.DefinitionDigest, &value.ArgumentsDigest, &value.ReviewedArgumentsDigest, &value.ReviewedArgumentsRef, &value.NativeCommand, &value.EffectMode, &classes, &value.ArgumentsRef, &value.Command, &value.State, &value.OwnerStarted, &value.OwnerInvoked, &status, &value.StopCode, &value.HostStopCode, &value.Complete, &value.PublicationEligible, &value.OutputPublishable, &value.EffectCertainty, &value.EvidenceKind, &value.EvidenceRef, &value.OwnerRef, &value.RecoveryRef, &value.HeldVersionID, &value.AcceptedRevision, &value.PublishedRevision, &value.DetailRef, &value.ApprovalRef, &after)
 		if err != nil {
+			return nil, after, err
+		}
+		if err = json.Unmarshal([]byte(classes), &value.EffectClasses); err != nil {
 			return nil, after, err
 		}
 		value.StatusCode = optionalStatus(status)
@@ -148,4 +157,16 @@ func optionalStatus(in sql.NullInt64) *int {
 	}
 	status := int(in.Int64)
 	return &status
+}
+
+func readProgramProgress(ctx context.Context, tx *sql.Tx, programID string) (*api.CommandProgramProgressReceipt, error) {
+	var out api.CommandProgramProgressReceipt
+	err := tx.QueryRowContext(ctx, `SELECT execution_id,program_id,root_session_id,state,owner_invoked,arguments_digest,arguments_ref,detail_ref FROM invocation_program_progress WHERE program_id=?`, programID).Scan(&out.ExecutionID, &out.ProgramID, &out.RootSessionID, &out.State, &out.OwnerInvoked, &out.ArgumentsDigest, &out.ArgumentsRef, &out.DetailRef)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

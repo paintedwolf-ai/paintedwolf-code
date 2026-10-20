@@ -699,6 +699,10 @@ type InvocationProgramExecutions struct {
 	DefinitionJson          string         `json:"definition_json"`
 	ArgumentsDigest         string         `json:"arguments_digest"`
 	ReviewedArgumentsDigest string         `json:"reviewed_arguments_digest"`
+	ReviewedArgumentsRef    string         `json:"reviewed_arguments_ref"`
+	NativeCommand           string         `json:"native_command"`
+	EffectMode              string         `json:"effect_mode"`
+	EffectClassesJson       string         `json:"effect_classes_json"`
 	ArgumentsRef            string         `json:"arguments_ref"`
 	Canonical               string         `json:"canonical"`
 	State                   string         `json:"state"`
@@ -751,6 +755,22 @@ type InvocationProgramOutputs struct {
 	Redacted          int64  `json:"redacted"`
 	MappingsJson      string `json:"mappings_json"`
 	CreatedAt         string `json:"created_at"`
+}
+
+type InvocationProgramProgress struct {
+	ExecutionID     string         `json:"execution_id"`
+	ProgramID       string         `json:"program_id"`
+	ActorID         string         `json:"actor_id"`
+	SessionID       string         `json:"session_id"`
+	RootSessionID   string         `json:"root_session_id"`
+	ScopeJson       string         `json:"scope_json"`
+	ArgumentsDigest string         `json:"arguments_digest"`
+	ArgumentsRef    string         `json:"arguments_ref"`
+	State           string         `json:"state"`
+	OwnerInvoked    int64          `json:"owner_invoked"`
+	DetailRef       string         `json:"detail_ref"`
+	StartedAt       string         `json:"started_at"`
+	SettledAt       sql.NullString `json:"settled_at"`
 }
 
 type InvocationProgramSources struct {

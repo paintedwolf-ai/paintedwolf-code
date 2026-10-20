@@ -21,6 +21,23 @@ CREATE TABLE IF NOT EXISTS invocation_programs (
     settled_at TEXT
 ) STRICT;
 
+-- Envelope progress has no fabricated shell node or source span.
+CREATE TABLE IF NOT EXISTS invocation_program_progress (
+    execution_id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL UNIQUE REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    actor_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    root_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+    arguments_digest TEXT NOT NULL,
+    arguments_ref TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('running','unchanged','committed','rejected','unknown')),
+    owner_invoked INTEGER NOT NULL DEFAULT 0 CHECK (owner_invoked IN (0,1)),
+    detail_ref TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    settled_at TEXT
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS invocation_program_sources (
     program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
     source_unit_id TEXT NOT NULL,
@@ -62,6 +79,9 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     arguments_digest TEXT NOT NULL,
     reviewed_arguments_digest TEXT NOT NULL DEFAULT '',
     reviewed_arguments_ref TEXT NOT NULL DEFAULT '',
+    native_command TEXT NOT NULL DEFAULT '',
+    effect_mode TEXT NOT NULL DEFAULT '',
+    effect_classes_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(effect_classes_json)),
     arguments_ref TEXT NOT NULL,
     canonical TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('prepared','waiting','running','completed','refused','failed','interrupted')),

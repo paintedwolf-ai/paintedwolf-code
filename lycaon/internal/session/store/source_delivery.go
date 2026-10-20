@@ -63,27 +63,3 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	}
 	return rec.Handle, nil
 }
-
-func (s *Memory) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	rec := observation.Record()
-	if rec.SourceDelivery == nil {
-		return "", fmt.Errorf("confirmed source delivery required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return "", ErrSessionNotFound
-	}
-	ledger := s.ensureEvidenceSession(sessionID)
-	for handle, row := range ledger {
-		if row.rec.SourceDelivery != nil && *row.rec.SourceDelivery == *rec.SourceDelivery {
-			return handle, nil
-		}
-	}
-	rec.Handle = evidence.FormatHandle(rec.Kind, s.nextEvidenceOrdinalLocked(sessionID, rec.Kind))
-	ledger[rec.Handle] = memoryEvidenceRow{rec: rec}
-	return rec.Handle, nil
-}

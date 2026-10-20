@@ -7876,6 +7876,8 @@ export interface components {
             /** @description Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args. */
             display_subject?: string;
             invocation?: components["schemas"]["InvocationReceipt"];
+            /** @description Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads. */
+            command_program?: components["schemas"]["CommandProgramReceipt"];
             /** @description Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row. */
             tool?: string;
             /** @description ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet. */
@@ -10558,6 +10560,28 @@ export interface components {
             /** Format: date-time */
             settled_at?: string;
         };
+        CommandProgramReceipt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_receipt_id: string;
+            language_version: number;
+            catalog_digest: string;
+            source_digest: string;
+            source_ref: string;
+            /** @enum {string} */
+            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
+            status_code?: number;
+            stop_code?: string;
+            detail_ref: string;
+            /** @enum {string} */
+            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
+            progress_ref?: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+        };
         /** @enum {string} */
         ToolResultOutcome: "completed" | "rejected" | "error";
         FeedbackSubject: {
@@ -11274,27 +11298,20 @@ export interface components {
             /** @description Opaque cursor for the next search page; absent when the search reached the end of the content. */
             next_cursor?: string;
         };
-        CommandProgramReceipt: {
+        /** @description Existing progress owner's envelope invocation, independent of shell effects. */
+        CommandProgramProgressReceipt: {
             /** Format: uuid */
-            id: string;
+            execution_id: string;
             /** Format: uuid */
-            parent_receipt_id: string;
-            language_version: number;
-            catalog_digest: string;
-            source_digest: string;
-            source_ref: string;
+            program_id: string;
+            /** Format: uuid */
+            root_session_id: string;
             /** @enum {string} */
-            state: "running" | "waiting" | "completed" | "rejected" | "failed" | "interrupted";
-            status_code?: number;
-            stop_code?: string;
+            state: "running" | "unchanged" | "committed" | "rejected" | "unknown";
+            owner_invoked: boolean;
+            arguments_digest: string;
+            arguments_ref: string;
             detail_ref: string;
-            /** @enum {string} */
-            progress_state: "unchanged" | "committed" | "rejected" | "unknown";
-            progress_ref?: string;
-            /** Format: date-time */
-            started_at: string;
-            /** Format: date-time */
-            settled_at?: string;
         };
         /** @description Host dynamic execution. It has no assistant message or model tool-call identity. */
         CommandExecutionReceipt: {
@@ -11310,6 +11327,10 @@ export interface components {
             definition_digest: string;
             arguments_digest: string;
             reviewed_arguments_digest?: string;
+            reviewed_arguments_ref?: string;
+            native_command?: string;
+            effect_mode?: string;
+            effect_classes?: ("read_only" | "mutation" | "external_exec" | "network_egress")[];
             arguments_ref: string;
             /** @description Compact display only. Not authority or replay input. */
             command: string;
@@ -11351,6 +11372,7 @@ export interface components {
         };
         CommandProgramReceiptPage: {
             program: components["schemas"]["CommandProgramReceipt"];
+            progress?: components["schemas"]["CommandProgramProgressReceipt"];
             executions: components["schemas"]["CommandExecutionReceipt"][];
             /** @description Known static nodes only; never speculative future loop iterations. */
             nodes: components["schemas"]["CommandProgramNode"][];
@@ -29926,6 +29948,7 @@ export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
 export type InvocationIsolation = components["schemas"]["InvocationIsolation"];
 export type InvocationReceipt = components["schemas"]["InvocationReceipt"];
+export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolResultOutcome = components["schemas"]["ToolResultOutcome"];
 export type FeedbackSubject = components["schemas"]["FeedbackSubject"];
 export type ToolFeedback = components["schemas"]["ToolFeedback"];
@@ -30003,7 +30026,7 @@ export type MessageNavigationResponse = components["schemas"]["MessageNavigation
 export type ChatContentPage = components["schemas"]["ChatContentPage"];
 export type ChatContentMatch = components["schemas"]["ChatContentMatch"];
 export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage"];
-export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
+export type CommandProgramProgressReceipt = components["schemas"]["CommandProgramProgressReceipt"];
 export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
 export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
 export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];

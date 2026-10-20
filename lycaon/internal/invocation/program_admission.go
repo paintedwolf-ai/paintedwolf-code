@@ -29,6 +29,24 @@ func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound t
 	if r.Recorder == nil || r.Inputs == nil || !validDigest(inputs.ArgumentsDigest) {
 		return fmt.Errorf("program start requires screened reviewed-input retention")
 	}
+	if err := validateReviewedInputs(inputs); err != nil {
+		return err
+	}
+	var err error
+	if err = bound.Invocation().Validate(); err != nil {
+		return err
+	}
+	reference, err := r.Inputs.RetainReviewedProgramInputs(ctx, bound.Invocation(), inputs.CanonicalArguments)
+	if err != nil {
+		return err
+	}
+	if reference == "" {
+		return fmt.Errorf("reviewed input retention returned no reference")
+	}
+	return r.Recorder.startNativeOwner(ctx, bound, modelCallID, inputs.ArgumentsDigest, reference)
+}
+
+func validateReviewedInputs(inputs toolcontract.ReviewedOperationInputs) error {
 	// Validate the exact canonical object, not a credential-resolved map. Reject
 	// alternate encodings so the digest and inspected input cannot name two objects.
 	limits, err := receiptLimits()
@@ -55,15 +73,6 @@ func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound t
 	if hex.EncodeToString(sum[:]) != inputs.ArgumentsDigest {
 		return fmt.Errorf("reviewed argument digest mismatch")
 	}
-	if err = bound.Invocation().Validate(); err != nil {
-		return err
-	}
-	reference, err := r.Inputs.RetainReviewedProgramInputs(ctx, bound.Invocation(), inputs.CanonicalArguments)
-	if err != nil {
-		return err
-	}
-	if reference == "" {
-		return fmt.Errorf("reviewed input retention returned no reference")
-	}
-	return r.Recorder.startNativeOwner(ctx, bound, modelCallID, inputs.ArgumentsDigest, reference)
+
+	return nil
 }

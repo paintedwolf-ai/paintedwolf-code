@@ -49,7 +49,7 @@ func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
 
 func (f programReceiptFixture) child(t *testing.T) toolcontract.BoundOperation {
 	t.Helper()
-	return f.childFor(t, "read")
+	return f.childFor(t, "grep")
 }
 
 func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.BoundOperation {

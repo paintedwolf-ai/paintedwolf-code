@@ -36,6 +36,12 @@ components:
         definition_digest: {type: string}
         arguments_digest: {type: string}
         reviewed_arguments_digest: {type: string}
+        reviewed_arguments_ref: {type: string}
+        native_command: {type: string}
+        effect_mode: {type: string}
+        effect_classes:
+          type: array
+          items: {type: string, enum: [read_only, mutation, external_exec, network_egress]}
         arguments_ref: {type: string}
         command: {type: string, description: Compact display only. Not authority or replay input.}
         state: {type: string, enum: [prepared, waiting, running, completed, refused, failed, interrupted]}
@@ -78,6 +84,9 @@ components:
       properties:
         program:
           $ref: '#/components/schemas/CommandProgramReceipt'
+        progress:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramProgressReceipt'
         executions:
           type: array
           items:
@@ -90,3 +99,18 @@ components:
         executions_omitted: {type: integer}
         nodes_omitted: {type: integer}
         next_cursor: {type: string}
+    CommandProgramProgressReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Existing progress owner's envelope invocation, independent of shell effects.
+      required: [execution_id, program_id, root_session_id, state, owner_invoked, arguments_digest, arguments_ref, detail_ref]
+      properties:
+        execution_id: {type: string, format: uuid}
+        program_id: {type: string, format: uuid}
+        root_session_id: {type: string, format: uuid}
+        state: {type: string, enum: [running, unchanged, committed, rejected, unknown]}
+        owner_invoked: {type: boolean}
+        arguments_digest: {type: string}
+        arguments_ref: {type: string}
+        detail_ref: {type: string}
