@@ -38,8 +38,9 @@ class RepositoryObservationTests(unittest.TestCase):
         if mutation == 'wrong-origin':
             backend.origin = 'https://foreign.example'
             backend.public = backend.origin + '/' + backend.prefix
-        def public(name, path, mutable=False):
+        def public(name, path, mutable=False, *, expected_identity):
             self.assertTrue(path.is_file())
+            self.assertEqual(set(expected_identity), {"sha256", "bytes"})
             if mutation == 'tampered':
                 raise ValueError('fixture public byte mismatch')
             if mutation == 'changed-during-read':
