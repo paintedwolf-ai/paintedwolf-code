@@ -1202,6 +1202,8 @@ host_facts:
    type: int
  - name: paintedwolf.expected_form
    type: string
+ - name: paintedwolf.resource_unit
+   type: string
  - name: paintedwolf.limit_id
    type: string
  - name: paintedwolf.maximum

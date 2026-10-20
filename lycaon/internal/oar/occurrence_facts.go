@@ -9,6 +9,7 @@ var occurrenceFactDecls = []factDecl{
 	{"source_line", oarcore.TypeInt, FactTierHost, ""},
 	{"source_column", oarcore.TypeInt, FactTierHost, ""},
 	{"expected_form", oarcore.TypeString, FactTierHost, ""},
+	{"resource_unit", oarcore.TypeString, FactTierHost, ""},
 	{"limit_id", oarcore.TypeString, FactTierHost, ""},
 	{"maximum", oarcore.TypeInt, FactTierHost, ""},
 	{"observed", oarcore.TypeInt, FactTierHost, ""},
