@@ -13,9 +13,10 @@ import subprocess
 import time
 
 from ..installed_runtime import unchanged
+from .app import InstalledApp
 from .process import run
 from .products import require_owned_guest
-from .records import retain
+from .records import CaseUnavailable, retain
 
 SOCKET = Path('/run/painted-wolf-code/vault-identity.sock')
 UNIT = 'paintedwolf-vault-identity.service'
@@ -122,6 +123,17 @@ def process_identity(pid: int) -> tuple[str, list[int], int]:
     return fields[19], [int(value) for value in status['Uid'].split()], int(status['CapEff'].strip(), 16)
 
 
+def memory_read_denied(pid: int) -> bool:
+    try:
+        descriptor = os.open(f'/proc/{pid}/mem', os.O_RDONLY)
+    except OSError as error:
+        if error.errno not in {errno.EACCES, errno.EPERM}:
+            raise
+        return True
+    os.close(descriptor)
+    return False
+
+
 def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
     info, parent = SOCKET.lstat(), SOCKET.parent.stat()
     if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0 or parent.st_uid != 0 or parent.st_mode & 0o022:
@@ -136,24 +148,27 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
     expected = unchanged(binding, 'pw-vault-identity')
     if Path(image).resolve() != expected.resolve():
         raise ValueError('identity service is not the selected installed image')
-    denied = False
-    try:
-        descriptor = os.open(f'/proc/{pid}/mem', os.O_RDONLY)
-    except OSError as error:
-        if error.errno not in {errno.EACCES, errno.EPERM}:
-            raise
-        denied = True
-    else:
-        os.close(descriptor)
+    denied = memory_read_denied(pid)
     stable = service_pid() == pid and process_identity(pid) == (start, uids, capabilities)
     passed = (outcome['status'] == 'refused' and outcome['code'] == 'executable_mismatch'
               and not outcome['identity_returned'] and outcome['launcher_pid'] == 0
               and all(uid not in {0, os.getuid()} for uid in uids)
               and capabilities == 1 << 19 and denied and stable)
-    return ('passed' if passed else 'failed',
-            {'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
+    with InstalledApp(binding) as app:
+        engine = app.observations['engine_identity']
+        engine_start, engine_uids, engine_capabilities = process_identity(engine['pid'])
+        engine_denied = memory_read_denied(engine['pid'])
+        engine_stable = process_identity(engine['pid']) == (engine_start, engine_uids, engine_capabilities)
+        engine_passed = (engine_start == str(engine['start_time_ticks'])
+                         and engine_uids == [os.getuid()] * 4 and engine_capabilities == 0
+                         and engine_denied and engine_stable)
+        engine_observations = {'identity': engine, 'uids': engine_uids,
+                               'effective_capabilities': engine_capabilities,
+                               'memory_read_denied': engine_denied, 'identity_stable': engine_stable}
+    return ('passed' if passed and engine_passed else 'failed',
+            {'engine': engine_observations, 'app': app.observations, 'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
              'service_uids': uids, 'effective_capabilities': capabilities,
-             'memory_read_denied': denied, 'service_identity_stable': stable}, {})
+             'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
 PROBES = {('session', 'inhibitor-lifetime'): inhibitor_lifetime,
@@ -173,6 +188,10 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
                       {'reason': 'installed-app-interaction-driver-required'})
     try:
         status, observations, streams = probe(binding)
+    except CaseUnavailable as error:
+        status, observations, streams = ('unverified',
+            getattr(error, 'observations', {'reason': 'installed-app-interaction-unavailable'}),
+            getattr(error, 'streams', {}))
     except (OSError, subprocess.SubprocessError):
         status, observations, streams = 'unverified', {'reason': 'native-security-observer-unavailable'}, {}
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):

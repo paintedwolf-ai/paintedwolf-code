@@ -1,4 +1,5 @@
 """Installed security observations must bind typed native facts to product execution."""
+import errno
 import json
 from pathlib import Path
 import struct
@@ -69,6 +70,28 @@ class InstalledSecurityTests(unittest.TestCase):
                 status, facts, streams = security.inhibitor_lifetime({})
                 self.assertEqual(status, 'passed' if observed_pid == 123 else 'failed')
                 self.assertEqual(facts['after'], [])
+
+    def test_memory_observer_never_reads_content_and_refuses_unexpected_errors(self):
+        for code in [errno.EPERM, errno.EACCES]:
+            with patch.object(security.os, 'open', side_effect=OSError(code, 'fixture')):
+                self.assertTrue(security.memory_read_denied(123))
+        with patch.object(security.os, 'open', return_value=42) as opened, \
+                patch.object(security.os, 'close') as closed:
+            self.assertFalse(security.memory_read_denied(123))
+            opened.assert_called_once_with('/proc/123/mem', security.os.O_RDONLY)
+            closed.assert_called_once_with(42)
+        with patch.object(security.os, 'open', side_effect=FileNotFoundError()):
+            with self.assertRaises(FileNotFoundError):
+                security.memory_read_denied(123)
+
+    def test_missing_actual_application_interaction_cannot_pass_security_case(self):
+        with patch.object(security, 'require_owned_guest'), \
+                patch.dict(security.PROBES, {('vault', 'wrong-launcher-and-memory'):
+                    lambda binding: (_ for _ in ()).throw(security.CaseUnavailable('fixture'))}), \
+                patch.object(security, 'retain', side_effect=lambda *args: args):
+            result = security.execute({'case_inputs': {}}, 'vault', 'wrong-launcher-and-memory', Path('/unused'))
+            self.assertEqual(result[4], 'unverified')
+            self.assertEqual(result[5], {'reason': 'installed-app-interaction-unavailable'})
 
     def test_unsupported_cases_remain_unverified_and_boolean_schema_is_refused(self):
         with patch.object(security, 'require_owned_guest'), patch.object(security, 'retain', side_effect=lambda *args: args):
