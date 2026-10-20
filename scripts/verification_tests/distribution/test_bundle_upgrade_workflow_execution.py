@@ -1,23 +1,34 @@
 """Publication is downstream of a credential-free desktop upgrade gate."""
 from pathlib import Path
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 class WorkflowTests(unittest.TestCase):
+    def dry_run(self, *arguments):
+        with tempfile.TemporaryDirectory() as temporary:
+            tools = Path(temporary)
+            for name in ("bun", "minisign"):
+                executable = tools / name
+                executable.write_text("#!/bin/sh\nexit 97\n")
+                executable.chmod(0o755)
+            environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"])
+            return subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", *arguments],
+                                  cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30)
+
     def test_existing_task_dispatches_bundle_mode_without_building_a_replacement(self):
-        result = subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence", "--case", "1.0.2-preview"],
-                                cwd=ROOT, capture_output=True, text=True, timeout=30)
+        result = self.dry_run("--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence", "--case", "1.0.2-preview")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("bundle-rehearse --fixtures /fixtures --evidence /evidence", " ".join((result.stdout + result.stderr).split()))
         self.assertNotIn("build:lycaon-dev", result.stdout + result.stderr)
 
     def test_preparation_uses_its_own_managed_mode_without_building(self):
-        result = subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--prepare-bundle", "--manifest", "/manifest", "--archives", "/archives", "--source", "/source", "--output", "/output"],
-                                cwd=ROOT, capture_output=True, text=True, timeout=30)
+        result = self.dry_run("--prepare-bundle", "--manifest", "/manifest", "--archives", "/archives", "--source", "/source", "--output", "/output")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("bundle-prepare --manifest /manifest", " ".join((result.stdout + result.stderr).split()))
         self.assertNotIn("build:lycaon-dev", result.stdout + result.stderr)
