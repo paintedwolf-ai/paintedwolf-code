@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,15 +145,19 @@ func TestPreparedLaunchResolvesRelativeAndEmptyPathAtCapturedCwd(t *testing.T) {
 				dir = filepath.Join(root, "bin")
 				testutil.FailErr(t, "create relative PATH directory", os.Mkdir(dir, 0700))
 			}
-			testutil.FailErr(t, "write child PATH fixture", os.WriteFile(filepath.Join(dir, "portable-child-path-fixture"), []byte("#!/bin/sh\nprintf exact"), 0700))
+			testutil.FailErr(t, "write child PATH fixture", os.WriteFile(filepath.Join(dir, "portable-child-path-fixture"), []byte("#!/bin/sh\nprintf '%s' \"$0\""), 0700))
 			cmd, cleanup, err := PrepareCommand(t.Context(), "portable-child-path-fixture", nil, ExecOpts{Launch: HostLaunch("synthetic child PATH fixture"), Dir: root, Env: []string{"PATH=" + pathValue}})
 			testutil.FailErr(t, "prepare relative PATH", err)
 			defer cleanup()
 			var output bytes.Buffer
 			cmd.Stdout = &output
 			testutil.FailErr(t, "run child-selected PATH entry", RunPrepared(cmd))
-			if output.String() != "exact" {
-				t.Fatal("child PATH selected wrong entry")
+			expected := "bin/portable-child-path-fixture"
+			if pathValue[0] == ':' {
+				expected = "portable-child-path-fixture"
+			}
+			if output.String() != expected {
+				t.Fatalf("child PATH spelling changed: %q", output.String())
 			}
 		})
 	}
@@ -210,7 +215,9 @@ func TestAgentPreparedLaunchCurrentActionRefusalNeverReleasesPayload(t *testing.
 
 func TestAgentPreparedLaunchPreservesExecuteOnlyNativeBinary(t *testing.T) {
 	root := t.TempDir()
-	data, err := os.ReadFile("/bin/echo")
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate native test image", err)
+	data, err := os.ReadFile(self)
 	testutil.FailErr(t, "read native fixture image", err)
 	entry := filepath.Join(root, "execute-only")
 	testutil.FailErr(t, "write execute-only native fixture", os.WriteFile(entry, data, 0100))
@@ -221,7 +228,7 @@ func TestAgentPreparedLaunchPreservesExecuteOnlyNativeBinary(t *testing.T) {
 	defer lease.Close(context.Background())
 	plan := AgentLaunch(LaunchAgentCommand, "synthetic execute-only action", boundary)
 	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
-	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"literal value"}, ExecOpts{Launch: plan, Dir: root})
+	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"-test.run=^TestExecuteOnlyNativePayload$", "literal value"}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin", "PW_EXECUTE_ONLY_NATIVE_PAYLOAD=1"}})
 	testutil.FailErr(t, "capture without source read", err)
 	defer cleanup()
 	var output bytes.Buffer
@@ -230,4 +237,35 @@ func TestAgentPreparedLaunchPreservesExecuteOnlyNativeBinary(t *testing.T) {
 	if output.String() != "literal value\n" {
 		t.Fatal("execute-only invocation changed")
 	}
+}
+
+func TestPreparedLaunchPreservesRelativeScriptKernelFilename(t *testing.T) {
+	for _, nativePath := range []string{"./fixture", "sub/fixture"} {
+		t.Run(nativePath, func(t *testing.T) {
+			root := t.TempDir()
+			entry := filepath.Join(root, nativePath)
+			testutil.FailErr(t, "create native script directory", os.MkdirAll(filepath.Dir(entry), 0700))
+			testutil.FailErr(t, "write native filename script", os.WriteFile(entry, []byte("#!/bin/sh\nprintf '%s' \"$0\""), 0700))
+			cmd, cleanup, err := PrepareCommand(t.Context(), nativePath, nil, ExecOpts{Launch: HostLaunch("synthetic native script filename"), Dir: root})
+			testutil.FailErr(t, "prepare literal script filename", err)
+			defer cleanup()
+			var output bytes.Buffer
+			cmd.Stdout = &output
+			testutil.FailErr(t, "run literal script filename", RunPrepared(cmd))
+			if output.String() != nativePath {
+				t.Fatalf("kernel script spelling changed: %q", output.String())
+			}
+		})
+	}
+}
+
+func TestExecuteOnlyNativePayload(t *testing.T) {
+	if os.Getenv("PW_EXECUTE_ONLY_NATIVE_PAYLOAD") != "1" {
+		return
+	}
+	if len(os.Args) != 3 {
+		os.Exit(2)
+	}
+	fmt.Println(os.Args[2])
+	os.Exit(0)
 }

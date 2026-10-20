@@ -88,7 +88,12 @@ literal argv are captured before helper construction. The helper receives the
 selected native executable path and held cwd, and never resolves a prepared
 command through PATH a second time. A current invocation path owner may supply
 its checked metadata handles; a held handle never grants source-read or execution
-authority. Host-managed native producers retain their existing OS authority.
+authority. Host-managed native producers retain their existing OS authority. Agent command
+launches without an explicit scoped path port require their current initiating
+execution-authority callback: it revalidates the actual live action, actor/root
+identity, confinement and worker branch without consuming once-use permits twice.
+This admits execution metadata only and never grants source-read authority.
+Explicit strict confinement remains strict when the platform cannot apply it.
 
 Selection captures metadata identity without reading executable contents or
 preparsing shebangs. Execution-only files and directories retain their native
@@ -97,7 +102,11 @@ owner rechecks current authority and captured entry/cwd identity. Existing proce
 or process-tree supervision registers before release. The helper then uses
 ordinary native pathname execution with the original literal argv, held cwd and
 frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
-rules. Approved set-user-ID and file-capability behavior is preserved without a
+rules. The absolute metadata selection is separate from the native filename sent
+to the kernel: relative slash operands and relative/empty PATH entries preserve
+that spelling under captured cwd. Discovery without cwd facts retains its explicit
+absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
+Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
 tracer, descriptor pathname or extra no-new-privileges restriction. Existing
 confinement still applies its own required restrictions.
 

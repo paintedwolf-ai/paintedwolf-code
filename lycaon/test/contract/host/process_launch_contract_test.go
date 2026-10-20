@@ -33,12 +33,13 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(root, path)
 		aliases := importAliases(f)
+		prepared := preparedCommandNames(f, aliases)
 		allowRaw := strings.HasPrefix(filepath.ToSlash(rel), "lycaon/internal/exec/") ||
 			strings.HasPrefix(filepath.ToSlash(rel), "lycaon/internal/confine/")
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.CallExpr:
-				if !allowRaw && isRawProcessStart(node.Fun, aliases) {
+				if !allowRaw && (isRawProcessStart(node.Fun, aliases) || isRawPreparedStart(node.Fun, prepared)) {
 					findings = append(findings, positionFinding(fset, node.Pos(), rel, "raw os/exec process start"))
 				}
 			case *ast.CompositeLit:
@@ -114,4 +115,67 @@ func hasKey(lit *ast.CompositeLit, want string) bool {
 
 func positionFinding(fset *token.FileSet, pos token.Pos, rel, message string) string {
 	return rel + ":" + strconv.Itoa(fset.Position(pos).Line) + ": " + message
+}
+
+// Prepared commands keep their actual start algorithm behind the registered
+// lifecycle. Native Wait and specialized typed owners remain independent.
+func preparedCommandNames(f *ast.File, aliases map[string]string) map[string]bool {
+	names := map[string]bool{}
+	ast.Inspect(f, func(node ast.Node) bool {
+		assignment, ok := node.(*ast.AssignStmt)
+		if !ok || len(assignment.Rhs) != 1 || len(assignment.Lhs) == 0 {
+			return true
+		}
+		call, ok := assignment.Rhs[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "PrepareCommand" {
+			return true
+		}
+		pkg, ok := selector.X.(*ast.Ident)
+		if !ok || aliases[pkg.Name] != "github.com/lycaon/lycaon/internal/exec" {
+			return true
+		}
+		name, ok := assignment.Lhs[0].(*ast.Ident)
+		if ok {
+			names[name.Name] = true
+		}
+		return true
+	})
+	return names
+}
+
+func isRawPreparedStart(expr ast.Expr, names map[string]bool) bool {
+	selector, ok := expr.(*ast.SelectorExpr)
+	if !ok || (selector.Sel.Name != "Start" && selector.Sel.Name != "Run" && selector.Sel.Name != "Output" && selector.Sel.Name != "CombinedOutput") {
+		return false
+	}
+	receiver, ok := selector.X.(*ast.Ident)
+	return ok && names[receiver.Name]
+}
+
+func TestPreparedCommandScanRejectsNativeStartBypasses(t *testing.T) {
+	source := `package fixture
+ import process "github.com/lycaon/lycaon/internal/exec"
+ func example(){
+ cmd,cleanup,err:=process.PrepareCommand(nil,"fixture",nil,process.ExecOpts{})
+ _=cleanup;_=err
+ cmd.Start();cmd.Run();cmd.Output();cmd.CombinedOutput();cmd.Wait()
+ process.StartPrepared(cmd)
+ }`
+	f, err := parser.ParseFile(token.NewFileSet(), "fixture.go", source, 0)
+	contractcheck.FailErr(t, "parse launch scan fixture", err)
+	prepared := preparedCommandNames(f, importAliases(f))
+	count := 0
+	ast.Inspect(f, func(node ast.Node) bool {
+		if call, ok := node.(*ast.CallExpr); ok && isRawPreparedStart(call.Fun, prepared) {
+			count++
+		}
+		return true
+	})
+	if count != 4 {
+		t.Fatalf("prepared process bypasses detected=%d, want four", count)
+	}
 }
