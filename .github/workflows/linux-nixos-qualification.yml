@@ -165,14 +165,14 @@ jobs:
         run: |
           set -euo pipefail
           controller=70481454abe7489c8b9fd0747f1872c84168aa1c
-          factory=d8c3bf6fbc1948f7bf12132b2cd98ceba2ef9391
+          factory=b8f1b62f596a9ee19adee31aca55a1236d1d4fe3
           git fetch --no-tags origin "$controller"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
           git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
           git fetch --no-tags origin "$factory"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$factory" ]]
           git worktree add --detach "$RUNNER_TEMP/nixos-factory-source" "$factory"
-          [[ "$(git -C "$RUNNER_TEMP/nixos-factory-source" rev-parse 'HEAD^{tree}')" == 107873e2e27141c8baad7670a20560dbe389907e ]]
+          [[ "$(git -C "$RUNNER_TEMP/nixos-factory-source" rev-parse 'HEAD^{tree}')" == 12efb7589a40a33b121006e1ace69a5a835159aa ]]
 
       - name: Build and archive the native NixOS desktop factory
         working-directory: ${{ runner.temp }}/nix-build-controller
@@ -182,7 +182,7 @@ jobs:
           set -euo pipefail
           ./task nix:build -- --component "nixos-$DESKTOP-vm" --archive-dir "$RUNNER_TEMP/nixos-factory" \
             --factory-source-root "$RUNNER_TEMP/nixos-factory-source" \
-            --factory-source-commit d8c3bf6fbc1948f7bf12132b2cd98ceba2ef9391 \
+            --factory-source-commit b8f1b62f596a9ee19adee31aca55a1236d1d4fe3 \
             --factory-channel '${{ matrix.channel }}' 
 
       - name: Bind the factory to the exact retained application closure
@@ -197,8 +197,8 @@ jobs:
             --source-commit "$SOURCE_COMMIT" --source-tree "$EXPECTED_TREE" \
             --lock-sha256 "$(sha256sum '${{ steps.source.outputs.path }}/flake.lock' | cut -d' ' -f1)" \
             --architecture "$EXPECTED_MACHINE" --controller-commit "$GITHUB_SHA" \
-            --factory-source-commit d8c3bf6fbc1948f7bf12132b2cd98ceba2ef9391 \
-            --factory-source-tree 107873e2e27141c8baad7670a20560dbe389907e \
+            --factory-source-commit b8f1b62f596a9ee19adee31aca55a1236d1d4fe3 \
+            --factory-source-tree 12efb7589a40a33b121006e1ace69a5a835159aa \
             --factory-channel '${{ matrix.channel }}' 
 
       - name: Retain the nonrelease native desktop factory
