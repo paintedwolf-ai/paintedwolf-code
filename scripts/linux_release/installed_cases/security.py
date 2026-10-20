@@ -19,6 +19,7 @@ from .lifecycle import background_cancel
 from .crash import detached_cleanup, host_execution_lifetime
 from .kernel import private_shared_memory, restricted_namespaces, helper_boundary
 from .process import run
+from .terminal import terminal_interaction
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
 from .security_boundary import filesystem_egress
@@ -176,7 +177,8 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
              'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
-PROBES = {('processes', 'host-execution-lifetime'): host_execution_lifetime,
+PROBES = {('processes', 'terminal-interaction'): terminal_interaction,
+          ('processes', 'host-execution-lifetime'): host_execution_lifetime,
           ('processes', 'background-cancel'): background_cancel,
           ('processes', 'setsid-and-double-fork'): detached_cleanup,
           ('confinement', 'system-v-ipc-isolation'): system_v_isolation,
