@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src-tauri/crates/desktop-settings-observer/src/portal.rs",
+  "kind": "runtime_service",
+  "workstream": "desktop-settings-observation",
+  "disposition": "retain",
+  "reason": "One fixed Gio main-context lifecycle owns subscription-before-snapshot, bounded typed observations, owner loss, heartbeat and parent EOF. Retain the cohesive 308-line runtime while protocol, process ownership and tests stay separate. Focused private-bus controls cover startup, denial, live changes, owner loss, oversized input and owned EOF teardown.",
+  "reviewed_commit": "ab6efcb6507160b01020c52c7d07b9b248361705",
+  "ceiling": 308,
+  "boundaries": {
+    "lycaon-den/src-tauri/crates/desktop-settings-observer/src/portal_tests.rs": "2bcc3e709fd530141c430286faf2004e29d9a6cc54c0f69047ef38f6a93ec943",
+    "lycaon-den/src-tauri/crates/desktop-settings-observer/tests/private_bus.rs": "37706d15af0a2b4054c7685e57d0767576f35aa25786e2aba67046474f9e9fef",
+    "lycaon-den/src-tauri/crates/desktop-settings-observer/src/lib.rs": "25112b4c970e0e1a8bc72d17f41a6f059f5fa6c43387928a41b58019abb9f1a4"
+  }
+}
