@@ -45,13 +45,14 @@ def main():
     qs = corpus.surface_questions(args.surface)
     engine = Engine(args.engine)
     try:
-        # One warm call absorbs model load and allocator warm-up.
-        engine.call({"method": "decide", "head": "turn-load", "state": {"host": "coordinator", "user": STATES[0], "surface": args.surface}, "questions": qs})
+        # Replay scoring caches identical requests; latency must invoke the engine every time.
+        # One untimed call absorbs model load and allocator warm-up.
+        engine.ask({"method": "decide", "head": "turn-load", "state": {"host": "coordinator", "user": STATES[0], "surface": args.surface}, "questions": qs})
         samples = []
         for i in range(args.rounds):
             state = {"host": "coordinator", "user": STATES[i % len(STATES)], "root_count": 1, "surface": args.surface}
             started = time.perf_counter()
-            engine.call({"method": "decide", "head": "turn-load", "state": state, "questions": qs})
+            engine.ask({"method": "decide", "head": "turn-load", "state": state, "questions": qs})
             samples.append((time.perf_counter() - started) * 1000)
         samples.sort()
         report = {
