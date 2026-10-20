@@ -1,12 +1,12 @@
 """Fixed installed product probes; neither observations nor arbitrary commands are cases."""
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import stat
 
 from .process import run
+from .records import retain
 
 SCANNER_FILES = {"main.rs", "app.vue", "run.ps1", "safe.html", "ignored.vue", "data.proto", ".semgrepignore"}
 PROBES = {
@@ -71,17 +71,6 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
             scanner_report(result["stdout"], binding)
         except (ValueError, TypeError) as error:
             passed, validation = False, str(error)
-    directory = evidence_root / capability / case
-    directory.mkdir(parents=True, exist_ok=False)
-    records = []
-    for stream in ("stdout", "stderr"):
-        path = directory / (stream + ".bin")
-        path.write_bytes(result.pop(stream))
-        records.append({"path": path.relative_to(evidence_root).as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-    result.update({"format_version": 1, "source_commit": binding["source_commit"],
-                   "artifact": binding["artifact"], "capability": capability, "case": case,
-                   "validation_error": validation})
-    path = directory / "execution.json"
-    path.write_text(json.dumps(result, indent=2) + "\n")
-    records.append({"path": path.relative_to(evidence_root).as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-    return {"id": case, "status": "passed" if passed else "failed", "evidence": records}
+    streams = {name: result.pop(name) for name in ("stdout", "stderr")}
+    result["validation_error"] = validation
+    return retain(binding, capability, case, evidence_root, "passed" if passed else "failed", result, streams)
