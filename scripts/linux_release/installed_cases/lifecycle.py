@@ -15,6 +15,7 @@ import tempfile
 import time
 
 from .app import InstalledApp
+from .approval import approve_host_execution
 from .provider import ProviderFixture
 from .workflow import ToolTurn, accepted
 
@@ -98,10 +99,10 @@ def state(identity: dict):
     return row[0] if row[19] == identity['start_ticks'] else None
 
 
-def capture(witness: dict) -> list[dict]:
+def capture(witness: dict, host_execution: bool = False) -> list[dict]:
     namespace, members = witness.get('namespace'), witness.get('members')
     if (type(namespace) is not int or namespace <= 0
-            or namespace == Path('/proc/self/ns/pid').stat().st_ino
+            or (namespace == Path('/proc/self/ns/pid').stat().st_ino) != host_execution
             or not isinstance(members, list) or len(members) not in {1, 2}):
         raise ValueError('installed command omitted its private process namespace identity')
     for member in members:
@@ -181,7 +182,7 @@ def cleanup(owned: list[dict]):
             os.close(descriptor)
 
 
-def scenario(binding: dict, cancel: bool) -> tuple[str, dict, dict]:
+def scenario(binding: dict, cancel: bool, host_execution: bool = False) -> tuple[str, dict, dict]:
     owned = []
     try:
         with tempfile.TemporaryDirectory(prefix='paintedwolf-lifecycle-') as directory, ExitStack() as stack:
@@ -194,14 +195,18 @@ def scenario(binding: dict, cancel: bool) -> tuple[str, dict, dict]:
                 script = project / 'lifecycle.py'
                 script.write_text(SCRIPT)
                 command = shlex.join([str(Path(sys.executable).resolve()), str(script), mode])
-                provider = stack.enter_context(ProviderFixture([{'name': 'command', 'arguments': {
-                    'command': command, 'background': index == 0 or cancel, 'wait_ms': 1,
-                    'allow_concurrent': True, 'timeout_ms': 90000}}]))
+                arguments = {'command': command, 'background': index == 0 or cancel, 'wait_ms': 1,
+                             'allow_concurrent': True, 'timeout_ms': 90000}
+                if host_execution and index == 1:
+                    arguments['capability_request'] = {'host_execution': True}
+                provider = stack.enter_context(ProviderFixture([{'name': 'command', 'arguments': arguments}]))
                 turn = stack.enter_context(ToolTurn(app, provider, project))
                 turn.submit()
+                if host_execution and index == 1:
+                    approve_host_execution(turn, arguments)
                 process = handle(turn.wait())
                 observation = witness(turn)
-                members = capture(observation)
+                members = capture(observation, host_execution and index == 1)
                 owned.extend(members)
                 if len(members) != len(observation['members']):
                     raise ValueError('installed command lost a fixture process before ownership capture')
@@ -233,7 +238,7 @@ def scenario(binding: dict, cancel: bool) -> tuple[str, dict, dict]:
                      'unrelated_processes': auxiliary[3], 'app': app.observations}
         return 'passed' if passed else 'failed', facts, app.streams()
     finally:
-        # These PIDs were bound while alive to the fixed fixture's private namespace.
+        # These PIDs were bound while alive to the fixed fixture's namespace and start time.
         cleanup(owned)
 
 
@@ -243,3 +248,7 @@ def detached_cleanup(binding):
 
 def background_cancel(binding):
     return scenario(binding, True)
+
+
+def host_execution_lifetime(binding):
+    return scenario(binding, True, True)

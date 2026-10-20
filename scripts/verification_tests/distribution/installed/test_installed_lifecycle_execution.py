@@ -1,4 +1,5 @@
 """Lifecycle observations use structured handles and PID identities rather than output silence."""
+import json
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -58,3 +59,22 @@ class InstalledLifecycleTests(unittest.TestCase):
                 patch.object(lifecycle.select, 'poll', return_value=waiter, create=True):
             with self.assertRaises(OSError):
                 lifecycle.cleanup([{'pid': 123, 'start_ticks': '42'}])
+
+    def test_host_execution_requires_host_namespace_and_exact_process_identity(self):
+        witness = {'namespace': 42, 'members': [{'inner_pid': 123, 'start_ticks': '7'}]}
+        row = {'pid': 123, 'inner_pid': 123, 'start_ticks': '7', 'namespace': 42, 'uids': [1000] * 4}
+        native = lifecycle.Path
+        class NamespacePath:
+            def stat(self):
+                return SimpleNamespace(st_ino=42)
+        def path(value):
+            return NamespacePath() if value == '/proc/self/ns/pid' else native(value)
+        with patch.object(lifecycle, 'Path', side_effect=path), \
+                patch.object(lifecycle.os, 'getuid', return_value=1000), \
+                patch.object(lifecycle.subprocess, 'run', return_value=SimpleNamespace(
+                    returncode=0, stdout=json.dumps([row]).encode())):
+            self.assertEqual(lifecycle.capture(witness, True), [row])
+            with self.assertRaises(ValueError):
+                lifecycle.capture(witness, False)
+            with self.assertRaises(ValueError):
+                lifecycle.capture(dict(witness, namespace=43), True)
