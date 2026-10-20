@@ -2,13 +2,15 @@
   "category": "source_files",
   "artifact": "lycaon/internal/oar/occurrence_facts.go",
   "kind": "data_record",
-  "workstream": "candidate-syntax-recovery",
+  "workstream": "portable-command-parser",
   "disposition": "retain",
-  "reason": "Retain the cohesive typed occurrence declaration table at 407 measured lines. The mutation observation joins existing parser facts without adding runtime state, authority, or evaluation logic. Splitting one declaration into a forwarding catalog would obscure the shared type contract. Producer tests cover new and existing paths; the production OAR recovery matrix covers present, false, and missing observations across mutation tools.",
-  "reviewed_commit": "4776c06e8b8e397d45ddf6c42e03e02f18b4e539",
-  "ceiling": 407,
+  "reason": "Retain one cohesive typed occurrence declaration table at its measured412-line baseline plus8 explicit command syntax/resource facts (420 measured lines). The entries declare names and types without runtime state, effect authority or evaluation logic. Splitting a single closed fact catalog into forwarding fragments would hide the shared host contract. Existing mutation/parser recovery tests remain; new program syntax producer and OAR rendering tests verify typed source coordinates, bounds and no guessed executable repairs. No further growth is retained without renewed review.",
+  "reviewed_commit": "a81e09128e7cc8ae9907b42c91adfb5333561aba",
+  "ceiling": 420,
   "boundaries": {
-    "lycaon/internal/tools/native/edit_health_test.go": "a126e54f33c34e25aaa80fc0869c5455d821549294c85b74c55b425baa961ad2",
-    "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138"
+    "lycaon/internal/tools/native/edit_health_test.go": "e897de10b454ca7ea03f73a62289665254f68a331df68ff7a53abbafbaa530af",
+    "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138",
+    "lycaon/internal/toolcommand/command_argv_test.go": "2e5eb69debd10d0f8d6e7a1b18cda76a6888b6cf085e3552f39b17fbcbd1a161",
+    "lycaon/test/contract/architecture/program_syntax_feedback_test.go": "b8f45c40a8f1f5a1371c6d4bc2c70b92ed78d968d12eb5790e55d8e7f1002fe4"
   }
 }

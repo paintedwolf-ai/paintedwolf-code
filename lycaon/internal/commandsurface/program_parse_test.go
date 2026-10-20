@@ -113,6 +113,10 @@ func TestSnapshotsAndDeferredSubstitutionsAreDetached(t *testing.T) {
 }
 
 func TestEncodingVersionsAndAdmissionCeilings(t *testing.T) {
+	if _, err := commandsurface.ParseProgram([]byte(":"), commandsurface.ParseOptions{CatalogDigest: "different-catalog"}); err == nil {
+		t.Fatal("mislabeled frozen catalog")
+	}
+
 	for _, source := range [][]byte{{0xff}, {'e', 'c', 'h', 'o', 0}, {0xef, 0xbb, 0xbf, '#'}} {
 		if p, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{}); p != nil || err == nil {
 			t.Fatalf("accepted invalid bytes: %x", source)
@@ -163,4 +167,31 @@ func FuzzParseProgramNeverExecutes(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestEncodingDiagnosticsAddressOriginalOffendingBytes(t *testing.T) {
+	for _, source := range [][]byte{append([]byte("#α\n  "), 0), append([]byte("#α\n  "), 0xff)} {
+		_, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{})
+		var diagnostic *commandsurface.SyntaxDiagnostic
+		if !errors.As(err, &diagnostic) || diagnostic.Span.StartByte != len(source)-1 || diagnostic.Span.EndByte != len(source) || diagnostic.Span.Line != 2 || diagnostic.Span.Column != 3 {
+			t.Fatalf("encoding span=%#v err=%v", diagnostic, err)
+		}
+	}
+}
+func TestHereDocumentExpansionAndRedirectOrderStayStructured(t *testing.T) {
+	p := parseProgram(t, "cat 2>&1 > ./out <<'END'\n${literal} {a,b}\nEND\n")
+	redirects := p.Statements[0].Redirects
+	if len(redirects) != 3 || redirects[0].Operator != ">&" || redirects[0].Descriptor != 2 || redirects[1].Operator != ">" || redirects[2].HereDocument == nil {
+		t.Fatalf("redirect order changed: %#v", redirects)
+	}
+	parts := redirects[2].HereDocument.Parts
+	if len(parts) != 1 || parts[0].(commandsurface.LiteralPart).Value != "${literal} {a,b}\n" {
+		t.Fatalf("quoted here-document executed expansions: %#v", parts)
+	}
+	for _, source := range []string{"echo ~fixture-user/path", "VALUE=~fixture-user/path"} {
+		if _, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{}); err == nil {
+			t.Fatalf("named-user lookup admitted: %s", source)
+		}
+	}
+	parseProgram(t, "echo '~fixture-user/path' \\~fixture-user/path")
 }

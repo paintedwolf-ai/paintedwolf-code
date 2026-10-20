@@ -2,14 +2,13 @@ package commandsurface
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"mvdan.cc/sh/v3/syntax"
@@ -67,8 +66,17 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 }
 
 // ParseProgram validates the complete syntax unit before exposing any plan.
+// This pure entry applies local bounds; execution uses NewProgramParser to
+// reserve scratch against its enclosing program before capture or parsing.
 // It only uses the upstream syntax package, never its interpreter or executor.
 func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
+	return parseProgram(context.Background(), source, options)
+}
+
+func parseProgram(ctx context.Context, source []byte, options ParseOptions) (*ParsedProgram, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	catalog, catalogErr := programLanguage()
 	if catalogErr != nil {
 		return nil, fmt.Errorf("load compiled command catalog: %w", catalogErr)
@@ -83,14 +91,17 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 	if options.Version != 0 && options.Version != toolcontract.LanguageVersion {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "language version 1"}
 	}
-	if !utf8.Valid(source) || bytes.IndexByte(source, 0) >= 0 || bytes.HasPrefix(source, []byte{0xef, 0xbb, 0xbf}) {
-		code := "COMMAND_SYNTAX_INVALID"
-		if options.Sourced {
-			code = "COMMAND_OPERAND_INVALID"
-		}
-		return nil, &SyntaxDiagnostic{Code: code, Span: unitStart(), Expected: "UTF-8 source without BOM or NUL"}
+	if diagnostic := programEncodingDiagnostic(source, options.Sourced); diagnostic != nil {
+		return nil, diagnostic
 	}
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(bytes.NewReader(source), options.SourceName)
+
+	if options.CatalogDigest != "" && options.CatalogDigest != toolcontract.LanguageCatalogDigest() {
+		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "the frozen compiled language/catalog identity"}
+	}
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{MaxBytes: languageLimit(catalog, "evaluation_memory_bytes")})).Parse(contextSource{ctx: ctx, reader: bytes.NewReader(source)}, options.SourceName)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		return nil, parserDiagnostic(err, len(source))
 	}
@@ -104,12 +115,7 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 		return nil, c.err
 	}
 	sourceHash := sha256.Sum256(source)
-	digest := options.CatalogDigest
-	if digest == "" {
-		raw, _ := json.Marshal(catalog)
-		sum := sha256.Sum256(raw)
-		digest = hex.EncodeToString(sum[:])
-	}
+	digest := toolcontract.LanguageCatalogDigest()
 	return &ParsedProgram{source: bytes.Clone(source), plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: options.SourceName, Statements: statements}}, nil
 }
 
@@ -124,6 +130,10 @@ func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {
 func unitStart() toolcontract.SourceSpan { return toolcontract.SourceSpan{Line: 1, Column: 1} }
 func parserDiagnostic(err error, length int) error {
 	span := unitStart()
+	var budget *syntax.BudgetError
+	if errors.As(err, &budget) {
+		return &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: toolcontract.SourceSpan{StartByte: min(int(budget.Pos.Offset()), length), EndByte: min(int(budget.Pos.Offset())+1, length), Line: int(budget.Pos.Line()), Column: int(budget.Pos.Col())}, Expected: "bounded parser working storage", Limit: "evaluation_memory_bytes", Maximum: budget.Maximum, Observed: budget.Observed}
+	}
 	var parse syntax.ParseError
 	if errors.As(err, &parse) {
 		start := min(int(parse.Pos.Offset()), length)

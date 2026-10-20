@@ -19,6 +19,7 @@ copy:
   cause: '{{ paintedwolf.rejection_reason }}'
   why: The host validates operand identity, representation and role before admitting its effect. Unsupported operands never fall through to an external implementation.
   fix: Check the typed operand details and command help. Preserve exact path bytes and source revisions; conversion alone does not grant access. Earlier effects remain recorded.
+  instead: Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command operand was not admitted

@@ -2,6 +2,7 @@ package commandsurface
 
 import (
 	"strconv"
+	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -38,7 +39,7 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 				if a.Value != nil {
 					result.Words = append(result.Words, c.word(a.Value))
 				} else {
-					result.Words = append(result.Words, DeferredWord{SyntaxLocation: c.location(a), Parts: []WordNode{LiteralPart{SyntaxLocation: c.location(a.Name), Value: a.Name.Value}}})
+					result.Words = append(result.Words, DeferredWord{SyntaxLocation: c.location(a), Parts: []WordNode{LiteralPart{SyntaxLocation: c.location(a.Name), Value: strings.Clone(a.Name.Value)}}})
 				}
 			} else {
 				result.Assignments = append(result.Assignments, c.assignment(a))
@@ -57,9 +58,9 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 		return WhileLoop{SyntaxLocation: loc, Condition: c.statements(v.Cond), Body: c.statements(v.Do)}
 	case *syntax.ForClause:
 		iter := v.Loop.(*syntax.WordIter)
-		return ForLoop{SyntaxLocation: loc, Variable: iter.Name.Value, Positional: !iter.InPos.IsValid(), Items: c.words(iter.Items), Body: c.statements(v.Do)}
+		return ForLoop{SyntaxLocation: loc, Variable: strings.Clone(iter.Name.Value), Positional: !iter.InPos.IsValid(), Items: c.words(iter.Items), Body: c.statements(v.Do)}
 	case *syntax.FuncDecl:
-		return FunctionDeclaration{SyntaxLocation: loc, Name: v.Name.Value, Body: c.statement(v.Body)}
+		return FunctionDeclaration{SyntaxLocation: loc, Name: strings.Clone(v.Name.Value), Body: c.statement(v.Body)}
 	case *syntax.TestClause:
 		return TestExpression{SyntaxLocation: loc, Expression: c.test(v.X)}
 	}
@@ -82,7 +83,7 @@ func (c *programCompiler) assignments(items []*syntax.Assign) []Assignment {
 	return out
 }
 func (c *programCompiler) assignment(a *syntax.Assign) Assignment {
-	out := Assignment{SyntaxLocation: c.location(a), Name: a.Name.Value}
+	out := Assignment{SyntaxLocation: c.location(a), Name: strings.Clone(a.Name.Value)}
 	if a.Value != nil {
 		out.Value = c.word(a.Value)
 	}
@@ -119,13 +120,13 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 		loc := c.location(part)
 		switch p := part.(type) {
 		case *syntax.Lit:
-			out = append(out, LiteralPart{SyntaxLocation: loc, Value: p.Value})
+			out = append(out, LiteralPart{SyntaxLocation: loc, Value: strings.Clone(p.Value)})
 		case *syntax.SglQuoted:
-			out = append(out, SingleQuotedPart{SyntaxLocation: loc, Value: p.Value})
+			out = append(out, SingleQuotedPart{SyntaxLocation: loc, Value: strings.Clone(p.Value)})
 		case *syntax.DblQuoted:
 			out = append(out, DoubleQuotedPart{SyntaxLocation: loc, Parts: c.parts(p.Parts)})
 		case *syntax.ParamExp:
-			out = append(out, ParameterPart{SyntaxLocation: loc, Name: p.Param.Value, Length: p.Length})
+			out = append(out, ParameterPart{SyntaxLocation: loc, Name: strings.Clone(p.Param.Value), Length: p.Length})
 		case *syntax.CmdSubst:
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Backquotes: p.Backquotes, Statements: c.statements(p.Stmts)})
 		}
