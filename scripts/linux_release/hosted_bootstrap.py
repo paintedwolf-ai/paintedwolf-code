@@ -62,16 +62,28 @@ def captured_child(arguments, checkout, root):
                     sizes[index] += min(len(block), remaining)
                     if len(block) > remaining:
                         raise ValueError('bootstrap supervisor output exceeded fixed bound')
-        return child.wait(timeout=max(0.1, deadline - time.monotonic()))
+        while True:
+            exited = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            if exited is not None:
+                return exited.si_status if exited.si_code == os.CLD_EXITED else -exited.si_status
+            if time.monotonic() >= deadline:
+                raise ValueError('bootstrap supervisor exceeded its fixed deadline')
+            time.sleep(0.01)
     finally:
-        if child is not None and child.poll() is None:
-            # Interrupt the captured Python owner so its native transaction finally can cancel its own group.
-            os.killpg(child.pid, signal.SIGINT)
+        if child is not None:
+            # Keep the leader waitable until its private group is cleaned, preventing PID/group reuse.
+            exited = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            if exited is None:
+                os.killpg(child.pid, signal.SIGINT)
+                grace = time.monotonic() + 5
+                while exited is None and time.monotonic() < grace:
+                    time.sleep(0.01)
+                    exited = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             try:
-                child.wait(timeout=5)
-            except subprocess.TimeoutExpired:
                 os.killpg(child.pid, signal.SIGKILL)
-                child.wait()
+            except ProcessLookupError:
+                pass
+            child.wait(timeout=10)
         if child is not None:
             child.stdout.close()
             child.stderr.close()
@@ -109,12 +121,12 @@ def supervise(root, selected, account):
 
 def verify(root, selected, account, execution):
     path = root / 'bootstrap-supervision.json'
-    physical(path)
+    identity = physical(path)
     expected = {'format_version': 1, 'execution': execution, 'controller_commit': selected['controller_commit'],
         'controller_tree': selected['controller_tree'], 'arguments': invocation(root, account), 'exit_code': 0,
         'observer_uid': 0, 'observer_euid': 0}
     actual = read(path)
-    if (actual != expected or any(type(actual.get(key)) is not int for key in
+    if (physical(path) != identity or actual != expected or any(type(actual.get(key)) is not int for key in
             ('format_version', 'exit_code', 'observer_uid', 'observer_euid'))):
         raise ValueError('bootstrap supervision differs from its actual selected successful invocation')
     return expected
