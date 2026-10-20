@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	_ "embed"
@@ -120,6 +121,9 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 				}
 			}
 			if kind != "socket_permit" && kind != "direct_ip_permit" {
+				if err := retainedOnceBoundary(kind, delta); err != nil {
+					return nil, err
+				}
 				if _, present := delta["execution_id"]; present {
 					return nil, fmt.Errorf("unrecognized child identity on retained authority")
 				}
@@ -129,6 +133,9 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 				if !retainedIdentity(delta[key]) {
 					return nil, fmt.Errorf("retained once authority identity is incomplete")
 				}
+			}
+			if err := retainedOnceBoundary(kind, delta); err != nil {
+				return nil, err
 			}
 			if _, present := delta["execution_id"]; present {
 				return nil, fmt.Errorf("revision4 cannot assert native child authority")
@@ -194,4 +201,46 @@ func knownEffectOptionField(key string) bool {
 func retainedIdentity(raw json.RawMessage) bool {
 	var value string
 	return json.Unmarshal(raw, &value) == nil && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\x00\x01")
+}
+
+// Freeze the changed boundary payloads at revision4's exact stored shapes.
+// This is format recognition only; existing capability owners still decide
+// whether a restored descriptor is complete, current and usable.
+func retainedOnceBoundary(kind string, delta map[string]json.RawMessage) error {
+	decode := func(raw json.RawMessage, target any) error {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(target); err != nil {
+			return fmt.Errorf("unrecognized retained boundary payload: %w", err)
+		}
+		return nil
+	}
+	if kind == "socket_permit" {
+		var sockets []struct {
+			ApprovedPath string `json:"approved_path"`
+			ResolvedPath string `json:"resolved_path"`
+		}
+		if err := decode(delta["sockets"], &sockets); err != nil {
+			return err
+		}
+		if len(sockets) == 0 {
+			return fmt.Errorf("retained socket boundary is missing")
+		}
+		return nil
+	}
+	var lease struct {
+		ActionDigest          string
+		RequestDigest         string
+		ConfinementDigest     string
+		ChatConfinementDigest string
+		DeclaredDestinations  []string
+		CommandSummary        string
+	}
+	if err := decode(delta["direct_ip_lease"], &lease); err != nil {
+		return err
+	}
+	if lease.ActionDigest == "" || lease.RequestDigest == "" || lease.ConfinementDigest == "" {
+		return fmt.Errorf("retained direct-IP boundary identity is incomplete")
+	}
+	return nil
 }

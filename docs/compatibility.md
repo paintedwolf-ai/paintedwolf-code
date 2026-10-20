@@ -83,14 +83,29 @@ P03 introduces internal compiled declarations and consumer ports only. It adds n
 Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
 
 P09's compiled native selection, program attribution frame and conditional
-listener admission are ephemeral, with no serialized interpreter or new database
-shape. `command_effects` on tool profiles, coordinator surfaces and posture
+listener admission are ephemeral, with no serialized interpreter.
+`command_effects` on tool profiles, coordinator surfaces and posture
 catalogs is additive configuration vocabulary; absent declarations close the new
 native surface. Posture overlays intersect their shipped restriction. The new
 operation/effect refusal codes are agent-public and keep actual owner and source
 facts. Existing egress endpoint records may carry the additive
 `authority_refused` outcome after a later payload refusal; prior connected facts
 remain distinct. These changes add no OpenAPI fields or generated DTOs.
+
+P09 also adds `execution_id` to the durable checkpoint authority descriptor for
+socket/direct-IP once permits. Its canonical reader keeps session and real
+model-call identity distinct from the native child. Absence or an empty value
+preserves structured-only authority and grants no native child. Schema revision
+5 registers the explicit revision 4 to 5 checkpoint-data transformation; revision
+4 is an existing known intermediate with unchanged SQL shape, not a newly
+claimed released baseline. Shipped revisions 1 through 3 and their migration
+checksums remain unchanged. The step makes old structured-only scope explicit,
+preserves semantic grant and plan identities, and refuses unknown authority
+shapes without committing any part of the transaction. Checkpoint/session
+retention remains unchanged; live permit caches remain ephemeral. The wire
+projection does not publish these private authority descriptors, so this field
+adds no OpenAPI DTO. P10's introducing receipt producer separately owns its next
+schema step and persisted inspected reviewed-input/progress records.
 
 ## Workflow definitions
 

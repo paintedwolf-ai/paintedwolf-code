@@ -304,6 +304,15 @@ model call used for checkpoint correlation. Binding and effect-class admission
 supply no filesystem, network, revision, content-review or person authority.
 Those existing boundaries still admit each reached effect, including resumption.
 
+Reached admission freezes the actual reviewed opaque-reference argument object,
+separately from the ephemeral resolved-secret copy, under the shared retained
+state admission. The required recorder marker runs before entering the complete
+native owner. `OwnerInvoked` is independent of mutation certainty: an executed
+read with `NoEffect` still rules out a claim of zero program execution. A later
+host stop cannot rewrite a completed owner result or make its output publishable.
+Socket and direct-IP once permits bind session, the real model call and optional
+native execution id; a structured-only permit cannot authorize a native child.
+
 Progress requirements belong to immutable operation metadata. Retained operations
 use the existing progress-gated catalog; native definitions declare `required` or
 `not_required`. The shared progress predicate preserves worker and review-loop
@@ -312,6 +321,16 @@ and optional owner-prepared progress before applying that progress, then check
 known prerequisites and recheck reached effects against current progress. A
 progress update remains separate from program success and is never inferred
 from utility output.
+
+`PrepareProgramEnvelope` requires the actual parsed program's live validated
+identity before admitting the optional payload through the existing
+`update_progress` schema and author validation. `ApplyProgramProgress` uses the
+existing policy, secret screens, review and progress store, checking the held
+program identity and current root again before application. Its host envelope
+execution id has no invented shell node or source span. The progress recorder
+marker and `AuthorUpdateResult` remain separate from program-child settlement;
+a committed checklist is preserved after a later denied operation. These typed
+ports do not activate the replacement command entry.
 
 A listen request alone grants no connection. Automatic paired loopback access
 requires narrowed per-action conditional admission, current policy, and a fresh
