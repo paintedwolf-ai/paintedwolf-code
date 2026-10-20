@@ -1732,8 +1732,13 @@ tasks:
       - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
         msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
     cmds:
-      - cmd: '{{if not (hasPrefix "--bundle" .CLI_ARGS)}}./task build:lycaon-dev{{else}}true{{end}}'
-      - bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+      - |
+        {{if hasPrefix "--bundle" .CLI_ARGS}}
+        python3 {{.SCRIPTS_DIR}}/release_control.py bundle-rehearse {{trimPrefix "--bundle" .CLI_ARGS}}
+        {{else}}
+        ./task build:lycaon-dev
+        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+        {{end}}
 
   upgrade:corpus:prepare:
     desc: 'Prepare the versioned upgrade fixture for VERSION before tagging'

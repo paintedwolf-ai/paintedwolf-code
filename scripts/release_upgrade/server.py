@@ -51,7 +51,7 @@ class Handler(BaseHTTPRequestHandler):
 def routes_for(root: Path, plan: dict) -> dict[str, Path]:
     routes = {}
     for relative in plan["archives"].values():
-        from bundle_upgrade_prepare import archive_path
+        from release_upgrade.prepare import archive_path
         path = archive_path(relative)
         routes["/" + path] = root / path
     for pointer in (root / "offers").glob("*/key-*/latest.json"):

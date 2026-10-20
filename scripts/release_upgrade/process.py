@@ -44,7 +44,20 @@ class Installation:
     def launch(self):
         subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(self.app)], check=True, timeout=30)
 
+    def capture_owned(self):
+        helpers = self.config.glob("updates/installations/*/staging/*/update-helper")
+        commands = [str(self.executable), *(str(path) for path in helpers)]
+        rows = subprocess.run(["ps", "-axo", "pid=,command="], check=True, capture_output=True, text=True, timeout=5)
+        for row in rows.stdout.splitlines():
+            fields = row.strip().split(None, 1)
+            if len(fields) == 2 and any(fields[1] == command or fields[1].startswith(command + " ") for command in commands):
+                pid = int(fields[0])
+                identity = process_identity(pid)
+                if identity:
+                    self.owned[pid] = (identity, 1 if fields[1].startswith(str(self.executable)) else 0)
+
     def observe(self, version: str):
+        self.capture_owned()
         daemon = read_json(self.config / "daemon.json")
         if not daemon or type(daemon.get("pid")) is not int or type(daemon.get("port")) is not int:
             return None
@@ -59,8 +72,8 @@ class Installation:
         app_identity = process_identity(app_pid)
         if not app_identity or str(self.executable) not in app_identity:
             return None
-        self.owned[pid] = engine
-        self.owned[app_pid] = app_identity
+        self.owned[pid] = (engine, 2)
+        self.owned[app_pid] = (app_identity, 1)
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
                 health = json.load(response)
@@ -74,12 +87,16 @@ class Installation:
         return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
 
     def stop(self):
+        self.capture_owned()
         errors = []
-        # Stop the app before its captured engine so supervision cannot restart it.
-        for pid, identity in reversed(list(self.owned.items())):
+        # Retire helpers and app supervision before stopping captured engines.
+        for pid, (identity, _) in sorted(self.owned.items(), key=lambda item: item[1][1]):
             if process_identity(pid) != identity:
                 continue
-            os.kill(pid, signal.SIGTERM)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                continue
             deadline = time.monotonic() + 10
             while process_identity(pid) == identity and time.monotonic() < deadline:
                 time.sleep(0.1)

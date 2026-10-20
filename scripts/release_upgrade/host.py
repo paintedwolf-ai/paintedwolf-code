@@ -7,8 +7,8 @@ import json
 import os
 from pathlib import Path
 import platform
-import pwd
 import subprocess
+import socket
 import sys
 import time
 import uuid
@@ -22,6 +22,7 @@ def require_disposable_host() -> Path:
             or os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
         raise ValueError("desktop rehearsal requires a disposable GitHub-hosted arm64 macOS runner")
+    import pwd
     actual = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
     if Path.home().resolve() != actual:
         raise ValueError("LaunchServices rehearsal must use the account's actual home")
@@ -33,13 +34,15 @@ def require_disposable_host() -> Path:
     return config
 
 
-def run(arguments, **kwargs):
-    return subprocess.run(arguments, check=True, timeout=60, capture_output=True, **kwargs)
+def run(arguments, check=True, **kwargs):
+    return subprocess.run(arguments, check=check, timeout=60, capture_output=True, **kwargs)
 
 
 def certificates(work: Path) -> tuple[Path, Path, Path]:
     root, certificate, key = work / "root.pem", work / "server.pem", work / "server.key"
-    run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+    ca_config = work / "root.cnf"
+    ca_config.write_text("[req]\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n")
+    run(["openssl", "req", "-config", str(ca_config), "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
          "-subj", f"/CN=Upgrade rehearsal {uuid.uuid4()}", "-keyout", str(work / "root.key"), "-out", str(root)])
     run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-subj", f"/CN={HOST}",
          "-keyout", str(key), "-out", str(work / "server.csr")])
@@ -68,7 +71,6 @@ else:
         output.write(line)
 """
     run(["sudo", "-n", sys.executable, "-c", script, line, "remove" if remove else "add"])
-    run(["sudo", "-n", "dscacheutil", "-flushcache"])
 
 
 @contextmanager
@@ -77,16 +79,27 @@ def local_origin(root: Path, work: Path, evidence: Path):
     der = run(["openssl", "x509", "-in", str(ca), "-outform", "DER"]).stdout
     fingerprint = hashlib.sha1(der).hexdigest()
     line = f"\n127.0.0.1 {HOST} # upgrade-rehearsal-{uuid.uuid4()}\n"
-    trusted = mapped = False
+    trusted = mapped = mocked = False
+    previous_mock = None
     process = None
     try:
+        previous_mock = run(["launchctl", "getenv", "LYCAON_LLM_MOCK"], check=False)
+        if previous_mock.returncode not in (0, 1):
+            raise ValueError("cannot inspect the runner launch environment")
+        run(["launchctl", "setenv", "LYCAON_LLM_MOCK", "1"])
+        mocked = True
         run(["sudo", "-n", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", KEYCHAIN, str(ca)])
         trusted = True
         change_hosts(line, False)
         mapped = True
+        run(["sudo", "-n", "dscacheutil", "-flushcache"])
+        addresses = {row[4][0] for row in socket.getaddrinfo(HOST, 443, type=socket.SOCK_STREAM)}
+        if addresses != {"127.0.0.1"}:
+            raise ValueError("download origin did not resolve exclusively to the local fixture")
+        (evidence / "origin.json").write_text(json.dumps({"host": HOST, "addresses": sorted(addresses)}) + "\n")
         ready = work / "server-ready.json"
         with (evidence / "server.log").open("wb") as log:
-            process = subprocess.Popen(["sudo", "-n", sys.executable, str(Path(__file__).with_name("bundle_upgrade_server.py")),
+            process = subprocess.Popen(["sudo", "-n", sys.executable, str(Path(__file__).resolve().parent.parent / "release_control.py"), "bundle-serve",
                                         "--root", str(root), "--certificate", str(certificate), "--key", str(key),
                                         "--log", str(evidence / "requests.jsonl"), "--ready", str(ready)], stdout=log, stderr=log)
         deadline = time.monotonic() + 30
@@ -99,10 +112,16 @@ def local_origin(root: Path, work: Path, evidence: Path):
         errors = []
         if process is not None:
             try:
-                process.terminate()
+                if process.poll() is None:
+                    owner = json.loads(ready.read_text())["pid"] if ready.exists() else process.pid
+                    if type(owner) is not int or owner <= 1:
+                        raise ValueError("invalid captured HTTPS server PID")
+                    run(["sudo", "-n", "kill", "-TERM", str(owner)])
                 process.wait(timeout=15)
-            except (OSError, subprocess.TimeoutExpired) as error:
+            except (OSError, ValueError, subprocess.SubprocessError) as error:
                 errors.append(str(error))
+                if process.poll() is None:
+                    run(["sudo", "-n", "kill", "-KILL", str(process.pid)])
         for needed, action in ((mapped, lambda: change_hosts(line, True)),
                                (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-Z", fingerprint, KEYCHAIN]))):
             if needed:
@@ -110,6 +129,19 @@ def local_origin(root: Path, work: Path, evidence: Path):
                     action()
                 except (OSError, subprocess.SubprocessError) as error:
                     errors.append(str(error))
+        if mocked:
+            try:
+                if previous_mock.returncode == 0:
+                    run(["launchctl", "setenv", "LYCAON_LLM_MOCK", previous_mock.stdout.decode().strip()])
+                else:
+                    run(["launchctl", "unsetenv", "LYCAON_LLM_MOCK"])
+            except (OSError, subprocess.SubprocessError) as error:
+                errors.append(str(error))
+        if mapped:
+            try:
+                run(["sudo", "-n", "dscacheutil", "-flushcache"])
+            except (OSError, subprocess.SubprocessError) as error:
+                errors.append(str(error))
         (evidence / "host-cleanup.json").write_text(json.dumps({"success": not errors, "errors": errors}) + "\n")
         if errors:
             raise ValueError("desktop rehearsal host cleanup failed")

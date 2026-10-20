@@ -9,10 +9,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ "${1:-}" == --bundle ]]; then
-  shift
-  exec python3 "${ROOT}/scripts/bundle_upgrade_rehearse.py" "$@"
-fi
 # shellcheck source=scripts/upgrade-store-contract.sh
 source "${ROOT}/scripts/upgrade-store-contract.sh"
 # shellcheck source=scripts/artifact-paths.sh

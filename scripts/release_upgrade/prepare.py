@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,8 +11,9 @@ import urllib.request
 
 from feed_signing import sign, verify
 from release_control import capture_sources
-from release_upgrade_feeds import ORIGIN
-from update_keys import generation, load_registry, validate_binding
+from release_upgrade.feeds import ORIGIN
+from update_keys import generation, load_registry, validate_publication
+from updater_signature import require_version
 
 PLATFORM = "darwin-aarch64"
 ARCHIVE_LIMIT = 2 * 1024 * 1024 * 1024
@@ -55,7 +57,10 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
     if candidate["version"] != (source / "VERSION").read_text().strip():
         raise ValueError("candidate manifest differs from the selected source")
     registry = load_registry()
-    validate_binding(registry, candidate)
+    validate_publication(registry, candidate, candidate["update_keys"]["signing_generation"])
+    subprocess.run(["bash", str(Path(__file__).resolve().parent.parent / "release-validate-updater-manifest.sh"),
+                    "--file", str(candidate_path), "--version", candidate["version"]],
+                   env={**os.environ, "DOWNLOAD_BASE_URL": ORIGIN}, check=True, timeout=60)
     result = capture_sources(ORIGIN, candidate, output / "sources")
     manifests = {candidate["version"]: candidate}
     for case in result["cases"]:
@@ -74,6 +79,7 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
         else:
             fetch_archive(manifest, target)
         number = manifest["update_keys"]["signing_generation"]
+        require_version(manifest["platforms"][PLATFORM]["signature"], version, "upgrade archive")
         verify(target, manifest["platforms"][PLATFORM]["signature"], generation(registry, number)["public_key"])
         manifests[version] = {**manifest, "archive_sha256": file_digest(target)}
     result["schemas"] = {}

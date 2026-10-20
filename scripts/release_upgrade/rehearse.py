@@ -7,9 +7,9 @@ from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
 
-from bundle_upgrade_case import run_case
-from bundle_upgrade_host import local_origin, require_disposable_host
-from bundle_upgrade_prepare import file_digest
+from release_upgrade.case import run_case
+from release_upgrade.host import local_origin, require_disposable_host
+from release_upgrade.prepare import file_digest
 
 
 def verify_inventory(root: Path) -> dict:
@@ -25,6 +25,18 @@ def verify_inventory(root: Path) -> dict:
         if target.is_symlink() or file_digest(target) != expected:
             raise ValueError("upgrade fixture checksum differs: " + name)
     return json.loads((root / "plan.json").read_text())
+
+
+def verify_requests(path: Path, case: dict, start: int):
+    from release_upgrade.prepare import archive_path
+    requests = [json.loads(line) for line in path.read_text().splitlines()][start:]
+    observed = {row["path"] for row in requests if row["status"] == 200}
+    for step in case["steps"]:
+        number = step["update_keys"]["signing_generation"]
+        feed = f"/updates/{case['channel']}/key-{number}/latest.json"
+        required = {feed, feed + ".sig", "/" + archive_path(step)}
+        if not required <= observed:
+            raise ValueError("upgrade did not fetch every authenticated fixture route")
 
 
 def rehearse(root: Path, evidence: Path):
@@ -46,8 +58,12 @@ def rehearse(root: Path, evidence: Path):
                 for case in plan["cases"]:
                     case_work = work / case["id"]
                     case_work.mkdir()
+                    receipt["cases"].append({"id": case["id"], "result": "failed"})
+                    request_log = evidence / "requests.jsonl"
+                    start = len(request_log.read_text().splitlines()) if request_log.exists() else 0
                     result = run_case(case, plan, root, case_work, config, evidence / case["id"])
-                    receipt["cases"].append(result)
+                    verify_requests(request_log, case, start)
+                    receipt["cases"][-1] = result
                     shutil.rmtree(config)
                     shutil.rmtree(case_work)
         receipt["result"] = "passed"
@@ -56,9 +72,6 @@ def rehearse(root: Path, evidence: Path):
         receipt["error"] = str(error)
         raise
     finally:
-        # The store is created only after the disposable-host guard has admitted this run.
-        if config is not None and config.is_dir():
-            shutil.rmtree(config)
         (evidence / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
 
 

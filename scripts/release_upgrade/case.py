@@ -9,10 +9,10 @@ import sqlite3
 import subprocess
 import sys
 
-from bundle_upgrade_prepare import archive_path, file_digest
-from bundle_upgrade_process import Installation, read_json, wait_for
+from release_upgrade.prepare import archive_path, file_digest
+from release_upgrade.process import Installation, read_json, wait_for
 
-SCRIPTS = Path(__file__).resolve().parent
+SCRIPTS = Path(__file__).resolve().parent.parent
 
 
 def materialize(fixture: Path, config: Path, project: Path):
@@ -28,6 +28,14 @@ def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: P
         subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
                         "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
                         "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120)
+
+
+def candidate_matches(candidate: dict, step: dict, channel: str) -> bool:
+    artifact = step["platforms"]["darwin-aarch64"]
+    expected = {"version": step["version"], "channel": channel, "platform": "darwin-aarch64",
+                "signing_generation": step["update_keys"]["signing_generation"],
+                "artifact_url": artifact["url"], "artifact_signature": artifact["signature"]}
+    return all(candidate.get(key) == value for key, value in expected.items())
 
 
 def confirmed(transaction: dict | None, version: str, app: Path) -> bool:
@@ -73,15 +81,22 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         for step in case["steps"]:
             version = step["version"]
             ready = wait_for(f"{version} was not automatically staged", lambda: read_json(records / "ready.json"), 2100)
-            if ready.get("candidate", {}).get("version") != version:
+            if not candidate_matches(ready.get("candidate", {}), step, case["channel"]):
                 raise ValueError("automatic staging selected an unexpected release")
             (evidence / f"{version}-ready.json").write_text(json.dumps(ready, indent=2) + "\n")
+            prepared = Path(ready["prepared_bundle"])
+            prepared_inode = prepared.stat().st_ino
+            prior_inode = app.stat().st_ino
             installation.stop()
             installation.launch()
             after = installation.healthy(version)
             wait_for(f"{version} did not confirm startup and remove the previous bundle",
                      lambda: confirmed(read_json(records / "transaction.json"), version, app), 180)
+            if app.stat().st_ino != prepared_inode or app.stat().st_ino == prior_inode:
+                raise ValueError("activation did not exchange the prepared bundle inode")
             transaction = read_json(records / "transaction.json")
+            if transaction["candidate"]["release_id"] != ready["candidate"]["release_id"]:
+                raise ValueError("activation confirmed a different staged release")
             if file_digest(installation.executable) != transaction["next_hash"]:
                 raise ValueError("installed executable differs from its activation receipt")
             expected = plan["schema_version"] if version == plan["candidate"]["version"] else plan["schemas"][version]
@@ -96,6 +111,15 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         verify_semantics(config, fixture, restart, evidence)
         return {"id": case["id"], "result": "passed", "steps": observations, "restart_health": restart["health"]}
     finally:
-        installation.stop()
-        if (config / "engine.log").is_file():
-            shutil.copyfile(config / "engine.log", evidence / "engine.log")
+        try:
+            installation.stop()
+        finally:
+            retain_state(config, records, evidence)
+
+
+def retain_state(config, records, evidence):
+    for name in ("ready.json", "rejected.json", "transaction.json"):
+        if (records / name).is_file():
+            shutil.copyfile(records / name, evidence / ("final-" + name))
+    if (config / "engine.log").is_file():
+        shutil.copyfile(config / "engine.log", evidence / "engine.log")
