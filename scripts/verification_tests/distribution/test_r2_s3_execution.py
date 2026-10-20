@@ -1,0 +1,109 @@
+"""Offline contracts for private credentials and bucket-scoped object operations."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from release_storage import rehearsal, s3
+
+
+class RehearsalCredentialsTests(unittest.TestCase):
+    def setUp(self):
+        self.config = dict(schema_version=1, endpoint_url="https://" + "a" * 32 + ".r2.cloudflarestorage.com",
+                           bucket="test-bucket", access_key_id="access", secret_access_key="secret",
+                           download_base_url="https://test-download.example.com")
+
+    def test_private_json_and_literal_credentials_isolate_inherited_authority(self):
+        self.config["secret_access_key"] = "$(touch${IFS}/tmp/never-execute)"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(self.config))
+            path.chmod(0o600)
+            env = rehearsal.environment(rehearsal.load_file(path), {
+                "AWS_PROFILE": "production", "AWS_SESSION_TOKEN": "old", "CLOUDFLARE_API_TOKEN": "broad",
+                "BASH_ENV": "/untrusted", "PATH": os.environ["PATH"]})
+        self.assertEqual(env["AWS_SECRET_ACCESS_KEY"], self.config["secret_access_key"])
+        for name in ["AWS_PROFILE", "AWS_SESSION_TOKEN", "CLOUDFLARE_API_TOKEN", "BASH_ENV"]:
+            self.assertNotIn(name, env)
+        self.assertEqual(env["AWS_SHARED_CREDENTIALS_FILE"], os.devnull)
+        self.assertEqual(env["RELEASE_R2_TRANSPORT"], "s3")
+
+    def test_refuses_public_files_symlinks_duplicate_fields_and_invalid_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(self.config))
+            path.chmod(0o644)
+            with self.assertRaises(ValueError):
+                rehearsal.load_file(path)
+            path.chmod(0o600)
+            link = Path(directory) / "link"
+            link.symlink_to(path)
+            with self.assertRaises(OSError):
+                rehearsal.load_file(link)
+            path.write_text('{"secret_access_key":"private-value","secret_access_key":"other"}')
+            with self.assertRaisesRegex(ValueError, "^duplicate configuration field$"):
+                rehearsal.load_file(path)
+        for change in [{"schema_version": True}, {"unexpected": "private"},
+                       {"endpoint_url": "https://attacker.example"},
+                       {"download_base_url": "https://user:secret@test.example"}]:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                rehearsal.validate({**self.config, **change})
+
+    def test_explicit_config_and_optional_session_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps({**self.config, "session_token": "temporary"}))
+            path.chmod(0o400)
+            configured = rehearsal.configuration({"RELEASE_TEST_CONFIG": str(path)})
+            self.assertEqual(rehearsal.environment(configured, {})["AWS_SESSION_TOKEN"], "temporary")
+
+
+class BucketTransportTests(unittest.TestCase):
+    def test_absence_is_structured_and_authentication_failure_is_not_absence(self):
+        with patch.object(s3, "request", return_value={"Contents": [{"Key": "prefix/other"}]}):
+            self.assertIsNone(s3.object_stat("prefix/key"))
+        with patch.object(s3, "request", side_effect=ValueError("authentication refused")):
+            with self.assertRaises(ValueError):
+                s3.get("prefix/key", Path("unused"))
+        with patch.object(s3, "request", return_value={"Contents": ["invalid"]}):
+            with self.assertRaises(ValueError):
+                s3.object_stat("key")
+
+    def test_authenticated_read_refuses_listing_get_race(self):
+        def response(operation, *args):
+            Path(args[-1]).write_bytes(b"payload")
+            return {"ETag": '"changed"'}
+        with patch.object(s3, "object_stat", return_value={"size": 7, "etag": "original"}), \
+                patch.object(s3, "request", side_effect=response):
+            with self.assertRaisesRegex(ValueError, "changed"):
+                s3.read_bytes("key")
+
+    def test_multipart_immutable_identity_and_changed_bytes(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "object"
+            source.write_bytes(b"payload")
+            metadata = {"ContentLength": 7, "Metadata": {"sha256": hashlib.sha256(b"payload").hexdigest()}}
+            with patch.object(s3, "object_stat", return_value={"etag": "multipart-2"}), \
+                    patch.object(s3, "request", return_value=metadata), patch.object(s3, "put") as upload:
+                s3.immutable("key", source, "text/plain", "immutable")
+                upload.assert_not_called()
+                source.write_bytes(b"changed")
+                with self.assertRaisesRegex(ValueError, "different bytes"):
+                    s3.immutable("key", source, "text/plain", "immutable")
+
+    def test_s3_command_keeps_keys_literal_and_redacts_cli_error(self):
+        env = {"R2_S3_ENDPOINT": "https://test.invalid", "R2_BUCKET": "test-bucket",
+               "AWS_ACCESS_KEY_ID": "access", "AWS_SECRET_ACCESS_KEY": "private-value"}
+        with patch.dict(os.environ, env, clear=True), patch.object(subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, b'{}', b'')
+            s3.request("delete-object", "--key", "prefix/$(literal)")
+            command = run.call_args.args[0]
+            self.assertEqual(command[-1], "prefix/$(literal)")
+            self.assertNotIn("private-value", command)
+            run.return_value = subprocess.CompletedProcess([], 1, b'', b'private-value')
+            with self.assertRaisesRegex(ValueError, "^S3 delete-object failed; check bucket credentials, endpoint and object permissions$"):
+                s3.request("delete-object", "--key", "key")

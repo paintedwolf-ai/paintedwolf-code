@@ -1770,8 +1770,8 @@ tasks:
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby && command -v aws
+        msg: bun, curl, jq, python3, ruby, and AWS CLI v2 required for release:live-test
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
 

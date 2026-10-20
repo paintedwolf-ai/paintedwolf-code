@@ -999,8 +999,24 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 ### Release dry run
 
-The isolated R2 rehearsal is being updated to use bucket-scoped S3 credentials;
-its local configuration and offline transport checks are tracked in the accompanying PR.
+The isolated R2 rehearsal uses S3 credentials with **Object Read & Write** permission scoped to its test bucket. Create `~/.config/paintedwolf/release-rehearsal.json`, owned by your user with mode `600` (or read-only `400`):
+
+```json
+{
+  "schema_version": 1,
+  "endpoint_url": "https://<account-id>.r2.cloudflarestorage.com",
+  "bucket": "paintedwolf-release-test",
+  "access_key_id": "<R2 S3 access key ID>",
+  "secret_access_key": "<R2 S3 secret access key>",
+  "download_base_url": "https://test-download.example.com"
+}
+```
+
+Use the bucket's actual S3 endpoint, including its jurisdiction suffix when applicable. `download_base_url` is the HTTPS origin serving that test bucket; it needs public reads and must exercise the intended CDN cache rules. An optional `session_token` supports temporary S3 credentials. The file is JSON, never sourced as shell code; symlinks, unknown fields, duplicate fields, and files readable by other users are refused. Keep it outside the repository. No Cloudflare account API token is needed.
+
+With AWS CLI v2, bun, curl, jq, Python 3, and Ruby installed, run `./task release:live-test`. Override the config path with `RELEASE_TEST_CONFIG=/absolute/path/config.json`. The rehearsal writes beneath a unique `release-system-tests/<run-id>/` prefix and cleans up only its recorded keys. Use a dedicated test bucket and download domain: this is a credentialed write/delete test, not an offline check or public release.
+
+The protected `release-rehearsal` GitHub environment uses `RELEASE_TEST_R2_ACCESS_KEY_ID` and `RELEASE_TEST_R2_SECRET_ACCESS_KEY` secrets, optional `RELEASE_TEST_R2_SESSION_TOKEN`, and `RELEASE_TEST_R2_ENDPOINT_URL`, `RELEASE_TEST_R2_BUCKET`, and `RELEASE_TEST_DOWNLOAD_BASE_URL` variables. These environment fields are the fallback when no local config file exists. Local execution clears inherited AWS profiles, role credentials, metadata discovery, and Cloudflare tokens before invoking S3. Production publication credentials are unchanged.
 
 Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
 

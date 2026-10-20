@@ -62,8 +62,14 @@ if [[ -n "${STORAGE_PREFIX}" ]]; then
   OBJECT_KEY="${STORAGE_PREFIX}/${KEY}"
 fi
 : "${R2_BUCKET:?missing R2_BUCKET}"
+if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+  : "${R2_S3_ENDPOINT:?missing R2_S3_ENDPOINT}"
+  : "${AWS_ACCESS_KEY_ID:?missing AWS_ACCESS_KEY_ID}"
+  : "${AWS_SECRET_ACCESS_KEY:?missing AWS_SECRET_ACCESS_KEY}"
+else
 : "${CLOUDFLARE_ACCOUNT_ID:?missing CLOUDFLARE_ACCOUNT_ID}"
 : "${CLOUDFLARE_API_TOKEN:?missing CLOUDFLARE_API_TOKEN}"
+fi
 : "${DOWNLOAD_BASE_URL:?missing DOWNLOAD_BASE_URL}"
 
 bash "$(dirname "$0")/release-validate-updater-manifest.sh" --file "${FILE}"
@@ -144,10 +150,19 @@ if [[ -n "${PREPARE_OUTPUT}" ]]; then
   exit 0
 fi
 
+publish_object() {
+  local key="$1" file="$2" content_type="$3"
+  if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+    python3 "$(dirname "$0")/release_storage/s3.py" put "${key}" "${file}" \
+      --content-type "${content_type}" --cache-control "no-cache, no-store, must-revalidate"
+  else
+    "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${key}" \
+      --file "${file}" --content-type "${content_type}" \
+      --cache-control "no-cache, no-store, must-revalidate" --remote
+  fi
+}
 publish_signature() {
-  "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}.sig" \
-    --file "${SIGNATURE}" --content-type text/plain \
-    --cache-control "no-cache, no-store, must-revalidate" --remote
+  publish_object "${OBJECT_KEY}.sig" "${SIGNATURE}" text/plain
 }
 get_status="$(python3 "$(dirname "$0")/release_distribution.py" storage-read \
   --key "${OBJECT_KEY}" --output "${CURRENT}")"
@@ -180,9 +195,7 @@ case "${get_status}" in
         fi
       fi
       publish_signature
-      "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}" \
-        --file "${FILE}" --content-type application/json \
-        --cache-control "no-cache, no-store, must-revalidate" --remote
+      publish_object "${OBJECT_KEY}" "${FILE}" application/json
     fi
     ;;
   404)
@@ -191,9 +204,7 @@ case "${get_status}" in
       exit 1
     }
     publish_signature
-    "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}" \
-      --file "${FILE}" --content-type application/json \
-      --cache-control "no-cache, no-store, must-revalidate" --remote
+    publish_object "${OBJECT_KEY}" "${FILE}" application/json
     ;;
   *)
     echo "error: R2 returned HTTP ${get_status} reading current updater pointer" >&2
