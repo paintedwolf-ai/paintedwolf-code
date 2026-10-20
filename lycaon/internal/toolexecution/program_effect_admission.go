@@ -27,16 +27,16 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 		return ProgramSurface{}, fmt.Errorf("command metadata required")
 	}
 	source, ok := e.policy.(interface {
-		CommandEffects(context.Context, string) (toolcontract.CommandEffects, error)
+		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
 	})
 	if !ok {
 		return ProgramSurface{}, fmt.Errorf("command profile effect boundary required")
 	}
-	allowed, err := source.CommandEffects(ctx, filter.ProfileID)
+	frozen, allowed, err := source.FreezeCommandProfile(ctx, filter.ProfileID)
 	if err != nil {
 		return ProgramSurface{}, err
 	}
-	offered, _, err := e.OfferProgramOperations(ctx, filter, active)
+	offered, _, err := e.OfferProgramOperations(frozen, filter, active)
 	if err != nil {
 		return ProgramSurface{}, err
 	}

@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -17,8 +19,8 @@ type programEffectPolicy struct{ effects toolcontract.CommandEffects }
 func (p programEffectPolicy) Evaluate(context.Context, platform.PolicyContext) (*platform.PolicyDecision, error) {
 	return &platform.PolicyDecision{Allowed: true}, nil
 }
-func (p programEffectPolicy) CommandEffects(context.Context, string) (toolcontract.CommandEffects, error) {
-	return p.effects, nil
+func (p programEffectPolicy) FreezeCommandProfile(ctx context.Context, _ string) (context.Context, toolcontract.CommandEffects, error) {
+	return ctx, p.effects, nil
 }
 
 func TestBoundProgramModePreservesProfileAndSourceInEffectRefusal(t *testing.T) {
@@ -51,5 +53,41 @@ func TestBoundProgramModePreservesProfileAndSourceInEffectRefusal(t *testing.T) 
 				t.Fatal("invented mode admitted")
 			}
 		})
+	}
+}
+
+func TestProgramSurfaceFreezesProductionProfileAndWorkerOverlayTogether(t *testing.T) {
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	all, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	boundary := sandbox.NewBoundary(sandbox.Config{}, nil)
+	lookups := 0
+	boundary.SetProfileSource(func(_ context.Context, sessionID string) []sandbox.ToolProfile {
+		lookups++
+		if sessionID != "worker-session" {
+			t.Fatalf("lost worker session %q", sessionID)
+		}
+		if lookups > 1 {
+			return []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true, "write": true}, CommandEffects: all}}
+		}
+		return []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true}, CommandEffects: readOnly}}
+	})
+	registry := tools.NewDefaultRegistry()
+	for _, name := range []string{"read", "write"} {
+		contract, _ := toolcontract.Lookup(name)
+		testutil.FailErr(t, "register frozen owner", registry.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}}, Contract: contract, Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			t.Fatal("profile capture dispatched handler")
+			return "", nil
+		}}))
+	}
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), registry, "fixture")
+	ctx := sandbox.WithSessionID(t.Context(), "worker-session")
+	surface, err := executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: "fixture"}, []string{"read", "write"})
+	testutil.FailErr(t, "freeze production approval/profile boundary", err)
+	if lookups != 1 || !surface.allowed.Allows(readOnly) || surface.allowed.Allows(all) {
+		t.Fatalf("profile capture changed between effect and exposure: lookups=%d classes=%v", lookups, surface.allowed.Classes())
+	}
+	write, _ := registry.Definition("write")
+	if err := surface.offered.Validate(write.Operation, toolcontract.OperationInvocation{}); err == nil {
+		t.Fatal("later overlay leaked hidden write into frozen surface")
 	}
 }
