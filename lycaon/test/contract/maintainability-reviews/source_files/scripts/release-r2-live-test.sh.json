@@ -4,11 +4,12 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain the single managed release rehearsal entrypoint with fixed mode dispatch at374lines. Qualification preparation and retention exec dedicated Python owners before any R2 credential path; signing, server selection, guest execution, variant and nonce freshness, bounded evidence and final admission remain outside the shell dispatcher. The existing generic release rehearsal keeps its own transaction lifecycle. Renewed after626managedcontracts passed on the same dispatcher/workflow/guard bytes, including actualvariant, nonce, source and resource-bound refusal paths. Additional modes or changed authority and guard contracts require renewed review.",
-  "reviewed_commit": "07080c7208863ed3c477b2f88b7f5e5eb9b6dd4a",
-  "ceiling": 374,
+  "reason": "Retain the managed release rehearsal entrypoint at 383 measured lines after inspecting the composed four-mode dispatch and its lifecycle. A fixed case table selects only qualification prepare/retain, native pacman construction or package signing; one shared shift/cd/exec path preserves literal argv and avoids duplicated wrappers. The shell grants no server, source, signature, guest, freshness or publication authority: dedicated Python owners retain those boundaries before any generic R2 credential path. The existing generic release rehearsal keeps its own isolated transaction and cleanup lifecycle. The composed source passed 655 managed contracts and budgets; native ARM substrate construction separately passed its actual 11-control managed rehearsal. Ceiling is the present measurement with no growth allowance. Additional modes, changed guard ownership or transaction changes require renewed review.",
+  "reviewed_commit": "26ebc1be719783e331cdafcc03fa40d530dd9eee",
+  "ceiling": 383,
   "boundaries": {
     ".github/workflows/linux-installed-qualification.yml": "91b64af5f2b97ff9b8f40d8b178e450d01f8316c73838bf572efef2df2b1acb7",
-    "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581"
+    "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
+    "scripts/verification_tests/distribution/installed/test_installed_candidate_inputs_execution.py": "398d2d9dc198c0dfdfc8b9465565b31f4857ab2cdfc552aaa38c5bd7f3cd1151"
   }
 }
