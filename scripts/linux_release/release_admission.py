@@ -9,8 +9,8 @@ from pathlib import Path
 import sys
 
 from .installed_results import admit
-from .publication_files import verify_files
-from .publication_repositories import verify_repositories
+from .publication.files import verify_files
+from .publication.repositories import verify_repositories
 from .support_matrix import CATALOG
 
 

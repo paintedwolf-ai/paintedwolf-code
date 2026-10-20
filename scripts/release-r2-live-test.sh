@@ -5,27 +5,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ "${1:-}" == "--prepare-distribution-document" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_document_pipeline "$@"
+  exec python3 -m scripts.linux_release.publication.document_pipeline "$@"
 fi
 if [[ "${1:-}" == "--retain-release-inputs" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_release_producer "$@"
+  exec python3 -m scripts.linux_release.publication.release_producer "$@"
 fi
 if [[ "${1:-}" == "--produce-linux-controls" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_control_pipeline "$@"
+  exec python3 -m scripts.linux_release.publication.control_pipeline "$@"
 fi
 if [[ "${1:-}" == "--prepare-linux-controls" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_controls "$@"
+  exec python3 -m scripts.linux_release.publication.controls "$@"
 fi
 if [[ "${1:-}" == "--retain-linux-campaign" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_producer "$@"
+  exec python3 -m scripts.linux_release.publication.producer "$@"
 fi
 if [[ "${1:-}" == "--admit-linux-publication" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication_controller "$@"
+  exec python3 -m scripts.linux_release.publication.controller "$@"
 fi
 
 # shellcheck source=release-r2-rest.sh

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from linux_release.release_admission import main
-from linux_release.publication_repositories import digest, verify_repositories
+from linux_release.publication.repositories import digest, verify_repositories
 
 
 class LinuxReleaseAdmissionTests(unittest.TestCase):
