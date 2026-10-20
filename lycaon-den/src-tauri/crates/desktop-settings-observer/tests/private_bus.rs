@@ -88,6 +88,7 @@ fn missing_service_reports_typed_unavailability_and_exits() {
     ended(&mut observer);
 }
 struct Service {
+    connection: gio::DBusConnection,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -114,13 +115,14 @@ impl Service {
                     },|_,_,_,_,_|false.to_variant(),|_,_,_,_,_,_|false).unwrap();
                 connection.call_sync(Some("org.freedesktop.DBus"),"/org/freedesktop/DBus","org.freedesktop.DBus","RequestName",
                     Some(&("org.freedesktop.portal.Desktop",0u32).to_variant()),None,gio::DBusCallFlags::NONE,1500,None::<&gio::Cancellable>).unwrap();
-                ready.send(()).unwrap();
+                ready.send(connection.clone()).unwrap();
                 while !requested.load(Ordering::Acquire) { context.iteration(false);thread::sleep(Duration::from_millis(5)); }
                 connection.close_sync(None::<&gio::Cancellable>).unwrap();
             }).unwrap();
         });
-        wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let connection = wait.recv_timeout(Duration::from_secs(5)).unwrap();
         Self {
+            connection,
             stop,
             worker: Some(worker),
         }
@@ -158,5 +160,40 @@ fn ready_observer_exits_on_parent_pipe_eof() {
         vec![desktop_settings_observer::Setting::Contrast(1)]
     );
     drop(observer.stdin.take());
+    ended(&mut observer);
+}
+
+#[test]
+fn live_settings_and_owner_loss_have_separate_typed_observations() {
+    let bus = Bus::new();
+    let service = Service::new(&bus, false);
+    let mut observer = bus.observer();
+    let mut output = BufReader::new(observer.stdout.take().unwrap());
+    let initial = read(&mut output, 0).unwrap().unwrap();
+    assert_eq!(initial.status, Status::Ready);
+    service
+        .connection
+        .emit_signal(
+            None,
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings",
+            "SettingChanged",
+            Some(&("org.freedesktop.appearance", "contrast", 0u32.to_variant()).to_variant()),
+        )
+        .unwrap();
+    service
+        .connection
+        .flush_sync(None::<&gio::Cancellable>)
+        .unwrap();
+    let changed = read(&mut output, initial.sequence).unwrap().unwrap();
+    assert_eq!(changed.status, Status::Ready);
+    assert_eq!(
+        changed.settings,
+        vec![desktop_settings_observer::Setting::Contrast(0)]
+    );
+    drop(service);
+    let lost = read(&mut output, changed.sequence).unwrap().unwrap();
+    assert_eq!(lost.status, Status::Disconnected);
+    assert!(lost.settings.is_empty());
     ended(&mut observer);
 }
