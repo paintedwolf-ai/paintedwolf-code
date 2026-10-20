@@ -197,3 +197,37 @@ fn live_settings_and_owner_loss_have_separate_typed_observations() {
     assert!(lost.settings.is_empty());
     ended(&mut observer);
 }
+
+#[test]
+fn oversized_live_preference_fails_without_emitting_an_unbounded_snapshot() {
+    let bus = Bus::new();
+    let service = Service::new(&bus, false);
+    let mut observer = bus.observer();
+    let mut output = BufReader::new(observer.stdout.take().unwrap());
+    let initial = read(&mut output, 0).unwrap().unwrap();
+    service
+        .connection
+        .emit_signal(
+            None,
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings",
+            "SettingChanged",
+            Some(
+                &(
+                    "org.gnome.desktop.wm.preferences",
+                    "button-layout",
+                    "x".repeat(65536).to_variant(),
+                )
+                    .to_variant(),
+            ),
+        )
+        .unwrap();
+    service
+        .connection
+        .flush_sync(None::<&gio::Cancellable>)
+        .unwrap();
+    let refused = read(&mut output, initial.sequence).unwrap().unwrap();
+    assert_eq!(refused.status, Status::Failed);
+    assert!(refused.settings.is_empty());
+    ended(&mut observer);
+}

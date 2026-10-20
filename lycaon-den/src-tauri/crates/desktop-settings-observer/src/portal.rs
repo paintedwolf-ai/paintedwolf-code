@@ -52,6 +52,10 @@ fn status(error: &glib::Error) -> Status {
         Status::Failed
     }
 }
+fn text(v: &Variant, limit: usize) -> Option<String> {
+    let value = v.str()?;
+    (value.len() <= limit && !value.contains('\0')).then(|| value.to_owned())
+}
 fn value(namespace: &str, key: &str, boxed: &Variant) -> Option<Setting> {
     let v = if boxed.type_().as_str() == "v" {
         boxed.as_variant()?
@@ -66,9 +70,9 @@ fn value(namespace: &str, key: &str, boxed: &Variant) -> Option<Setting> {
         }
         ("org.gnome.desktop.interface", "text-scaling-factor") => Setting::TextScale(v.get()?),
         ("org.gnome.desktop.a11y.interface", "high-contrast") => Setting::HighContrast(v.get()?),
-        ("org.kde.kdeglobals.General", "AccentColor") => Setting::KdeAccent(v.str()?.into()),
+        ("org.kde.kdeglobals.General", "AccentColor") => Setting::KdeAccent(text(&v, 32)?),
         ("org.gnome.desktop.wm.preferences", "button-layout") => {
-            Setting::ButtonLayout(v.str()?.into())
+            Setting::ButtonLayout(text(&v, 256)?)
         }
         _ => return None,
     };
@@ -186,6 +190,9 @@ fn watch(context: &glib::MainContext, stop: Arc<AtomicBool>) -> io::Result<()> {
     let journal = Rc::new(RefCell::new(Journal::default()));
     let lost = Rc::new(Cell::new(false));
     let changes = journal.clone();
+    let malformed = lost.clone();
+    let malformed_loop = loop_.clone();
+    let malformed_output = output.clone();
     connection.signal_subscribe(
         Some(BUS),
         Some(INTERFACE),
@@ -194,6 +201,12 @@ fn watch(context: &glib::MainContext, stop: Arc<AtomicBool>) -> io::Result<()> {
         None,
         gio::DBusSignalFlags::NONE,
         move |_, _, _, _, _, parameters| {
+            if parameters.size() > 64 * 1024 {
+                malformed.set(true);
+                let _ = malformed_output.borrow_mut().send(Status::Failed, vec![]);
+                malformed_loop.quit();
+                return;
+            }
             if parameters.type_().as_str() != "(ssv)" {
                 return;
             }
@@ -291,54 +304,5 @@ fn watch(context: &glib::MainContext, stop: Arc<AtomicBool>) -> io::Result<()> {
     Ok(())
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn typed_denial_cannot_become_missing() {
-        assert_eq!(
-            status(&glib::Error::new(
-                DbCode(gio::ffi::G_DBUS_ERROR_ACCESS_DENIED),
-                "diagnostic"
-            )),
-            Status::Denied
-        );
-        assert_eq!(
-            status(&glib::Error::new(
-                DbCode(gio::ffi::G_DBUS_ERROR_SERVICE_UNKNOWN),
-                "same diagnostic"
-            )),
-            Status::Missing
-        );
-        assert_eq!(
-            status(&glib::Error::new(
-                DbCode(gio::ffi::G_DBUS_ERROR_FAILED),
-                "same diagnostic"
-            )),
-            Status::Failed
-        );
-    }
-    #[test]
-    fn settings_keys_and_variant_types_are_fixed() {
-        assert_eq!(
-            value(NAMESPACES[0], "contrast", &1u32.to_variant()),
-            Some(Setting::Contrast(1))
-        );
-        assert!(value(NAMESPACES[0], "contrast", &"one".to_variant()).is_none());
-        assert!(value(NAMESPACES[0], "execute-command", &"anything".to_variant()).is_none());
-        assert!(value(NAMESPACES[0], "accent-color", &(2.0, 0.0, 0.0).to_variant()).is_none());
-    }
-    #[test]
-    fn startup_snapshot_replays_intervening_changes_and_invalidates_removed_fact() {
-        let mut journal = Journal::default();
-        journal.change(NAMESPACES[0], "contrast", Some(Setting::Contrast(1)));
-        let namespaces = std::collections::BTreeMap::from([(
-            NAMESPACES[0],
-            std::collections::BTreeMap::from([("contrast", 0u32.to_variant())]),
-        )]);
-        journal.snapshot(&(namespaces,).to_variant());
-        assert_eq!(journal.settings, vec![Setting::Contrast(1)]);
-        journal.change(NAMESPACES[0], "contrast", None);
-        assert!(journal.settings.is_empty());
-        assert!(journal.dirty);
-    }
-}
+#[path = "portal_tests.rs"]
+mod tests;
