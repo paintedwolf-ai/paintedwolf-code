@@ -1,12 +1,22 @@
 package toolcontract
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"sync"
 )
 
 var operationLanguage = sync.OnceValues(LanguageV1)
+
+// LanguageCatalogDigest identifies exact frozen compiled language facts.
+var languageDigest = sync.OnceValue(func() string {
+	sum := sha256.Sum256([]byte(languageV1JSON))
+	return hex.EncodeToString(sum[:])
+})
+
+func LanguageCatalogDigest() string { return languageDigest() }
 
 // ToolOperation compiles a retained interface from its existing schema and
 // invocation contract, attaching selected command forms from the same catalog.

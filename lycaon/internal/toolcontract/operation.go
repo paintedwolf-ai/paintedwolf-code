@@ -13,6 +13,7 @@ import (
 type OperationFacts struct {
 	Identity          string
 	Version           int
+	CatalogDigest     string
 	Contract          Contract
 	Arguments         json.RawMessage
 	Commands          []CommandSpecification
@@ -38,6 +39,12 @@ type OperationDefinition struct {
 }
 
 func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
+	if facts.CatalogDigest == "" {
+		facts.CatalogDigest = LanguageCatalogDigest()
+	}
+	if facts.CatalogDigest != LanguageCatalogDigest() {
+		return OperationDefinition{}, fmt.Errorf("operation catalog digest mismatch")
+	}
 	if facts.Identity == "" || facts.Version < 1 || facts.Contract.Owner == "" || facts.ProgressGate == "" || facts.RejectionContract == "" {
 		return OperationDefinition{}, fmt.Errorf("operation identity, version, owner, progress and rejection contract required")
 	}
@@ -47,6 +54,9 @@ func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
 	var schema map[string]json.RawMessage
 	if err := DecodeLanguageJSON(facts.Arguments, &schema); err != nil || string(schema["type"]) != `"object"` {
 		return OperationDefinition{}, fmt.Errorf("operation %s requires an object argument schema", facts.Identity)
+	}
+	if err := ValidateArgumentSchema(facts.Arguments); err != nil {
+		return OperationDefinition{}, err
 	}
 	if facts.Streams.Output == "" || facts.Streams.Error == "" || len(facts.Streams.Statuses) == 0 {
 		return OperationDefinition{}, fmt.Errorf("operation %s requires stream and status contracts", facts.Identity)

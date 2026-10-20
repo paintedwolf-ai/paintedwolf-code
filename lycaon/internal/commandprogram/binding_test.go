@@ -10,7 +10,7 @@ import (
 )
 
 func fixtureInvocation() toolcontract.OperationInvocation {
-	return toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "execution"}, ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: "catalog"}
+	return toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "execution"}, ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 }
 
 func TestUnofferedDirectBindingDoesNotExecute(t *testing.T) {
@@ -36,6 +36,11 @@ func TestUnofferedDirectBindingDoesNotExecute(t *testing.T) {
 	invalid.ActorID = ""
 	if _, err := Invoke(t.Context(), Offer(definition), binding, invalid, "input"); err == nil || called != 1 {
 		t.Fatal("missing actor reached owner")
+	}
+	wrongCatalog := fixtureInvocation()
+	wrongCatalog.CatalogDigest = "different-catalog"
+	if _, err := Invoke(t.Context(), Offer(definition), binding, wrongCatalog, "input"); err == nil || called != 1 {
+		t.Fatal("mismatched catalog reached owner")
 	}
 }
 

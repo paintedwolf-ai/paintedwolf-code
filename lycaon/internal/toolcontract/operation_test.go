@@ -16,7 +16,7 @@ func TestOperationDefinitionIsDetachedAndUsesExistingContract(t *testing.T) {
 	contract.SecretReferenceArgs[0] = "changed"
 	schema[2] = 'X'
 	facts := definition.Facts()
-	if facts.Contract.Owner != "filesystem" || facts.Contract.Lifecycle != LifecycleJournaledMutation || facts.Contract.SecretReferenceArgs[0] != "content" || definition.Digest() == "" {
+	if facts.Contract.Owner != "filesystem" || facts.Contract.Lifecycle != contract.Lifecycle || facts.Contract.SecretReferenceArgs[0] != "content" || definition.Digest() == "" {
 		t.Fatalf("lost owner contract: %+v", facts.Contract)
 	}
 	facts.Resources[0].Maximum = -1
@@ -29,10 +29,17 @@ func TestOperationDefinitionIsDetachedAndUsesExistingContract(t *testing.T) {
 			t.Fatal("invalid definition admitted")
 		}
 	}
+	for _, schema := range []string{`{"type":"object","required":"path"}`, `{"type":"object","properties":{"path":17}}`} {
+		invalid := definition.Facts()
+		invalid.Arguments = json.RawMessage(schema)
+		if _, err := NewOperationDefinition(invalid); err == nil {
+			t.Fatalf("invalid schema admitted: %s", schema)
+		}
+	}
 }
 
 func TestProducerPublicationRequiresCompleteEligibleOutcome(t *testing.T) {
-	completeNoMatch := ProducerResult{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true}
+	completeNoMatch := ProducerResult{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: NativeComparisonPublication}
 	if err := completeNoMatch.Validate(); err != nil {
 		t.Fatalf("status one complete result: %v", err)
 	}
@@ -40,6 +47,7 @@ func TestProducerPublicationRequiresCompleteEligibleOutcome(t *testing.T) {
 		{Status: 0, Terminal: ProducerCompleted, PublicationEligible: true},
 		{Status: 0, Terminal: ProducerInterrupted, Complete: true, PublicationEligible: true},
 		{Status: 0, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, StopCode: "COMMAND_LIMIT_EXCEEDED"},
+		{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true},
 		{Status: -1, Terminal: ProducerCompleted}, {Terminal: "invented"},
 	} {
 		if result.Validate() == nil {

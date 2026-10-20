@@ -10,14 +10,17 @@ import (
 
 // OfferedOperations is frozen for one invocation. Discoverability or registry
 // presence never substitutes for the offered capability selected by the host.
-type OfferedOperations struct{ digests map[string]string }
+type OfferedOperations struct {
+	digests       map[string]string
+	catalogDigest string
+}
 
 func Offer(definitions ...toolcontract.OperationDefinition) OfferedOperations {
 	digests := make(map[string]string, len(definitions))
 	for _, definition := range definitions {
 		digests[definition.Facts().Identity] = definition.Digest()
 	}
-	return OfferedOperations{digests: digests}
+	return OfferedOperations{digests: digests, catalogDigest: toolcontract.LanguageCatalogDigest()}
 }
 
 // Binding calls one complete typed operation for either interface. The adapter
@@ -37,6 +40,9 @@ func Invoke[Input, Result any](ctx context.Context, offered OfferedOperations, b
 	}
 	if err := invocation.Validate(); err != nil {
 		return zero, err
+	}
+	if invocation.CatalogDigest != offered.catalogDigest || facts.CatalogDigest != offered.catalogDigest {
+		return zero, fmt.Errorf("invocation and offered operation catalog mismatch")
 	}
 	if binding.InvokeOwner == nil {
 		return zero, fmt.Errorf("operation %s has no runtime binding", facts.Identity)

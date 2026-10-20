@@ -81,9 +81,20 @@ type ProducerResult struct {
 	StopCode            string
 	Complete            bool
 	PublicationEligible bool
+	PublicationBasis    PublicationBasis
 	EffectCertainty     EffectCertainty
 	Evidence            OperationEvidence
 }
+
+// PublicationBasis is supplied by a classified native producer. Ordinary or
+// unclassified external results require status zero; comparisons explicitly
+// admit the complete native no-match/difference status one.
+type PublicationBasis uint8
+
+const (
+	ZeroStatusPublication PublicationBasis = iota
+	NativeComparisonPublication
+)
 
 type EffectCertainty string
 
@@ -125,6 +136,20 @@ func (r ProducerResult) Validate() error {
 	}
 	if r.PublicationEligible && (!r.Complete || r.Terminal != ProducerCompleted || r.StopCode != "") {
 		return fmt.Errorf("incomplete or stopped producer is not publication eligible")
+	}
+	if r.PublicationEligible {
+		switch r.PublicationBasis {
+		case ZeroStatusPublication:
+			if r.Status != 0 {
+				return fmt.Errorf("unclassified nonzero producer is not publication eligible")
+			}
+		case NativeComparisonPublication:
+			if r.Status > 1 {
+				return fmt.Errorf("comparison utility error is not publication eligible")
+			}
+		default:
+			return fmt.Errorf("unknown publication eligibility basis")
+		}
 	}
 	return nil
 }

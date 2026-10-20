@@ -3,6 +3,8 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
@@ -12,10 +14,19 @@ import (
 
 // WriteInput is shared by retained structured write and native command adapters.
 type WriteInput struct {
-	Path    string
-	Content string
-	Append  bool
+	Path         string
+	Content      string
+	Append       bool
+	Admission    WriteAdmission
+	ExecutionPin toolcontract.SourcePin
 }
+
+type WriteAdmission uint8
+
+const (
+	WriteConversational WriteAdmission = iota
+	WriteExecutionPinned
+)
 
 // WriteResult distinguishes accepted document edits from saved publication.
 type WriteResult struct {
@@ -33,6 +44,11 @@ type WriteResult struct {
 // Apply performs the complete native write operation, including scope, review,
 // revision, syntax, attribution and the existing source write door.
 func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (WriteResult, error) {
+	if input.Admission != WriteConversational {
+		// P11 supplies the exact execution-pin adapter. Until then no command
+		// caller can accidentally refresh a conversational base or replay a write.
+		return WriteResult{}, &toolrejection.ToolReject{Code: "COMMAND_NATIVE_FORM_UNSUPPORTED", Data: map[string]any{"operation": "write", "admission": "execution-pinned"}}
+	}
 	path, content, appendMode := input.Path, input.Content, input.Append
 	if path == "" {
 		return WriteResult{}, toolkit.MissingArg("path")
