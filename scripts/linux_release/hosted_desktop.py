@@ -73,13 +73,21 @@ def fresh(path: Path, text: str, mode=0o644):
     path.chmod(mode)
 
 
-def prepare(checkout: Path, output: Path) -> dict:
+def selected_controller(environment: dict, explicit: str | None) -> str:
+    selected = environment['GITHUB_SHA'] if explicit is None else explicit
+    if not isinstance(selected, str) or len(selected) != 40 or any(value not in '0123456789abcdef' for value in selected):
+        raise ValueError('hosted desktop controller must be one exact immutable commit')
+    return selected
+
+
+def prepare(checkout: Path, output: Path, controller_commit: str | None = None) -> dict:
     validate_host(os.environ, os.getuid(), platform.machine(), release())
+    selected = selected_controller(os.environ, controller_commit)
     checkout = checkout.resolve(strict=True)
     if not (checkout / 'scripts/linux_release/installed_environment.py').is_file() or output.exists() or output.is_symlink():
         raise ValueError('desktop preparation requires the checked-out controller and a fresh result path')
     revision = run(['git', '-c', 'safe.directory=' + str(checkout), '-C', str(checkout), 'rev-parse', 'HEAD'], timeout=10).decode().strip()
-    if revision != os.environ['GITHUB_SHA']:
+    if revision != selected:
         raise ValueError('desktop checkout differs from its selected controller commit')
     marker = Path('/etc/paintedwolf-qualification.json')
     if marker.exists() or marker.is_symlink():
@@ -100,6 +108,9 @@ def prepare(checkout: Path, output: Path) -> dict:
     controller = home / 'controller'
     run(['git', '-c', 'safe.directory=' + str(checkout), 'clone', '--no-local',
          str(checkout), str(controller)], timeout=120)
+    cloned = run(['git', '-C', str(controller), 'rev-parse', 'HEAD'], timeout=10).decode().strip()
+    if cloned != selected:
+        raise ValueError('graphical account controller differs from the selected immutable commit')
     run(['chown', '-R', str(account.pw_uid) + ':' + str(account.pw_gid), str(controller)])
     (home / '.ssh').mkdir(mode=0o700)
     os.chown(home / '.ssh', account.pw_uid, account.pw_gid)
@@ -149,7 +160,7 @@ def prepare(checkout: Path, output: Path) -> dict:
     (home / '.Xauthority').symlink_to(authority)
     os.lchown(home / '.Xauthority', account.pw_uid, account.pw_gid)
     fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': 'deb'}) + '\n')
-    result = {'format_version': 1, 'controller_commit': os.environ['GITHUB_SHA'],
+    result = {'format_version': 1, 'controller_commit': selected, 'workflow_commit': os.environ['GITHUB_SHA'],
               'github_run_id': os.environ['GITHUB_RUN_ID'], 'architecture': platform.machine(),
               'controller_checkout': str(controller),
               'session': session, 'user': USER, 'uid': account.pw_uid, 'desktop': 'gnome',
@@ -163,8 +174,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--checkout', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--controller-commit')
     arguments = parser.parse_args()
-    prepare(arguments.checkout, arguments.output)
+    prepare(arguments.checkout, arguments.output, arguments.controller_commit)
 
 
 if __name__ == '__main__':
