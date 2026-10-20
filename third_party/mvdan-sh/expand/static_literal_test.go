@@ -80,7 +80,7 @@ func TestStaticLiteralSharedLedgerAtLimitAndOneByteOver(t *testing.T) {
 		if _, static, err := expand.StaticLiteral(word, pool); err != nil || !static {
 			return pool.UsedBytes(), err
 		}
-		err := pool.ReserveHeap(4096, word.Pos()) // caller's host lowering
+		err := pool.ReserveHeap(1<<20, word.Pos()) // caller's host lowering
 		return pool.UsedBytes(), err
 	}
 	maximum, err := run(32 << 20)

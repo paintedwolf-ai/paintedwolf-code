@@ -54,13 +54,13 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 		return old
 	}
 	addLit := func(lit *Lit) {
-		acc.Parts = braceAppend(budget, acc.Parts, lit)
+		acc.Parts = braceAppend[WordPart](budget, acc.Parts, lit)
 	}
 
 	for _, wp := range word.Parts {
 		lit, ok := wp.(*Lit)
 		if !ok {
-			acc.Parts = braceAppend(budget, acc.Parts, wp)
+			acc.Parts = braceAppend[WordPart](budget, acc.Parts, wp)
 			continue
 		}
 		last := 0
@@ -92,8 +92,8 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 					// a list expansion where the ".." are literal.
 					merged := cur.Elems[0]
 					for _, elem := range cur.Elems[1:] {
-						merged.Parts = braceAppend(budget, merged.Parts, litDots)
-						merged.Parts = braceAppend(budget, merged.Parts, elem.Parts...)
+						merged.Parts = braceAppend[WordPart](budget, merged.Parts, litDots)
+						merged.Parts = braceAppend[WordPart](budget, merged.Parts, elem.Parts...)
 					}
 					cur.Sequence = false
 					cur.Elems = cur.Elems[:1]
@@ -126,12 +126,12 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 				if len(br.Elems) == 1 {
 					// return {x} to a non-brace
 					addLit(litLeftBrace)
-					acc.Parts = braceAppend(budget, acc.Parts, br.Elems[0].Parts...)
+					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br.Elems[0].Parts...)
 					addLit(litRightBrace)
 					break
 				}
 				if !br.Sequence {
-					acc.Parts = braceAppend(budget, acc.Parts, br)
+					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
 					break
 				}
 				var chars [2]bool
@@ -163,7 +163,7 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 					broken = true
 				}
 				if !broken {
-					acc.Parts = braceAppend(budget, acc.Parts, br)
+					acc.Parts = braceAppend[WordPart](budget, acc.Parts, br)
 					break
 				}
 				// return broken {x..y[..incr]} to a non-brace
@@ -172,7 +172,7 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 					if i > 0 {
 						addLit(litDots)
 					}
-					acc.Parts = braceAppend(budget, acc.Parts, elem.Parts...)
+					acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
 				}
 				addLit(litRightBrace)
 			default:
@@ -200,7 +200,7 @@ func splitBraces(word *Word, budget *AllocationBudget) bool {
 					addLit(litComma)
 				}
 			}
-			acc.Parts = braceAppend(budget, acc.Parts, elem.Parts...)
+			acc.Parts = braceAppend[WordPart](budget, acc.Parts, elem.Parts...)
 		}
 	}
 	*word = *top

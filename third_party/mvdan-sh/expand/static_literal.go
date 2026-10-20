@@ -28,7 +28,7 @@ func StaticLiteral(word *syntax.Word, pool *syntax.AllocationBudget) (value stri
 	if pool == nil {
 		return "", false, fmt.Errorf("static literal requires an allocation budget")
 	}
-	if word == nil {
+	if word == nil || len(word.Parts) == 0 {
 		return "", true, nil
 	}
 	if len(word.Parts) > 0 {
