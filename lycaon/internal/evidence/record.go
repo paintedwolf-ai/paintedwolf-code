@@ -8,10 +8,11 @@ type LineRange struct {
 
 // Record is one runtime evidence row: tool observation (Handle set) or gate row (GateType set).
 type Record struct {
-	RecordID string `json:"record_id,omitempty"`
-	Handle   string // kind#ordinal, e.g. read#3
-	Kind     string
-	Shape    string // evidence shape id (file_region, url, …)
+	SourceDelivery *SourceDelivery // exact delivered native window; never execution input
+	RecordID       string          `json:"record_id,omitempty"`
+	Handle         string          // kind#ordinal, e.g. read#3
+	Kind           string
+	Shape          string // evidence shape id (file_region, url, …)
 	// Fidelity describes capture quality, independent of content trust.
 	Fidelity   string
 	SourceTool string // registry tool name that produced this record

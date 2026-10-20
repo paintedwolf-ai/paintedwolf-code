@@ -95,7 +95,7 @@ func TestProgramLoopIterationsHaveIndependentSettlementAndHeldIdentity(t *testin
 	testutil.FailErr(t, "hold first child", f.recorder.WaitChild(t.Context(), first.Invocation().Identity.ExecutionID, "approval:one"))
 	f.start(t, first)
 	f.start(t, second)
-	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.NativeComparisonPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "survey", Kind: "result"}}
+	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.NativeComparisonPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "result"}}
 	for _, bound := range []toolcontract.BoundOperation{first, second} {
 		err := f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:complete-result"})
 		testutil.FailErr(t, "settle independent iteration", err)

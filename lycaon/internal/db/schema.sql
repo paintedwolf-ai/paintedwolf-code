@@ -2567,6 +2567,19 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     PRIMARY KEY (session_id, handle)
 ) STRICT, WITHOUT ROWID;
 
+-- Exact delivered-window identity makes retries idempotent without weakening
+-- historical handle identity or manufacturing a model response.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_records_source_delivery
+    ON evidence_records(session_id,
+        json_extract(line_ranges,'$.source_delivery.response_id'),
+        json_extract(line_ranges,'$.source_delivery.delivery_id'),
+        json_extract(line_ranges,'$.source_delivery.source.SHA256'),
+        json_extract(line_ranges,'$.source_delivery.source.SourceID'),
+        json_extract(line_ranges,'$.source_delivery.source.Revision'),
+        json_extract(line_ranges,'$.source_delivery.source_start_byte'),
+        json_extract(line_ranges,'$.source_delivery.source_end_byte'))
+    WHERE json_type(line_ranges,'$.source_delivery')='object';
+
 CREATE INDEX IF NOT EXISTS idx_evidence_records_session_path ON evidence_records(session_id, path);
 CREATE INDEX IF NOT EXISTS idx_evidence_records_live ON evidence_records(session_id) WHERE superseded_by IS NULL;
 CREATE INDEX IF NOT EXISTS idx_evidence_records_content_blob
