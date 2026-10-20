@@ -11,14 +11,15 @@
       "libssl3t64 | libssl3",
       "ca-certificates",
       "xdg-utils",
-      "polkitd | policykit-1"
-    ],
-    "recommends": [
+      "polkitd | policykit-1",
       "libnss3",
       "libatk-bridge2.0-0t64 | libatk-bridge2.0-0",
       "libgbm1",
       "libxkbcommon0",
       "libasound2t64 | libasound2",
+      "python3-apt"
+    ],
+    "recommends": [
       "libvulkan1",
       "mesa-vulkan-drivers"
     ]
@@ -32,14 +33,14 @@
       "openssl-libs",
       "ca-certificates",
       "xdg-utils",
-      "polkit"
-    ],
-    "recommends": [
+      "polkit",
       "nss",
       "at-spi2-atk",
       "mesa-libgbm",
       "libxkbcommon",
-      "alsa-lib",
+      "alsa-lib"
+    ],
+    "recommends": [
       "vulkan-loader",
       "mesa-vulkan-drivers"
     ]
