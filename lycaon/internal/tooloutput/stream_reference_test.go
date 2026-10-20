@@ -135,6 +135,11 @@ func TestDurableReferenceClosePreservesActualClaimUntilReleased(t *testing.T) {
 			retained = false
 			callbackFailure = false
 			testutil.FailErr(t, "collect after durable owner releases reference", body.Close())
+			claimed, err = store.HasRetentionClaim(reference.RetentionClaimID, reference.Blob.ID)
+			testutil.FailErr(t, "inspect released marker", err)
+			if claimed {
+				t.Fatal("released durable body retained its old marker")
+			}
 			if quota.disk != 0 || quota.state != 0 {
 				t.Fatalf("released reference leaked accounting %+v", quota)
 			}
