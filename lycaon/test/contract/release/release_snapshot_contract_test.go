@@ -36,13 +36,14 @@ func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
 				continue
 			}
 			want := "${{ needs.classify.outputs.source_sha }}"
-			if name == "classify" {
+			switch name {
+			case "classify":
 				want = "${{ steps.source.outputs.source_sha }}"
-			} else if name == "bundle-upgrade" {
+			case "bundle-upgrade":
 				want = "${{ github.workflow_sha }}"
 			}
 			if step.With["ref"] != want {
-				t.Errorf("%s checkout %d uses %q, want admitted source %q", name, count, step.With["ref"], want)
+				t.Errorf("%s checkout %d uses %q, want %q", name, count, step.With["ref"], want)
 			}
 		}
 	}
