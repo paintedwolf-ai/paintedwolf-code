@@ -53,7 +53,7 @@ def rehearse(root: Path, evidence: Path):
             return receipt
         config = require_disposable_host()
         with tempfile.TemporaryDirectory(prefix="bundle-upgrade-") as directory:
-            work = Path(directory)
+            work = Path(directory).resolve()
             with local_origin(root, work, evidence):
                 for case in plan["cases"]:
                     case_work = work / case["id"]
