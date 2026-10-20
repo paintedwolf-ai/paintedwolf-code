@@ -105,6 +105,18 @@ class InstalledOnboardingTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable):
             onboarding.controls(window, API, deadline=0)
 
+    def test_structured_native_inventory_error_retries_before_owned_public_readiness(self):
+        error = RuntimeError('private native message')
+        error.domain, error.code = 'atspi_error', 0
+        app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=Mock(side_effect=[False, True]))
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=API), patch.object(
+                onboarding, 'form', side_effect=error), patch.object(onboarding.time, 'sleep'):
+            onboarding.onboard(app)
+        self.assertEqual(app.observations['native_accessibility_inventory_retries'], 1)
+        self.assertEqual(app.observations['native_accessibility_last_retry']['domain'], 'atspi_error')
+        self.assertNotIn('private', repr(app.observations))
+
     def test_inventory_failure_retains_only_phase_and_exception_class(self):
         app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=lambda: False)
         with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(

@@ -100,6 +100,7 @@ jobs:
             --checkout "$GITHUB_WORKSPACE/controller" --controller-commit "$CONTROLLER_COMMIT" \
             --output "$RUNNER_TEMP/installed-desktop/facts.json"
       - id: prepare
+        if: needs.select.outputs.partial == 'false'
         name: Install the selected package and bind the fresh execution
         working-directory: controller
         run: |
@@ -108,7 +109,18 @@ jobs:
             --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
             --candidate "$RUNNER_TEMP/installed-candidate"
+      - id: diagnostic-prepare
+        if: needs.select.outputs.partial == 'true'
+        name: Stage partial bytes without pre-installing the application
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare-diagnostic \
+            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
+            --candidate "$RUNNER_TEMP/installed-candidate"
       - id: leaf
+        if: needs.select.outputs.partial == 'false'
         name: Execute actual installed cases as the graphical user
         continue-on-error: true
         run: |
@@ -125,6 +137,30 @@ jobs:
             --file-root /var/lib/paintedwolf-installed-rehearsal/packages --install-root /opt/painted-wolf-code \
             --case-inputs /var/lib/paintedwolf-installed-rehearsal/case-inputs.json \
             --output /home/paintedwolf-test/installed-observations
+      - name: Diagnose the actual first package launch on the native CPU
+        if: needs.select.outputs.partial == 'true'
+        continue-on-error: true
+        run: |
+          contract=/var/lib/paintedwolf-installed-rehearsal/contract.json
+          go_bin="$(dirname "$(command -v go)")"
+          sudo -H -u paintedwolf-test /bin/bash -c 'cd /home/paintedwolf-test/controller && exec "$@"' -- \
+            env "PATH=$go_bin:/usr/bin:/bin" ./task test:linux:installed -- --diagnose-first-launch \
+            --candidate-inputs /var/lib/paintedwolf-installed-rehearsal \
+            --artifact-id "$(jq -r .artifact_id "$contract")" \
+            --candidate-run-id "$(jq -r .candidate_provenance.run_id "$contract")" \
+            --candidate-artifact-id "$(jq -r .candidate_provenance.artifact_id "$contract")" \
+            --candidate-controller-commit "$(jq -r .candidate_provenance.controller_commit "$contract")" \
+            --source-commit "$APPLICATION_COMMIT" --source-tree "$APPLICATION_TREE" --driver-tree "$CONTROLLER_TREE" \
+            --execution-nonce "$(jq -r .execution_nonce "$contract")" --output /home/paintedwolf-test/installed-observations
+      - name: Retain bounded partial diagnostics without campaign admission
+        if: always() && steps.diagnostic-prepare.outcome == 'success'
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime retain-diagnostic \
+            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
+            --output "$RUNNER_TEMP/installed-rehearsal"
       - name: Retain fresh observations without granting release authority
         if: always() && steps.prepare.outcome == 'success'
         working-directory: controller

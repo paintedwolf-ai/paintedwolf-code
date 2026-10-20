@@ -51,10 +51,7 @@ def context(selected: dict, checkout: Path, facts: dict):
     return account
 
 
-def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dict:
-    account = context(selected, checkout, facts)
-    if ROOT.exists() or ROOT.is_symlink() or INSTALL.exists() or INSTALL.is_symlink():
-        raise ValueError('hosted installation must preserve any existing runtime or campaign')
+def candidate_package(selected: dict, candidate: Path):
     final, producer = read(candidate / 'final-artifacts.json'), read(candidate / 'candidate-selection.json')
     if (producer.get('qualification_authority') is not False or producer.get('publication_authority') is not False
             or producer.get('partial') is not selected['partial']
@@ -74,6 +71,14 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
     actual = file_identity(source)
     if source.is_symlink() or actual['sha256'] != artifact['identity']['sha256']:
         raise ValueError('hosted Debian package differs from the selected candidate bytes')
+    return final, producer, artifact, source, actual
+
+
+def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dict:
+    account = context(selected, checkout, facts)
+    if ROOT.exists() or ROOT.is_symlink() or INSTALL.exists() or INSTALL.is_symlink():
+        raise ValueError('hosted installation must preserve any existing runtime or campaign')
+    final, producer, artifact, source, actual = candidate_package(selected, candidate)
     marker = Path('/etc/paintedwolf-qualification.json')
     info = marker.lstat()
     expected_marker = {'format_version': 1, 'desktop': 'gnome', 'package': str(INSTALL)}
@@ -163,7 +168,7 @@ def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
 
 def main(arguments=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('prepare', 'retain'))
+    parser.add_argument('mode', choices=('prepare', 'retain', 'prepare-diagnostic', 'retain-diagnostic'))
     parser.add_argument('--selection', type=Path, required=True)
     parser.add_argument('--checkout', type=Path, required=True)
     parser.add_argument('--facts', type=Path, required=True)
@@ -172,7 +177,15 @@ def main(arguments=None) -> int:
     args = parser.parse_args(arguments)
     try:
         selected, facts = selection(args.selection), read(args.facts)
-        if args.mode == 'prepare' and args.candidate is not None:
+        if args.mode in {'prepare-diagnostic', 'retain-diagnostic'}:
+            from .hosted_installed_diagnostic import prepare as diagnostic_prepare, retain as diagnostic_retain
+            if args.mode == 'prepare-diagnostic' and args.candidate is not None:
+                diagnostic_prepare(selected, args.checkout, args.candidate, facts)
+            elif args.mode == 'retain-diagnostic' and args.output is not None:
+                diagnostic_retain(selected, args.checkout, facts, args.output)
+            else:
+                raise ValueError('diagnostic mode requires its explicit input or output path')
+        elif args.mode == 'prepare' and args.candidate is not None:
             prepare(selected, args.checkout, args.candidate, facts)
         elif args.mode == 'retain' and args.output is not None:
             retain(selected, args.checkout, facts, args.output)
