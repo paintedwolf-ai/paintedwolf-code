@@ -110,6 +110,7 @@ export function activateFocusTrap(
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape" && options.onEscape) {
       e.preventDefault();
       e.stopPropagation();

@@ -380,6 +380,7 @@ export function AnchoredSurface(props: Props) {
       props.onDismiss?.();
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (
         props.dismissOnEscape === false ||
         event.key !== "Escape" ||
@@ -392,6 +393,7 @@ export function AnchoredSurface(props: Props) {
       (props.onEscape ?? props.onDismiss)?.();
     };
     const onMenuKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.defaultPrevented || props.role !== "menu") return;
       if (event.key === "Escape") {
         if (props.dismissOnEscape === false) return;

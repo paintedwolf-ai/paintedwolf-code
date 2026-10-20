@@ -95,6 +95,7 @@ export function createAnchoredPopoverFocus(
       element.focus({ preventScroll: true });
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
