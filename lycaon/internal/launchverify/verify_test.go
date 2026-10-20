@@ -48,7 +48,7 @@ func (f fakeProc) add(p fakeProcess) {
 	testutil.FailErr(f.t, "write image", os.WriteFile(image, p.image, 0o755))
 	testutil.FailErr(f.t, "link exe", os.Symlink(image, filepath.Join(dir, "exe")))
 	installed := fmt.Sprintf("/opt/painted-wolf-code/image-%d", p.pid)
-	f.files[installed] = fileFacts{inode: uint64(p.pid), mode: 0o755}
+	f.files[installed] = fileFacts{device: 0xfd01, inode: uint64(p.pid), mode: 0o755}
 	maps := fmt.Sprintf("00400000-00500000 r-xp 00000000 fd:01 %d %s\n"+
 		"00600000-00700000 rw-p 00000000 00:00 0 \n"+
 		"7f0000000000-7f0000001000 r-xp 00000000 00:00 0 \n"+

@@ -24,7 +24,7 @@ type Snapshot struct {
 
 // Same reports whether other still names the process this snapshot saw.
 func (s Snapshot) Same(other Snapshot) bool {
-	return s.PID == other.PID && s.StartTime == other.StartTime && s.PPID == other.PPID
+	return s.PID == other.PID && s.StartTime == other.StartTime && s.PPID == other.PPID && s.UID == other.UID && s.EUID == other.EUID
 }
 
 func (v Verifier) procPath(pid int, name string) string {

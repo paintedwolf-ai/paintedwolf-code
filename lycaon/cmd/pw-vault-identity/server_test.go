@@ -49,9 +49,10 @@ func (f *fixture) addProcess(p process) {
 	testutil.FailErr(f.t, "mkdir proc", os.MkdirAll(dir, 0o755))
 	stat := fmt.Sprintf("%d (x) S %d 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 1 1 1", p.pid, p.ppid, p.start)
 	testutil.FailErr(f.t, "write stat", os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644))
-	status := fmt.Sprintf("Uid:\t%d\t%d\t%d\t%d\n", p.uid, p.uid, p.uid, p.uid)
+	status := fmt.Sprintf("TracerPid:\t0\nUid:\t%d\t%d\t%d\t%d\n", p.uid, p.uid, p.uid, p.uid)
 	testutil.FailErr(f.t, "write status", os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
 	testutil.FailErr(f.t, "write exe", os.WriteFile(filepath.Join(dir, "exe"), p.image, 0o755))
+	testutil.FailErr(f.t, "create target root", os.MkdirAll(filepath.Join(dir, "root"), 0755))
 	// Only anonymous code: the mapping rules are covered in launchverify.
 	maps := "7fff00000000-7fff00002000 r-xp 00000000 00:00 0                          [vdso]\n"
 	testutil.FailErr(f.t, "write maps", os.WriteFile(filepath.Join(dir, "maps"), []byte(maps), 0o644))

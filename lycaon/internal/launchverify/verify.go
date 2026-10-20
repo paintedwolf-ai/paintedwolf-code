@@ -104,18 +104,6 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if launcher.UID != uid || launcher.EUID != uid {
 		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uid %d/%d, caller %d", launcher.UID, launcher.EUID, uid))
 	}
-	if err := v.VerifyExecutable(pid, RoleEngine); err != nil {
-		return Chain{}, err
-	}
-	if err := v.VerifyExecutable(launcher.PID, RoleDesktopApp); err != nil {
-		return Chain{}, err
-	}
-	if err := v.VerifyMappings(pid, RoleEngine); err != nil {
-		return Chain{}, err
-	}
-	if err := v.VerifyMappings(launcher.PID, RoleDesktopApp); err != nil {
-		return Chain{}, err
-	}
 	chain := Chain{Engine: engine, Launcher: launcher}
 	if err := v.Recheck(chain); err != nil {
 		return Chain{}, err
@@ -127,25 +115,39 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 // ones verified: a pid reused by another process has a new start time, and
 // a parent that exited reparents the engine.
 func (v Verifier) Recheck(chain Chain) error {
-	engine, err := v.snapshot(chain.Engine.PID)
+	for _, process := range []struct {
+		snapshot Snapshot
+		role     string
+	}{
+		{chain.Engine, RoleEngine}, {chain.Launcher, RoleDesktopApp},
+	} {
+		if err := v.unchangedUntraced(process.snapshot, process.role); err != nil {
+			return err
+		}
+		if err := v.VerifyExecutable(process.snapshot.PID, process.role); err != nil {
+			return err
+		}
+		if err := v.VerifyMappings(process.snapshot.PID, process.role); err != nil {
+			return err
+		}
+	}
+	// Rebind both identities after reading both images and mapping views.
+	if err := v.unchangedUntraced(chain.Engine, RoleEngine); err != nil {
+		return err
+	}
+	return v.unchangedUntraced(chain.Launcher, RoleDesktopApp)
+}
+
+func (v Verifier) unchangedUntraced(expected Snapshot, role string) error {
+	actual, err := v.snapshot(expected.PID)
 	if err != nil {
-		return refuse(CodeProcessGone, RoleEngine, chain.Engine.PID, err.Error())
+		return refuse(CodeProcessGone, role, expected.PID, err.Error())
 	}
-	if engine.TracerPID != 0 {
-		return refuse(CodeProcessTraced, RoleEngine, engine.PID, "")
+	if actual.TracerPID != 0 {
+		return refuse(CodeProcessTraced, role, expected.PID, "")
 	}
-	if !engine.Same(chain.Engine) {
-		return refuse(CodeProcessChanged, RoleEngine, chain.Engine.PID, "")
-	}
-	launcher, err := v.snapshot(chain.Launcher.PID)
-	if err != nil {
-		return refuse(CodeProcessGone, RoleDesktopApp, chain.Launcher.PID, err.Error())
-	}
-	if launcher.TracerPID != 0 {
-		return refuse(CodeProcessTraced, RoleDesktopApp, launcher.PID, "")
-	}
-	if !launcher.Same(chain.Launcher) {
-		return refuse(CodeProcessChanged, RoleDesktopApp, chain.Launcher.PID, "")
+	if !actual.Same(expected) {
+		return refuse(CodeProcessChanged, role, expected.PID, "")
 	}
 	return nil
 }

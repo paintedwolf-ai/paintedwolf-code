@@ -16,14 +16,14 @@ func chainFixture(t *testing.T) (fakeProc, Verifier) {
 	proc.add(fakeProcess{pid: 301, ppid: 300, uid: 1000, euid: 1000, start: 20, image: engineImage})
 	proc.files["/usr"] = fileFacts{mode: fs.ModeDir | 0o755}
 	proc.files["/usr/lib64"] = fileFacts{mode: fs.ModeDir | 0o755}
-	proc.files["/usr/lib64/libwebkit2gtk-4.1.so.0"] = fileFacts{inode: 77, mode: 0o755}
+	proc.files["/usr/lib64/libwebkit2gtk-4.1.so.0"] = fileFacts{device: 0xfd01, inode: 77, mode: 0o755}
 	proc.files["/home"] = fileFacts{mode: fs.ModeDir | 0o755}
 	proc.files["/home/person"] = fileFacts{uid: 1000, mode: fs.ModeDir | 0o700}
-	proc.files["/home/person/inject.so"] = fileFacts{inode: 88, uid: 1000, mode: 0o755}
+	proc.files["/home/person/inject.so"] = fileFacts{device: 0xfd01, inode: 88, uid: 1000, mode: 0o755}
 	proc.files["/srv"] = fileFacts{mode: fs.ModeDir | 0o775}
-	proc.files["/srv/shared.so"] = fileFacts{inode: 99, mode: 0o755}
-	proc.files["/opt/lib with space.so"] = fileFacts{inode: 55, mode: 0o755}
-	proc.files["/opt/painted-wolf-code/link.so"] = fileFacts{inode: 66, mode: fs.ModeSymlink | 0o777}
+	proc.files["/srv/shared.so"] = fileFacts{device: 0xfd01, inode: 99, mode: 0o755}
+	proc.files["/opt/lib with space.so"] = fileFacts{device: 0xfd01, inode: 55, mode: 0o755}
+	proc.files["/opt/painted-wolf-code/link.so"] = fileFacts{device: 0xfd01, inode: 66, mode: fs.ModeSymlink | 0o777}
 	return proc, verifier
 }
 
@@ -39,16 +39,18 @@ func TestMappingsAcceptSystemLibrariesAndAnonymousCode(t *testing.T) {
 
 func TestMappingsRefuseForeignExecutableObjects(t *testing.T) {
 	for name, line := range map[string]string{
-		"user preloaded library":     "7f1-7f2 r-xp 00000000 fd:01 88 /home/person/inject.so\n",
-		"library in a writable dir":  "7f1-7f2 r-xp 00000000 fd:01 99 /srv/shared.so\n",
-		"replaced after mapping":     "7f1-7f2 r-xp 00000000 fd:01 78 /usr/lib64/libwebkit2gtk-4.1.so.0\n",
-		"memfd code":                 "7f1-7f2 r-xp 00000000 00:01 4242 /memfd:payload (deleted)\n",
-		"deleted library":            "7f1-7f2 r-xp 00000000 fd:01 77 /usr/lib64/gone.so (deleted)\n",
-		"unknown file":               "7f1-7f2 r-xp 00000000 fd:01 12 /usr/lib64/missing.so\n",
-		"symlink at the mapped path": "7f1-7f2 r-xp 00000000 fd:01 66 /opt/painted-wolf-code/link.so\n",
-		"relative path":              "7f1-7f2 r-xp 00000000 fd:01 12 lib.so\n",
-		"truncated line":             "7f1-7f2 r-xp\n",
-		"bad inode":                  "7f1-7f2 r-xp 00000000 fd:01 x /usr/lib64/libwebkit2gtk-4.1.so.0\n",
+		"user preloaded library":      "7f1-7f2 r-xp 00000000 fd:01 88 /home/person/inject.so\n",
+		"library in a writable dir":   "7f1-7f2 r-xp 00000000 fd:01 99 /srv/shared.so\n",
+		"replaced after mapping":      "7f1-7f2 r-xp 00000000 fd:01 78 /usr/lib64/libwebkit2gtk-4.1.so.0\n",
+		"memfd code":                  "7f1-7f2 r-xp 00000000 00:01 4242 /memfd:payload (deleted)\n",
+		"deleted library":             "7f1-7f2 r-xp 00000000 fd:01 77 /usr/lib64/gone.so (deleted)\n",
+		"unknown file":                "7f1-7f2 r-xp 00000000 fd:01 12 /usr/lib64/missing.so\n",
+		"symlink at the mapped path":  "7f1-7f2 r-xp 00000000 fd:01 66 /opt/painted-wolf-code/link.so\n",
+		"relative path":               "7f1-7f2 r-xp 00000000 fd:01 12 lib.so\n",
+		"truncated line":              "7f1-7f2 r-xp\n",
+		"different device same inode": "7f1-7f2 r-xp 00000000 fd:02 77 /usr/lib64/libwebkit2gtk-4.1.so.0\n",
+		"bad device":                  "7f1-7f2 r-xp 00000000 nope 77 /usr/lib64/libwebkit2gtk-4.1.so.0\n",
+		"bad inode":                   "7f1-7f2 r-xp 00000000 fd:01 x /usr/lib64/libwebkit2gtk-4.1.so.0\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			proc, verifier := chainFixture(t)

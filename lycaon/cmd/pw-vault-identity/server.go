@@ -141,6 +141,11 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 		resp := s.handle(caller, req)
+		// Handling may wait on storage. Reverify before releasing its response.
+		if err := verifier.Recheck(chain); err != nil {
+			s.answer(conn, refusal(err))
+			return
+		}
 		// Accounts are configuration-root digests, never secrets.
 		s.Log.Info("vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
 		if !s.answer(conn, resp) {
