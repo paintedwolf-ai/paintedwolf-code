@@ -743,18 +743,18 @@ type InvocationProgramNodes struct {
 }
 
 type InvocationProgramOutputs struct {
-	ID                string `json:"id"`
-	ProgramID         string `json:"program_id"`
-	ExecutionID       string `json:"execution_id"`
-	Stream            string `json:"stream"`
-	Reference         string `json:"reference"`
-	RetentionClaimID  string `json:"retention_claim_id"`
-	InitiatingClaimID string `json:"initiating_claim_id"`
-	BlobJson          string `json:"blob_json"`
-	Complete          int64  `json:"complete"`
-	Redacted          int64  `json:"redacted"`
-	MappingsJson      string `json:"mappings_json"`
-	CreatedAt         string `json:"created_at"`
+	ID                string         `json:"id"`
+	ProgramID         string         `json:"program_id"`
+	ExecutionID       sql.NullString `json:"execution_id"`
+	Stream            string         `json:"stream"`
+	Reference         string         `json:"reference"`
+	RetentionClaimID  string         `json:"retention_claim_id"`
+	InitiatingClaimID string         `json:"initiating_claim_id"`
+	BlobJson          string         `json:"blob_json"`
+	Complete          int64          `json:"complete"`
+	Redacted          int64          `json:"redacted"`
+	MappingsJson      string         `json:"mappings_json"`
+	CreatedAt         string         `json:"created_at"`
 }
 
 type InvocationProgramProgress struct {

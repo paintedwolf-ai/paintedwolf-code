@@ -106,15 +106,22 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err = insertProgram(ctx, tx, in); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
 	var state string
-	if err = tx.QueryRowContext(ctx, "SELECT status FROM invocation_receipts WHERE id = ?", in.Version.ParentReceiptID).Scan(&state); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT status FROM invocation_receipts WHERE id = ?", in.Version.ParentReceiptID).Scan(&state); err != nil {
 		return fmt.Errorf("program parent: %w", err)
 	}
 	if state != "running" {
 		return fmt.Errorf("program parent is not running")
 	}
 	v := in.Version
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err := tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("begin program: %w", err)
 	}
@@ -131,7 +138,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // PrepareChild records the independently addressed dynamic execution before

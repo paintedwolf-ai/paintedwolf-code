@@ -59,6 +59,9 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 
 // WaitChild preserves one execution identity while approval or an owned job waits.
 func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalReference string) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
 	if approvalReference == "" {
 		return fmt.Errorf("waiting child requires authoritative wait reference")
 	}
@@ -138,6 +141,9 @@ func (s ProgramSettlement) validate() error {
 }
 
 func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in ProgramSettlement) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
 	if err := in.validate(); err != nil {
 		return err
 	}
@@ -149,7 +155,7 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in Pr
 	// Unfinished children must first be reconciled with their real owners. An
 	// aggregate terminal cannot convert outstanding effects into a zero-effect stop.
 	var count int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running')`, programID).Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running'))+(SELECT count(*) FROM invocation_program_progress WHERE program_id=? AND state='running')`, programID, programID).Scan(&count); err != nil {
 		return err
 	}
 	if count != 0 {
