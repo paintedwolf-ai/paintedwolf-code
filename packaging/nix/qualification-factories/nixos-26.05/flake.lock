@@ -7,17 +7,17 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1792514297,
-        "narHash": "sha256-SZgVNeHD7aipQoyT+2ViMnOiSEBdpvuXXdYz+Jn6C10=",
-        "ref": "refs/qualification/8f1288b52ce5e5853f6dbff5cb4547b5bd25be40",
-        "rev": "8f1288b52ce5e5853f6dbff5cb4547b5bd25be40",
-        "revCount": 888,
+        "lastModified": 1792518483,
+        "narHash": "sha256-18MTgfnWrkZIWn0AeRNzkPLsdJZLI0rON0KLmpJLP6c=",
+        "ref": "refs/qualification/686b4f49589d87f27091c0d552015540e0fd5497",
+        "rev": "686b4f49589d87f27091c0d552015540e0fd5497",
+        "revCount": 889,
         "type": "git",
         "url": "https://github.com/paintedwolf-ai/paintedwolf-code"
       },
       "original": {
-        "ref": "refs/qualification/8f1288b52ce5e5853f6dbff5cb4547b5bd25be40",
-        "rev": "8f1288b52ce5e5853f6dbff5cb4547b5bd25be40",
+        "ref": "refs/qualification/686b4f49589d87f27091c0d552015540e0fd5497",
+        "rev": "686b4f49589d87f27091c0d552015540e0fd5497",
         "type": "git",
         "url": "https://github.com/paintedwolf-ai/paintedwolf-code"
       }
