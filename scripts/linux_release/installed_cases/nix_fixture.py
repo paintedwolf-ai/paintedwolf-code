@@ -43,7 +43,7 @@ def read_marker() -> dict:
 def store_file(value: dict, fields: set[str]) -> Path:
     if (not isinstance(value, dict) or set(value) != fields or not isinstance(value.get('path'), str)
             or STORE.fullmatch(value['path']) is None and not re.fullmatch(
-                r'/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+/bin/(nix|nix-daemon)', value['path'])
+                r'/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+/bin/(nix|nix-daemon|busybox)', value['path'])
             or not isinstance(value.get('sha256'), str) or HEX.fullmatch(value['sha256']) is None):
         raise ValueError('Nix fixture has an invalid fixed store identity')
     path = Path(value['path'])
@@ -80,7 +80,7 @@ def derivation(graph: dict, record: dict) -> dict:
                     'out': selected['output'], 'preferLocalBuild': '1', 'system': record['system']}
     if (row.get('version') != 4 or row.get('system') != record['system'] or row.get('builder') != builder
             or row.get('args') != arguments or selected['arguments'] != arguments
-            or row.get('env') != expected_env or row.get('inputs') != {'drvs': {}, 'srcs': [Path(builder).name]}
+            or row.get('env') != expected_env or row.get('inputs') != {'drvs': {}, 'srcs': [Path(builder).parts[3]]}
             or row.get('outputs') != {'out': {'path': Path(selected['output']).name}}):
         raise ValueError('Nix cancellation derivative differs from its fixed sandboxed fixture')
     return selected
@@ -97,9 +97,10 @@ def load(binding: dict) -> dict:
     program = store_file(record['client'], {'path', 'sha256'})
     store_file(record['daemon'], {'path', 'sha256'})
     builder = store_file(record['static_builder'], {'path', 'sha256', 'nar_hash'})
-    paths = json.loads(nix_command(program, 'path-info', '--json', '--json-format', '1', str(builder)))
-    if (not isinstance(paths, dict) or set(paths) != {str(builder)}
-            or paths[str(builder)].get('narHash') != record['static_builder']['nar_hash']):
+    builder_store = '/nix/store/' + builder.parts[3]
+    paths = json.loads(nix_command(program, 'path-info', '--json', '--json-format', '1', builder_store))
+    if (not isinstance(paths, dict) or set(paths) != {builder_store}
+            or paths[builder_store].get('narHash') != record['static_builder']['nar_hash']):
         raise ValueError('Nix static fixture builder differs from its actual store NAR')
     selected = binding.get('payload', {}).get('nix_client', {})
     if (record['client']['path'], record['client']['sha256']) != (selected.get('path'), selected.get('sha256')):
@@ -173,6 +174,15 @@ if operation == 'observe':
             matches.append(row)
     if len(matches) > 1: raise ValueError('fixture derivative has ambiguous builder processes')
     rows = descendants(matches[0]['pid']) if matches else []
+    sleeping = False
+    for child in rows[1:]:
+        try:
+            args = pathlib.Path('/proc',str(child['pid']),'cmdline').read_bytes().rstrip(b'\0').split(b'\0')
+            executable = pathlib.Path('/proc',str(child['pid']),'exe').stat()
+        except (FileNotFoundError, ProcessLookupError): continue
+        if args[-2:] == [b'sleep',b'300'] and (executable.st_dev,executable.st_ino) == (selected.st_dev,selected.st_ino):
+            sleeping = True
+    if not sleeping: rows = []
     if rows:
         with lease.open('x') as stream: json.dump(rows,stream)
         lease.chmod(0o600)

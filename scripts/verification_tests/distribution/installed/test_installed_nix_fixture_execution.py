@@ -9,7 +9,7 @@ from scripts.linux_release.installed_cases import nix_fixture as fixture
 
 
 def selected():
-    token, builder = 'c' * 32, '/nix/store/' + 'a' * 32 + '-busybox'
+    token, builder = 'c' * 32, '/nix/store/' + 'a' * 32 + '-fixture-tools/bin/busybox'
     name = 'paintedwolf-nix-cancel-' + token
     drv, output = '/nix/store/' + 'd' * 32 + '-' + name + '.drv', '/nix/store/' + 'e' * 32 + '-' + name
     arguments = ['sh', '-c', fixture.cancellation_script(builder, token)]
@@ -18,7 +18,7 @@ def selected():
     row = {'version': 4, 'system': record['system'], 'builder': builder, 'args': arguments,
            'env': {'allowSubstitutes': '', 'builder': builder, 'name': name, 'out': output,
                    'preferLocalBuild': '1', 'system': record['system']},
-           'inputs': {'drvs': {}, 'srcs': [Path(builder).name]},
+           'inputs': {'drvs': {}, 'srcs': [Path(builder).parts[3]]},
            'outputs': {'out': {'path': Path(output).name}}}
     return record, {'version': 4, 'derivations': {Path(drv).name: row}}
 
