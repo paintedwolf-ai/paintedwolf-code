@@ -99,6 +99,18 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         self.assertEqual(api.Registry.getDesktop.call_count, 2)
         button.action.doAction.assert_called_once_with(0)
 
+    def test_incomplete_inventory_retains_exact_requested_control_without_action(self):
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        api, _ = surface([button])
+        with ui.DesktopUI(self.app, api) as actor:
+            with patch.object(actor, 'descendants', side_effect=CaseUnavailable('normal-native-control-observation-deadline')):
+                with self.assertRaises(CaseUnavailable) as refusal:
+                    actor.click('Send')
+        self.assertEqual(refusal.exception.observations['desktop_control'], {
+            'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 0,
+            'inventory_complete': False})
+        button.action.doAction.assert_not_called()
+
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
         entry = Node(API.ROLE_ENTRY, 'Message')
         entry.editable.setTextContents.side_effect = RuntimeError('do not retain fixture content')
