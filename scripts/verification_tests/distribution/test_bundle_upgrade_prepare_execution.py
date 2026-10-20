@@ -94,3 +94,8 @@ class PreparationTests(unittest.TestCase):
         self.plan["cases"][0]["steps"][0]["platforms"]["darwin-aarch64"]["signature"] = "different"
         with self.assertRaisesRegex(ValueError, "conflicting"):
             self.prepare()
+
+    def test_case_matrix_covers_every_planned_case_and_records_an_empty_scope(self):
+        self.assertEqual(preparation.case_matrix({"cases": [{"id": "1.0.2-stable"}, {"id": "1.0.2-preview"}]}),
+                         {"include": [{"case_id": "1.0.2-stable"}, {"case_id": "1.0.2-preview"}]})
+        self.assertEqual(preparation.case_matrix({"cases": []}), {"include": [{"case_id": "not_applicable"}]})

@@ -56,7 +56,7 @@ def rehearse(root: Path, evidence: Path, case_id: str):
     try:
         plan = verify_inventory(root)
         receipt.update({"source_sha": plan["source_sha"], "candidate_version": plan["candidate"]["version"],
-                        "excluded_sources": plan["excluded_sources"], "inventory_sha256": file_digest(root / "inventory.json")})
+                        "excluded_sources": plan["excluded_sources"], "plan_case_count": len(plan["cases"]), "inventory_sha256": file_digest(root / "inventory.json")})
         shutil.copyfile(root / "plan.json", evidence / "plan.json")
         if not plan["cases"]:
             if case_id != "not_applicable":
@@ -75,21 +75,20 @@ def rehearse(root: Path, evidence: Path, case_id: str):
         with tempfile.TemporaryDirectory(prefix="bundle-upgrade-") as directory:
             work = Path(directory).resolve()
             with local_origin(root, work, evidence):
-                for case in selected:
-                    case_work = work / case["id"]
-                    case_work.mkdir()
-                    receipt["cases"].append({"id": case["id"], "result": "failed"})
-                    request_log = evidence / "requests.jsonl"
-                    start = len(request_log.read_text().splitlines()) if request_log.exists() else 0
-                    try:
-                        result = run_case(case, plan, root, case_work, config, evidence / case["id"])
-                        verify_requests(request_log, case, start)
-                    except (Exception, KeyboardInterrupt) as error:
-                        receipt["cases"][-1]["error"] = str(error)
-                        raise
-                    receipt["cases"][-1] = result
-                    shutil.rmtree(config)
-                    shutil.rmtree(case_work)
+                case_work = work / case["id"]
+                case_work.mkdir()
+                receipt["cases"].append({"id": case["id"], "result": "failed"})
+                request_log = evidence / "requests.jsonl"
+                start = len(request_log.read_text().splitlines()) if request_log.exists() else 0
+                try:
+                    result = run_case(case, plan, root, case_work, config, evidence / case["id"])
+                    verify_requests(request_log, case, start)
+                except (Exception, KeyboardInterrupt) as error:
+                    receipt["cases"][-1]["error"] = str(error)
+                    raise
+                receipt["cases"][-1] = result
+                shutil.rmtree(config)
+                shutil.rmtree(case_work)
         receipt["result"] = "passed"
         return receipt
     except KeyboardInterrupt as error:

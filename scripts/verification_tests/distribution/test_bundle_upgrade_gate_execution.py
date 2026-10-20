@@ -220,3 +220,21 @@ class GateTests(unittest.TestCase):
         (records / "transaction.json").write_text('{"phase":"failed"}')
         retain_state(config, records, evidence)
         self.assertEqual({path.name for path in evidence.iterdir()}, {"engine.log", "updates.log", "final-transaction.json"})
+
+    def test_a_case_outside_the_prepared_matrix_is_refused_before_host_changes(self):
+        self.plan["cases"] = [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}]
+        self.plan["skip_reason"] = None
+        self.inventory()
+        with patch.object(gate, "require_disposable_host") as guard:
+            with self.assertRaisesRegex(ValueError, "exactly one case"):
+                gate.rehearse(self.fixtures, self.evidence, "other")
+            guard.assert_not_called()
+
+    def test_case_paths_must_match_their_structured_release_and_channel(self):
+        self.plan["cases"] = [{"id": "../escape", "source_version": "1.0.2", "channel": "preview"}]
+        self.plan["skip_reason"] = None
+        self.inventory()
+        with patch.object(gate, "require_disposable_host") as guard:
+            with self.assertRaisesRegex(ValueError, "case identity"):
+                gate.rehearse(self.fixtures, self.evidence, "../escape")
+            guard.assert_not_called()
