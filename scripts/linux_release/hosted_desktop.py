@@ -18,7 +18,7 @@ USER = 'paintedwolf-test'
 PACKAGES = ['gdm3', 'gnome-session', 'gnome-shell', 'gnome-settings-daemon', 'gnome-keyring',
             'at-spi2-core', 'python3-pyatspi', 'dbus-x11', 'xserver-xorg-core',
             'xserver-xorg-video-dummy', 'xserver-xorg-input-libinput', 'x11-xserver-utils',
-            'libgl1-mesa-dri', 'mesa-utils', 'fonts-dejavu-core', 'libglib2.0-bin']
+            'libgl1-mesa-dri', 'mesa-utils', 'fonts-dejavu-core', 'libglib2.0-bin', 'xauth']
 XORG = '''Section "Device"
     Identifier "QualificationDummy"
     Driver "dummy"
@@ -97,6 +97,10 @@ def prepare(checkout: Path, output: Path) -> dict:
     run(['chpasswd'], input=(USER + ':' + secrets.token_urlsafe(48) + '\n').encode())
     account = pwd.getpwnam(USER)
     home = Path(account.pw_dir)
+    controller = home / 'controller'
+    run(['git', '-c', 'safe.directory=' + str(checkout), 'clone', '--no-local',
+         str(checkout), str(controller)], timeout=120)
+    run(['chown', '-R', USER + ':' + account.pw_name, str(controller)])
     (home / '.ssh').mkdir(mode=0o700)
     os.chown(home / '.ssh', account.pw_uid, account.pw_gid)
     fresh(Path('/etc/sudoers.d/paintedwolf-qualification'), USER + ' ALL=(ALL) NOPASSWD: ALL\n', 0o440)
@@ -129,7 +133,7 @@ def prepare(checkout: Path, output: Path) -> dict:
     while time.monotonic() < deadline:
         try:
             raw = run(['runuser', '-u', USER, '--', 'env',
-                       'PYTHONPATH=' + str(checkout / 'scripts'), '/usr/bin/python3', '-c', probe], timeout=15)
+                       'HOME=' + str(home), 'PYTHONPATH=' + str(controller / 'scripts'), '/usr/bin/python3', '-c', probe], timeout=15)
             session = json.loads(raw)
             if session.get('Type') == 'x11' and session.get('Active') == 'yes':
                 break
@@ -147,6 +151,7 @@ def prepare(checkout: Path, output: Path) -> dict:
     fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': 'deb'}) + '\n')
     result = {'format_version': 1, 'controller_commit': os.environ['GITHUB_SHA'],
               'github_run_id': os.environ['GITHUB_RUN_ID'], 'architecture': platform.machine(),
+              'controller_checkout': str(controller),
               'session': session, 'user': USER, 'uid': account.pw_uid, 'desktop': 'gnome',
               'display_protocol': 'x11', 'graphics': 'software',
               'application_qualified': False, 'physical_gpu_qualified': False}
