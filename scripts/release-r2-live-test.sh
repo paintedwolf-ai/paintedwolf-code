@@ -55,7 +55,7 @@ get_status() {
 delete_created_objects() {
   local failed=0 key
   [[ "${CLEANED}" -eq 0 ]] || return 0
-  for key in "${CREATED_KEYS[@]}"; do
+  for key in ${CREATED_KEYS[@]+"${CREATED_KEYS[@]}"}; do
     python3 "${S3_DRIVER}" delete "${key}" \
       >/dev/null 2>&1 || failed=1
   done
@@ -359,7 +359,7 @@ grep -Fq "active updater version is ${VERSIONS[2]}" "${WORKDIR}/stale-halt.out"
 echo "release-live-test: halt, idempotent retry, recovery, and stale halt verified" >&2
 
 delete_created_objects
-for key in "${CREATED_KEYS[@]}"; do
+for key in ${CREATED_KEYS[@]+"${CREATED_KEYS[@]}"}; do
   stat="$(r2_rest_object_stat "${key}")" || {
     CLEANED=0
     echo "error: cleanup verification transport failure for ${key}" >&2
