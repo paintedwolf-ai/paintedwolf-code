@@ -1,0 +1,37 @@
+oar: '1.0'
+id: COMMAND_LIMIT_EXCEEDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.limit_id
+  - paintedwolf.maximum
+  - paintedwolf.observed
+when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
+effect: block
+copy:
+  what: 'Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }}.'
+  cause: 'A declared host resource ceiling stopped new admission. Earlier completed effects remain authoritative.'
+  why: 'Started operations retain their terminal settlement and recovery contracts. Exhaustion cannot erase completed effects or authorize replay.'
+  fix: 'Reduce the requested work within the declared limit. earlier parent effects remain recorded; inspect them before proposing a new action.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    limit_id: ast_nodes
+    maximum: 8192
+    observed: 8193
+  expect_contains:
+  - 'Code: COMMAND_LIMIT_EXCEEDED'
+  - ast_nodes
+  - earlier parent effects

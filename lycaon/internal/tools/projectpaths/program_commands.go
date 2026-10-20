@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -17,16 +19,33 @@ func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.Operat
 	var pathErr *PathError
 	if errors.As(err, &pathErr) {
 		span := request.Invocation.Span
-		data := map[string]any{"path": pathErr.Operand, "reason": pathErr.Cause.Error(), "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed}
+		data := map[string]any{"path": pathErr.Operand, "reason": pathErr.Cause.Error(), "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "command": pathErr.Command, "expected_form": pathErr.ExpectedForm}
 		err = errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: data})
 	}
 	if err == nil && streams.Output != nil {
-		_, err = streams.Output.Write(output)
+		var n int
+		n, err = streams.Output.Write(output)
+		if err == nil && n != len(output) {
+			err = io.ErrShortWrite
+		}
+	}
+	if err == nil {
+		err = ctx.Err()
 	}
 	if err != nil {
-		return toolcontract.ProducerResult{Status: 2, Complete: false, PublicationEligible: false, EffectCertainty: "none"}, err
+		result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+		var reject *toolrejection.ToolReject
+		if errors.As(err, &reject) {
+			result.Status = 2
+			result.Terminal = toolcontract.ProducerRefused
+			result.StopCode = reject.Code
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			result.Terminal = toolcontract.ProducerInterrupted
+		}
+		return result, err
 	}
-	return toolcontract.ProducerResult{Status: 0, Complete: true, PublicationEligible: true, EffectCertainty: "none"}, nil
+	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 }
 
 func (p *ProgramPaths) commandOutput(ctx context.Context, name string, args []string) ([]byte, error) {
@@ -49,8 +68,8 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, args []st
 	}
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
-	} else if len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		return nil, invalidOperand(args[0], "unsupported option; use -- before path operands")
+	} else if len(args) > 0 && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
+		return nil, p.unsupportedOption(name, args[0])
 	}
 	switch name {
 	case "basename":
@@ -74,16 +93,24 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, args []st
 		if _, err := p.Bind(ctx, ".", false); err != nil {
 			return nil, err
 		}
-		return []byte(p.cwd.Resolved.Abs + "\n"), nil
+		return []byte(p.cwd.Resolved.DisplayPath + "\n"), nil
 	case "cd":
 		if len(args) > 1 {
 			return nil, invalidOperand(name, "cd accepts at most one PATH")
 		}
-		target := p.context.ActiveRootPath()
-		if len(args) == 1 {
-			target = args[0]
+		if len(args) == 0 {
+			info, err := directoryInfo(p.initial)
+			if err != nil {
+				return nil, err
+			}
+			if !os.SameFile(info, p.initialInfo) {
+				return nil, invalidOperand("cd", "initial invocation directory identity changed")
+			}
+			p.cwd = p.initial
+			p.cwdInfo = info
+			return nil, nil
 		}
-		return nil, p.Chdir(ctx, target)
+		return nil, p.Chdir(ctx, args[0])
 	case "realpath":
 		if len(args) == 0 {
 			return nil, invalidOperand(name, "expected at least one PATH")
@@ -100,6 +127,9 @@ func (p *ProgramPaths) convertCommand(ctx context.Context, args []string) ([]byt
 		nul = true
 		args = args[1:]
 	}
+	if len(args) > 0 && args[0] != "--" && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
+		return nil, p.unsupportedOption("native_path", args[0])
+	}
 	if len(args) < 2 || args[0] != "--" {
 		return nil, invalidOperand("native_path", "expected [-0] -- PATH ...")
 	}
@@ -114,8 +144,8 @@ func (p *ProgramPaths) linkCommand(ctx context.Context, args []string) ([]byte, 
 	}
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
-	} else if len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		return nil, invalidOperand(args[0], "unsupported readlink option")
+	} else if len(args) > 0 && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
+		return nil, p.unsupportedOption("readlink", args[0])
 	}
 	if len(args) == 0 {
 		return nil, invalidOperand("readlink", "expected at least one PATH")
@@ -150,3 +180,7 @@ func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical 
 }
 
 var _ commandprogram.OperationDispatcher = (*ProgramPaths)(nil)
+
+func (p *ProgramPaths) unsupportedOption(command, word string) error {
+	return &PathError{Code: "COMMAND_OPTION_UNSUPPORTED", Operand: word, Command: command, ExpectedForm: p.forms[command], Cause: errors.New("supported form: " + p.forms[command] + "; use -- before path operands")}
+}

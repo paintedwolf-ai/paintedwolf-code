@@ -3,28 +3,15 @@
 package fseffect
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// missingReadLeaf is resolved by the descriptor walk; it never names an
-// unvisited parent or an unchecked symlink target.
-type missingReadLeaf struct{ path string }
-
-func (e *missingReadLeaf) Error() string { return "missing filesystem leaf" }
-func (e *missingReadLeaf) Unwrap() error { return os.ErrNotExist }
-
-// Canonical returns the descriptor-resolved native name. Only the final leaf
-// may be absent; all parents and symlink targets stay under this held root.
-func (r *ReadRoot) Canonical(rel string, allowMissingLeaf bool) (string, error) {
+// Canonical returns an existing descriptor-resolved native identity.
+func (r *ReadRoot) Canonical(rel string) (string, error) {
 	file, err := r.OpenExact(rel)
 	if err != nil {
-		var missing *missingReadLeaf
-		if allowMissingLeaf && errors.As(err, &missing) {
-			return missing.path, nil
-		}
 		return "", err
 	}
 	defer file.Close()

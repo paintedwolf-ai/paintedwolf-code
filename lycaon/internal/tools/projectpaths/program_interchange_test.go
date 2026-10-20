@@ -3,10 +3,13 @@
 package projectpaths_test
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"strings"
 )
 
 // This real process fixture establishes physical identity and argv/environment
@@ -102,6 +104,7 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	testutil.FailErr(t, "seed physical target", os.WriteFile(filepath.Join(root, "nested", "same"), []byte("actual identity"), 0600))
 	testutil.FailErr(t, "seed lexical decoy", os.WriteFile(filepath.Join(root, "same"), []byte("wrong identity"), 0600))
 	testutil.FailErr(t, "seed directory link", os.Symlink("nested/child", filepath.Join(root, "link")))
+	testutil.FailErr(t, "seed absolute nested link", os.Symlink(root+"/link/../same", filepath.Join(root, "absolute-link")))
 	operand := root + "/link/../same"
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
@@ -117,9 +120,58 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	defer file.Close()
 	native, err := io.ReadAll(file)
 	testutil.FailErr(t, "read actual native identity", err)
+	absoluteLink, err := p.Bind(t.Context(), root+"/absolute-link", false)
+	testutil.FailErr(t, "bind absolute symlink target", err)
+	linked, err := absoluteLink.Open()
+	testutil.FailErr(t, "open exact absolute symlink target", err)
+	defer linked.Close()
+	linkBytes, err := io.ReadAll(linked)
+	testutil.FailErr(t, "read exact absolute symlink target", err)
+	if string(linkBytes) != "actual identity" {
+		t.Fatalf("absolute link identity=%q", linkBytes)
+	}
+	mutation, err := p.Bind(t.Context(), root+"/link/../new", true)
+	testutil.FailErr(t, "bind exact mutation coordinates", err)
+	target, err := mutation.MutationTarget()
+	testutil.FailErr(t, "admit actual mutation parent", err)
+	if target.Abs != filepath.Join(root, "nested", "new") {
+		t.Fatalf("mutation selected lexical decoy: %+v", target)
+	}
+	testutil.FailErr(t, "enter exact native directory", p.Chdir(t.Context(), root+"/link/.."))
+	var cwd bytes.Buffer
+	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: &cwd})
+	testutil.FailErr(t, "report logical actual cwd", err)
+	if cwd.String() != "nested\n" {
+		t.Fatalf("logical cwd names lexical decoy: %q", cwd.String())
+	}
 	external, err := os.ReadFile(operand)
 	testutil.FailErr(t, "read physical OS identity", err)
 	if string(native) != "actual identity" || string(external) != string(native) {
 		t.Fatalf("native=%q external=%q", native, external)
+	}
+}
+
+func TestLiteralTemporaryAbsolutePathIsNotRemapped(t *testing.T) {
+	temporary, err := os.MkdirTemp("/tmp", "portable-path-fixture-")
+	testutil.FailErr(t, "create literal temporary fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(temporary) })
+	tc, _, _ := scratchToolContext(t)
+	tc.Source.Roots[0].Path = temporary
+	operand := temporary + "/literal"
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind literal temporary root", err)
+	bound, err := p.Bind(t.Context(), operand, true)
+	testutil.FailErr(t, "bind literal absolute destination", err)
+	if bound.Resolved.Abs != operand {
+		t.Fatalf("literal path remapped to %q", bound.Resolved.Abs)
+	}
+	target, err := bound.MutationTarget()
+	testutil.FailErr(t, "admit literal temporary destination", err)
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{Location: target.EffectLocation(), Source: strings.NewReader("literal OS bytes"), Mode: 0600})
+	testutil.FailErr(t, "publish fixture through existing filesystem door", err)
+	actual, err := os.ReadFile(operand)
+	testutil.FailErr(t, "read literal OS identity", err)
+	if string(actual) != "literal OS bytes" {
+		t.Fatalf("literal identity=%q", actual)
 	}
 }

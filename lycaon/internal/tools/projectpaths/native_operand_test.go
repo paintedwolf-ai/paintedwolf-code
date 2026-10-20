@@ -11,7 +11,7 @@ func TestWindowsPathDesignShapes(t *testing.T) {
 			t.Errorf("valid shape %q: %v", path, err)
 		}
 	}
-	for _, path := range []string{`C:relative`, `C:`, `\\server`, `\\?\C:\secret`, `\\.\NUL`, `file:stream`, `CON.txt`, `folder\LPT1`, `file.`, `file `, "line\nbreak", string([]byte{0xff})} {
+	for _, path := range []string{`C:relative`, `C:`, `1:/file`, `\rooted`, `/rooted`, `//server`, `//./C:/device`, `\\server`, `\\?\C:\secret`, `\\.\NUL`, `file:stream`, `CON.txt`, `folder\LPT1`, `file.`, `file `, "line\nbreak", string([]byte{0xff})} {
 		if err := projectpaths.ValidatePlatformOperand(path, "windows"); err == nil {
 			t.Errorf("ambiguous Windows shape accepted: %q", path)
 		}

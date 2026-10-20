@@ -31,17 +31,26 @@ func ValidatePlatformOperand(operand, platform string) error {
 	if !utf8.ValidString(operand) {
 		return invalidOperand(operand, "Windows path is not Unicode")
 	}
-	if strings.HasPrefix(operand, `\\?\`) || strings.HasPrefix(operand, `\\.\`) {
+	isSeparator := func(b byte) bool { return b == '/' || b == '\\' }
+	unc := len(operand) >= 2 && isSeparator(operand[0]) && isSeparator(operand[1])
+	if len(operand) >= 4 && unc && (operand[2] == '?' || operand[2] == '.') && isSeparator(operand[3]) {
 		return invalidOperand(operand, "Windows device namespace is not an ordinary path")
 	}
-	if len(operand) >= 2 && operand[1] == ':' && (len(operand) == 2 || (operand[2] != '\\' && operand[2] != '/')) {
-		return invalidOperand(operand, "drive-relative path requires explicit drive root")
+	if len(operand) >= 2 && operand[1] == ':' {
+		if !((operand[0] >= 'A' && operand[0] <= 'Z') || (operand[0] >= 'a' && operand[0] <= 'z')) {
+			return invalidOperand(operand, "invalid drive name")
+		}
+		if len(operand) == 2 || !isSeparator(operand[2]) {
+			return invalidOperand(operand, "drive-relative path requires explicit drive root")
+		}
 	}
-	if strings.HasPrefix(operand, `\\`) {
+	if unc {
 		parts := strings.FieldsFunc(operand[2:], func(r rune) bool { return r == '\\' || r == '/' })
 		if len(parts) < 2 {
 			return invalidOperand(operand, "UNC path requires server and share")
 		}
+	} else if isSeparator(operand[0]) && operand != "/dev/null" {
+		return invalidOperand(operand, "rooted Windows path requires an explicit drive")
 	}
 	for _, part := range strings.FieldsFunc(operand, func(r rune) bool { return r == '\\' || r == '/' }) {
 		if part == "." || part == ".." || (len(part) == 2 && part[1] == ':') {

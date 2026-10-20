@@ -4,13 +4,17 @@ package projectpaths_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -32,8 +36,8 @@ func TestProgramPathHelpersUseActualEntries(t *testing.T) {
 		{"basename", []string{""}, "\n"},
 		{"dirname", []string{"--", "./pkg/file.go"}, "pkg\n"},
 		{"readlink", []string{"--", "link"}, " trailing \n\n"},
-		{"readlink", []string{"-f", "--", "link"}, filepath.Join(root, " trailing \n") + "\n"},
-		{"realpath", []string{"--", "link"}, filepath.Join(root, " trailing \n") + "\n"},
+		{"readlink", []string{"-f", "--", "link"}, filepath.Join(fspath.CanonicalPath(root), " trailing \n") + "\n"},
+		{"realpath", []string{"--", "link"}, filepath.Join(fspath.CanonicalPath(root), " trailing \n") + "\n"},
 		{"native_path", []string{"-0", "--", "@ws/ trailing \n"}, filepath.Join(root, " trailing \n") + "\x00"},
 	}
 	for _, c := range cases {
@@ -41,6 +45,7 @@ func TestProgramPathHelpersUseActualEntries(t *testing.T) {
 			var output bytes.Buffer
 			result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: c.name, Arguments: c.args}, commandprogram.Streams{Output: &output})
 			testutil.FailErr(t, "invoke path helper", err)
+			testutil.FailErr(t, "validate producer terminal", result.Validate())
 			if result.Status != 0 || !result.Complete || !result.PublicationEligible || output.String() != c.want {
 				t.Fatalf("result=%+v output=%q want=%q", result, output.String(), c.want)
 			}
@@ -165,23 +170,15 @@ func TestProgramPathPreservesNonUnicodeNulLists(t *testing.T) {
 	}
 }
 
-func TestProgramCanonicalAllowsOnlyMissingFinalLeaf(t *testing.T) {
+func TestProgramCanonicalRefusesMissingAndDanglingEntries(t *testing.T) {
 	tc, root := readSessionContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	got, err := p.Canonical(t.Context(), "pkg/new.go")
-	testutil.FailErr(t, "canonical absent leaf", err)
-	if got != filepath.Join(root, "pkg", "new.go") {
-		t.Fatalf("canonical=%q", got)
-	}
-	if _, err := p.Canonical(t.Context(), "missing/new.go"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("missing parent=%v", err)
-	}
 	testutil.FailErr(t, "seed dangling link", os.Symlink("pkg/new.go", filepath.Join(root, "dangling")))
-	got, err = p.Canonical(t.Context(), "dangling")
-	testutil.FailErr(t, "canonical dangling final target", err)
-	if got != filepath.Join(root, "pkg", "new.go") {
-		t.Fatalf("dangling canonical=%q", got)
+	for _, path := range []string{"pkg/new.go", "missing/new.go", "dangling"} {
+		if _, err := p.Canonical(t.Context(), path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("missing path %q=%v", path, err)
+		}
 	}
 }
 
@@ -203,5 +200,105 @@ func TestProgramPathsAuthorizeActualLinkIdentity(t *testing.T) {
 	}
 	if _, err := p.LinkTarget(t.Context(), "../secret"); err == nil {
 		t.Fatal("link metadata bypassed entry authority")
+	}
+}
+
+func TestCdNoArgumentRestoresInitialLogicalDirectory(t *testing.T) {
+	tc, _ := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "pkg")
+	testutil.FailErr(t, "initial subdirectory", err)
+	testutil.FailErr(t, "leave initial directory", p.Chdir(t.Context(), ".."))
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "cd"}, commandprogram.Streams{})
+	testutil.FailErr(t, "restore initial directory", err)
+	testutil.FailErr(t, "validate cd terminal", result.Validate())
+	var out bytes.Buffer
+	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: &out})
+	testutil.FailErr(t, "logical pwd", err)
+	if out.String() != "pkg\n" {
+		t.Fatalf("logical cwd=%q", out.String())
+	}
+}
+
+type shortPathWriter struct{}
+
+func (shortPathWriter) Write(p []byte) (int, error) { return len(p) - 1, nil }
+func TestPathProducerSettlesShortWriteAndTypedRefusals(t *testing.T) {
+	tc, _ := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind invocation", err)
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: shortPathWriter{}})
+	if !errors.Is(err, io.ErrShortWrite) || result.Terminal != toolcontract.ProducerFailed || result.PublicationEligible || result.Complete {
+		t.Fatalf("short write result=%+v err=%v", result, err)
+	}
+	testutil.FailErr(t, "validate short-write terminal", result.Validate())
+	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "basename", Arguments: []string{"--bad"}}, commandprogram.Streams{})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "COMMAND_OPTION_UNSUPPORTED" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code || reject.Data["expected_form"] != "basename [--] PATH [SUFFIX]" {
+		t.Fatalf("unsupported result=%+v reject=%+v", result, reject)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	result, err = p.Invoke(ctx, commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{})
+	if !errors.Is(err, context.Canceled) || result.Terminal != toolcontract.ProducerInterrupted || result.PublicationEligible {
+		t.Fatalf("cancelled result=%+v err=%v", result, err)
+	}
+}
+
+func TestPhysicalRootAliasKeepsAttachedReadScope(t *testing.T) {
+	tc, root := readSessionContext(t)
+	alias := filepath.Join(t.TempDir(), "attached-alias")
+	testutil.FailErr(t, "seed attached root alias", os.Symlink(root, alias))
+	tc.Source.Roots[0].Path = alias
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg", "pkg/**"}}})
+	p, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "pkg")
+	testutil.FailErr(t, "bind alias invocation", err)
+	allowed, err := p.Bind(t.Context(), filepath.Join(root, "pkg", "b.go"), false)
+	testutil.FailErr(t, "bind physical spelling of attached alias", err)
+	file, err := allowed.Open()
+	testutil.FailErr(t, "open actual admitted identity", err)
+	file.Close()
+	denied, err := p.Bind(t.Context(), filepath.Join(root, "a.go"), false)
+	testutil.FailErr(t, "bind denied coordinates", err)
+	if file, err := denied.Open(); err == nil {
+		file.Close()
+		t.Fatal("physical root spelling bypassed attached read profile")
+	}
+}
+
+func TestNativeCaseSpellingRetainsFilesystemIdentity(t *testing.T) {
+	tc, root := readSessionContext(t)
+	testutil.FailErr(t, "seed upper case name", os.WriteFile(filepath.Join(root, "Case"), []byte("upper"), 0600))
+	testutil.FailErr(t, "seed lower case name", os.WriteFile(filepath.Join(root, "case"), []byte("lower"), 0600))
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind invocation", err)
+	for _, name := range []string{"Case", "case"} {
+		bound, err := p.Bind(t.Context(), name, false)
+		testutil.FailErr(t, "bind preserved case spelling", err)
+		if bound.Resolved.Abs != filepath.Join(root, name) {
+			t.Fatalf("case spelling changed: %q", bound.Resolved.Abs)
+		}
+		file, err := bound.Open()
+		testutil.FailErr(t, "open native case identity", err)
+		native, err := io.ReadAll(file)
+		file.Close()
+		testutil.FailErr(t, "read native case identity", err)
+		actual, err := os.ReadFile(filepath.Join(root, name))
+		testutil.FailErr(t, "read OS case identity", err)
+		if !bytes.Equal(native, actual) {
+			t.Fatalf("native and OS disagree for %q", name)
+		}
+	}
+	upper, err := os.Stat(filepath.Join(root, "Case"))
+	testutil.FailErr(t, "stat upper", err)
+	lower, err := os.Stat(filepath.Join(root, "case"))
+	testutil.FailErr(t, "stat lower", err)
+	if !os.SameFile(upper, lower) {
+		a, err := os.ReadFile(filepath.Join(root, "Case"))
+		testutil.FailErr(t, "read distinct upper", err)
+		b, err := os.ReadFile(filepath.Join(root, "case"))
+		testutil.FailErr(t, "read distinct lower", err)
+		if string(a) != "upper" || string(b) != "lower" {
+			t.Fatal("distinct case-sensitive entries were collapsed")
+		}
 	}
 }

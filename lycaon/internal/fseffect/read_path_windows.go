@@ -8,9 +8,9 @@ import (
 )
 
 // Canonical returns the native path admitted by the existing handle-relative
-// reader. Missing-leaf and link metadata need native Windows qualification.
-func (r *ReadRoot) Canonical(rel string, allowMissingLeaf bool) (string, error) {
-	file, err := r.Open(rel)
+// reader. Link metadata needs native Windows qualification.
+func (r *ReadRoot) Canonical(rel string) (string, error) {
+	file, err := r.OpenExact(rel)
 	if err != nil {
 		return "", err
 	}

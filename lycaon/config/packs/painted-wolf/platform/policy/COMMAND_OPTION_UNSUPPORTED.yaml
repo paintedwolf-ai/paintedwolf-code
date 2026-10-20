@@ -1,0 +1,36 @@
+oar: '1.0'
+id: COMMAND_OPTION_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.command
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "COMMAND_OPTION_UNSUPPORTED"
+effect: block
+copy:
+  what: 'An option is unsupported for native {{ paintedwolf.command }}.'
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: Native command names bind before option validation. Unsupported options never fall through to an external program.
+  fix: Use the supported form in these details or consult command help. Preserve earlier effects before choosing a new action.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: native command option is unsupported
+x-paintedwolf-scenarios:
+- id: path_option
+  vars:
+    tool: command
+    command: basename
+    reason: 'supported form: basename [--] PATH [SUFFIX]'
+  expect_contains:
+  - 'Code: COMMAND_OPTION_UNSUPPORTED'
+  - basename
+  - PATH
+  - never fall through

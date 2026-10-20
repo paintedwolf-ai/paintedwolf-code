@@ -63,8 +63,15 @@ func lexicalRelUnder(root, target string) (string, bool) {
 
 // relUnderRoot maps a canonical in-root target to a relative path.
 func relUnderRoot(root, target string) (string, bool) {
-	if rel, ok := lexicalRelUnder(root, target); ok {
-		return rel, true
+	prefix := root + string(filepath.Separator)
+	if root == string(filepath.Separator) {
+		prefix = root
+	}
+	if strings.HasPrefix(target, prefix) {
+		return target[len(prefix):], true
+	}
+	if target == root {
+		return ".", true
 	}
 	resolved, err := filepath.EvalSymlinks(target)
 	if err != nil {
@@ -155,9 +162,6 @@ func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
 		dir := w.top()
 		var st unix.Stat_t
 		if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-			if err == unix.ENOENT && len(pending) == 0 {
-				return nil, &fs.PathError{Op: "open effect target", Path: name, Err: &missingReadLeaf{path: filepath.Join(dir.Name(), name)}}
-			}
 			// PathError so os.IsNotExist recognizes a missing component.
 			return nil, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 		}

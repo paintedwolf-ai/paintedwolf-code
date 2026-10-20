@@ -1,8 +1,9 @@
 package projectpaths
 
 import (
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // openRoot checks the held directory, including replacement between path checks.

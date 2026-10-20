@@ -8,7 +8,7 @@ import (
 )
 
 // Canonical resolves only through the confined filesystem reader. Like the
-// version 1 realpath/readlink -f contract, an absent final leaf is representable.
+// version 1 realpath/readlink -f contract, every component must exist.
 func (p *ProgramPaths) Canonical(ctx context.Context, operand string) (string, error) {
 	return p.inspectPath(ctx, operand, true)
 }
@@ -32,7 +32,7 @@ func (p *ProgramPaths) inspectPath(ctx context.Context, operand string, canonica
 	}
 	defer root.Close()
 	if canonical {
-		actual, err := root.Canonical(bound.exactRelative, true)
+		actual, err := root.Canonical(bound.exactRelative)
 		if err != nil {
 			return "", err
 		}

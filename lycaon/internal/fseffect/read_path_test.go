@@ -20,7 +20,7 @@ func TestReadPathOperationsUseTheSameContainedWalk(t *testing.T) {
 	root, err := OpenReadRoot(dir)
 	testutil.FailErr(t, "open contained root", err)
 	defer root.Close()
-	canonical, err := root.Canonical("alias/link", true)
+	canonical, err := root.Canonical("alias/link")
 	testutil.FailErr(t, "resolve contained canonical name", err)
 	if canonical != filepath.Join(root.Path(), "inside", "target") {
 		t.Fatalf("canonical=%q", canonical)
@@ -34,7 +34,7 @@ func TestReadPathOperationsUseTheSameContainedWalk(t *testing.T) {
 	if _, err := root.Readlink("outside/link", nil); !errors.Is(err, ErrSymlink) {
 		t.Fatalf("escaping link metadata=%v", err)
 	}
-	if _, err := root.Canonical("outside/target", true); !errors.Is(err, ErrSymlink) {
+	if _, err := root.Canonical("outside/target"); !errors.Is(err, ErrSymlink) {
 		t.Fatalf("escaping canonical path=%v", err)
 	}
 }

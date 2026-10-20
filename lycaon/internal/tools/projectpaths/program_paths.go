@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -19,19 +18,22 @@ import (
 
 // PathError carries a catalog diagnostic without deriving control from its text.
 type PathError struct {
-	Code     string
-	Operand  string
-	Cause    error
-	LimitID  string
-	Maximum  int64
-	Observed int64
+	Code         string
+	Operand      string
+	Cause        error
+	LimitID      string
+	Maximum      int64
+	Observed     int64
+	Command      string
+	ExpectedForm string
 }
 
 func (e *PathError) Error() string { return fmt.Sprintf("%s: path %q: %v", e.Code, e.Operand, e.Cause) }
 func (e *PathError) Unwrap() error { return e.Cause }
 
 // BoundPath keeps root identity separate from native and display spellings.
-// It grants no authority; operation admission still occurs at the effect.
+// Resolved contains addressed coordinates; Open and MutationTarget establish
+// reached identity at the effect boundary. Conversion grants no authority.
 type BoundPath struct {
 	Resolved      Resolved
 	Null          bool
@@ -39,6 +41,7 @@ type BoundPath struct {
 	rootInfo      os.FileInfo
 	exactRelative string
 	admitRead     func(string) error
+	admitMutation func(string) (Resolved, error)
 }
 
 // Validate rejects a root replaced since binding. Descriptor-relative effect
@@ -86,6 +89,9 @@ type ProgramPaths struct {
 	boundary      *sandbox.Boundary
 	context       tools.ToolContext
 	cwd           BoundPath
+	initial       BoundPath
+	initialInfo   os.FileInfo
+	forms         map[string]string
 	cwdInfo       os.FileInfo
 	argumentLimit int64
 	outputLimit   int64
@@ -98,7 +104,10 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc}
+	p := &ProgramPaths{boundary: boundary, context: tc, forms: map[string]string{}}
+	for _, command := range catalog.Commands {
+		p.forms[command.Name] = command.Argv
+	}
 	for _, limit := range catalog.Language.Limits {
 		if limit.ID == "argument_bytes" {
 			p.argumentLimit = limit.Maximum
@@ -117,12 +126,14 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	if err != nil {
 		return nil, err
 	}
-	info, err := directoryInfo(bound)
+	bound, info, err := p.directoryBinding(ctx, bound)
 	if err != nil {
 		return nil, err
 	}
 	p.cwdInfo = info
 	p.cwd = bound
+	p.initial = bound
+	p.initialInfo = info
 	return p, nil
 }
 
@@ -157,9 +168,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	var resolved Resolved
 	var err error
 	if write {
-		resolved, err = resolveMutationScope(ctx, p.boundary, p.context, addressed)
+		resolved, err = resolveMutationScope(ctx, p.boundary, p.context, p.rootAddress(addressed))
 	} else {
-		resolved, err = ResolveRead(ctx, nil, p.context, addressed)
+		resolved, err = ResolveRead(ctx, nil, p.context, p.rootAddress(addressed))
 	}
 	if err != nil {
 		return BoundPath{}, err
@@ -171,6 +182,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	relative, err := exactRelativeOperand(resolved, addressed)
 	if err != nil {
 		return BoundPath{}, err
+	}
+	for len(relative) > 0 && os.IsPathSeparator(relative[0]) {
+		relative = relative[1:]
 	}
 	for strings.HasPrefix(relative, "."+string(filepath.Separator)) {
 		relative = relative[2:]
@@ -185,8 +199,27 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	}
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
 	bound.admitRead = func(actual string) error {
-		_, err := ResolveRead(ctx, p.boundary, p.context, actual)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		authority, err := authorityAddress(resolved.Root.Path, actual)
+		if err != nil {
+			return err
+		}
+		_, err = ResolveRead(ctx, p.boundary, p.context, authority)
 		return err
+	}
+	if write {
+		bound.admitMutation = func(actual string) (Resolved, error) {
+			if err := ctx.Err(); err != nil {
+				return Resolved{}, err
+			}
+			authority, err := authorityAddress(resolved.Root.Path, actual)
+			if err != nil {
+				return Resolved{}, err
+			}
+			return resolveMutationScope(ctx, p.boundary, p.context, authority)
+		}
 	}
 	return bound, nil
 }
@@ -197,7 +230,7 @@ func (p *ProgramPaths) Chdir(ctx context.Context, operand string) error {
 	if err != nil {
 		return err
 	}
-	info, err := directoryInfo(bound)
+	bound, info, err := p.directoryBinding(ctx, bound)
 	if err != nil {
 		return err
 	}
