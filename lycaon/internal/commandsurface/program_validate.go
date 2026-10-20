@@ -31,6 +31,7 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
 	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit, *syntax.TestClause, *syntax.ParenTest:
 	case *syntax.Word:
+		c.validateTilde(v)
 		copy := *v
 		copy.Parts = append([]syntax.WordPart(nil), v.Parts...)
 		if !c.literalContext[v] && syntax.SplitBraces(&copy) {
@@ -161,5 +162,19 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 		}
 	default:
 		c.unsupported(r, "version 1 redirects and here-documents")
+	}
+}
+
+func (c *programCompiler) validateTilde(w *syntax.Word) {
+	if c.literalContext[w] || len(w.Parts) == 0 {
+		return
+	}
+	literal, ok := w.Parts[0].(*syntax.Lit)
+	if !ok || !strings.HasPrefix(literal.Value, "~") {
+		return
+	}
+	name, _, _ := strings.Cut(literal.Value[1:], "/")
+	if name != "" {
+		c.unsupported(w, "quoted literal paths or invocation-local variables; no named-user lookup")
 	}
 }

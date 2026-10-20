@@ -1192,6 +1192,22 @@ host_facts:
    type: list<string>
  - name: paintedwolf.redirect
    type: bool
+ - name: paintedwolf.source_start_byte
+   type: int
+ - name: paintedwolf.source_end_byte
+   type: int
+ - name: paintedwolf.source_line
+   type: int
+ - name: paintedwolf.source_column
+   type: int
+ - name: paintedwolf.expected_form
+   type: string
+ - name: paintedwolf.limit_id
+   type: string
+ - name: paintedwolf.maximum
+   type: int
+ - name: paintedwolf.observed
+   type: int
  - name: paintedwolf.redirection_issue
    type: string
  - name: paintedwolf.redirection_conflict
