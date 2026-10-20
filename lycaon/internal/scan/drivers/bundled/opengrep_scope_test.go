@@ -22,3 +22,12 @@ func TestOpenGrepTargetsDoNotExposeExcludedAncestorNames(t *testing.T) {
 		t.Fatal("scanner invocation changed its caller's authorized target identities")
 	}
 }
+
+func TestOpenGrepRejectsMissingTargetScope(t *testing.T) {
+	if _, err := opengrepRelativeTargets("", []string{"."}); err == nil {
+		t.Fatal("missing project working directory accepted")
+	}
+	if _, err := opengrepRelativeTargets(t.TempDir(), []string{""}); err == nil {
+		t.Fatal("empty target expanded into project-wide coverage")
+	}
+}

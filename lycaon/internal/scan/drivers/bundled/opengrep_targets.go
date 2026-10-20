@@ -3,6 +3,8 @@ package bundleddriver
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -60,4 +62,32 @@ func scanOpengrepTargetBatches(ctx context.Context, targets []string, run func([
 		start = end
 	}
 	return &result, nil
+}
+
+// Exclusions match argument paths, so absolute ancestor names must not hide the
+// project or the host-owned embedded projection. Authorization stays with the
+// caller and the command's unchanged filesystem confinement.
+func opengrepRelativeTargets(projectDir string, targets []string) ([]string, error) {
+	if projectDir == "" {
+		return nil, errors.New("opengrep requires a project working directory")
+	}
+	root, err := filepath.Abs(projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("opengrep project working directory: %w", err)
+	}
+	result := make([]string, len(targets))
+	for i, target := range targets {
+		if target == "" {
+			return nil, errors.New("opengrep requires a nonempty scan target")
+		}
+		if filepath.IsAbs(target) {
+			result[i], err = filepath.Rel(root, target)
+			if err != nil {
+				return nil, fmt.Errorf("opengrep project-relative target: %w", err)
+			}
+		} else {
+			result[i] = filepath.Clean(target)
+		}
+	}
+	return result, nil
 }
