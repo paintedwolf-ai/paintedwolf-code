@@ -1,6 +1,6 @@
 {
   description = "Nonpublishing Painted Wolf Code NixOS nixos-unstable qualification images";
-  inputs.application.url = "git+https://github.com/paintedwolf-ai/paintedwolf-code?ref=refs/qualification/1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8&rev=1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8";
+  inputs.application.url = "git+https://github.com/paintedwolf-ai/paintedwolf-code?ref=refs/qualification/e3e8a59f830243063eba5f488f8dfa9a6199a728&rev=e3e8a59f830243063eba5f488f8dfa9a6199a728";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   outputs = { self, application, nixpkgs }:
     let
@@ -13,7 +13,7 @@
                 schema_version = 1;
                 channel = "nixos-unstable";
                 nixpkgs_revision = nixpkgs.rev;
-                application_commit = "1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8";
+                application_commit = "e3e8a59f830243063eba5f488f8dfa9a6199a728";
                 application_store_path = toString application.packages.${arguments.system}.default;
               };
             } ];
