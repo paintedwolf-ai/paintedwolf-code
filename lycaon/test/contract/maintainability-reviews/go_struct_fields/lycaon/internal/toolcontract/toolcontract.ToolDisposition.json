@@ -4,12 +4,13 @@
   "kind": "data_record",
   "workstream": "portable-command-operations",
   "disposition": "retain",
-  "reason": "One stock-tool disposition keeps the selected interface, owner/lifecycle, reuse and cleanup handoff together. P03 adds authored typed command references so binding never infers identities from descriptive slash text, and generator closure verifies every referenced form and owner. Retain this cohesive immutable record at15 fields; no growth beyond that ceiling. Detached catalog and operation-definition tests, plus strict generator closure, support the decision.",
-  "reviewed_commit": "423ad2d202b635ed40dcbf7f4786d2748a8c1372",
+  "reason": "One stock-tool disposition keeps interface, actual owner/lifecycle, reuse and cleanup handoff together. Authored typed command references avoid interpreting descriptive slash text; generation checks canonical command identities and existing owners. Retain this immutable 15-field declaration with no further growth. Strict generation closure and detached operation/catalog tests passed; this is declaration evidence, not native-runtime qualification.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
   "ceiling": 15,
   "boundaries": {
     "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "d77c2dfde2d5bf37c2d53aecfde2ead6bdd1b6915aa285208c1a7091f1a3512f",
-    "lycaon/internal/toolcontract/language_catalog_test.go": "cff5a59a1cf300ae8b0ba9cb49ab084b476d224b6ffb581af4764753f70f3f2a"
+    "lycaon/internal/toolcontract/language_catalog_test.go": "cff5a59a1cf300ae8b0ba9cb49ab084b476d224b6ffb581af4764753f70f3f2a",
+    "lycaon/internal/toolcontract/operation_test.go": "9800bea0ae4a2f271f385ed8022c247ea1fc31e35119679e24496f9f82d78826"
   },
-  "reviewed_shape": "cf69ca28e059c35e38dd69cef795f7dca511564190b4082abe1d70c2ab86b19f"
+  "reviewed_shape": "a3abc883a520ae9d211133234bc6cacc83eeb5861976d215bf6147f8b8353fe1"
 }
