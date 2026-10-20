@@ -4,17 +4,19 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain this installed qualification protocol at 28 immediate members. Independent server/source selection, bounded transport, catalog variants, native execution freshness and protected retention remain explicit owners; physical VM delivery is now a cohesive installed_input subsystem with root lease, guest marker, fixed operations and host/leaf receipt comparison. No generic key/text or command callback is admitted by the plan. The hosted-only ancestor observer tightens two fixed root-owned paths without relaxing payload verification; partial diagnostics remain authority-false. Reviewed the actual changed boundaries and the 803-contract source (three platform skips). Keep the measured ceiling with no growth allowance; new members or changed authority require another decision.",
-  "reviewed_commit": "bb0567e6df9266818e690eedfad60d8ad5cf0cc2",
-  "ceiling": 28,
+  "reason": "Retain exactly 29 immediate qualification owners after reviewing the new administrator supervisor boundary. Hosted bootstrap now captures a fixed graphical-user child and actual exit, holds its leader waitable through owned group cleanup, verifies immutable controller/request before and after, and seals root-only invocation/result facts. Freeze separately consumes that authority and bounded graphical operation evidence; submitted JSON cannot establish execution. Root supervisor and native transaction effects remain separate explicit owners, using one managed admission without nested task dispatch. Splitting by file count would hide this privilege boundary. The composed 819-contract source passed with three platform skips; actual partial physical editor save also succeeded but grants no campaign authority. This reconsideration permits no future growth or hard-limit change. New authority or members require a fresh decision.",
+  "reviewed_commit": "c75724715410ba4fb07540627dafe3d22b3351ff",
+  "ceiling": 29,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_hosted_diagnostic_execution.py": "507d173431e67f4d434724d4bc3ff30b5ccce00985c93a72970a4b6e46994de7",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "d7b50bac9c8b2b9a2a5eecd8ca9b3be19ea9d81d0f53b17ed67d42bb24dee2cb",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "73b7a6219e609d36f45583b8aef9be82c8a1b9981f50ad8660a11f54ecac2134",
     "scripts/verification_tests/distribution/installed/test_installed_input_diagnostic_execution.py": "6135c0a74353e2f69ac06aba14394cee042c1bfd974e73f7d9abb898ee1d109b",
     "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "86abde44ecd3f6d6069fa47ba8a1f1ef7fd5248a390d4a28ff18c11bb809ab03",
     "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
-    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "f9f50f40a1b2f5d854269c875261724dd5a3fb8cd7d027ce6103399d1899fa06"
+    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "f9f50f40a1b2f5d854269c875261724dd5a3fb8cd7d027ce6103399d1899fa06",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "f30dfc723fb8f7626999a324f0869f0942517618fcee0e70c264f16a06c80f03",
+    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb"
   },
-  "reviewed_shape": "cc3a54457f664cc0a5358bfe73234feccc80606760f006d2d50b165990f3b21a"
+  "reviewed_shape": "f5346b393895aaaef5de6828ef2030d8628237577ce7376dbdf94e6e1bb4da8d"
 }
