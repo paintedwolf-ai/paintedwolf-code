@@ -38,6 +38,25 @@ class Mailbox:
         self.path = Path('/tmp') / ('paintedwolf-native-input-' + execution['execution_nonce'])
         self.vm_id = vm_id
 
+    def marker(self):
+        path = Path('/etc/paintedwolf-input-qualification.json')
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            before = os.fstat(descriptor)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_gid != 0
+                    or before.st_mode & 0o222 or before.st_size > protocol.MAX_DOCUMENT
+                    or path.resolve() != path):
+                raise ValueError('native input requires its root-owned readonly VM marker')
+            raw = os.read(descriptor, protocol.MAX_DOCUMENT + 1)
+            after = os.fstat(descriptor)
+            identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+            if identity(before) != identity(after) or identity(after) != identity(path.lstat()):
+                raise ValueError('native input VM marker changed during observation')
+            if decode(raw) != {'format_version': 1, 'vm_id': self.vm_id}:
+                raise ValueError('native input guest differs from the selected VM identity')
+        finally:
+            os.close(descriptor)
+
     def _directory(self):
         value = self.path.lstat()
         if (not stat.S_ISDIR(value.st_mode) or value.st_uid != os.getuid()
@@ -46,11 +65,13 @@ class Mailbox:
         return value
 
     def create(self):
+        self.marker()
         self.path.mkdir(mode=0o700)
         self._directory()
         self.write('binding.json', {'format_version': 1, 'binding': self.execution, 'vm_id': self.vm_id})
 
     def attach(self):
+        self.marker()
         self._directory()
         if self.read('binding.json') != {'format_version': 1, 'binding': self.execution, 'vm_id': self.vm_id}:
             raise ValueError('native input mailbox differs from its fresh execution')

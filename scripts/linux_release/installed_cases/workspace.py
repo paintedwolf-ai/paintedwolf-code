@@ -36,6 +36,13 @@ def observed_file(path: Path) -> dict:
 
 
 def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
+    selected = getattr(app, 'binding', {}).get('native_input')
+    if selected is not None:
+        from ..installed_input.guest import perform
+        if not isinstance(selected, dict) or set(selected) != {'format_version', 'vm_id', 'binding'} or selected['format_version'] != 1:
+            raise ValueError('native input configuration differs from its fixed binding')
+        return {'physical_vm_keyboard': perform(selected['binding'], selected['vm_id'],
+            EntryFocus(app, ui, 'Contents of ' + path.name))}
     if native is None:
         import gi
         gi.require_version('Atspi', '2.0')

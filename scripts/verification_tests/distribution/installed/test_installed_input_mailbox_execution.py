@@ -10,6 +10,9 @@ from linux_release.installed_input import mailbox, protocol
 
 class NativeInputMailboxTests(unittest.TestCase):
     def setUp(self):
+        marker = patch.object(mailbox.Mailbox, 'marker')
+        marker.start()
+        self.addCleanup(marker.stop)
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
             'artifact_id': 'native-rpm-amd64.rpm', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}

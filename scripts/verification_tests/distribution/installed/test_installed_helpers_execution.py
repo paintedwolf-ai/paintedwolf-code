@@ -87,7 +87,7 @@ class InstalledHelperTests(unittest.TestCase):
                   "final_artifacts": "/control/final.json", "file_root": "/packages",
                   "install_root": "/opt/painted-wolf-code", "output": "/fresh/output",
                   "nix_program": None, "case_inputs": None, "variant_id": "noble-scale-100",
-                  "snapshot": {"kind": "package-inventory", "value": "a" * 64, "channel": None}}
+                  "snapshot": {"kind": "package-inventory", "value": "a" * 64, "channel": None}, "input_adapter": None}
         result = command(target, ["./task", "test:linux:installed", "--", "--run-cases"])
         self.assertIn("StrictHostKeyChecking=yes", result)
         self.assertIn("IdentitiesOnly=yes", result)
@@ -103,7 +103,7 @@ class InstalledHelperTests(unittest.TestCase):
 
     def test_stale_leaf_output_cannot_replace_a_fresh_execution(self):
         target = {"artifact_id": "selected", "environment_id": "guest", "variant_id": "floor-scale-100",
-                  "snapshot": {"kind": "package-inventory", "value": "f" * 64, "channel": None}}
+                  "snapshot": {"kind": "package-inventory", "value": "f" * 64, "channel": None}, "input_adapter": None}
         request = {"format_version": 1, "execution_nonce": "a" * 32, "source_commit": "b" * 40,
                    "driver_tree": "c" * 40, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": target["variant_id"]}
         with tempfile.TemporaryDirectory() as temporary:
