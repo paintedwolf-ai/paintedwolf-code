@@ -105,7 +105,9 @@ def build(root, work, architecture, epoch):
                    'getent group "$3" >/dev/null || groupadd -g "$3" pwbuild; '
                    'getent passwd "$2" >/dev/null || useradd -M -u "$2" -g "$3" pwbuild')
         keyring = "archlinuxarm" if imported else "archlinux"
-        container = command("docker", "create", "--platform", expected_platform, image,
+        # Landlock requires no_new_privs when Docker withholds CAP_SYS_ADMIN.
+        container = command("docker", "create", "--platform", expected_platform,
+                            "--security-opt=no-new-privileges", image,
                             "/bin/bash", "-c", prepare, "prepare", keyring, uid, gid)
         subprocess.run(["docker", "start", "--attach", container], check=True)
         if command("docker", "inspect", "--format", "{{.State.ExitCode}}", container) != "0":
