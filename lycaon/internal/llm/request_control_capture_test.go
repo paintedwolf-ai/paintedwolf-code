@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -34,10 +35,17 @@ func TestRequestControlCaptureMatchesSentWireWithoutPrompt(t *testing.T) {
 	defer server.Close()
 	model := "zai-org/GLM-5.3-Flash"
 	provider := wrapProviderIfDebug(openaicompat.New("fixture", server.URL, "fixture", []modelinfo.Entry{{ID: model}}).WithProfile(providerprofile.Together()))
-	_, err := provider.Complete(t.Context(), modelcall.CompletionRequest{Model: model,
+	wireCapture := &modelcall.WireCapture{}
+	_, err := provider.Complete(t.Context(), modelcall.CompletionRequest{Model: model, ControlCapture: &modelcall.RequestControlCapture{Wire: wireCapture},
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "private task"}},
 		Tools:    []tools.ToolMeta{{Name: "read"}}, Debug: modelcall.RequestDebug{SessionID: "session"}})
 	testutil.FailErr(t, "complete fixture request", err)
+	raw, dispatches := wireCapture.Snapshot()
+	var exact map[string]any
+	testutil.FailErr(t, "decode exact wire", json.Unmarshal(raw, &exact))
+	if dispatches != 1 || !reflect.DeepEqual(sent, exact) {
+		t.Fatal("debug wrapper replaced the collection capture")
+	}
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read capture", err)
 	var captured struct {
