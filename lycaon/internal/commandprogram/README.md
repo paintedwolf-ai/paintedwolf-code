@@ -99,3 +99,29 @@ Snapshot hashes, licenses, omitted files and patches live in `third_party`.
 Tests use synthetic fixtures. Standard Go regex comparisons are reference probes
 for adapter equivalence. Passing unit tests do not qualify connected evaluator
 wiring, real model behavior, installed operating systems or milestone Q22.
+
+## Status and continuation
+
+`OutcomeLatch` preserves the first typed host stop. Ordinary nonzero results
+remain available to conditionals and sequences; authority refusal, interruption,
+owner conflict/limits and incomplete required input stop admission before later
+expansion or effects. `StatusControl` keeps the last executed/explicit exit status;
+negation changes ordinary status only. Failed substitution prevents its containing
+launch without turning output into syntax.
+
+`SettlePipeline` retains every original stage result and uses the shared
+rightmost-nonzero aggregation rule. Expected consumer closure requires the
+existing executor classification or the exact native byte-endpoint close fact,
+bound to adjacent dynamic execution IDs. It cannot hide another producer failure.
+Typed completeness and eligibility remain separate from ordinary status and
+verification evidence: native comparison status1 may publish, while unclassified
+external status1 cannot. Destination review, revision checks, publication and
+recovery remain with their existing operation domains.
+
+The legacy external executor now reports the rightmost nonzero pipeline status,
+instead of the first nonzero status. Its established SIGPIPE classification and
+raw per-stage outcomes are retained. Real helper-process fixtures cover3/7/0,
+and the document-owner fixture proves that a later actual refused review and
+exit0 preserve an earlier accepted/saved mutation. Additional publication fixtures
+use classified producer inputs and real document publication; they are not a
+claim that future native grep/diff adapters or full command entry are qualified.
