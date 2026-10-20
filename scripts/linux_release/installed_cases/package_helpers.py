@@ -40,8 +40,8 @@ def execute(binding, capability, case, evidence_root: Path):
             for channel in ("stdout", "stderr"):
                 raw = result.pop(channel)
                 stream = "helpers-" + channel
-                remaining = max(0, (24 << 20) - sum(map(len, streams.values())))
                 offset = len(streams[stream])
+                remaining = max(0, min((8 << 20) - offset, (24 << 20) - sum(map(len, streams.values()))))
                 streams[stream] += raw[:remaining]
                 observed[channel] = {"stream": stream, "offset": offset, "bytes": min(len(raw), remaining),
                                      "truncated": len(raw) > remaining}
@@ -71,7 +71,7 @@ def execute(binding, capability, case, evidence_root: Path):
             app.stop()
             observations["desktop"] = app.observations
             for name, raw in app.streams().items():
-                remaining = max(0, (30 << 20) - sum(map(len, streams.values())))
+                remaining = max(0, min(8 << 20, (30 << 20) - sum(map(len, streams.values()))))
                 if len(raw) > remaining:
                     observations["output_limit"], status = True, "failed"
                 streams[name] = raw[:remaining]

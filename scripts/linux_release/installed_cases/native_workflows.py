@@ -75,11 +75,11 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
         code, stdout, stderr = command(arguments)
         observations[label] = {"arguments": arguments, "exit_code": code}
         for stream, raw in (("stdout", stdout), ("stderr", stderr)):
-            remaining = max(0, (24 << 20) - sum(map(len, streams.values())))
-            if len(raw) > remaining:
-                observations["output_limit"] = True
             name = label + "-" + stream if capture else "transaction-operations-" + stream
             offset = len(streams.get(name, b""))
+            remaining = max(0, min((8 << 20) - offset, (24 << 20) - sum(map(len, streams.values()))))
+            if len(raw) > remaining:
+                observations["output_limit"] = True
             streams[name] = streams.get(name, b"") + raw[:remaining]
             observations[label].setdefault("streams", {})[stream] = {
                 "name": name, "offset": offset, "bytes": min(len(raw), remaining),
