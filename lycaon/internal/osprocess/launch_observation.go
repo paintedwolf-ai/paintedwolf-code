@@ -26,7 +26,11 @@ type LaunchObservation struct {
 	DirectoryMatches  bool
 	Arguments         []string
 	Environment       []string
-	Security          ProcessSecurity
+	// EnvironmentObserved distinguishes returned environment bytes from native
+	// omission. Darwin can hide even an owned restricted process environment;
+	// a zero-length result there is conservatively unknown, never known empty.
+	EnvironmentObserved bool
+	Security            ProcessSecurity
 }
 
 // ObserveStoppedLaunch requires bounded native argument capture and a current
@@ -50,7 +54,7 @@ func ObserveStoppedLaunch(ctx context.Context, pid int, executable, cwd *os.File
 	if err != nil {
 		return LaunchObservation{}, err
 	}
-	args, env, err := processArguments(pid, maximumBytes)
+	args, env, environmentObserved, err := processArguments(pid, maximumBytes)
 	if err != nil {
 		return LaunchObservation{}, err
 	}
@@ -72,7 +76,7 @@ func ObserveStoppedLaunch(ctx context.Context, pid int, executable, cwd *os.File
 	if current != image {
 		return LaunchObservation{}, ErrExecutableObservationUnavailable
 	}
-	return LaunchObservation{ExecutableMatches: image, DirectoryMatches: directory, Arguments: args, Environment: env, Security: security}, nil
+	return LaunchObservation{ExecutableMatches: image, DirectoryMatches: directory, Arguments: args, Environment: env, EnvironmentObserved: environmentObserved, Security: security}, nil
 }
 
 // ProcessCredentials captures the current incarnation's observed credentials.

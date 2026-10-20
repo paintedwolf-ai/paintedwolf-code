@@ -65,24 +65,30 @@ func processSecurity(pid int) (ProcessSecurity, error) {
 	}
 	return ProcessSecurity{RealUID: uint32(data[0]), EffectiveUID: uint32(data[1]), SavedUID: uint32(data[2]), RealGID: uint32(data[3]), EffectiveGID: uint32(data[4]), SavedGID: uint32(data[5])}, nil
 }
-func processArguments(pid int, maximumBytes int) ([]string, []string, error) {
-	data := make([]byte, maximumBytes)
-	length := C.size_t(len(data))
+func processArguments(pid int, maximumBytes int) ([]string, []string, bool, error) {
+	var length C.size_t
+	if code := C.pw_process_arguments(C.int(pid), nil, &length); code != 0 {
+		return nil, nil, false, fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, syscall.Errno(code))
+	}
+	if length < 4 || uint64(length) > uint64(maximumBytes) {
+		return nil, nil, false, ErrExecutableObservationUnavailable
+	}
+	data := make([]byte, int(length))
 	if code := C.pw_process_arguments(C.int(pid), unsafe.Pointer(&data[0]), &length); code != 0 {
-		return nil, nil, fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, syscall.Errno(code))
+		return nil, nil, false, fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, syscall.Errno(code))
 	}
 	data = data[:int(length)]
 	if len(data) < 4 {
-		return nil, nil, ErrExecutableObservationUnavailable
+		return nil, nil, false, ErrExecutableObservationUnavailable
 	}
 	argc := int(binary.NativeEndian.Uint32(data[:4]))
 	if argc < 1 || argc > len(data)-4 {
-		return nil, nil, ErrExecutableObservationUnavailable
+		return nil, nil, false, ErrExecutableObservationUnavailable
 	}
 	data = data[4:]
 	end := bytes.IndexByte(data, 0)
 	if end < 0 {
-		return nil, nil, ErrExecutableObservationUnavailable
+		return nil, nil, false, ErrExecutableObservationUnavailable
 	}
 	data = data[end+1:]
 	for len(data) > 0 && data[0] == 0 {
@@ -92,7 +98,7 @@ func processArguments(pid int, maximumBytes int) ([]string, []string, error) {
 	for i := 0; i < argc; i++ {
 		end = bytes.IndexByte(data, 0)
 		if end < 0 {
-			return nil, nil, ErrExecutableObservationUnavailable
+			return nil, nil, false, ErrExecutableObservationUnavailable
 		}
 		args = append(args, string(data[:end]))
 		data = data[end+1:]
@@ -100,10 +106,10 @@ func processArguments(pid int, maximumBytes int) ([]string, []string, error) {
 	for len(data) > 0 && data[0] != 0 {
 		end = bytes.IndexByte(data, 0)
 		if end < 0 {
-			return nil, nil, ErrExecutableObservationUnavailable
+			return nil, nil, false, ErrExecutableObservationUnavailable
 		}
 		env = append(env, string(data[:end]))
 		data = data[end+1:]
 	}
-	return args, env, nil
+	return args, env, len(env) > 0, nil
 }

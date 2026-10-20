@@ -10,6 +10,6 @@ func matchProcessDirectory(int, *os.File) (bool, error) {
 func processSecurity(int) (ProcessSecurity, error) {
 	return ProcessSecurity{}, ErrExecutableObservationUnavailable
 }
-func processArguments(int, int) ([]string, []string, error) {
-	return nil, nil, ErrExecutableObservationUnavailable
+func processArguments(int, int) ([]string, []string, bool, error) {
+	return nil, nil, false, ErrExecutableObservationUnavailable
 }

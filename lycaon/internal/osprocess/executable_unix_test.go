@@ -9,12 +9,17 @@ import (
 	"slices"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing.T) {
-	path, err := exec.LookPath("sleep")
+	if os.Getenv("SYNTHETIC_LAUNCH_CHILD") == "1" {
+		time.Sleep(30 * time.Second)
+		return
+	}
+	path, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +33,8 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 		t.Fatal(err)
 	}
 	defer other.Close()
-	child := exec.Command(path, "30")
-	child.Env = []string{"SYNTHETIC_FIXTURE=value"}
+	child := exec.Command(path, "-test.run=^TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable$")
+	child.Env = []string{"SYNTHETIC_FIXTURE=value", "SYNTHETIC_LAUNCH_CHILD=1"}
 	cwd, err := os.Open(".")
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +58,8 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !observation.ExecutableMatches || !observation.DirectoryMatches || !slices.Equal(observation.Arguments, child.Args) || !slices.Equal(observation.Environment, child.Env) {
-		t.Fatal("stopped launch facts did not match actual fixture image/cwd/argv/environment")
+	if !observation.ExecutableMatches || !observation.DirectoryMatches || !slices.Equal(observation.Arguments, child.Args) || !observation.EnvironmentObserved || !slices.Equal(observation.Environment, child.Env) {
+		t.Fatalf("stopped launch fact mismatch: image=%v cwd=%v argv=%v environment_observed=%v environment=%v", observation.ExecutableMatches, observation.DirectoryMatches, slices.Equal(observation.Arguments, child.Args), observation.EnvironmentObserved, slices.Equal(observation.Environment, child.Env))
 	}
 	if observation.Security.RealUID != uint32(os.Getuid()) || observation.Security.EffectiveUID != uint32(os.Geteuid()) {
 		t.Fatal("stopped credentials did not match unprivileged fixture")

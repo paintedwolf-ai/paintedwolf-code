@@ -79,24 +79,24 @@ func processSecurity(pid int) (ProcessSecurity, error) {
 	}
 	return ProcessSecurity{RealUID: ids[0], EffectiveUID: ids[1], SavedUID: ids[2], RealGID: ids[3], EffectiveGID: ids[4], SavedGID: ids[5], Linux: &LinuxPrivileges{Permitted: capabilities[0], Effective: capabilities[1], Ambient: capabilities[2], NoNewPrivileges: fields["NoNewPrivs"] == "1"}}, nil
 }
-func processArguments(pid int, maximumBytes int) ([]string, []string, error) {
+func processArguments(pid int, maximumBytes int) ([]string, []string, bool, error) {
 	args, err := processFile(pid, "cmdline", maximumBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	env, err := processFile(pid, "environ", maximumBytes-len(args))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	argumentWords, err := nulWords(args)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	environmentWords, err := nulWords(env)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return argumentWords, environmentWords, nil
+	return argumentWords, environmentWords, true, nil
 }
 func nulWords(data []byte) ([]string, error) {
 	if len(data) == 0 {
