@@ -40,7 +40,7 @@ fn show(
     // Keep actions in the bottom action area. A header containing both actions
     // and a long title can itself exceed a small monitor's logical width.
     let dialog = gtk::Dialog::builder()
-        .title(&options.title)
+        .title(options.title.as_str())
         .transient_for(parent)
         .modal(true)
         .destroy_with_parent(true)
