@@ -15,6 +15,10 @@ in stdenvNoCC.mkDerivation {
   nativeBuildInputs = [ patchelf jq ];
   installPhase = ''
     runHook preInstall
+    export HOME="$TMPDIR/scanner-home"
+    export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share"
+    export XDG_STATE_HOME="$HOME/.local/state" XDG_CACHE_HOME="$HOME/.cache"
+    mkdir -m 700 -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
     root="$out/engine-root"
     artifact="$root/bundled/opengrep-${pins.scannerVersion}"
     mkdir -p "$(dirname "$artifact")"

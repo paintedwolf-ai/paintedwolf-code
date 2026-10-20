@@ -64,6 +64,7 @@
           ocr = resources.inputs.ocr;
           decision-resources = resources.inputs.decision;
           scanner-original = resources.inputs.scannerOriginal;
+          scanner-finalized = resources.scanner;
           notices = resources.notices;
           notice-tools = resources.notices.cargoAbout;
           nix-workflow-fixture = pkgs.writeText "painted-wolf-nix-workflow-inputs.json" (builtins.toJSON {
