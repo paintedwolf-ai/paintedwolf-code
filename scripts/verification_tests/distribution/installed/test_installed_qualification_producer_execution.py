@@ -78,6 +78,30 @@ class InstalledQualificationProducerTests(unittest.TestCase):
             args=argparse.Namespace(execution=execution,output=root/"raw")
             with patch.object(producer,"validate_inputs",return_value=plan), \
                     patch.object(producer,"admit") as admission,self.assertRaisesRegex(ValueError,"stale"):
-                producer.retain_verified(args,{},"a"*40,{},b"drivers",{"source_commit":"b"*40},root/"fresh")
+                producer.retain_verified(args,{},"a"*40,{},b"drivers",{"source_commit":"b"*40,"selections":{}},root/"fresh")
             admission.assert_not_called()
             self.assertFalse(args.output.exists())
+
+    def test_plan_shape_is_owned_by_execution_validator_and_source_stays_independent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            controls,plan=root/"controls",root/"plan"
+            controls.mkdir()
+            plan.mkdir()
+            for name in producer.CONTROL_DIRS:
+                (controls/name).mkdir()
+            for name in producer.CONTROL_FILES:
+                (controls/name).write_text("{}")
+            for name in producer.PLAN_FILES:
+                (plan/name).write_text("{}")
+            document={"format_version":2,"source_commit":"a"*40,"driver_tree":"b"*40,"targets":[]}
+            (plan/"qualification-plan.json").write_text(json.dumps(document))
+            with patch.object(producer,"verify_producer"), \
+                    patch.object(producer,"validate_plan",return_value=("a"*40,"b"*40,[])) as validate:
+                self.assertEqual(producer.validate_inputs(root,{"controls":{},"plan":{}},
+                                 {"source_commit":"a"*40,"source_tree":"c"*40},"b"*40),document)
+                validate.assert_called_once_with(document,{})
+                validate.return_value=("d"*40,"b"*40,[])
+                with self.assertRaisesRegex(ValueError,"selected source"):
+                    producer.validate_inputs(root,{"controls":{},"plan":{}},
+                                             {"source_commit":"a"*40,"source_tree":"c"*40},"b"*40)
