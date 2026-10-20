@@ -4,11 +4,11 @@
   "kind": "runtime_service",
   "workstream": "desktop-settings-observation",
   "disposition": "retain",
-  "reason": "One fixed Gio main-context lifecycle owns Settings subscription before snapshot, typed denials, coalesced bounded observations, owner disconnect, heartbeat and parent EOF. Keep these coupled ordering guarantees together; the strict pipe protocol and owned executable process lifetime are separate owners.",
-  "reviewed_commit": "ab7e8d41137786c92146abe484cae09af067ef91",
+  "reason": "One fixed Gio main-context lifecycle owns Settings subscription before snapshot, typed denials, coalesced bounded observations, owner disconnect, heartbeat and parent EOF. Keep these coupled ordering guarantees together; the strict pipe protocol and owned executable process lifetime are separate owners. The private-bus contract also observes a live preference change and owner loss without conflating either with startup defaults.",
+  "reviewed_commit": "9d47aafccd01ea23dddb074ca74cc49703aba000",
   "ceiling": 340,
   "boundaries": {
-    "lycaon-den/src-tauri/crates/desktop-settings-observer/tests/private_bus.rs": "9ff93fd496bcd43b16809b0c57eb0453b1ec7f671b77b62852bb4393cf4c037d",
+    "lycaon-den/src-tauri/crates/desktop-settings-observer/tests/private_bus.rs": "3ab1ceb4d5f6efee7212506bf0123da31aa8c5258e3129664f3bbef6ba5208f6",
     "lycaon-den/src-tauri/crates/desktop-settings-observer/src/lib.rs": "25112b4c970e0e1a8bc72d17f41a6f059f5fa6c43387928a41b58019abb9f1a4"
   }
 }
