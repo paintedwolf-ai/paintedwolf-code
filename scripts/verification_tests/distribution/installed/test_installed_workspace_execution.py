@@ -100,6 +100,27 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertEqual(result['ui_identity'], child)
             self.assertEqual(native.generate_keyboard_event.call_count, 7)
 
+    def test_replaced_accessible_entry_is_observed_without_refocusing_or_replaying(self):
+        identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
+        ui, original, replacement, frame = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG = 23, 16
+        ui.find.side_effect = [original, replacement]
+        original.get_process_id.return_value = replacement.get_process_id.return_value = 123
+        original.queryComponent.return_value.grabFocus.return_value = True
+        original.getState.return_value.contains.return_value = False
+        replacement.getState.return_value.contains.return_value = True
+        replacement.get_parent.return_value = frame
+        frame.get_process_id.return_value = 123
+        frame.getRole.return_value = 23
+        frame.getState.return_value.contains.return_value = True
+        app = SimpleNamespace(observations={'launch_identity': identity}, require_running=lambda: None)
+        with patch.object(focus_owner, 'process_identity', return_value=identity), \
+                patch.object(focus_owner, 'owned_process', return_value=True):
+            selected = focus_owner.EntryFocus(app, ui, 'Contents of fixture')
+            self.assertEqual(selected.observe()['entry'], identity)
+        replacement.queryComponent.assert_not_called()
+        original.queryComponent.return_value.grabFocus.assert_called_once_with()
+
     def test_accepted_keyboard_dispatch_without_saved_bytes_never_passes(self):
         ui = MagicMock()
         ui.__enter__.return_value = ui
