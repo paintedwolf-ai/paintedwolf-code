@@ -99,6 +99,24 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertEqual(result['ui_identity'], child)
             self.assertEqual(native.generate_keyboard_event.call_count, 7)
 
+    def test_accepted_keyboard_dispatch_without_saved_bytes_never_passes(self):
+        ui = MagicMock()
+        ui.__enter__.return_value = ui
+        with patch.object(workspace, 'DesktopUI', return_value=ui), \
+                patch.object(workspace, 'interactive_window', return_value={}), \
+                patch.object(workspace, 'run', return_value={'exit_code': 0, 'timed_out': False,
+                    'output_limit': False, 'stdout': b'', 'stderr': b''}), \
+                patch.object(workspace, 'fixed_editor_keyboard', return_value={'normal_keyboard_replace_and_save': True}), \
+                patch.object(workspace, 'observed_file', return_value={'expected_content': False, 'bytes': 57}), \
+                patch.object(workspace.time, 'monotonic', side_effect=[0, 1, 31]), \
+                patch.object(workspace.time, 'sleep'):
+            with self.assertRaises(workspace.CaseUnavailable) as refusal:
+                workspace.edit_and_find(SimpleNamespace(binding={}), Path('/owned/fixture'))
+        self.assertEqual(refusal.exception.observations['keyboard_delivery'], {
+            'dispatch_accepted': True, 'effect_observed': False})
+        self.assertEqual(refusal.exception.observations['saved_file']['bytes'], 57)
+        self.assertNotIn('Find in file', [call.args[0] for call in ui.click.call_args_list])
+
     def test_missing_editor_retains_bound_process_and_capture_evidence(self):
         app = MagicMock()
         app.__enter__.return_value = app
