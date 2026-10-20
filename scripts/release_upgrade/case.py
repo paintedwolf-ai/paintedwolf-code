@@ -39,12 +39,26 @@ def verify_preferences(path: Path, channel: str):
         raise ValueError("automatic update preferences changed during activation")
 
 
-def staged(records: Path):
+def staged(records: Path, diagnostics: Path | None = None, offset: int = 0):
     if read_json(records / "rejected.json") is not None:
         raise ValueError("native updater rejected the signed candidate")
     transaction = read_json(records / "transaction.json")
     if transaction and transaction.get("phase") == "failed":
         raise ValueError("native update transaction failed")
+    if diagnostics is not None and diagnostics.is_file():
+        data = diagnostics.read_bytes()
+        data = data[offset:] if len(data) >= offset else data
+        for line in data.splitlines(keepends=True):
+            if not line.endswith(b"\n"):
+                continue
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            error = record.get("error") if isinstance(record, dict) else None
+            code = error.get("code") if isinstance(error, dict) else None
+            if isinstance(code, str) and code:
+                raise ValueError("Native updater failed: " + code)
     return read_json(records / "ready.json")
 
 
@@ -92,6 +106,8 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
     namespace = hashlib.sha256(str(app).encode()).hexdigest()
     records = config / "updates/installations" / namespace
     observations = []
+    diagnostics = config / "updates.log"
+    diagnostic_offset = diagnostics.stat().st_size if diagnostics.is_file() else 0
     try:
         installation.launch()
         before = installation.healthy(case["source_version"])
@@ -100,7 +116,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         verify_semantics(config, fixture, before, evidence)
         for step in case["steps"]:
             version = step["version"]
-            ready = wait_for(f"{version} was not automatically staged", lambda: staged(records), 600)
+            ready = wait_for(f"{version} was not automatically staged", lambda: staged(records, diagnostics, diagnostic_offset), 600)
             if not candidate_matches(ready.get("candidate", {}), step, case["channel"]):
                 raise ValueError("automatic staging selected an unexpected release")
             (evidence / f"{version}-ready.json").write_text(json.dumps(ready, indent=2) + "\n")
@@ -146,5 +162,6 @@ def retain_state(config, records, evidence):
     for name in ("ready.json", "rejected.json", "transaction.json"):
         if (records / name).is_file():
             shutil.copyfile(records / name, evidence / ("final-" + name))
-    if (config / "engine.log").is_file():
-        shutil.copyfile(config / "engine.log", evidence / "engine.log")
+    for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1"):
+        if (config / name).is_file():
+            shutil.copyfile(config / name, evidence / name)

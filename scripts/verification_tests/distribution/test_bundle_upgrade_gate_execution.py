@@ -189,3 +189,30 @@ class GateTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     gate.verify_inventory(self.fixtures)
                 self.plan = original
+
+    def test_new_structured_native_errors_fail_staging_and_prior_diagnostics_are_ignored(self):
+        from release_upgrade.case import staged
+        records = self.root / "records"
+        records.mkdir()
+        diagnostics = self.root / "updates.log"
+        diagnostics.write_text('{"error":{"code":"prior_failure"}}\n')
+        offset = diagnostics.stat().st_size
+        self.assertIsNone(staged(records, diagnostics, offset))
+        with diagnostics.open("a") as output:
+            output.write('diagnostic prose is not a failure code\n')
+        self.assertIsNone(staged(records, diagnostics, offset))
+        with diagnostics.open("a") as output:
+            output.write('{"error":{"code":"feed_rejected"}}\n')
+        with self.assertRaisesRegex(ValueError, "feed_rejected"):
+            staged(records, diagnostics, offset)
+
+    def test_retained_diagnostics_exclude_the_api_token(self):
+        from release_upgrade.case import retain_state
+        config, records, evidence = self.root / "config", self.root / "records", self.root / "logs"
+        for path in (config, records, evidence):
+            path.mkdir()
+        for name in ("engine.log", "updates.log", "api.token"):
+            (config / name).write_text("fixture")
+        (records / "transaction.json").write_text('{"phase":"failed"}')
+        retain_state(config, records, evidence)
+        self.assertEqual({path.name for path in evidence.iterdir()}, {"engine.log", "updates.log", "final-transaction.json"})
