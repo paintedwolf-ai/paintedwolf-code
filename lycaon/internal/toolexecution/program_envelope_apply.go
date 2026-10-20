@@ -25,6 +25,11 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if err = p.validate(ctx); err != nil {
 		return result, err
 	}
+	end, err := p.frame.beginUse()
+	if err != nil {
+		return result, err
+	}
+	defer end()
 	if p.update == nil {
 		return result, nil
 	}

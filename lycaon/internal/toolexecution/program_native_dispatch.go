@@ -61,6 +61,11 @@ type NativeEffect struct {
 // The introducing entry validates the complete syntax/progress envelope first.
 // A held review keeps the same child identity; a fresh invocation uses a new one.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission ProgramStateAdmission, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+	end, err := frame.beginUse()
+	if err != nil {
+		return result, err
+	}
+	defer end()
 	bound := effect.Operation
 	definition, invocation := bound.Definition(), bound.Invocation()
 	facts := definition.Facts()
