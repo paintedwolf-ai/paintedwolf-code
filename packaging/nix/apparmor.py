@@ -39,7 +39,10 @@ def profile(package):
     with engine.open("rb") as source:
         header = source.read(20)
         source.seek(0)
-        digest = hashlib.file_digest(source, "sha256").hexdigest()
+        hasher = hashlib.sha256()
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            hasher.update(chunk)
+        digest = hasher.hexdigest()
     if (len(header) != 20 or header[:7] != b"\x7fELF\x02\x01\x01"
             or machine is None or struct.unpack_from("<H", header, 18)[0] != machine):
         raise ValueError("selected engine must be the manifest's native ELF")
