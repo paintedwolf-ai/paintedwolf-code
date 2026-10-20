@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path, PurePosixPath
 import shutil
+import signal
 import tempfile
 
 from release_upgrade.case import run_case
@@ -64,7 +65,7 @@ def rehearse(root: Path, evidence: Path):
                     try:
                         result = run_case(case, plan, root, case_work, config, evidence / case["id"])
                         verify_requests(request_log, case, start)
-                    except Exception as error:
+                    except (Exception, KeyboardInterrupt) as error:
                         receipt["cases"][-1]["error"] = str(error)
                         raise
                     receipt["cases"][-1] = result
@@ -72,6 +73,9 @@ def rehearse(root: Path, evidence: Path):
                     shutil.rmtree(case_work)
         receipt["result"] = "passed"
         return receipt
+    except KeyboardInterrupt as error:
+        receipt.update({"result": "cancelled", "error": str(error)})
+        raise
     except Exception as error:
         receipt["error"] = str(error)
         raise
@@ -84,7 +88,14 @@ def main():
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
-    rehearse(args.fixtures.resolve(), args.evidence.resolve())
+    def interrupted(number, _frame):
+        raise KeyboardInterrupt(f"Desktop rehearsal interrupted by signal {number}")
+    previous = {number: signal.signal(number, interrupted) for number in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        rehearse(args.fixtures.resolve(), args.evidence.resolve())
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
 
 
 if __name__ == "__main__":

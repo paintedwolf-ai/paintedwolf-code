@@ -1086,7 +1086,7 @@ and restores its previous value during cleanup. A temporary CA, trusted only on 
 `downloads.paintedwolf.dev` to a local HTTPS fixture. The fixture serves exact
 allowlisted paths and retains request evidence. Cleanup removes its certificate
 and hosts entry and stops its captured server process; cleanup failures fail the
-gate.
+gate. Cancellation records an interrupted result and attempts the same cleanup.
 
 `./task upgrade:rehearse -- --bundle --fixtures <directory> --evidence <directory>`
 uses the prepared artifact without rebuilding the candidate. The protected job

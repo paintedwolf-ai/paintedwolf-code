@@ -155,3 +155,24 @@ class GateTests(unittest.TestCase):
                 path.write_text(json.dumps({**original, **change}))
                 with self.assertRaisesRegex(ValueError, "preferences changed"):
                     verify_preferences(path, "preview")
+
+    def test_interruption_retains_cancelled_evidence_and_exits_the_host_context(self):
+        from contextlib import contextmanager
+        self.plan["cases"] = [{"id": "prior-preview"}]
+        self.inventory()
+        cleaned = []
+        @contextmanager
+        def origin(*_):
+            try:
+                yield
+            finally:
+                cleaned.append(True)
+        with patch.object(gate, "require_disposable_host", return_value=self.root / "config"), \
+             patch.object(gate, "local_origin", origin), \
+             patch.object(gate, "run_case", side_effect=KeyboardInterrupt("cancelled")):
+            with self.assertRaises(KeyboardInterrupt):
+                gate.rehearse(self.fixtures, self.evidence)
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["result"], "cancelled")
+        self.assertEqual(receipt["cases"][0]["error"], "cancelled")
+        self.assertEqual(cleaned, [True])
