@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.installed_cases import onboarding
+from linux_release.installed_cases import onboarding, desktop_ui
 from linux_release.installed_cases.records import CaseUnavailable
 
 API = SimpleNamespace(ROLE_PASSWORD_TEXT=1, ROLE_PUSH_BUTTON=2, ROLE_FRAME=3, ROLE_DIALOG=4,
@@ -93,11 +93,11 @@ class InstalledOnboardingTests(unittest.TestCase):
 
     def test_foreign_or_reused_application_pid_is_never_an_owned_window(self):
         app = SimpleNamespace(observations={'launch_identity': IDENTITY})
-        with patch.object(onboarding, 'process_identity', return_value=dict(IDENTITY, start_time_ticks=43)):
-            self.assertFalse(onboarding.owned_process(123, app))
-        with patch.object(onboarding, 'process_identity', side_effect=[
+        with patch.object(desktop_ui, 'process_identity', return_value=dict(IDENTITY, start_time_ticks=43)):
+            self.assertFalse(desktop_ui.owned_process(123, app))
+        with patch.object(desktop_ui, 'process_identity', side_effect=[
                 {'pid': 200, 'parent_pid': 123, 'start_time_ticks': 7}, IDENTITY]):
-            self.assertTrue(onboarding.owned_process(200, app))
+            self.assertTrue(desktop_ui.owned_process(200, app))
 
     def test_service_custody_ready_path_needs_no_accessible_form_or_password(self):
         app = SimpleNamespace(timeout=1, observations={'session': {}},

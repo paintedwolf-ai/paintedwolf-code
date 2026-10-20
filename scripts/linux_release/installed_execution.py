@@ -25,7 +25,7 @@ NIX = {"updates", "development", "distribution"}
 FAMILIES = {"documents": "products", "installation": "packages", "conversation": "desktop",
             "git": "desktop", "files": "desktop", "external-files": "desktop", "clipboard": "desktop",
             "input": "desktop", "windowing": "desktop", "accessibility": "desktop",
-            "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "desktop",
+            "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "performance",
             **{capability: "security" for capability in SECURITY},
             **{capability: "packages" for capability in NIX}}
 
