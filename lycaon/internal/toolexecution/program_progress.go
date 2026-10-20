@@ -31,3 +31,12 @@ func CheckOperationProgress(definition toolcontract.OperationDefinition, invocat
 	}
 	return &toolrejection.ToolReject{Code: "PROGRESS_MISSING", OwnerRef: facts.Contract.Owner, Data: map[string]any{"tool": facts.Identity, "source_start_byte": invocation.Span.StartByte, "source_end_byte": invocation.Span.EndByte, "source_line": invocation.Span.Line, "source_column": invocation.Span.Column, "source_unit_id": invocation.SourceUnitID}}
 }
+
+// CheckOperationProgressState prevents cross-session progress from satisfying a
+// reached native prerequisite. The provider reads the existing session tree.
+func CheckOperationProgressState(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, state progress.PrerequisiteState) error {
+	if state.SessionID != invocation.SessionID || state.RootSessionID == "" {
+		return fmt.Errorf("operation progress state does not match invocation")
+	}
+	return CheckOperationProgress(definition, invocation, state.Content, state.WorkerChild, state.ReviewLoopActive)
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -34,5 +35,20 @@ func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
 	testutil.FailErr(t, "read-only operation has no broad command gate", CheckOperationProgress(nativeDefinition(t, "read"), invocation, "", false, false))
 	if CheckOperationProgress(toolcontract.OperationDefinition{}, invocation, "", false, false) == nil {
 		t.Fatal("missing operation metadata admitted")
+	}
+}
+
+func TestOperationProgressRejectsCrossSessionState(t *testing.T) {
+	invocation, _ := frameFixture(t)
+	definition := nativeDefinition(t, "write")
+	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: "root-session", Content: "- [ ] Actual task"}
+	testutil.FailErr(t, "matching actual state", CheckOperationProgressState(definition, invocation, state))
+	state.SessionID = "foreign-session"
+	if CheckOperationProgressState(definition, invocation, state) == nil {
+		t.Fatal("foreign progress state admitted")
+	}
+	state.SessionID, state.RootSessionID = invocation.SessionID, ""
+	if CheckOperationProgressState(definition, invocation, state) == nil {
+		t.Fatal("missing progress root admitted")
 	}
 }
