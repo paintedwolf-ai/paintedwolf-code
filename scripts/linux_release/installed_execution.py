@@ -13,7 +13,7 @@ import sys
 
 from . import installed_evidence as evidence
 from .installed_cases.products import require_owned_guest
-from .installed_cases.records import CaseUnavailable, retain
+from .installed_cases.records import CaseFailed, CaseUnavailable, retain
 from .installed_environment import collect
 from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
@@ -146,6 +146,12 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
             try:
                 result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
                           if variant_error else execute_case(binding, row["capability"], case, retained))
+            except CaseFailed as error:
+                failed_case = case if not (retained / row["capability"] / case).exists() else case + "-product-failure"
+                result = retain(binding, row["capability"], failed_case, retained, "failed",
+                                {"reason": str(error), **getattr(error, "observations", {})},
+                                getattr(error, "streams", None))
+                result["id"] = case
             except CaseUnavailable as error:
                 result = retain(binding, row["capability"], case, retained, "unverified",
                                 {"reason": str(error), **getattr(error, "observations", {})}, getattr(error, "streams", None))
