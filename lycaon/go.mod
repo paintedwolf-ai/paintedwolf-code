@@ -323,3 +323,6 @@ replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runt
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
 
 replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
+
+// Bounded typed ERE execution; provenance and patch in third_party/README.md.
+replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2

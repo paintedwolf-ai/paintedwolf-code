@@ -85,3 +85,22 @@ valid 8192-node/depth-64/1-MiB units, dense and malformed deep syntax, parser re
 unsupported entry points and unrelated panics. The exact selected-tree limits
 remain host admission checks before host-plan allocation. These source-level
 controls do not establish installed-platform qualification.
+
+## Native predicate ERE execution
+
+`regexp2/` is the runtime source subset of the already selected
+`github.com/dlclark/regexp2/v2` v2.5.1, commit
+`0ec61737c1e8483bb16083a916fa9a3bd21f91bb`.
+The complete release archive was verified before extraction against
+`h1:E5Ug7Dh264W1ymdySmiHNcDG7fmsR307APCE5R07a20=`; its module metadata is
+`h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=`.
+The upstream license remains included. `UPSTREAM-MANIFEST.json` records every
+verified archive member, its SHA-256 and whether it is included. The subset keeps
+root runtime Go sources, `syntax/`, `helpers/`, module metadata and license;
+upstream tests, test data, code generation, benchmarks, CI and documentation are
+omitted. Synthetic host fixtures exercise the selected bounded entry point.
+
+The P08 patch adds bounded boolean execution of a host-validated POSIX ERE tree.
+It does not select the P13 PCRE grammar or expose additional regex syntax.
+Existing upstream text parser/matcher entry points retain their behavior.
+The patch and exact metering contract are recorded alongside the selected source.
