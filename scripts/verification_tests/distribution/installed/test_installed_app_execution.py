@@ -1,4 +1,5 @@
 """Actual application identity and platform-owner boundaries fail closed."""
+import io
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -44,3 +45,18 @@ class InstalledAppTests(unittest.TestCase):
         with patch("scripts.linux_release.installed_environment.query", return_value={"exit_code": 0, "stdout": '{"type":"s","data":["GNOME"]}'}):
             with self.assertRaises(ValueError):
                 gnome_owner()
+
+    def test_x11_display_comes_from_the_captured_desktop_when_logind_omits_it(self):
+        from scripts.linux_release.installed_cases.app import desktop_display
+        owner = {"pid": 321, "start_time_ticks": 42}
+        identity = {"pid": 321, "parent_pid": 100, "start_time_ticks": 42}
+        session = {"Display": "", "DesktopOwner": owner}
+        with patch("scripts.linux_release.installed_cases.app.process_identity", return_value=identity), patch.object(
+                Path, "open", return_value=io.BytesIO(b"IGNORED=not-retained\0DISPLAY=:2.0\0")):
+            self.assertEqual(desktop_display(session), ":2.0")
+        with patch("scripts.linux_release.installed_cases.app.process_identity", return_value=dict(identity, start_time_ticks=43)):
+            with self.assertRaises(ValueError):
+                desktop_display(session)
+        for display in ("remote.example:0", ":0;bad", "", ":0\n"):
+            with self.subTest(display=display), self.assertRaises((ValueError, CaseUnavailable)):
+                desktop_display({"Display": display})
