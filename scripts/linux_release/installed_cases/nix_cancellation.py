@@ -10,7 +10,7 @@ import time
 from .app import InstalledApp
 from .approval import approve_host_execution
 from .lifecycle import handle, mirror
-from .nix_fixture import load, observe
+from .nix_fixture import load, observe, realized
 from .provider import ProviderFixture
 from .records import CaseUnavailable
 from .workflow import ToolTurn, accepted
@@ -32,11 +32,7 @@ def scenario(binding: dict) -> tuple[str, dict, dict]:
     selected = fixture['cancellation']
     program = Path(fixture['client']['path'])
     # A previously completed fixture cannot prove a fresh daemon-side cancellation.
-    try:
-        nix_command(program, 'path-info', '--json', '--json-format', '1', selected['output'])
-    except ValueError:
-        pass
-    else:
+    if realized(program, selected['output']):
         raise CaseUnavailable('selected cancellation derivative was already realized')
     observations = {'daemon_authority': baseline, 'derivation': selected, 'builder': fixture['static_builder'],
                     'client': fixture['client'], 'cleanup_required': False}
@@ -79,13 +75,8 @@ def scenario(binding: dict) -> tuple[str, dict, dict]:
                                          'turn': turn.observations, 'provider': provider.observations,
                                          'app': app.observations})
                 streams = app.streams()
-        try:
-            nix_command(program, 'path-info', '--json', '--json-format', '1', selected['output'])
-        except ValueError:
-            observations['incomplete_output_refused'] = True
-        else:
-            observations['incomplete_output_refused'] = False
-            passed = False
+        observations['incomplete_output_refused'] = not realized(program, selected['output'])
+        passed = passed and observations['incomplete_output_refused']
         ping = json.loads(nix_command(program, 'store', 'ping', '--json'))
         observations['daemon_after_cancel'] = ping
         passed = passed and isinstance(ping, dict) and isinstance(ping.get('version'), str)
