@@ -114,13 +114,33 @@ release, while the existing explicit host-execution path remains available.
 A process code hash or incarnation alone is not substituted for missing mapped
 identity, cwd and argv proof. This remains required acceptance work.
 
-Required Linux identity release remains unavailable pending its native helper
-integration. Startup tracing cannot silently replace privileged host execution:
+Required Linux binary launches select `held_binary_procfd_exec` before admission.
+The existing `unix.Exec` door executes the held ELF image through a verified
+native `/proc/self/fd/N` path, preserving literal argv, the held cwd, sanitized
+environment and native credential transitions. Its kernel `AT_EXECFN` is that
+procfd path; it does not claim pathname-exec equivalence. Procfs identity and
+access are checked before admission and again in the actual inherited boundary.
+There is no pathname fallback, and scripts never use descriptor transport.
+
+The existing owned process guard registers supervision before releasing a
+credentialed pre-exec gate. A self-opened pidfd arrives with kernel sender
+credentials in the same bounded message; the host checks the actual held image,
+cwd, process incarnation, namespaces and current authority before release.
+These are mechanism guarantees, not a stopped postexec snapshot. Later actual
+credential observation can be unavailable, particularly for privileged or
+short-lived processes, and remains explicitly unknown. Control EOF is only the
+exec transport settlement, never proof of completed effects or output. A caller
+requiring a stopped postexec/preinstruction observation receives a capability
+refusal for this mechanism.
+
+Startup tracing cannot silently replace privileged host execution:
 [Linux execve](https://man7.org/linux/man-pages/man2/execve.2.html) suppresses
-set-user-ID, set-group-ID and file capabilities while ptraced. Existing optional
-callers retain their actual launch behavior; portable callers requesting required
-identity capture refuse an unavailable capability. Neither these component
-fixtures nor a refusal result qualifies the complete command runtime.
+set-user-ID, set-group-ID and file capabilities while ptraced. The procfd route
+uses no tracer and adds no no-new-privileges setting beyond the selected existing
+confinement. Script path release, genuine privileged observations and native Linux
+qualification remain acceptance work. Existing optional callers retain their
+actual launch behavior. Component fixtures do not qualify the complete runtime;
+no transitive interpreter, loader or plugin byte-identity guarantee is claimed.
 
 Windows qualification requires actual filesystem replacement while handles are
 open, reparse-point and exact-name identity checks, journal/error settlement,

@@ -1,6 +1,7 @@
 package confine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -26,15 +27,18 @@ var ErrLaunchIdentityChanged = errors.New("selected launch identity changed")
 // Close it after the prepared process has settled. Capture/release checks do not
 // promise immutable files/plugins an interpreter opens after process release.
 type ProcessPins struct {
-	paths   LaunchPaths
-	limits  LaunchVectorLimits
-	images  []pinnedImage
-	words   [][]string
-	cwd     *os.File
-	cwdInfo os.FileInfo
-	mu      sync.Mutex
-	closed  bool
-	bound   bool
+	paths              LaunchPaths
+	limits             LaunchVectorLimits
+	images             []pinnedImage
+	words              [][]string
+	cwd                *os.File
+	cwdInfo            os.FileInfo
+	mu                 sync.Mutex
+	closed             bool
+	bound              bool
+	nativeELF          bool
+	launchFacts        ProcessLaunchFacts
+	launchFactsPresent bool
 }
 
 type pinnedImage struct {
@@ -90,6 +94,7 @@ func CaptureProcessPins(ctx context.Context, nativePath string, paths LaunchPath
 			return nil, err
 		}
 		if len(words) == 0 {
+			p.nativeELF = len(p.words) == 0 && bytes.HasPrefix(header, []byte{0x7f, 'E', 'L', 'F'})
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}

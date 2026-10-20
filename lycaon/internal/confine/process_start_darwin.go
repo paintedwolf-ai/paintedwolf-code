@@ -41,6 +41,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"syscall"
 	"time"
@@ -50,7 +51,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func pinnedPlatformAvailable() error { return nil }
+func pinnedPlatformAvailable(*ProcessPins) error { return nil }
 func nativeArgumentBudget() (int, error) {
 	var maximum C.int
 	if code := C.pw_native_argmax(&maximum); code != 0 {
@@ -133,3 +134,10 @@ func nativeCStringVector(words []string) ([]*C.char, func(), error) {
 		}
 	}, nil
 }
+
+func newPinnedTransport() (*os.File, *os.File, error)                     { return os.Pipe() }
+func attachPlatformPins(*exec.Cmd, *pendingProcessPins) ([]string, error) { return nil, nil }
+func confirmPlatformPins(context.Context, *exec.Cmd, *pendingProcessPins) (bool, error) {
+	return false, nil
+}
+func platformLaunchMechanism(*ProcessPins) LaunchMechanism { return StoppedPathLaunch }

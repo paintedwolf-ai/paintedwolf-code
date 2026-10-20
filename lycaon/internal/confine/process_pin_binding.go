@@ -23,6 +23,8 @@ const (
 	pinReadyFDFlag       = "--pin-ready-fd"
 	pinEntryFlag         = "--pin-entry"
 	pinHostExecutionFlag = "--pin-host-execution"
+	pinExecutableFDFlag  = "--pin-executable-fd"
+	pinFinalFlag         = "--pin-final"
 )
 
 type pendingProcessPins struct {
@@ -35,12 +37,13 @@ type pendingProcessPins struct {
 	maximumBytes           int
 	confined               bool
 	frozen                 bool
+	closeNative            func()
 }
 
 var processPinStarts sync.Map
 
 func attachPinnedLaunch(ctx context.Context, cmd *exec.Cmd, p *ProcessPins, name string, args []string, confined bool) (func(), error) {
-	if err := pinnedPlatformAvailable(); err != nil {
+	if err := pinnedPlatformAvailable(p); err != nil {
 		return nil, err
 	}
 	if err := p.revalidate(ctx, name); err != nil {
@@ -54,7 +57,7 @@ func attachPinnedLaunch(ctx context.Context, cmd *exec.Cmd, p *ProcessPins, name
 	if err != nil {
 		return nil, err
 	}
-	read, write, err := os.Pipe()
+	read, write, err := newPinnedTransport()
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +81,13 @@ func attachPinnedLaunch(ctx context.Context, cmd *exec.Cmd, p *ProcessPins, name
 	readyFD := cwdFD + 1
 	cmd.ExtraFiles = append(cmd.ExtraFiles, p.cwd, write)
 	entry := p.images[0].path
+	platformFlags, err := attachPlatformPins(cmd, state)
 	p.mu.Unlock()
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		return nil, err
+	}
 	split := slices.Index(cmd.Args, "--")
 	if split < 0 {
 		_ = read.Close()
@@ -86,9 +95,17 @@ func attachPinnedLaunch(ctx context.Context, cmd *exec.Cmd, p *ProcessPins, name
 		return nil, fmt.Errorf("pinned helper has no target boundary")
 	}
 	flags := []string{pinCwdFDFlag, strconv.Itoa(cwdFD), pinReadyFDFlag, strconv.Itoa(readyFD), pinEntryFlag, entry}
+	flags = append(flags, platformFlags...)
 	cmd.Args = append(append(append([]string{}, cmd.Args[:split]...), flags...), cmd.Args[split:]...)
 	processPinStarts.Store(cmd, state)
-	return func() { processPinStarts.Delete(cmd); _ = read.Close(); _ = write.Close() }, nil
+	return func() {
+		processPinStarts.Delete(cmd)
+		_ = read.Close()
+		_ = write.Close()
+		if state.closeNative != nil {
+			state.closeNative()
+		}
+	}, nil
 }
 
 // FreezePinnedLaunch snapshots the final sanitized child environment and admits
@@ -148,6 +165,9 @@ func ConfirmPinnedLaunch(cmd *exec.Cmd) error {
 	ctx, cancel := context.WithTimeout(state.ctx, 10*time.Second)
 	defer cancel()
 	_ = state.write.Close()
+	if handled, err := confirmPlatformPins(ctx, cmd, state); handled {
+		return err
+	}
 	type readyResult struct {
 		bytes []byte
 		err   error

@@ -48,6 +48,8 @@ var helperRefusalFDArg = -1
 var helperPinnedCwdFDArg = -1
 var helperPinnedReadyFDArg = -1
 var helperPinnedEntryArg string
+var helperPinnedExecutableFDArg = -1
+var helperPinnedFinal bool
 var helperPinnedHostExecution bool
 
 // runHelper applies an inherited profile before replacing the process.
@@ -56,11 +58,13 @@ func runHelper(args []string) error {
 	helperRefusalFDArg = -1
 	helperPinnedCwdFDArg, helperPinnedReadyFDArg = -1, -1
 	helperPinnedEntryArg = ""
+	helperPinnedExecutableFDArg = -1
+	helperPinnedFinal = false
 	helperPinnedHostExecution = false
 	var target []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag:
+		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag, pinExecutableFDFlag:
 			flag := args[i]
 			if i+1 >= len(args) {
 				return fmt.Errorf("%s requires a file descriptor", flag)
@@ -78,6 +82,8 @@ func runHelper(args []string) error {
 				helperPinnedCwdFDArg = fd
 			case pinReadyFDFlag:
 				helperPinnedReadyFDArg = fd
+			case pinExecutableFDFlag:
+				helperPinnedExecutableFDArg = fd
 			default:
 				helperRefusalFDArg = fd
 			}
@@ -88,12 +94,25 @@ func runHelper(args []string) error {
 			}
 			helperPinnedEntryArg = args[i+1]
 			i++
+		case pinFinalFlag:
+			helperPinnedFinal = true
 		case pinHostExecutionFlag:
 			helperPinnedHostExecution = true
 		case "--":
 			target = args[i+1:]
 			i = len(args)
 		}
+	}
+	if helperPinnedFinal {
+		if helperPinnedEntryArg == "" || helperPinnedHostExecution || helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 || len(target) == 0 {
+			return fmt.Errorf("invalid inherited final launch descriptors")
+		}
+		if lineageFD >= 0 {
+			if err := placeLineageMarker(lineageFD); err != nil {
+				return err
+			}
+		}
+		return execPinnedTarget(helperPinnedEntryArg, target, helperPinnedCwdFDArg, helperPinnedReadyFDArg)
 	}
 	if profileFD < 0 || len(target) == 0 {
 		return fmt.Errorf("usage: %s %s <fd> -- <cmd> [args...]", helperFlag, profileFDFlag)
@@ -114,7 +133,11 @@ func runHelper(args []string) error {
 	}
 
 	if helperPinnedReadyFDArg >= 0 {
-		defer syscall.Close(helperPinnedReadyFDArg)
+		defer func() {
+			if helperPinnedReadyFDArg >= 0 {
+				_ = syscall.Close(helperPinnedReadyFDArg)
+			}
+		}()
 	}
 	if helperPinnedReadyFDArg >= 0 || helperPinnedCwdFDArg >= 0 || helperPinnedEntryArg != "" || helperPinnedHostExecution {
 		if helperPinnedReadyFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedEntryArg == "" {
