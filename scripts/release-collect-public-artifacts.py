@@ -44,10 +44,14 @@ def main() -> int:
                 raise ValueError(f"public release platform {row['updater_key']} lists no package")
             names = [f"{stem}.{extension}{suffix}" for extension in extensions for suffix in ("", ".sha256")]
             updater = row.get("updater_extension")
-            # A public platform updates through the signed updater artifact.
-            if not isinstance(updater, str) or not updater:
+            native_linux = row["updater_key"] in {"linux-x86_64", "linux-aarch64"} and row.get("goos") == "linux"
+            if native_linux:
+                if updater is not None:
+                    raise ValueError("native Linux publication cannot offer an in-app updater")
+            elif not isinstance(updater, str) or not updater:
                 raise ValueError(f"public release platform {row['updater_key']} has no updater artifact")
-            names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]
+            else:
+                names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]
             for name in dict.fromkeys(names):
                 source = args.input / name
                 if not source.is_file() or source.is_symlink():
