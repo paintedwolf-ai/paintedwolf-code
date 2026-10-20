@@ -122,6 +122,9 @@ class PortableCommandGrades(unittest.TestCase):
             if dimension == 'receipts': broken['receipts'].clear()
             else: broken['effects'].append({'operation':'forbidden-write','outcome':'completed'})
             self.assertFalse(self.grade(case, broken)['recovery_success'])
+        broken = observation(case)
+        broken['obligations'] = [{'kind':'browser', 'tool':'capture_page', 'state':'pending'}]
+        self.assertFalse(self.grade(case, broken)['recovery_success'])
         target = self.root / next(iter(case['expected']['files']))
         original = target.read_bytes()
         target.write_bytes(b'wrong corrected bytes')
