@@ -77,7 +77,7 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
 
 
 def fixture_path(root: Path) -> Path:
-    base = root.parent / 'workspace-fixtures'
+    base = root / 'workspace-fixtures'
     base.mkdir(mode=0o700, exist_ok=True)
     identity = base.lstat()
     if (not stat.S_ISDIR(identity.st_mode) or identity.st_uid != os.getuid()

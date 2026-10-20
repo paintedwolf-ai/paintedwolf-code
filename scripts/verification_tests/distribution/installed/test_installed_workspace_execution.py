@@ -62,3 +62,12 @@ class InstalledWorkspaceTests(unittest.TestCase):
         self.assertEqual(refusal.exception.observations['engine_identity'], {'pid': 123})
         self.assertEqual(refusal.exception.observations['desktop_control']['match_count'], 0)
         self.assertEqual(refusal.exception.streams, {'app-stderr': b'owned capture'})
+
+    def test_owned_project_fixture_is_retained_inside_evidence_with_private_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            path = workspace.fixture_path(root)
+            self.assertTrue(path.is_relative_to(root / 'workspace-fixtures'))
+            self.assertEqual(path.read_text(), workspace.BEFORE)
+            self.assertEqual((root / 'workspace-fixtures').stat().st_mode & 0o777, 0o700)
+            self.assertTrue(path.parent.exists())
