@@ -116,10 +116,16 @@ class DesktopUI:
         matches, deadline = [], time.monotonic() + 15
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
-            for identity, window in self.windows(deadline):
-                for node in self.descendants(window, deadline):
-                    if node.getRole() == role and self.visible(node) and node.name == name:
-                        matches.append((identity, node))
+            try:
+                for identity, window in self.windows(deadline):
+                    for node in self.descendants(window, deadline):
+                        if node.getRole() == role and self.visible(node) and node.name == name:
+                            matches.append((identity, node))
+            except CaseUnavailable as error:
+                error.observations = {**getattr(error, 'observations', {}), 'desktop_control': {
+                    'role': int(role), 'name': name, 'match_count': len(matches),
+                    'inventory_complete': False}}
+                raise
             if len(matches) > 1:
                 break
             if len(matches) == 1:
