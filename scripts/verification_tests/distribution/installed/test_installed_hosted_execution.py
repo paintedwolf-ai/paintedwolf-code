@@ -143,3 +143,16 @@ class HostedDesktopTests(unittest.TestCase):
                 self.assertEqual((observed['before_mode'], stat.S_IMODE(path.stat().st_mode)), (0o777, 0o755))
                 with self.assertRaises(ValueError):
                     hosted.prepare_install_parent(path / 'unselected')
+
+    def test_debian_shared_fragment_ancestors_are_explicitly_prepared(self):
+        import runpy
+        source = Path(__file__).resolve().parents[4] / 'scripts/linux-package-config.py'
+        catalog = runpy.run_path(str(source))
+        destinations = [Path(value[0]) for value in catalog['OPTIONAL_FRAGMENTS'].values()
+                        if 'deb' in value[2] and value[0].startswith('/usr/share/')]
+        destinations += [Path('/usr/share/lintian/overrides'), Path('/usr/share/applications')]
+        declared = {hosted.SHARED_PARENT, *hosted.DESKTOP_PARENTS}
+        for destination in destinations:
+            for ancestor in (destination, *destination.parents):
+                if ancestor == Path('/usr/share') or Path('/usr/share') in ancestor.parents:
+                    self.assertIn(ancestor, declared, 'changed package footprint requires an explicit hosted ownership review')
