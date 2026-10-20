@@ -1,0 +1,18 @@
+[package]
+name = "desktop-settings-observer"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[[bin]]
+name = "pw-desktop-settings"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json = "1"
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+glib = "0.18"
