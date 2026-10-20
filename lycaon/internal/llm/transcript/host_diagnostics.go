@@ -16,7 +16,8 @@ const (
 	maxDiagnosticValueDepth   = 10
 )
 
-// Order preserves identities and parser locations before larger inventories.
+// Order preserves effect certainty, identities and parser locations before
+// larger inventories.
 // Executable replacements and examples are deliberately absent: partial calls
 // cannot be presented as equivalent repairs.
 var diagnosticFields = []string{
@@ -26,6 +27,8 @@ var diagnosticFields = []string{
 	"program_id", "execution_id", "node_id", "source_unit_id", "model_tool_call_id", "program_detail_ref",
 	"program_replay_limitation", "program_static_not_started", "program_static_untaken",
 	"program_progress_state", "program_progress_ref", "program_progress_ref_omitted",
+	"program_completed_details_retained_omitted", "program_unknown_details_retained_omitted", "program_stopped_details_omitted",
+	"program_stopped_details", "program_completed_details", "program_unknown_details",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
 	"field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
 	"json_unexpected_token_at", "json_unterminated_string_at", "json_trailing_text_at",
@@ -50,7 +53,15 @@ func boundedHostDiagnostics(details map[string]any, limit int) map[string]any {
 	if decoder.Decode(&source) != nil {
 		return nil
 	}
-	return projectDiagnosticFields(source, limit, 0)
+	out := projectDiagnosticFields(source, limit, 0)
+	for _, name := range []string{"program_completed_details", "program_unknown_details", "program_stopped_details"} {
+		rows, _ := source[name].([]any)
+		kept, _ := out[name].([]any)
+		if len(kept) < len(rows) {
+			out["program_effect_details_omitted"] = true
+		}
+	}
+	return out
 }
 
 func projectDiagnosticFields(source map[string]any, limit, depth int) map[string]any {
