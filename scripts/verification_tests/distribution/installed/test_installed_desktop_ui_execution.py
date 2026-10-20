@@ -42,6 +42,23 @@ def surface(children):
 
 
 class DesktopUIOwnershipTests(unittest.TestCase):
+    def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
+        class Oversized(Node):
+            reads = 0
+            @property
+            def childCount(self):
+                self.reads += 1
+                return 1025
+        oversized = Oversized(API.ROLE_FRAME)
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(CaseUnavailable) as refusal:
+            list(actor.descendants(oversized))
+        self.assertEqual(oversized.reads, 1)
+        self.assertEqual(refusal.exception.observations['desktop_inventory_bound'], {
+            'visited': 1, 'depth': 0, 'child_count': 1025,
+            'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}})
+        oversized.action.doAction.assert_not_called()
+
     def setUp(self):
         self.app = SimpleNamespace(observations={'launch_identity': IDENTITY, 'session': {}}, process=SimpleNamespace(poll=lambda: None))
         identity = patch.object(ui, 'process_identity', return_value=IDENTITY)
