@@ -10,6 +10,7 @@ MODEL = 'installed-qualification'
 LIMIT = 2 << 20
 GUI_PORT = 50179
 GUI_LABEL = 'Installed UI qualification'
+GUI_KIND = 'litellm-proxy'
 GUI_ENDPOINT = f'http://127.0.0.1:{GUI_PORT}/v1'
 
 
@@ -23,6 +24,7 @@ class ProviderFixture:
                 raise ValueError('fixture tool call has an invalid typed shape')
         self.calls = copy.deepcopy(calls)
         self.observations = []
+        self.discovery_observations = []
         self.lock = threading.Lock()
         self.server = None
         self.thread = None
@@ -85,6 +87,16 @@ class ProviderFixture:
                 self.wfile.write(raw)
 
             def do_GET(self):
+                if fixture.gui_purpose and self.path == '/v1/model/info':
+                    with fixture.lock:
+                        if len(fixture.discovery_observations) >= 64:
+                            return self.respond(429, {'error': 'fixture-discovery-bound'})
+                        fixture.discovery_observations.append({'kind': GUI_KIND, 'model': MODEL,
+                            'path': '/v1/model/info', 'structured_tools': True})
+                    return self.respond(200, {'data': [{'model_name': MODEL, 'model_info': {
+                        'mode': 'chat', 'max_input_tokens': 131072, 'supports_function_calling': True,
+                        'supports_vision': False, 'supports_reasoning': False,
+                        'supports_response_schema': False, 'supports_prompt_caching': False}}]})
                 if self.path != '/v1/models':
                     return self.respond(404, {'error': 'fixture-path-refused'})
                 self.respond(200, {'object': 'list', 'data': [

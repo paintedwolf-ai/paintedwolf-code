@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import profile_observer, profile_providers as observer
-from linux_release.installed_cases.provider import ProviderFixture, GUI_ENDPOINT, GUI_LABEL, GUI_PORT, MODEL
+from linux_release.installed_cases.provider import ProviderFixture, GUI_ENDPOINT, GUI_LABEL, GUI_PORT, GUI_KIND, MODEL
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -29,7 +29,7 @@ class ProfileProviderTests(unittest.TestCase):
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
         self.stack.enter_context(patch.object(profile_observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(profile_observer, 'engine_image', return_value=(1, 2, 3)))
-        self.row = {'id': 'owned-fixture-1', 'kind': 'openai-compatible', 'label': GUI_LABEL,
+        self.row = {'id': 'owned-fixture-1', 'kind': GUI_KIND, 'label': GUI_LABEL,
             'base_url': GUI_ENDPOINT, 'requires_api_key': False, 'api_key_env': '', 'models': [{'id': MODEL}]}
 
     def write(self, rows):
@@ -43,7 +43,7 @@ class ProfileProviderTests(unittest.TestCase):
         before = self.path.read_bytes()
         with patch.object(observer.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app)
-        self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': 'openai-compatible',
+        self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
             'requires_api_key': False, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
         self.assertEqual(self.path.read_bytes(), before)

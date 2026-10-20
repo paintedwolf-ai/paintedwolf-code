@@ -6,7 +6,7 @@ import re
 import stat
 
 from .profile_observer import profile
-from .provider import GUI_ENDPOINT, GUI_LABEL, MODEL
+from .provider import GUI_ENDPOINT, GUI_LABEL, GUI_KIND, MODEL
 from .package_payload import stable
 from .records import CaseUnavailable
 
@@ -61,7 +61,7 @@ def selected(rows):
     if not matches:
         return None
     row = matches[0]
-    if (row.get('kind') != 'openai-compatible' or row.get('base_url') != GUI_ENDPOINT
+    if (row.get('kind') != GUI_KIND or row.get('base_url') != GUI_ENDPOINT
             or row.get('requires_api_key') is not False or row.get('api_key_env', '') != ''
             or row.get('ambient_auth', '') != ''):
         raise ValueError('owned GUI provider differs from its fixed keyless transport')
@@ -72,7 +72,7 @@ def selected(rows):
     identifiers = [model['id'] for model in models]
     if len(set(identifiers)) != len(identifiers) or any(value != MODEL for value in identifiers):
         raise ValueError('owned GUI provider model identities are ambiguous')
-    return {'provider_id': row['id'], 'kind': 'openai-compatible', 'requires_api_key': False,
+    return {'provider_id': row['id'], 'kind': GUI_KIND, 'requires_api_key': False,
             'models': identifiers, 'observer': 'owned-provider-YAML'}
 
 

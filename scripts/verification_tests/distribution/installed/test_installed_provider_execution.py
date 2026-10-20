@@ -58,3 +58,24 @@ class InstalledProviderTests(unittest.TestCase):
             fixture.completion(self.request())
         with self.assertRaises(ValueError):
             fixture.completion(self.request())
+
+    def test_gui_discovery_uses_existing_typed_litellm_model_info_protocol_only(self):
+        with ProviderFixture([{'name': 'command', 'arguments': {}}]) as fixture:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with self.assertRaises(urllib.error.HTTPError) as refused:
+                opener.open(fixture.base_url + '/model/info', timeout=5)
+            self.assertEqual(refused.exception.code, 404)
+            fixture.gui_purpose = True
+            with opener.open(fixture.base_url + '/model/info', timeout=5) as response:
+                row = json.load(response)['data'][0]
+            self.assertEqual(row['model_name'], MODEL)
+            self.assertIs(row['model_info']['supports_function_calling'], True)
+            self.assertEqual(row['model_info']['mode'], 'chat')
+            self.assertEqual(row['model_info']['max_input_tokens'], 131072)
+            self.assertIs(row['model_info']['supports_vision'], False)
+            self.assertEqual(fixture.discovery_observations, [{'kind': 'litellm-proxy',
+                'model': MODEL, 'path': '/v1/model/info', 'structured_tools': True}])
+            fixture.discovery_observations *= 64
+            with self.assertRaises(urllib.error.HTTPError) as flooded:
+                opener.open(fixture.base_url + '/model/info', timeout=5)
+            self.assertEqual(flooded.exception.code, 429)
