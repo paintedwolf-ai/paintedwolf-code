@@ -129,7 +129,7 @@ class Actor:
                 or (info.st_dev, info.st_ino) != (self.value['qmp']['device'], self.value['qmp']['inode'])):
             raise ValueError('leased QMP socket changed identity')
         if self.connection is not None:
-            peer = struct.unpack('3i', self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+            peer = struct.unpack('iII', self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
             if peer[:2] != (pid, uid):
                 raise ValueError('QMP connection is not the leased process')
 
