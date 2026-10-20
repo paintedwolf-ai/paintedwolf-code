@@ -17,6 +17,11 @@ let
     preBuild = "";
     buildPhase = ''
       runHook preBuild
+      # go-licenses resolves local replacement roots from go.mod, while the
+      # offline build resolves packages from vendor. Keep both attributions on
+      # the same reviewed vendored copy for this inventory only.
+      substituteInPlace go.mod vendor/modules.txt \
+        --replace-fail '../third_party/gotreesitter' './vendor/github.com/odvcencio/gotreesitter'
       packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
       ignored=(--ignore=github.com/lycaon/lycaon --ignore=github.com/deitch/magic
         --ignore=github.com/alecthomas/chroma/v2)
