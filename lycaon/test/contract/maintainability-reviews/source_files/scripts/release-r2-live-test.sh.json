@@ -4,12 +4,14 @@
   "kind": "module",
   "workstream": "linux-nix-cache-admission",
   "disposition": "retain",
-  "reason": "Retain the existing isolated R2 rehearsal owner at 370 code lines, including eight lines that dispatch the whole local Nix cache rehearsal to its own adapter before credential setup. No Nix cache lifecycle is added to the R2 controller. Native Nix 2.35.3 exercised disposable signatures, cold closure import, corruption, missing dependencies, rotation, wrong architecture, and production fixture refusal at the reviewed commit. The complete dispatch and focused admission/rehearsal boundaries are pinned; no growth allowance is retained.",
-  "reviewed_commit": "9a39be6850ca9880353daf14b084210687a6bf4f",
-  "ceiling": 370,
+  "reason": "Retain the measured 390-line isolated R2 transaction at this exact bound. Five literal local component dispatches delegate Nix cache, native repositories, pacman construction, signing and extracted-package diagnostics before the existing credentialed transaction. They add no dynamic module, arbitrary command or publication authority. The coherent 645-test run, existing native repository/cache fixtures and actual scoped package diagnostic cover the composed boundaries. The credentialed lifecycle remains one cleanup transaction; no future growth allowance is retained.",
+  "reviewed_commit": "16fde7134a5239b4504534fe4a0fa26f4d6420af",
+  "ceiling": 390,
   "boundaries": {
-    "scripts/release-r2-live-test.sh": "13ae08e3387eae0364e46829a123d1b9a4e3c42d41c85aaec741239c36cd5bdb",
+    "scripts/release-r2-live-test.sh": "3bda3746eb1e48b2009643fe73463667f347ecb9798dd4cab40dad2cae95bbf9",
     "scripts/nix_cache/rehearsal.py": "33894bea868017038316ef3decae730637db7070c078d79efcd54e366df40a0d",
-    "scripts/verification_tests/distribution/test_nix_cache_execution.py": "ccb1be139050c27a8773b67c72a106d28bce0ba95dde5826c239a917ab3377ca"
+    "scripts/verification_tests/distribution/test_nix_cache_execution.py": "ccb1be139050c27a8773b67c72a106d28bce0ba95dde5826c239a917ab3377ca",
+    "scripts/linux_release/package_probe.py": "f4e349f56f1c743a51a242ba8c9945fa5b4214bbfd9aae44b3319d309565e2d9",
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "55822efb209e9b8e0b7cca6fb62ab0463c3e50f4b148f4c110f8904615df9cf2"
   }
 }

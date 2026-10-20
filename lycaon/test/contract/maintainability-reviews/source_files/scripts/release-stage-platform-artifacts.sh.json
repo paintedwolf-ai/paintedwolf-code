@@ -4,13 +4,15 @@
   "kind": "construction",
   "workstream": "linux-release-staging",
   "disposition": "retain",
-  "reason": "Retain the measured 465-line cross-platform final-artifact staging transaction under a bounded 480-line ceiling. The composed source delegates ELF structure and ABI policy to its audit adapter, and native pacman archive parsing, dependency identity and family inventory to named adapters. Its added orchestration preserves complete-tree audit and immutable final filenames. The ABI and pacman behavior suites plus release-channel invariant contract support the boundary; the changed reusable-workflow contract pin remains stale until focused verification, rather than being renewed automatically. Reconsider further growth.",
-  "reviewed_commit": "0dad2dd4a7c3be3ad4ccd9ab46a41ab201930d4e",
+  "reason": "Retain the measured 466-line complete cross-platform staging transaction within the existing 480-line ceiling. ELF/ABI and pacman format policy remain in named adapters; the fixed extracted-engine diagnostic delegates exact sealed input authority, transient userns attachment and process/profile cleanup to package_probe. The coherent 645-test run and actual restricted-kernel retained-package differential support this boundary. The older Go release-channel contract pin remains deliberately unchanged because this cohort did not run that Go scope; no claim of renewed Go evidence is made. Reconsider additional orchestration growth.",
+  "reviewed_commit": "16fde7134a5239b4504534fe4a0fa26f4d6420af",
   "ceiling": 480,
   "boundaries": {
     "scripts/verification_tests/distribution/test_linux_abi_execution.py": "8c1ff7423a3075089c9906ad0f628d6d57c046d8036414d6fe1e833fb1116965",
     "lycaon/test/contract/runner/release_channel_invariants_test.go": "4c71e5079c6c3e5b05cc033b5ec4a1f0e9591eb7af2b164583a5f5a48d9eb84d",
     "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
-    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "507a51ee4edaa661eb1157817f0d8ec0525b59c3e30676a80ada198534348cb9"
+    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "507a51ee4edaa661eb1157817f0d8ec0525b59c3e30676a80ada198534348cb9",
+    "scripts/linux_release/package_probe.py": "f4e349f56f1c743a51a242ba8c9945fa5b4214bbfd9aae44b3319d309565e2d9",
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "55822efb209e9b8e0b7cca6fb62ab0463c3e50f4b148f4c110f8904615df9cf2"
   }
 }
