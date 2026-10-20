@@ -138,7 +138,8 @@ fn apply(app: &AppHandle, frame: Frame) {
             .or_default()
             .insert(key.into(), value);
     }
-    emit(app, state().settings.replace_snapshot(snapshot));
+    let emissions = state().settings.replace_snapshot(snapshot);
+    emit(app, emissions);
 }
 fn emit(app: &AppHandle, emissions: Vec<Emission>) {
     for emission in emissions {
