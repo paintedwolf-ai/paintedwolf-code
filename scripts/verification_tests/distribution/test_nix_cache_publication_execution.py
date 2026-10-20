@@ -315,6 +315,28 @@ class CachePublicHTTPTests(unittest.TestCase):
             transport.put("object.narinfo", path, record)
             transport.put_bytes.assert_called_once_with("object.narinfo", b"incoming", "text/plain", "no-store")
 
+    def test_rehearsal_uses_explicit_bucket_credentials_without_account_token(self):
+        environment = {"R2_BUCKET": "test-bucket", "DOWNLOAD_BASE_URL": "https://test.example",
+                       "RELEASE_R2_TRANSPORT": "s3", "R2_S3_ENDPOINT": "https://" + "a" * 32 + ".eu.r2.cloudflarestorage.com",
+                       "AWS_ACCESS_KEY_ID": "bucket-access", "AWS_SECRET_ACCESS_KEY": "bucket-secret",
+                       "AWS_SESSION_TOKEN": "temporary", "AWS_PROFILE": "production", "CLOUDFLARE_API_TOKEN": "broad"}
+        request = {"mode": "rehearsal", "cache_prefix": "release-system-tests/fixture/nix-cache"}
+        with patch.dict("os.environ", environment, clear=True), patch("scripts.nix_cache.r2.subprocess.run") as external:
+            transport = R2Transport(request)
+            external.assert_not_called()
+            self.assertEqual(transport.endpoint, environment["R2_S3_ENDPOINT"])
+            self.assertEqual(transport.environment["AWS_ACCESS_KEY_ID"], "bucket-access")
+            self.assertEqual(transport.environment["AWS_SESSION_TOKEN"], "temporary")
+            self.assertNotIn("AWS_PROFILE", transport.environment)
+            self.assertNotIn("CLOUDFLARE_API_TOKEN", transport.environment)
+            for changes in [{"AWS_SECRET_ACCESS_KEY": ""}, {"R2_S3_ENDPOINT": "https://foreign.example"}]:
+                with self.subTest(changes=changes), patch.dict("os.environ", changes), self.assertRaises(ValueError):
+                    R2Transport(request)
+            with patch.dict("os.environ", {"DOWNLOAD_BASE_URL": "https://downloads.paintedwolf.dev"}), \
+                    self.assertRaisesRegex(ValueError, "limited to isolated rehearsals"):
+                R2Transport({"mode": "production", "cache_prefix": "nix-cache"})
+            external.assert_not_called()
+
     def test_r2_listing_is_complete_and_foreign_production_domain_refuses_before_credentials(self):
         transport = R2Transport.__new__(R2Transport)
         transport.prefix = "nix-cache"

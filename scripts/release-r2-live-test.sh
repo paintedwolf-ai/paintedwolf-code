@@ -3,6 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --r2-nix-cache && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.rehearsal_r2
+fi
 if [[ "${1:-}" == --local-nix-cache && $# -eq 1 ]]; then
   cd "${ROOT}"
   exec python3 -m scripts.nix_cache.rehearsal

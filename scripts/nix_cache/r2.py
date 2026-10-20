@@ -47,28 +47,45 @@ class R2Transport:
         if self.prefix != "nix-cache" and not re.fullmatch(r"release-system-tests/[A-Za-z0-9_-]+/nix-cache", self.prefix):
             raise ValueError("R2 cache requires its dedicated production or rehearsal prefix")
         self.bucket = os.environ["R2_BUCKET"]
-        self.account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
-        if not re.fullmatch(r"[a-f0-9]{32}", self.account) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", self.bucket):
-            raise ValueError("cache storage account or bucket is invalid")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", self.bucket):
+            raise ValueError("cache storage bucket is invalid")
         self.public = os.environ["DOWNLOAD_BASE_URL"].rstrip("/") + "/" + self.prefix
         if request["mode"] == "production" and self.public != "https://downloads.paintedwolf.dev/nix-cache":
             raise ValueError("production cache delivery must use the selected product domain")
         parsed = urllib.parse.urlsplit(self.public)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("cache delivery requires an explicit HTTPS domain")
-        # Reuse the repository's token-to-S3 authority rather than inventing credentials.
-        script = 'source "$1"; r2_s3_require_env; python3 -c \'import json,os; print(json.dumps({k:v for k,v in os.environ.items() if k.startswith("AWS_")}))\''
-        result = subprocess.run(["bash", "-euc", script, "nix-cache", str(ROOT / "scripts/release-r2-rest.sh")],
-                                capture_output=True, text=True, timeout=120)
-        if result.returncode:
-            raise ValueError("cache R2 authority initialization failed")
-        selected = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION",
-                    "AWS_REQUEST_CHECKSUM_CALCULATION", "AWS_RESPONSE_CHECKSUM_VALIDATION"}
-        credentials = {key: value for key, value in json.loads(result.stdout.splitlines()[-1]).items() if key in selected}
-        self.environment = {key: value for key, value in os.environ.items() if not key.startswith("AWS_")}
+        if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+            if request["mode"] != "rehearsal":
+                raise ValueError("explicit S3 cache credentials are limited to isolated rehearsals")
+            self.endpoint = os.environ.get("R2_S3_ENDPOINT", "")
+            if not re.fullmatch(r"https://[a-f0-9]{32}(?:\.(?:eu|us|fedramp))?\.r2\.cloudflarestorage\.com", self.endpoint):
+                raise ValueError("cache rehearsal requires the explicit R2 S3 endpoint")
+            credentials = {key: os.environ[key] for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
+                           if os.environ.get(key)}
+            if not {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} <= credentials.keys():
+                raise ValueError("cache rehearsal requires bucket-scoped S3 credentials")
+            credentials.update(AWS_DEFAULT_REGION="auto", AWS_REQUEST_CHECKSUM_CALCULATION="when_required",
+                               AWS_RESPONSE_CHECKSUM_VALIDATION="when_required")
+        else:
+            account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+            if not re.fullmatch(r"[a-f0-9]{32}", account):
+                raise ValueError("cache storage account is invalid")
+            script = 'source "$1"; r2_s3_require_env; python3 -c \'import json,os; print(json.dumps({k:v for k,v in os.environ.items() if k.startswith("AWS_")}))\''
+            result = subprocess.run(["bash", "-euc", script, "nix-cache", str(ROOT / "scripts/release-r2-rest.sh")],
+                                    capture_output=True, text=True, timeout=120)
+            if result.returncode:
+                raise ValueError("cache R2 authority initialization failed")
+            selected = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION",
+                        "AWS_REQUEST_CHECKSUM_CALCULATION", "AWS_RESPONSE_CHECKSUM_VALIDATION"}
+            credentials = {key: value for key, value in json.loads(result.stdout.splitlines()[-1]).items() if key in selected}
+            self.endpoint = f"https://{account}.r2.cloudflarestorage.com"
+        self.environment = {key: value for key, value in os.environ.items()
+                            if not key.startswith(("AWS_", "CLOUDFLARE_"))}
+        if os.environ.get("RELEASE_R2_TRANSPORT") != "s3":
+            self.environment.update({key: value for key, value in os.environ.items() if key.startswith("CLOUDFLARE_")})
         self.environment.update(credentials, AWS_CONFIG_FILE="/dev/null", AWS_SHARED_CREDENTIALS_FILE="/dev/null",
-                                AWS_PAGER="", AWS_EC2_METADATA_DISABLED="true")
-        self.endpoint = f"https://{self.account}.r2.cloudflarestorage.com"
+                                AWS_PAGER="", AWS_CLI_AUTO_PROMPT="off", AWS_EC2_METADATA_DISABLED="true")
 
     def _aws(self, *arguments) -> str:
         result = subprocess.run(["aws", "s3api", *arguments, "--bucket", self.bucket, "--endpoint-url", self.endpoint],
