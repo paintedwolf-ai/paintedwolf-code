@@ -59,3 +59,25 @@ class InstalledQualificationProducerTests(unittest.TestCase):
                 producer.retain_verified(args,{},"a"*40,{},b"drivers",{"selections":{}},Path(temporary))
             admission.assert_not_called()
             self.assertFalse(args.output.exists())
+
+    def test_stale_guest_nonce_refuses_before_campaign_admission(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            execution=root/"executed"
+            leaf=execution/"guest/leaf"
+            leaf.mkdir(parents=True)
+            target={"id":"guest","artifact_id":"app","environment_id":"fixture"}
+            plan={"targets":[target]}
+            (execution/"plan.json").write_text(json.dumps(plan))
+            (execution/"driver-registry.json").write_bytes(b"drivers")
+            receipt={"format_version":1,"execution_nonce":"1"*32,"source_commit":"b"*40,
+                     "driver_tree":"a"*40,"artifact_id":"app","environment_id":"fixture","variant_id":None}
+            (execution/"guest/execution-request.json").write_text(json.dumps(receipt))
+            receipt["execution_nonce"]="2"*32
+            (leaf/"execution.json").write_text(json.dumps(receipt))
+            args=argparse.Namespace(execution=execution,output=root/"raw")
+            with patch.object(producer,"validate_inputs",return_value=plan), \
+                    patch.object(producer,"admit") as admission,self.assertRaisesRegex(ValueError,"stale"):
+                producer.retain_verified(args,{},"a"*40,{},b"drivers",{"source_commit":"b"*40},root/"fresh")
+            admission.assert_not_called()
+            self.assertFalse(args.output.exists())
