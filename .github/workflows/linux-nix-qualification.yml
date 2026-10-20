@@ -11,6 +11,12 @@ on:
         description: Frozen commit available at refs/qualification/<commit>
         type: string
         required: true
+      component:
+        description: Fixed nonpublishing qualification scope
+        type: choice
+        options: [default, scanner-finalized]
+        default: default
+        required: true
 
 permissions:
   contents: read
@@ -199,20 +205,23 @@ jobs:
           (Path(os.environ['PW_ARTIFACT_ROOT'])/'scanner-builder-permission.json').write_text(json.dumps(evidence, indent=2)+'\n')
           SCANNER_PY
 
-      - name: Evaluate and build the native application closure
+      - name: Evaluate and build the selected native component
         working-directory: ${{ steps.source.outputs.path }}
         env:
           PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+          COMPONENT: ${{ inputs.component || 'default' }}
         run: |
           set -euo pipefail
-          ./task nix:check
-          ./task nix:build -- --archive-dir "$RUNNER_TEMP/nix-closure"
+          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized ]]
+          ./task nix:check -- --component "$COMPONENT"
+          ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure"
 
       - name: Bind the retained closure to the selected source
         working-directory: ${{ steps.source.outputs.path }}
         env:
           EXPECTED_TREE: ${{ steps.source.outputs.tree }}
           PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+          COMPONENT: ${{ inputs.component || 'default' }}
         run: |
           set -euo pipefail
           python3 - <<'CI_PY'
@@ -220,7 +229,8 @@ jobs:
           from pathlib import Path
           evidence = Path(os.environ['PW_ARTIFACT_ROOT'])
           reports = [json.loads(path.read_text()) for path in (evidence/'nix').glob('build-*.json')]
-          reports = [report for report in reports if report.get('component') == 'default']
+          component = os.environ['COMPONENT']
+          reports = [report for report in reports if report.get('component') == component]
           if len(reports) != 1:
               raise SystemExit('Expected exactly one native closure build report')
           report = reports[0]
@@ -235,7 +245,11 @@ jobs:
                       'controller_commit': os.environ['GITHUB_SHA'],
                       'execution': 'native', 'publication': 'nonrelease',
                       'scope': 'Nix closure build; installed desktop qualification is separate'}
-          (evidence/'qualification-source.json').write_text(json.dumps(manifest, indent=2)+'\n')
+          name = 'qualification-source.json'
+          if component != 'default':
+              name = 'component-source.json'
+              manifest.update(component=component, scope='Finalized scanner component; no application closure or installed qualification')
+          (evidence/name).write_text(json.dumps(manifest, indent=2)+'\n')
           CI_PY
           uname -a > "$PW_ARTIFACT_ROOT/kernel.txt"
           cp /etc/os-release "$PW_ARTIFACT_ROOT/os-release"
@@ -244,7 +258,7 @@ jobs:
       - name: Retain the nonrelease native closure
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: nix-closure-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          name: nix-${{ inputs.component == 'scanner-finalized' && 'scanner-finalized' || 'closure' }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
           path: ${{ runner.temp }}/nix-closure
           if-no-files-found: error
           retention-days: 14
