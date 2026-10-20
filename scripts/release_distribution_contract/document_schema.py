@@ -180,8 +180,10 @@ def validate(document):
     require(isinstance(aur, dict) and type(aur.get("enabled")) is bool, "AUR requires an explicit availability state")
     if aur["enabled"]:
         exact(aur, {"enabled", "git_url", "commit", "source_sha256", "package_sha256"})
-        require(aur["git_url"] in {"https://aur.archlinux.org/painted-wolf-code.git",
-                                   "https://aur.archlinux.org/painted-wolf-code-bin.git"}, "foreign AUR source")
+        origins = ({"https://aur.archlinux.org/painted-wolf-code.git",
+                    "https://aur.archlinux.org/painted-wolf-code-bin.git"} if document["channel"] == "stable"
+                   else {"https://aur.archlinux.org/painted-wolf-code-preview-bin.git"})
+        require(aur["git_url"] in origins, "foreign or cross-channel AUR source")
         digest(aur["commit"], 40)
         digest(aur["source_sha256"])
         digest(aur["package_sha256"])

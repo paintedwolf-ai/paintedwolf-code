@@ -93,6 +93,21 @@ class DistributionDocumentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(document)
 
+    def test_aur_origins_are_fixed_and_channel_bound(self):
+        stable = self.construct()
+        preview = json.loads(json.dumps(stable).replace('1.2.3', '1.2.4-rc.1'))
+        preview['channel'] = 'preview'
+        for document, names in [(stable, ['painted-wolf-code', 'painted-wolf-code-bin']),
+                                 (preview, ['painted-wolf-code-preview-bin'])]:
+            for name in names:
+                document['aur'] = {'enabled': True, 'git_url': 'https://aur.archlinux.org/' + name + '.git',
+                                   'commit': 'e' * 40, 'source_sha256': 'f' * 64, 'package_sha256': 'a' * 64}
+                self.assertIs(validate(document), document)
+            for url in ['https://foreign.invalid/package.git',
+                        'https://aur.archlinux.org/' + ('painted-wolf-code-preview-bin' if document is stable else 'painted-wolf-code-bin') + '.git']:
+                document['aur']['git_url'] = url
+                with self.assertRaises(ValueError):
+                    validate(document)
     def prepare(self, name, signer=None):
         return document_signing.prepare(self.root / name, self.request, self.catalog, self.updater, self.artifacts,
             authorize=lambda binding: True, registry={}, signer=signer or (lambda path, number, registry: 'fixture signature'))
