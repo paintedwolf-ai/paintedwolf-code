@@ -59,7 +59,7 @@ class InstalledOnboardingTests(unittest.TestCase):
             selected = onboarding.controls(window, API)
             facts = onboarding.complete((123, IDENTITY, selected), OWNER)
             self.assertEqual(facts['mode'], 'create' if create else 'unlock')
-            self.assertFalse(facts['password_retained'])
+            self.assertFalse(facts['password_in_evidence'])
             self.assertNotIn(onboarding._password, repr(facts))
             for field in fields:
                 field.editor.setTextContents.assert_called_once_with(onboarding._password)

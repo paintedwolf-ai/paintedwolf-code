@@ -15,7 +15,8 @@ import time
 from ..installed_runtime import unchanged
 from .app import InstalledApp
 from .ipc import system_v_isolation
-from .lifecycle import background_cancel, detached_cleanup, host_execution_lifetime
+from .lifecycle import background_cancel
+from .crash import detached_cleanup, host_execution_lifetime
 from .kernel import private_shared_memory, restricted_namespaces
 from .process import run
 from .products import require_owned_guest
