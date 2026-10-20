@@ -166,4 +166,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == '--diagnose-guest-input':
+        from .installed_input.diagnostic import main as diagnostic_input_main
+        raise SystemExit(diagnostic_input_main(sys.argv[2:]))
     raise SystemExit(main())

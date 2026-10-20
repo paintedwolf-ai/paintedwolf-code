@@ -12,7 +12,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 from contextlib import nullcontext
 
 from . import installed_evidence as evidence
@@ -22,7 +21,7 @@ from .installed_transfer import receive
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, snapshot, aggregate
 from .installed_capacity import limits
-from .installed_input.controller import Bridge, adapter, verify_deliveries
+from .installed_input.controller import Bridge, adapter, verify_deliveries, run_managed
 
 PLAN_FORMAT_VERSION = 3
 
@@ -78,24 +77,11 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
         '--binding', json.dumps(request, sort_keys=True, separators=(',', ':')),
         '--vm-id', selected_input['vm_id']]) if selected_input else None
     context = Bridge(selected_input, request, mailbox_command, directory) if selected_input else nullcontext()
-    with context as bridge, (directory / "managed-execution.log").open("xb") as log:
+    with context as bridge:
         if bridge is not None and bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
             raise ValueError('fixed native input lease differs from selected SSH guest')
-        result = subprocess.Popen(command(target, arguments), stdout=log, stderr=subprocess.STDOUT)
-        try:
-            while result.poll() is None:
-                if bridge is not None:
-                    bridge.require_healthy()
-                time.sleep(0.1)
-        except BaseException:
-            result.terminate()
-            try:
-                result.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                result.kill()
-                result.wait(timeout=5)
-            raise
-    if result.returncode not in {0, 1}:
+        returncode = run_managed(bridge, command(target, arguments), directory / 'managed-execution.log')
+    if returncode not in {0, 1}:
         raise ValueError("guest managed execution failed before retaining an installed campaign")
     archive = directory / "leaf.zip"
     with archive.open("xb") as stream, (directory / "transfer.log").open("xb") as log:

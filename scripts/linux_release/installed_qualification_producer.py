@@ -121,7 +121,10 @@ def retain_verified(args, producer, tree, catalog, drivers, preparation, fresh):
         raise ValueError("only a complete freshly admitted actual installed campaign may be retained")
     for target in plan["targets"]:
         directory = args.execution / target["id"]
-        for name in ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/variant.json", "leaf/driver-registry.json", "leaf/execution.json", "leaf/environment-facts.json", "execution-request.json"):
+        required = ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/variant.json", "leaf/driver-registry.json", "leaf/execution.json", "leaf/environment-facts.json", "execution-request.json")
+        if target.get('input_adapter') is not None:
+            required += ('native-input.jsonl', 'native-input-transport.log')
+        for name in required:
             path = directory / name
             if not path.is_file() or path.is_symlink():
                 raise ValueError("raw qualification omitted a selected guest execution receipt")
