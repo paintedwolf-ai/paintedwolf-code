@@ -115,8 +115,10 @@ class Bridge:
         self.process.stdin.write(protocol.canonical(document))
         self.process.stdin.flush()
         raw = bytearray()
+        deadline = time.monotonic() + 5
         while len(raw) <= protocol.MAX_DOCUMENT:
-            if not self.selector.select(5):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not self.selector.select(remaining):
                 raise ValueError('fixed native input guest transport exceeded its bounded response time')
             char = os.read(self.process.stdout.fileno(), 1)
             if not char:

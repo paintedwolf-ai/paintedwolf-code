@@ -9,6 +9,28 @@ from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
 
+class _InventoryChanged(Exception):
+    pass
+
+
+def retry_inventory(app, error) -> bool:
+    domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
+    native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
+              and type(code) is int and 0 <= code < 1 << 31)
+    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
+        return False
+    expected = app.observations['launch_identity']
+    try:
+        actual = process_identity(expected['pid'])
+    except (FileNotFoundError, ProcessLookupError):
+        raise CaseFailed('captured installed desktop disappeared during native observation') from None
+    if actual != expected:
+        raise CaseFailed('captured installed desktop identity changed during native observation')
+    app.observations['desktop_inventory_retry'] = {'exception_type': type(error).__name__,
+        **({'domain': domain, 'code': code} if native else {})}
+    return True
+
+
 def owned_process(pid: int, app) -> bool:
     if type(pid) is not int or pid <= 1:
         return False
@@ -106,6 +128,8 @@ class DesktopUI:
             node, depth = pending.pop()
             visited += 1
             count = node.childCount
+            if type(count) is int and count == -1:
+                raise _InventoryChanged()
             if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
                 error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
                 error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
@@ -137,13 +161,7 @@ class DesktopUI:
             except (ValueError, TypeError):
                 raise
             except Exception as error:
-                domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
-                native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
-                          and type(code) is int and 0 <= code < 1 << 31)
-                if isinstance(error, IndexError) or native:
-                    self.app.observations['desktop_inventory_retry'] = {
-                        'exception_type': type(error).__name__,
-                        **({'domain': domain, 'code': code} if native else {})}
+                if retry_inventory(self.app, error):
                     time.sleep(0.05)
                     continue
                 refusal = CaseUnavailable('normal-native-control-inventory-unavailable')
@@ -193,10 +211,10 @@ class DesktopUI:
             refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
             raise refusal from None
 
-    def interactive(self) -> dict | None:
+    def interactive(self, deadline=None) -> dict | None:
         controls = {self.api.ROLE_PUSH_BUTTON, self.api.ROLE_ENTRY, self.api.ROLE_PASSWORD_TEXT}
         decoration = {'Close', 'Minimize', 'Maximize', 'Restore'}
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + 15 if deadline is None else deadline
         for identity, window in self.windows(deadline):
             if window.getRole() != self.api.ROLE_FRAME:
                 continue
@@ -220,7 +238,15 @@ def interactive_window(app, timeout=30) -> dict:
     try:
         with DesktopUI(app) as ui:
             while app.process.poll() is None and time.monotonic() < deadline:
-                witness = ui.interactive()
+                try:
+                    witness = ui.interactive(deadline)
+                except (ValueError, CaseUnavailable):
+                    raise
+                except Exception as error:
+                    if retry_inventory(app, error):
+                        time.sleep(0.05)
+                        continue
+                    raise
                 if witness is not None:
                     return witness
                 time.sleep(0.05)
