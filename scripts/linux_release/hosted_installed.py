@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,11 +16,11 @@ from .hosted_installed_plan import controller, read as selection
 from .installed_artifact_bundle import Limits, retain_tree
 from .installed_campaign import verify_execution_receipt
 from .installed_capacity import limits
-from .installed_environment import package_inventory, release
+from .installed_environment import release
 from .installed_evidence import artifacts
 from .installed_execution import read
 from .installed_results import admit
-from .installed_runtime import bind, file_identity
+from .installed_runtime import file_identity, stable
 from .installed_variants import requirements
 from .support_matrix import CATALOG
 
@@ -75,6 +74,8 @@ def candidate_package(selected: dict, candidate: Path):
 
 
 def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dict:
+    if selected.get('partial') is not False:
+        raise ValueError('complete hosted preparation requires its independently selected complete candidate')
     account = context(selected, checkout, facts)
     if ROOT.exists() or ROOT.is_symlink() or INSTALL.exists() or INSTALL.is_symlink():
         raise ValueError('hosted installation must preserve any existing runtime or campaign')
@@ -96,19 +97,6 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
     if (command(['/usr/bin/dpkg-deb', '--field', str(target), 'Package']) != 'painted-wolf-code'
             or command(['/usr/bin/dpkg-deb', '--field', str(target), 'Architecture']) != selected['architecture']):
         raise ValueError('hosted package native metadata differs from its selected package and CPU')
-    command(['/usr/bin/apt-get', 'install', '-y', str(target)])
-    bind(final, selected['source_commit'], artifact['id'], packages, INSTALL)
-    replacement = ROOT / 'owned-marker.json'
-    fresh(replacement, json.dumps({**expected_marker, 'package': str(INSTALL)}) + '\n', 0o444)
-    current = marker.lstat()
-    stable = lambda item: (item.st_dev, item.st_ino, item.st_mode, item.st_uid, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
-    if stable(current) != stable(info):
-        raise ValueError('hosted ownership marker changed during package installation')
-    os.replace(replacement, marker)
-    inventory = package_inventory('deb')
-    if inventory['exit_code'] != 0:
-        raise ValueError('hosted installed package snapshot could not be observed')
-    snapshot = {'kind': 'package-inventory', 'value': hashlib.sha256(json.dumps(inventory, sort_keys=True).encode()).hexdigest(), 'channel': None}
     catalog = read(CATALOG)
     environment = 'ubuntu-floor-gnome-x11'
     variants = [item for item in requirements(catalog, environment, 'windowing')
@@ -119,11 +107,16 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
     request = {'format_version': 1, 'execution_nonce': nonce, 'source_commit': selected['source_commit'],
                'driver_tree': selected['controller_tree'], 'artifact_id': artifact['id'],
                'environment_id': environment, 'variant_id': variants[0]['id']}
-    inputs = {'native_packages': {'format_version': 1, 'current_package': str(target)}}
+    inputs = {'native_packages': {'format_version': 1, 'current_package': str(target),
+                                 'installation': {'operation': 'fresh-install', 'expected_absent': True}}}
     output = Path(account.pw_dir) / 'installed-observations'
     if output.exists() or output.is_symlink():
         raise ValueError('hosted graphical account already owns an installed observation campaign')
-    contract = {**request, 'snapshot': snapshot, 'output': str(output), 'user': USER,
+    bootstrap = Path(account.pw_dir) / 'native-bootstrap'
+    if bootstrap.exists() or bootstrap.is_symlink():
+        raise ValueError('hosted graphical account already owns a bootstrap transaction')
+    contract = {**request, 'snapshot': None, 'output': str(output), 'user': USER,
+                'bootstrap_output': str(bootstrap), 'bootstrap_frozen': False,
                 'controller_commit': selected['controller_commit'], 'candidate_selection': producer}
     for name, value in [('final-artifacts.json', final), ('case-inputs.json', inputs),
                         ('execution-request.json', request), ('contract.json', contract)]:
@@ -131,11 +124,54 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
     return contract
 
 
+def freeze(selected: dict, checkout: Path, facts: dict) -> dict:
+    """Freeze preparation observations before the qualifying fresh-install leaf."""
+    from .installed_cases.native_bootstrap import verify
+    if selected.get('partial') is not False:
+        raise ValueError('complete hosted snapshot freeze refuses partial diagnostic packages')
+    account = context(selected, checkout, facts)
+    contract_path = ROOT / 'contract.json'
+    original_identity = (stable(contract_path.lstat()), file_identity(contract_path))
+    original_bytes = contract_path.read_bytes()
+    contract = read(contract_path)
+    if (contract['controller_commit'] != selected['controller_commit'] or contract['bootstrap_frozen'] is not False
+            or contract['snapshot'] is not None or Path(contract['bootstrap_output']) != Path(account.pw_dir) / 'native-bootstrap'):
+        raise ValueError('hosted bootstrap differs from its pending preparation contract')
+    original = Path(contract['bootstrap_output'])
+    info = original.lstat()
+    if (original.resolve() != original or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != account.pw_uid or stat.S_IMODE(info.st_mode) != 0o700):
+        raise ValueError('hosted bootstrap is not the fresh graphical user transaction')
+    request, final = read(ROOT / 'execution-request.json'), read(ROOT / 'final-artifacts.json')
+    from .installed_input.protocol import binding as execution_binding
+    execution_binding(request)
+    if (request['source_commit'] != selected['source_commit'] or request['driver_tree'] != selected['controller_tree']
+            or any(request[key] != contract[key] for key in request)):
+        raise ValueError('hosted bootstrap request differs from its selected preleaf execution')
+    from .hosted_bootstrap import verify as verify_supervision
+    verify_supervision(ROOT, selected, account, request)
+    artifact = artifacts(final, selected['source_commit'])[contract['artifact_id']]
+    retained = ROOT / 'bootstrap'
+    retain_tree(original, retained, root_files={'bootstrap.json'}, root_dirs={'evidence'},
+                limits=Limits(max_files=64, max_bytes=64 << 20, max_file=32 << 20))
+    observed = verify(retained, request, artifact)
+    contract.update(snapshot=observed['snapshot'], bootstrap_frozen=True)
+    replacement = ROOT / 'frozen-contract.json'
+    fresh(replacement, json.dumps(contract, sort_keys=True, indent=2) + '\n', 0o444)
+    if ((stable(contract_path.lstat()), file_identity(contract_path)) != original_identity or contract_path.read_bytes() != original_bytes):
+        raise ValueError('hosted bootstrap contract changed before snapshot freeze')
+    os.replace(replacement, ROOT / 'contract.json')
+    return contract
+
+
 def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
+    if selected.get('partial') is not False:
+        raise ValueError('complete hosted campaign retention refuses partial diagnostic packages')
     account = context(selected, checkout, facts)
     contract, final = read(ROOT / 'contract.json'), read(ROOT / 'final-artifacts.json')
     if (contract['controller_commit'] != selected['controller_commit'] or contract['source_commit'] != selected['source_commit']
-            or Path(contract['output']) != Path(account.pw_dir) / 'installed-observations'):
+            or Path(contract['output']) != Path(account.pw_dir) / 'installed-observations'
+            or contract.get('bootstrap_frozen') is not True):
         raise ValueError('hosted execution contract differs from the selected controller and account')
     if output.exists() or output.is_symlink() or output.resolve().is_relative_to(checkout.resolve()):
         raise ValueError('hosted evidence requires a fresh independent retention path')
@@ -143,6 +179,10 @@ def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
     bound = limits(catalog, final)
     capacity = Limits(**{key: bound[key] for key in ('max_files', 'max_bytes', 'max_file')})
     output.mkdir(mode=0o755)
+    retain_tree(ROOT / 'bootstrap', output / 'bootstrap', root_files={'bootstrap.json'}, root_dirs={'evidence'},
+                limits=Limits(max_files=64, max_bytes=64 << 20, max_file=32 << 20))
+    for name in ('bootstrap-supervision.json', 'bootstrap-invocation.json'):
+        shutil.copyfile(ROOT / name, output / name)
     target = output / 'target'
     target.mkdir(mode=0o755)
     retain_tree(Path(contract['output']), target / 'leaf',
@@ -168,7 +208,7 @@ def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
 
 def main(arguments=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('prepare', 'retain', 'prepare-diagnostic', 'retain-diagnostic'))
+    parser.add_argument('mode', choices=('prepare', 'bootstrap', 'freeze', 'retain', 'prepare-diagnostic', 'retain-diagnostic'))
     parser.add_argument('--selection', type=Path, required=True)
     parser.add_argument('--checkout', type=Path, required=True)
     parser.add_argument('--facts', type=Path, required=True)
@@ -187,6 +227,13 @@ def main(arguments=None) -> int:
                 raise ValueError('diagnostic mode requires its explicit input or output path')
         elif args.mode == 'prepare' and args.candidate is not None:
             prepare(selected, args.checkout, args.candidate, facts)
+        elif args.mode == 'bootstrap':
+            if selected.get('partial') is not False:
+                raise ValueError('complete bootstrap refuses partial diagnostic packages')
+            from .hosted_bootstrap import supervise
+            supervise(ROOT, selected, context(selected, args.checkout, facts))
+        elif args.mode == 'freeze':
+            freeze(selected, args.checkout, facts)
         elif args.mode == 'retain' and args.output is not None:
             retain(selected, args.checkout, facts, args.output)
         else:
