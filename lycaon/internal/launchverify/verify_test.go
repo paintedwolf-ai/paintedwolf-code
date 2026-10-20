@@ -41,7 +41,7 @@ func (f fakeProc) add(p fakeProcess) {
 	testutil.FailErr(f.t, "create proc dir", os.MkdirAll(dir, 0o755))
 	stat := fmt.Sprintf("%d (pw (sidecar)) S %d %d %d 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 %d 1 1 1", p.pid, p.ppid, p.pid, p.pid, p.start)
 	testutil.FailErr(f.t, "write stat", os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644))
-	status := fmt.Sprintf("Name:\tpw\nPPid:\t%d\nUid:\t%d\t%d\t%d\t%d\nGid:\t1000\t1000\t1000\t1000\n", p.ppid, p.uid, p.euid, p.uid, p.euid)
+	status := fmt.Sprintf("Name:\tpw\nTracerPid:\t0\nPPid:\t%d\nUid:\t%d\t%d\t%d\t%d\nGid:\t1000\t1000\t1000\t1000\n", p.ppid, p.uid, p.euid, p.uid, p.euid)
 	testutil.FailErr(f.t, "write status", os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
 	image := filepath.Join(f.root, "images", strconv.Itoa(p.pid))
 	testutil.FailErr(f.t, "create image dir", os.MkdirAll(filepath.Dir(image), 0o755))

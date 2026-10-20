@@ -16,6 +16,7 @@ type Snapshot struct {
 	PID       int
 	PPID      int
 	StartTime uint64
+	TracerPID int
 	// UID and EUID are the process's real and effective user ids.
 	UID  int
 	EUID int
@@ -51,6 +52,10 @@ func (v Verifier) snapshot(pid int) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snap.UID, snap.EUID, err = parseStatusUIDs(status)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snap.TracerPID, err = parseTracerPID(status)
 	if err != nil {
 		return Snapshot{}, err
 	}
