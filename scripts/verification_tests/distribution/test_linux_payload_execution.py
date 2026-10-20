@@ -24,6 +24,7 @@ def module(name):
 class LinuxPayloadTests(unittest.TestCase):
     def test_catalog_requires_valid_unique_helper_and_entry_point_roles(self):
         self.assertIn("pw-vault-identity", load()["helpers"])
+        self.assertIn("pw-desktop-settings", load()["helpers"])
         for value in [{"format_version": 0}, {"format_version": 1, "helpers": ["pw", "pw"], "entry_points": ["pw"]},
                       {"format_version": 1, "helpers": ["pw"], "entry_points": ["missing"]}]:
             with tempfile.TemporaryDirectory() as directory:
@@ -32,30 +33,30 @@ class LinuxPayloadTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     load(path)
 
-    def test_manifest_and_staging_refuse_a_missing_vault_helper(self):
+    def test_manifest_and_staging_refuse_missing_required_helpers(self):
         config = module("linux-package-config")
         manifest = module("linux-package-manifest")
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            tauri = root / "lycaon-den/src-tauri"
-            target = "x86_64-unknown-linux-gnu"
-            shell = tauri / "target" / target / "release/painted-wolf-code"
-            shell.parent.mkdir(parents=True)
-            shell.write_text("fixture")
-            shell.chmod(0o755)
-            (tauri / "binaries").mkdir()
-            for helper in load()["helpers"]:
-                if helper == "pw-vault-identity":
-                    continue
-                path = tauri / "binaries" / f"{helper}-{target}"
-                path.write_text("fixture")
-                path.chmod(0o755)
-            with self.assertRaisesRegex(ValueError, "pw-vault-identity"):
-                config.required_files(root, tauri, target, root / "manifest.json")
-            args = argparse.Namespace(root=root, target=target, version="1.0.0", output=root / "manifest.json")
-            with self.assertRaisesRegex((ValueError, FileNotFoundError), "pw-vault-identity"):
-                manifest.generate(args)
-
+        for missing in ("pw-vault-identity", "pw-desktop-settings"):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                tauri = root / "lycaon-den/src-tauri"
+                target = "x86_64-unknown-linux-gnu"
+                shell = tauri / "target" / target / "release/painted-wolf-code"
+                shell.parent.mkdir(parents=True)
+                shell.write_text("fixture")
+                shell.chmod(0o755)
+                (tauri / "binaries").mkdir()
+                for helper in load()["helpers"]:
+                    if helper == missing:
+                        continue
+                    path = tauri / "binaries" / f"{helper}-{target}"
+                    path.write_text("fixture")
+                    path.chmod(0o755)
+                with self.assertRaisesRegex(ValueError, missing):
+                    config.required_files(root, tauri, target, root / "manifest.json")
+                args = argparse.Namespace(root=root, target=target, version="1.0.0", output=root / "manifest.json")
+                with self.assertRaisesRegex((ValueError, FileNotFoundError), missing):
+                    manifest.generate(args)
     def test_optional_fragments_never_stage_a_selinux_module(self):
         config = module("linux-package-config")
         with tempfile.TemporaryDirectory() as directory:
