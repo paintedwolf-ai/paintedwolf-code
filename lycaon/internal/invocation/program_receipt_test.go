@@ -27,6 +27,11 @@ type programReceiptFixture struct {
 
 func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
 	t.Helper()
+	return newProgramReceiptFixtureWithArgs(t, map[string]any{"command": "${op} arg"})
+}
+
+func newProgramReceiptFixtureWithArgs(t *testing.T, args map[string]any) programReceiptFixture {
+	t.Helper()
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
@@ -35,7 +40,7 @@ func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
 	if !ok {
 		t.Fatal("command contract missing")
 	}
-	parent, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session, ToolCallID: "actual-model-call", ToolName: "command", Args: map[string]any{"command": "cat input"}, Contract: contract})
+	parent, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session, ToolCallID: "actual-model-call", ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin real model call", err)
 	read, _ := toolcontract.Lookup("read")
 	definition, err := toolcontract.ToolOperation("read", json.RawMessage(`{"type":"object"}`), read)
