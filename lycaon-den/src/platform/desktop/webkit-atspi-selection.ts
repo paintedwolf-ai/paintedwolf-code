@@ -1,11 +1,72 @@
 import { webkitAtspiWorkaroundActive } from "./webkit-atspi-workaround.ts";
 
-/** A retained editor keeps its logical selection; its inaccessible DOM range must leave WebKit. */
-export function releaseInaccessibleWebKitSelection(surface: HTMLElement): void {
-  if (!webkitAtspiWorkaroundActive()) return;
-  const selection = surface.ownerDocument.getSelection();
-  if (!selection || selection.rangeCount === 0) return;
-  if (surface.contains(selection.anchorNode) || surface.contains(selection.focusNode)) {
-    selection.removeAllRanges();
-  }
+type Intent = {
+  anchor: Node;
+  anchorOffset: number;
+  focus: Node;
+  focusOffset: number;
+};
+
+/** Keep logical endpoints outside WebKit's live selection while the surface is inaccessible. */
+export function createRetainedWebKitSelection(surface: HTMLElement) {
+  const document = surface.ownerDocument;
+  let intent: Intent | undefined;
+  let parked = false;
+  const changed = () => { intent = undefined; };
+  const content = new MutationObserver(changed);
+  const selectionChanged = () => {
+    if (parked && document.getSelection()?.rangeCount) changed();
+  };
+
+  const stop = () => {
+    const mutated = content.takeRecords().length > 0;
+    content.disconnect();
+    document.removeEventListener("selectionchange", selectionChanged);
+    parked = false;
+    if (mutated) changed();
+  };
+  const release = () => {
+    const selection = document.getSelection();
+    if (selection && (surface.contains(selection.anchorNode) || surface.contains(selection.focusNode))) {
+      selection.removeAllRanges();
+    }
+  };
+
+  return {
+    hide() {
+      if (!webkitAtspiWorkaroundActive() || parked) return;
+      const selection = document.getSelection();
+      intent = undefined;
+      if (selection?.anchorNode && selection.focusNode && !selection.isCollapsed &&
+          surface.contains(selection.anchorNode) && surface.contains(selection.focusNode)) {
+        intent = {
+          anchor: selection.anchorNode, anchorOffset: selection.anchorOffset,
+          focus: selection.focusNode, focusOffset: selection.focusOffset,
+        };
+      }
+      parked = true;
+      content.observe(surface, { subtree: true, childList: true, characterData: true });
+      document.addEventListener("selectionchange", selectionChanged);
+      release();
+    },
+    restore() {
+      stop();
+      const saved = intent;
+      intent = undefined;
+      if (!saved || !webkitAtspiWorkaroundActive() || !surface.isConnected) return;
+      const selection = document.getSelection();
+      if (!selection || selection.rangeCount > 0) return;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && !surface.contains(focused) &&
+          (focused.isContentEditable || focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement)) return;
+      if (!saved.anchor.isConnected || !saved.focus.isConnected ||
+          !surface.contains(saved.anchor) || !surface.contains(saved.focus)) return;
+      selection.setBaseAndExtent(saved.anchor, saved.anchorOffset, saved.focus, saved.focusOffset);
+    },
+    dispose() {
+      stop();
+      intent = undefined;
+      if (webkitAtspiWorkaroundActive()) release();
+    },
+  };
 }
