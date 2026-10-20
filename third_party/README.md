@@ -39,3 +39,22 @@ of the selected release and review whether the patch is still needed. Update
 parser regression suites and the repository closeout checks through `./task`.
 When an upstream release includes the correction, remove the local replacement
 and copy after those checks pass.
+
+
+## Portable command parser
+
+`mvdan-sh/` contains the complete Go module source for `mvdan.cc/sh/v3`
+v3.14.1, commit `a3f0c75d21d918756fa38de8b5d3429efde7948b`.
+The release archive was verified against its Go module checksum before extraction:
+`h1:bXkhQWNHCs0KZEChF8hYS6FC+T2N9mUZLbQv9blditI=`.
+The module metadata checksum is
+`h1:syYCoFET8w9tvevxiXUtY8/ICrU+l26jHmhJDra3Vwo=`.
+The upstream license and source notices remain in the module directory.
+
+The portable command host uses the selected syntax parser, never the interpreter.
+P04 adds a narrow parser scratch budget patch: allocation and recursive-entry
+reservations precede parser growth. Exact selected-tree node/depth admission stays
+in the host before constructing its plan; transient parser wrappers are scratch.
+The host reserves the full scratch allowance against its aggregate budget before
+parsing. An exhausted scratch budget returns a typed refusal with no partial tree.
+The patch and focused regression cases will record the accounting contract.

@@ -321,3 +321,5 @@ require (
 replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.1
 
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
+
+replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
