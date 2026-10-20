@@ -180,21 +180,19 @@ func (r *DirectIPCapabilityRuntime) revokeByIDInstalledBy(id, checkpointID strin
 }
 
 // IssuePermit mints an ephemeral current-call permit.
-func (r *DirectIPCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) {
+func (r *DirectIPCapabilityRuntime) IssuePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string) {
 	if r == nil {
 		return
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	toolCallID = strings.TrimSpace(toolCallID)
 	actionDigest = strings.TrimSpace(actionDigest)
 	requestDigest = strings.TrimSpace(requestDigest)
 	confinementDigest = strings.TrimSpace(confinementDigest)
-	if sessionID == "" || toolCallID == "" || actionDigest == "" || requestDigest == "" || confinementDigest == "" {
+	if !identity.Valid() || actionDigest == "" || requestDigest == "" || confinementDigest == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	slotKey := directIPPermitKey(sessionID, toolCallID, actionDigest)
+	slotKey := directIPPermitKey(identity, actionDigest)
 	r.permits.Store(slotKey, &directIPPermitSlot{
 		requestDigest:     requestDigest,
 		confinementDigest: confinementDigest,
@@ -203,31 +201,29 @@ func (r *DirectIPCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDig
 
 // RevokePermit removes an unconsumed current-action permit during atomic
 // approval rollback.
-func (r *DirectIPCapabilityRuntime) RevokePermit(sessionID, toolCallID, actionDigest string) {
-	if r == nil {
+func (r *DirectIPCapabilityRuntime) RevokePermit(identity hitl.EffectPermitIdentity, actionDigest string) {
+	if r == nil || !identity.Valid() {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.permits.Delete(directIPPermitKey(strings.TrimSpace(sessionID), strings.TrimSpace(toolCallID), strings.TrimSpace(actionDigest)))
+	r.permits.Delete(directIPPermitKey(identity, strings.TrimSpace(actionDigest)))
 }
 
 // ConsumePermit atomically consumes a current-call permit once for the invocation.
-func (r *DirectIPCapabilityRuntime) ConsumePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) (bool, error) {
+func (r *DirectIPCapabilityRuntime) ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string) (bool, error) {
 	if r == nil {
 		return false, errDirectIPPermitMismatch
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	toolCallID = strings.TrimSpace(toolCallID)
 	actionDigest = strings.TrimSpace(actionDigest)
 	requestDigest = strings.TrimSpace(requestDigest)
 	confinementDigest = strings.TrimSpace(confinementDigest)
-	if sessionID == "" || toolCallID == "" || actionDigest == "" || requestDigest == "" || confinementDigest == "" {
+	if !identity.Valid() || actionDigest == "" || requestDigest == "" || confinementDigest == "" {
 		return false, errDirectIPPermitMismatch
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	slotKey := directIPPermitKey(sessionID, toolCallID, actionDigest)
+	slotKey := directIPPermitKey(identity, actionDigest)
 	slot, ok := r.permits.LoadAndDelete(slotKey)
 	if !ok {
 		return false, nil
@@ -239,19 +235,17 @@ func (r *DirectIPCapabilityRuntime) ConsumePermit(sessionID, toolCallID, actionD
 }
 
 // Authorized reports whether an unconsumed permit exists for this invocation.
-func (r *DirectIPCapabilityRuntime) Authorized(sessionID, toolCallID, actionDigest string) bool {
+func (r *DirectIPCapabilityRuntime) Authorized(identity hitl.EffectPermitIdentity, actionDigest string) bool {
 	if r == nil {
 		return false
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	toolCallID = strings.TrimSpace(toolCallID)
 	actionDigest = strings.TrimSpace(actionDigest)
-	if sessionID == "" || toolCallID == "" || actionDigest == "" {
+	if !identity.Valid() || actionDigest == "" {
 		return false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	slot, ok := r.permits.Load(directIPPermitKey(sessionID, toolCallID, actionDigest))
+	slot, ok := r.permits.Load(directIPPermitKey(identity, actionDigest))
 	return ok && slot != nil
 }
 
@@ -295,6 +289,6 @@ type directIPPermitSlot struct {
 	confinementDigest string
 }
 
-func directIPPermitKey(sessionID, toolCallID, actionDigest string) string {
-	return sessionID + "\x01" + toolCallID + "\x01" + actionDigest
+func directIPPermitKey(identity hitl.EffectPermitIdentity, actionDigest string) string {
+	return identity.Key() + "\x01" + actionDigest
 }

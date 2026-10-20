@@ -29,9 +29,12 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	resultPaths := migrations.ToolResultPaths(current)
-	steps := []migrations.Step{migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths}
-	return migrations.New(current, released, steps)
+	effectPermits := migrations.EffectPermitIdentity(current)
+	resultPaths := migrations.ToolResultPaths(effectPermits.From)
+	steps := []migrations.Step{migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths, effectPermits}
+	// Explicit registered intermediate shapes do not become released baselines.
+	supported := append(released, effectPermits.From)
+	return migrations.New(current, supported, steps)
 }
 
 // CurrentBaseline identifies the fresh-install schema.

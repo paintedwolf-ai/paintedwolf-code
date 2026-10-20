@@ -7,14 +7,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
-	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -45,21 +40,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		profileID = e.defaultProfile
 	}
 	tc.Identity.Agent = profileID
-	ctx = people.WithoutCaller(ctx)
-	ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
-	ctx = tools.SandboxScopeContext(ctx, tc)
-	ctx = authzledger.WithInvocation(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID, tc.Identity.ToolCallID)
-	sessionFacts := curationctx.SessionFrom(ctx)
-	ctx = curationctx.WithSession(ctx, curationctx.Session{
-		SessionID:       tc.Identity.SessionID,
-		OwnerPersonID:   sessionFacts.OwnerPersonID,
-		Posture:         sessionFacts.Posture,
-		ProjectID:       tc.Identity.ProjectID,
-		Agent:           tc.Identity.Agent,
-		ParentSessionID: tc.Identity.ParentSessionID,
-		ToolCallID:      tc.Identity.ToolCallID,
-		ProjectDir:      tc.ActiveRootPath(),
-	})
+	ctx = invocationContext(ctx, tc)
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
@@ -78,31 +59,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		return "", err
 	}
 	canonicalArgs := args
-	// Handlers execute against resolved arguments and echo against these.
-	tc.Effects.CanonicalArgs = canonicalArgs
-	ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
-	executionArgs := tc.Effects.Secrets.Arguments
-	if err := e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
+	ctx, executionArgs, err := e.prepareOwnerDispatch(ctx, qualifiedName, profileID, canonicalArgs, &tc)
+	if err != nil {
 		return "", err
-	}
-	if err := e.Secrets.screenFileSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
-		return "", err
-	}
-	// The screened save is a file tool's transport.
-	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
-		if err := tc.Effects.Secrets.HandOff(ctx, nil); err != nil {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.HeldHandOffReject(string(secretmatch.SurfaceFile), err))
-		}
-	}
-	tc.Execution.ProcessReview = e.Process.processReviewer(qualifiedName, canonicalArgs, tc)
-	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(qualifiedName, canonicalArgs, tc)
-	if e.Rejections.blockPlane != nil {
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolPreInvoke, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return "", err
-		}
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolHandler, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return "", err
-		}
 	}
 	out, err = e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)
 	// A consumer may echo what it received; results carry references, never resolved values.

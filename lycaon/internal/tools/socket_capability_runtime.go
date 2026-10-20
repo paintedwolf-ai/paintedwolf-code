@@ -4,15 +4,16 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 )
 
 // SocketCapabilityRuntime holds session-tree AF_UNIX chat grants and ephemeral permits.
 type SocketCapabilityRuntime interface {
 	AppliedGrants(rootSessionID string) []confine.SocketGrant
-	AuthorizedGrants(rootSessionID, sessionID, toolCallID, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant
+	AuthorizedGrants(rootSessionID string, identity hitl.EffectPermitIdentity, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant
 	GrantChat(rootSessionID string, g confine.SocketGrant, grantID, checkpointID, actionDigest string, expiresAt *time.Time) bool
-	IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant)
-	ConsumePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) (bool, error)
+	IssuePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant)
+	ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) (bool, error)
 }
 
 // DurableSocketSource supplies project/device exact AF_UNIX grants for the next

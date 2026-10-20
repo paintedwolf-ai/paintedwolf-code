@@ -180,9 +180,11 @@ type ApprovalAuthorityDelta struct {
 	Kind  AuthorityDeltaKind `json:"kind"`
 	Grant *ApprovalGrant     `json:"grant,omitempty"`
 	// ChatSessionID is the chat that chat-lifetime authority belongs to.
-	ChatSessionID string                 `json:"chat_session_id,omitempty"`
-	SessionID     string                 `json:"session_id,omitempty"`
-	ToolCallID    string                 `json:"tool_call_id,omitempty"`
+	ChatSessionID string `json:"chat_session_id,omitempty"`
+	SessionID     string `json:"session_id,omitempty"`
+	ToolCallID    string `json:"tool_call_id,omitempty"`
+	// ExecutionID binds native child once authority; absent retains structured-only history.
+	ExecutionID   string                 `json:"execution_id,omitempty"`
 	ActionDigest  string                 `json:"action_digest,omitempty"`
 	Sockets       []ApprovalSocketTarget `json:"sockets,omitempty"`
 	DirectIPLease *DirectIPLease         `json:"direct_ip_lease,omitempty"`

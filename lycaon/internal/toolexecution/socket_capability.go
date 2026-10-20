@@ -116,7 +116,7 @@ func (e *Capabilities) preflightSocketCapability(
 	}
 	authorized := []confine.SocketGrant{}
 	if e.socketRuntime != nil {
-		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, requested)
+		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.PermitIdentity(), actionDigest, requested)
 	}
 	authorized = mergeAuthorizedWithOverlay(authorized, requested, overlay)
 	observation := socketObservationFields(merged, requested, chatGrants, durableGrants, authorized)
@@ -133,7 +133,7 @@ func (e *Capabilities) preflightSocketCapability(
 		}
 		if e.approvalsDisabled != nil && e.approvalsDisabled(tc.ActiveRootPath()) {
 			if e.socketRuntime != nil {
-				e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
+				e.socketRuntime.IssuePermit(tc.PermitIdentity(), actionDigest, grant)
 			}
 			authSource = authzledger.AuthorizationSourceNeverAsk
 			e.recordCapabilityDecision(ctx, tc, tool, grant, true, authSource)
@@ -153,7 +153,7 @@ func (e *Capabilities) preflightSocketCapability(
 		authSource = source
 	}
 	if e.socketRuntime != nil {
-		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, requested)
+		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.PermitIdentity(), actionDigest, requested)
 	}
 	authorized = mergeAuthorizedWithOverlay(authorized, requested, overlay)
 	for _, grant := range requested {
@@ -207,37 +207,37 @@ func socketCapabilityProposedAction(
 		contained = contained.WithDialedSockets(merged)
 	}
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: filesFromArgs(tool, args),
-ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.EffectActionID(),
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: chatSession,
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), merged...),
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Egress: hitl.ActionEgress{
-Visibility: "unobserved",
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          tool,
+			Args:          args,
+			Files:         filesFromArgs(tool, args),
+			ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+			ActionID:      tc.EffectActionID(),
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      chatSession,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants: append([]confine.SocketGrant(nil), merged...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+		Egress: hitl.ActionEgress{
+			Visibility: "unobserved",
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 }
 
 // authorizeMissingSocketGrants reviews grants absent from the action digest.
@@ -272,7 +272,7 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 		predicted.Socket.SocketScopes = append([]string(nil), observation.scopes...)
 		predicted.Socket.SocketGrantStates = append([]string(nil), observation.states...)
 		review := e.buildDirectIPApprovalReview(ctx, tool, args, predicted, capReq.DirectIP.DeclaredDestinations)
-		if e.directIPRuntime == nil || !e.directIPRuntime.Authorized(tc.Identity.SessionID, tc.Identity.ToolCallID, review.Lease.ActionDigest) {
+		if e.directIPRuntime == nil || !e.directIPRuntime.Authorized(tc.PermitIdentity(), review.Lease.ActionDigest) {
 			if !e.directIPLeaseAuthorizes(review.Action, predicted, review.Lease) {
 				direct = &review
 			}
