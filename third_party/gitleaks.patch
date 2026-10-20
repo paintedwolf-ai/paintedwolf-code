@@ -37,7 +37,7 @@
 +}
 --- /dev/null
 +++ b/detect/bounded_test.go
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,127 @@
 +package detect
 +
 +import (
@@ -112,9 +112,62 @@
 +		t.Fatalf("cancel: %d %v", len(got), err)
 +	}
 +}
++
++func TestBoundedLocationGolden(t *testing.T) {
++	for _, c := range []struct {
++		raw        string
++		start, end int
++		want       Location
++	}{
++		{"abc", 0, 3, Location{startLine: 0, endLine: 0, startColumn: 1, endColumn: 3, startLineIndex: 0, endLineIndex: 3}},
++		{"a\nbc\nz", 2, 4, Location{startLine: 1, endLine: 1, startColumn: 2, endColumn: 3, startLineIndex: 1, endLineIndex: 4}},
++		{"a\nbc\nz", 5, 6, Location{startLine: 2, endLine: 2, startColumn: 2, endColumn: 2, startLineIndex: 0, endLineIndex: 6}},
++	} {
++		if got := locationRaw(c.raw, []int{c.start, c.end}, nil); got != c.want {
++			t.Fatalf("raw location=%+v want %+v", got, c.want)
++		}
++	}
++}
++
++func TestBoundedPolicyGuardsAndRequiredRules(t *testing.T) {
++	for _, mode := range []string{"keyword-case", "rule-allowlist", "global-allowlist", "path", "required"} {
++		t.Run(mode, func(t *testing.T) {
++			d := boundedFixture()
++			rule := d.Config.Rules["fixture"]
++			raw := "fixture_123456abcdef auxiliary_123"
++			fragment := Fragment{Raw: raw, FilePath: "fixture.txt"}
++			allow := &config.Allowlist{Regexes: []*regexp.Regexp{regexp.MustCompile("fixture_")}}
++			if err := allow.Validate(); err != nil {
++				t.Fatal(err)
++			}
++			switch mode {
++			case "keyword-case":
++				d.Config.Keywords = map[string]struct{}{"FIXTURE": {}}
++				d = NewDetector(d.Config)
++			case "rule-allowlist":
++				rule.Allowlists = []*config.Allowlist{allow}
++				d.Config.Rules["fixture"] = rule
++			case "global-allowlist":
++				d.Config.Allowlists = []*config.Allowlist{allow}
++			case "path":
++				rule.Path = regexp.MustCompile(`other\.txt$`)
++				d.Config.Rules["fixture"] = rule
++			case "required":
++				rule.RequiredRules = []*config.Required{{RuleID: "auxiliary"}}
++				d.Config.Rules["fixture"] = rule
++				d.Config.Rules["auxiliary"] = config.Rule{RuleID: "auxiliary", Regex: regexp.MustCompile(`auxiliary_[0-9]+`), SkipReport: true}
++			}
++			got, err := d.DetectBounded(context.Background(), fragment, boundedLimits())
++			want := d.DetectContext(context.Background(), fragment)
++			if err != nil || !reflect.DeepEqual(got, want) {
++				t.Fatalf("policy changed: %v got=%+v want=%+v", err, got, want)
++			}
++		})
++	}
++}
 --- /dev/null
 +++ b/detect/budget/budget.go
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,125 @@
 +// Package budget meters the selected bounded detector entry point.
 +package budget
 +
@@ -128,6 +181,10 @@
 +type Limits struct {
 +	MaxInputBytes, MaxAllocationBytes, MaxWork int64
 +	MaxMatches                                 int
++	// Reserve admits each allocation against a caller-owned aggregate pool.
++	Reserve func(int64) error
++	// Release returns only a reserved envelope proven not to have been allocated.
++	Release func(int64)
 +}
 +
 +// Error reports an exhausted resource without treating partial matches as safe.
@@ -182,6 +239,11 @@
 +	if n < 0 || n > m.Limits.MaxAllocationBytes-m.allocated {
 +		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.allocated+n)
 +	}
++	if m.Limits.Reserve != nil {
++		if err := m.Limits.Reserve(n); err != nil {
++			panic(abort{err})
++		}
++	}
 +	m.allocated += n
 +}
 +func (m *Meter) Work(n int64) {
@@ -195,25 +257,78 @@
 +	m.work += n
 +}
 +
-+// Enumeration reserves the entire allowed backing-store envelope before FindAll.
-+// One extra candidate is reserved to distinguish truncation from completeness.
-+func (m *Meter) Enumeration(inputBytes, width int) int {
++// enumeration reserves a sentinel envelope before FindAll, then returns only
++// the unused reservation after the actual result capacity is conservatively
++// charged. Actual backing allocations remain cumulatively charged.
++func (m *Meter) enumeration(inputBytes, width int) (int, func(int)) {
 +	if m == nil {
-+		return -1
++		return -1, func(int) {}
 +	}
-+	n := m.Limits.MaxMatches + 1
-+	if inputBytes+1 < n {
-+		n = inputBytes + 1
++	if width < 256 {
++		width = 256
 +	}
++	n := min(m.Limits.MaxMatches+1, inputBytes+1)
++	slots := (m.Limits.MaxAllocationBytes - m.allocated - 512) / int64(width)
++	if slots < 1 {
++		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
++	}
++	n = min(n, int(slots))
++	reservation := 512 + int64(n)*int64(width)
 +	m.Work(int64(inputBytes) + int64(n))
-+	if width < 128 {width=128}
-+ m.Allocate(512+int64(n)*int64(width))
-+	return n
++	m.Allocate(reservation)
++	return n, func(actual int) {
++		m.Count(actual)
++		if actual == n && n < inputBytes+1 {
++			m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
++		}
++		unused := int64(n-actual) * int64(width)
++		m.allocated -= unused
++		if m.Limits.Release != nil {
++			m.Limits.Release(unused)
++		}
++	}
 +}
 +func (m *Meter) Count(n int) {
 +	if m != nil && n > m.Limits.MaxMatches {
 +		m.Refuse("match_candidates", int64(m.Limits.MaxMatches), int64(n))
 +	}
++}
+--- /dev/null
++++ b/detect/budget/indices.go
+@@ -0,0 +1,34 @@
++package budget
++
++import "github.com/zricethezav/gitleaks/v8/regexp"
++
++func (m *Meter) StringIndices(re *regexp.Regexp, value string) [][]int {
++	n, finish := m.enumeration(len(value), 256)
++	out := re.FindAllStringIndex(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) StringSubmatchIndices(re *regexp.Regexp, value string) [][]int {
++	n, finish := m.enumeration(len(value), 256+32*(re.NumSubexp()+1))
++	out := re.FindAllStringSubmatchIndex(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) Strings(re *regexp.Regexp, value string) []string {
++	n, finish := m.enumeration(len(value), 256)
++	out := re.FindAllString(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) StringSubmatches(re *regexp.Regexp, value string) [][]string {
++	n, finish := m.enumeration(len(value), 256+64*(re.NumSubexp()+1))
++	out := re.FindAllStringSubmatch(value, n)
++	finish(len(out))
++	return out
++}
++func (m *Meter) SubmatchIndices(re *regexp.Regexp, value []byte) [][]int {
++	n, finish := m.enumeration(len(value), 256+32*(re.NumSubexp()+1))
++	out := re.FindAllSubmatchIndex(value, n)
++	finish(len(out))
++	return out
 +}
 --- a/detect/codec/decoder.go
 +++ b/detect/codec/decoder.go
@@ -308,7 +423,7 @@
 +func findEncodingMatchesBudget(data string, meter *budget.Meter) []encodingMatch {
  	var all []encodingMatch
 -	for _, matchIndex := range encodingsRe.FindAllStringSubmatchIndex(data, -1) {
-+	indices := encodingsRe.FindAllStringSubmatchIndex(data, meter.Enumeration(len(data), 256))
++	indices := meter.StringSubmatchIndices(encodingsRe, data)
 +	meter.Count(len(indices))
 +	meter.Allocate(int64(len(indices)) * 256)
 +	for _, matchIndex := range indices {
@@ -338,7 +453,7 @@
 +	meter.Work(int64(len(encodedValue)))
  	// First, check if we have a continuous sequence of Unicode code points
 -	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, -1); len(matches) > 0 {
-+	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
++	if matches := meter.Strings(unicodeMultiCodePointPat, encodedValue); len(matches) > 0 {
  		// For each detected sequence of code points
 +		meter.Count(len(matches))
  		for _, match := range matches {
@@ -356,7 +471,7 @@
  
  	// Next, check if we have a continuous sequence of escape sequences
 -	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, -1); len(matches) > 0 {
-+	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
++	if matches := meter.Strings(unicodeMultiEscapePat, encodedValue); len(matches) > 0 {
  		// For each detected sequence of escape sequences
 +		meter.Count(len(matches))
  		for _, match := range matches {
@@ -428,7 +543,7 @@
  
  	// Find all escape sequences
 -	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, -1)
-+	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, meter.Enumeration(len(sequence), 128))
++	escapes := meter.StringSubmatches(unicodeEscapePat, sequence)
 +	meter.Count(len(escapes))
  	if len(escapes) == 0 {
  		return sequence
@@ -453,7 +568,7 @@
 +	meter.Work(int64(len(input)))
  	// Find all Unicode code point sequences in the input byte slice
 -	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, -1)
-+	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
++	indices := meter.SubmatchIndices(unicodeCodePointPat, input)
  
  	// If none found, return original input
 +	meter.Count(len(indices))
@@ -481,7 +596,7 @@
 +	meter.Work(int64(len(input)))
  	// Find all Unicode escape sequences in the input byte slice
 -	indices := unicodeEscapePat.FindAllSubmatchIndex(input, -1)
-+	indices := unicodeEscapePat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
++	indices := meter.SubmatchIndices(unicodeEscapePat, input)
  
  	// If none found, return original input
 +	meter.Count(len(indices))
@@ -600,12 +715,12 @@
  				return append(findings, finding)
  			}
  		} else {
-@@ -439,17 +466,22 @@
+@@ -439,17 +466,24 @@
  		}
  	}
  
 -	matches := r.Regex.FindAllStringIndex(currentRaw, -1)
-+	matches := r.Regex.FindAllStringIndex(currentRaw, meter.Enumeration(len(currentRaw), 64))
++	matches := meter.StringIndices(r.Regex, currentRaw)
 +	meter.Count(len(matches))
  	if len(matches) == 0 {
  		return findings
@@ -613,8 +728,10 @@
  
  	// TODO profile this, probably should replace with something more efficient
 -	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
-+	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, meter.Enumeration(len(fragment.Raw), 64))
-+	meter.Count(len(newlineIndices))
++	var newlineIndices [][]int
++	if meter == nil {
++		newlineIndices = newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
++	}
  
  	// use currentRaw instead of fragment.Raw since this represents the current
  	// decoding pass on the text
@@ -626,7 +743,21 @@
  		// Extract secret from match
  		secret := strings.Trim(currentRaw[matchIndex[0]:matchIndex[1]], "\n")
  
-@@ -520,6 +552,7 @@
+@@ -479,7 +513,12 @@
+ 		// in the finding will be the line/column numbers of the _match_
+ 		// not the _secret_, which will be different if the secretGroup
+ 		// value is set for this rule
+-		loc := location(newlineIndices, fragment.Raw, matchIndex)
++		var loc Location
++		if meter == nil {
++			loc = location(newlineIndices, fragment.Raw, matchIndex)
++		} else {
++			loc = locationRaw(fragment.Raw, matchIndex, meter)
++		}
+ 
+ 		if matchIndex[1] > loc.endLineIndex {
+ 			loc.endLineIndex = matchIndex[1]
+@@ -520,6 +559,7 @@
  
  		// Set the value of |secret|, if the pattern contains at least one capture group.
  		// (The first element is the full match, hence we check >= 2.)
@@ -634,7 +765,7 @@
  		groups := r.Regex.FindStringSubmatch(finding.Secret)
  		if len(groups) >= 2 {
  			if r.SecretGroup > 0 {
-@@ -540,6 +573,7 @@
+@@ -540,6 +580,7 @@
  		}
  
  		// check entropy
@@ -642,7 +773,7 @@
  		entropy := shannonEntropy(finding.Secret)
  		finding.Entropy = float32(entropy)
  		if r.Entropy != 0.0 {
-@@ -573,17 +607,18 @@
+@@ -573,17 +614,18 @@
  	}
  
  	// Process required rules and create findings with auxiliary findings
@@ -663,7 +794,7 @@
  	allRequiredFindings := make(map[string][]report.Finding)
  
  	for _, requiredRule := range r.RequiredRules {
-@@ -598,7 +633,7 @@
+@@ -598,7 +640,7 @@
  		inheritedFragment.InheritedFromFinding = true
  
  		// Call detectRule once for each required rule
@@ -672,7 +803,7 @@
  		allRequiredFindings[requiredRule.RuleID] = requiredFindings
  
  		logger.Debug().
-@@ -621,6 +656,8 @@
+@@ -621,6 +663,8 @@
  
  			// Filter findings that are within proximity of the primary finding
  			for _, requiredFinding := range foundRequiredFindings {
@@ -681,7 +812,7 @@
  				if d.withinProximity(primaryFinding, requiredFinding, requiredRule) {
  					req := &report.RequiredFinding{
  						RuleID:      requiredFinding.RuleID,
-@@ -641,6 +678,7 @@
+@@ -641,6 +685,7 @@
  		if len(requiredFindings) > 0 && d.hasAllRequiredRules(requiredFindings, r.RequiredRules) {
  			// Create a finding with auxiliary findings
  			newFinding := primaryFinding // Copy the primary finding
@@ -689,6 +820,96 @@
  			newFinding.AddRequiredFindings(requiredFindings)
  			finalFindings = append(finalFindings, newFinding)
  
+--- a/detect/location.go
++++ b/detect/location.go
+@@ -1,4 +1,9 @@
+ package detect
++
++import (
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
++	"strings"
++)
+ 
+ // Location represents a location in a file
+ type Location struct {
+@@ -11,6 +16,44 @@
+ }
+ 
+ func location(newlineIndices [][]int, raw string, matchIndex []int) Location {
++	if len(newlineIndices) == 0 {
++		newlineIndices = [][]int{{len(raw), len(raw) + 1}}
++	}
++	at := 0
++	return locationNext(raw, matchIndex, func() (int, bool) {
++		if at == len(newlineIndices) {
++			return 0, false
++		}
++		index := newlineIndices[at][0]
++		at++
++		return index, true
++	})
++}
++
++// locationRaw feeds the unchanged location calculation directly from original
++// bytes, avoiding a whole-file newline index per bounded rule invocation.
++func locationRaw(raw string, matchIndex []int, meter *budget.Meter) Location {
++	at := 0
++	empty := !strings.Contains(raw, "\n")
++	return locationNext(raw, matchIndex, func() (int, bool) {
++		meter.Check()
++		if empty {
++			empty = false
++			at = len(raw)
++			return len(raw), true
++		}
++		next := strings.IndexByte(raw[at:], '\n')
++		if next < 0 {
++			return 0, false
++		}
++		next += at
++		at = next + 1
++		return next, true
++	})
++}
++
++func locationNext(raw string, matchIndex []int, next func() (int, bool)) Location {
++
+ 	var (
+ 		prevNewLine int
+ 		location    Location
+@@ -24,19 +67,12 @@
+ 	// default startLineIndex to 0
+ 	location.startLineIndex = 0
+ 
+-	// Fixes: https://github.com/zricethezav/gitleaks/issues/1037
+-	// When a fragment does NOT have any newlines, a default "newline"
+-	// will be counted to make the subsequent location calculation logic work
+-	// for fragments will no newlines.
+-	if len(newlineIndices) == 0 {
+-		newlineIndices = [][]int{
+-			{len(raw), len(raw) + 1},
++	for lineNum := 0; ; lineNum++ {
++		newLineByteIndex, ok := next()
++		if !ok {
++			break
+ 		}
+-	}
+-
+-	for lineNum, pair := range newlineIndices {
+ 		_lineNum = lineNum
+-		newLineByteIndex := pair[0]
+ 		if prevNewLine <= start && start < newLineByteIndex {
+ 			lineSet = true
+ 			location.startLine = lineNum
+@@ -51,7 +87,7 @@
+ 			location.endLineIndex = newLineByteIndex
+ 		}
+ 
+-		prevNewLine = pair[0]
++		prevNewLine = newLineByteIndex
+ 	}
+ 
+ 	if !lineSet {
 --- a/detect/utils.go
 +++ b/detect/utils.go
 @@ -8,6 +8,7 @@

@@ -466,15 +466,17 @@ func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r conf
 		}
 	}
 
-	matches := r.Regex.FindAllStringIndex(currentRaw, meter.Enumeration(len(currentRaw), 64))
+	matches := meter.StringIndices(r.Regex, currentRaw)
 	meter.Count(len(matches))
 	if len(matches) == 0 {
 		return findings
 	}
 
 	// TODO profile this, probably should replace with something more efficient
-	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, meter.Enumeration(len(fragment.Raw), 64))
-	meter.Count(len(newlineIndices))
+	var newlineIndices [][]int
+	if meter == nil {
+		newlineIndices = newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
+	}
 
 	// use currentRaw instead of fragment.Raw since this represents the current
 	// decoding pass on the text
@@ -511,7 +513,12 @@ func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r conf
 		// in the finding will be the line/column numbers of the _match_
 		// not the _secret_, which will be different if the secretGroup
 		// value is set for this rule
-		loc := location(newlineIndices, fragment.Raw, matchIndex)
+		var loc Location
+		if meter == nil {
+			loc = location(newlineIndices, fragment.Raw, matchIndex)
+		} else {
+			loc = locationRaw(fragment.Raw, matchIndex, meter)
+		}
 
 		if matchIndex[1] > loc.endLineIndex {
 			loc.endLineIndex = matchIndex[1]

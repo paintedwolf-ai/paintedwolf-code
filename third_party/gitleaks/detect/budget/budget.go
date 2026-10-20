@@ -11,6 +11,10 @@ import (
 type Limits struct {
 	MaxInputBytes, MaxAllocationBytes, MaxWork int64
 	MaxMatches                                 int
+	// Reserve admits each allocation against a caller-owned aggregate pool.
+	Reserve func(int64) error
+	// Release returns only a reserved envelope proven not to have been allocated.
+	Release func(int64)
 }
 
 // Error reports an exhausted resource without treating partial matches as safe.
@@ -65,6 +69,11 @@ func (m *Meter) Allocate(n int64) {
 	if n < 0 || n > m.Limits.MaxAllocationBytes-m.allocated {
 		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.allocated+n)
 	}
+	if m.Limits.Reserve != nil {
+		if err := m.Limits.Reserve(n); err != nil {
+			panic(abort{err})
+		}
+	}
 	m.allocated += n
 }
 func (m *Meter) Work(n int64) {
@@ -78,22 +87,36 @@ func (m *Meter) Work(n int64) {
 	m.work += n
 }
 
-// Enumeration reserves the entire allowed backing-store envelope before FindAll.
-// One extra candidate is reserved to distinguish truncation from completeness.
-func (m *Meter) Enumeration(inputBytes, width int) int {
+// enumeration reserves a sentinel envelope before FindAll, then returns only
+// the unused reservation after the actual result capacity is conservatively
+// charged. Actual backing allocations remain cumulatively charged.
+func (m *Meter) enumeration(inputBytes, width int) (int, func(int)) {
 	if m == nil {
-		return -1
+		return -1, func(int) {}
 	}
-	n := m.Limits.MaxMatches + 1
-	if inputBytes+1 < n {
-		n = inputBytes + 1
+	if width < 256 {
+		width = 256
 	}
+	n := min(m.Limits.MaxMatches+1, inputBytes+1)
+	slots := (m.Limits.MaxAllocationBytes - m.allocated - 512) / int64(width)
+	if slots < 1 {
+		m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
+	}
+	n = min(n, int(slots))
+	reservation := 512 + int64(n)*int64(width)
 	m.Work(int64(inputBytes) + int64(n))
-	if width < 128 {
-		width = 128
+	m.Allocate(reservation)
+	return n, func(actual int) {
+		m.Count(actual)
+		if actual == n && n < inputBytes+1 {
+			m.Refuse("allocation_bytes", m.Limits.MaxAllocationBytes, m.Limits.MaxAllocationBytes+1)
+		}
+		unused := int64(n-actual) * int64(width)
+		m.allocated -= unused
+		if m.Limits.Release != nil {
+			m.Limits.Release(unused)
+		}
 	}
-	m.Allocate(512 + int64(n)*int64(width))
-	return n
 }
 func (m *Meter) Count(n int) {
 	if m != nil && n > m.Limits.MaxMatches {

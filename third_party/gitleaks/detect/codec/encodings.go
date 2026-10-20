@@ -121,7 +121,7 @@ func init() {
 func findEncodingMatches(data string) []encodingMatch { return findEncodingMatchesBudget(data, nil) }
 func findEncodingMatchesBudget(data string, meter *budget.Meter) []encodingMatch {
 	var all []encodingMatch
-	indices := encodingsRe.FindAllStringSubmatchIndex(data, meter.Enumeration(len(data), 256))
+	indices := meter.StringSubmatchIndices(encodingsRe, data)
 	meter.Count(len(indices))
 	meter.Allocate(int64(len(indices)) * 256)
 	for _, matchIndex := range indices {

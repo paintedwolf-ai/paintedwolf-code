@@ -36,7 +36,7 @@ func decodeUnicodeBudget(encodedValue string, meter *budget.Meter) string {
 	meter.Allocate(int64(len(encodedValue))*32 + 128)
 	meter.Work(int64(len(encodedValue)))
 	// First, check if we have a continuous sequence of Unicode code points
-	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
+	if matches := meter.Strings(unicodeMultiCodePointPat, encodedValue); len(matches) > 0 {
 		// For each detected sequence of code points
 		meter.Count(len(matches))
 		for _, match := range matches {
@@ -55,7 +55,7 @@ func decodeUnicodeBudget(encodedValue string, meter *budget.Meter) string {
 	}
 
 	// Next, check if we have a continuous sequence of escape sequences
-	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
+	if matches := meter.Strings(unicodeMultiEscapePat, encodedValue); len(matches) > 0 {
 		// For each detected sequence of escape sequences
 		meter.Count(len(matches))
 		for _, match := range matches {
@@ -171,7 +171,7 @@ func decodeMultiEscapeBudget(sequence string, meter *budget.Meter) string {
 	}
 
 	// Find all escape sequences
-	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, meter.Enumeration(len(sequence), 128))
+	escapes := meter.StringSubmatches(unicodeEscapePat, sequence)
 	meter.Count(len(escapes))
 	if len(escapes) == 0 {
 		return sequence
@@ -213,7 +213,7 @@ func decodeIndividualCodePointsBudget(input []byte, meter *budget.Meter) []byte 
 	meter.Allocate(int64(len(input))*32 + 128)
 	meter.Work(int64(len(input)))
 	// Find all Unicode code point sequences in the input byte slice
-	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
+	indices := meter.SubmatchIndices(unicodeCodePointPat, input)
 
 	// If none found, return original input
 	meter.Count(len(indices))
@@ -269,7 +269,7 @@ func decodeIndividualEscapesBudget(input []byte, meter *budget.Meter) []byte {
 	meter.Allocate(int64(len(input))*32 + 128)
 	meter.Work(int64(len(input)))
 	// Find all Unicode escape sequences in the input byte slice
-	indices := unicodeEscapePat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
+	indices := meter.SubmatchIndices(unicodeEscapePat, input)
 
 	// If none found, return original input
 	meter.Count(len(indices))

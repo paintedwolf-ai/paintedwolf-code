@@ -1,5 +1,10 @@
 package detect
 
+import (
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
+	"strings"
+)
+
 // Location represents a location in a file
 type Location struct {
 	startLine      int
@@ -11,6 +16,44 @@ type Location struct {
 }
 
 func location(newlineIndices [][]int, raw string, matchIndex []int) Location {
+	if len(newlineIndices) == 0 {
+		newlineIndices = [][]int{{len(raw), len(raw) + 1}}
+	}
+	at := 0
+	return locationNext(raw, matchIndex, func() (int, bool) {
+		if at == len(newlineIndices) {
+			return 0, false
+		}
+		index := newlineIndices[at][0]
+		at++
+		return index, true
+	})
+}
+
+// locationRaw feeds the unchanged location calculation directly from original
+// bytes, avoiding a whole-file newline index per bounded rule invocation.
+func locationRaw(raw string, matchIndex []int, meter *budget.Meter) Location {
+	at := 0
+	empty := !strings.Contains(raw, "\n")
+	return locationNext(raw, matchIndex, func() (int, bool) {
+		meter.Check()
+		if empty {
+			empty = false
+			at = len(raw)
+			return len(raw), true
+		}
+		next := strings.IndexByte(raw[at:], '\n')
+		if next < 0 {
+			return 0, false
+		}
+		next += at
+		at = next + 1
+		return next, true
+	})
+}
+
+func locationNext(raw string, matchIndex []int, next func() (int, bool)) Location {
+
 	var (
 		prevNewLine int
 		location    Location
@@ -24,19 +67,12 @@ func location(newlineIndices [][]int, raw string, matchIndex []int) Location {
 	// default startLineIndex to 0
 	location.startLineIndex = 0
 
-	// Fixes: https://github.com/zricethezav/gitleaks/issues/1037
-	// When a fragment does NOT have any newlines, a default "newline"
-	// will be counted to make the subsequent location calculation logic work
-	// for fragments will no newlines.
-	if len(newlineIndices) == 0 {
-		newlineIndices = [][]int{
-			{len(raw), len(raw) + 1},
+	for lineNum := 0; ; lineNum++ {
+		newLineByteIndex, ok := next()
+		if !ok {
+			break
 		}
-	}
-
-	for lineNum, pair := range newlineIndices {
 		_lineNum = lineNum
-		newLineByteIndex := pair[0]
 		if prevNewLine <= start && start < newLineByteIndex {
 			lineSet = true
 			location.startLine = lineNum
@@ -51,7 +87,7 @@ func location(newlineIndices [][]int, raw string, matchIndex []int) Location {
 			location.endLineIndex = newLineByteIndex
 		}
 
-		prevNewLine = pair[0]
+		prevNewLine = newLineByteIndex
 	}
 
 	if !lineSet {

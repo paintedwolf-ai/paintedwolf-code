@@ -72,3 +72,56 @@ func TestBoundedRefusals(t *testing.T) {
 		t.Fatalf("cancel: %d %v", len(got), err)
 	}
 }
+
+func TestBoundedLocationGolden(t *testing.T) {
+	for _, c := range []struct {
+		raw        string
+		start, end int
+		want       Location
+	}{
+		{"abc", 0, 3, Location{startLine: 0, endLine: 0, startColumn: 1, endColumn: 3, startLineIndex: 0, endLineIndex: 3}},
+		{"a\nbc\nz", 2, 4, Location{startLine: 1, endLine: 1, startColumn: 2, endColumn: 3, startLineIndex: 1, endLineIndex: 4}},
+		{"a\nbc\nz", 5, 6, Location{startLine: 2, endLine: 2, startColumn: 2, endColumn: 2, startLineIndex: 0, endLineIndex: 6}},
+	} {
+		if got := locationRaw(c.raw, []int{c.start, c.end}, nil); got != c.want {
+			t.Fatalf("raw location=%+v want %+v", got, c.want)
+		}
+	}
+}
+
+func TestBoundedPolicyGuardsAndRequiredRules(t *testing.T) {
+	for _, mode := range []string{"keyword-case", "rule-allowlist", "global-allowlist", "path", "required"} {
+		t.Run(mode, func(t *testing.T) {
+			d := boundedFixture()
+			rule := d.Config.Rules["fixture"]
+			raw := "fixture_123456abcdef auxiliary_123"
+			fragment := Fragment{Raw: raw, FilePath: "fixture.txt"}
+			allow := &config.Allowlist{Regexes: []*regexp.Regexp{regexp.MustCompile("fixture_")}}
+			if err := allow.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			switch mode {
+			case "keyword-case":
+				d.Config.Keywords = map[string]struct{}{"FIXTURE": {}}
+				d = NewDetector(d.Config)
+			case "rule-allowlist":
+				rule.Allowlists = []*config.Allowlist{allow}
+				d.Config.Rules["fixture"] = rule
+			case "global-allowlist":
+				d.Config.Allowlists = []*config.Allowlist{allow}
+			case "path":
+				rule.Path = regexp.MustCompile(`other\.txt$`)
+				d.Config.Rules["fixture"] = rule
+			case "required":
+				rule.RequiredRules = []*config.Required{{RuleID: "auxiliary"}}
+				d.Config.Rules["fixture"] = rule
+				d.Config.Rules["auxiliary"] = config.Rule{RuleID: "auxiliary", Regex: regexp.MustCompile(`auxiliary_[0-9]+`), SkipReport: true}
+			}
+			got, err := d.DetectBounded(context.Background(), fragment, boundedLimits())
+			want := d.DetectContext(context.Background(), fragment)
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("policy changed: %v got=%+v want=%+v", err, got, want)
+			}
+		})
+	}
+}
