@@ -14,7 +14,7 @@ on:
       component:
         description: Fixed nonpublishing qualification scope
         type: choice
-        options: [default, scanner-finalized]
+        options: [default, scanner-finalized, desktop-settings-observer]
         default: default
         required: true
 
@@ -212,7 +212,7 @@ jobs:
           COMPONENT: ${{ inputs.component || 'default' }}
         run: |
           set -euo pipefail
-          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized ]]
+          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized || "$COMPONENT" == desktop-settings-observer ]]
           ./task nix:check
           ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure"
 
@@ -248,7 +248,7 @@ jobs:
           name = 'qualification-source.json'
           if component != 'default':
               name = 'component-source.json'
-              manifest.update(component=component, scope='Finalized scanner component; no application closure or installed qualification')
+              manifest.update(component=component, scope='Selected component only; no application closure or installed qualification')
           (evidence/name).write_text(json.dumps(manifest, indent=2)+'\n')
           CI_PY
           uname -a > "$PW_ARTIFACT_ROOT/kernel.txt"
@@ -258,7 +258,7 @@ jobs:
       - name: Retain the nonrelease native closure
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: nix-${{ inputs.component == 'scanner-finalized' && 'scanner-finalized' || 'closure' }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          name: nix-${{ inputs.component != 'default' && inputs.component || 'closure' }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
           path: ${{ runner.temp }}/nix-closure
           if-no-files-found: error
           retention-days: 14
