@@ -67,8 +67,17 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                 interactive = interactive_window(app)
                 witness = add_keyless_provider(app, provider)
                 try:
+                    skipped = False
+                    with DesktopUI(app) as ui:
+                        try:
+                            ui.click('Skip')
+                            skipped = True
+                        except CaseUnavailable:
+                            # Optional setup Skip is not completed onboarding.
+                            pass
                     observations = {'interactive': interactive, 'normal_provider_setup': witness,
                                     'provider_requests': provider.observations,
+                                    'normal_optional_setup_skip': skipped,
                                     'remaining_requirements': ['default-model-selection-and-first-turn',
                                                                'credential-provider-onboarding-and-reconnect']}
                 finally:
