@@ -91,6 +91,20 @@ class InstalledOnboardingTests(unittest.TestCase):
         self.assertNotIn('sensitive', str(error.exception))
         self.assertNotIn(onboarding._password, str(error.exception))
 
+    def test_changing_native_inventory_retries_but_does_not_establish_readiness(self):
+        readiness = Mock(side_effect=[False, True])
+        app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=readiness)
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=API), patch.object(
+                onboarding, 'form', side_effect=IndexError('private native payload')), patch.object(onboarding.time, 'sleep'):
+            onboarding.onboard(app)
+        self.assertEqual(app.observations['native_accessibility_inventory_retries'], 1)
+        self.assertEqual(readiness.call_count, 2)
+        self.assertNotIn('private', repr(app.observations))
+        window, _, _ = form()
+        with self.assertRaises(CaseUnavailable):
+            onboarding.controls(window, API, deadline=0)
+
     def test_inventory_failure_retains_only_phase_and_exception_class(self):
         app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=lambda: False)
         with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
