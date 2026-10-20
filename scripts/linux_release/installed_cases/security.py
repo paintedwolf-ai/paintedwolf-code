@@ -15,6 +15,7 @@ import time
 from ..installed_runtime import unchanged
 from .app import InstalledApp
 from .ipc import system_v_isolation
+from .lifecycle import background_cancel, detached_cleanup
 from .kernel import private_shared_memory, restricted_namespaces
 from .process import run
 from .products import require_owned_guest
@@ -174,7 +175,9 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
              'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
-PROBES = {('confinement', 'system-v-ipc-isolation'): system_v_isolation,
+PROBES = {('processes', 'background-cancel'): background_cancel,
+          ('processes', 'setsid-and-double-fork'): detached_cleanup,
+          ('confinement', 'system-v-ipc-isolation'): system_v_isolation,
           ('confinement', 'private-shared-memory'): private_shared_memory,
           ('confinement', 'restricted-user-namespaces'): restricted_namespaces,
           ('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
