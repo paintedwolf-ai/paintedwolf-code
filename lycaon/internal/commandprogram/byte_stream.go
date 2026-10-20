@@ -30,7 +30,7 @@ type StreamCompletion struct {
 	ReceivedSHA256 string
 	EmittedSHA256  string
 	Redacted       bool
-	Mappings       []toolcontract.DeliveryMapping
+	Mappings       []toolcontract.StreamSourceMapping
 }
 
 // StreamLimitError reports attempted ingress before its bytes enter the pipe.

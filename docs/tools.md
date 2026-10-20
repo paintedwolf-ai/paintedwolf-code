@@ -111,6 +111,45 @@ execution callers must retain the applicable leases while values remain reachabl
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
 
+
+### Complete byte streams
+
+`commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
+ingress byte budget. EOF, producer failure, deliberate consumer closure,
+cancellation and budget refusal have separate typed settlement facts. A preview,
+receipt, digest or truncation notice is never a pipeline source. Here-document
+and native-null inputs use the same exact byte endpoints; typed null sinks count
+ingress without opening a platform device or resolving secret references.
+
+`ScreenedPipe` connects the existing capture projection to that byte plane.
+Screening reserves actual payload/candidate capacities incrementally against the
+caller's aggregate working-memory ledger before allocation. It reuses the
+catalog window schedule, exact-value policy and interval rewrite; independent
+chunk screening is not equivalent. Managed-value and classification changes
+stop complete publication. Raw received hashes and emitted screened hashes stay
+separate, and emitted bytes preserve NUL, CRLF and invalid UTF-8 outside declared
+redactions. No general transform receives a secret-resolution API.
+
+`tooloutput.RetainScreenedStream` spools only already-screened bytes through the
+existing blob store's staging, compression, commit, retention and recovery claims.
+The plaintext and compressed staging overlap is admitted against spill quota;
+codec scratch is admitted after input EOF, when upstream screening can release
+its scratch. Preview and metadata have a separate retained-state lease. A
+readable failure prefix remains incomplete. Canceling input closes its source;
+copy/compression cancellation refuses a not-yet-committed body. Closing a spill
+releases accounting only after active readers and other recovery claims permit
+physical collection. Callers keep all applicable leases until their references
+are no longer used. These are logical capacity reservations, not process RSS.
+
+`StreamSourceMapping` carries only candidate ranges beside exact bytes. Its
+capture pin and digest stay unchanged when an exact presentation slice narrows
+the separate mapped range. `ProjectStreamMappings` admits and retains that
+metadata for explicitly exact slices; unspecified/arbitrary transforms drop it.
+Unseen retained bytes and printed source-like text establish no model read base.
+A source operation and the existing delivery boundary must still attribute the
+actual page before it qualifies as conversational evidence. These stream ports
+do not activate the later command-entry integration by themselves.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
