@@ -1729,8 +1729,13 @@ tasks:
   upgrade:rehearse:
     desc: 'Rehearse released-store upgrades, or signed desktop activation with --bundle --fixtures DIR --evidence DIR'
     preconditions:
-      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
-        msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
+      - sh: |
+          {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+          command -v python3 && command -v bun && command -v minisign
+          {{else}}
+          command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
+          {{end}}
+        msg: Required upgrade rehearsal tools are unavailable
     cmds:
       - |
         {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
