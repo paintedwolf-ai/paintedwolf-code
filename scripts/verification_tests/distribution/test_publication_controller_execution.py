@@ -68,7 +68,7 @@ class PublicationControllerTests(unittest.TestCase):
     def test_refused_server_provenance_never_downloads_campaign_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch("linux_release.publication_controller.facts", return_value={}), \
-                 patch("linux_release.publication_controller.select", side_effect=ValueError("untrusted workflow")), \
+                 patch("linux_release.publication_controller.select_final", side_effect=ValueError("untrusted workflow")), \
                  patch("linux_release.publication_controller.download") as download:
                 with self.assertRaisesRegex(ValueError, "untrusted workflow"):
                     retain(None, "owner/repo", 42, 123, Path(directory), "a" * 40,

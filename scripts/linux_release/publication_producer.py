@@ -7,12 +7,12 @@ import json
 import os
 from pathlib import Path
 import shutil
-import stat
+import tempfile
 
-from .publication_bundle import MAX_BYTES, MAX_FILES
+from .installed_artifact_bundle import retain_tree
 from .publication_controller import SelectedCampaign
 from .publication_source import facts
-from .publication_provenance import controller_context
+from .installed_provenance import controller_context
 from .publication_authority import PREFIX, repository_origin
 from .release_admission import document
 from .support_matrix import CATALOG
@@ -21,65 +21,10 @@ ROOT_FILES = {"final-artifacts.json", "campaign.json", "repositories.json"}
 ROOT_DIRS = {"packages", "evidence", "generations", "nix-cache", "repository-setup"}
 
 
-def copy_inputs(source: Path, destination: Path) -> None:
-    """Copy bounded regular files through pinned directory descriptors."""
-    if (source.is_symlink() or not source.is_dir() or destination.exists() or destination.is_symlink()
-            or destination.resolve().is_relative_to(source.resolve())):
-        raise ValueError("campaign production requires a fresh independent destination")
-    count, total = 0, 0
-    destination.mkdir(mode=0o700)
-    try:
-        for parent, directories, files, descriptor in os.fwalk(source, follow_symlinks=False):
-            relative = Path(parent).relative_to(source)
-            if relative == Path("."):
-                if set(files) != ROOT_FILES or not set(directories) <= ROOT_DIRS:
-                    raise ValueError("campaign input root contains missing or unexpected entries")
-            output = destination / relative
-            output.mkdir(mode=0o700, exist_ok=True)
-            for name in directories:
-                count += 1
-                if count > MAX_FILES:
-                    raise ValueError("campaign exceeds its entry count bound")
-                if not stat.S_ISDIR(os.stat(name, dir_fd=descriptor, follow_symlinks=False).st_mode):
-                    raise ValueError("campaign directories must not be links or special files")
-            for name in files:
-                count += 1
-                if count > MAX_FILES:
-                    raise ValueError("campaign exceeds its file count bound")
-                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
-                with os.fdopen(fd, "rb") as incoming:
-                    before = os.fstat(incoming.fileno())
-                    if not stat.S_ISREG(before.st_mode) or before.st_size > 16 << 30:
-                        raise ValueError("campaign requires bounded regular files")
-                    total += before.st_size
-                    if total > MAX_BYTES or shutil.disk_usage(destination).free < before.st_size + (1 << 30):
-                        raise ValueError("campaign exceeds its size or available disk bound")
-                    target = output / name
-                    with target.open("xb") as outgoing:
-                        remaining = before.st_size
-                        while remaining:
-                            block = incoming.read(min(remaining, 1 << 20))
-                            if not block:
-                                raise ValueError("campaign file changed during retention")
-                            outgoing.write(block)
-                            remaining -= len(block)
-                        if incoming.read(1):
-                            raise ValueError("campaign file grew during retention")
-                    target.chmod(0o600)
-                    after = os.fstat(incoming.fileno())
-                    current = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
-                    identity = lambda row: (row.st_dev, row.st_ino, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
-                    if identity(before) != identity(after) or identity(after) != identity(current):
-                        raise ValueError("campaign file changed or was replaced during retention")
-    except BaseException:
-        shutil.rmtree(destination)
-        raise
-
-
 def produce(source: Path, destination: Path, immutable: dict, producer: dict, *, catalog,
             signing_generation: int, key_fingerprint: str, repository_base_url=None) -> dict:
     """Only freshly admitted copied inputs receive the producer binding."""
-    copy_inputs(source, destination)
+    retain_tree(source, destination, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
     try:
         with (destination / "producer.json").open("x") as stream:
             json.dump({"format_version": 1, **producer,
@@ -96,7 +41,7 @@ def produce(source: Path, destination: Path, immutable: dict, producer: dict, *,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--inputs", type=Path, required=True)
+    parser.add_argument("--qualification-run-id", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-repository", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
@@ -110,9 +55,21 @@ def main(argv=None):
             raise ValueError("campaign retention must not write into the immutable source checkout")
         signer, _ = selection(signing_catalog, False)
         catalog, _ = document(CATALOG)
-        produce(args.inputs, args.output, source, producer, catalog=catalog,
-                signing_generation=signer["generation"], key_fingerprint=signer["fingerprint"],
-                repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX)
+        from scripts.ci_policy.github import api
+        from .publication_raw_campaign import materialize
+        with tempfile.TemporaryDirectory(prefix=".linux-qualification-", dir=args.output.absolute().parent) as temporary:
+            inputs, provenance = materialize(api, os.environ["GITHUB_REPOSITORY"], producer["repository_id"],
+                                             args.qualification_run_id, source, catalog, Path(temporary))
+            produce(inputs, args.output, source, producer, catalog=catalog,
+                    signing_generation=signer["generation"], key_fingerprint=signer["fingerprint"],
+                    repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX)
+            try:
+                with (args.output / "qualification-selection.json").open("x") as stream:
+                    json.dump(provenance, stream, indent=2, sort_keys=True)
+                    stream.write("\n")
+            except BaseException:
+                shutil.rmtree(args.output)
+                raise
         print(f"Complete Linux campaign inputs retained: {args.output}")
     except (OSError, ValueError, KeyError, TypeError, ImportError) as exc:
         parser.exit(1, f"Linux campaign retention refused: {exc}\n")

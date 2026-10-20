@@ -9,7 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.publication_producer import copy_inputs, main, produce
+from linux_release.publication_producer import main, produce, ROOT_FILES, ROOT_DIRS
+from linux_release.installed_artifact_bundle import retain_tree
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
@@ -76,7 +77,7 @@ class PublicationProducerTests(unittest.TestCase):
                 else:
                     (source / "accepted.json").write_text('{"accepted":true}')
                 with self.assertRaises((ValueError, OSError)):
-                    copy_inputs(source, output)
+                    retain_tree(source, output, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
                 self.assertFalse(output.exists())
 
     def test_existing_nested_and_linked_destination_refusal_preserves_inputs(self):
@@ -84,21 +85,21 @@ class PublicationProducerTests(unittest.TestCase):
             source, output, *_ = self.fixture(directory)
             for destination in [source / "nested", source]:
                 with self.assertRaises(ValueError):
-                    copy_inputs(source, destination)
+                    retain_tree(source, destination, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
             output.symlink_to(source, target_is_directory=True)
             with self.assertRaises(ValueError):
-                copy_inputs(source, output)
+                retain_tree(source, output, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
             self.assertTrue((source / "packages/app").is_file())
 
     def test_entry_and_disk_bounds_clean_up_owned_destination(self):
         for constraint in ["count", "disk"]:
             with self.subTest(constraint=constraint), tempfile.TemporaryDirectory() as directory:
                 source, output, *_ = self.fixture(directory)
-                target = "linux_release.publication_producer."
+                target = "linux_release.installed_artifact_bundle."
                 manager = patch(target + "MAX_FILES", 1) if constraint == "count" else patch(
                     target + "shutil.disk_usage", return_value=type("Disk", (), {"free": 0})())
                 with manager, self.assertRaises(ValueError):
-                    copy_inputs(source, output)
+                    retain_tree(source, output, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
                 self.assertFalse(output.exists())
 
     def test_branch_or_unprotected_workflow_cannot_stamp_production_inputs(self):
@@ -107,7 +108,7 @@ class PublicationProducerTests(unittest.TestCase):
             errors = io.StringIO()
             with redirect_stderr(errors), patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_REF": "refs/heads/work"}), \
                  self.assertRaises(SystemExit):
-                main(["--inputs", str(source), "--output", str(output),
+                main(["--qualification-run-id", "123", "--output", str(output),
                       "--source-repository", str(source), "--source-commit", "a" * 40])
             self.assertFalse(output.exists())
             self.assertIn("protected main release controller", errors.getvalue())

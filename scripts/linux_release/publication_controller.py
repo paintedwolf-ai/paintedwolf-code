@@ -9,12 +9,12 @@ from pathlib import Path
 import subprocess
 
 from .installed_evidence import artifacts as validate_artifacts
-from .publication_bundle import download
+from .installed_artifact_bundle import download
 from .publication_caches import verify as verify_caches
 from .publication_setups import verify as verify_setups
 from .publication_authority import PREFIX, repository_origin
 from .publication_generations import verify as verify_generations
-from .publication_provenance import controller_context, select, verify_producer
+from .installed_provenance import controller_context, select_final, verify_producer
 from .publication_source import facts
 from .release_admission import document, verify_release
 from .publication_files import verify_files
@@ -63,7 +63,7 @@ def retain(api, repository: str, repository_id: int, run_id: int, source_reposit
            source_commit: str, destination: Path, *, catalog, signing_generation, key_fingerprint, repository_base_url=None):
     """The main controller supplies its policy, selected source and production signer."""
     source = facts(source_repository, source_commit)
-    provenance = select(api, repository, repository_id, run_id)
+    provenance = select_final(api, repository, repository_id, run_id)
     download(provenance, destination)
     selected = SelectedCampaign(destination, provenance, source, catalog, signing_generation, key_fingerprint,
                                 repository_base_url=repository_base_url)
