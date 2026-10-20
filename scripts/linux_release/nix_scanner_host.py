@@ -55,7 +55,14 @@ def authorize_scanner(executable: str) -> dict:
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
     if result.returncode:
         raise OSError('could not authorize the exact scanner build executable in AppArmor')
-    profiles = PROFILES.read_text().splitlines()
+    observed = subprocess.run(['sudo', '-n', 'cat', '/sys/kernel/security/apparmor/profiles'],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    if observed.returncode or len(observed.stdout) > 8 << 20:
+        raise ValueError('scanner profile readback could not complete within its bound')
+    try:
+        profiles = observed.stdout.decode('utf-8').splitlines()
+    except UnicodeDecodeError:
+        raise ValueError('scanner profile readback is not UTF-8') from None
     if (not any(line == name + ' (unconfined)' or line == name + ' (enforce)' for line in profiles)
             or POLICY.read_text().strip() != before):
         raise ValueError('scanner profile was not loaded without changing global userns policy')
