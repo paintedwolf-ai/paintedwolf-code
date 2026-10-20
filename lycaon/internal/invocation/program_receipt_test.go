@@ -22,6 +22,7 @@ type programReceiptFixture struct {
 	parent, program, root, session string
 	definition                     toolcontract.OperationDefinition
 	span                           toolcontract.SourceSpan
+	sourceStart                    invocation.ProgramStart
 }
 
 func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
@@ -42,7 +43,8 @@ func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
 	f := programReceiptFixture{recorder: recorder, database: database, parent: parent.ID, program: uuid.NewString(), root: uuid.NewString(), session: session, definition: definition, span: toolcontract.SourceSpan{StartByte: 0, EndByte: 9, Line: 1, Column: 1}}
 	digest := sha256.Sum256([]byte("${op} arg"))
 	sourceDigest := hex.EncodeToString(digest[:])
-	err = recorder.BeginProgram(t.Context(), invocation.ProgramStart{Version: invocation.ProgramVersion{ProgramID: f.program, ParentReceiptID: f.parent, RootExecutionID: f.root, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"}, PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true, Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: 9}, DetailReference: "output:exact-program"}}, Nodes: []invocation.ProgramNode{{ID: "cat-node", SourceUnitID: "submitted", Span: f.span}, {ID: "untaken-node", SourceUnitID: "submitted", Span: f.span}}})
+	f.sourceStart = invocation.ProgramStart{Version: invocation.ProgramVersion{ProgramID: f.program, ParentReceiptID: f.parent, RootExecutionID: f.root, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"}, PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true, Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: 9}, DetailReference: "output:exact-program"}}, Nodes: []invocation.ProgramNode{{ID: "cat-node", SourceUnitID: "submitted", Span: f.span}, {ID: "untaken-node", SourceUnitID: "submitted", Span: f.span}}}
+	err = recorder.BeginProgram(t.Context(), f.sourceStart)
 	testutil.FailErr(t, "attach validated program", err)
 	return f
 }

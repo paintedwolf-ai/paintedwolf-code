@@ -1587,7 +1587,7 @@ CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_running
 CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     id TEXT PRIMARY KEY,
     program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
-    execution_id TEXT NOT NULL,
+    execution_id TEXT,
     stream TEXT NOT NULL CHECK (stream IN ('stdout','stderr','detail','source','arguments')),
     reference TEXT NOT NULL,
     retention_claim_id TEXT NOT NULL UNIQUE,
