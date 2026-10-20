@@ -174,6 +174,16 @@ mod tests {
         if std::env::var_os("PW_OBSERVER_TEST_CHILD").is_none() {
             return;
         }
+        if std::env::var("PW_OBSERVER_TEST_CHILD").unwrap() == "-1" {
+            assert_eq!(unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) }, 0);
+            let mut observer = command(&std::env::current_exe().unwrap())
+                .args(["--exact", "process::tests::fixed_child_observes_only_safe_environment_and_no_inherited_fds"])
+                .env("PW_OBSERVER_TEST_CHILD", "200")
+                .spawn().unwrap();
+            assert!(observer.wait().unwrap().success());
+            assert_eq!(unsafe { libc::prctl(libc::PR_GET_DUMPABLE) }, 0);
+            return;
+        }
         assert_eq!(unsafe { libc::prctl(libc::PR_GET_DUMPABLE) }, 1);
         assert_eq!(
             unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) },
@@ -210,6 +220,18 @@ mod tests {
         assert!(result.success());
         stop(&mut child);
         assert!(child.try_wait().unwrap().is_some());
+    }
+    #[test]
+    fn separate_exec_observes_without_relaxing_the_nondumpable_parent() {
+        let mut hardened = command(&std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "process::tests::fixed_child_observes_only_safe_environment_and_no_inherited_fds",
+            ])
+            .env("PW_OBSERVER_TEST_CHILD", "-1")
+            .spawn()
+            .unwrap();
+        assert!(hardened.wait().unwrap().success());
     }
     #[test]
     fn environment_never_inherits_parent_credentials() {
