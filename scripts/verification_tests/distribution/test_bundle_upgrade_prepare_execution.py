@@ -40,8 +40,9 @@ class PreparationTests(unittest.TestCase):
         (self.archives / Path(preparation.archive_path(self.candidate)).name).write_bytes(b"exact candidate")
         self.output = self.root / "prepared"
         self.plan = {"format_version": 1, "cases": [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview",
-                               "source_feed": "prior", "steps": [self.candidate]}],
-                     "feeds": [{"path": "prior", "manifest": self.prior}], "candidate": self.candidate}
+                               "source_manifest": self.prior, "steps": [self.candidate]}],
+                     "feeds": [{"path": "prior", "manifest": self.prior}], "candidate": self.candidate,
+                     "anchors": [{"manifest": self.prior, "verification": "artifact_signature_required"}]}
         self.patches = [patch.object(preparation, "load_registry", return_value={}),
                         patch.object(preparation, "validate_publication"),
                         patch.object(preparation, "capture_sources", side_effect=lambda *_: copy.deepcopy(self.plan)),
@@ -70,6 +71,7 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual((self.output / preparation.archive_path(self.candidate)).read_bytes(), b"exact candidate")
         self.assertEqual((self.output / "offers/preview/key-1/latest.json.sig").read_text(), "signed fixture")
         self.assertEqual(result["source_sha"], "a" * 40)
+        self.assertEqual(result["anchors"][0]["verification"], "artifact_signature_verified")
         inventory = json.loads((self.output / "inventory.json").read_text())
         self.assertEqual(inventory[preparation.archive_path(self.candidate)], result["archives"]["1.1.0"]["archive_sha256"])
 
@@ -77,6 +79,13 @@ class PreparationTests(unittest.TestCase):
         with patch.object(preparation, "verify", side_effect=ValueError("invalid signature")), \
              patch.object(preparation, "sign") as signer:
             with self.assertRaisesRegex(ValueError, "invalid signature"):
+                self.prepare()
+            signer.assert_not_called()
+
+    def test_uncovered_baseline_cannot_be_marked_authenticated(self):
+        self.plan["anchors"][0]["manifest"] = manifest("1.0.3")
+        with patch.object(preparation, "verify"), patch.object(preparation, "sign") as signer:
+            with self.assertRaisesRegex(ValueError, "absent from the authenticated archive"):
                 self.prepare()
             signer.assert_not_called()
 

@@ -64,8 +64,7 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
     result = capture_sources(ORIGIN, candidate, output / "sources")
     manifests = {candidate["version"]: candidate}
     for case in result["cases"]:
-        snapshot = next(row for row in result["feeds"] if row["path"] == case["source_feed"])
-        for manifest in [snapshot["manifest"], *case["steps"]]:
+        for manifest in [case["source_manifest"], *case["steps"]]:
             version = manifest["version"]
             if version in manifests and any(manifests[version][field] != manifest[field] for field in ("version", "platforms", "update_keys")):
                 raise ValueError("one release version has conflicting manifests")
@@ -82,6 +81,10 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
         require_version(manifest["platforms"][PLATFORM]["signature"], version, "upgrade archive")
         verify(target, manifest["platforms"][PLATFORM]["signature"], generation(registry, number)["public_key"])
         manifests[version] = {**manifest, "archive_sha256": file_digest(target)}
+    for anchor in result["anchors"]:
+        if anchor["manifest"]["version"] not in manifests:
+            raise ValueError("automatic baseline is absent from the authenticated archive inventory")
+        anchor["verification"] = "artifact_signature_verified"
     result["schemas"] = {}
     for version in manifests:
         metadata = source / "lycaon/testdata/upgrade-corpus" / version / "MANIFEST.json"
