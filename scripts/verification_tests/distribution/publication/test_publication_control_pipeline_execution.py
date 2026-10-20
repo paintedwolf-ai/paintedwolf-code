@@ -89,6 +89,9 @@ class ControlPipelineTests(unittest.TestCase):
         with patch.object(owner, "validate_plan") as validate:
             result = owner.plan(template, final("amd64"), SOURCE, "f" * 40, catalog)
             self.assertEqual(result["targets"][0]["artifact_id"], "app-amd64.deb")
+            self.assertEqual(result["format_version"], owner.PLAN_FORMAT_VERSION)
+            self.assertIn("input_adapter", result["targets"][0])
+            self.assertIsNone(result["targets"][0]["input_adapter"])
             self.assertNotIn("artifact_selector", result["targets"][0])
             validate.assert_called_once_with(result, final("amd64"), catalog)
             self.assertIn("artifact_selector", template["targets"][0])

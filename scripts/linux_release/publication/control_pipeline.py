@@ -8,7 +8,7 @@ import shutil
 import tempfile
 
 from ..installed_candidate_inputs import prepare as candidate, select as select_candidate
-from ..installed_campaign import FIELDS, validate_plan
+from ..installed_campaign import FIELDS, PLAN_FORMAT_VERSION, validate_plan
 from ..installed_evidence import artifacts
 from .controls import build
 from ..release_admission import document
@@ -42,7 +42,7 @@ def plan(template, final, source, driver_tree, catalog):
         del target["artifact_selector"]
         target["artifact_id"] = by_kind[key]
         targets.append(target)
-    result = {"format_version": 2, "source_commit": source["source_commit"],
+    result = {"format_version": PLAN_FORMAT_VERSION, "source_commit": source["source_commit"],
               "driver_tree": driver_tree, "targets": targets}
     validate_plan(result, final, catalog)
     return result
