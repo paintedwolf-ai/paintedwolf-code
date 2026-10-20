@@ -39,9 +39,12 @@ func TestOperationDefinitionIsDetachedAndUsesExistingContract(t *testing.T) {
 }
 
 func TestProducerPublicationRequiresCompleteEligibleOutcome(t *testing.T) {
-	completeNoMatch := ProducerResult{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: NativeComparisonPublication}
+	completeNoMatch := ProducerResult{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: NativeComparisonPublication, EffectCertainty: NoEffect}
 	if err := completeNoMatch.Validate(); err != nil {
 		t.Fatalf("status one complete result: %v", err)
+	}
+	if (ProducerResult{Terminal: ProducerCompleted, EffectCertainty: "invented"}).Validate() == nil {
+		t.Fatal("unclassified effect certainty admitted")
 	}
 	for _, result := range []ProducerResult{
 		{Status: 0, Terminal: ProducerCompleted, PublicationEligible: true},
@@ -50,6 +53,7 @@ func TestProducerPublicationRequiresCompleteEligibleOutcome(t *testing.T) {
 		{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true},
 		{Status: -1, Terminal: ProducerCompleted}, {Terminal: "invented"},
 	} {
+		result.EffectCertainty = NoEffect
 		if result.Validate() == nil {
 			t.Fatalf("invalid producer admitted: %+v", result)
 		}
