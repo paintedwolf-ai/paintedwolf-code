@@ -23,12 +23,34 @@ type Identity struct {
 	Groups []uint32
 }
 
+// CaptureCaller accepts only the kernel credential transition of the installed
+// setuid bootstrap. A traced or no_new_privs launch cannot obtain this state.
+func CaptureCaller() (Identity, error) {
+	uid, effective, saved := unix.Getresuid()
+	if uid <= 0 || effective != 0 || saved != 0 {
+		return Identity{}, errors.New("the installed privileged bootstrap transition is unavailable")
+	}
+	gid, effectiveGID, savedGID := unix.Getresgid()
+	if gid < 0 || effectiveGID != gid || savedGID != gid {
+		return Identity{}, errors.New("bootstrap group identity differs from the original caller")
+	}
+	groups, err := os.Getgroups()
+	if err != nil {
+		return Identity{}, err
+	}
+	caller := Identity{UID: uint32(uid), GID: uint32(gid)}
+	for _, group := range groups {
+		caller.Groups = append(caller.Groups, uint32(group))
+	}
+	return caller, nil
+}
+
 // Attributes creates a user namespace owned by the privileged parent. The
 // entry executable must remove all capabilities and set no_new_privs before
 // executing application code: identity mappings deliberately preserve root
 // ownership facts, not authority to assume uid 0.
 func Attributes(caller Identity) (*syscall.SysProcAttr, error) {
-	if os.Geteuid() != 0 || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
+	if os.Geteuid() != 0 || uint32(os.Getuid()) != caller.UID || uint32(os.Getgid()) != caller.GID || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
 		return nil, errors.New("protected launch requires a privileged bootstrap and a login user")
 	}
 	return &syscall.SysProcAttr{
@@ -67,6 +89,10 @@ func SealEntry(originNamespace *os.File) error {
 func verifyNamespace(origin *os.File) error {
 	if origin == nil {
 		return errors.New("missing original user namespace")
+	}
+	kind, err := unix.IoctlGetInt(int(origin.Fd()), unix.NS_GET_NSTYPE)
+	if err != nil || kind != unix.CLONE_NEWUSER {
+		return errors.New("original descriptor is not a user namespace")
 	}
 	current, err := os.Open("/proc/self/ns/user")
 	if err != nil {
