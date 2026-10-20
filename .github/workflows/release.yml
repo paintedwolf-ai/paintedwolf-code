@@ -681,6 +681,10 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .release-controller
           persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: .release-controller/lycaon/go.mod
+          cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .release-controller/.bun-version
@@ -699,11 +703,13 @@ jobs:
           name: release-public-artifacts
           path: release-public-artifacts
       - name: Pin upgrade sources and sign isolated channel fixtures
+        working-directory: .release-controller
         env:
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
         run: |
-          python3 .release-controller/scripts/release_control.py bundle-prepare \
-            --manifest release-metadata/latest.json --archives release-public-artifacts \
+          ./task upgrade:rehearse -- --prepare-bundle \
+            --manifest "${GITHUB_WORKSPACE}/release-metadata/latest.json" \
+            --archives "${GITHUB_WORKSPACE}/release-public-artifacts" \
             --source "${GITHUB_WORKSPACE}" --output "${RUNNER_TEMP}/bundle-upgrade-fixtures"
       - name: Retain the credential-free upgrade fixtures
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

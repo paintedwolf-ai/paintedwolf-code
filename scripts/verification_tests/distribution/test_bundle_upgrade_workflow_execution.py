@@ -15,6 +15,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("bundle-rehearse --fixtures /fixtures --evidence /evidence", " ".join((result.stdout + result.stderr).split()))
         self.assertNotIn("build:lycaon-dev", result.stdout + result.stderr)
 
+    def test_preparation_uses_its_own_managed_mode_without_building(self):
+        result = subprocess.run([str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--prepare-bundle", "--manifest", "/manifest", "--archives", "/archives", "--source", "/source", "--output", "/output"],
+                                cwd=ROOT, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bundle-prepare --manifest /manifest", " ".join((result.stdout + result.stderr).split()))
+        self.assertNotIn("build:lycaon-dev", result.stdout + result.stderr)
+
     def test_bundle_commands_reach_their_argument_parsers(self):
         for command in ("bundle-prepare", "bundle-rehearse", "bundle-serve"):
             result = subprocess.run([sys.executable, "scripts/release_control.py", command, "--help"], cwd=ROOT,
@@ -30,6 +37,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("needs: [classify, ship-gates, aggregate-release, publication-credentials]", prepare)
         self.assertIn("environment: release-publication", prepare)
         self.assertIn("FEED_SIGNING_KEYS_JSON:", prepare)
+        self.assertIn("./task upgrade:rehearse -- --prepare-bundle", prepare)
         self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)
         self.assertNotIn("secrets.", execution)
         self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)

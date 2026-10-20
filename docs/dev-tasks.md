@@ -1088,7 +1088,9 @@ and hosts entry and stops its captured server process; cleanup failures fail the
 gate.
 
 `./task upgrade:rehearse -- --bundle --fixtures <directory> --evidence <directory>`
-uses the prepared artifact without rebuilding the candidate. Each case installs
+uses the prepared artifact without rebuilding the candidate. The protected job
+prepares it through the same target with `--prepare-bundle --manifest PATH
+--archives DIR --source DIR --output DIR`. Each case installs
 an unmodified prior app in writable scratch space, materializes its exact corpus,
 and enables automatic updates with rollout bucket zero. After automatic staging,
 it stops the captured app and engine, then launches that installation again.
