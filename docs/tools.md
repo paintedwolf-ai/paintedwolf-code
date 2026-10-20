@@ -78,7 +78,8 @@ lineage membership. Session pairing additionally requires complete observation
 of every relevant holder: inaccessible process/socket tables produce
 `ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
 ordinary connection admission. These are observations for mediated admission,
-not grants; the broker rechecks current identities at each required boundary.
+not grants; mediated admission must recheck current identities at each required
+boundary.
 
 Windows qualification requires actual filesystem replacement while handles are
 open, reparse-point and exact-name identity checks, journal/error settlement,
