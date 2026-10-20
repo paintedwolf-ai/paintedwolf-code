@@ -86,6 +86,7 @@ class HostedRuntimeCustodyTests(unittest.TestCase):
                 self.assertEqual(retain.call_args.args[:2], (original, custody / 'bootstrap'))
                 with self.assertRaises(ValueError):
                     runtime.freeze(selected(), Path('/controller'), {})
+                (custody / 'contract.json').chmod(0o600)
                 (custody / 'contract.json').write_text(json.dumps(contract))
                 def mutate(*_):
                     (custody / 'contract.json').write_text(json.dumps({**contract, 'source_commit': 'f' * 40}))
