@@ -135,3 +135,27 @@ class RealLocalGitTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "no longer offers"):
                     observe(selected, recipe, first["commit"], backend=backend,
                             authorize=lambda *_: {"accepted": True})
+
+    def test_committed_symlink_is_refused_without_checking_out_or_executing_recipe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            recipe, selected = selection(root)
+            publishing = root / "publisher"
+            publishing.mkdir(mode=0o700)
+            publisher = FixturePublisher(publishing)
+            Path(publisher.origin).chmod(0o700)
+            first = publisher.publish(selected, recipe, None)
+            checkout = publishing / "checkout-1"
+            (checkout / "PKGBUILD").unlink()
+            (checkout / "PKGBUILD").symlink_to(".SRCINFO")
+            publisher.git("-C", checkout, "add", "--", "PKGBUILD")
+            publisher.git("-C", checkout, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                          "commit", "-m", encoded({**selected, "previous": first["commit"]}).decode().strip())
+            publisher.git("-C", checkout, "push", "origin", "HEAD:refs/heads/master")
+            changed = publisher.head()
+            reader = root / "reader"
+            with FixtureOrigin(reader, Path(publisher.origin)) as backend:
+                with self.assertRaisesRegex(ValueError, "nonregular"):
+                    observe(selected, recipe, changed, backend=backend,
+                            authorize=lambda *_: {"accepted": True})
+            self.assertFalse(reader.exists())
