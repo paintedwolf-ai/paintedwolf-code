@@ -6,6 +6,7 @@ in rust.buildRustPackage {
   pname = "cargo-about";
   version = "0.9.1";
   src = fetchurl {
+    name = "cargo-about-0.9.1.tar.gz";
     url = "https://static.crates.io/crates/cargo-about/cargo-about-0.9.1.crate";
     sha256 = "4d62bfc04a579b87777727b0f5f389f72bdeb1c6cc8fbcf1c0e0c736c9b5b7a4";
   };
