@@ -25,7 +25,7 @@ NIX = {"updates", "development", "distribution"}
 FAMILIES = {"documents": "products", "installation": "packages", "conversation": "desktop",
             "git": "desktop", "files": "desktop", "external-files": "desktop", "clipboard": "desktop",
             "input": "desktop", "windowing": "desktop", "accessibility": "desktop",
-            "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "desktop",
+            "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "performance",
             **{capability: "security" for capability in SECURITY},
             **{capability: "packages" for capability in NIX}}
 
@@ -52,18 +52,24 @@ def driver_family(capability: str, installation: str) -> str | None:
     return "nix" if capability in NIX and installation not in {"deb", "rpm", "pacman"} else FAMILIES.get(capability)
 
 
+def case_family(capability: str, case: str, installation: str) -> str | None:
+    if capability == "installation" and case in {"clean-install-and-launch", "launcher-arguments"}:
+        return "desktop"
+    if capability == "documents" and case in {"redacted-send", "ocr-and-documents"}:
+        return "documents"
+    return driver_family(capability, installation)
+
+
 def registry(catalog: dict, installation: str) -> dict:
     entries = []
     for capability in catalog["capabilities"]:
-        family = driver_family(capability["id"], installation)
         for case in capability["cases"]:
-            entries.append({"capability": capability["id"], "case": case, "driver_family": "desktop" if capability["id"] == "installation" and case in {"clean-install-and-launch", "launcher-arguments"} else family})
+            entries.append({"capability": capability["id"], "case": case, "driver_family": case_family(capability["id"], case, installation)})
     return {"format_version": 1, "cases": entries}
 
 
 def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
-    family = ("desktop" if capability == "installation" and case in {"clean-install-and-launch", "launcher-arguments"}
-              else driver_family(capability, binding["artifact"]["installation"]))
+    family = case_family(capability, case, binding["artifact"]["installation"])
     module_name = "scripts.linux_release.installed_cases." + family if family else None
     if module_name is None or importlib.util.find_spec(module_name) is None:
         return retain(binding, capability, case, root, "unverified", {"reason": "native-case-driver-required"})

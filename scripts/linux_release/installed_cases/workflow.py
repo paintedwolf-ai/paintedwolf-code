@@ -24,7 +24,10 @@ def identity(document: dict) -> str:
 
 
 class ToolTurn:
-    def __init__(self, app, provider, project: Path):
+    def __init__(self, app, provider, project: Path, *, vision: bool = False):
+        if type(vision) is not bool:
+            raise ValueError('installed fixture vision capability must be explicit')
+        self.capabilities = {'chat', 'streaming', 'tools'} | ({'vision'} if vision else set())
         self.app, self.provider, self.project = app, provider, project
         self.session_id = None
         self.observations = {}
@@ -36,7 +39,7 @@ class ToolTurn:
             'base_url': self.provider.base_url, 'requires_api_key': False,
             'models': [{'id': MODEL, 'context_length': 131072,
                         'capabilities': {name: {'state': 'supported' if name in
-                            {'chat', 'streaming', 'tools'} else 'unsupported',
+                            self.capabilities else 'unsupported',
                             'sources': ['installed-fixture']} for name in
                             ('chat', 'streaming', 'tools', 'vision', 'reasoning',
                              'structured_output', 'prompt_caching')}}]}, {201})

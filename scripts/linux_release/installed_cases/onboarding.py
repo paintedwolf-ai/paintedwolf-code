@@ -1,34 +1,17 @@
 """Use only the installed window's normal accessible vault form; keep its password in memory."""
 from __future__ import annotations
 
-from contextlib import contextmanager
 import os
 from pathlib import Path
 import secrets
 import time
 
-from .app import process_identity, session_environment
+from .app import process_identity
+from .desktop_ui import accessibility_bus, owned_process, load_api
 from .records import CaseUnavailable
 
 _password = None
 _password_owner = None
-
-
-def owned_process(pid: int, app) -> bool:
-    if type(pid) is not int or pid <= 1:
-        return False
-    root = app.observations['launch_identity']
-    seen = set()
-    try:
-        while pid > 1 and pid not in seen and len(seen) < 32:
-            seen.add(pid)
-            row = process_identity(pid)
-            if pid == root['pid']:
-                return row == root
-            pid = row['parent_pid']
-    except (FileNotFoundError, ProcessLookupError):
-        pass
-    return False
 
 
 def controls(window, api):
@@ -114,22 +97,6 @@ def complete(selected, owner: tuple) -> dict:
     return {'mode': mode, 'ui_identity': identity, 'password_in_evidence': False, 'normal_action': True}
 
 
-@contextmanager
-def accessibility_bus(session):
-    environment = session_environment(session)
-    names = ('DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR')
-    previous = {name: os.environ.get(name) for name in names}
-    try:
-        os.environ.update({name: environment[name] for name in names})
-        yield
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
-
-
 def onboard(app):
     deadline, acted, api = time.monotonic() + min(app.timeout, 60), False, None
     owner = (os.getuid(), str(Path.home()))
@@ -139,9 +106,8 @@ def onboard(app):
                 return
             if api is None:
                 try:
-                    import pyatspi
-                    api = pyatspi
-                except ImportError:
+                    api = load_api()
+                except CaseUnavailable:
                     time.sleep(0.1)
                     continue
             if not acted:
