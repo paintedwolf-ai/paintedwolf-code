@@ -52,42 +52,42 @@ func DirectIPReview(tool string, args map[string]any, tc tools.ToolContext, decl
 	confInputs.SocksProxyEnv = false
 	contained := hitl.ContainedForAction(confInputs)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: filesFromArgs(tool, args),
-ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.EffectActionID(),
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: rootSession,
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
-SocketScopes: append([]string(nil), tc.Socket.SocketScopes...),
-SocketGrantStates: append([]string(nil), tc.Socket.SocketGrantStates...),
-AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Egress: hitl.ActionEgress{
-DirectIPRequested: true,
-Visibility: hitl.DirectIPVisibilityUnobserved,
-DeclaredDestinations: append([]string(nil), declared...),
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          tool,
+			Args:          args,
+			Files:         filesFromArgs(tool, args),
+			ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+			ActionID:      tc.EffectActionID(),
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      rootSession,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
+			SocketScopes:            append([]string(nil), tc.Socket.SocketScopes...),
+			SocketGrantStates:       append([]string(nil), tc.Socket.SocketGrantStates...),
+			AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+		Egress: hitl.ActionEgress{
+			DirectIPRequested:    true,
+			Visibility:           hitl.DirectIPVisibilityUnobserved,
+			DeclaredDestinations: append([]string(nil), declared...),
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 	lease := hitl.DirectIPLease{
 		ActionDigest:          hitl.GrantKey(action),
 		RequestDigest:         directIPRequestDigest(declared),
@@ -161,7 +161,7 @@ func (e *Capabilities) preflightDirectIPCapability(
 		DeclaredDestinations: declared,
 		Background:           capabilityrequest.BoolArg(args, "background"),
 	})
-	if e.directIPRuntime != nil && e.directIPRuntime.Authorized(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest) {
+	if e.directIPRuntime != nil && e.directIPRuntime.Authorized(tc.PermitIdentity(), actionDigest) {
 		e.emitDirectIPLifecycle(tools.DirectIPLifecycleEvent{
 			Phase:                tools.DirectIPLifecycleApproved,
 			SessionID:            tc.Identity.SessionID,
@@ -183,7 +183,7 @@ func (e *Capabilities) preflightDirectIPCapability(
 	}
 	if e.approvalsDisabled != nil && e.approvalsDisabled(tc.ActiveRootPath()) {
 		if e.directIPRuntime != nil {
-			e.directIPRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, requestDigest, confineDigest)
+			e.directIPRuntime.IssuePermit(tc.PermitIdentity(), actionDigest, requestDigest, confineDigest)
 		}
 		e.emitDirectIPLifecycle(tools.DirectIPLifecycleEvent{
 			Phase:                tools.DirectIPLifecycleApproved,
@@ -231,7 +231,7 @@ func (e *Capabilities) preflightDirectIPCapability(
 	if err := e.awaitDirectIPCapability(ctx, action, lease, tc, approval); err != nil {
 		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
-	authorized := e.directIPRuntime != nil && e.directIPRuntime.Authorized(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest)
+	authorized := e.directIPRuntime != nil && e.directIPRuntime.Authorized(tc.PermitIdentity(), actionDigest)
 	if !authorized {
 		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeDirectIPAuthorizationChanged,
@@ -265,7 +265,7 @@ func (e *Capabilities) directIPLeaseAuthorizes(action hitl.ProposedAction, tc to
 	if !e.directIPRuntime.LeaseCovers(action.Scope.ChatSession(), lease) {
 		return false
 	}
-	e.directIPRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
+	e.directIPRuntime.IssuePermit(tc.PermitIdentity(), lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
 	e.emitDirectIPLifecycle(tools.DirectIPLifecycleEvent{
 		Phase:                tools.DirectIPLifecycleLeaseReused,
 		SessionID:            action.Scope.SessionID,
@@ -309,7 +309,7 @@ func (e *Capabilities) awaitDirectIPCapability(
 		title = "Run with direct network access"
 	}
 	permit := hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthorityDirectIPPermit, SessionID: action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID,
+		Kind: hitl.AuthorityDirectIPPermit, SessionID: action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID, ExecutionID: tc.PermitIdentity().ExecutionID,
 		ActionDigest: actionDigest, DirectIPLease: &lease,
 	}
 	options := []hitl.ApprovalOption{{

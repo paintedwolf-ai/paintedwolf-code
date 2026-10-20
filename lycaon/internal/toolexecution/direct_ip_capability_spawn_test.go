@@ -20,13 +20,13 @@ type memoryDirectIPRuntime struct {
 	used map[string]bool
 }
 
-func (r *memoryDirectIPRuntime) IssuePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) {
+func (r *memoryDirectIPRuntime) IssuePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string) {
 	if r.permits == nil {
 		r.permits = map[string]struct {
 			req, conf string
 		}{}
 	}
-	key := sessionID + "|" + toolCallID + "|" + actionDigest
+	key := identity.Key() + "|" + actionDigest
 	r.permits[key] = struct {
 		req, conf string
 	}{req: requestDigest, conf: confinementDigest}
@@ -39,8 +39,8 @@ func (*memoryDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, stri
 	return true
 }
 
-func (r *memoryDirectIPRuntime) ConsumePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) (bool, error) {
-	key := sessionID + "|" + toolCallID + "|" + actionDigest
+func (r *memoryDirectIPRuntime) ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string) (bool, error) {
+	key := identity.Key() + "|" + actionDigest
 	if r.used == nil {
 		r.used = map[string]bool{}
 	}
@@ -58,8 +58,8 @@ func (r *memoryDirectIPRuntime) ConsumePermit(sessionID, toolCallID, actionDiges
 	return true, nil
 }
 
-func (r *memoryDirectIPRuntime) Authorized(sessionID, toolCallID, actionDigest string) bool {
-	key := sessionID + "|" + toolCallID + "|" + actionDigest
+func (r *memoryDirectIPRuntime) Authorized(identity hitl.EffectPermitIdentity, actionDigest string) bool {
+	key := identity.Key() + "|" + actionDigest
 	if r.used[key] {
 		return false
 	}
@@ -73,7 +73,7 @@ func TestConfineRequestForSpawnSelectsDirectIP(t *testing.T) {
 	digest := "action-digest"
 	reqDigest := "req-digest"
 	confDigest := "conf-digest"
-	rt.IssuePermit("sess", "call-1", digest, reqDigest, confDigest)
+	rt.IssuePermit(hitl.EffectPermitIdentity{SessionID: "sess", ToolCallID: "call-1"}, digest, reqDigest, confDigest)
 
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess",
@@ -147,7 +147,7 @@ func TestParseSocksProxyArg(t *testing.T) {
 
 func TestFinalizeDirectIPForSpawnMismatch(t *testing.T) {
 	rt := &memoryDirectIPRuntime{}
-	rt.IssuePermit("sess", "call-1", "action", "req", "conf")
+	rt.IssuePermit(hitl.EffectPermitIdentity{SessionID: "sess", ToolCallID: "call-1"}, "action", "req", "conf")
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess",
 			ToolCallID: "call-1"},

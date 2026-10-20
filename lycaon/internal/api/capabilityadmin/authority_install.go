@@ -79,7 +79,7 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 		for _, target := range delta.Sockets {
 			requested = append(requested, confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
 		}
-		already := s.Sockets.AuthorizedGrants("", delta.SessionID, delta.ToolCallID, delta.ActionDigest, requested)
+		already := s.Sockets.AuthorizedGrants("", delta.PermitIdentity(), delta.ActionDigest, requested)
 		covered := make(map[string]struct{}, len(already))
 		for _, grant := range already {
 			covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath] = struct{}{}
@@ -89,12 +89,12 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 			if _, ok := covered[grant.ApprovedPath+"\x00"+grant.ResolvedPath]; ok {
 				continue
 			}
-			s.Sockets.IssuePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest, grant)
+			s.Sockets.IssuePermit(delta.PermitIdentity(), delta.ActionDigest, grant)
 			created = append(created, grant)
 		}
 		return func() {
 			for _, grant := range created {
-				s.Sockets.RevokePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest, grant)
+				s.Sockets.RevokePermit(delta.PermitIdentity(), delta.ActionDigest, grant)
 			}
 		}, nil
 	case hitl.AuthorityDirectIPPermit:
@@ -102,11 +102,11 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 			return nil, fmt.Errorf("direct-IP approval authority is not configured")
 		}
 		lease := *delta.DirectIPLease
-		if s.DirectIP.Authorized(delta.SessionID, delta.ToolCallID, lease.ActionDigest) {
+		if s.DirectIP.Authorized(delta.PermitIdentity(), lease.ActionDigest) {
 			return nil, nil
 		}
-		s.DirectIP.IssuePermit(delta.SessionID, delta.ToolCallID, lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
-		return func() { s.DirectIP.RevokePermit(delta.SessionID, delta.ToolCallID, lease.ActionDigest) }, nil
+		s.DirectIP.IssuePermit(delta.PermitIdentity(), lease.ActionDigest, lease.RequestDigest, lease.ConfinementDigest)
+		return func() { s.DirectIP.RevokePermit(delta.PermitIdentity(), lease.ActionDigest) }, nil
 	case hitl.AuthorityGrantedPath:
 		if s.GrantedPaths == nil || delta.Grant == nil || delta.GrantedPath == nil {
 			return nil, fmt.Errorf("granted-path approval authority is not configured")
@@ -182,7 +182,7 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 		case hitl.AuthoritySocketPermit:
 			if s.Sockets != nil {
 				for _, target := range delta.Sockets {
-					s.Sockets.RevokePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest,
+					s.Sockets.RevokePermit(delta.PermitIdentity(), delta.ActionDigest,
 						confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath})
 				}
 			}
@@ -192,7 +192,7 @@ func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID 
 			}
 		case hitl.AuthorityDirectIPPermit:
 			if s.DirectIP != nil && delta.DirectIPLease != nil {
-				s.DirectIP.RevokePermit(delta.SessionID, delta.ToolCallID, delta.DirectIPLease.ActionDigest)
+				s.DirectIP.RevokePermit(delta.PermitIdentity(), delta.DirectIPLease.ActionDigest)
 			}
 		case hitl.AuthorityDirectIPChat:
 			if s.DirectIP != nil && delta.Grant != nil {

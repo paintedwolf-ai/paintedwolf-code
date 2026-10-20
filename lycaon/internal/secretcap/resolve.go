@@ -99,30 +99,40 @@ func pathMatchesSlots(slots []string, path string) (exact bool, prefix bool) {
 // ReferenceUseInSlots walks string values permitted by the declared slot paths;
 // nil slots permit every value. Map keys are never substituted.
 func ReferenceUseInSlots(value any, slots []string) ReferenceUse {
+	return referenceUseSelected(value, slots, false)
+}
+
+// ReferenceUseOutsideSlots identifies opaque references outside explicitly
+// declared native sinks. It shares the retained reference grammar and walker.
+func ReferenceUseOutsideSlots(value any, slots []string) ReferenceUse {
+	return referenceUseSelected(value, slots, true)
+}
+
+func referenceUseSelected(value any, slots []string, outside bool) ReferenceUse {
 	var use ReferenceUse
 	var walk func(any, string)
 	walk = func(val any, path string) {
 		exact, prefix := pathMatchesSlots(slots, path)
 		switch typed := val.(type) {
 		case string:
-			if exact {
+			if exact != outside {
 				use.Complete = use.Complete || secretmatch.ContainsReferenceToken(typed)
 				use.Malformed = use.Malformed || secretmatch.ContainsMalformedReferenceToken(typed)
 			}
 		case []string:
-			if prefix || exact {
+			if outside || prefix || exact {
 				for i, item := range typed {
 					walk(item, path+"/"+strconv.Itoa(i))
 				}
 			}
 		case []any:
-			if prefix || exact {
+			if outside || prefix || exact {
 				for i, item := range typed {
 					walk(item, path+"/"+strconv.Itoa(i))
 				}
 			}
 		case map[string]any:
-			if prefix || exact {
+			if outside || prefix || exact {
 				keys := make([]string, 0, len(typed))
 				for k := range typed {
 					keys = append(keys, k)

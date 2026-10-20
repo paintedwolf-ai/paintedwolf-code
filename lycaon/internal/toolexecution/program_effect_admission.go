@@ -20,6 +20,24 @@ type ProgramSurface struct {
 	profile   string
 }
 
+// ValidateOperation admits already compiled immutable effect metadata. It is
+// also the static-unit check; callers run it for every known prohibited effect
+// before starting any program operation. It invokes no authority or owner.
+func (s ProgramSurface) ValidateOperation(bound toolcontract.BoundOperation) error {
+	definition, invocation := bound.Definition(), bound.Invocation()
+	if err := s.selection.known.Validate(definition, invocation); err != nil {
+		return err
+	}
+	facts := definition.Facts()
+	if s.selection.denied[facts.Identity][bound.Command()] {
+		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
+	}
+	if !s.allowed.Allows(bound.Effects()) {
+		return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
+	}
+	return nil
+}
+
 // FreezeProgramSurface uses the effective profile boundary and explicit native
 // definitions. Existing profile/path grants remain separate executing checks.
 func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.ToolFilter, active []toolcontract.OperationDefinition) (ProgramSurface, error) {
