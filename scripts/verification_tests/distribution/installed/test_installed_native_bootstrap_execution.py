@@ -36,6 +36,8 @@ class NativeBootstrapTests(unittest.TestCase):
                         return (1 if failure == 'remove' else 0), b'', b''
                     if arguments[:3] == ['sudo', '-n', '/usr/bin/python3']:
                         return 0, json.dumps({'format_version': 1, 'matching_processes': [123] if failure == 'process' else []}).encode(), b''
+                    if arguments[0] == 'dpkg-deb' or '--showformat=${Version}' in arguments:
+                        return 0, b'1.0', b''
                     if '--showformat=${Package}' in arguments:
                         return 0, b'painted-wolf-code' if arguments[-1] == 'painted-wolf-code' else b'dpkg', b''
                     return 1, b'', b''
