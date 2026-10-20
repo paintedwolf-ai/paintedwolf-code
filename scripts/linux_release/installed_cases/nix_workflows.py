@@ -1,6 +1,7 @@
 """Exercise selected Nix authority through the final installed command workflow."""
 from __future__ import annotations
 
+import base64
 import errno
 import hashlib
 import json
@@ -24,7 +25,7 @@ from .workflow import ToolTurn, wait_settled
 
 SOCKET = '/nix/var/nix/daemon-socket/socket'
 SCRIPT = r'''import errno, json, os, pathlib, socket, subprocess, sys
-client, daemon, nonce, mode, target = sys.argv[1:]
+client, daemon, nonce, mode, target, output = sys.argv[1:]
 observation = {'nonce': nonce, 'uid': os.getuid(),
                'pid_namespace': os.stat('/proc/self/ns/pid').st_ino}
 with socket.socket(socket.AF_UNIX) as connection:
@@ -38,15 +39,22 @@ with socket.socket(socket.AF_UNIX) as connection:
 arguments = [client, '--extra-experimental-features', 'nix-command flakes',
              '--offline', '--option', 'substituters', '', '--option', 'extra-substituters', '',
              '--option', 'builders', '', '--store', 'daemon']
+config = pathlib.Path.cwd() / ('nix-config-' + nonce)
+config.mkdir(mode=0o700)
+environment = {'HOME': str(config), 'NIX_CONF_DIR': str(config),
+               'NIX_USER_CONF_FILES': '/dev/null', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'}
+if mode == 'develop':
+    store = subprocess.run(arguments + ['path-info', '--json', '--json-format', '1', output],
+                           capture_output=True, timeout=30, env=environment)
+    if len(store.stdout) > 65536:
+        raise RuntimeError('Nix store identity exceeded its evidence bound')
+    observation['store_exit_code'] = store.returncode
+    observation['store_stdout'] = store.stdout.decode('utf-8')
 if mode == 'daemon':
     arguments += ['store', 'ping', '--json']
 else:
     arguments += ['develop', '--no-write-lock-file', target, '--command', 'sh', '-c',
                   "test -x \"$(command -v go)\" && test -x \"$(command -v bun)\" && printf paintedwolf-nix-dev-shell"]
-config = pathlib.Path.cwd() / ('nix-config-' + nonce)
-config.mkdir(mode=0o700)
-environment = {'HOME': str(config), 'NIX_CONF_DIR': str(config),
-               'NIX_USER_CONF_FILES': '/dev/null', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'}
 result = subprocess.run(arguments, capture_output=True, timeout=120, env=environment)
 if len(result.stdout) > 65536 or len(result.stderr) > 65536:
     raise RuntimeError('Nix workflow exceeded its evidence bound')
@@ -120,6 +128,18 @@ def daemon_facts(ordinary: dict, approved: dict, namespace: int) -> bool:
             and isinstance(ping.get('version'), str) and bool(ping['version']))
 
 
+def store_facts(binding: dict, observed: dict) -> bool:
+    try:
+        rows = json.loads(observed['store_stdout'])
+        identity = binding['artifact']['identity']
+        sri = 'sha256-' + base64.b64encode(bytes.fromhex(identity['sha256'])).decode()
+        return (observed.get('store_exit_code') == 0 and isinstance(rows, dict)
+                and set(rows) == {identity['store_path']}
+                and rows[identity['store_path']].get('narHash') == sri)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
     program = client(binding)
     target = source_target(binding) if mode == 'develop' else ''
@@ -134,7 +154,8 @@ def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
             for approved in (False, True):
                 nonce = uuid.uuid4().hex
                 arguments = {'command': shlex.join([str(Path(sys.executable).resolve()), str(script),
-                             str(program), SOCKET, nonce, mode, target]), 'timeout_ms': 180000}
+                             str(program), SOCKET, nonce, mode, target,
+                             binding['artifact']['identity']['store_path']]), 'timeout_ms': 180000}
                 if approved:
                     arguments['capability_request'] = {'host_execution': True}
                 with ProviderFixture([{'name': 'command', 'arguments': arguments}]) as provider:
@@ -158,7 +179,8 @@ def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
                 passed = (first['socket_errno'] in {errno.EPERM, errno.EACCES} and first['exit_code'] != 0
                           and first['pid_namespace'] != namespace and second['socket_errno'] == 0
                           and second['exit_code'] == 0 and second['pid_namespace'] == namespace
-                          and second['stdout'] == 'paintedwolf-nix-dev-shell')
+                          and second['stdout'] == 'paintedwolf-nix-dev-shell'
+                          and store_facts(binding, second))
             client(binding)
             observations['app'] = app.observations
         return 'passed' if passed else 'failed', observations, app.streams()
