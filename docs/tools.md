@@ -81,6 +81,25 @@ ordinary connection admission. These are observations for mediated admission,
 not grants; mediated admission must recheck current identities at each required
 boundary.
 
+Portable external launch freezes the selected entry and interpreter identities,
+real cwd, literal argv/environment and confinement before release to user code.
+A held handle does not waive current path or operation admission. Entry,
+interpreter and cwd replacements refuse release; observed credentials must agree
+with the permitted transition of the captured selection. Native binary image
+observations come from the stopped kernel image rather than a successful stdout
+or a pathname check.
+
+For shebang entries, the release check verifies the actual interpreter image and
+exact kernel-expanded argv, including the original script pathname and arguments,
+and rechecks the held selected entry. It does not rewrite script paths through
+`/dev/fd` or assert the kernel's historical script vnode under an ABA namespace
+swap. Subsequent interpreter source, import and plugin reads remain ordinary
+confined process reads; they are not immutable captured program source. Native
+header and argument behavior follows [XNU's image activator](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exec.c)
+and [Linux's script loader](https://github.com/torvalds/linux/blob/master/fs/binfmt_script.c).
+The capture and stopped-image components do not qualify the complete helper
+release protocol while its integration and actual ordinary-script fixtures remain.
+
 Windows qualification requires actual filesystem replacement while handles are
 open, reparse-point and exact-name identity checks, journal/error settlement,
 metadata capability results, typed null operands, executable alias resolution
