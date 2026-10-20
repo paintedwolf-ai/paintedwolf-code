@@ -11,4 +11,24 @@ case "$1" in
     fi
     ;;
 esac
+if [ "$1" = "remove" ] && [ -d /sys/kernel/security/apparmor ]; then
+  profiles=/sys/kernel/security/apparmor/profiles
+  pattern='^painted-wolf-code \((enforce|complain|unconfined|kill)\)$'
+  if grep -Eq "$pattern" "$profiles"; then
+    command -v apparmor_parser >/dev/null 2>&1 || {
+      printf '%s\n' 'painted-wolf-code: restore apparmor_parser before removing the loaded package profile' >&2
+      exit 1
+    }
+    # Remove only this package-owned name, without parsing local policy includes.
+    printf 'profile painted-wolf-code {}\n' | apparmor_parser --remove --skip-cache
+    if grep -Eq "$pattern" "$profiles"; then
+      printf '%s\n' 'painted-wolf-code: the package AppArmor profile remains loaded' >&2
+      exit 1
+    else
+      [ "$?" -eq 1 ] || exit 1
+    fi
+  else
+    [ "$?" -eq 1 ] || exit 1
+  fi
+fi
 exit 0
