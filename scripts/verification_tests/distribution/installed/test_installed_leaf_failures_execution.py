@@ -81,3 +81,27 @@ class InstalledLeafFailureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.invoke(output, case_inputs={'arbitrary_commands': {}})
             self.assertFalse(output.exists())
+
+    def test_first_launch_runs_immediately_after_binding_before_environment_and_cases(self):
+        from linux_release.installed_cases import desktop
+        events = []
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            def prepare(*args):
+                events.append('install')
+                return {'status': 'passed'}
+            binder = self.fixture(stack, prepare)
+            original_binding = binder.return_value
+            binder.side_effect = lambda *args: events.append('bind') or original_binding
+            def first(binding, root):
+                events.append('first-launch')
+                self.assertEqual(binding['execution_nonce'], 'c' * 32)
+                return {'status': 'passed'}
+            stack.enter_context(patch.object(desktop, 'prepare_first_launch', side_effect=first))
+            stack.enter_context(patch.object(leaf, 'collect', side_effect=lambda *args:
+                events.append('environment') or ({'OS': 'fixture'}, {'session': {}})))
+            def case(binding, capability, case, root):
+                events.append('case')
+                return retain(binding, capability, case, root, 'unverified', {'fixture': True})
+            stack.enter_context(patch.object(leaf, 'execute_case', side_effect=case))
+            self.invoke(Path(directory) / 'leaf')
+        self.assertEqual(events, ['install', 'bind', 'first-launch', 'environment', 'case'])

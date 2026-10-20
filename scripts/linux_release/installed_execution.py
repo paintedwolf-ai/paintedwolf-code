@@ -126,6 +126,9 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         binding["case_inputs"] = case_inputs
     if transaction is not None:
         binding["installation_transaction"] = transaction
+        binding["execution_nonce"] = execution_nonce
+        from .installed_cases.desktop import prepare_first_launch
+        binding["first_launch_transaction"] = prepare_first_launch(binding, retained)
     facts, observations = collect(environments[environment_id], binding, guest, variant["display"]["protocol"])
     if facts.keys() != set(catalog["recorded_environment_facts"]):
         raise ValueError("installed environment collector differs from the selected catalog")
