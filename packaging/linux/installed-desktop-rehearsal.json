@@ -1,0 +1,17 @@
+{
+  "format_version": 1,
+  "controller_commit": "590631830301c7bd6b70d78f370fc8989d804ba2",
+  "controller_tree": "eada1e4d2bb200244cbbd8efac2973d857e63532",
+  "components": {
+    "native_candidates": "27cc615a1aac58e7ff29f139ed2eacc9da17063d",
+    "support_variants": "c02e46ad908a584d15067441216d1c9d67f8e52f",
+    "installed_execution": "6a14a59eb4c3ea9927d4fb29cf9b4286e0e33b9d"
+  },
+  "architecture": "arm64",
+  "candidate_run_id": 39469279036,
+  "candidate_artifact_id": 12288949953,
+  "candidate_controller_commit": "094f5375bd73ed99485f642790a2f6d2fca44a52",
+  "source_commit": "686b4f49589d87f27091c0d552015540e0fd5497",
+  "source_tree": "961323178bf8decaef9447f631d59a278957a468",
+  "partial": true
+}
