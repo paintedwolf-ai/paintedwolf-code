@@ -3,21 +3,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ "${1:-}" == --local-rpm-metadata ]]; then
+rehearsal_module=
+case "${1:-}" in
+  --local-package-probe) rehearsal_module=linux_release.package_probe ;;
+  --local-rpm-metadata) rehearsal_module=linux_release.rpm_metadata_rehearsal ;;
+  --local-pacman-construction) rehearsal_module=linux_release.arch_substrate_rehearsal ;;
+esac
+if [[ -n "$rehearsal_module" ]]; then
   shift
   cd "$ROOT"
-  exec env PYTHONPATH="$ROOT/scripts" python3 -m linux_release.rpm_metadata_rehearsal "$@"
-fi
-if [[ "${1:-}" == --local-pacman-construction ]]; then
-  shift
-  exec python3 - "$ROOT" "$@" <<'PACMAN_PY'
-import sys
-from pathlib import Path
-root = Path(sys.argv.pop(1))
-sys.path.insert(0, str(root / "scripts"))
-from linux_release.arch_substrate_rehearsal import main
-main()
-PACMAN_PY
+  exec env PYTHONPATH="$ROOT/scripts" python3 -m "$rehearsal_module" "$@"
 fi
 
 # shellcheck source=release-r2-rest.sh

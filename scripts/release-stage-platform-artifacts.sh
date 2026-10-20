@@ -313,8 +313,11 @@ case "${GOOS}" in
     # Both families install the same tree apart from the fragments only one ships.
     python3 "${ROOT}/scripts/linux-package-assemble.py" compare --root "${ROOT}" --deb-tree "${DEB_TREE}" --rpm-tree "${RPM_TREE}"
     ENGINE="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw"
-    LYCAON_DOCUMENT_CORE_BINARY="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw-document-core" \
-      LYCAON_ENGINE_ROOT="${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}" diagnostics document-core
+    PROBE_ARGS=(--tree "${DEB_TREE}")
+    if [[ -n "${PW_PACKAGE_PROBE_LEASE:-}" ]]; then
+      PROBE_ARGS+=(--lease "${PW_PACKAGE_PROBE_LEASE}")
+    fi
+    PYTHONPATH="${ROOT}/scripts" python3 -m linux_release.package_probe "${PROBE_ARGS[@]}"
     OPENGREP="$(verify_opengrep "${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}")"
     if [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm,pkg.tar.zst" ]]; then
       PACMAN_PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path '*/release/bundle/pacman/*.pkg.tar.zst' -print -quit)"
