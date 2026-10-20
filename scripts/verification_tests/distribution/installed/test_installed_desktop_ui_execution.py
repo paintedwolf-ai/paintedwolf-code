@@ -82,10 +82,22 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         self.assertEqual(refusal.exception.observations['desktop_control'],
                          {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2})
         api, _ = surface([button])
-        with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
+        with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}), \
+                patch.object(ui.time, 'monotonic', side_effect=iter(range(100))), patch.object(ui.time, 'sleep'):
             with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
                 actor.click('Send')
         button.action.doAction.assert_not_called()
+
+    def test_control_waits_for_actual_async_render_without_activating_missing_node(self):
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        missing, _ = surface([])
+        ready, _ = surface([button])
+        api = SimpleNamespace(**vars(API), Registry=SimpleNamespace(
+            getDesktop=Mock(side_effect=[missing.Registry.getDesktop(0), ready.Registry.getDesktop(0)])))
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            actor.click('Send')
+        self.assertEqual(api.Registry.getDesktop.call_count, 2)
+        button.action.doAction.assert_called_once_with(0)
 
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
         entry = Node(API.ROLE_ENTRY, 'Message')
