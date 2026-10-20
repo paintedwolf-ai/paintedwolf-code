@@ -12,6 +12,10 @@ class CaseUnavailable(ValueError):
 
 
 STATUSES = {"passed", "failed", "unverified"}
+MAX_STREAMS = 16
+MAX_STREAM_BYTES = 8 << 20
+MAX_CASE_BYTES = 32 << 20
+MAX_OBSERVATION_BYTES = 1 << 20
 
 
 def retain(binding: dict, capability: str, case: str, evidence_root: Path, status: str,
@@ -22,9 +26,16 @@ def retain(binding: dict, capability: str, case: str, evidence_root: Path, statu
     if not isinstance(observations, dict):
         raise ValueError("installed case observations must be an object")
     streams = streams or {}
-    if any(not IDENTIFIER.fullmatch(name) or not isinstance(raw, bytes) or len(raw) > 8 << 20
-           for name, raw in streams.items()):
+    if (len(streams) > MAX_STREAMS or any(not IDENTIFIER.fullmatch(name) or not isinstance(raw, bytes)
+            or len(raw) > MAX_STREAM_BYTES for name, raw in streams.items())
+            or sum(map(len, streams.values())) > MAX_CASE_BYTES):
         raise ValueError("installed case evidence stream exceeds its contract")
+    document = {"format_version": 1, "source_commit": binding["source_commit"],
+                "artifact": binding["artifact"], "capability": capability,
+                "case": case, "status": status, "observations": observations}
+    raw = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
+    if len(raw) > MAX_OBSERVATION_BYTES or len(raw) + sum(map(len, streams.values())) > MAX_CASE_BYTES:
+        raise ValueError("installed case observations exceed the aggregate evidence contract")
     directory = evidence_root / capability / case
     directory.mkdir(parents=True, exist_ok=False)
     records = []
@@ -34,10 +45,6 @@ def retain(binding: dict, capability: str, case: str, evidence_root: Path, statu
             stream.write(raw)
         records.append({"path": path.relative_to(evidence_root).as_posix(),
                         "sha256": hashlib.sha256(raw).hexdigest()})
-    document = {"format_version": 1, "source_commit": binding["source_commit"],
-                "artifact": binding["artifact"], "capability": capability,
-                "case": case, "status": status, "observations": observations}
-    raw = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
     path = directory / "execution.json"
     with path.open("xb") as stream:
         stream.write(raw)
