@@ -138,10 +138,12 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
-	reviewed, err := freezeReviewedOperationInputs(canonical)
+	reviewedArguments, reviewed, err := admitReviewedOperationInputs(ctx, admission, canonical)
 	if err != nil {
 		return result, err
 	}
+	defer reviewedArguments.close()
+	canonical = reviewedArguments.values
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
 	if err != nil {

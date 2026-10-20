@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -42,26 +41,33 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if !ok || definition.Contract.Digest() != p.contractDigest {
 		return result, fmt.Errorf("progress owner unavailable")
 	}
+	arguments, err := prepareNativeArguments(ctx, p.admission, p.update.values)
+	if err != nil {
+		return result, err
+	}
+	defer arguments.close()
 	tc = freshProgramOwnerContext("update_progress", definition.Contract, p.identity.ExecutionID, p.identity.Scope.ProjectID, p.identity.SessionID, tc)
 	ctx = invocationContext(ctx, tc)
-	if reject := e.validateInvocation(ctx, "update_progress", tc.Identity.Agent, p.update.values, &tc); reject != nil {
+	if reject := e.validateInvocation(ctx, "update_progress", tc.Identity.Agent, arguments.values, &tc); reject != nil {
 		return result, reject
 	}
-	use, err := parseSecretUse(tc.Invocation.Contract, p.update.values)
+	use, err := parseSecretUse(tc.Invocation.Contract, arguments.values)
 	if err != nil {
 		return result, err
 	}
 	ctx = withSecretUse(ctx, use)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
-	canonical, tc, err := e.applyPreInvokeBoundary(ctx, "update_progress", tc.Identity.Agent, p.update.values, tc)
+	canonical, tc, err := e.applyPreInvokeBoundary(ctx, "update_progress", tc.Identity.Agent, arguments.values, tc)
 	if err != nil {
 		return result, err
 	}
+	reviewedArguments, reviewed, err := admitReviewedOperationInputs(ctx, p.admission, canonical)
+	if err != nil {
+		return result, err
+	}
+	defer reviewedArguments.close()
+	canonical = reviewedArguments.values
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, "update_progress", tc.Identity.Agent, canonical, &tc)
-	if err != nil {
-		return result, err
-	}
-	reviewed, err := freezeReviewedOperationInputs(canonical)
 	if err != nil {
 		return result, err
 	}
@@ -71,10 +77,11 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if err != nil {
 		return result, err
 	}
-	currentReview, err := freezeReviewedOperationInputs(rechecked)
+	currentArguments, currentReview, err := admitReviewedOperationInputs(ctx, p.admission, rechecked)
 	if err != nil {
 		return result, err
 	}
+	defer currentArguments.close()
 	if currentReview != reviewed {
 		return result, fmt.Errorf("reviewed progress changed during authority recheck")
 	}
@@ -119,16 +126,4 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	result.OwnerInvoked = true
 	result.Outcome, err = author.Apply(ctx, store, current.RootSessionID)
 	return result, err
-}
-
-func freezeReviewedOperationInputs(canonical map[string]any) (toolcontract.ReviewedOperationInputs, error) {
-	encoded, err := authzcontext.CanonicalJSON(canonical)
-	if err != nil {
-		return toolcontract.ReviewedOperationInputs{}, err
-	}
-	digest, err := authzcontext.CanonicalDigest(canonical)
-	if err != nil {
-		return toolcontract.ReviewedOperationInputs{}, err
-	}
-	return toolcontract.ReviewedOperationInputs{ArgumentsDigest: digest, CanonicalArguments: string(encoded)}, nil
 }

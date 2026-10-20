@@ -35,6 +35,7 @@ type PreparedProgramEnvelope struct {
 	contractDigest string
 	frame          ProgramFrame
 	update         *nativeArguments
+	admission      ProgramStateAdmission
 	identity       toolcontract.ProgramProgressIdentity
 	closed         bool
 	attempted      bool
@@ -98,6 +99,7 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 		return nil, progressOwnerError(err)
 	}
 	prepared.update = args
+	prepared.admission = admission
 	prepared.contractDigest = definition.Contract.Digest()
 	prepared.identity = toolcontract.ProgramProgressIdentity{ProgramID: frame.parent.Identity.ProgramID, ExecutionID: update.ExecutionID, ActorID: frame.parent.ActorID, SessionID: frame.parent.SessionID, Scope: frame.parent.Scope}
 	return prepared, nil
@@ -114,6 +116,7 @@ func (p *PreparedProgramEnvelope) Close() {
 		p.update.close()
 	}
 	p.program = nil
+	p.admission = nil
 }
 
 func (p *PreparedProgramEnvelope) validate(ctx context.Context) error {
