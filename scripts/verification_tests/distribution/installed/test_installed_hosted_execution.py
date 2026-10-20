@@ -1,5 +1,6 @@
 """Hosted desktop setup refuses shared machines and preserves existing filesystem owners."""
 from pathlib import Path
+import os
 import stat
 import tempfile
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.hosted_desktop import desktop_record, fresh, run, selected_controller, validate_host
+from linux_release import hosted_desktop as hosted
 
 
 class HostedDesktopTests(unittest.TestCase):
@@ -69,3 +71,36 @@ class HostedDesktopTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             desktop_record(self.environment(), 'gnome-xorg', Path('/owned/controller'), session,
                            SimpleNamespace(pw_uid=1002))
+
+    def test_owned_host_prepares_the_secure_parent_without_relaxing_package_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory).resolve()
+            actual_fstat, actual_lstat = os.fstat, Path.lstat
+            def root_owned(info):
+                return SimpleNamespace(st_dev=info.st_dev, st_ino=info.st_ino, st_mode=info.st_mode,
+                                       st_uid=0, st_gid=0)
+            with patch.object(hosted, 'INSTALL_PARENT', path), patch.object(hosted, 'validate_host') as guard, \
+                    patch.object(hosted.os, 'fstat', side_effect=lambda fd: root_owned(actual_fstat(fd))), \
+                    patch.object(Path, 'lstat', lambda item: root_owned(actual_lstat(item))):
+                path.chmod(0o777)
+                result = hosted.prepare_install_parent()
+                self.assertEqual((result['before_mode'], result['prepared_mode']), (0o777, 0o755))
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755)
+                self.assertEqual(hosted.prepare_install_parent()['before_mode'], 0o755)
+                guard.assert_called()
+                path.chmod(0o750)
+                with self.assertRaises(ValueError):
+                    hosted.prepare_install_parent()
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o750)
+                path.chmod(0o777)
+                (path / 'painted-wolf-code').mkdir()
+                with self.assertRaises(ValueError):
+                    hosted.prepare_install_parent()
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o777)
+
+    def test_secure_parent_preparation_cannot_run_on_an_unselected_host(self):
+        with patch.object(hosted, 'validate_host', side_effect=ValueError('unselected')), \
+                patch.object(hosted.os, 'open') as opened:
+            with self.assertRaises(ValueError):
+                hosted.prepare_install_parent()
+            opened.assert_not_called()
