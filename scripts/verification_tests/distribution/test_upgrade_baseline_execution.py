@@ -16,8 +16,11 @@ class BaselineTests(unittest.TestCase):
 
     def test_an_active_baseline_feed_supplies_the_existing_authenticated_source(self):
         with patch.object(baseline, "read_bytes") as read:
-            sources = [{"manifest": {"version": "1.0.2"}}]
-            self.assertEqual(baseline.capture("https://downloads.paintedwolf.dev", "1.1.0", {}, sources, Path("unused")), [])
+            sources = [{"path": "updates/preview/key-1/latest.json", "manifest_sha256": "digest", "manifest": {"version": "1.0.2"}}]
+            result = baseline.capture("https://downloads.paintedwolf.dev", "1.1.0", {}, sources, Path("unused"))
+            self.assertEqual(result[0]["manifest"], sources[0]["manifest"])
+            self.assertEqual(result[0]["path"], sources[0]["path"])
+            self.assertEqual(result[0]["verification"], "artifact_signature_required")
             read.assert_not_called()
 
     def test_archived_metadata_requires_artifact_authentication_before_execution(self):

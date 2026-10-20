@@ -17,8 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 def capture(base: str, candidate: str, registry: dict, feeds: list[dict], destination: Path) -> list[dict]:
     if compare(parse(candidate), parse(FIRST_AUTOMATIC_VERSION)) <= 0:
         return []
-    if any(row["manifest"]["version"] == FIRST_AUTOMATIC_VERSION for row in feeds):
-        return []
+    active = next((row for row in feeds if row["manifest"]["version"] == FIRST_AUTOMATIC_VERSION), None)
+    if active is not None:
+        return [{"path": active["path"], "manifest_sha256": active["manifest_sha256"],
+                 "manifest": active["manifest"], "verification": "artifact_signature_required"}]
     relative = f"anchors/{FIRST_AUTOMATIC_VERSION}.json"
     raw = read_bytes(f"{base}/updates/releases/{FIRST_AUTOMATIC_VERSION}.json", 1024 * 1024)
     if raw is None:
