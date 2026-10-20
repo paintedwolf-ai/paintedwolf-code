@@ -1168,3 +1168,15 @@ acknowledgement verifies schema-2 receipts and every package link from the signe
 distribution document, including newer Preview state after Stable promotion.
 These controls are implementation interfaces; defining them does not authorize a
 production run, release, or activation during a nonpublishing rehearsal.
+
+**Protected AUR availability policy.** `packaging/linux/aur-delivery-policy.json`
+defaults to `{"schema_version":1,"enabled":false}`. Disabled policy has no
+other fields and performs no Git request. An enabled declaration additionally
+requires `channel` (`stable` or `preview`), the matching maintained `package`
+(`painted-wolf-code-bin` or `painted-wolf-code-preview-bin`), and an exact
+40-character `commit`. It contains no caller-selected URL or publication command.
+The protected publication controller regenerates the recipe from both admitted
+Pacman generations and freshly observes the fixed origin before advertising it.
+Every signing callback repeats complete release and origin admission. A fixture
+origin cannot enable public availability; preparing this policy does not publish
+a recipe, reserve an AUR name, or change installed package sources.
