@@ -126,7 +126,8 @@ class BialyLatencyTests(unittest.TestCase):
             (root / 'heads/release.json').write_text(json.dumps({'preload': {'encoding': 'independent', 'options': {str(i): str(i) for i in range(16)}}}))
             data = {'root': str(root), 'model': '/sealed/model',
                     'files': {'heads/release.json': {}, 'heads/turn-load.safetensors': {}}}
-            result = {'responses': [{'engine': {'device': 'cpu'}}] + [{'answers': {'tools': {}}}] * 21,
+            result = {'responses': [{'engine': {'device': 'cpu'}}] + [{'answers': {'tools': {'type': 'multi', 'confidence': 0.5,
+                          'probabilities': {str(i): 0.5 for i in range(16)}}}}] * 21,
                       'roundtrip_ms': [500, 2000] + [25] * 20, 'stdout': b'', 'stderr': b''}
             policy = {'engine': {'reference_ms': 1000}, 'turn': {'deadline_ms': 10000, 'tools': {'question': 'fixed'}}}
             with patch.object(bialy_performance, 'unchanged', return_value=data), \

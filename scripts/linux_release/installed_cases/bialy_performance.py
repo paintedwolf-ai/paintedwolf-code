@@ -54,7 +54,7 @@ def reference(binding: dict) -> tuple[dict, dict]:
 
 
 def turn_latency(binding: dict) -> tuple[dict, dict]:
-    from scripts.bialy.bench_latency import STATES
+    from scripts.bialy.latency_workload import STATES
     from .performance import distribution
     data = unchanged(binding)
     release = Path(data['root']) / 'heads/release.json'
@@ -87,6 +87,13 @@ def turn_latency(binding: dict) -> tuple[dict, dict]:
     for response in result['responses'][1:]:
         if not isinstance(response.get('answers'), dict) or set(response['answers']) != {'tools'}:
             raise ValueError('installed Bialy did not answer the fixed reference question')
+        answer = response['answers']['tools']
+        probabilities = answer.get('probabilities') if isinstance(answer, dict) else None
+        if (not isinstance(probabilities, dict) or set(probabilities) != set(questions['tools']['options'])
+                or answer.get('type') != 'multi'
+                or any(type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1
+                       for value in [answer.get('confidence'), *probabilities.values()])):
+            raise ValueError('installed Bialy returned incomplete or invalid reference probabilities')
     measured = distribution(result['roundtrip_ms'][2:])
     return {'device': 'cpu', 'engine': result['responses'][0]['engine'], 'samples_ms': result['roundtrip_ms'][2:],
             'warmup_excluded': True, 'single_inflight': True, 'measurements_ms': measured,
