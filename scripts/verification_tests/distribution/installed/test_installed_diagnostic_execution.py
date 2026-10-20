@@ -87,7 +87,8 @@ class InstalledDiagnosticTests(unittest.TestCase):
                 self.assertEqual(continued.call_args.args[2], 'continued-startup')
                 self.assertEqual(installer.call_count, 1)
                 self.assertEqual([call.args[1:3] for call in cases.call_args_list],
-                                 [('conversation', 'provider-onboarding'), ('files', 'edit-search-review')] * 2)
+                                 [('vault', 'wrong-launcher-and-memory'), ('session', 'inhibitor-lifetime'),
+                                  ('conversation', 'provider-onboarding'), ('files', 'edit-search-review')] * 2)
             result = json.loads((output / 'diagnostic.json').read_text())
             for field in ('complete_candidate', 'application_qualified', 'qualification_authority', 'publication_authority'):
                 self.assertIs(result[field], False)
