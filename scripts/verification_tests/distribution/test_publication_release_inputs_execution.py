@@ -82,7 +82,7 @@ class ReleaseInputBytesTests(unittest.TestCase):
                          "pub_date": self.updater["pub_date"], "origin": "https://download.example",
                          "updater_manifest_sha256": self.digest((self.root / "updater.json").read_bytes()),
                          "platforms": {"darwin-aarch64": {"packages": {"dmg": {
-                             "file": self.package, "sha256": self.digest(b"actual fixture package"), "bytes": 21}}},
+                             "file": self.package, "sha256": self.digest(b"actual fixture package"), "bytes": len(b"actual fixture package")}}},
                              "linux-x86_64": {"packages": {}}}}
         self.binding = {"document": self.document, "catalog": self.root / "catalog.json",
                         "updater_manifest": self.root / "updater.json", "artifacts": self.root / "artifacts"}
