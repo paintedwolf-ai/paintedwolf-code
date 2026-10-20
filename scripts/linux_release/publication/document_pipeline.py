@@ -64,7 +64,7 @@ def package_files(selected, released, source, destination):
 
 
 def produce(api, repository, producer, source_repository, source_commit, campaign_run_id,
-            release_run_id, release_artifact_id, destination, *, catalog, signing_generation, package_signing_generation, key_fingerprint, repository_base_url):
+            release_run_id, release_artifact_id, destination, *, catalog, signing_generation, package_signing_generation, key_fingerprint, repository_base_url, enabled_delivery=False):
     if (destination.exists() or destination.is_symlink()
             or destination.resolve().is_relative_to(source_repository.resolve())):
         raise ValueError("distribution preparation requires fresh independent retained inputs")
@@ -85,12 +85,21 @@ def produce(api, repository, producer, source_repository, source_commit, campaig
                    "nix": {"source": {"git_url": "github:paintedwolf-ai/paintedwolf-code/" + source_commit,
                                       "commit": source_commit, "flake_lock_sha256": source["flake_lock_sha256"]},
                            "cache": {"enabled": False}} if linux else None}
-        authority = InactiveDeliveryReleaseAuthority(released, producer["controller_commit"])
+        if type(enabled_delivery) is not bool or enabled_delivery and not linux:
+            raise ValueError("enabled Linux delivery requires explicit public source catalog policy")
+        if enabled_delivery:
+            from .delivery import ObservedDeliveryReleaseAuthority
+            authority = ObservedDeliveryReleaseAuthority(selected, released, producer["controller_commit"])
+            request["repositories"], request["nix"]["cache"] = authority.facts()
+        else:
+            authority = InactiveDeliveryReleaseAuthority(released, producer["controller_commit"])
         identity = prepare(selected, destination / "document", request, released.root / "catalog.json",
                            released.root / "updater.json", destination / "packages", authorize_release=authority)
         with (destination / "preparation.json").open("x") as stream:
             json.dump({**identity, "published": False, "linux_public": linux,
-                       "repository_availability": False, "cache_availability": False, "aur_availability": False}, stream, indent=2)
+                       "repository_availability": bool(request["repositories"]),
+                       "cache_availability": bool(request["nix"] and request["nix"]["cache"]["enabled"]),
+                       "aur_availability": False}, stream, indent=2)
             stream.write("\n")
         return identity
     except BaseException:
@@ -105,6 +114,7 @@ def main(arguments=None):
     parser.add_argument("--source-commit", required=True)
     for name in ("campaign-run-id", "release-run-id", "release-artifact-id"):
         parser.add_argument("--" + name, type=int, required=True)
+    parser.add_argument("--observe-enabled-delivery", action="store_true")
     args = parser.parse_args(arguments)
     try:
         producer = controller_context(os.environ)
@@ -120,7 +130,8 @@ def main(arguments=None):
                 args.campaign_run_id, args.release_run_id, args.release_artifact_id, args.output,
                 catalog=catalog, signing_generation=load_registry()["signing_generation"],
                 package_signing_generation=signing["generation"], key_fingerprint=signing["fingerprint"],
-                repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX)
+                repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX,
+                enabled_delivery=args.observe_enabled_delivery)
         print(f"Nonpublishing distribution document prepared: {args.output}")
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
         parser.exit(1, "Distribution document preparation refused: " + str(error) + "\n")
