@@ -4,8 +4,8 @@ from pathlib import Path
 
 from .installed_evidence import artifacts
 from .release_admission import document
+from .publication_cache_policy import POLICY, load
 
-POLICY = Path(__file__).resolve().parents[2] / "packaging/linux/nix-cache-trust.json"
 SYSTEMS = {"amd64": "x86_64-linux", "arm64": "aarch64-linux"}
 
 
@@ -15,10 +15,13 @@ def verify(root: Path, selection: dict) -> list[dict]:
                if row["identity"]["kind"] == "nix-closure"}
     if not systems:
         return []
+    policy = load(POLICY)
+    if policy is None:
+        # Source-only Nix still passes the same final artifact and installed closure gates.
+        return []
     from scripts.nix_cache.admission import validate_request
     from scripts.nix_cache.publication import verified_report
     from scripts.nix_cache.release_authority import authorize
-    policy, _ = document(POLICY)
     verified = []
     for system in sorted(systems):
         directory = root / "nix-cache" / system

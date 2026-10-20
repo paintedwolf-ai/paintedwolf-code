@@ -19,7 +19,7 @@ class PublicationCachesTests(unittest.TestCase):
         directory = root / "nix-cache/x86_64-linux"
         directory.mkdir(parents=True)
         (directory / "report.json").write_text(json.dumps(report))
-        (root / "policy.json").write_text(json.dumps(policy))
+        (root / "policy.json").write_text(json.dumps({"schema_version":1,"enabled":True,"trust_policy":policy}))
         selection = {"source_commit": "a" * 40, "artifacts": {"format_version": 1,
             "source_commit": "a" * 40, "artifacts": [{"id": "nix", "installation": "nix-profile",
             "architecture": "amd64", "source_commit": "a" * 40,
@@ -69,3 +69,15 @@ class PublicationCachesTests(unittest.TestCase):
                  patch.dict(sys.modules, {"scripts.nix_cache." + name: module for name, module in modules.items()}):
                 with self.assertRaisesRegex(ValueError, "independently admitted"):
                     verify(root, selection)
+
+    def test_disabled_cache_makes_no_cache_claim_or_transport_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            selection,_,_,modules=self.fixture(root)
+            (root/"policy.json").write_text('{"schema_version":1,"enabled":false}')
+            with patch("linux_release.publication_caches.POLICY",root/"policy.json"), \
+                    patch.dict(sys.modules,{"scripts.nix_cache."+name:module for name,module in modules.items()}):
+                self.assertEqual(verify(root,selection),[])
+            modules["admission"].validate_request.assert_not_called()
+            modules["publication"].verified_report.assert_not_called()
+            modules["release_authority"].authorize.assert_not_called()

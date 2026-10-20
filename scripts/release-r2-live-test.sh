@@ -3,6 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == "--prepare-linux-controls" ]]; then
+  shift
+  exec python3 -m scripts.linux_release.publication_controls "$@"
+fi
 if [[ "${1:-}" == "--retain-linux-campaign" ]]; then
   shift
   exec python3 -m scripts.linux_release.publication_producer "$@"

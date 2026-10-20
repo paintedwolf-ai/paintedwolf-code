@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 from .installed_artifact_bundle import download, retain_tree
-from .installed_campaign import validate_plan
+from .installed_campaign import validate_plan, verify_execution_receipt
 from .installed_execution import registry
 from .installed_provenance import select_control, select_plan, select_qualification, verify_producer
 from .installed_qualification_binding import verify as verify_binding
@@ -59,6 +59,8 @@ def materialize(api, repository: str, repository_id: int, run_id: int, source: d
     if ({path.name for path in executed.iterdir() if path.is_file()} != expected_files
             or {path.name for path in executed.iterdir() if path.is_dir()} != expected_dirs):
         raise ValueError("raw campaign omitted a selected guest execution directory")
+    for target in targets:
+        verify_execution_receipt(executed / target["id"],target,source["source_commit"],driver_tree)
     retained = directory / "executed"
     retain_tree(executed, retained, root_files={"campaign.json", "admission.json", "plan.json", "driver-registry.json"},
                 root_dirs={"evidence", *[target["id"] for target in targets]})

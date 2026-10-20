@@ -47,6 +47,10 @@ class RawCampaignCompositionTests(unittest.TestCase):
         executed=raw/"installed-campaign"
         (executed/"evidence").mkdir(parents=True)
         (executed/"guest").mkdir()
+        execution={"format_version":1,"execution_nonce":"1"*32,"source_commit":source["source_commit"],
+                   "driver_tree":"d"*40,"artifact_id":"app","environment_id":"fixture","variant_id":None}
+        write(executed/"guest/execution-request.json",execution)
+        write(executed/"guest/leaf/execution.json",execution)
         for name,value in [("campaign.json",{**final,"results":[]}),("admission.json",{"accepted":False}),("plan.json",plan)]:
             write(executed/name,value)
         (executed/"driver-registry.json").write_bytes(drivers)
@@ -94,3 +98,13 @@ class RawCampaignCompositionTests(unittest.TestCase):
                 path.write_text(json.dumps(document))
                 with self.assertRaises(ValueError):
                     self.run_materialize(fixture)
+
+    def test_stale_guest_output_cannot_be_retained(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture=self.fixture(temporary)
+            path=Path(temporary)/"raw-payload/installed-campaign/guest/leaf/execution.json"
+            document=json.loads(path.read_text())
+            document["execution_nonce"]="2"*32
+            path.write_text(json.dumps(document))
+            with self.assertRaisesRegex(ValueError,"stale"):
+                self.run_materialize(fixture)
