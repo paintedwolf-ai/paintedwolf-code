@@ -111,6 +111,23 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             'inventory_complete': False, 'observed_roles': []})
         button.action.doAction.assert_not_called()
 
+    def test_typed_native_inventory_race_retries_but_unknown_error_is_retained(self):
+        class NativeRace(Exception):
+            domain, code = 'atspi_error', 0
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        api, window = surface([button])
+        self.app.observations = {'launch_identity': IDENTITY, 'session': {}}
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            with patch.object(actor, 'descendants', side_effect=[NativeRace('not retained'), iter([button])]):
+                actor.click('Send')
+        button.action.doAction.assert_called_once_with(0)
+        self.assertEqual(self.app.observations['desktop_inventory_retry']['domain'], 'atspi_error')
+        with ui.DesktopUI(self.app, api) as actor:
+            with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
+                with self.assertRaises(CaseUnavailable) as refusal:
+                    actor.find(API.ROLE_PUSH_BUTTON, 'Send')
+        self.assertNotIn('not retained', str(refusal.exception))
+
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
         entry = Node(API.ROLE_ENTRY, 'Message')
         entry.editable.setTextContents.side_effect = RuntimeError('do not retain fixture content')
