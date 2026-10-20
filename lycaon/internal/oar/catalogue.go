@@ -59,6 +59,7 @@ var factDecls = []factDecl{
 
 	{"tool", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"tool_args", oarcore.TypeMap, FactTierStandard, ProfileTool},
+	{"native_operation", oarcore.TypeString, FactTierHost, ""},
 	{"response_tools_callable", oarcore.TypeBool, FactTierHost, ""},
 	{"response_structured_output", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_turn_has_text", oarcore.TypeBool, FactTierHost, ""},
