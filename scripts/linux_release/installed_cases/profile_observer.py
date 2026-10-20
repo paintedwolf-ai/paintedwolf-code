@@ -136,7 +136,7 @@ def invocations(app, session_id, tool_names):
             or len(set(tool_names)) != len(tool_names)):
         raise ValueError('profile observer requires fixed declared fixture tools')
     with _database(app) as connection:
-        found = rows(connection.execute("SELECT id,length(tool_result_json),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool_call_id'),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool'),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.outcome') FROM messages WHERE session_id=? AND role='tool' AND tool_result_json IS NOT NULL AND tool_result_json!='' ORDER BY id LIMIT 257", (session_id,)))
+        found = rows(connection.execute("SELECT id,length(CAST(tool_result_json AS BLOB)),json_extract(CASE WHEN length(CAST(tool_result_json AS BLOB))<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool_call_id'),json_extract(CASE WHEN length(CAST(tool_result_json AS BLOB))<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool'),json_extract(CASE WHEN length(CAST(tool_result_json AS BLOB))<=1048576 THEN tool_result_json ELSE '{}' END,'$.outcome') FROM messages WHERE session_id=? AND role='tool' AND tool_result_json IS NOT NULL AND tool_result_json!='' ORDER BY id LIMIT 257", (session_id,)))
     result = []
     for message_id, length, call_id, tool, outcome in found:
         if type(length) is not int or length > 1 << 20:
