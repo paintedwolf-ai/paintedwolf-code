@@ -115,3 +115,14 @@ class InstalledSecurityTests(unittest.TestCase):
             with patch.object(security, 'process_identity', return_value=('42', uids, caps)), patch.object(
                     security, 'memory_read_denied', return_value=True), patch.object(security.os, 'getuid', return_value=1000):
                 self.assertFalse(security.protected_process(123, 42)[0])
+
+    def test_security_failure_retains_typed_phase_without_exception_prose(self):
+        error = ValueError('do not retain diagnostic text')
+        error.observations = {'observer_phase': 'service-image', 'error_type': 'ValueError'}
+        with patch.object(security, 'require_owned_guest'), patch.dict(security.PROBES, {
+                ('vault', 'wrong-launcher-and-memory'): lambda binding: (_ for _ in ()).throw(error)}), patch.object(
+                security, 'retain', side_effect=lambda *args: args):
+            result = security.execute({'case_inputs': {}}, 'vault', 'wrong-launcher-and-memory', Path('/unused'))
+        self.assertEqual(result[4], 'failed')
+        self.assertEqual(result[5]['observer_phase'], 'service-image')
+        self.assertNotIn('do not retain', json.dumps(result[5]))

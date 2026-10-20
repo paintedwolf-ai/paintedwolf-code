@@ -154,34 +154,46 @@ def protected_process(pid: int, expected_start: int) -> tuple[bool, dict]:
 
 
 def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
-    info, parent = SOCKET.lstat(), SOCKET.parent.stat()
-    if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0 or parent.st_uid != 0 or parent.st_mode & 0o022:
-        raise ValueError('identity socket is not selected by the administrator')
-    with socket.socket(socket.AF_UNIX) as stream:
-        stream.settimeout(5)
-        stream.connect(str(SOCKET))
-        outcome = refusal(stream)
-    pid = service_pid()
-    start, uids, capabilities = process_identity(pid)
-    image = observe(['sudo', '-n', 'readlink', '-e', f'/proc/{pid}/exe']).decode().strip()
-    expected = unchanged(binding, 'pw-vault-identity')
-    if Path(image).resolve() != expected.resolve():
-        raise ValueError('identity service is not the selected installed image')
-    denied = memory_read_denied(pid)
-    stable = service_pid() == pid and process_identity(pid) == (start, uids, capabilities)
-    passed = (outcome['status'] == 'refused' and outcome['code'] == 'executable_mismatch'
-              and not outcome['identity_returned'] and outcome['launcher_pid'] == 0
-              and all(uid not in {0, os.getuid()} for uid in uids)
-              and capabilities == 1 << 19 and denied and stable)
-    with InstalledApp(binding) as app:
-        engine = app.observations['engine_identity']
-        engine_passed, engine_observations = protected_process(engine['pid'], engine['start_time_ticks'])
-        shell = app.observations['launch_identity']
-        shell_passed, shell_observations = protected_process(shell['pid'], shell['start_time_ticks'])
-    return ('passed' if passed and engine_passed and shell_passed else 'failed',
-            {'engine': engine_observations, 'shell': shell_observations, 'app': app.observations, 'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
-             'service_uids': uids, 'effective_capabilities': capabilities,
-             'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
+    phase = "service-socket-ownership"
+    try:
+        info, parent = SOCKET.lstat(), SOCKET.parent.stat()
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0 or parent.st_uid != 0 or parent.st_mode & 0o022:
+            raise ValueError('identity socket is not selected by the administrator')
+        phase = "service-protocol-refusal"
+        with socket.socket(socket.AF_UNIX) as stream:
+            stream.settimeout(5)
+            stream.connect(str(SOCKET))
+            outcome = refusal(stream)
+        phase = "service-owner"
+        pid = service_pid()
+        phase = "service-process-credentials"
+        start, uids, capabilities = process_identity(pid)
+        phase = "service-image"
+        image = observe(['sudo', '-n', 'readlink', '-e', f'/proc/{pid}/exe']).decode().strip()
+        expected = unchanged(binding, 'pw-vault-identity')
+        if Path(image).resolve() != expected.resolve():
+            raise ValueError('identity service is not the selected installed image')
+        phase = "service-memory-and-stability"
+        denied = memory_read_denied(pid)
+        stable = service_pid() == pid and process_identity(pid) == (start, uids, capabilities)
+        passed = (outcome['status'] == 'refused' and outcome['code'] == 'executable_mismatch'
+                  and not outcome['identity_returned'] and outcome['launcher_pid'] == 0
+                  and all(uid not in {0, os.getuid()} for uid in uids)
+                  and capabilities == 1 << 19 and denied and stable)
+        phase = "installed-gui-and-engine"
+        with InstalledApp(binding) as app:
+            engine = app.observations['engine_identity']
+            engine_passed, engine_observations = protected_process(engine['pid'], engine['start_time_ticks'])
+            shell = app.observations['launch_identity']
+            shell_passed, shell_observations = protected_process(shell['pid'], shell['start_time_ticks'])
+        return ('passed' if passed and engine_passed and shell_passed else 'failed',
+                {'engine': engine_observations, 'shell': shell_observations, 'app': app.observations, 'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
+                 'service_uids': uids, 'effective_capabilities': capabilities,
+                 'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
+        error.observations = {"observer_phase": phase, "error_type": type(error).__name__,
+                              **getattr(error, "observations", {})}
+        raise
 
 
 PROBES = {('browser', 'denied-local-services'): denied_local_services,
@@ -220,8 +232,10 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
         status, observations, streams = ('unverified',
             getattr(error, 'observations', {'reason': 'installed-app-interaction-unavailable'}),
             getattr(error, 'streams', {}))
-    except (OSError, subprocess.SubprocessError):
-        status, observations, streams = 'unverified', {'reason': 'native-security-observer-unavailable'}, {}
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-        status, observations, streams = 'failed', {'reason': 'native-security-contract-refused'}, {}
+    except (OSError, subprocess.SubprocessError) as error:
+        status, observations, streams = 'unverified', {'reason': 'native-security-observer-unavailable',
+            **getattr(error, 'observations', {})}, getattr(error, 'streams', {})
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
+        status, observations, streams = 'failed', {'reason': 'native-security-contract-refused',
+            **getattr(error, 'observations', {})}, getattr(error, 'streams', {})
     return retain(binding, capability, case, evidence_root, status, observations, streams)
