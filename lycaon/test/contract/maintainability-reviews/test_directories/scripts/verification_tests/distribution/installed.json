@@ -4,14 +4,23 @@
   "kind": "test_suite",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "This namespace keeps the installed qualification protocol and interaction contracts together after their deliberate move out of generic distribution tests. It covers independent source and artifact authority, nonce and variant completeness, captured native lifecycle, fixed interactions and evidence admission. Splitting modules into arbitrary smaller test folders would obscure those joint contracts without changing a product or authority boundary. The current source passed 776 managed contracts with three platform skips. Retain exactly 47 immediate files with no growth allowance; membership or owner-boundary changes require renewed review.",
-  "reviewed_commit": "0094b038d353b04da47c0d1db370ac6953a75c5e",
-  "ceiling": 47,
+  "reason": "After reviewing the five added physical-input suites, retain exactly 52 immediate contracts in the installed qualification namespace. Protocol, private mailbox, guest focus/delivery, root-leased QMP peer and diagnostic-controller tests jointly establish one native-execution evidence chain with existing leaf, source, variant and retention contracts. These tests exercise cross-owner stale nonce, replay, focus, immutable process identity and authority-false partial boundaries; a smaller folder alone would not change their shared admission contract. The actual composed source passed 803 managed contracts with three platform skips, including owned hosted ancestor preparation and all new input guards. This is an explicit reconsideration of the prior 47-member decision, not a hard-limit change or future growth allowance. Any added member or owner-boundary change requires renewed review.",
+  "reviewed_commit": "bb0567e6df9266818e690eedfad60d8ad5cf0cc2",
+  "ceiling": 52,
   "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_candidate_inputs_execution.py": "689dc307b48d09002824fd31b7094ccc4988ca287391916c2940a4bcea2252ee",
+    "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "41a23aca29905baa3bb4523d180e2753e0c12f92c09a6db3e1aa51d01af54a0e",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "d7b50bac9c8b2b9a2a5eecd8ca9b3be19ea9d81d0f53b17ed67d42bb24dee2cb",
+    "scripts/verification_tests/distribution/installed/test_installed_input_diagnostic_execution.py": "6135c0a74353e2f69ac06aba14394cee042c1bfd974e73f7d9abb898ee1d109b",
+    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "86abde44ecd3f6d6069fa47ba8a1f1ef7fd5248a390d4a28ff18c11bb809ab03",
+    "scripts/verification_tests/distribution/installed/test_installed_input_mailbox_execution.py": "c39ce10b251256655de35f7c20b2df3d1560e8c3e2e1664f9184287af82f48d1",
+    "scripts/verification_tests/distribution/installed/test_installed_input_protocol_execution.py": "8fa714d809431bfc62fee10cd7c916cdfc07733fd78af961fedf8f4c417b867b",
     "scripts/verification_tests/distribution/installed/test_installed_leaf_failures_execution.py": "6dd8afa64d38c3fb82d29a59946efbc767da32cbb6c8a2dd1b63d7bff6c083af",
+    "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "0c3b36ee854bbdc267e50fd9ee548d069197feb6dbdaf2ecb243f23d13a99ec4",
+    "scripts/verification_tests/distribution/installed/test_installed_onboarding_execution.py": "90167ec957e6994ce75f73efea6e5023fef3a7aceeac22ec5953ae35e80aaad9",
+    "scripts/verification_tests/distribution/installed/test_installed_qemu_input_execution.py": "d309136e216d011be2b502307fccc75b8f6f00b1ab0e3e3bf2cea9e7e74ee53f",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
-    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "c9997bb45700d77813162275ca526b00a0fef82ede59d488fc216b07be55e0a3",
-    "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "0c3b36ee854bbdc267e50fd9ee548d069197feb6dbdaf2ecb243f23d13a99ec4"
+    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "2945ddd772e133ddc59336db8cb662b5c3e00c9c2cc4bee01e7379067afbfc83"
   },
-  "reviewed_shape": "a66cf8a67c9179cba8f147dec5e2a3d71bc93d1b210c5e6b58896a50a1ed0de3"
+  "reviewed_shape": "6cab84bd2a7ebc90b965a565cb40e1f2875e5a647b6faeed4abd7e25c38fc2c5"
 }

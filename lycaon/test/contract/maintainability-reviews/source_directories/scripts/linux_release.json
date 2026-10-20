@@ -4,14 +4,17 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "This package owns one installed qualification protocol: independent producer selection, bounded byte transport, typed plan variants, native execution freshness and fresh retention. The added hosted diagnostic owner isolates partial custody and authority-false observations from complete campaign admission. Keep these explicit owners and the installed_cases interaction package rather than exporting private lifecycle seams solely to lower directory breadth. The current composed source passed 776 managed contracts and the preceding graphical-context source passed budgets. Retain exactly 28 immediate members with no growth allowance; membership or authority changes require renewed review.",
-  "reviewed_commit": "0094b038d353b04da47c0d1db370ac6953a75c5e",
+  "reason": "Retain this installed qualification protocol at 28 immediate members. Independent server/source selection, bounded transport, catalog variants, native execution freshness and protected retention remain explicit owners; physical VM delivery is now a cohesive installed_input subsystem with root lease, guest marker, fixed operations and host/leaf receipt comparison. No generic key/text or command callback is admitted by the plan. The hosted-only ancestor observer tightens two fixed root-owned paths without relaxing payload verification; partial diagnostics remain authority-false. Reviewed the actual changed boundaries and the 803-contract source (three platform skips). Keep the measured ceiling with no growth allowance; new members or changed authority require another decision.",
+  "reviewed_commit": "bb0567e6df9266818e690eedfad60d8ad5cf0cc2",
   "ceiling": 28,
   "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_diagnostic_execution.py": "507d173431e67f4d434724d4bc3ff30b5ccce00985c93a72970a4b6e46994de7",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "d7b50bac9c8b2b9a2a5eecd8ca9b3be19ea9d81d0f53b17ed67d42bb24dee2cb",
+    "scripts/verification_tests/distribution/installed/test_installed_input_diagnostic_execution.py": "6135c0a74353e2f69ac06aba14394cee042c1bfd974e73f7d9abb898ee1d109b",
+    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "86abde44ecd3f6d6069fa47ba8a1f1ef7fd5248a390d4a28ff18c11bb809ab03",
     "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
-    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "eb40e9553b666fab6bd004923a7665a3856bd2c6461a8d85e7d0105667a57877",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_diagnostic_execution.py": "507d173431e67f4d434724d4bc3ff30b5ccce00985c93a72970a4b6e46994de7"
+    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "f9f50f40a1b2f5d854269c875261724dd5a3fb8cd7d027ce6103399d1899fa06"
   },
   "reviewed_shape": "cc3a54457f664cc0a5358bfe73234feccc80606760f006d2d50b165990f3b21a"
 }

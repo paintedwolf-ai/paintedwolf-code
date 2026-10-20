@@ -4,16 +4,17 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "These fixed interaction families share one sealed installed-app lifecycle, owned native session and process observers, typed permission checkpoints and bounded evidence. The logind observer is a separate authority boundary: typed NoSessionForPID can bind an owned user unit to the active local display, while SSH remains rejected. Keep direct owner imports rather than splitting the same captured-process lifecycle into packages with exported internals for a count target. The 776-contract managed checkpoint covers native retry, focus, refusal and cleanup guards. Retain exactly 37 members with no growth allowance; new families or changed lifecycle authority require renewed review. Reconsidered the actual embedded WebKit/Den ownership distinction and metadata-only failure changes: ancestry and focus remain required, undelivered input stays unverified, and traversal limits and package verification remain unchanged.",
-  "reviewed_commit": "0094b038d353b04da47c0d1db370ac6953a75c5e",
+  "reason": "Retain 37 immediate fixed interaction owners sharing the sealed InstalledApp lifecycle, actual captured native process/session identities, checkpoints and bounded evidence. EntryFocus now belongs to the physical-input subsystem and re-observes only the same owned label/process and already-focused active frame. Passive retries never refocus or replay delivered input; invalidated accessibility inventories preserve the original deadline and complete-inventory requirement. Captured product death remains failed, while unavailable observer bounds remain unverified. The 803-contract checkpoint covers these refusal, cleanup, negative-childCount and no-replay boundaries. Exporting private lifecycle internals only to split this directory would obscure that joint authority. No growth allowance; future families or changed lifecycle authority require renewed review.",
+  "reviewed_commit": "bb0567e6df9266818e690eedfad60d8ad5cf0cc2",
   "ceiling": 37,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_app_execution.py": "96edcfcb69b3b92798c52ca76dcba7add790f2f89b4faf90db8fb253908f2ce1",
-    "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "94bac01ac8c4c0e181e0e1e84903217094fc33720b605c6b62e2b68d601a8ab8",
-    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "c9997bb45700d77813162275ca526b00a0fef82ede59d488fc216b07be55e0a3",
+    "scripts/verification_tests/distribution/installed/test_installed_crash_execution.py": "b60485534a370aa4ab150a36906444d0c7472360089f80bb8f59a2dc2fa2a8aa",
+    "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "41a23aca29905baa3bb4523d180e2753e0c12f92c09a6db3e1aa51d01af54a0e",
     "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "0c3b36ee854bbdc267e50fd9ee548d069197feb6dbdaf2ecb243f23d13a99ec4",
+    "scripts/verification_tests/distribution/installed/test_installed_onboarding_execution.py": "90167ec957e6994ce75f73efea6e5023fef3a7aceeac22ec5953ae35e80aaad9",
     "scripts/verification_tests/distribution/installed/test_installed_security_execution.py": "5a0fe7eb66f3057721aceccc550ce93d4fe03e34431f276adac7dec69f5ec3e3",
-    "scripts/verification_tests/distribution/installed/test_installed_crash_execution.py": "b60485534a370aa4ab150a36906444d0c7472360089f80bb8f59a2dc2fa2a8aa"
+    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "2945ddd772e133ddc59336db8cb662b5c3e00c9c2cc4bee01e7379067afbfc83"
   },
   "reviewed_shape": "cfdeca2e393042a255c89ae48afa7737da617797d38de03c79f5af1cbd163e89"
 }
