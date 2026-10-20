@@ -54,3 +54,37 @@ class DocumentRehearsalTests(unittest.TestCase):
             with patch.object(immutable.subprocess, "run") as transport, self.assertRaises(ValueError):
                 backend.put("releases/v1.2.3/distribution.v1.json", source, "application/json", expected_identity=expected)
             transport.assert_not_called()
+
+    def test_setup_capture_admits_private_bytes_before_yield_and_refuses_changed_report(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from scripts.linux_release.publication import immutable
+        from scripts.linux_release import repository_setup_admission
+        with tempfile.TemporaryDirectory() as temporary:
+            original = Path(temporary)
+            names = ('repo.deb', 'SHA256SUMS', 'SHA256SUMS.asc', 'package-key.asc')
+            expected = {}
+            for name in names:
+                expected[name] = ('fixture ' + name).encode()
+                (original / name).write_bytes(expected[name])
+            setup = {'family': 'deb', 'package': {'file': 'repo.deb'}, 'repository_generation': 'a' * 64,
+                     'inventory_sha256': 'b' * 64,
+                     'public_key_sha256': hashlib.sha256(expected['package-key.asc']).hexdigest()}
+            inputs = dict(source_commit='c' * 40, version='1.2.3', channel='stable', signing_generation=1,
+                          key_fingerprint='d' * 40)
+            report = {key: value for key, value in setup.items() if key != 'public_key_sha256'}
+            def admit(package, checksums, signature, catalog, **kwargs):
+                self.assertNotEqual(package.parent, original)
+                for name in names:
+                    self.assertEqual((package.parent / name).read_bytes(), expected[name])
+                    self.assertEqual((package.parent / name).stat().st_mode & 0o777, 0o400)
+                self.assertFalse(kwargs['rehearsal'])
+                (original / 'repo.deb').write_bytes(b'changed original')
+                return report
+            with patch.object(repository_setup_admission, 'admit_setup', side_effect=admit):
+                with immutable.captured_setup(original, setup, inputs, 'https://protected.invalid', names) as frozen:
+                    self.assertEqual((frozen / 'repo.deb').read_bytes(), expected['repo.deb'])
+            with patch.object(repository_setup_admission, 'admit_setup', return_value={}), self.assertRaises(ValueError):
+                with immutable.captured_setup(original, setup, inputs, 'https://protected.invalid', names):
+                    self.fail('a changed admission report cannot yield transport inputs')
