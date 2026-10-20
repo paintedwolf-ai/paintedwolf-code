@@ -16,6 +16,13 @@ from scripts.harness.supervise import stop_stack
 LIMIT = 8 << 20
 
 
+def identity(pid: int) -> dict:
+    row = Path(f"/proc/{pid}/stat").read_text().rpartition(") ")[2].split()
+    if len(row) < 20 or int(row[1]) != os.getpid():
+        raise ValueError("native probe launch identity differs from its captured child")
+    return {"pid": pid, "start_time_ticks": int(row[19])}
+
+
 def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
     if platform.system() != "Linux":
         raise ValueError("installed native process probes require Linux")
@@ -35,6 +42,7 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
         process = subprocess.Popen([str(path), *arguments], executable=f"/proc/self/fd/{descriptor}",
             pass_fds=(descriptor,), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=environment, start_new_session=True)
+        launch_identity = identity(process.pid)
         overflow = threading.Event()
         streams = {"stdout": bytearray(), "stderr": bytearray()}
 
@@ -73,7 +81,7 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
                 reader.join(timeout=2)
             raise ValueError("native probe left a descendant holding its evidence channels")
         unchanged(binding, role)
-        return {"exit_code": process.returncode, "timed_out": timed_out, "output_limit": overflow.is_set(),
+        return {"launch_identity": launch_identity, "exit_code": process.returncode, "timed_out": timed_out, "output_limit": overflow.is_set(),
                 **{name: bytes(data) for name, data in streams.items()}}
     finally:
         os.close(descriptor)

@@ -118,6 +118,12 @@ def admit(catalog: dict, campaign: object, final_artifacts: object,
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "--run-cases":
+        from .installed_execution import main as execute
+        return execute(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--execute-plan":
+        from .installed_campaign import main as execute_plan
+        return execute_plan(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=CATALOG)
     parser.add_argument("--campaign", type=Path, required=True)

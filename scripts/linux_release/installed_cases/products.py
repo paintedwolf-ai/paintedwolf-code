@@ -28,7 +28,7 @@ def require_owned_guest(binding: dict, marker=Path("/etc/paintedwolf-qualificati
     data = json.loads(physical.read_text())
     if (not isinstance(data, dict) or set(data) != {"format_version", "desktop", "package"}
             or type(data["format_version"]) is not int or data["format_version"] != 1
-            or data["desktop"] not in ("gnome", "plasma")
+            or data["desktop"] not in ("gnome", "plasma", "xfce", "cinnamon", "mate", "lxqt", "cosmic", "sway", "hyprland", "i3")
             or data["package"] not in (binding["install_root"], binding["artifact"]["identity"].get("store_path"))):
         raise ValueError("owned guest marker differs from the selected installed package")
     return data

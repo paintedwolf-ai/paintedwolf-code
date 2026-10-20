@@ -143,8 +143,18 @@ def bind(final: dict, source: str, artifact_id: str, file_root: Path, install_ro
     images = manifest(root, native[0])
     if identity["kind"] == "file" and any(str(Path(path).relative_to("/")) not in entries for path in images["images"]):
         raise ValueError("installed manifest names an executable outside the selected final package")
+    launcher = Path("/usr/bin/painted-wolf-code") if identity["kind"] == "file" else output / "bin/painted-wolf-code"
+    if identity["kind"] == "file":
+        if str(launcher) not in images["images"]:
+            raise ValueError("final package manifest omits its public application launcher")
+        launcher_image = images["images"][str(launcher)]
+    else:
+        launcher_image = file_identity(launcher)
+        header = launcher_image.pop("header")
+        if launcher_image["mode"] & 0o111 == 0 or launcher_image["mode"] & 0o7000 or not header.startswith((b"#!", b"\x7fELF")):
+            raise ValueError("final Nix output has no ordinary public application launcher")
     return {"format_version": 1, "source_commit": source, "artifact": artifact,
-            "install_root": str(root), "payload": payload, **images}
+            "install_root": str(root), "payload": payload, "launcher": {"path": str(launcher), **launcher_image}, **images}
 
 
 def unchanged(binding: dict, role: str) -> Path:

@@ -110,6 +110,7 @@ class InstalledRuntimeTests(unittest.TestCase):
                 Path, "resolve", lambda path, **kwargs: path), patch(
                 "scripts.linux_release.installed_runtime.elf", return_value={"sha256": "client"}), patch(
                 "scripts.linux_release.installed_runtime.manifest", return_value={"version": "1.0.2", "images": {}}), patch(
+                "scripts.linux_release.installed_runtime.file_identity", return_value={"header": b"#!/bin/sh", "mode": 0o755}), patch(
                 "scripts.linux_release.installed_runtime.nix_command", side_effect=lambda *args: json.dumps(rows).encode()) as query:
             result = bind(final, source, "nix-amd64", Path("/files"), root, Path("/explicit/nix"))
             self.assertTrue(result["payload"]["content_verified"])
