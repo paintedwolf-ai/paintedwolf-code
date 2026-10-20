@@ -101,7 +101,7 @@ def onboard(app):
     deadline, acted, api = time.monotonic() + min(app.timeout, 60), False, None
     owner = (os.getuid(), str(Path.home()))
     with accessibility_bus(app.observations['session']):
-        while time.monotonic() < deadline and app.process.poll() is None:
+        while time.monotonic() < deadline:
             if app.try_ready():
                 return
             if api is None:
@@ -121,4 +121,5 @@ def onboard(app):
                 except Exception:
                     raise CaseUnavailable('normal native vault accessibility is unavailable') from None
             time.sleep(0.1)
+    app.require_running()
     raise CaseUnavailable('installed application did not finish its normal startup interaction')

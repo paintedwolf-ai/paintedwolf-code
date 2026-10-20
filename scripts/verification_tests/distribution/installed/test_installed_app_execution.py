@@ -3,10 +3,10 @@ import io
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from scripts.linux_release.installed_cases.app import engine_image
-from scripts.linux_release.installed_cases.records import CaseUnavailable
+from scripts.linux_release.installed_cases.app import engine_image, InstalledApp
+from scripts.linux_release.installed_cases.records import CaseUnavailable, CaseFailed
 from scripts.linux_release.installed_environment import graphical_session, gnome_owner
 
 
@@ -60,3 +60,29 @@ class InstalledAppTests(unittest.TestCase):
         for display in ("remote.example:0", ":0;bad", "", ":0\n"):
             with self.subTest(display=display), self.assertRaises((ValueError, CaseUnavailable)):
                 desktop_display({"Display": display})
+
+
+    def test_observed_product_exit_and_output_overflow_are_failures_not_missing_fixtures(self):
+        for code in (-11, 1, 0):
+            app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
+            app.process = SimpleNamespace(poll=lambda: code)
+            with self.subTest(code=code), self.assertRaises(CaseFailed) as captured:
+                app.try_ready()
+            self.assertNotIsInstance(captured.exception, CaseUnavailable)
+            self.assertEqual(captured.exception.observations['exit_code'], code)
+            self.assertEqual(captured.exception.streams, {'app-stdout': b'', 'app-stderr': b''})
+        app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
+        app.process = SimpleNamespace(poll=lambda: None)
+        app._overflow.set()
+        with self.assertRaises(CaseFailed):
+            app.require_running()
+
+    def test_readiness_deadline_rechecks_typed_exit_before_classification(self):
+        for code, expected in [(-11, CaseFailed), (None, CaseUnavailable)]:
+            app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40}, timeout=1)
+            app.process = SimpleNamespace(poll=lambda: code)
+            app.stop = Mock()
+            with self.subTest(code=code), patch('scripts.linux_release.installed_cases.app.time.monotonic', side_effect=[0, 2]):
+                with self.assertRaises(expected):
+                    app.wait_ready()
+            app.stop.assert_called_once_with()
