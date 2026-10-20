@@ -195,3 +195,23 @@ func TestHereDocumentExpansionAndRedirectOrderStayStructured(t *testing.T) {
 	}
 	parseProgram(t, "echo '~fixture-user/path' \\~fixture-user/path")
 }
+
+func TestTestExpressionBracesAreDeferredPatternAndRegexData(t *testing.T) {
+	for _, source := range []string{`[[ aaa =~ a{1,3} ]]`, `[[ '{a,b}' == {a,b} ]]`, `[[ aaa =~ a{2} && "$name" != {x,y} ]]`} {
+		parseProgram(t, source)
+	}
+	for _, source := range []string{`echo {a,b}`, `[[ aaa =~ $(echo {a,b}) ]]`, `[[ ~fixtureUser == x ]]`} {
+		if plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{}); plan != nil || err == nil {
+			t.Fatalf("unsupported expansion admitted: %s", source)
+		}
+	}
+}
+
+func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
+	source := `printf ok; echo ${(q)name}`
+	plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+	var diagnostic *commandsurface.SyntaxDiagnostic
+	if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || diagnostic.Span.StartByte < strings.Index(source, "${") || diagnostic.Span.Line != 1 || diagnostic.Span.Column != diagnostic.Span.StartByte+1 {
+		t.Fatalf("foreign dialect diagnostic lost offending span: %+v %v", diagnostic, err)
+	}
+}

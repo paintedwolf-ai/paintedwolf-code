@@ -313,25 +313,6 @@ func (s Store) stage(state *storeState, r io.Reader, limit bytebound.Materializa
 // compressStagedFile rewrites tmp's plaintext contents as a zstd frame,
 // in place, leaving the file positioned as os.CreateTemp left it (open,
 // at end-of-file) so the caller's Sync/Close sequence is unchanged.
-func compressStagedFile(tmp *os.File) error {
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("rewind plaintext: %w", err)
-	}
-	compressed, err := zstdcodec.Compress(tmp)
-	if err != nil {
-		return fmt.Errorf("compress: %w", err)
-	}
-	if err := tmp.Truncate(0); err != nil {
-		return fmt.Errorf("truncate plaintext: %w", err)
-	}
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("rewind for compressed write: %w", err)
-	}
-	if _, err := tmp.Write(compressed); err != nil {
-		return fmt.Errorf("write compressed body: %w", err)
-	}
-	return nil
-}
 
 func (s Store) releaseStage(state *storeState, path string) {
 	_ = os.Remove(path)

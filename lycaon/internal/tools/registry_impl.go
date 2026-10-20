@@ -120,8 +120,7 @@ func validateDefinition(def Definition) (Definition, error) {
 	}
 	schema := def.Meta.ArgsSchema
 	if len(schema) == 0 {
-		schema = map[string]any{"type": "object"}
-		def.Meta.ArgsSchema = schema
+		return Definition{}, fmt.Errorf("tool %q argument schema is required", name)
 	}
 	encoded, err := json.Marshal(schema)
 	if err != nil {

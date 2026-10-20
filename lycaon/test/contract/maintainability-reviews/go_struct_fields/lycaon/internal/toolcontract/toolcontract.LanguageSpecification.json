@@ -5,7 +5,7 @@
   "workstream": "portable-command-operations",
   "disposition": "retain",
   "reason": "One versioned language specification serializes syntax, encoding, resource rules and catalog closure as a coherent declaration. It has no effect authority or mutable execution lifetime. Retain the measured17 fields with no growth; strict missing/unknown-source tests, budget-boundary fixtures and detached language snapshots support this shape. P03 moves the unchanged pure fact shape into toolcontract so guidance and execution consume one declaration without importing the parser.",
-  "reviewed_commit": "da6f861696",
+  "reviewed_commit": "423ad2d202b635ed40dcbf7f4786d2748a8c1372",
   "ceiling": 17,
   "boundaries": {
     "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "d77c2dfde2d5bf37c2d53aecfde2ead6bdd1b6915aa285208c1a7091f1a3512f",

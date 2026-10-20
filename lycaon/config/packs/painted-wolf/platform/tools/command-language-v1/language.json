@@ -979,6 +979,11 @@
       "id": "COMMAND_PLATFORM_UNAVAILABLE",
       "location": "operation span",
       "help": "missing platform capability"
+    },
+    {
+      "id": "COMMAND_NATIVE_FORM_UNSUPPORTED",
+      "location": "Reached native operation or explicit structured admission mode; retain prior child outcomes.",
+      "help": "Documented native forms and required admission; no shell fallback, refreshed inputs or whole-program replay."
     }
   ],
   "source_locations": {

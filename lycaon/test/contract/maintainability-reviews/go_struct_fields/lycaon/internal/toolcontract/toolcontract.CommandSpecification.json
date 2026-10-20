@@ -5,7 +5,7 @@
   "workstream": "portable-command-operations",
   "disposition": "retain",
   "reason": "One immutable utility specification keeps argv forms, observable stream/status/effect contracts, source evidence and fixture references together. These are catalog data, not runtime dependencies or grants; splitting into parameter bundles would hide one command contract. Retain at the measured17 fields with no growth; strict generation, scoped option/owner closure and detached snapshot tests support the decision. P03 moves the unchanged pure fact shape into toolcontract so guidance and execution consume one declaration without importing the parser.",
-  "reviewed_commit": "da6f861696",
+  "reviewed_commit": "423ad2d202b635ed40dcbf7f4786d2748a8c1372",
   "ceiling": 17,
   "boundaries": {
     "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "d77c2dfde2d5bf37c2d53aecfde2ead6bdd1b6915aa285208c1a7091f1a3512f",

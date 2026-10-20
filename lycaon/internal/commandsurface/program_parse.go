@@ -30,6 +30,7 @@ type SyntaxDiagnostic struct {
 	Span     toolcontract.SourceSpan
 	Expected string
 	Limit    string
+	Unit     string
 	Maximum  int64
 	Observed int64
 }
@@ -86,7 +87,7 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions) (*Pa
 		maximum = languageLimit(catalog, "source_bytes")
 	}
 	if int64(len(source)) > maximum {
-		return nil, &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: unitStart(), Expected: "a bounded syntax unit", Limit: map[bool]string{true: "source_bytes", false: "program_bytes"}[options.Sourced], Maximum: maximum, Observed: int64(len(source))}
+		return nil, &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: unitStart(), Expected: "a bounded syntax unit", Limit: map[bool]string{true: "source_bytes", false: "program_bytes"}[options.Sourced], Unit: "bytes", Maximum: maximum, Observed: int64(len(source))}
 	}
 	if options.Version != 0 && options.Version != toolcontract.LanguageVersion {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "language version 1"}
@@ -127,19 +128,38 @@ func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {
 	}
 	panic("missing compiled command language limit: " + id)
 }
+func languageLimitUnit(c toolcontract.LanguageCatalog, id string) string {
+	for _, limit := range c.Language.Limits {
+		if limit.ID == id {
+			return limit.Unit
+		}
+	}
+	panic("missing compiled command language limit: " + id)
+}
 func unitStart() toolcontract.SourceSpan { return toolcontract.SourceSpan{Line: 1, Column: 1} }
 func parserDiagnostic(err error, length int) error {
-	span := unitStart()
 	var budget *syntax.BudgetError
 	if errors.As(err, &budget) {
-		return &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: toolcontract.SourceSpan{StartByte: min(int(budget.Pos.Offset()), length), EndByte: min(int(budget.Pos.Offset())+1, length), Line: int(budget.Pos.Line()), Column: int(budget.Pos.Col())}, Expected: "bounded parser working storage", Limit: "evaluation_memory_bytes", Maximum: budget.Maximum, Observed: budget.Observed}
+		return &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: parserPosition(budget.Pos, length), Expected: "bounded parser working storage", Limit: "evaluation_memory_bytes", Unit: "bytes", Maximum: budget.Maximum, Observed: budget.Observed}
 	}
+	var dialect syntax.LangError
+	if errors.As(err, &dialect) {
+		return &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: parserPosition(dialect.Pos, length), Expected: "a supported version 1 syntax form"}
+	}
+	span := unitStart()
 	var parse syntax.ParseError
 	if errors.As(err, &parse) {
-		start := min(int(parse.Pos.Offset()), length)
-		span = toolcontract.SourceSpan{StartByte: start, EndByte: min(start+1, length), Line: int(parse.Pos.Line()), Column: int(parse.Pos.Col())}
+		span = parserPosition(parse.Pos, length)
 	}
 	return &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_INVALID", Span: span, Expected: "a complete version 1 syntax form"}
+}
+
+func parserPosition(pos syntax.Pos, length int) toolcontract.SourceSpan {
+	if !pos.IsValid() {
+		return unitStart()
+	}
+	start := min(int(pos.Offset()), length)
+	return toolcontract.SourceSpan{StartByte: start, EndByte: min(start+1, length), Line: int(pos.Line()), Column: int(pos.Col())}
 }
 
 type programCompiler struct {
@@ -147,6 +167,7 @@ type programCompiler struct {
 	source         []byte
 	sequence       int
 	literalContext map[*syntax.Word]bool
+	testWords      map[*syntax.Word]bool
 	err            error
 }
 
@@ -168,7 +189,7 @@ func (c *programCompiler) unsupported(n syntax.Node, expected string) {
 func (c *programCompiler) limit(n syntax.Node, id string, observed int64) {
 	maximum := languageLimit(c.catalog, id)
 	if c.err == nil && observed > maximum {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: nodeSpan(n), Expected: "bounded " + id, Limit: id, Maximum: maximum, Observed: observed}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: nodeSpan(n), Expected: "bounded " + id, Limit: id, Unit: languageLimitUnit(c.catalog, id), Maximum: maximum, Observed: observed}
 	}
 }
 func (c *programCompiler) nativeName(name string) bool {
