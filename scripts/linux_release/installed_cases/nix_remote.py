@@ -108,7 +108,8 @@ config = pathlib.Path.cwd() / ('nix-config-' + nonce)
 config.mkdir(mode=0o700)
 environment = {'HOME':str(config),'PATH':'/run/current-system/sw/bin:/usr/bin:/bin','LC_ALL':'C',
 'NIX_CONF_DIR':str(config),'NIX_USER_CONF_FILES':'/dev/null',
-'NIX_SSHOPTS':shlex.join(['-i',remote['ssh_key'],'-o','UserKnownHostsFile='+remote['known_hosts'],
+'NIX_SSHOPTS':shlex.join(['-F','/dev/null','-i',remote['ssh_key'],'-o','UserKnownHostsFile='+remote['known_hosts'],
+'-o','GlobalKnownHostsFile=/dev/null','-o','IdentityAgent=none',
 '-o','StrictHostKeyChecking=yes','-o','IdentitiesOnly=yes','-o','BatchMode=yes'])}
 base = [fixture['client']['path'],'--extra-experimental-features','nix-command','--option','substituters','','--option','builders','']
 steps = []
