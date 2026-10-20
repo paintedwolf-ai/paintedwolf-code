@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 
 	"github.com/zricethezav/gitleaks/v8/logging"
 )
@@ -9,6 +10,7 @@ import (
 // Decoder decodes various types of data in place
 type Decoder struct {
 	decodedMap map[string]string
+	meter      *budget.Meter
 }
 
 // NewDecoder creates a default decoder struct
@@ -18,12 +20,22 @@ func NewDecoder() *Decoder {
 	}
 }
 
+// NewDecoderWithBudget retains the codec policy with explicit allocation/work admission.
+func NewDecoderWithBudget(meter *budget.Meter) *Decoder {
+	meter.Allocate(128)
+	d := NewDecoder()
+	d.meter = meter
+	return d
+}
+
 // Decode returns the data with the values decoded in place along with the
 // encoded segment meta data for the next pass of decoding
 func (d *Decoder) Decode(data string, predecessors []*EncodedSegment) (string, []*EncodedSegment) {
+	d.meter.Check()
 	segments := d.findEncodedSegments(data, predecessors)
 
 	if len(segments) > 0 {
+		d.meter.Allocate(int64(len(data))*4 + 128)
 		result := bytes.NewBuffer(make([]byte, 0, len(data)))
 		encodedStart := 0
 		for _, segment := range segments {
@@ -46,14 +58,22 @@ func (d *Decoder) findEncodedSegments(data string, predecessors []*EncodedSegmen
 	}
 
 	decodedShift := 0
-	encodingMatches := findEncodingMatches(data)
+	encodingMatches := findEncodingMatchesBudget(data, d.meter)
+	d.meter.Allocate(int64(len(encodingMatches)) * 512)
 	segments := make([]*EncodedSegment, 0, len(encodingMatches))
 	for _, m := range encodingMatches {
+		d.meter.Check()
 		encodedValue := data[m.start:m.end]
 		decodedValue, alreadyDecoded := d.decodedMap[encodedValue]
 
 		if !alreadyDecoded {
-			decodedValue = m.encoding.decode(encodedValue)
+			d.meter.Allocate(int64(len(encodedValue))*8 + 128)
+			d.meter.Work(int64(len(encodedValue)))
+			if m.encoding.kind == unicodeKind {
+				decodedValue = decodeUnicodeBudget(encodedValue, d.meter)
+			} else {
+				decodedValue = m.encoding.decode(encodedValue)
+			}
 			d.decodedMap[encodedValue] = decodedValue
 		}
 
@@ -83,6 +103,7 @@ func (d *Decoder) findEncodedSegments(data string, predecessors []*EncodedSegmen
 			segment.depth = 1 + segment.predecessors[0].depth
 			// Adjust encodings
 			for _, p := range segment.predecessors {
+				d.meter.Work(1)
 				if segment.encoded.overlaps(p.decoded) {
 					segment.encodings |= p.encodings
 				}

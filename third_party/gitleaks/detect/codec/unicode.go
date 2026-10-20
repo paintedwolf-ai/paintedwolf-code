@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -28,12 +29,22 @@ const maxBytesPerRune = 4
 
 // decodeUnicode decodes Unicode escape sequences in the given string
 func decodeUnicode(encodedValue string) string {
+	return decodeUnicodeBudget(encodedValue, nil)
+}
+func decodeUnicodeBudget(encodedValue string, meter *budget.Meter) string {
+	meter.Check()
+	meter.Allocate(int64(len(encodedValue))*32 + 128)
+	meter.Work(int64(len(encodedValue)))
 	// First, check if we have a continuous sequence of Unicode code points
-	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, -1); len(matches) > 0 {
+	if matches := unicodeMultiCodePointPat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
 		// For each detected sequence of code points
+		meter.Count(len(matches))
 		for _, match := range matches {
+			meter.Check()
+			meter.Allocate(int64(len(encodedValue)) * 2)
+			meter.Work(int64(len(encodedValue)))
 			// Decode the entire sequence at once
-			decodedSequence := decodeMultiCodePoint(match)
+			decodedSequence := decodeMultiCodePointBudget(match, meter)
 
 			// If we successfully decoded something, replace it in the original string
 			if decodedSequence != "" && decodedSequence != match {
@@ -44,11 +55,15 @@ func decodeUnicode(encodedValue string) string {
 	}
 
 	// Next, check if we have a continuous sequence of escape sequences
-	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, -1); len(matches) > 0 {
+	if matches := unicodeMultiEscapePat.FindAllString(encodedValue, meter.Enumeration(len(encodedValue), 64)); len(matches) > 0 {
 		// For each detected sequence of escape sequences
+		meter.Count(len(matches))
 		for _, match := range matches {
+			meter.Check()
+			meter.Allocate(int64(len(encodedValue)) * 2)
+			meter.Work(int64(len(encodedValue)))
 			// Decode the entire sequence at once
-			decodedSequence := decodeMultiEscape(match)
+			decodedSequence := decodeMultiEscapeBudget(match, meter)
 
 			// If we successfully decoded something, replace it in the original string
 			if decodedSequence != "" && decodedSequence != match {
@@ -69,7 +84,7 @@ func decodeUnicode(encodedValue string) string {
 
 	// Check and decode Unicode code points (U+1234 format)
 	if unicodeCodePointPat.Match(data) {
-		result = decodeIndividualCodePoints(data)
+		result = decodeIndividualCodePointsBudget(data, meter)
 	}
 
 	// If no code points were found or we have a mix of formats,
@@ -78,9 +93,9 @@ func decodeUnicode(encodedValue string) string {
 		// If we already have some result from code point decoding,
 		// continue decoding escape sequences on that result
 		if len(result) > 0 {
-			result = decodeIndividualEscapes(result)
+			result = decodeIndividualEscapesBudget(result, meter)
 		} else {
-			result = decodeIndividualEscapes(data)
+			result = decodeIndividualEscapesBudget(data, meter)
 		}
 	}
 
@@ -94,6 +109,12 @@ func decodeUnicode(encodedValue string) string {
 
 // decodeMultiCodePoint decodes a continuous sequence of Unicode code points (U+XXXX format)
 func decodeMultiCodePoint(sequence string) string {
+	return decodeMultiCodePointBudget(sequence, nil)
+}
+func decodeMultiCodePointBudget(sequence string, meter *budget.Meter) string {
+	meter.Check()
+	meter.Allocate(int64(len(sequence))*32 + 128)
+	meter.Work(int64(len(sequence)))
 	// If the sequence is empty, return empty string
 	if sequence == "" {
 		return ""
@@ -108,6 +129,7 @@ func decodeMultiCodePoint(sequence string) string {
 	// Decode each code point and build the result
 	var decodedRunes []rune
 	for _, cp := range codePoints {
+		meter.Check()
 		// Check if it follows the U+XXXX pattern
 		if !strings.HasPrefix(cp, "U+") || len(cp) < 6 {
 			continue
@@ -137,13 +159,20 @@ func decodeMultiCodePoint(sequence string) string {
 
 // decodeMultiEscape decodes a continuous sequence of Unicode escape sequences (\uXXXX format)
 func decodeMultiEscape(sequence string) string {
+	return decodeMultiEscapeBudget(sequence, nil)
+}
+func decodeMultiEscapeBudget(sequence string, meter *budget.Meter) string {
+	meter.Check()
+	meter.Allocate(int64(len(sequence))*32 + 128)
+	meter.Work(int64(len(sequence)))
 	// If the sequence is empty, return empty string
 	if sequence == "" {
 		return ""
 	}
 
 	// Find all escape sequences
-	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, -1)
+	escapes := unicodeEscapePat.FindAllStringSubmatch(sequence, meter.Enumeration(len(sequence), 128))
+	meter.Count(len(escapes))
 	if len(escapes) == 0 {
 		return sequence
 	}
@@ -151,6 +180,7 @@ func decodeMultiEscape(sequence string) string {
 	// Decode each escape sequence and build the result
 	var decodedRunes []rune
 	for _, esc := range escapes {
+		meter.Check()
 		// Extract the hexadecimal value
 		hexValue := esc[1]
 
@@ -176,10 +206,17 @@ func decodeMultiEscape(sequence string) string {
 // decodeIndividualCodePoints decodes individual Unicode code points (U+1234 format)
 // This is a fallback for when we don't have a continuous sequence of code points
 func decodeIndividualCodePoints(input []byte) []byte {
+	return decodeIndividualCodePointsBudget(input, nil)
+}
+func decodeIndividualCodePointsBudget(input []byte, meter *budget.Meter) []byte {
+	meter.Check()
+	meter.Allocate(int64(len(input))*32 + 128)
+	meter.Work(int64(len(input)))
 	// Find all Unicode code point sequences in the input byte slice
-	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, -1)
+	indices := unicodeCodePointPat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
 
 	// If none found, return original input
+	meter.Count(len(indices))
 	if len(indices) == 0 {
 		return input
 	}
@@ -187,6 +224,8 @@ func decodeIndividualCodePoints(input []byte) []byte {
 	// Iterate over found indices in reverse order to avoid modifying the slice length
 	utf8Bytes := make([]byte, maxBytesPerRune)
 	for i := len(indices) - 1; i >= 0; i-- {
+		meter.Allocate(int64(len(input))*4 + 32)
+		meter.Work(int64(len(input)))
 		matches := indices[i]
 
 		startIndex := matches[0]
@@ -223,10 +262,17 @@ func decodeIndividualCodePoints(input []byte) []byte {
 // decodeIndividualEscapes decodes individual Unicode escape sequences (\u1234 format)
 // This is a fallback for when we don't have a continuous sequence of escape sequences
 func decodeIndividualEscapes(input []byte) []byte {
+	return decodeIndividualEscapesBudget(input, nil)
+}
+func decodeIndividualEscapesBudget(input []byte, meter *budget.Meter) []byte {
+	meter.Check()
+	meter.Allocate(int64(len(input))*32 + 128)
+	meter.Work(int64(len(input)))
 	// Find all Unicode escape sequences in the input byte slice
-	indices := unicodeEscapePat.FindAllSubmatchIndex(input, -1)
+	indices := unicodeEscapePat.FindAllSubmatchIndex(input, meter.Enumeration(len(input), 96))
 
 	// If none found, return original input
+	meter.Count(len(indices))
 	if len(indices) == 0 {
 		return input
 	}
@@ -234,6 +280,8 @@ func decodeIndividualEscapes(input []byte) []byte {
 	// Iterate over found indices in reverse order to avoid modifying the slice length
 	utf8Bytes := make([]byte, maxBytesPerRune)
 	for i := len(indices) - 1; i >= 0; i-- {
+		meter.Allocate(int64(len(input))*4 + 32)
+		meter.Work(int64(len(input)))
 		matches := indices[i]
 
 		startIndex := matches[0]

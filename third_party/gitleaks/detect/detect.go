@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zricethezav/gitleaks/v8/config"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 	"github.com/zricethezav/gitleaks/v8/detect/codec"
 	"github.com/zricethezav/gitleaks/v8/logging"
 	"github.com/zricethezav/gitleaks/v8/regexp"
@@ -274,6 +275,12 @@ func (d *Detector) Detect(fragment Fragment) []report.Finding {
 // DetectContext is the same as Detect but supports passing in a
 // context to use for timeouts
 func (d *Detector) DetectContext(ctx context.Context, fragment Fragment) []report.Finding {
+	return d.detectContext(ctx, fragment, nil)
+}
+
+func (d *Detector) detectContext(ctx context.Context, fragment Fragment, meter *budget.Meter) []report.Finding {
+	meter.Check()
+	meter.Allocate(int64(len(fragment.Raw))*4 + 1024)
 	if fragment.Bytes == nil {
 		d.TotalBytes.Add(uint64(len(fragment.Raw)))
 	}
@@ -308,7 +315,7 @@ func (d *Detector) DetectContext(ctx context.Context, fragment Fragment) []repor
 	currentRaw := fragment.Raw
 	encodedSegments := []*codec.EncodedSegment{}
 	currentDecodeDepth := 0
-	decoder := codec.NewDecoder()
+	decoder := codec.NewDecoderWithBudget(meter)
 
 ScanLoop:
 	for {
@@ -318,10 +325,22 @@ ScanLoop:
 		default:
 			// build keyword map for prefiltering rules
 			keywords := make(map[string]bool)
+			meter.Allocate(int64(len(currentRaw)) * 4)
 			normalizedRaw := strings.ToLower(currentRaw)
-			matches := d.prefilter.MatchString(normalizedRaw)
-			for _, m := range matches {
-				keywords[normalizedRaw[m.Pos():int(m.Pos())+len(m.Match())]] = true
+			if meter == nil {
+				matches := d.prefilter.MatchString(normalizedRaw)
+				for _, m := range matches {
+					keywords[normalizedRaw[m.Pos():int(m.Pos())+len(m.Match())]] = true
+				}
+			} else {
+				// Presence, not occurrence enumeration, is the prefilter policy.
+				for key := range d.Config.Keywords {
+					meter.Allocate(int64(len(key)) + 64)
+					meter.Work(int64(len(normalizedRaw)) + int64(len(key)))
+					if strings.Contains(normalizedRaw, key) {
+						keywords[key] = true
+					}
+				}
 			}
 
 			for _, rule := range d.Config.Rules {
@@ -332,14 +351,14 @@ ScanLoop:
 					if len(rule.Keywords) == 0 {
 						// if no keywords are associated with the rule always scan the
 						// fragment using the rule
-						findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
+						findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
 						continue
 					}
 
 					// check if keywords are in the fragment
 					for _, k := range rule.Keywords {
 						if _, ok := keywords[strings.ToLower(k)]; ok {
-							findings = append(findings, d.detectRule(fragment, currentRaw, rule, encodedSegments)...)
+							findings = append(findings, d.detectRuleBudget(fragment, currentRaw, rule, encodedSegments, meter)...)
 							break
 						}
 					}
@@ -364,11 +383,18 @@ ScanLoop:
 		}
 	}
 
-	return filter(findings, d.Redact)
+	meter.Check()
+	meter.Allocate(int64(len(findings)) * 2048)
+	return filterBudget(findings, d.Redact, meter)
 }
 
 // detectRule scans the given fragment for the given rule and returns a list of findings
 func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment) []report.Finding {
+	return d.detectRuleBudget(fragment, currentRaw, r, encodedSegments, nil)
+}
+func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, meter *budget.Meter) []report.Finding {
+	meter.Check()
+	meter.Work(int64(len(currentRaw)))
 	var (
 		findings []report.Finding
 		logger   = func() zerolog.Logger {
@@ -410,6 +436,7 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 					finding.Link = createScmLink(fragment.CommitInfo.Remote, finding)
 					finding.Message = fragment.CommitInfo.Message
 				}
+				meter.Allocate(4096)
 				return append(findings, finding)
 			}
 		} else {
@@ -439,17 +466,22 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 		}
 	}
 
-	matches := r.Regex.FindAllStringIndex(currentRaw, -1)
+	matches := r.Regex.FindAllStringIndex(currentRaw, meter.Enumeration(len(currentRaw), 64))
+	meter.Count(len(matches))
 	if len(matches) == 0 {
 		return findings
 	}
 
 	// TODO profile this, probably should replace with something more efficient
-	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, -1)
+	newlineIndices := newLineRegexp.FindAllStringIndex(fragment.Raw, meter.Enumeration(len(fragment.Raw), 64))
+	meter.Count(len(newlineIndices))
 
 	// use currentRaw instead of fragment.Raw since this represents the current
 	// decoding pass on the text
-	for _, matchIndex := range r.Regex.FindAllStringIndex(currentRaw, -1) {
+	for _, matchIndex := range matches {
+		meter.Check()
+		meter.Allocate(4096 + int64(len(r.Tags))*64 + int64(len(encodedSegments))*256 + int64(len(currentRaw))*4)
+		meter.Work(int64(len(fragment.Raw)) + int64(len(currentRaw)))
 		// Extract secret from match
 		secret := strings.Trim(currentRaw[matchIndex[0]:matchIndex[1]], "\n")
 
@@ -520,6 +552,7 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 
 		// Set the value of |secret|, if the pattern contains at least one capture group.
 		// (The first element is the full match, hence we check >= 2.)
+		meter.Allocate(int64(r.Regex.NumSubexp()+1) * 64)
 		groups := r.Regex.FindStringSubmatch(finding.Secret)
 		if len(groups) >= 2 {
 			if r.SecretGroup > 0 {
@@ -540,6 +573,7 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 		}
 
 		// check entropy
+		meter.Allocate(int64(len(finding.Secret))*64 + 128)
 		entropy := shannonEntropy(finding.Secret)
 		finding.Entropy = float32(entropy)
 		if r.Entropy != 0.0 {
@@ -573,17 +607,18 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 	}
 
 	// Process required rules and create findings with auxiliary findings
-	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger)
+	return d.processRequiredRules(fragment, currentRaw, r, encodedSegments, findings, logger, meter)
 }
 
 // processRequiredRules handles the logic for multi-part rules with auxiliary findings
-func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger) []report.Finding {
+func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, primaryFindings []report.Finding, logger zerolog.Logger, meter *budget.Meter) []report.Finding {
 	if len(primaryFindings) == 0 {
 		logger.Debug().Msg("no primary findings to process for required rules")
 		return primaryFindings
 	}
 
 	// Pre-collect all required rule findings once
+	meter.Allocate(int64(len(r.RequiredRules)) * 128)
 	allRequiredFindings := make(map[string][]report.Finding)
 
 	for _, requiredRule := range r.RequiredRules {
@@ -598,7 +633,7 @@ func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r 
 		inheritedFragment.InheritedFromFinding = true
 
 		// Call detectRule once for each required rule
-		requiredFindings := d.detectRule(inheritedFragment, currentRaw, rule, encodedSegments)
+		requiredFindings := d.detectRuleBudget(inheritedFragment, currentRaw, rule, encodedSegments, meter)
 		allRequiredFindings[requiredRule.RuleID] = requiredFindings
 
 		logger.Debug().
@@ -621,6 +656,8 @@ func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r 
 
 			// Filter findings that are within proximity of the primary finding
 			for _, requiredFinding := range foundRequiredFindings {
+				meter.Work(1)
+				meter.Allocate(1024)
 				if d.withinProximity(primaryFinding, requiredFinding, requiredRule) {
 					req := &report.RequiredFinding{
 						RuleID:      requiredFinding.RuleID,
@@ -641,6 +678,7 @@ func (d *Detector) processRequiredRules(fragment Fragment, currentRaw string, r 
 		if len(requiredFindings) > 0 && d.hasAllRequiredRules(requiredFindings, r.RequiredRules) {
 			// Create a finding with auxiliary findings
 			newFinding := primaryFinding // Copy the primary finding
+			meter.Allocate(int64(len(requiredFindings)) * 4096)
 			newFinding.AddRequiredFindings(requiredFindings)
 			finalFindings = append(finalFindings, newFinding)
 

@@ -2,6 +2,7 @@ package codec
 
 import (
 	"fmt"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 	"math"
 	"strings"
 
@@ -117,9 +118,14 @@ func init() {
 }
 
 // findEncodingMatches finds as many encodings as it can for this pass
-func findEncodingMatches(data string) []encodingMatch {
+func findEncodingMatches(data string) []encodingMatch { return findEncodingMatchesBudget(data, nil) }
+func findEncodingMatchesBudget(data string, meter *budget.Meter) []encodingMatch {
 	var all []encodingMatch
-	for _, matchIndex := range encodingsRe.FindAllStringSubmatchIndex(data, -1) {
+	indices := encodingsRe.FindAllStringSubmatchIndex(data, meter.Enumeration(len(data), 256))
+	meter.Count(len(indices))
+	meter.Allocate(int64(len(indices)) * 256)
+	for _, matchIndex := range indices {
+		meter.Check()
 		// Add the encodingMatch with its proper encoding
 		for i, j := 2, 0; i < len(matchIndex); i, j = i+2, j+1 {
 			if matchIndex[i] > -1 {

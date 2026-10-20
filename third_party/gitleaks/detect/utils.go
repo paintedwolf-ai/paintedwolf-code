@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zricethezav/gitleaks/v8/cmd/scm"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 	"github.com/zricethezav/gitleaks/v8/logging"
 	"github.com/zricethezav/gitleaks/v8/report"
 	"github.com/zricethezav/gitleaks/v8/sources"
@@ -135,11 +136,18 @@ func shannonEntropy(data string) (entropy float64) {
 
 // filter will dedupe and redact findings
 func filter(findings []report.Finding, redact uint) []report.Finding {
+	return filterBudget(findings, redact, nil)
+}
+func filterBudget(findings []report.Finding, redact uint, meter *budget.Meter) []report.Finding {
 	var retFindings []report.Finding
 	for _, f := range findings {
+		meter.Check()
+		meter.Allocate(2048 + int64(len(f.RuleID))*4 + int64(len(f.Match)+len(f.Line)+len(f.Secret))*4)
 		include := true
 		if strings.Contains(strings.ToLower(f.RuleID), "generic") {
 			for _, fPrime := range findings {
+				meter.Work(int64(len(fPrime.Secret)+len(f.Secret)) + 1)
+				meter.Allocate(int64(len(fPrime.RuleID)) * 4)
 				if f.StartLine == fPrime.StartLine &&
 					f.Commit == fPrime.Commit &&
 					f.RuleID != fPrime.RuleID &&

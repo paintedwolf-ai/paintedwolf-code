@@ -89,7 +89,7 @@ controls do not establish installed-platform qualification.
 
 ## Secret detector enumeration
 
-`gitleaks/` contains the complete selected Go module source for
+`gitleaks/` contains the selected runtime source subset for
 `github.com/zricethezav/gitleaks/v8` v8.30.1, commit
 `8d1f98c7967eb1e79cb44ac6241a124e145d2165`.
 The release archive was verified against its Go module checksum before extraction:
@@ -105,3 +105,21 @@ behavior; complete command stream projection uses the bounded entry only.
 The narrow patch and focused controls record the supported accounting envelope.
 
 The gitleaks snapshot omits upstream command generators, tests, fixtures, repository metadata, and unrelated documentation. It retains the transitive runtime packages, embedded default configuration, module metadata, and license. The complete original archive was verified against the module hash before selection; omitted files are not needed for the selected runtime and include upstream credential-shaped test examples.
+
+The local [gitleaks.patch](gitleaks.patch) adds `DetectBounded` through the shared
+`DetectContext` core. Its invocation-local meter reserves backing-store envelopes
+before index enumeration, Unicode decoding, finding growth, required-rule joins,
+and filter copies; it meters candidate counts and work separately. A reserved
+sentinel distinguishes complete enumeration from truncation. Refusal returns no
+partial findings. Keyword presence scans the exact configured keyword set rather
+than retaining every Aho-Corasick occurrence. Legacy calls retain their original
+unbounded behavior and use the same rule/codec/allowlist implementations.
+
+These are conservative cumulative payload/allocation and selected-work
+reservations, not exact process RSS or a Go heap ceiling. Static catalog storage,
+regexp engine scratch, runtime metadata, logging infrastructure, and preexisting
+caller-owned input are outside this meter. The stream caller must reserve its
+owner buffers and the selected detector allowance before invoking it. Selected
+catalog configuration retains its existing two decode passes. Differential tests
+use synthetic custom catalog rules for codec/case/allowlist semantics, and
+resource/cancellation controls require an error with no partial findings.
