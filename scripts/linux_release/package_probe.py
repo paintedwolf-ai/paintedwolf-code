@@ -23,7 +23,7 @@ def physical(path, *, owner, executable=False, limit=None):
     if not path.is_absolute() or path.resolve(strict=True) != path:
         raise ValueError('package probe inputs must be absolute physical paths')
     before = path.lstat()
-    if (not stat.S_ISREG(before.st_mode) or before.st_uid != owner or before.st_mode & 0o6022
+    if (not stat.S_ISREG(before.st_mode) or before.st_uid not in (owner if isinstance(owner, tuple) else (owner,)) or before.st_mode & 0o6022
             or executable and not before.st_mode & 0o111 or limit is not None and before.st_size > limit):
         raise ValueError('package probe input ownership, mode or size is invalid')
     digest = hashlib.sha256()
@@ -34,7 +34,8 @@ def physical(path, *, owner, executable=False, limit=None):
     identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
     if identity(before) != identity(after):
         raise ValueError('package probe input changed during capture')
-    return {'path': str(path), 'sha256': digest.hexdigest(), 'bytes': after.st_size}
+    return {'path': str(path), 'sha256': digest.hexdigest(), 'bytes': after.st_size,
+            'uid': after.st_uid, 'mode': oct(after.st_mode & 0o7777)}
 
 
 def profile_source(executable):
@@ -54,17 +55,17 @@ def selected(tree):
     if not tree.is_absolute() or tree.resolve(strict=True) != tree or tree == Path('/'):
         raise ValueError('select an absolute physical extracted package root')
     ancestor = tree.stat()
-    if not stat.S_ISDIR(ancestor.st_mode) or ancestor.st_uid != uid or ancestor.st_mode & 0o022:
+    if not stat.S_ISDIR(ancestor.st_mode) or ancestor.st_uid not in {0, uid} or ancestor.st_mode & 0o022:
         raise ValueError('extracted package root must be private to its probe owner')
     manifest_path = tree / INSTALL / 'manifest.json'
-    manifest_identity = physical(manifest_path, owner=uid, limit=2 << 20)
+    manifest_identity = physical(manifest_path, owner=(0, uid), limit=2 << 20)
     manifest = json.loads(manifest_path.read_bytes())
     if manifest.get('format_version') != 1 or manifest.get('install_root') != '/' + INSTALL:
         raise ValueError('extracted package manifest has an unsupported identity')
     result = {'tree': str(tree), 'manifest': manifest_identity}
     for name in ('pw', 'pw-document-core'):
         path = tree / INSTALL / 'bin' / name
-        measured = physical(path, owner=uid, executable=True)
+        measured = physical(path, owner=(0, uid), executable=True)
         matches = [row for row in manifest['executables'] if row.get('path') == '/' + INSTALL + '/bin/' + name]
         if len(matches) != 1 or matches[0] != {'path': '/' + INSTALL + '/bin/' + name,
                                              'sha256': measured['sha256'], 'size': measured['bytes']}:
