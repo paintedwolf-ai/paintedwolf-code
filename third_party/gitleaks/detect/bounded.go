@@ -30,5 +30,6 @@ func (d *Detector) DetectBounded(ctx context.Context, fragment Fragment, limits 
 		m.Refuse("input_bytes", limits.MaxInputBytes, int64(len(fragment.Bytes)))
 	}
 	findings = d.detectContext(ctx, fragment, m)
+	m.Check()
 	return findings, nil
 }

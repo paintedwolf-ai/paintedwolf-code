@@ -23,6 +23,10 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 		return result, errors.New("invalid stream screening contract")
 	}
 	memory := &streamMemory{maximum: bounds.MemoryBytes}
+	// Fixed hash/context/iterator/control payloads share the operation lease too.
+	if err := memory.take(8192); err != nil {
+		return result, err
+	}
 	ctx, revision, checkClass, err := m.streamClassifications(ctx, memory)
 	if err != nil {
 		return result, err

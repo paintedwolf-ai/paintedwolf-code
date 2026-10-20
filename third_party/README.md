@@ -123,3 +123,11 @@ owner buffers and the selected detector allowance before invoking it. Selected
 catalog configuration retains its existing two decode passes. Differential tests
 use synthetic custom catalog rules for codec/case/allowlist semantics, and
 resource/cancellation controls require an error with no partial findings.
+
+The bounded location adapter supplies newline byte positions to the original
+location calculation through an iterator, retaining its coordinates without
+materializing one newline array per rule. Enumeration returns unused sentinel
+reservations only after proving how many candidate arrays were allocated;
+actual capacities and conservative growth envelopes remain charged. The source
+selection and exact upstream omissions/checksums are recorded in
+[gitleaks.upstream.json](gitleaks.upstream.json).

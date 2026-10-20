@@ -125,3 +125,16 @@ func TestBoundedPolicyGuardsAndRequiredRules(t *testing.T) {
 		})
 	}
 }
+
+func TestBoundedCancellationCannotCompleteThroughAllowlist(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d := boundedFixture()
+	d.Config.Path = "fixture.txt"
+	limits := boundedLimits()
+	limits.Reserve = func(int64) error { cancel(); return nil }
+	findings, err := d.DetectBounded(ctx, Fragment{Raw: "fixture_123456abcdef", FilePath: "fixture.txt"}, limits)
+	if !errors.Is(err, context.Canceled) || len(findings) != 0 {
+		t.Fatalf("canceled allowlist short circuit completed: %v %+v", err, findings)
+	}
+}
