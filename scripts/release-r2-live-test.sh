@@ -15,6 +15,13 @@ if [[ -n "$rehearsal_module" ]]; then
   exec env PYTHONPATH="$ROOT/scripts" python3 -m "$rehearsal_module" "$@"
 fi
 
+for tool in bun curl jq ruby; do
+  command -v "$tool" >/dev/null || {
+    echo "error: $tool is required for the credentialed release live test" >&2
+    exit 1
+  }
+done
+
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)

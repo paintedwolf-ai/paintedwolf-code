@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -34,6 +35,18 @@ class PackageProbeTests(unittest.TestCase):
             path.chmod(0o720)
             with self.assertRaises(ValueError):
                 owner.physical(path, owner=os.geteuid())
+
+    def test_fixed_probe_dispatch_requires_no_publishing_toolchain(self):
+        root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as temporary:
+            tools = Path(temporary)
+            (tools / 'python3').symlink_to(sys.executable)
+            (tools / 'dirname').symlink_to('/usr/bin/dirname')
+            result = subprocess.run(['/bin/bash', str(root / 'release-r2-live-test.sh'),
+                                     '--local-package-probe', '--help'],
+                                    env={**os.environ, 'PATH': str(tools)}, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn(b'--require-baseline-refusal', result.stdout)
 
     def fixture(self):
         binding = {'tree': '/tmp/package', 'pw': {'path': '/tmp/package/opt/painted-wolf-code/bin/pw',
