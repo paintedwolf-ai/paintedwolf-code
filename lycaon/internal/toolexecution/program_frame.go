@@ -20,6 +20,7 @@ type ProgramFrame struct {
 	roots      map[string]programRoot
 	workerRoot string
 	surfaceID  string
+	lifetime   *programFrameLifetime
 }
 
 type programRoot struct {
@@ -29,14 +30,24 @@ type programRoot struct {
 
 // FreezeProgramFrame captures immutable attribution before any child starts.
 // The host resolves its actor and project/session identity before calling this.
-func FreezeProgramFrame(parent toolcontract.OperationInvocation, tc tools.ToolContext) (ProgramFrame, error) {
+func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission ProgramStateAdmission) (ProgramFrame, error) {
 	if err := parent.Validate(); err != nil {
 		return ProgramFrame{}, err
 	}
 	if parent.Kind != toolcontract.ProgramChildInvocation || tc.Identity.ToolCallID == "" || parent.SessionID != tc.Identity.SessionID || parent.Scope.ProjectID != tc.Identity.ProjectID {
 		return ProgramFrame{}, fmt.Errorf("program frame requires matching host session, project and initiating call")
 	}
-	frame := ProgramFrame{parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot, surfaceID: tc.Turn.TurnSurfaceID}
+	lifetime, err := captureProgramModel(ctx, parent, tc, model, admission)
+	if err != nil {
+		return ProgramFrame{}, err
+	}
+	complete := false
+	defer func() {
+		if !complete {
+			lifetime.close()
+		}
+	}()
+	frame := ProgramFrame{lifetime: lifetime, parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot, surfaceID: tc.Turn.TurnSurfaceID}
 	for _, root := range tc.Source.Roots {
 		if root.ID == "" || root.Path == "" {
 			return ProgramFrame{}, fmt.Errorf("program frame requires addressed root identity")
@@ -53,10 +64,14 @@ func FreezeProgramFrame(parent toolcontract.OperationInvocation, tc tools.ToolCo
 	if err := frame.validateScope(parent.Scope, tc); err != nil {
 		return ProgramFrame{}, err
 	}
+	complete = true
 	return frame, nil
 }
 
 func (f ProgramFrame) validateScope(scope toolcontract.OperationScope, tc tools.ToolContext) error {
+	if err := f.alive(); err != nil {
+		return err
+	}
 	if scope.Kind != f.parent.Scope.Kind || scope.ProjectID != f.parent.Scope.ProjectID {
 		return fmt.Errorf("program scope changed")
 	}
@@ -117,6 +132,9 @@ func (f ProgramFrame) childContext(ctx context.Context, name string, contract to
 }
 
 func (f ProgramFrame) validateHostContext(ctx context.Context, tc tools.ToolContext) error {
+	if err := f.alive(); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

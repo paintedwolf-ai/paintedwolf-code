@@ -41,8 +41,9 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "freeze actual profile", err)
-	frame, err := FreezeProgramFrame(parent, tc)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
 	testutil.FailErr(t, "freeze frame", err)
+	t.Cleanup(frame.Close)
 	child := parent
 	child.Identity.ExecutionID = "child"
 	child.Identity.ParentExecutionID = "parent"
