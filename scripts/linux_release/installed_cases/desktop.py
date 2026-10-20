@@ -67,9 +67,14 @@ def prepare_first_launch(binding: dict, root: Path) -> dict:
     nonce = binding.get("execution_nonce")
     if not isinstance(nonce, str) or re.fullmatch(r"[a-f0-9]{32}", nonce) is None:
         raise ValueError("first postinstallation launch requires the fresh controller nonce")
+    return observe_startup(binding, root, "first-launch-transaction",
+        {"execution_nonce": nonce, "profile_absent_before": True, "webview_profile_absent_before": True,
+         "preinstallation_evidence": installation})
+
+
+def observe_startup(binding: dict, root: Path, phase: str, observations: dict) -> dict:
     app, status = InstalledApp(binding), "failed"
-    observations = {"execution_nonce": nonce, "profile_absent_before": True, "webview_profile_absent_before": True,
-                    "preinstallation_evidence": installation}
+    nonce = binding["execution_nonce"]
     try:
         with app:
             observations["interactive_window"] = interactive_window(app)
@@ -87,7 +92,7 @@ def prepare_first_launch(binding: dict, root: Path) -> dict:
         observations["desktop"] = app.observations
     if status == "passed" and (not app.observations.get("capture_complete") or app.observations.get("output_limit")):
         status = "failed"
-    result = retain(binding, "installation", "first-launch-transaction", root, status, observations, app.streams())
+    result = retain(binding, "installation", phase, root, status, observations, app.streams())
     return {"format_version": 1, "status": status, "source_commit": binding["source_commit"],
             "artifact_id": binding["artifact"]["id"], "execution_nonce": nonce,
             "observations": observations, "evidence": result["evidence"]}
@@ -162,6 +167,7 @@ def diagnostic_main(arguments: list[str]) -> int:
     parser.add_argument('--driver-tree', required=True)
     parser.add_argument('--execution-nonce', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--continue-installed', action='store_true')
     args = parser.parse_args(arguments)
     try:
         source = evidence.source(args.source_commit)
@@ -206,14 +212,16 @@ def diagnostic_main(arguments: list[str]) -> int:
         case_inputs = {'native_packages': {'format_version': 1,
             'current_package': str(inputs / 'packages' / args.artifact_id),
             'installation': {'operation': 'fresh-install', 'expected_absent': True}}}
-        transaction = prepare_install(final, source, args.artifact_id, inputs / 'packages',
-                                      Path('/opt/painted-wolf-code'), case_inputs, retained)
+        transaction = None if args.continue_installed else prepare_install(
+            final, source, args.artifact_id, inputs / 'packages', Path('/opt/painted-wolf-code'), case_inputs, retained)
         first = None
-        if transaction['status'] == 'passed':
+        if args.continue_installed or transaction['status'] == 'passed':
             binding = bind(final, source, args.artifact_id, inputs / 'packages', Path('/opt/painted-wolf-code'))
             binding.update(case_inputs=case_inputs, installation_transaction=transaction,
                            execution_nonce=args.execution_nonce)
-            first = prepare_first_launch(binding, retained)
+            first = (observe_startup(binding, retained, "continued-startup",
+                {"execution_nonce": args.execution_nonce, "existing_profile_preserved": True})
+                if args.continue_installed else prepare_first_launch(binding, retained))
         status = first['status'] if first else transaction['status']
         cases = []
         if first is not None and first['status'] == 'passed':
@@ -230,10 +238,12 @@ def diagnostic_main(arguments: list[str]) -> int:
                 status = 'failed'
             elif any(case['status'] != 'passed' for case in cases):
                 status = 'unverified'
-        document = {'format_version': 1, 'scope': 'partial-native-first-launch-diagnostic',
+        document = {'format_version': 1, 'scope': ('partial-native-onboarding-continuation' if args.continue_installed
+                                                   else 'partial-native-first-launch-diagnostic'),
                     'source_commit': source, 'source_tree': tree, 'driver_tree': driver_tree,
                     'candidate_provenance': provenance, 'status': status, 'installation': transaction,
-                    'first_launch': first, 'cases': cases, 'complete_candidate': False, 'application_qualified': False,
+                    'first_launch': None if args.continue_installed else first,
+                    'continued_startup': first if args.continue_installed else None, 'cases': cases, 'complete_candidate': False, 'application_qualified': False,
                     'qualification_authority': False, 'publication_authority': False}
         (args.output / 'diagnostic.json').write_text(json.dumps(document, indent=2, sort_keys=True) + '\n')
         return {'passed': 0, 'failed': 1, 'unverified': 2}[status]

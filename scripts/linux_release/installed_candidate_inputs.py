@@ -71,8 +71,10 @@ def package_rows(root, source, controller, architecture, partial):
             family=original.parent.name
             # Older diagnostic producers also retained the raw Tauri DEB. Only the
             # canonical package assembler output can become an installed fixture.
-            if family not in {'deb','rpm'} or not original.name.startswith('painted-wolf-code'):
+            if family not in EXTENSIONS or not original.name.startswith('painted-wolf-code'):
                 continue
+            if not original.name.endswith('.'+EXTENSIONS[family]):
+                raise ValueError('partial package extension differs from its canonical output family')
             triple={'amd64':'x86_64','arm64':'aarch64'}[architecture]+'-unknown-linux-gnu'
             if original.parts[:-1]!=('lycaon-den','src-tauri','target',triple,'release','bundle',family):
                 raise ValueError('partial package path differs from the selected native CPU output')

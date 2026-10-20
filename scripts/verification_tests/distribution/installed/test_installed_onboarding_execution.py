@@ -91,6 +91,17 @@ class InstalledOnboardingTests(unittest.TestCase):
         self.assertNotIn('sensitive', str(error.exception))
         self.assertNotIn(onboarding._password, str(error.exception))
 
+    def test_inventory_failure_retains_only_phase_and_exception_class(self):
+        app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=lambda: False)
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=API), patch.object(
+                onboarding, 'form', side_effect=RuntimeError('private toolkit payload')):
+            with self.assertRaises(CaseUnavailable) as refusal:
+                onboarding.onboard(app)
+        self.assertEqual(app.observations['native_accessibility_error'],
+                         {'phase': 'vault-form-inventory', 'exception_type': 'RuntimeError'})
+        self.assertNotIn('private', repr(app.observations) + str(refusal.exception))
+
     def test_foreign_or_reused_application_pid_is_never_an_owned_window(self):
         app = SimpleNamespace(observations={'launch_identity': IDENTITY})
         with patch.object(desktop_ui, 'process_identity', return_value=dict(IDENTITY, start_time_ticks=43)):

@@ -63,7 +63,8 @@ class InstalledDiagnosticTests(unittest.TestCase):
                     patch.object(installed_runtime, 'bind', return_value={'artifact': artifact}), \
                     patch.object(installed_execution, 'execute_case', side_effect=lambda binding, cap, case, root:
                         {'id': case, 'status': 'passed', 'evidence': []}) as cases, \
-                    patch.object(desktop, 'prepare_first_launch', return_value={'status': 'passed'}):
+                    patch.object(desktop, 'prepare_first_launch', return_value={'status': 'passed'}) as fresh, \
+                    patch.object(desktop, 'observe_startup', return_value={'status': 'passed'}) as continued:
                 self.assertEqual(desktop.diagnostic_main(self.arguments(inputs, output)), 0)
                 for field, value in [('partial', False), ('qualification_authority', True), ('publication_authority', True)]:
                     changed = dict(selected, **{field: value})
@@ -72,9 +73,21 @@ class InstalledDiagnosticTests(unittest.TestCase):
                     with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                         desktop.diagnostic_main(self.arguments(inputs, refused))
                     self.assertFalse(refused.exists())
+                (inputs / 'candidate-selection.json').write_text(json.dumps(selected))
+                continuation = inputs.parent / 'continuation'
+                self.assertEqual(desktop.diagnostic_main(
+                    self.arguments(inputs, continuation) + ['--continue-installed']), 0)
+                resumed = json.loads((continuation / 'diagnostic.json').read_text())
+                self.assertEqual(resumed['scope'], 'partial-native-onboarding-continuation')
+                self.assertIsNone(resumed['first_launch'])
+                self.assertIsNone(resumed['installation'])
+                self.assertEqual(resumed['continued_startup']['status'], 'passed')
+                self.assertIs(resumed['qualification_authority'], False)
+                self.assertEqual(fresh.call_count, 1)
+                self.assertEqual(continued.call_args.args[2], 'continued-startup')
                 self.assertEqual(installer.call_count, 1)
                 self.assertEqual([call.args[1:3] for call in cases.call_args_list],
-                                 [('conversation', 'provider-onboarding'), ('files', 'edit-search-review')])
+                                 [('conversation', 'provider-onboarding'), ('files', 'edit-search-review')] * 2)
             result = json.loads((output / 'diagnostic.json').read_text())
             for field in ('complete_candidate', 'application_qualified', 'qualification_authority', 'publication_authority'):
                 self.assertIs(result[field], False)
