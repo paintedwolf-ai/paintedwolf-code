@@ -1,6 +1,6 @@
 import copy
 import unittest
-from portable_command_live import SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
+from portable_command.live import SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
 
 
 class PortableCommandLivePlan(unittest.TestCase):

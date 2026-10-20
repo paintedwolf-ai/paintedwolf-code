@@ -2,7 +2,7 @@ import copy
 import pathlib
 import tempfile
 import unittest
-from portable_command_contracts import bytes_value, fixture_path, load_suite, materialize, validate_suite
+from portable_command.contracts import bytes_value, fixture_path, load_suite, materialize, validate_suite
 
 
 class PortableCommandContracts(unittest.TestCase):

@@ -3,7 +3,7 @@ import json
 import math
 import re
 from focused_outcomes import read_json
-from portable_command_contracts import DIRECTORY, digest
+from portable_command.contracts import DIRECTORY, digest
 
 SHA256 = re.compile(r'[0-9a-f]{64}')
 SOURCE_FIELDS = ('application_sha256', 'configuration_sha256', 'bialy_sha256',
@@ -23,7 +23,7 @@ def load_live_manifest():
 
 
 def validate_manifest(manifest):
-    from portable_command_contracts import load_suite
+    from portable_command.contracts import load_suite
     cases = {case['id'] for case in load_suite()['cases']}
     if (manifest.get('version') != 1 or manifest.get('attempts_per_task_model_arm') != 5
             or manifest.get('arms') != ['real-shell-reference', 'production-native']

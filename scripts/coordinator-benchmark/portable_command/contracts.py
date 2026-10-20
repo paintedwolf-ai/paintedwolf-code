@@ -4,7 +4,7 @@ import hashlib
 import pathlib
 from focused_outcomes import read_json
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[3]
 DIRECTORY = ROOT / 'lycaon/test/fixtures/eval/portable-command'
 SUITE = DIRECTORY / 'suite.json'
 PROFILES = {'implement', 'worker_readonly', 'explore_readonly', 'plan_review_readonly'}

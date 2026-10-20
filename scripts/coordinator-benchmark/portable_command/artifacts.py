@@ -8,7 +8,7 @@ from artifacts import project_hashes
 from fixture_contracts import grade as artifact_grade
 import focused_outcomes as oracle
 from outcomes import successful_tests
-from portable_command_contracts import bytes_value, fixture_path
+from portable_command.contracts import bytes_value, fixture_path
 
 
 def grade_artifacts(project, case):
@@ -65,7 +65,7 @@ def grade_archive(path, spec):
 
 def delivered_suite(project):
     """Reuse the trusted candidate-test driver inside the existing isolated oracle."""
-    driver = pathlib.Path(__file__).with_name('candidate_tests.py').read_text()
+    driver = (pathlib.Path(__file__).parent.parent / 'candidate_tests.py').read_text()
     definitions = driver.split("if __name__ == '__main__':", 1)[0]
     program = definitions + '\nprint(json.dumps(execute(pathlib.Path("/candidate"), "test*.py")))\n'
     return successful_tests(oracle.execute(pathlib.Path(project), program))

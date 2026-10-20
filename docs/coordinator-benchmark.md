@@ -280,7 +280,7 @@ revision before dispatch; an alias alone is never evidence of a matching revisio
 Fixture HTTP uses a hermetic loopback server supplied as `FIXTURE_HTTP`; credentials
 and projects are synthetic. Historical commands are never replayed.
 
-`portable_command_contracts.py` validates the closed case inventory, evidence
+`portable_command/contracts.py` validates the closed case inventory, evidence
 requirements, bounded dataset generators and linked OAR controls. Its disk-only
 materializer refuses an existing destination and preserves binary fixture bytes.
 The OAR matrix in `oar-matrix.json` separates syntax and options, missing progress,
@@ -289,7 +289,7 @@ HTTP outcomes. Progress uses the existing `update_progress` content schema.
 P32 binds typed causes without a declared code to its registered codes; the
 matrix does not invent a new rejection owner or parse diagnostic prose.
 
-`portable_command_grading.py` consumes a trusted harness export, never a file
+`portable_command/grading.py` consumes a trusted harness export, never a file
 written by the candidate or a success claim in final prose. Export version 1 is
 an internal evaluation format, not a new product wire or persisted schema.
 The real harness must normalize recorded program outcomes, immutable source
@@ -314,7 +314,9 @@ the delivered-test dimension. Missing browser follow-through remains a blocked
 closeout even after a successful build. Exact receipt/effect multisets reject
 extra forbidden attempts as well as missing terminal settlement. First-action
 success, recovery success and forbidden replay are separate outputs; recovery
-requires the exact invocation sequence and recorded remedy/effect facts.
+requires the exact invocation sequence and recorded remedy/effect facts, passing
+independent artifact/receipt/authority/test grades, and completed task closeout.
+First-invocation completion is retained separately from semantic action success.
 
 The numeric resource ceilings in `suite.json` name short-program, large-tree and
 spill-sort datasets and a hardware class before measurement. Freeze actual
@@ -326,7 +328,7 @@ acceptance ceilings, not claimed benchmark results.
 [`live.json`](../lycaon/test/fixtures/eval/portable-command/live.json) separately
 preregisters ten tasks, small/medium/large selections, equal response/token/time
 budgets, and five alternating-order paired attempts against a real-shell
-reference and production native architecture. `portable_command_live.py` refuses
+reference and production native architecture. `portable_command/live.py` refuses
 to freeze a plan without exact application/configuration/Bialy/catalog/fixture/
 grader/hardware digests, resolved supported backend/model artifacts and runtime
 identity, request settings, and explicit isolated-host/model/cost authorization.

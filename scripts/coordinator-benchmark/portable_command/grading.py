@@ -1,6 +1,7 @@
 """Independent grades over retained files and trusted, versioned harness observations."""
+import re
 from focused_outcomes import required_fields, same
-from portable_command_artifacts import grade_artifacts, delivered_suite
+from portable_command.artifacts import grade_artifacts, delivered_suite
 from verification_evidence import matches as verification_matches
 
 PROGRAM_FIELDS = ('stdout', 'stderr', 'status', 'host_stop', 'complete')
@@ -43,14 +44,18 @@ def grade_case(case, observation, project, identity):
         'recovery': recovery_checks(case, observation),
     }
     attempts = observation.get('invocations', [])
-    first_success = bool(attempts and attempts[0].get('outcome') == 'completed')
+    first_completed = bool(attempts and attempts[0].get('outcome') == 'completed')
+    semantic_success = all(dimensions.values()) and expected['closeout'] == 'complete'
+    first_success = first_completed and semantic_success
     corrected = len(case['turns']) > 1
-    recovery_success = bool(corrected and dimensions['recovery'] and dimensions['execution'])
+    recovery_success = bool(corrected and semantic_success)
     return {'qualification': 'grader-control' if observation['capture_kind'] == 'synthetic-control' else 'native-runtime',
             'passed': all(dimensions.values()), 'dimensions': dimensions,
-            'first_action_success': first_success,
+            'first_invocation_completed': first_completed, 'first_action_success': first_success,
             'recovery_success': recovery_success if corrected else None,
-            'forbidden_replay': observation.get('forbidden_replay') is True,
+            'forbidden_replay': (observation.get('forbidden_replay') is True
+                                 or len(attempts) > len(case['turns'])
+                                 or len({a.get('id') for a in attempts}) != len(attempts)),
             'metrics': observation.get('metrics', {})}
 
 
@@ -86,7 +91,9 @@ def recovery_checks(case, observation):
 def grade_resources(profile, measurement, binding):
     """Unknown hardware/dataset/coldness cannot pass a performance ceiling."""
     required = ('hardware_sha256', 'dataset_sha256', 'source_sha256', 'cache_state')
-    if any(not binding.get(k) or measurement.get(k) != binding[k] for k in required):
+    if (any(not binding.get(k) or measurement.get(k) != binding[k] for k in required)
+            or any(not isinstance(binding.get(k), str) or not re.fullmatch('[0-9a-f]{64}', binding[k])
+                   for k in required[:3]) or binding['cache_state'] not in {'cold', 'warm'}):
         return {'qualification': 'unqualified', 'passed': False}
     keys = ('wall_ms', 'peak_rss_bytes', 'spool_bytes', 'cancel_ms')
     passed = all(type(measurement.get(k)) in (int, float) and 0 <= measurement[k] <= profile[k] for k in keys)

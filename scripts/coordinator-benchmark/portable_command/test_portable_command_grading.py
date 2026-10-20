@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import focused_outcomes as oracle
-from portable_command_contracts import DIRECTORY, bytes_value, load_suite
-from portable_command_artifacts import grade_artifacts, delivered_suite
-from portable_command_grading import grade_case, grade_resources
+from portable_command.contracts import DIRECTORY, bytes_value, load_suite
+from portable_command.artifacts import grade_artifacts, delivered_suite
+from portable_command.grading import grade_case, grade_resources
 from test_focused_outcomes import local_execute
 
 CASES = {c['id']: c for c in load_suite()['cases']}
@@ -93,6 +93,8 @@ class PortableCommandGrades(unittest.TestCase):
         target = self.root / next(iter(case['expected']['files']))
         target.write_bytes(b'wrong bytes despite successful status')
         self.assertFalse(self.grade(case, actual)['dimensions']['artifacts'])
+        self.assertTrue(self.grade(case, actual)['first_invocation_completed'])
+        self.assertFalse(self.grade(case, actual)['first_action_success'])
 
     def test_missing_browser_obligation_cannot_be_closed_by_build_success(self):
         case = CASES['browser-obligation']
@@ -102,6 +104,7 @@ class PortableCommandGrades(unittest.TestCase):
         actual['closeout'] = 'complete'
         actual['obligations'] = []
         self.assertFalse(self.grade(case, actual)['dimensions']['closeout'])
+        self.assertFalse(self.grade(case, actual)['first_action_success'])
         actual = observation(case)
         actual['facts'].pop(case['required_evidence'][0])
         self.assertFalse(self.grade(case, actual)['dimensions']['evidence'])
@@ -114,12 +117,25 @@ class PortableCommandGrades(unittest.TestCase):
         self.assertTrue(result['passed'])
         self.assertFalse(result['first_action_success'])
         self.assertTrue(result['recovery_success'])
+        for dimension in ('receipts', 'effects'):
+            broken = observation(case)
+            if dimension == 'receipts': broken['receipts'].clear()
+            else: broken['effects'].append({'operation':'forbidden-write','outcome':'completed'})
+            self.assertFalse(self.grade(case, broken)['recovery_success'])
+        target = self.root / next(iter(case['expected']['files']))
+        original = target.read_bytes()
+        target.write_bytes(b'wrong corrected bytes')
+        self.assertFalse(self.grade(case, observation(case))['recovery_success'])
+        target.write_bytes(original)
         actual['invocations'][0]['outcome'] = 'completed'
         actual['final_prose'] = 'Recovered successfully'
         self.assertFalse(self.grade(case, actual)['dimensions']['recovery'])
         actual = observation(case)
         actual['forbidden_replay'] = True
         self.assertFalse(self.grade(case, actual)['passed'])
+        actual = observation(case)
+        actual['invocations'].append(dict(actual['invocations'][0], id='replayed-program'))
+        self.assertTrue(self.grade(case, actual)['forbidden_replay'])
 
     def test_fractional_and_wordle_controls_grade_behavior_and_own_tests_separately(self):
         for name, control in CONTROLS.items():
