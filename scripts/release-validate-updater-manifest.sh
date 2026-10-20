@@ -79,12 +79,20 @@ expected = {
 }
 if not expected:
     raise SystemExit("error: release platform catalog has no public updater platform")
-if set(manifest["platforms"]) != set(expected):
-    raise SystemExit(
-        "error: updater manifest platforms do not equal the public platform catalog"
-    )
+if not isinstance(manifest["platforms"], dict) or not manifest["platforms"]:
+    raise SystemExit("error: updater manifest has no platform entries")
+if sys.argv[5] == "1":
+    if set(manifest["platforms"]) - set(all_platforms):
+        raise SystemExit("error: published updater manifest names an unknown platform")
+    selected = {key: all_platforms[key] for key in manifest["platforms"]}
+else:
+    if set(manifest["platforms"]) != set(expected):
+        raise SystemExit(
+            "error: updater manifest platforms do not equal the public platform catalog"
+        )
+    selected = expected
 version = manifest["version"]
-for key, row in expected.items():
+for key, row in selected.items():
     extension = row.get("updater_extension")
     if not re.fullmatch(r"[a-z0-9]+-[a-z0-9_]+", key) or not isinstance(extension, str) or not re.fullmatch(r"[A-Za-z0-9.]+", extension):
         raise SystemExit(f"error: release platform catalog entry {key!r} is invalid")
