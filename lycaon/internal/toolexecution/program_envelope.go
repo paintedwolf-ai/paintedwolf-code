@@ -35,6 +35,7 @@ type PreparedProgramEnvelope struct {
 	contractDigest string
 	frame          ProgramFrame
 	update         *nativeArguments
+	admission      ProgramStateAdmission
 	identity       toolcontract.ProgramProgressIdentity
 	closed         bool
 	attempted      bool
@@ -51,6 +52,9 @@ type ProgramProgressResult struct {
 // PrepareProgramEnvelope validates both complete syntax and progress before
 // either owner may apply an effect. A missing update preserves existing progress.
 func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFrame, program ValidatedProgramIdentity, update *ProgramProgressUpdate, admission ProgramStateAdmission, tc tools.ToolContext) (*PreparedProgramEnvelope, error) {
+	if err := frame.alive(); err != nil {
+		return nil, err
+	}
 	if e == nil || program == nil {
 		return nil, fmt.Errorf("sealed program and executor required")
 	}
@@ -98,6 +102,7 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 		return nil, progressOwnerError(err)
 	}
 	prepared.update = args
+	prepared.admission = admission
 	prepared.contractDigest = definition.Contract.Digest()
 	prepared.identity = toolcontract.ProgramProgressIdentity{ProgramID: frame.parent.Identity.ProgramID, ExecutionID: update.ExecutionID, ActorID: frame.parent.ActorID, SessionID: frame.parent.SessionID, Scope: frame.parent.Scope}
 	return prepared, nil
@@ -114,11 +119,15 @@ func (p *PreparedProgramEnvelope) Close() {
 		p.update.close()
 	}
 	p.program = nil
+	p.admission = nil
 }
 
 func (p *PreparedProgramEnvelope) validate(ctx context.Context) error {
 	if p == nil || p.closed || p.program == nil {
 		return fmt.Errorf("program envelope is closed")
+	}
+	if err := p.frame.alive(); err != nil {
+		return err
 	}
 	source, catalog, err := p.program.ValidatedProgramIdentity(ctx)
 	if err != nil {

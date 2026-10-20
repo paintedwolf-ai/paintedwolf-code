@@ -41,7 +41,11 @@ func (r *retainedInputsFixture) RetainReviewedProgressInputs(_ context.Context, 
 func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.T) {
 	for _, mode := range []string{"committed", "closed-plan", "invalid-update"} {
 		t.Run(mode, func(t *testing.T) {
-			f := newProgramReceiptFixture(t)
+			submitted := map[string]any{"command": "${op} arg", "progress_update": map[string]any{"content": "- [ ] Create fixture"}}
+			if mode == "invalid-update" {
+				submitted["progress_update"].(map[string]any)["unknown_field"] = true
+			}
+			f := newProgramReceiptFixtureWithArgs(t, submitted)
 			memory := &progressMemory{}
 			parser, err := commandsurface.NewProgramParser(t.Context(), memory)
 			testutil.FailErr(t, "reserve actual parser", err)
@@ -56,8 +60,9 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			}()
 			parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "unit", ExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 			tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
-			frame, err := toolexecution.FreezeProgramFrame(parent, tc)
+			frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: submitted}, memory)
 			testutil.FailErr(t, "freeze actual outer invocation", err)
+			defer frame.Close()
 			schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 			testutil.FailErr(t, "load real progress schema", err)
 			registry, err := tools.NewCatalogRegistry(schemas)

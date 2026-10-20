@@ -20,8 +20,9 @@ func frameFixture(t *testing.T) (toolcontract.OperationInvocation, tools.ToolCon
 
 func TestProgramFramePreservesModelCallAndClearsChildAuthority(t *testing.T) {
 	parent, tc := frameFixture(t)
-	frame, err := FreezeProgramFrame(parent, tc)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
 	testutil.FailErr(t, "capture program frame", err)
+	t.Cleanup(frame.Close)
 	child := parent
 	child.Identity = toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "stage", ExecutionID: "child", ParentExecutionID: "parent"}
 	tc.Execution.ProcessControl = true
@@ -58,8 +59,9 @@ func TestProgramFrameRejectsChangedAttributionAndTrees(t *testing.T) {
 	for _, change := range []string{"actor", "session", "program", "call", "root", "branch", "worker"} {
 		t.Run(change, func(t *testing.T) {
 			parent, tc := frameFixture(t)
-			frame, err := FreezeProgramFrame(parent, tc)
+			frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
 			testutil.FailErr(t, "capture frame", err)
+			t.Cleanup(frame.Close)
 			child := parent
 			child.Identity.ExecutionID = "child"
 			child.Identity.ParentExecutionID = "parent"
@@ -85,8 +87,9 @@ func TestProgramFrameRejectsChangedAttributionAndTrees(t *testing.T) {
 		})
 	}
 	parent, tc := frameFixture(t)
-	frame, err := FreezeProgramFrame(parent, tc)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
 	testutil.FailErr(t, "capture frame", err)
+	t.Cleanup(frame.Close)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := frame.ChildContext(ctx, nativeDefinition(t, "read"), parent, tc); err == nil {
