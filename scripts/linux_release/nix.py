@@ -11,9 +11,10 @@ import platform
 import subprocess
 import sys
 import time
+import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive
+from . import nix_archive, factory_source
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
@@ -23,8 +24,8 @@ COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engin
               "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
 
 
-def command(operation: str, root: Path, component: str = "default") -> list[str]:
-    source = "git+file://" + str(root)
+def command(operation: str, root: Path, component: str = "default", source: str | None = None) -> list[str]:
+    source = source or "git+file://" + str(root)
     if operation == "check":
         return NIX + ["flake", "check", "--no-build", "--all-systems", "--no-write-lock-file", source]
     if platform.system() != "Linux" or platform.machine() not in SYSTEMS:
@@ -37,14 +38,28 @@ def command(operation: str, root: Path, component: str = "default") -> list[str]
 
 
 def execute(operation: str, root: Path = ROOT, component: str = "default",
-            archive_dir: Path | None = None) -> int:
+            archive_dir: Path | None = None, factory_root: Path | None = None,
+            factory_commit: str | None = None, factory_channel: str | None = None,
+            prepare_factory_lock: bool = False) -> int:
+    role = None
+    if any(value is not None for value in (factory_root, factory_commit, factory_channel)):
+        if not all(value is not None for value in (factory_root, factory_commit, factory_channel)):
+            raise ValueError("Factory root, commit and channel must be supplied together")
+        role = factory_source.select(factory_root, factory_commit, factory_channel, component,
+                                     prepare=prepare_factory_lock)
+    if prepare_factory_lock and (role is None or operation != "check" or archive_dir is not None):
+        raise ValueError("Factory lock preparation requires check and an explicit factory input")
     lock = root / "flake.lock"
     if not lock.is_file():
         raise ValueError("flake.lock is required; evaluation/build must not create or update it")
     if archive_dir is not None and operation != "build":
         raise ValueError("closure archives require a build operation")
     archive = nix_archive.destination(root, archive_dir)
-    invocation = command(operation, root, component)
+    if archive is not None and role is not None and archive.is_relative_to(factory_root):
+        raise ValueError("Factory archive must stay outside the factory source tree")
+    source = None if role is None else ("git+file://" + str(factory_root) + "?rev=" +
+                                       factory_commit + "&dir=" + role["subdirectory"])
+    invocation = command(operation, root, component, source)
     environment = dict(os.environ)
     for name in ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY",
                  "FEED_SIGNING_KEYS_JSON", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
@@ -55,6 +70,10 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
         "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip(),
     }
+    if role is not None:
+        report["factory"] = role
+    if prepare_factory_lock:
+        return prepare_lock(root, factory_root, factory_commit, role, environment, report)
     result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
@@ -81,14 +100,39 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     return result.returncode
 
 
+def prepare_lock(root, factory_root, commit, role, environment, report):
+    directory = artifact_root(root) / "nix" / ("factory-lock-" + str(time.time_ns()))
+    directory.mkdir(parents=True)
+    with tempfile.TemporaryDirectory(prefix="factory-lock-") as temporary:
+        candidate = Path(temporary)
+        (candidate / "flake.nix").write_bytes(factory_source.committed(
+            factory_root, commit, role["subdirectory"] + "/flake.nix"))
+        result = subprocess.run(NIX + ["flake", "lock", str(candidate)], env=environment)
+        report["operation"] = "prepare-factory-lock"
+        report["passed"] = result.returncode == 0
+        if result.returncode == 0:
+            raw = (candidate / "flake.lock").read_bytes()
+            report["factory"].update(factory_source.validate_lock(factory_root, role, raw))
+            (directory / "flake.lock").write_bytes(raw)
+    (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(f"Candidate factory lock and provenance: {directory}")
+    return result.returncode
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("check", "build"))
     parser.add_argument("--component", choices=COMPONENTS, default="default")
     parser.add_argument("--archive-dir", type=Path)
+    parser.add_argument("--factory-source-root", type=Path)
+    parser.add_argument("--factory-source-commit")
+    parser.add_argument("--factory-channel", choices=factory_source.CHANNELS)
+    parser.add_argument("--prepare-factory-lock", action="store_true")
     args = parser.parse_args()
     try:
-        return execute(args.operation, component=args.component, archive_dir=args.archive_dir)
+        return execute(args.operation, component=args.component, archive_dir=args.archive_dir,
+                       factory_root=args.factory_source_root, factory_commit=args.factory_source_commit,
+                       factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
