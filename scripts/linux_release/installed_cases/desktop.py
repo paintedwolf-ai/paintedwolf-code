@@ -226,7 +226,8 @@ def diagnostic_main(arguments: list[str]) -> int:
         cases = []
         if first is not None and first['status'] == 'passed':
             binding['first_launch_transaction'] = first
-            for capability, case in [('conversation', 'provider-onboarding'), ('files', 'edit-search-review')]:
+            for capability, case in [('vault', 'wrong-launcher-and-memory'), ('session', 'inhibitor-lifetime'),
+                                     ('conversation', 'provider-onboarding'), ('files', 'edit-search-review')]:
                 try:
                     observed = execute_case(binding, capability, case, retained)
                 except (OSError, ValueError, TypeError) as error:
