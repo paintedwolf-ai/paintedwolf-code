@@ -56,6 +56,13 @@ func TestScreenedPipeCloseInducedEOFCannotComplete(t *testing.T) {
 				testutil.FailErr(t, "close consumer", p.Close())
 			}
 			metadata, err := p.Wait(ctx)
+			wantTermination := StreamConsumerClosed
+			if external {
+				wantTermination = StreamCanceled
+			}
+			if got := p.pipe.Completion().Termination; got != wantTermination {
+				t.Fatalf("wrong terminal classification %s want%s", got, wantTermination)
+			}
 			if !errors.Is(err, want) || metadata.Complete {
 				t.Fatalf("close-induced EOF complete=%v err=%v", metadata.Complete, err)
 			}

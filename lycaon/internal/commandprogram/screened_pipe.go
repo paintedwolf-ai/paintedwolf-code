@@ -47,16 +47,21 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 		defer close(out.done)
 		defer out.closeSource()
 		metadata, err := projector.ScreenStream(screenCtx, scope, label, source, pipe, options)
+		termination := StreamScreeningFailed
 		out.mu.Lock()
 		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 			err = cause
 			metadata.Complete = false
+			termination = StreamCanceled
+			if errors.Is(cause, ErrConsumerClosed) {
+				termination = StreamConsumerClosed
+			}
 		}
 		out.metadata, out.err, out.settled = metadata, err, true
 		out.mu.Unlock()
 		defer cancel(nil)
 		if out.err != nil {
-			pipe.finish(StreamScreeningFailed, out.err)
+			pipe.finish(termination, out.err)
 		} else {
 			_ = pipe.CloseProducer(nil)
 		}
