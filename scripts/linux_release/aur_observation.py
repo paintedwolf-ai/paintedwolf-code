@@ -8,13 +8,23 @@ import re
 from .aur_delivery import recipe_objects
 from .repository_objects import encoded
 
+FIELDS = {"format_version", "operation", "source_commit", "version", "channel", "package", "rehearsal",
+          "final_artifacts_sha256", "generations", "recipe_objects", "recipe_sha256"}
+
 
 def observe(selected, recipe, commit, *, backend, authorize):
     """Bracket exact origin bytes with fresh release admission and branch observations."""
+    if (not isinstance(selected, dict) or set(selected) != FIELDS
+            or type(selected["format_version"]) is not int or selected["format_version"] != 1
+            or selected["operation"] != "publish-aur" or selected["channel"] not in {"stable", "preview"}
+            or any(not isinstance(selected[key], str) or re.fullmatch(r"[0-9a-f]{" + str(size) + "}", selected[key]) is None
+                   for key, size in (("source_commit", 40), ("final_artifacts_sha256", 64), ("recipe_sha256", 64)))):
+        raise ValueError("AUR observation requires its exact selected publisher plan")
     if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
         raise ValueError("AUR availability requires its protected exact recipe commit")
     package = selected.get("package")
-    if package not in {"painted-wolf-code-bin", "painted-wolf-code-preview-bin"}:
+    expected_package = "painted-wolf-code" + ("-preview" if selected["channel"] == "preview" else "") + "-bin"
+    if package != expected_package:
         raise ValueError("AUR availability requires a maintained channel-specific package")
     if (type(selected.get("rehearsal")) is not bool
             or backend.production is not (selected["rehearsal"] is False)):
@@ -37,6 +47,7 @@ def observe(selected, recipe, commit, *, backend, authorize):
         raise ValueError("AUR origin did not retain the selected immutable commit")
     message = json.loads(actual["message"])
     if (not isinstance(message, dict) or set(message) != set(selected) | {"previous"}
+            or actual["message"].strip() != encoded(message).strip()
             or {key: value for key, value in message.items() if key != "previous"} != selected
             or message["previous"] is not None and
             (not isinstance(message["previous"], str) or re.fullmatch(r"[0-9a-f]{40}", message["previous"]) is None)):
