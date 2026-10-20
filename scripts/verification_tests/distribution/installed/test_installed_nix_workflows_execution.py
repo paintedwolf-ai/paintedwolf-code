@@ -1,6 +1,8 @@
 """Contracts for real installed Nix operations; no mocked installed pass claims."""
 from __future__ import annotations
 
+import base64
+import json
 import copy
 import errno
 import hashlib
@@ -52,6 +54,16 @@ class InstalledNixWorkflowsTests(unittest.TestCase):
             binding['case_inputs']['nix']['command'] = 'uncontrolled hook'
             with self.assertRaises(CaseUnavailable):
                 nix.source_target(binding)
+
+    def test_store_identity_requires_actual_selected_output_and_nar(self):
+        path, digest = '/nix/store/' + 'a' * 32 + '-application', 'b' * 64
+        binding = {'artifact': {'identity': {'store_path': path, 'sha256': digest}}}
+        sri = 'sha256-' + base64.b64encode(bytes.fromhex(digest)).decode()
+        observed = {'store_exit_code': 0, 'store_stdout': json.dumps({path: {'narHash': sri}})}
+        self.assertTrue(nix.store_facts(binding, observed))
+        for changed in [{'store_exit_code': 1}, {'store_stdout': '{}'},
+                        {'store_stdout': json.dumps({path: {'narHash': 'sha256-wrong'}})}]:
+            self.assertFalse(nix.store_facts(binding, {**observed, **changed}))
 
     def test_missing_source_is_unverified_and_invalid_revisions_are_refused(self):
         with self.assertRaises(CaseUnavailable):
