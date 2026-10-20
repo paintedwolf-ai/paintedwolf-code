@@ -22,6 +22,11 @@ class UpgradePlanTests(unittest.TestCase):
         self.addCleanup(self.binding.stop)
         self.registry = {"generations": [{"bridge_version": "1.1.0"}]}
 
+    def test_manual_clients_are_explicitly_excluded_from_desktop_coverage(self):
+        result = plan(manifest("1.1.0"), self.registry, [snapshot("stable", manifest("1.0.1"))])
+        self.assertEqual(result["cases"], [])
+        self.assertEqual(result["excluded_sources"][0]["reason"], "requires_manual_installation")
+
     def test_shipped_protocol_boundary_is_explicit(self):
         from release_upgrade_plan import client_protocol
         self.assertEqual(client_protocol("1.0.1"), "tauri-plugin-v1")
@@ -29,40 +34,40 @@ class UpgradePlanTests(unittest.TestCase):
 
     def test_stable_promotes_preview_without_changing_the_preference(self):
         result = plan(manifest("1.2.0"), self.registry,
-                      [snapshot("stable", manifest("1.0.0")), snapshot("preview", manifest("1.2.0-rc.1"))])
+                      [snapshot("stable", manifest("1.0.2")), snapshot("preview", manifest("1.2.0-rc.1"))])
         self.assertEqual([(case["source_version"], case["channel"]) for case in result["cases"]],
-                         [("1.0.0", "preview"), ("1.0.0", "stable"), ("1.2.0-rc.1", "preview")])
+                         [("1.0.2", "preview"), ("1.0.2", "stable"), ("1.2.0-rc.1", "preview")])
         self.assertIsNone(result["skip_reason"])
 
     def test_preview_covers_opt_in_from_stable_and_the_prior_preview(self):
         result = plan(manifest("1.2.0-rc.2"), self.registry,
-                      [snapshot("stable", manifest("1.0.0")), snapshot("preview", manifest("1.2.0-rc.1"))])
+                      [snapshot("stable", manifest("1.0.2")), snapshot("preview", manifest("1.2.0-rc.1"))])
         self.assertEqual([case["channel"] for case in result["cases"]], ["preview", "preview"])
 
     def test_missing_preview_uses_stable_and_equal_or_newer_offers_are_excluded(self):
-        result = plan(manifest("1.1.0-rc.1"), self.registry, [snapshot("stable", manifest("1.0.0"))])
+        result = plan(manifest("1.1.0-rc.1"), self.registry, [snapshot("stable", manifest("1.0.2"))])
         self.assertEqual(len(result["cases"]), 1)
-        result = plan(manifest("1.0.0"), self.registry,
-                      [snapshot("stable", manifest("1.0.0")), snapshot("preview", manifest("1.1.0-rc.1"))])
+        result = plan(manifest("1.0.2"), self.registry,
+                      [snapshot("stable", manifest("1.0.2")), snapshot("preview", manifest("1.1.0-rc.1"))])
         self.assertEqual(result["cases"], [])
-        self.assertEqual(result["skip_reason"], "no_older_published_source")
+        self.assertEqual(result["skip_reason"], "no_automatic_upgrade_source")
 
     def test_withdrawn_sources_remain_in_the_matrix(self):
-        source = {**manifest("1.0.0"), "withdrawn": True}
+        source = {**manifest("1.0.2"), "withdrawn": True}
         self.assertEqual(len(plan(manifest("1.1.0"), self.registry, [snapshot("stable", source)])["cases"]), 2)
 
     def test_skipped_generations_follow_each_channel_bridge(self):
-        feeds = [snapshot("stable", manifest("1.0.0")),
+        feeds = [snapshot("stable", manifest("1.0.2")),
                  snapshot("preview", manifest("1.1.0", 1, 2)),
                  snapshot("stable", manifest("1.2.0", 2))]
         with patch("release_upgrade_plan.generation", return_value={"bridge_version": "1.1.0"}):
             result = plan(manifest("1.3.0-rc.1", 2), self.registry, feeds)
-        source = next(case for case in result["cases"] if case["source_version"] == "1.0.0")
+        source = next(case for case in result["cases"] if case["source_version"] == "1.0.2")
         self.assertEqual([step["version"] for step in source["steps"]], ["1.1.0", "1.3.0-rc.1"])
 
     def test_missing_or_withdrawn_bridge_refuses_the_plan(self):
         for bridge in (None, {**manifest("1.1.0", 1, 2), "withdrawn": True}):
-            feeds = [snapshot("stable", manifest("1.0.0"))]
+            feeds = [snapshot("stable", manifest("1.0.2"))]
             if bridge:
                 feeds.append(snapshot("preview", bridge))
             with patch("release_upgrade_plan.generation", return_value={"bridge_version": "1.1.0"}):
@@ -71,7 +76,7 @@ class UpgradePlanTests(unittest.TestCase):
 
     def test_invalid_stable_and_duplicate_feeds_are_refused(self):
         bad = snapshot("stable", manifest("1.0.1-rc.1"))
-        for feeds in ([bad], [snapshot("stable", manifest("1.0.0"))] * 2):
+        for feeds in ([bad], [snapshot("stable", manifest("1.0.2"))] * 2):
             with self.assertRaises(ValueError):
                 plan(manifest("1.1.0"), self.registry, feeds)
 

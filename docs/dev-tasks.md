@@ -1080,3 +1080,8 @@ The 1.0.0 and 1.0.1 clients use the Tauri updater plugin and require an explicit
 install action. Their plan entries name `tauri-plugin-v1`; later releases name
 `native-v2` and support automatic preparation and startup activation. These are
 released protocol boundaries, not runtime guesses from logs or file presence.
+
+Desktop rehearsal covers the automatic updater in the 1.0.2 line onward. Manual
+clients are recorded under `excluded_sources` with `requires_manual_installation`;
+they retain sidecar/store coverage through `upgrade:rehearse`. A desktop result
+with no automatic source records `no_automatic_upgrade_source`, never a pass.

@@ -47,10 +47,15 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
             raise ValueError("stable feed contains a prerelease")
         feeds[channel, number] = snapshot
     cases = {}
+    excluded = []
     for (source_channel, number), snapshot in feeds.items():
         source = snapshot["manifest"]
         version = source["version"]
         if compare(parse(version), parse("1.0.0")) < 0 or compare(parse(version), target) >= 0:
+            continue
+        if client_protocol(version) != "native-v2":
+            excluded.append({"source_version": version, "source_feed": snapshot["path"],
+                             "reason": "requires_manual_installation"})
             continue
         channels = ("stable", "preview") if target.channel == "stable" else ("preview",)
         for channel in channels:
@@ -63,5 +68,5 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
                           "channel": channel, "protocol": client_protocol(version), "source_feed": snapshot["path"],
                           "source_generation": number, "steps": steps}
     return {"format_version": 1, "candidate": candidate, "feeds": snapshots,
-            "cases": [cases[key] for key in sorted(cases)],
-            "skip_reason": None if cases else "no_older_published_source"}
+            "cases": [cases[key] for key in sorted(cases)], "excluded_sources": excluded,
+            "skip_reason": None if cases else "no_automatic_upgrade_source"}
