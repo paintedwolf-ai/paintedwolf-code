@@ -74,9 +74,9 @@ func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservatio
 	// Structured argv preserves the executor's process boundaries.
 	plan, _ := commandsurface.PlanGroups(action.Invocation.Args)
 	roots := effectReachRoots(action.Execution.Contained)
-	processes := commandProcesses(rawCommand, plan)
-	if len(action.Invocation.BoundStages) > 0 {
-		processes = nil
+	var processes []commandProcess
+	if len(action.Invocation.BoundStages) == 0 {
+		processes = commandProcesses(rawCommand, plan)
 	}
 	processReach := make([]string, 0, len(processes))
 	for _, process := range processes {

@@ -465,28 +465,30 @@ func newCommandEventFields(tool, rawCommand, projectDir string, contained bool, 
 // canonical host observation.
 func NewEvent(in ActionObservation) Event {
 	directIP := in.Boundary.DirectIP
-	ev := newCommandEvent(
-		in.Tool,
-		in.CommandLine,
-		in.ProjectDir,
-		in.Boundary.FSJailed && !directIP && len(in.Sockets) == 0,
-		in.Boundary.Egress,
-		in.SessionID,
-		in.Plan,
-	)
-	if in.CommandLine == "" {
-		if imgs := canonicalBounded(in.Image, 32); len(imgs) > 0 {
-			ev.Image = imgs
-		}
-		if argv := canonicalBounded(in.Argv, 256); len(argv) > 0 {
-			ev.Argv = argv
-		}
-	}
+	var ev Event
 	if len(in.BoundStages) > 0 {
 		groups := boundCommandEvents(in)
 		ev = groups[0]
 		if len(groups) > 1 {
 			ev.executionGroups = groups
+		}
+	} else {
+		ev = newCommandEvent(
+			in.Tool,
+			in.CommandLine,
+			in.ProjectDir,
+			in.Boundary.FSJailed && !directIP && len(in.Sockets) == 0,
+			in.Boundary.Egress,
+			in.SessionID,
+			in.Plan,
+		)
+		if in.CommandLine == "" {
+			if imgs := canonicalBounded(in.Image, 32); len(imgs) > 0 {
+				ev.Image = imgs
+			}
+			if argv := canonicalBounded(in.Argv, 256); len(argv) > 0 {
+				ev.Argv = argv
+			}
 		}
 	}
 	if len(in.BoundStages) == 1 {

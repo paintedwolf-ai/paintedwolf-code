@@ -3,6 +3,7 @@ package toolexecution
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
@@ -115,5 +116,24 @@ func TestCoordinatorCommandSurfaceIntersectsActualPostureDeclaration(t *testing.
 		if _, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "coordinator", SurfaceID: surfaceID}, []toolcontract.OperationDefinition{read}); err == nil {
 			t.Fatal("missing coordinator posture admitted")
 		}
+	}
+}
+
+func TestReadOnlyRemedyNeverIncludesMixedMutationArgv(t *testing.T) {
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	surface := ProgramSurface{allowed: readOnly, profile: "worker_readonly", selection: NativeOperationSelection{denied: map[string]map[string]bool{}}}
+	catalog, err := toolcontract.LanguageV1()
+	testutil.FailErr(t, "load actual utility contracts", err)
+	var commands []toolcontract.CommandSpecification
+	for _, command := range catalog.Commands {
+		if command.Name == "sed" || command.Name == "tar" {
+			commands = append(commands, command)
+		}
+	}
+	invocation, _ := frameFixture(t)
+	rejection := surface.profileReject("COMMAND_EFFECT_NOT_ALLOWED", toolcontract.OperationFacts{Identity: "fixture", Contract: toolcontract.Contract{Owner: "filesystem"}, Commands: commands}, invocation)
+	forms, _ := rejection.Data["expected_form"].(string)
+	if strings.Contains(forms, "-i") || strings.Contains(forms, "-x") || strings.Contains(forms, "-c") || !strings.Contains(forms, "stream-script") || !strings.Contains(forms, "listing-or-stream-decode") {
+		t.Fatalf("remedy widened allowed native forms: %q", forms)
 	}
 }

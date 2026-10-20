@@ -90,21 +90,28 @@ func (s ProgramSurface) ValidateBound(definition toolcontract.OperationDefinitio
 			return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
 		}
 	}
-	return &toolrejection.ToolReject{Code: "COMMAND_NATIVE_FORM_UNSUPPORTED", Data: map[string]any{"tool": "command"}}
+	rejected := s.profileReject("COMMAND_NATIVE_FORM_UNSUPPORTED", facts, invocation)
+	rejected.FailureClass = api.FailureClassHostRejection
+	return rejected
 }
 
-func (s ProgramSurface) profileReject(code string, facts toolcontract.OperationFacts, invocation toolcontract.OperationInvocation) error {
+func (s ProgramSurface) profileReject(code string, facts toolcontract.OperationFacts, invocation toolcontract.OperationInvocation) *toolrejection.ToolReject {
 	var forms []string
 	for _, command := range facts.Commands {
 		if s.selection.denied[facts.Identity][command.Name] {
 			continue
 		}
+		var modes []string
 		for _, mode := range command.Effects {
 			effects, err := mode.CommandEffects(nil)
 			if err == nil && s.allowed.Allows(effects) {
-				forms = append(forms, command.Argv)
-				break
+				modes = append(modes, mode.Mode)
 			}
+		}
+		if len(modes) == len(command.Effects) && len(modes) > 0 {
+			forms = append(forms, command.Argv)
+		} else if len(modes) > 0 {
+			forms = append(forms, command.Name+" ["+strings.Join(modes, ", ")+"]")
 		}
 	}
 	return &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, OwnerRef: facts.Contract.Owner, Data: map[string]any{
