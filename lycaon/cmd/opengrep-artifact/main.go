@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
