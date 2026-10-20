@@ -1,0 +1,1433 @@
+{
+  "commands": [
+    {
+      "name": "cp",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "-R"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-r-R"
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-f"
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-n"
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-p"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "cp -- ./input ./copy",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "cp",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "cp-operands-valid",
+        "cp-option-invalid",
+        "cp-option-r-R",
+        "cp-option-f",
+        "cp-option-n",
+        "cp-option-p"
+      ]
+    },
+    {
+      "name": "mv",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "mv [-f|-n] [--] SOURCE ... DEST",
+      "forms": [
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mv-option-f"
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mv-option-n"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [-f|-n] [--] SOURCE ... DEST",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "mv -- ./input ./renamed",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "mv",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "mv-operands-valid",
+        "mv-option-invalid",
+        "mv-option-f",
+        "mv-option-n"
+      ]
+    },
+    {
+      "name": "rm",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "rm [-r|-R] [-f] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "-R"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-r-R"
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-f"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [-r|-R] [-f] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "rm -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "rm",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "rm-operands-valid",
+        "rm-option-invalid",
+        "rm-option-r-R",
+        "rm-option-f"
+      ]
+    },
+    {
+      "name": "rmdir",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "rmdir [--] PATH ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rmdir [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "rmdir -- ./empty-dir",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Only empty directories; no recursive implicit deletion.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "rmdir",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "rmdir-operands-valid",
+        "rmdir-option-invalid"
+      ]
+    },
+    {
+      "name": "mkdir",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "mkdir [-p] [-m MODE] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-p",
+            "--parents"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mkdir-option-p-parents"
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "mkdir-option-m"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mkdir [-p] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "mkdir -p -- ./generated",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "mkdir",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "mkdir-operands-valid",
+        "mkdir-option-invalid",
+        "mkdir-option-p-parents",
+        "mkdir-option-m"
+      ]
+    },
+    {
+      "name": "touch",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "touch [-c] [-m] [-a] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-c"
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-m"
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-a"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. touch [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "touch -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "touch",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "touch-operands-valid",
+        "touch-option-invalid",
+        "touch-option-c",
+        "touch-option-m",
+        "touch-option-a"
+      ]
+    },
+    {
+      "name": "mktemp",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "mktemp [-d] [-t PREFIX] [TEMPLATE]",
+      "forms": [
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "mktemp-option-d"
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 1,
+          "value_role": "prefix",
+          "fixture_id": "mktemp-option-t"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mktemp [-d] [-t PREFIX] [TEMPLATE]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "mktemp tmp.XXXXXXXX",
+        "stdout": "<session-tmp>/tmp.<unique>\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Real absolute path under session TMPDIR; default tmp.XXXXXXXXXX, at least four trailing X; -t prefix used with default random suffix, -d directory; collision-safe exclusive creation. Paths unpredictable and never fixture-identical.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "mktemp",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "mktemp-operands-valid",
+        "mktemp-option-invalid",
+        "mktemp-option-d",
+        "mktemp-option-t"
+      ]
+    },
+    {
+      "name": "tee",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "tee [-a] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-a",
+            "--append"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tee-option-a-append"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tee [-a] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'alpha\\n' | tee ./output",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Output exact stdin plus independent staged destination publications in declared order; -a old+new captured append; fail stops later targets, earlier commits remain.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "tee",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "tee-operands-valid",
+        "tee-option-invalid",
+        "tee-option-a-append"
+      ]
+    },
+    {
+      "name": "chmod",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "chmod [--] MODE PATH ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chmod [--] MODE PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "chmod -- 755 ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Portable numeric modes and symbolic u/g/o/a with +/-/= rwx; refuse unsupported platform semantics, never pretend ACL equivalence.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "chmod",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "chmod-operands-valid",
+        "chmod-option-invalid"
+      ]
+    },
+    {
+      "name": "chown",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "chown [--] UID[:GID] PATH ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] UID[:GID] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "chown -- 1000:1000 ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Numeric UID[:GID] only; no ambient account lookup; platform and authority capability check; unavailable on Windows is explicit.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "chown",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "chown-operands-valid",
+        "chown-option-invalid"
+      ]
+    },
+    {
+      "name": "edit",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "edit-option-path"
+        },
+        {
+          "spellings": [
+            "--old-string"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "edit-option-oldstring"
+        },
+        {
+          "spellings": [
+            "--new-string"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "edit-option-newstring"
+        },
+        {
+          "spellings": [
+            "--replace-all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "edit-option-replaceall"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "mutation",
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "edit --path ./input --old-string alpha --new-string beta",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "edit",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "edit-operands-valid",
+        "edit-option-invalid",
+        "edit-option-path",
+        "edit-option-oldstring",
+        "edit-option-newstring",
+        "edit-option-replaceall"
+      ]
+    },
+    {
+      "name": "replace-lines",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "replace-lines --path PATH --start N --end N --content TEXT",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "replace-lines-option-path"
+        },
+        {
+          "spellings": [
+            "--start"
+          ],
+          "arity": 1,
+          "value_role": "line",
+          "fixture_id": "replace-lines-option-start"
+        },
+        {
+          "spellings": [
+            "--end"
+          ],
+          "arity": 1,
+          "value_role": "line",
+          "fixture_id": "replace-lines-option-end"
+        },
+        {
+          "spellings": [
+            "--content"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "replace-lines-option-content"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. replace-lines --path PATH --start N --end N --content TEXT",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "mutation",
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "replace-lines --path ./input --start 1 --end 1 --content beta",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "replace-lines",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "replace-lines-operands-valid",
+        "replace-lines-option-invalid",
+        "replace-lines-option-path",
+        "replace-lines-option-start",
+        "replace-lines-option-end",
+        "replace-lines-option-content"
+      ]
+    },
+    {
+      "name": "code-rewrite",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "forms": [
+        {
+          "spellings": [
+            "--pattern"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "code-rewrite-option-pattern"
+        },
+        {
+          "spellings": [
+            "--rewrite"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "code-rewrite-option-rewrite"
+        },
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "code-rewrite-option-path"
+        },
+        {
+          "spellings": [
+            "--recursive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "code-rewrite-option-recursive"
+        },
+        {
+          "spellings": [
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "code-rewrite-option-dryrun"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "mutation",
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ]
+        },
+        {
+          "mode": "dry-run",
+          "requires": [
+            "read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "code-rewrite --path ./main.go --pattern 'fmt.Println($A)' --rewrite 'log.Print($A)'",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "code-rewrite",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "code-rewrite-operands-valid",
+        "code-rewrite-option-invalid",
+        "code-rewrite-option-pattern",
+        "code-rewrite-option-rewrite",
+        "code-rewrite-option-path",
+        "code-rewrite-option-recursive",
+        "code-rewrite-option-dryrun"
+      ]
+    },
+    {
+      "name": "jq-edit",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT]",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "jq-edit-option-path"
+        },
+        {
+          "spellings": [
+            "--query"
+          ],
+          "arity": 1,
+          "value_role": "query",
+          "fixture_id": "jq-edit-option-query"
+        },
+        {
+          "spellings": [
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "jq-edit-option-format"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq-edit --path PATH --query QUERY [--format FORMAT]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "mutation",
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "jq-edit --path ./settings.json --query '.enabled = true'",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "tests": [
+          "lycaon/internal/tools/native/source_write_contract_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "jq-edit",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "jq-edit-operands-valid",
+        "jq-edit-option-invalid",
+        "jq-edit-option-path",
+        "jq-edit-option-query",
+        "jq-edit-option-format"
+      ]
+    }
+  ]
+}

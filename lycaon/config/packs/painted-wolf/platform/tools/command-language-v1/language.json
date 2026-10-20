@@ -17,7 +17,7 @@
   "encoding": {
     "program": "UTF-8; reject invalid UTF-8 and NUL before effects",
     "streams": "bytes; preserve NUL and CRLF",
-    "document": "captured accepted text encoded with recorded newline/encoding policy",
+    "document": "Capture accepted Unicode text plus the source encoding, BOM-presence and newline policy; encode exactly in that representation, retaining BOM iff recorded. Refuse unrepresentable text. cat, head/tail byte modes, checksums and byte counts consume these exact bytes. Record representation and digest together, separately from disk; line transforms retain explicit source mappings.",
     "ordering": "unsigned byte lexical order; no ambient locale"
   },
   "syntax": {
@@ -79,7 +79,20 @@
       "shell options",
       "persistent interpreter state",
       "dynamic loading via environment",
-      "tilde-user lookup"
+      "tilde-user lookup",
+      "arithmetic expansion and arithmetic commands",
+      "brace expansion",
+      "globstar",
+      "case",
+      "until",
+      "select",
+      "coproc",
+      "extended globs",
+      "here-strings",
+      "fd allocation variables",
+      "arbitrary fd numbers",
+      "parameter default/assignment/removal/replacement operators",
+      "function recursion beyond budget"
     ]
   },
   "rules": {
@@ -94,426 +107,41 @@
     "evidence": "Execution pins differ from conversational delivery. Only delivered exact mapped cat/head/tail/nl ranges qualify an edit base; unseen output and arbitrary transforms do not.",
     "jobs": "Session job handles, not global PIDs; capture cwd/environment, bounded lifetime/output, owned cancellation; no interpreter checkpoints.",
     "secrets": "References remain opaque except declared authorized sinks; inserted bytes never become grammar.",
-    "progress_update": "Optional existing update_progress payload; validate envelope/program before either effect; progress owner settles independently before gated effects. Zero-program-effect fresh resubmission references never imply zero progress effects."
+    "progress_update": "Optional existing update_progress payload; validate envelope/program before either effect; progress owner settles independently before gated effects. Zero-program-effect fresh resubmission references never imply zero progress effects.",
+    "parameters": "Support $name/${name}, $0 program identity, $1..$9/${10} positional values, $# count, $? ordinary prior status, $! latest session job handle. Quoted \"$@\" preserves each positional operand and expands to zero arguments for zero parameters; \"$*\" joins with single spaces. ${#name} returns Unicode scalar length; all other parameter operators reject. Single quotes preserve bytes. Double quotes escape only dollar/backtick/double-quote/backslash/LF; backslash-newline is removed. Windows native paths preserve backslashes when single quoted.",
+    "grouping": "{ statements; } shares current frame; ( statements ) runs isolated cwd/variables frame with independently settled child effects. ! negates ordinary command/pipeline status only, never a terminal host stop.",
+    "here_documents": "<<DELIM expands supported variables/substitutions unless delimiter quoted; <<-DELIM additionally strips leading literal TAB from body/delimiter. No word splitting/globbing of body. Captured body bytes count against unit and here_document_bytes caps; no direct shell execution.",
+    "functions": "NAME() { statements; } only, names cannot shadow reserved language words or native built-ins. Functions shadow external names. Positional arguments local to frame; export/environment follows invocation frame. Assignments alone update current frame; preceding NAME=value scopes one dispatch. source shares current frame; no cross-invocation persistence.",
+    "status_details": "Ordinary status is0..255; explicit exit/return out-of-range rejects. test false1, misuse2; true/:0, false1. Failed substitution prevents containing command even when ordinary error handling could continue the outer sequence.",
+    "budget_counting": "AST nodes count selected parser syntax nodes, including words/redirects, excluding comments; depth is parent edge count from unit root. Each reached statement and loop test/iteration charged before admission, including empty bodies. Engine-specific query/regex instructions are not equated: work steps count host-observable value/record/match transitions and adapters additionally enforce CPU-time and memory bounds; uninterruptible allocation must isolate/refuse.",
+    "envelope": "Optional progress_update payload identical to existing update_progress schema. Other command envelope capabilities/verification remain unchanged until introducing dependent PRs. Prevalidate envelope and complete syntax unit before applying progress. Valid progress remains recorded after later program failure. Fresh zero-program-effect resubmission references bind exact rejected program/source/catalog identity and remain explicit human/model actions."
   },
   "limits": [
     {
-      "id": "program_bytes",
-      "maximum": 65536,
-      "unit": "bytes",
-      "scope": "submitted syntax unit",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "program_bytes-at",
-        "program_bytes-over"
-      ]
-    },
-    {
-      "id": "ast_nodes",
-      "maximum": 8192,
-      "unit": "nodes",
-      "scope": "syntax unit",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "ast_nodes-at",
-        "ast_nodes-over"
-      ]
-    },
-    {
-      "id": "ast_depth",
-      "maximum": 64,
-      "unit": "levels",
-      "scope": "syntax unit",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "ast_depth-at",
-        "ast_depth-over"
-      ]
-    },
-    {
-      "id": "argument_bytes",
-      "maximum": 131072,
-      "unit": "bytes",
-      "scope": "one expanded argument",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "argument_bytes-at",
-        "argument_bytes-over"
-      ]
-    },
-    {
-      "id": "argv_bytes",
-      "maximum": 1048576,
-      "unit": "bytes",
-      "scope": "one dispatch",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "argv_bytes-at",
-        "argv_bytes-over"
-      ]
-    },
-    {
-      "id": "expanded_fields",
-      "maximum": 16384,
-      "unit": "fields",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "expanded_fields-at",
-        "expanded_fields-over"
-      ]
-    },
-    {
-      "id": "glob_matches",
+      "id": "archive_create_entries",
       "maximum": 10000,
       "unit": "entries",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "glob_matches-at",
-        "glob_matches-over"
-      ]
-    },
-    {
-      "id": "traversal_visits",
-      "maximum": 100000,
-      "unit": "entries",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "traversal_visits-at",
-        "traversal_visits-over"
-      ]
-    },
-    {
-      "id": "substitution_bytes",
-      "maximum": 1048576,
-      "unit": "bytes",
-      "scope": "substitution",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "substitution_bytes-at",
-        "substitution_bytes-over"
-      ]
-    },
-    {
-      "id": "substitution_depth",
-      "maximum": 8,
-      "unit": "levels",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "substitution_depth-at",
-        "substitution_depth-over"
-      ]
-    },
-    {
-      "id": "loop_iterations",
-      "maximum": 10000,
-      "unit": "iterations",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "loop_iterations-at",
-        "loop_iterations-over"
-      ]
-    },
-    {
-      "id": "statement_visits",
-      "maximum": 100000,
-      "unit": "visits",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "statement_visits-at",
-        "statement_visits-over"
-      ]
-    },
-    {
-      "id": "function_depth",
-      "maximum": 32,
-      "unit": "frames",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "function_depth-at",
-        "function_depth-over"
-      ]
-    },
-    {
-      "id": "source_depth",
-      "maximum": 8,
-      "unit": "units",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "source_depth-at",
-        "source_depth-over"
-      ]
-    },
-    {
-      "id": "source_bytes",
-      "maximum": 1048576,
-      "unit": "bytes",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "source_bytes-at",
-        "source_bytes-over"
-      ]
-    },
-    {
-      "id": "pipeline_stages",
-      "maximum": 32,
-      "unit": "stages",
-      "scope": "pipeline",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "pipeline_stages-at",
-        "pipeline_stages-over"
-      ]
-    },
-    {
-      "id": "child_executions",
-      "maximum": 10000,
-      "unit": "executions",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "child_executions-at",
-        "child_executions-over"
-      ]
-    },
-    {
-      "id": "concurrent_processes",
-      "maximum": 16,
-      "unit": "processes",
-      "scope": "session",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "concurrent_processes-at",
-        "concurrent_processes-over"
-      ]
-    },
-    {
-      "id": "background_jobs",
-      "maximum": 4,
-      "unit": "jobs",
-      "scope": "session",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "background_jobs-at",
-        "background_jobs-over"
-      ]
-    },
-    {
-      "id": "job_lifetime_ms",
-      "maximum": 3600000,
-      "unit": "milliseconds",
-      "scope": "job",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "job_lifetime_ms-at",
-        "job_lifetime_ms-over"
-      ]
-    },
-    {
-      "id": "program_lifetime_ms",
-      "maximum": 3600000,
-      "unit": "milliseconds",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "program_lifetime_ms-at",
-        "program_lifetime_ms-over"
-      ]
-    },
-    {
-      "id": "stream_buffer_bytes",
-      "maximum": 65536,
-      "unit": "bytes",
-      "scope": "endpoint",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "stream_buffer_bytes-at",
-        "stream_buffer_bytes-over"
-      ]
-    },
-    {
-      "id": "stream_bytes",
-      "maximum": 67108864,
-      "unit": "bytes",
-      "scope": "endpoint",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "stream_bytes-at",
-        "stream_bytes-over"
-      ]
-    },
-    {
-      "id": "spill_bytes",
-      "maximum": 268435456,
-      "unit": "bytes",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "spill_bytes-at",
-        "spill_bytes-over"
-      ]
-    },
-    {
-      "id": "session_spill_bytes",
-      "maximum": 1073741824,
-      "unit": "bytes",
-      "scope": "session",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "session_spill_bytes-at",
-        "session_spill_bytes-over"
-      ]
-    },
-    {
-      "id": "sort_memory_bytes",
-      "maximum": 8388608,
-      "unit": "bytes",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "sort_memory_bytes-at",
-        "sort_memory_bytes-over"
-      ]
-    },
-    {
-      "id": "record_bytes",
-      "maximum": 1048576,
-      "unit": "bytes",
-      "scope": "record",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "record_bytes-at",
-        "record_bytes-over"
-      ]
-    },
-    {
-      "id": "sort_merge_fan_in",
-      "maximum": 16,
-      "unit": "readers",
-      "scope": "merge",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "sort_merge_fan_in-at",
-        "sort_merge_fan_in-over"
-      ]
-    },
-    {
-      "id": "trace_bytes",
-      "maximum": 8388608,
-      "unit": "bytes",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "trace_bytes-at",
-        "trace_bytes-over"
-      ]
-    },
-    {
-      "id": "trace_events",
-      "maximum": 100000,
-      "unit": "events",
-      "scope": "program",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "trace_events-at",
-        "trace_events-over"
-      ]
-    },
-    {
-      "id": "preview_bytes",
-      "maximum": 16384,
-      "unit": "bytes",
-      "scope": "result",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "preview_bytes-at",
-        "preview_bytes-over"
-      ]
-    },
-    {
-      "id": "retained_output_days",
-      "maximum": 7,
-      "unit": "days",
-      "scope": "unreferenced output",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "retained_output_days-at",
-        "retained_output_days-over"
-      ]
-    },
-    {
-      "id": "retained_output_bytes",
-      "maximum": 1073741824,
-      "unit": "bytes",
-      "scope": "session",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "retained_output_bytes-at",
-        "retained_output_bytes-over"
-      ]
-    },
-    {
-      "id": "recursive_mutation_files",
-      "maximum": 10000,
-      "unit": "files",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
       "boundary_fixtures": [
-        "recursive_mutation_files-at",
-        "recursive_mutation_files-over"
-      ]
+        "archive_create_entries-at",
+        "archive_create_entries-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
-      "id": "recursive_mutation_bytes",
+      "id": "archive_create_input_bytes",
       "maximum": 104857600,
       "unit": "bytes",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
       "boundary_fixtures": [
-        "recursive_mutation_bytes-at",
-        "recursive_mutation_bytes-over"
-      ]
-    },
-    {
-      "id": "editable_file_bytes",
-      "maximum": 4194304,
-      "unit": "bytes",
-      "scope": "replacement",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "editable_file_bytes-at",
-        "editable_file_bytes-over"
-      ]
-    },
-    {
-      "id": "archive_entries",
-      "maximum": 10000,
-      "unit": "entries",
-      "scope": "operation",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "archive_entries-at",
-        "archive_entries-over"
-      ]
-    },
-    {
-      "id": "archive_expanded_bytes",
-      "maximum": 104857600,
-      "unit": "bytes",
-      "scope": "operation",
-      "exceeded": "COMMAND_LIMIT_EXCEEDED",
-      "boundary_fixtures": [
-        "archive_expanded_bytes-at",
-        "archive_expanded_bytes-over"
-      ]
+        "archive_create_input_bytes-at",
+        "archive_create_input_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
       "id": "archive_expansion_ratio",
@@ -524,7 +152,334 @@
       "boundary_fixtures": [
         "archive_expansion_ratio-at",
         "archive_expansion_ratio-over"
-      ]
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "archive_extract_bytes",
+      "maximum": 52428800,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_extract_bytes-at",
+        "archive_extract_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "archive_extract_entries",
+      "maximum": 500,
+      "unit": "entries",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_extract_entries-at",
+        "archive_extract_entries-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "archive_input_bytes",
+      "maximum": 52428800,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_input_bytes-at",
+        "archive_input_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "argument_bytes",
+      "maximum": 131072,
+      "unit": "bytes",
+      "scope": "one expanded argument",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "argument_bytes-at",
+        "argument_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "argv_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "one dispatch",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "argv_bytes-at",
+        "argv_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "ast_depth",
+      "maximum": 64,
+      "unit": "levels",
+      "scope": "syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "ast_depth-at",
+        "ast_depth-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "ast_nodes",
+      "maximum": 8192,
+      "unit": "nodes",
+      "scope": "syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "ast_nodes-at",
+        "ast_nodes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "background_jobs",
+      "maximum": 4,
+      "unit": "jobs",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "background_jobs-at",
+        "background_jobs-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "child_executions",
+      "maximum": 10000,
+      "unit": "executions",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "child_executions-at",
+        "child_executions-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "concurrent_processes",
+      "maximum": 16,
+      "unit": "processes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "concurrent_processes-at",
+        "concurrent_processes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "concurrent_streams",
+      "maximum": 96,
+      "unit": "endpoints",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "concurrent_streams-at",
+        "concurrent_streams-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "editable_file_bytes",
+      "maximum": 4194304,
+      "unit": "bytes",
+      "scope": "replacement",
+      "exceeded": "EDIT_FILE_TOO_LARGE",
+      "boundary_fixtures": [
+        "editable_file_bytes-at",
+        "editable_file_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "environment_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "child launch",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "environment_bytes-at",
+        "environment_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "expanded_fields",
+      "maximum": 16384,
+      "unit": "fields",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "expanded_fields-at",
+        "expanded_fields-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "function_depth",
+      "maximum": 32,
+      "unit": "frames",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "function_depth-at",
+        "function_depth-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "glob_matches",
+      "maximum": 10000,
+      "unit": "entries",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "glob_matches-at",
+        "glob_matches-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "here_document_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "here_document_bytes-at",
+        "here_document_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "job_lifetime_ms",
+      "maximum": 3600000,
+      "unit": "milliseconds",
+      "scope": "job",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "job_lifetime_ms-at",
+        "job_lifetime_ms-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "loop_iterations",
+      "maximum": 10000,
+      "unit": "iterations",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "loop_iterations-at",
+        "loop_iterations-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "pipeline_stages",
+      "maximum": 32,
+      "unit": "stages",
+      "scope": "pipeline",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "pipeline_stages-at",
+        "pipeline_stages-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "preview_bytes",
+      "maximum": 16384,
+      "unit": "bytes",
+      "scope": "result",
+      "exceeded": "",
+      "boundary_fixtures": [
+        "preview_bytes-at",
+        "preview_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "truncate preview and retain paged output; do not interrupt complete streams"
+    },
+    {
+      "id": "program_bytes",
+      "maximum": 65536,
+      "unit": "bytes",
+      "scope": "submitted syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "program_bytes-at",
+        "program_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "program_lifetime_ms",
+      "maximum": 3600000,
+      "unit": "milliseconds",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "program_lifetime_ms-at",
+        "program_lifetime_ms-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "query_depth",
+      "maximum": 128,
+      "unit": "levels",
+      "scope": "value",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "query_depth-at",
+        "query_depth-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "query_outputs",
+      "maximum": 10000,
+      "unit": "values",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "query_outputs-at",
+        "query_outputs-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
       "id": "query_value_bytes",
@@ -535,7 +490,9 @@
       "boundary_fixtures": [
         "query_value_bytes-at",
         "query_value_bytes-over"
-      ]
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
       "id": "query_work_steps",
@@ -546,7 +503,61 @@
       "boundary_fixtures": [
         "query_work_steps-at",
         "query_work_steps-over"
-      ]
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "record_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "record",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "record_bytes-at",
+        "record_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "recursive_mutation_bytes",
+      "maximum": 104857600,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "recursive_mutation_bytes-at",
+        "recursive_mutation_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "recursive_mutation_files",
+      "maximum": 10000,
+      "unit": "files",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "recursive_mutation_files-at",
+        "recursive_mutation_files-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "regex_input_bytes",
+      "maximum": 67108864,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "regex_input_bytes-at",
+        "regex_input_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
       "id": "regex_pattern_bytes",
@@ -557,7 +568,9 @@
       "boundary_fixtures": [
         "regex_pattern_bytes-at",
         "regex_pattern_bytes-over"
-      ]
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
     },
     {
       "id": "regex_work_steps",
@@ -568,6 +581,281 @@
       "boundary_fixtures": [
         "regex_work_steps-at",
         "regex_work_steps-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "retained_output_bytes",
+      "maximum": 1073741824,
+      "unit": "bytes",
+      "scope": "session",
+      "exceeded": "",
+      "boundary_fixtures": [
+        "retained_output_bytes-at",
+        "retained_output_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "collect only unreferenced bytes; retain active review/journal/held-execution references; refuse new output when pinned pressure prevents collection"
+    },
+    {
+      "id": "retained_output_days",
+      "maximum": 7,
+      "unit": "days",
+      "scope": "unreferenced output",
+      "exceeded": "",
+      "boundary_fixtures": [
+        "retained_output_days-at",
+        "retained_output_days-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "collect only unreferenced bytes; retain active review/journal/held-execution references; refuse new output when pinned pressure prevents collection"
+    },
+    {
+      "id": "session_spill_bytes",
+      "maximum": 1073741824,
+      "unit": "bytes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "session_spill_bytes-at",
+        "session_spill_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "sort_memory_bytes",
+      "maximum": 8388608,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "",
+      "boundary_fixtures": [
+        "sort_memory_bytes-at",
+        "sort_memory_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "spill complete sorted runs within spill quota; refuse before excess allocation"
+    },
+    {
+      "id": "sort_merge_fan_in",
+      "maximum": 16,
+      "unit": "readers",
+      "scope": "merge",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "sort_merge_fan_in-at",
+        "sort_merge_fan_in-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "source_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "source_bytes-at",
+        "source_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "source_depth",
+      "maximum": 8,
+      "unit": "units",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "source_depth-at",
+        "source_depth-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "spill_bytes",
+      "maximum": 268435456,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "spill_bytes-at",
+        "spill_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "statement_visits",
+      "maximum": 100000,
+      "unit": "visits",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "statement_visits-at",
+        "statement_visits-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "stream_buffer_bytes",
+      "maximum": 65536,
+      "unit": "bytes",
+      "scope": "endpoint",
+      "exceeded": "",
+      "boundary_fixtures": [
+        "stream_buffer_bytes-at",
+        "stream_buffer_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "backpressure; never truncate"
+    },
+    {
+      "id": "stream_bytes",
+      "maximum": 67108864,
+      "unit": "bytes",
+      "scope": "endpoint",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "stream_bytes-at",
+        "stream_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "substitution_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "substitution",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "substitution_bytes-at",
+        "substitution_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "substitution_depth",
+      "maximum": 8,
+      "unit": "levels",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "substitution_depth-at",
+        "substitution_depth-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "trace_bytes",
+      "maximum": 8388608,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "trace_bytes-at",
+        "trace_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "trace_events",
+      "maximum": 100000,
+      "unit": "events",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "trace_events-at",
+        "trace_events-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "traversal_visits",
+      "maximum": 100000,
+      "unit": "entries",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "traversal_visits-at",
+        "traversal_visits-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "variable_count",
+      "maximum": 1024,
+      "unit": "variables",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "variable_count-at",
+        "variable_count-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "variable_value_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "variable",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "variable_value_bytes-at",
+        "variable_value_bytes-over"
+      ],
+      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects"
+    },
+    {
+      "id": "query_cpu_ms",
+      "maximum": 1000,
+      "unit": "milliseconds",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "overflow": "terminal structured refusal; retain actual earlier effects",
+      "enforcement": "Meter before work/allocation; adapters must cancel or isolate evaluation before ceiling.",
+      "boundary_fixtures": [
+        "query_cpu_ms-at",
+        "query_cpu_ms-over"
+      ]
+    },
+    {
+      "id": "regex_cpu_ms",
+      "maximum": 100,
+      "unit": "milliseconds",
+      "scope": "match attempt",
+      "exceeded": "GREP_MATCH_BUDGET",
+      "overflow": "terminal structured refusal; retain actual earlier effects",
+      "enforcement": "Meter before work/allocation; adapters must cancel or isolate evaluation before ceiling.",
+      "boundary_fixtures": [
+        "regex_cpu_ms-at",
+        "regex_cpu_ms-over"
+      ]
+    },
+    {
+      "id": "evaluation_memory_bytes",
+      "maximum": 33554432,
+      "unit": "bytes",
+      "scope": "query/AWK/regex operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "overflow": "terminal structured refusal; retain actual earlier effects",
+      "enforcement": "Meter before work/allocation; adapters must cancel or isolate evaluation before ceiling.",
+      "boundary_fixtures": [
+        "evaluation_memory_bytes-at",
+        "evaluation_memory_bytes-over"
       ]
     }
   ],
@@ -602,5 +890,30 @@
       "location": "operation span",
       "help": "missing platform capability"
     }
-  ]
+  ],
+  "source_locations": {
+    "byte_offsets": "zero-based UTF-8 byte offsets, end exclusive",
+    "line": "one-based LF-delimited line",
+    "column": "one-based UTF-8 byte column",
+    "source_identity": "submitted program digest or captured sourced-unit digest"
+  },
+  "compatibility": {
+    "class": "agent-public vocabulary when offered; additive pre-activation version 1 contract",
+    "durable_changes": "none in P01; introducing producers must migrate records and generate consumers",
+    "history": "retired public names retain original meaning and named successor; no active retirement in P01"
+  },
+  "retention": "Screen source/output before retention. Active journal, review, held-effect and retained receipt references pin required bytes; expiry never authorizes collecting recovery inputs. No interpreter checkpoints.",
+  "platforms": {
+    "macos": "native runtime and installed qualification required later",
+    "linux": "native runtime and installed qualification required later",
+    "windows": "same contract; real adapter/confinement/egress/packaging prerequisites and native installed qualification in P30; shaped fixtures/compilation are not qualification"
+  },
+  "option_grammar": {
+    "short_bundles": "Boolean short options combine; a value option consumes the remaining suffix or next argv word. Explicitly exceptional forms override this rule.",
+    "long_values": "Catalogued long value options accept --key=value or --key value unless a form states otherwise.",
+    "operand_boundary": "-- ends option parsing; leading dash path operands require --. Operands remain bytes, never reparsed.",
+    "unsupported": "Reject COMMAND_OPTION_UNSUPPORTED with exact option source span and generated help; no external fallback.",
+    "conflicts": "Reject COMMAND_OPERAND_INVALID for incompatible modes; never select a dialect from host OS."
+  },
+  "schema_copy": "Run a short coherent program using familiar shell syntax; return to the model when the next action needs evidence interpretation. Version 1 supports quotes/escapes, pipes, ;, &&/||, grouping, variables, sorted globs, $()/backticks, if/for/while, bounded functions, source -- PATH, here-documents and redirects. The host validates the complete submitted syntax unit before effects. Computed operations bind only when reached; source captures and validates its own unit. Untaken branches do not expand. No eval, reparsing, process substitution, traps, arrays, shell options or persistent shell state.\nNative utilities include literal cat/head/tail/nl; find/grep/rg; ls/stat/wc/diff/file/xxd/hexdump; checksums/base64; sed/awk/printf/echo/sort/uniq/cut/tr/xargs; jq/yq; cp/mv/rm/rmdir/mkdir/touch/mktemp/tee; tar/unzip/zip/gzip/gunzip/zcat; Git; curl; path, environment, identity, date and session process built-ins. Use generated help for supported option/operand forms. Both GNU and BSD sed -i forms, stat -c/-f and base64 -d/-D have fixed portable meanings. Unsupported native forms reject with focused help; they never fall through to an OS binary.\nOther installed programs such as python3, go, cargo, npm, node and ./task launch directly under confinement. Bare python resolves to python3 only when python is absent. external -- explicitly selects an installed binary with a native built-in name. Arguments remain literal data; native_path -- PATH explicitly converts a logical cross-root path without granting access. Native absolute paths retain OS identity. TMPDIR and mktemp use the same real session directory as child processes. Native null redirects are typed discard sinks.\nPipes carry complete bytes, independently of previews and receipts. Variables never become grammar. Unquoted expansion uses fixed whitespace splitting then sorted globbing; quoted expansion preserves argument boundaries. Unmatched globs stay literal. Substitution strips trailing LF and refuses NUL scalars; failed substitution prevents its containing dispatch. Native reads use accepted document snapshots in captured encoding; external processes use published disk.\nRedirects and in-place edits stage complete output, then review and compare captured destination revisions before publication. They never pre-truncate. Native grep no-match/diff differences keep status1 but can publish complete output. Failed/incomplete producers discard staging. Earlier committed effects remain after later failure; programs are not transactions. Permission refusal, conflict, cancellation and host budgets stop later admission even after exit0. Dependent processes wait for publication; unrelated human drafts remain unsaved.\nOptional progress_update uses the existing progress payload and settles separately before gated effects. Every effect retains its subsystem authority, source span, child identity, evidence and recovery. Internal execution reads are not conversational observation; only exact delivered mapped source windows establish an edit base. Retained surgical/orientation tools remain available through normal selection.\nTrailing & returns a bounded session job handle; $!, jobs, wait and kill refer to owned jobs, not arbitrary PIDs. Approval resumes exact held inputs once. Host loss interrupts; it does not replay the program, HTTP or completed effects. Partial/unknown outcomes require a specific safe next action. Whole-program resubmission is suggested only with proved zero program effects and is never automatic. Secret references stay opaque except at declared authorized sinks."
 }

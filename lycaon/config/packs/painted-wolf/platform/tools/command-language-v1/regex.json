@@ -1,0 +1,73 @@
+{
+  "regex_contract": {
+    "id": "pcre-common-v1",
+    "engine_selection": "P13 selects a bounded adapter that proves this grammar; no engine chosen or added by P01. Translation allowed only with equivalence fixtures.",
+    "grammar": [
+      "ASCII literal and escaped punctuation",
+      "dot excluding LF",
+      "^ and $ line anchors under multiline mode",
+      "character classes and negation/ranges",
+      "alternation and capturing/noncapturing groups",
+      "greedy/lazy * + ? {m,n}",
+      "ASCII \\d \\D \\w \\W \\s \\S and word boundaries \\b \\B",
+      "fixed-width positive/negative lookbehind",
+      "positive/negative lookahead",
+      "numbered backreferences to earlier completed capture groups"
+    ],
+    "rejected": [
+      "recursion/subroutine calls",
+      "conditionals",
+      "callouts",
+      "backtracking control verbs",
+      "Unicode property syntax beyond explicitly catalogued classes",
+      "variable-width lookbehind",
+      "embedded executable code",
+      "invalid or unsupported escapes"
+    ],
+    "positive_cases": [
+      {
+        "pattern": "\\b\\w+\\s+\\d+\\b",
+        "input": "item 42\n",
+        "matches": [
+          "item 42"
+        ]
+      },
+      {
+        "pattern": "(?<=id=)\\d+(?=;)",
+        "input": "id=42;",
+        "matches": [
+          "42"
+        ]
+      },
+      {
+        "pattern": "(ab)\\1",
+        "input": "abab",
+        "matches": [
+          "abab"
+        ]
+      }
+    ],
+    "negative_cases": [
+      {
+        "pattern": "(?R)",
+        "code": "GREP_REGEX_UNSUPPORTED"
+      },
+      {
+        "pattern": "(?<=a+)b",
+        "code": "GREP_REGEX_UNSUPPORTED"
+      },
+      {
+        "pattern": "[",
+        "code": "GREP_REGEX_INVALID"
+      }
+    ],
+    "resource_cases": [
+      {
+        "pattern": "(a+)+$",
+        "input_generator": "repeat a up to regex_input_bytes then !",
+        "expected": "complete under bounds or typed GREP_MATCH_BUDGET, never no-match after timeout"
+      }
+    ],
+    "normalization": "Never claim Go RE2 is full PCRE. -P grammar is explicitly this bounded PCRE-compatible subset. Preserve source span and original pattern in diagnostics."
+  }
+}

@@ -1,0 +1,491 @@
+{
+  "commands": [
+    {
+      "name": "jobs",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "jobs",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jobs",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-resource-read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "jobs",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "jobs",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "jobs-operands-valid",
+        "jobs-option-invalid"
+      ]
+    },
+    {
+      "name": "wait",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "wait [JOB ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. wait [JOB ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-resource-read",
+            "await-owned-job"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "wait",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "wait",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "wait-operands-valid",
+        "wait-option-invalid"
+      ]
+    },
+    {
+      "name": "kill",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "kill [-s SIGNAL|-SIGNAL] [--] JOB ...",
+      "forms": [
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "signal",
+          "fixture_id": "kill-option-s"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. kill [-s SIGNAL|-SIGNAL] [--] JOB ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-owned-process-control"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "kill -s TERM -- job-fixture",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "kill",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "kill-operands-valid",
+        "kill-option-invalid",
+        "kill-option-s"
+      ]
+    },
+    {
+      "name": "ps",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "ps",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ps",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-resource-read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "ps",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "ps",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "ps-operands-valid",
+        "ps-option-invalid"
+      ]
+    },
+    {
+      "name": "lsof",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
+      "forms": [
+        {
+          "spellings": [
+            "-i"
+          ],
+          "arity": 1,
+          "value_role": "endpoint",
+          "fixture_id": "lsof-option-i"
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "state",
+          "fixture_id": "lsof-option-s"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "session-resource-read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "lsof",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "lsof",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "lsof-operands-valid",
+        "lsof-option-invalid",
+        "lsof-option-i",
+        "lsof-option-s"
+      ]
+    },
+    {
+      "name": "external",
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "external -- PROGRAM [ARG ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. external -- PROGRAM [ARG ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "dispatch",
+          "requires": [
+            "external-exec",
+            "confinement"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "external -- fixture-helper alpha",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "tests": [
+          "lycaon/internal/tools/native/process_tools_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "external",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "external-operands-valid",
+        "external-option-invalid"
+      ]
+    }
+  ]
+}

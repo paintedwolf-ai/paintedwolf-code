@@ -1,0 +1,11 @@
+{
+  "builtin_contracts": {
+    "test": "test/[ support empty=false, one string nonempty, !, -n/-z, =/!= string bytes, -eq/-ne/-lt/-le/-gt/-ge decimal integers, -e/-f/-d/-L/-r/-w/-x PATH via authority, parenthesized -a/-o with ! > -a > -o. [ requires final ]. [[ supports &&/||, !, parentheses, ==/!= with unquoted glob RHS, =~ ERE with literal quoted RHS. Malformed operands/status2. No secondary execution.",
+    "identity": "Host identity queries use actual permitted platform facts and screened output; fixture-user/fixture-host are synthetic expectations only. id default uid/gid/group numeric stable formatting; -n names via platform adapter where authorized; missing capability explicit.",
+    "date": "Default UTC YYYY-MM-DDTHH:MM:SSZ; -u explicit UTC. +FORMAT supports %Y %m %d %H %M %S %s %z %% and literal text; no ambient locale; unsupported directive rejects. Clock captured once per operation.",
+    "environment": "export/unset invocation local; env -i empty permitted environment then explicit assignments; -u remove named values. Blocked host-internal keys remain forbidden. printenv emits NAME=VALUE byte-sorted, named values LF, missing name status1; secrets screened, never implicitly resolved. Discovery uses same frozen PATH resolution as external dispatch.",
+    "paths": "basename/dirname lexical native/logical component helpers with exact -- operands; basename strips exact optional suffix. realpath/readlink -f resolve canonical existing identity through authorized filesystem traversal; dangling target refuses; readlink default prints link text. cd no arg selects invocation initial cwd, not ambient home; cwd change local to frame. pwd emits logical cwd, native_path converts explicitly.",
+    "source": "source -- exactly one path, no implicit execution from data; capture accepted snapshot/encoding, parse UTF-8 syntax, shared catalog/budgets, identify unit; body error retains earlier parent effects.",
+    "jobs": "jobs lists session-owned handle/status in creation order; wait with no handle waits owned children; requested handle must belong session; kill accepts owned handles only. lsof -i :PORT/-iTCP:PORT/-sTCP:LISTEN is exact registered live listener query; ps session jobs only. Never process-name matching."
+  }
+}

@@ -1,0 +1,1641 @@
+{
+  "commands": [
+    {
+      "name": "cat",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "cat [OPTIONS] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--number"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-n-number"
+        },
+        {
+          "spellings": [
+            "-b",
+            "--number-nonblank"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-b-numbernonblank"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--squeeze-blank"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-s-squeezeblank"
+        },
+        {
+          "spellings": [
+            "-A",
+            "--show-all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-A-showall"
+        },
+        {
+          "spellings": [
+            "-v",
+            "--show-nonprinting"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-v-shownonprinting"
+        },
+        {
+          "spellings": [
+            "-E",
+            "--show-ends"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-E-showends"
+        },
+        {
+          "spellings": [
+            "-T",
+            "--show-tabs"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cat-option-T-showtabs"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cat [OPTIONS] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "cat -- ./input",
+        "stdout": "alpha\nbeta",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No paths or - reads stdin. -b overrides -n. -A combines -vET. Source-range maps survive only reversible numbering and literal windows.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "cat",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "cat-operands-valid",
+        "cat-option-invalid",
+        "cat-option-n-number",
+        "cat-option-b-numbernonblank",
+        "cat-option-s-squeezeblank",
+        "cat-option-A-showall",
+        "cat-option-v-shownonprinting",
+        "cat-option-E-showends",
+        "cat-option-T-showtabs"
+      ]
+    },
+    {
+      "name": "head",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "head [-n COUNT|-COUNT|-c BYTES] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--lines"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "head-option-n-lines"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--bytes"
+          ],
+          "arity": 1,
+          "value_role": "bytes",
+          "fixture_id": "head-option-c-bytes"
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "head-option-q-quiet"
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "head-option-v-verbose"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. head [-n COUNT|-COUNT|-c BYTES] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "head -n 1 -- ./input",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default 10 LF-delimited lines. -COUNT is legacy line shorthand. -c accepts nonnegative bytes; last unterminated line counts as a displayed line. Multiple files label headers unless quiet.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "head",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "head-operands-valid",
+        "head-option-invalid",
+        "head-option-n-lines",
+        "head-option-c-bytes",
+        "head-option-q-quiet",
+        "head-option-v-verbose"
+      ]
+    },
+    {
+      "name": "tail",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "tail [-n COUNT|+START|-COUNT|-c BYTES] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--lines"
+          ],
+          "arity": 1,
+          "value_role": "count-or-plus-start",
+          "fixture_id": "tail-option-n-lines"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--bytes"
+          ],
+          "arity": 1,
+          "value_role": "bytes-or-plus-start",
+          "fixture_id": "tail-option-c-bytes"
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tail-option-q-quiet"
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tail-option-v-verbose"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tail [-n COUNT|+START|-COUNT|-c BYTES] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "tail -n 1 -- ./input",
+        "stdout": "beta",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default last 10 lines. +N is one-based start; legacy -COUNT accepted. Follow modes -f/-F unsupported; use bounded jobs/output APIs.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "tail",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "tail-operands-valid",
+        "tail-option-invalid",
+        "tail-option-n-lines",
+        "tail-option-c-bytes",
+        "tail-option-q-quiet",
+        "tail-option-v-verbose"
+      ]
+    },
+    {
+      "name": "nl",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "nl [-ba|-bt] [-v START] [-w WIDTH] [-s SEP] [--] [PATH]",
+      "forms": [
+        {
+          "spellings": [
+            "-b"
+          ],
+          "arity": 1,
+          "value_role": "line-numbering-mode",
+          "fixture_id": "nl-option-b"
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 1,
+          "value_role": "start",
+          "fixture_id": "nl-option-v"
+        },
+        {
+          "spellings": [
+            "-w"
+          ],
+          "arity": 1,
+          "value_role": "width",
+          "fixture_id": "nl-option-w"
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "nl-option-s"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. nl [-ba|-bt] [-v START] [-w WIDTH] [-s SEP] [--] [PATH]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "nl -ba -w 1 -s ':' -- ./input",
+        "stdout": "1:alpha\n2:beta",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default -bt, start1,width6,tab separator. -ba numbers all lines; -bt nonempty lines; numbering reversible with source mapping.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "nl",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "nl-operands-valid",
+        "nl-option-invalid",
+        "nl-option-b",
+        "nl-option-v",
+        "nl-option-w",
+        "nl-option-s"
+      ]
+    },
+    {
+      "name": "file",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "file [-b] [-i|--mime] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-b",
+            "--brief"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "file-option-b-brief"
+        },
+        {
+          "spellings": [
+            "-i",
+            "--mime"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "file-option-i-mime"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. file [-b] [-i|--mime] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "file -b -- ./sample.txt",
+        "stdout": "UTF-8 Unicode text\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Use versioned signature corpus in signatures.json, not only HTTP sniffing; unknown binary is application/octet-stream/data. -i emits MIME; default prefixes path unless -b.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "file",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "file-operands-valid",
+        "file-option-invalid",
+        "file-option-b-brief",
+        "file-option-i-mime"
+      ]
+    },
+    {
+      "name": "xxd",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "xxd [-l BYTES] [-s OFFSET] [-p] [-g GROUP] [--] [PATH]",
+      "forms": [
+        {
+          "spellings": [
+            "-l"
+          ],
+          "arity": 1,
+          "value_role": "bytes",
+          "fixture_id": "xxd-option-l"
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "offset",
+          "fixture_id": "xxd-option-s"
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xxd-option-p"
+        },
+        {
+          "spellings": [
+            "-g"
+          ],
+          "arity": 1,
+          "value_role": "group",
+          "fixture_id": "xxd-option-g"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xxd [-l BYTES] [-s OFFSET] [-p] [-g GROUP] [--] [PATH]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf A | xxd -p",
+        "stdout": "41\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default16 bytes/row, group2; -g 1|2|4|8; offsets nonnegative or negative-from-end for seekable captured input only. -p lowercase hex,30 bytes/row. No reverse write mode.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "xxd",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "xxd-operands-valid",
+        "xxd-option-invalid",
+        "xxd-option-l",
+        "xxd-option-s",
+        "xxd-option-p",
+        "xxd-option-g"
+      ]
+    },
+    {
+      "name": "hexdump",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "hexdump -C [-n BYTES] [-s OFFSET] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "hexdump-option-C"
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 1,
+          "value_role": "bytes",
+          "fixture_id": "hexdump-option-n"
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 1,
+          "value_role": "offset",
+          "fixture_id": "hexdump-option-s"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. hexdump -C [-n BYTES] [-s OFFSET] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf A | hexdump -C",
+        "stdout": "00000000  41                                                |A|\n00000001\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Canonical 16-byte rows, lowercase hex, printable ASCII gutter; final offset line; repeated identical rows use *; only -C style.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "hexdump",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "hexdump-operands-valid",
+        "hexdump-option-invalid",
+        "hexdump-option-C",
+        "hexdump-option-n",
+        "hexdump-option-s"
+      ]
+    },
+    {
+      "name": "shasum",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "shasum [-c] [-a 1|256|512] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "shasum-option-c-check"
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 1,
+          "value_role": "algorithm",
+          "fixture_id": "shasum-option-a"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. shasum [-c] [-a 1|256|512] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "shasum -- ./empty",
+        "stdout": "da39a3ee5e6b4b0d3255bfef95601890afd80709  ./empty\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "SHA-1 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "shasum",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "shasum-operands-valid",
+        "shasum-option-invalid",
+        "shasum-option-c-check",
+        "shasum-option-a"
+      ]
+    },
+    {
+      "name": "sha256sum",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "sha256sum [-c] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sha256sum-option-c-check"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha256sum [-c] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "sha256sum -- ./empty",
+        "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./empty\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "SHA-256 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "sha256sum",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "sha256sum-operands-valid",
+        "sha256sum-option-invalid",
+        "sha256sum-option-c-check"
+      ]
+    },
+    {
+      "name": "sha1sum",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "sha1sum [-c] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sha1sum-option-c-check"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha1sum [-c] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "sha1sum -- ./empty",
+        "stdout": "da39a3ee5e6b4b0d3255bfef95601890afd80709  ./empty\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "SHA-1 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "sha1sum",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "sha1sum-operands-valid",
+        "sha1sum-option-invalid",
+        "sha1sum-option-c-check"
+      ]
+    },
+    {
+      "name": "sha512sum",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "sha512sum [-c] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sha512sum-option-c-check"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha512sum [-c] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "sha512sum -- ./empty",
+        "stdout": "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e  ./empty\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "SHA-512 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "sha512sum",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "sha512sum-operands-valid",
+        "sha512sum-option-invalid",
+        "sha512sum-option-c-check"
+      ]
+    },
+    {
+      "name": "md5sum",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "md5sum [-c] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "md5sum-option-c-check"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. md5sum [-c] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "md5sum -- ./empty",
+        "stdout": "d41d8cd98f00b204e9800998ecf8427e  ./empty\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "MD5 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "md5sum",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "md5sum-operands-valid",
+        "md5sum-option-invalid",
+        "md5sum-option-c-check"
+      ]
+    },
+    {
+      "name": "base64",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "base64 [-d|--decode|-D] [-w WIDTH|-b WIDTH] [--] [PATH]",
+      "forms": [
+        {
+          "spellings": [
+            "-d",
+            "--decode",
+            "-D"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "base64-option-d-decode-D"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--wrap"
+          ],
+          "arity": 1,
+          "value_role": "width",
+          "fixture_id": "base64-option-w-wrap"
+        },
+        {
+          "spellings": [
+            "-b"
+          ],
+          "arity": 1,
+          "value_role": "width",
+          "fixture_id": "base64-option-b"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. base64 [-d|--decode|-D] [-w WIDTH|-b WIDTH] [--] [PATH]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf A | base64",
+        "stdout": "QQ==\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Encode default76 columns and final LF; width0 disables wrapping and final LF. -w GNU and -b BSD same width. Decode ignores ASCII whitespace, rejects malformed padding/alphabet; complete binary bytes, no text conversion.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_handler_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "base64",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "base64-operands-valid",
+        "base64-option-invalid",
+        "base64-option-d-decode-D",
+        "base64-option-w-wrap",
+        "base64-option-b"
+      ]
+    },
+    {
+      "name": "repo-map",
+      "aliases": [
+        "survey-repo"
+      ],
+      "family": "inspect",
+      "owner": "survey",
+      "argv": "repo-map [--path PATH] [--depth N]",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "repo-map-option-path"
+        },
+        {
+          "spellings": [
+            "--depth"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "repo-map-option-depth"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. repo-map [--path PATH] [--depth N]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "repo-map --path ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "repo-map",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "repo-map-operands-valid",
+        "repo-map-option-invalid",
+        "repo-map-option-path",
+        "repo-map-option-depth"
+      ]
+    },
+    {
+      "name": "summarize",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "summarization",
+      "argv": "summarize --path PATH [--focus TEXT]",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "summarize-option-path"
+        },
+        {
+          "spellings": [
+            "--focus"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "summarize-option-focus"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. summarize --path PATH [--focus TEXT]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "summarize --path ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/summarize.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/summarize_test.go"
+        ],
+        "extension": "Retain accepted source briefing and delivered exact-window semantics; same typed operation for both entry points."
+      },
+      "unsupported": {
+        "argv": [
+          "summarize",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "summarize-operands-valid",
+        "summarize-option-invalid",
+        "summarize-option-path",
+        "summarize-option-focus"
+      ]
+    },
+    {
+      "name": "outline",
+      "aliases": [],
+      "family": "inspect",
+      "owner": "filesystem",
+      "argv": "outline --path PATH",
+      "forms": [
+        {
+          "spellings": [
+            "--path"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "outline-option-path"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. outline --path PATH",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "outline --path ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/read_outline.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/read_outline_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "outline",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "outline-operands-valid",
+        "outline-option-invalid",
+        "outline-option-path"
+      ]
+    }
+  ]
+}

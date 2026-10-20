@@ -1,0 +1,308 @@
+{
+  "commands": [
+    {
+      "name": "curl",
+      "aliases": [],
+      "family": "http",
+      "owner": "outbound_http",
+      "argv": "curl [OPTIONS] URL",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--silent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-s-silent"
+        },
+        {
+          "spellings": [
+            "-S",
+            "--show-error"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-S-showerror"
+        },
+        {
+          "spellings": [
+            "-i",
+            "--include"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-i-include"
+        },
+        {
+          "spellings": [
+            "-I",
+            "--head"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-I-head"
+        },
+        {
+          "spellings": [
+            "-L",
+            "--location"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-L-location"
+        },
+        {
+          "spellings": [
+            "-X",
+            "--request"
+          ],
+          "arity": 1,
+          "value_role": "method",
+          "fixture_id": "curl-option-X-request"
+        },
+        {
+          "spellings": [
+            "-H",
+            "--header"
+          ],
+          "arity": 1,
+          "value_role": "header",
+          "fixture_id": "curl-option-H-header"
+        },
+        {
+          "spellings": [
+            "-d",
+            "--data"
+          ],
+          "arity": 1,
+          "value_role": "body",
+          "fixture_id": "curl-option-d-data"
+        },
+        {
+          "spellings": [
+            "--data-raw"
+          ],
+          "arity": 1,
+          "value_role": "body",
+          "fixture_id": "curl-option-dataraw"
+        },
+        {
+          "spellings": [
+            "--data-binary"
+          ],
+          "arity": 1,
+          "value_role": "body",
+          "fixture_id": "curl-option-databinary"
+        },
+        {
+          "spellings": [
+            "--data-urlencode"
+          ],
+          "arity": 1,
+          "value_role": "data",
+          "fixture_id": "curl-option-dataurlencode"
+        },
+        {
+          "spellings": [
+            "-F",
+            "--form"
+          ],
+          "arity": 1,
+          "value_role": "part",
+          "fixture_id": "curl-option-F-form"
+        },
+        {
+          "spellings": [
+            "-u",
+            "--user"
+          ],
+          "arity": 1,
+          "value_role": "credentials",
+          "fixture_id": "curl-option-u-user"
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-o-output"
+        },
+        {
+          "spellings": [
+            "-D",
+            "--dump-header"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-D-dumpheader"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--write-out"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "curl-option-w-writeout"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--cookie-jar"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-c-cookiejar"
+        },
+        {
+          "spellings": [
+            "-b",
+            "--cookie"
+          ],
+          "arity": 1,
+          "value_role": "cookie",
+          "fixture_id": "curl-option-b-cookie"
+        },
+        {
+          "spellings": [
+            "--max-time"
+          ],
+          "arity": 1,
+          "value_role": "seconds",
+          "fixture_id": "curl-option-maxtime"
+        },
+        {
+          "spellings": [
+            "--connect-timeout"
+          ],
+          "arity": 1,
+          "value_role": "seconds",
+          "fixture_id": "curl-option-connecttimeout"
+        },
+        {
+          "spellings": [
+            "--unix-socket"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "curl-option-unixsocket"
+        },
+        {
+          "spellings": [
+            "--fail"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "curl-option-fail"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. curl [OPTIONS] URL",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete HTTP transfer (HTTP errors unless --fail)",
+        "22": "--fail HTTP status>=400; incomplete/ineligible body publication",
+        "2": "usage",
+        "6": "DNS",
+        "7": "connect",
+        "28": "timeout"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure"
+          ],
+          "mode": "request"
+        },
+        {
+          "requires": [
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-o--D--c-to-file"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "curl -sS --fail https://api.example.test/state",
+        "stdout": "{\"state\":\"ok\"}\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Existing HTTP owner, ordered repeated headers, body/redirect/cookie/screens. -s suppress progress (no routine progress output), -S keeps error, -sS bundle. -i/-D raw screened status+headers CRLF; -w only %{http_code},%{size_download},%{url_effective},%{time_total},%% and escaped LF/tab. -D - stdout; -o /dev/null typed sink. -b name=value or jar path, -c jar staged. URLencode variants name=value/name@path/@path/=value and multipart @path read through authority. -k/--insecure unsupported. No automatic HTTP retry or replay; non-idempotent unknown stays unknown. Loopback requires actual owned live listener or explicit current authority.",
+      "reuse": {
+        "implementation": "lycaon/internal/httpaction/tool.go",
+        "tests": [
+          "lycaon/internal/httpaction/tool_test.go"
+        ],
+        "extension": "Retain HTTP owner and request screening; add native CLI presentation/stream adapter."
+      },
+      "unsupported": {
+        "argv": [
+          "curl",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "curl-operands-valid",
+        "curl-option-invalid",
+        "curl-option-s-silent",
+        "curl-option-S-showerror",
+        "curl-option-i-include",
+        "curl-option-I-head",
+        "curl-option-L-location",
+        "curl-option-X-request",
+        "curl-option-H-header",
+        "curl-option-d-data",
+        "curl-option-dataraw",
+        "curl-option-databinary",
+        "curl-option-dataurlencode",
+        "curl-option-F-form",
+        "curl-option-u-user",
+        "curl-option-o-output",
+        "curl-option-D-dumpheader",
+        "curl-option-w-writeout",
+        "curl-option-c-cookiejar",
+        "curl-option-b-cookie",
+        "curl-option-maxtime",
+        "curl-option-connecttimeout",
+        "curl-option-unixsocket",
+        "curl-option-fail"
+      ]
+    }
+  ]
+}

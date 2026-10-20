@@ -1,0 +1,655 @@
+{
+  "commands": [
+    {
+      "name": "tar",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-x",
+            "--extract"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-x-extract"
+        },
+        {
+          "spellings": [
+            "-t",
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-t-list"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--create"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-c-create"
+        },
+        {
+          "spellings": [
+            "-z",
+            "--gzip"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-z-gzip"
+        },
+        {
+          "spellings": [
+            "-j",
+            "--bzip2"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tar-option-j-bzip2"
+        },
+        {
+          "spellings": [
+            "-f",
+            "--file"
+          ],
+          "arity": 1,
+          "value_role": "archive",
+          "fixture_id": "tar-option-f-file"
+        },
+        {
+          "spellings": [
+            "-C",
+            "--directory"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "tar-option-C-directory"
+        },
+        {
+          "spellings": [
+            "--strip-components"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "tar-option-stripcomponents"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "listing-or-stream-decode"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "create-extract-compress-decompress-to-path"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "tar -tf ./empty.tar",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "tar",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "tar-operands-valid",
+        "tar-option-invalid",
+        "tar-option-x-extract",
+        "tar-option-t-list",
+        "tar-option-c-create",
+        "tar-option-z-gzip",
+        "tar-option-j-bzip2",
+        "tar-option-f-file",
+        "tar-option-C-directory",
+        "tar-option-stripcomponents"
+      ]
+    },
+    {
+      "name": "unzip",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-l"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-l"
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-p"
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "unzip-option-d"
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-o"
+        },
+        {
+          "spellings": [
+            "-q"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "unzip-option-q"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "listing-or-stream-decode"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "create-extract-compress-decompress-to-path"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "unzip -- ./archive",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "unzip",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "unzip-operands-valid",
+        "unzip-option-invalid",
+        "unzip-option-l",
+        "unzip-option-p",
+        "unzip-option-d",
+        "unzip-option-o",
+        "unzip-option-q"
+      ]
+    },
+    {
+      "name": "zip",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "zip [-r] [-q] [--] ARCHIVE PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "zip-option-r"
+        },
+        {
+          "spellings": [
+            "-q"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "zip-option-q"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [--] ARCHIVE PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "listing-or-stream-decode"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "create-extract-compress-decompress-to-path"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "zip -- ./output.zip ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "zip",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "zip-operands-valid",
+        "zip-option-invalid",
+        "zip-option-r",
+        "zip-option-q"
+      ]
+    },
+    {
+      "name": "gzip",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "gzip [--] PATH ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. gzip [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "listing-or-stream-decode"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "create-extract-compress-decompress-to-path"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "gzip -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "gzip",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "gzip-operands-valid",
+        "gzip-option-invalid"
+      ]
+    },
+    {
+      "name": "gunzip",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "gunzip [--] PATH ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. gunzip [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "listing-or-stream-decode"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "create-extract-compress-decompress-to-path"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "gunzip -- ./input.gz",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "gunzip",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "gunzip-operands-valid",
+        "gunzip-option-invalid"
+      ]
+    },
+    {
+      "name": "zcat",
+      "aliases": [],
+      "family": "archive",
+      "owner": "filesystem",
+      "argv": "zcat [--] [PATH ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zcat [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "zcat -- ./input.gz",
+        "stdout": "alpha\nbeta",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/extract_archive.go",
+        "tests": [
+          "lycaon/internal/tools/native/extract_archive_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "zcat",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "zcat-operands-valid",
+        "zcat-option-invalid"
+      ]
+    }
+  ]
+}

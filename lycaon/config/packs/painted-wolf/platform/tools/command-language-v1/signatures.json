@@ -1,0 +1,105 @@
+{
+  "file_signatures": {
+    "version": 1,
+    "precedence": [
+      "magic",
+      "self-identifying encoding",
+      "valid UTF-8 text",
+      "opaque binary"
+    ],
+    "corpus": [
+      {
+        "name": "png",
+        "prefix_hex": "89504e470d0a1a0a",
+        "description": "PNG image data",
+        "mime": "image/png"
+      },
+      {
+        "name": "jpeg",
+        "prefix_hex": "ffd8ff",
+        "description": "JPEG image data",
+        "mime": "image/jpeg"
+      },
+      {
+        "name": "gif",
+        "prefix_hex": "474946383961",
+        "description": "GIF image data",
+        "mime": "image/gif"
+      },
+      {
+        "name": "pdf",
+        "prefix_hex": "255044462d",
+        "description": "PDF document",
+        "mime": "application/pdf"
+      },
+      {
+        "name": "zip",
+        "prefix_hex": "504b0304",
+        "description": "Zip archive data",
+        "mime": "application/zip"
+      },
+      {
+        "name": "gzip",
+        "prefix_hex": "1f8b08",
+        "description": "gzip compressed data",
+        "mime": "application/gzip"
+      },
+      {
+        "name": "bzip2",
+        "prefix_hex": "425a68",
+        "description": "bzip2 compressed data",
+        "mime": "application/x-bzip2"
+      },
+      {
+        "name": "sqlite",
+        "prefix_hex": "53514c69746520666f726d6174203300",
+        "description": "SQLite 3.x database",
+        "mime": "application/vnd.sqlite3"
+      },
+      {
+        "name": "elf",
+        "prefix_hex": "7f454c46",
+        "description": "ELF executable",
+        "mime": "application/x-executable"
+      },
+      {
+        "name": "macho64",
+        "prefix_hex": "cffaedfe",
+        "description": "Mach-O 64-bit executable",
+        "mime": "application/x-mach-binary"
+      },
+      {
+        "name": "pe",
+        "prefix_hex": "4d5a",
+        "description": "PE executable (validated PE offset/signature required)",
+        "mime": "application/vnd.microsoft.portable-executable"
+      },
+      {
+        "name": "utf8-bom",
+        "prefix_hex": "efbbbf",
+        "description": "UTF-8 Unicode text with BOM",
+        "mime": "text/plain; charset=utf-8"
+      },
+      {
+        "name": "utf16le",
+        "prefix_hex": "fffe",
+        "description": "UTF-16 little-endian Unicode text",
+        "mime": "text/plain; charset=utf-16le"
+      },
+      {
+        "name": "utf16be",
+        "prefix_hex": "feff",
+        "description": "UTF-16 big-endian Unicode text",
+        "mime": "text/plain; charset=utf-16be"
+      }
+    ],
+    "structural_signatures": [
+      "tar ustar at offset257 plus checksum",
+      "PE MZ plus bounded e_lfanew and PE signature",
+      "Mach-O32/64/fat both byte orders",
+      "GIF87a/GIF89a"
+    ],
+    "text": "UTF-8 validation and no NUL -> UTF-8 Unicode text/text/plain; empty -> empty/application/x-empty; unknown bytes -> data/application/octet-stream. Declared signature needs complete minimum header; truncated known prefix is data, never fabricate validity.",
+    "fixtures": "For every signature: exact minimum valid header, truncated prefix, offset corruption and unknown suffix. Signatures identify format, not trusted archive/database validity."
+  }
+}

@@ -1,0 +1,979 @@
+{
+  "commands": [
+    {
+      "name": "grep",
+      "aliases": [],
+      "family": "search",
+      "owner": "filesystem",
+      "argv": "grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "--recursive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-r-recursive"
+        },
+        {
+          "spellings": [
+            "-R"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-R"
+        },
+        {
+          "spellings": [
+            "-n",
+            "--line-number"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-n-linenumber"
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-i-ignorecase"
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fixed-strings"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-F-fixedstrings"
+        },
+        {
+          "spellings": [
+            "-E",
+            "--extended-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-E-extendedregexp"
+        },
+        {
+          "spellings": [
+            "-P",
+            "--perl-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-P-perlregexp"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--word-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-w-wordregexp"
+        },
+        {
+          "spellings": [
+            "-v",
+            "--invert-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-v-invertmatch"
+        },
+        {
+          "spellings": [
+            "-l",
+            "--files-with-matches"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-l-fileswithmatches"
+        },
+        {
+          "spellings": [
+            "-L",
+            "--files-without-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-L-fileswithoutmatch"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-c-count"
+        },
+        {
+          "spellings": [
+            "-o",
+            "--only-matching"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-o-onlymatching"
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-q-quiet"
+        },
+        {
+          "spellings": [
+            "-h",
+            "--no-filename"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-h-nofilename"
+        },
+        {
+          "spellings": [
+            "-H",
+            "--with-filename"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-H-withfilename"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--no-messages"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-s-nomessages"
+        },
+        {
+          "spellings": [
+            "-m",
+            "--max-count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "grep-option-m-maxcount"
+        },
+        {
+          "spellings": [
+            "-A",
+            "--after-context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "grep-option-A-aftercontext"
+        },
+        {
+          "spellings": [
+            "-B",
+            "--before-context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "grep-option-B-beforecontext"
+        },
+        {
+          "spellings": [
+            "-C",
+            "--context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "grep-option-C-context"
+        },
+        {
+          "spellings": [
+            "-e",
+            "--regexp"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "grep-option-e-regexp"
+        },
+        {
+          "spellings": [
+            "--include"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "grep-option-include"
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "grep-option-exclude"
+        },
+        {
+          "spellings": [
+            "--exclude-dir"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "grep-option-excludedir"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete matches; publication eligible",
+        "1": "complete no matches; empty publication eligible",
+        "2": "utility error or incomplete input; publication ineligible"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "grep -n -- 'alpha' ./input",
+        "stdout": "1:alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Context markers, path prefixes, only-matching and NUL paths defined in output.json.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/index_acceleration_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "grep",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "grep-operands-valid",
+        "grep-option-invalid",
+        "grep-option-r-recursive",
+        "grep-option-R",
+        "grep-option-n-linenumber",
+        "grep-option-i-ignorecase",
+        "grep-option-F-fixedstrings",
+        "grep-option-E-extendedregexp",
+        "grep-option-P-perlregexp",
+        "grep-option-w-wordregexp",
+        "grep-option-v-invertmatch",
+        "grep-option-l-fileswithmatches",
+        "grep-option-L-fileswithoutmatch",
+        "grep-option-c-count",
+        "grep-option-o-onlymatching",
+        "grep-option-q-quiet",
+        "grep-option-h-nofilename",
+        "grep-option-H-withfilename",
+        "grep-option-s-nomessages",
+        "grep-option-m-maxcount",
+        "grep-option-A-aftercontext",
+        "grep-option-B-beforecontext",
+        "grep-option-C-context",
+        "grep-option-e-regexp",
+        "grep-option-include",
+        "grep-option-exclude",
+        "grep-option-excludedir"
+      ]
+    },
+    {
+      "name": "rg",
+      "aliases": [],
+      "family": "search",
+      "owner": "filesystem",
+      "argv": "rg [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--line-number"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-n-linenumber"
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-i-ignorecase"
+        },
+        {
+          "spellings": [
+            "-F",
+            "--fixed-strings"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-F-fixedstrings"
+        },
+        {
+          "spellings": [
+            "-E",
+            "--extended-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-E-extendedregexp"
+        },
+        {
+          "spellings": [
+            "-P",
+            "--perl-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-P-perlregexp"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--word-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-w-wordregexp"
+        },
+        {
+          "spellings": [
+            "-v",
+            "--invert-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-v-invertmatch"
+        },
+        {
+          "spellings": [
+            "-l",
+            "--files-with-matches"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-l-fileswithmatches"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-c-count"
+        },
+        {
+          "spellings": [
+            "-o",
+            "--only-matching"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-o-onlymatching"
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-q-quiet"
+        },
+        {
+          "spellings": [
+            "-H",
+            "--with-filename"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-H-withfilename"
+        },
+        {
+          "spellings": [
+            "-m",
+            "--max-count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "rg-option-m-maxcount"
+        },
+        {
+          "spellings": [
+            "-A",
+            "--after-context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "rg-option-A-aftercontext"
+        },
+        {
+          "spellings": [
+            "-B",
+            "--before-context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "rg-option-B-beforecontext"
+        },
+        {
+          "spellings": [
+            "-C",
+            "--context"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "rg-option-C-context"
+        },
+        {
+          "spellings": [
+            "-e",
+            "--regexp"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "rg-option-e-regexp"
+        },
+        {
+          "spellings": [
+            "--include"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "rg-option-include"
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "rg-option-exclude"
+        },
+        {
+          "spellings": [
+            "--exclude-dir"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "rg-option-excludedir"
+        },
+        {
+          "spellings": [
+            "-g",
+            "--glob"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "rg-option-g-glob"
+        },
+        {
+          "spellings": [
+            "-t",
+            "--type"
+          ],
+          "arity": 1,
+          "value_role": "file-type",
+          "fixture_id": "rg-option-t-type"
+        },
+        {
+          "spellings": [
+            "-S",
+            "--smart-case"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-S-smartcase"
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-u"
+        },
+        {
+          "spellings": [
+            "--hidden"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-hidden"
+        },
+        {
+          "spellings": [
+            "--files"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-files"
+        },
+        {
+          "spellings": [
+            "-r",
+            "--replace"
+          ],
+          "arity": 1,
+          "value_role": "replacement",
+          "fixture_id": "rg-option-replace"
+        },
+        {
+          "spellings": [
+            "-L",
+            "--follow"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-follow"
+        },
+        {
+          "spellings": [
+            "--files-without-match"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-files-without-match"
+        },
+        {
+          "spellings": [
+            "-h",
+            "--help"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-help"
+        },
+        {
+          "spellings": [
+            "--no-filename"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-no-filename"
+        },
+        {
+          "spellings": [
+            "--no-messages"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-no-messages"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--case-sensitive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-case-sensitive"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rg [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete matches; publication eligible",
+        "1": "complete no matches; empty publication eligible",
+        "2": "utility error or incomplete input; publication ineligible"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "rg -n -- 'alpha' ./input",
+        "stdout": "1:alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Context markers, path prefixes, only-matching and NUL paths defined in output.json. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/index_acceleration_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "rg",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "rg-operands-valid",
+        "rg-option-invalid",
+        "rg-option-n-linenumber",
+        "rg-option-i-ignorecase",
+        "rg-option-F-fixedstrings",
+        "rg-option-E-extendedregexp",
+        "rg-option-P-perlregexp",
+        "rg-option-w-wordregexp",
+        "rg-option-v-invertmatch",
+        "rg-option-l-fileswithmatches",
+        "rg-option-c-count",
+        "rg-option-o-onlymatching",
+        "rg-option-q-quiet",
+        "rg-option-H-withfilename",
+        "rg-option-m-maxcount",
+        "rg-option-A-aftercontext",
+        "rg-option-B-beforecontext",
+        "rg-option-C-context",
+        "rg-option-e-regexp",
+        "rg-option-include",
+        "rg-option-exclude",
+        "rg-option-excludedir",
+        "rg-option-g-glob",
+        "rg-option-t-type",
+        "rg-option-S-smartcase",
+        "rg-option-u",
+        "rg-option-hidden",
+        "rg-option-files",
+        "rg-option-replace",
+        "rg-option-follow",
+        "rg-option-files-without-match",
+        "rg-option-help",
+        "rg-option-no-filename",
+        "rg-option-no-messages",
+        "rg-option-case-sensitive"
+      ]
+    },
+    {
+      "name": "find",
+      "aliases": [],
+      "family": "search",
+      "owner": "filesystem",
+      "argv": "find [PATH ...] [EXPRESSION]",
+      "forms": [
+        {
+          "spellings": [
+            "-name"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "find-option-name"
+        },
+        {
+          "spellings": [
+            "-iname"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "find-option-iname"
+        },
+        {
+          "spellings": [
+            "-path"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "find-option-path"
+        },
+        {
+          "spellings": [
+            "-ipath"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "find-option-ipath"
+        },
+        {
+          "spellings": [
+            "-regex"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "find-option-regex"
+        },
+        {
+          "spellings": [
+            "-type"
+          ],
+          "arity": 1,
+          "value_role": "kind",
+          "fixture_id": "find-option-type"
+        },
+        {
+          "spellings": [
+            "-maxdepth"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-maxdepth"
+        },
+        {
+          "spellings": [
+            "-mindepth"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-mindepth"
+        },
+        {
+          "spellings": [
+            "-size"
+          ],
+          "arity": 1,
+          "value_role": "size",
+          "fixture_id": "find-option-size"
+        },
+        {
+          "spellings": [
+            "-empty"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-empty"
+        },
+        {
+          "spellings": [
+            "-not"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-not"
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-a"
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-o"
+        },
+        {
+          "spellings": [
+            "-prune"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-prune"
+        },
+        {
+          "spellings": [
+            "-print"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-print"
+        },
+        {
+          "spellings": [
+            "-print0"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-print0"
+        },
+        {
+          "spellings": [
+            "-exec"
+          ],
+          "arity": 1,
+          "value_role": "command",
+          "fixture_id": "find-option-exec"
+        },
+        {
+          "spellings": [
+            "-delete"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "find-option-delete"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. find [PATH ...] [EXPRESSION]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "default-predicates-print"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "recovery"
+          ],
+          "mode": "-delete"
+        },
+        {
+          "requires": [
+            "read",
+            "bound-child-effect-set"
+          ],
+          "mode": "-exec"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "find ./empty -type f -print0",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/index_acceleration_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "find",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "find-operands-valid",
+        "find-option-invalid",
+        "find-option-name",
+        "find-option-iname",
+        "find-option-path",
+        "find-option-ipath",
+        "find-option-regex",
+        "find-option-type",
+        "find-option-maxdepth",
+        "find-option-mindepth",
+        "find-option-size",
+        "find-option-empty",
+        "find-option-not",
+        "find-option-a",
+        "find-option-o",
+        "find-option-prune",
+        "find-option-print",
+        "find-option-print0",
+        "find-option-exec",
+        "find-option-delete"
+      ]
+    }
+  ]
+}

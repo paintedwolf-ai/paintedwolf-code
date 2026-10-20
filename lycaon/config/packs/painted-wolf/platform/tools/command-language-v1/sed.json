@@ -1,0 +1,58 @@
+{
+  "sed_contract": {
+    "addresses": "None, one positive line number, $, /BRE/ or two addresses separated comma; second regex searches from first matching line, numeric end before start yields start line. Optional ! negates range.",
+    "commands": {
+      "p": "print current record",
+      "d": "delete current pattern space and start next cycle",
+      "q": "quit with complete early-consumer closure",
+      "a": "append literal text after cycle",
+      "i": "insert literal text before current record",
+      "c": "replace addressed range with literal text once",
+      "s": "s<delimiter>BRE<delimiter>replacement<delimiter>[g|p|positive match ordinal]; & whole match, \\1..\\9 captures, escaped delimiter literal"
+    },
+    "multi_script": "Semicolon/LF separates commands outside quoted text, regex and escaped delimiter; repeated -e concatenate in order; braces group addressed commands. Empty script copies records.",
+    "in_place": "-i consumes a separate empty suffix only if empty; otherwise next argument is script. Attached nonempty suffix rejects. No backups. Multiple files prepare/publish independently, stop on first failure.",
+    "unsupported": [
+      "w",
+      "W",
+      "r",
+      "R",
+      "e",
+      "s///e",
+      "s///w",
+      "branches/labels/hold-space commands outside catalog"
+    ],
+    "fixtures": [
+      {
+        "program": "sed -n '1,2p' ./input",
+        "input": "a\nb\nc\n",
+        "stdout": "a\nb\n"
+      },
+      {
+        "program": "sed '1d;$d' ./input",
+        "input": "a\nb\nc\n",
+        "stdout": "b\n"
+      },
+      {
+        "program": "sed -i '' 's/a/b/' ./input",
+        "input": "a\n",
+        "accepted_output": "b\n"
+      },
+      {
+        "program": "sed -i 's/a/b/' ./input",
+        "input": "a\n",
+        "accepted_output": "b\n"
+      },
+      {
+        "program": "sed -n '/^start$/,/^end$/p' ./input",
+        "input": "x\nstart\na\nend\ny\n",
+        "stdout": "start\na\nend\n"
+      },
+      {
+        "program": "sed 'w ./out' ./input",
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "effects": []
+      }
+    ]
+  }
+}

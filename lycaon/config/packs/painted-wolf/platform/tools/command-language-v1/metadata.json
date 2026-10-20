@@ -1,0 +1,569 @@
+{
+  "commands": [
+    {
+      "name": "ls",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "ls [OPTIONS] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-l"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-l"
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-a"
+        },
+        {
+          "spellings": [
+            "-A"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-A"
+        },
+        {
+          "spellings": [
+            "-1"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-1"
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-d"
+        },
+        {
+          "spellings": [
+            "-R"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-R"
+        },
+        {
+          "spellings": [
+            "-h"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-h"
+        },
+        {
+          "spellings": [
+            "-F"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-F"
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-t"
+        },
+        {
+          "spellings": [
+            "-S"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-S"
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-r"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ls [OPTIONS] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "ls -1 -- ./empty",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default .; byte-sorted one name per LF (no terminal columns). -a includes . and ..; -A omits those; -t modified descending, -S size descending, -r reverses final order; stable byte tie-break. -l uses numeric uid/gid, UTC timestamps, permissions and byte size; -h IEC units. -R bounded, no symlink recursion.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/stat.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/stat_wc_safecmd_golden_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "ls",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "ls-operands-valid",
+        "ls-option-invalid",
+        "ls-option-l",
+        "ls-option-a",
+        "ls-option-A",
+        "ls-option-1",
+        "ls-option-d",
+        "ls-option-R",
+        "ls-option-h",
+        "ls-option-F",
+        "ls-option-t",
+        "ls-option-S",
+        "ls-option-r"
+      ]
+    },
+    {
+      "name": "stat",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "stat [-L] [-c GNU_FORMAT|-f BSD_FORMAT|--file-system] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-L",
+            "--dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "stat-option-L-dereference"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--format"
+          ],
+          "arity": 1,
+          "value_role": "gnu-format",
+          "fixture_id": "stat-option-c-format"
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 1,
+          "value_role": "bsd-format",
+          "fixture_id": "stat-option-f"
+        },
+        {
+          "spellings": [
+            "--file-system"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "stat-option-filesystem"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. stat [-L] [-c GNU_FORMAT|-f BSD_FORMAT|--file-system] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "stat -c '%s' -- ./input",
+        "stdout": "10\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default lstat, -L follows after authority. GNU %n %s %a %A %F %Y %u %g %i; BSD %N %z %Lp %Sp %HT %m %u %g %i; %% literal. Unknown directives reject. -f always BSD metadata, never OS-dependent filesystem mode. --file-system explicitly requests filesystem metadata and may return capability unavailable.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/stat.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/stat_wc_safecmd_golden_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "stat",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "stat-operands-valid",
+        "stat-option-invalid",
+        "stat-option-L-dereference",
+        "stat-option-c-format",
+        "stat-option-f",
+        "stat-option-filesystem"
+      ]
+    },
+    {
+      "name": "wc",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "wc [-lwcmL] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-l",
+            "--lines"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "wc-option-l-lines"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--words"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "wc-option-w-words"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--bytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "wc-option-c-bytes"
+        },
+        {
+          "spellings": [
+            "-m",
+            "--chars"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "wc-option-m-chars"
+        },
+        {
+          "spellings": [
+            "-L",
+            "--max-line-length"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "wc-option-L-maxlinelength"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. wc [-lwc mL] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'alpha\\nbeta' | wc -l",
+        "stdout": "1\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default lines words bytes. -l counts LF bytes; -c same captured bytes, including recorded BOM. -w ASCII space/tab/LF/CR/VT/FF separators; -m decoded Unicode scalar count, invalid encoding rejects; -L max Unicode scalar line length excluding LF/CRLF. Single stdin scalar unpadded integer LF; multi values separated single space. Intentionally replaces existing CountLines/disk-size mixed representation.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/wc.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/stat_wc_safecmd_golden_test.go",
+          "lycaon/internal/tools/native/survey/text_encoding_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "wc",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "wc-operands-valid",
+        "wc-option-invalid",
+        "wc-option-l-lines",
+        "wc-option-w-words",
+        "wc-option-c-bytes",
+        "wc-option-m-chars",
+        "wc-option-L-maxlinelength"
+      ]
+    },
+    {
+      "name": "diff",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "diff [-u|-U CONTEXT|-q] [-wbBr] [--] PATH_A PATH_B",
+      "forms": [
+        {
+          "spellings": [
+            "-u",
+            "--unified"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-u-unified"
+        },
+        {
+          "spellings": [
+            "-U"
+          ],
+          "arity": 1,
+          "value_role": "context",
+          "fixture_id": "diff-option-U"
+        },
+        {
+          "spellings": [
+            "-q",
+            "--brief"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-q-brief"
+        },
+        {
+          "spellings": [
+            "-w",
+            "--ignore-all-space"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-w-ignoreallspace"
+        },
+        {
+          "spellings": [
+            "-b",
+            "--ignore-space-change"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-b-ignorespacechange"
+        },
+        {
+          "spellings": [
+            "-B",
+            "--ignore-blank-lines"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-B-ignoreblanklines"
+        },
+        {
+          "spellings": [
+            "-r",
+            "--recursive"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "diff-option-r-recursive"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. diff [-u|-U CONTEXT|-q] [-wbBr] [--] PATH_A PATH_B",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete equal comparison; publication eligible",
+        "1": "complete differences; publication eligible",
+        "2": "actual error/incomplete; publication ineligible"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "diff -u -- ./same-a ./same-b",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Reuse sourceview.UnifiedDiff. Default unified context3; -U bounded by record/stream budgets, not old preview context10. Binary identical=0, different=1 with binary notice; -r byte-sorted tree. Ignore flags compare transformed lines but report original source lines. Input/complete stream limits distinct from preview.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/survey/diff.go",
+        "tests": [
+          "lycaon/internal/tools/native/survey/diff_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "diff",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "diff-operands-valid",
+        "diff-option-invalid",
+        "diff-option-u-unified",
+        "diff-option-U",
+        "diff-option-q-brief",
+        "diff-option-w-ignoreallspace",
+        "diff-option-b-ignorespacechange",
+        "diff-option-B-ignoreblanklines",
+        "diff-option-r-recursive"
+      ]
+    }
+  ]
+}

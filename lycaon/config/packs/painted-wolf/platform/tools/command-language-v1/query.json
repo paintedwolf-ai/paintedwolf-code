@@ -1,0 +1,296 @@
+{
+  "commands": [
+    {
+      "name": "jq",
+      "aliases": [],
+      "family": "query",
+      "owner": "filesystem",
+      "argv": "jq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "--raw-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-r-rawoutput"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--compact-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-c-compactoutput"
+        },
+        {
+          "spellings": [
+            "-e",
+            "--exit-status"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-e-exitstatus"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--slurp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-s-slurp"
+        },
+        {
+          "spellings": [
+            "-n",
+            "--null-input"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-n-nullinput"
+        },
+        {
+          "spellings": [
+            "--arg"
+          ],
+          "arity": 2,
+          "value_role": "name-value-pair",
+          "fixture_id": "jq-option-arg"
+        },
+        {
+          "spellings": [
+            "--argjson"
+          ],
+          "arity": 2,
+          "value_role": "name-json-pair",
+          "fixture_id": "jq-option-argjson"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete output; -e final truthy",
+        "1": "-e final false/null",
+        "4": "-e no values",
+        "2": "usage/input/compile/runtime error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf '{\"x\":1}\\n' | jq -r '.x'",
+        "stdout": "1\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Retain gojq and yq/TOML codecs; --arg/--argjson consume TWO argv words. Complete value streams; -s array, -n one null input; -r strings raw, -c compact JSON, default indented2 JSON. yq parses YAML/TOML by explicit input selection/extension, stdin YAML; emits YAML default with LF. No ambient env, import/module/filesystem loader; query work/depth/allocation bounded. Plain serialization differs from jq-edit preserving comments.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/jq/jq.go",
+        "tests": [
+          "lycaon/internal/tools/native/jq/jq_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "jq",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "jq-operands-valid",
+        "jq-option-invalid",
+        "jq-option-r-rawoutput",
+        "jq-option-c-compactoutput",
+        "jq-option-e-exitstatus",
+        "jq-option-s-slurp",
+        "jq-option-n-nullinput",
+        "jq-option-arg",
+        "jq-option-argjson"
+      ]
+    },
+    {
+      "name": "yq",
+      "aliases": [],
+      "family": "query",
+      "owner": "filesystem",
+      "argv": "yq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "--raw-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-r-rawoutput"
+        },
+        {
+          "spellings": [
+            "-c",
+            "--compact-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-c-compactoutput"
+        },
+        {
+          "spellings": [
+            "-e",
+            "--exit-status"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-e-exitstatus"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--slurp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-s-slurp"
+        },
+        {
+          "spellings": [
+            "-n",
+            "--null-input"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-n-nullinput"
+        },
+        {
+          "spellings": [
+            "--arg"
+          ],
+          "arity": 2,
+          "value_role": "name-value-pair",
+          "fixture_id": "yq-option-arg"
+        },
+        {
+          "spellings": [
+            "--argjson"
+          ],
+          "arity": 2,
+          "value_role": "name-json-pair",
+          "fixture_id": "yq-option-argjson"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. yq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete output; -e final truthy",
+        "1": "-e final false/null",
+        "4": "-e no values",
+        "2": "usage/input/compile/runtime error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf '{\"x\":1}\\n' | yq -r '.x'",
+        "stdout": "1\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Retain gojq and yq/TOML codecs; --arg/--argjson consume TWO argv words. Complete value streams; -s array, -n one null input; -r strings raw, -c compact JSON, default indented2 JSON. yq parses YAML/TOML by explicit input selection/extension, stdin YAML; emits YAML default with LF. No ambient env, import/module/filesystem loader; query work/depth/allocation bounded. Plain serialization differs from jq-edit preserving comments.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/jq/jq.go",
+        "tests": [
+          "lycaon/internal/tools/native/jq/jq_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "yq",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "yq-operands-valid",
+        "yq-option-invalid",
+        "yq-option-r-rawoutput",
+        "yq-option-c-compactoutput",
+        "yq-option-e-exitstatus",
+        "yq-option-s-slurp",
+        "yq-option-n-nullinput",
+        "yq-option-arg",
+        "yq-option-argjson"
+      ]
+    }
+  ]
+}

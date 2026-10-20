@@ -1,0 +1,3234 @@
+{
+  "commands": [
+    {
+      "name": "git status",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] status [-s|--short] [--porcelain[=v1]] [--untracked-files=all|normal|no] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git status-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git status-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-s",
+            "--short"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git status-option-s-short",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--porcelain"
+          ],
+          "arity": -1,
+          "value_role": "optional-v1",
+          "fixture_id": "git status-option-porcelain",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--untracked-files"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "git status-option-untrackedfiles",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-s|--short] [--porcelain[=v1]] [--untracked-files=all|normal|no] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git status --porcelain=v1",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git status",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-status-operands-valid",
+        "git-status-option-invalid",
+        "git status-option-C",
+        "git status-option-c",
+        "git status-option-s-short",
+        "git status-option-porcelain",
+        "git status-option-untrackedfiles"
+      ]
+    },
+    {
+      "name": "git diff",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] diff [--cached|--staged] [--stat] [-U N] [REF] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git diff-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git diff-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--cached",
+            "--staged"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git diff-option-cached-staged",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--stat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git diff-option-stat",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "-U"
+          ],
+          "arity": 1,
+          "value_role": "context",
+          "fixture_id": "git diff-option-U",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--cached|--staged] [--stat] [-U N] [REF] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git diff --stat",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git diff",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-diff-operands-valid",
+        "git-diff-option-invalid",
+        "git diff-option-C",
+        "git diff-option-c",
+        "git diff-option-cached-staged",
+        "git diff-option-stat",
+        "git diff-option-U"
+      ]
+    },
+    {
+      "name": "git log",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] log [-n N|-N] [--oneline] [REF_RANGE] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git log-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git log-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-n",
+            "--max-count"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git log-option-n-maxcount",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--oneline"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git log-option-oneline",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-n N|-N] [--oneline] [REF_RANGE] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git log -n 1 --oneline",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git log",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-log-operands-valid",
+        "git-log-option-invalid",
+        "git log-option-C",
+        "git log-option-c",
+        "git log-option-n-maxcount",
+        "git log-option-oneline"
+      ]
+    },
+    {
+      "name": "git show",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] show [--stat] [REF[:PATH]]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git show-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git show-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--stat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git show-option-stat",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--stat] [REF[:PATH]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git show HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git show",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-show-operands-valid",
+        "git-show-option-invalid",
+        "git show-option-C",
+        "git show-option-c",
+        "git show-option-stat"
+      ]
+    },
+    {
+      "name": "git blame",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] blame [-L START,END] [REF] [--] PATH",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git blame-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git blame-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 1,
+          "value_role": "range",
+          "fixture_id": "git blame-option-L",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-L START,END] [REF] [--] PATH",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git blame -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git blame",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-blame-operands-valid",
+        "git-blame-option-invalid",
+        "git blame-option-C",
+        "git blame-option-c",
+        "git blame-option-L"
+      ]
+    },
+    {
+      "name": "git branch",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] branch [--list] [-a]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git branch-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git branch-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git branch-option-list",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git branch-option-a",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--list] [-a]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git branch --list",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git branch",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-branch-operands-valid",
+        "git-branch-option-invalid",
+        "git branch-option-C",
+        "git branch-option-c",
+        "git branch-option-list",
+        "git branch-option-a"
+      ]
+    },
+    {
+      "name": "git tag",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] tag --list [PATTERN]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git tag-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git tag-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git tag-option-list",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] --list [PATTERN]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git tag --list",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git tag",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-tag-operands-valid",
+        "git-tag-option-invalid",
+        "git tag-option-C",
+        "git tag-option-c",
+        "git tag-option-list"
+      ]
+    },
+    {
+      "name": "git rev-parse",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] rev-parse [--verify] REF",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git rev-parse-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git rev-parse-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--verify"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rev-parse-option-verify",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--verify] REF",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git rev-parse --verify HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git rev-parse",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-rev-parse-operands-valid",
+        "git-rev-parse-option-invalid",
+        "git rev-parse-option-C",
+        "git rev-parse-option-c",
+        "git rev-parse-option-verify"
+      ]
+    },
+    {
+      "name": "git rev-list",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] rev-list [--count] [-n N] REF_RANGE",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git rev-list-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git rev-list-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rev-list-option-count",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git rev-list-option-n",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--count] [-n N] REF_RANGE",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git rev-list --count HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git rev-list",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-rev-list-operands-valid",
+        "git-rev-list-option-invalid",
+        "git rev-list-option-C",
+        "git rev-list-option-c",
+        "git rev-list-option-count",
+        "git rev-list-option-n"
+      ]
+    },
+    {
+      "name": "git merge-base",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] merge-base REF REF",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git merge-base-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git merge-base-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] REF REF",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git merge-base HEAD HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git merge-base",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-merge-base-operands-valid",
+        "git-merge-base-option-invalid",
+        "git merge-base-option-C",
+        "git merge-base-option-c"
+      ]
+    },
+    {
+      "name": "git remote",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] remote [-v|get-url NAME]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git remote-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git remote-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git remote-option-v",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-v|get-url NAME]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git remote -v",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git remote",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-remote-operands-valid",
+        "git-remote-option-invalid",
+        "git remote-option-C",
+        "git remote-option-c",
+        "git remote-option-v"
+      ]
+    },
+    {
+      "name": "git config",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] config (--get KEY|--list)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git config-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git config-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--get"
+          ],
+          "arity": 1,
+          "value_role": "key",
+          "fixture_id": "git config-option-get",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--list"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git config-option-list",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (--get KEY|--list)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git config --get core.bare",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately. Missing --get key exits1; fixture empty config has no core.bare.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git config",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-config-operands-valid",
+        "git-config-option-invalid",
+        "git config-option-C",
+        "git config-option-c",
+        "git config-option-get",
+        "git config-option-list"
+      ]
+    },
+    {
+      "name": "git stash list",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] stash list",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git stash-list-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git stash-list-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] stash list",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git stash list",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git stash-list",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-stash-list-operands-valid",
+        "git-stash-list-option-invalid",
+        "git stash-list-option-C",
+        "git stash-list-option-c"
+      ]
+    },
+    {
+      "name": "git worktree list",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] worktree list [--porcelain]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git worktree-list-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git worktree-list-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--porcelain"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git worktree-list-option-porcelain",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] worktree list [--porcelain]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "query"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git worktree list --porcelain",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git worktree-list",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-worktree-list-operands-valid",
+        "git-worktree-list-option-invalid",
+        "git worktree-list-option-C",
+        "git worktree-list-option-c",
+        "git worktree-list-option-porcelain"
+      ]
+    },
+    {
+      "name": "git add",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] add [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git add-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git add-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git add -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git add",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-add-operands-valid",
+        "git-add-option-invalid",
+        "git add-option-C",
+        "git add-option-c"
+      ]
+    },
+    {
+      "name": "git commit",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] commit [-m MESSAGE] [--amend] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git commit-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git commit-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git commit-option-m",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--amend"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git commit-option-amend",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-m MESSAGE] [--amend] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git commit -m 'Update fixture' -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git commit",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-commit-operands-valid",
+        "git-commit-option-invalid",
+        "git commit-option-C",
+        "git commit-option-c",
+        "git commit-option-m",
+        "git commit-option-amend"
+      ]
+    },
+    {
+      "name": "git restore",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] restore [--staged] [--worktree] [--source REF] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git restore-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git restore-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--staged"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git restore-option-staged",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--worktree"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git restore-option-worktree",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--source"
+          ],
+          "arity": 1,
+          "value_role": "ref",
+          "fixture_id": "git restore-option-source",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--staged] [--worktree] [--source REF] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git restore -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git restore",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-restore-operands-valid",
+        "git-restore-option-invalid",
+        "git restore-option-C",
+        "git restore-option-c",
+        "git restore-option-staged",
+        "git restore-option-worktree",
+        "git restore-option-source"
+      ]
+    },
+    {
+      "name": "git checkout",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] checkout [-b BRANCH] [REF] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git checkout-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git checkout-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-b"
+          ],
+          "arity": 1,
+          "value_role": "branch",
+          "fixture_id": "git checkout-option-b",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-b BRANCH] [REF] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git checkout main",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git checkout",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-checkout-operands-valid",
+        "git-checkout-option-invalid",
+        "git checkout-option-C",
+        "git checkout-option-c",
+        "git checkout-option-b"
+      ]
+    },
+    {
+      "name": "git switch",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] switch [-c BRANCH] [REF]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git switch-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git switch-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "branch",
+          "fixture_id": "git switch-option-c",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-c BRANCH] [REF]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git switch main",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git switch",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-switch-operands-valid",
+        "git-switch-option-invalid",
+        "git switch-option-C",
+        "git switch-option-c",
+        "git switch-option-c"
+      ]
+    },
+    {
+      "name": "git merge",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] merge [--ff-only|--abort] [REF]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git merge-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git merge-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--ff-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-ffonly",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--abort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-abort",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only|--abort] [REF]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git merge --ff-only fixture",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git merge",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-merge-operands-valid",
+        "git-merge-option-invalid",
+        "git merge-option-C",
+        "git merge-option-c",
+        "git merge-option-ffonly",
+        "git merge-option-abort"
+      ]
+    },
+    {
+      "name": "git stash",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] stash (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git stash-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git stash-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git stash-option-m",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git stash push -m 'Fixture' -- ./input",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git stash",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-stash-operands-valid",
+        "git-stash-option-invalid",
+        "git stash-option-C",
+        "git stash-option-c",
+        "git stash-option-m"
+      ]
+    },
+    {
+      "name": "git reset",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] reset [--soft|--mixed|--hard] [REF] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git reset-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git reset-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--soft"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-soft",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--mixed"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-mixed",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "--hard"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-hard",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--soft|--mixed|--hard] [REF] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git reset --mixed HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git reset",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-reset-operands-valid",
+        "git-reset-option-invalid",
+        "git reset-option-C",
+        "git reset-option-c",
+        "git reset-option-soft",
+        "git reset-option-mixed",
+        "git reset-option-hard"
+      ]
+    },
+    {
+      "name": "git clean",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] clean -f [-d] [--] PATH ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git clean-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git clean-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clean-option-f",
+          "scope": "subcommand"
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clean-option-d",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] -f [-d] [--] PATH ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git clean -f -- ./untracked",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git clean",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-clean-operands-valid",
+        "git-clean-option-invalid",
+        "git clean-option-C",
+        "git clean-option-c",
+        "git clean-option-f",
+        "git clean-option-d"
+      ]
+    },
+    {
+      "name": "git worktree",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] worktree (add PATH [REF]|remove PATH|prune)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git worktree-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git worktree-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (add PATH [REF]|remove PATH|prune)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git worktree add ./fixture-worktree HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git worktree",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-worktree-operands-valid",
+        "git-worktree-option-invalid",
+        "git worktree-option-C",
+        "git worktree-option-c"
+      ]
+    },
+    {
+      "name": "git fetch",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] fetch [REMOTE [REFSPEC ...]]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git fetch-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git fetch-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery",
+            "egress"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git fetch fixture-remote",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git fetch",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-fetch-operands-valid",
+        "git-fetch-option-invalid",
+        "git fetch-option-C",
+        "git fetch-option-c"
+      ]
+    },
+    {
+      "name": "git pull",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] pull [--ff-only] [REMOTE [REFSPEC]]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git pull-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git pull-option-c",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "--ff-only"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git pull-option-ffonly",
+          "scope": "subcommand"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only] [REMOTE [REFSPEC]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery",
+            "egress"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git pull --ff-only fixture-remote main",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git pull",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-pull-operands-valid",
+        "git-pull-option-invalid",
+        "git pull-option-C",
+        "git pull-option-c",
+        "git pull-option-ffonly"
+      ]
+    },
+    {
+      "name": "git push",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] push [REMOTE [REFSPEC ...]]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git push-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git push-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery",
+            "egress"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git push fixture-remote HEAD:main",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git push",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-push-operands-valid",
+        "git-push-option-invalid",
+        "git push-option-C",
+        "git push-option-c"
+      ]
+    },
+    {
+      "name": "git ls-remote",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] ls-remote [REMOTE [PATTERN ...]]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git ls-remote-option-C",
+          "scope": "global"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git ls-remote-option-c",
+          "scope": "global"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [PATTERN ...]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "network-query",
+          "requires": [
+            "read",
+            "egress"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git ls-remote fixture-remote",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git ls-remote",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-ls-remote-operands-valid",
+        "git-ls-remote-option-invalid",
+        "git ls-remote-option-C",
+        "git ls-remote-option-c"
+      ]
+    },
+    {
+      "name": "git",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] SUBCOMMAND ARGS ...",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git-option-C"
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git-option-c"
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] SUBCOMMAND ARGS ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "bound-child-effect-set"
+          ],
+          "mode": "selected-subcommand"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git status --porcelain=v1",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Only catalogued git subcommand forms bind; each shares existing Git owner. stash list/worktree list resolved before mutation form. Native git errors never fallback.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "tests": [
+          "lycaon/internal/tools/native/git_operations_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+      },
+      "unsupported": {
+        "argv": [
+          "git",
+          "--not-a-version-1-option"
+        ],
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "git-operands-valid",
+        "git-option-invalid",
+        "git-option-C",
+        "git-option-c"
+      ]
+    }
+  ]
+}

@@ -1076,10 +1076,14 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - internal/commandsurface/language_catalog.go
+      - internal/commandsurface/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/commandsurface/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
@@ -1089,9 +1093,13 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - internal/commandsurface/language_catalog.go
+      - internal/commandsurface/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/commandsurface/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
 
