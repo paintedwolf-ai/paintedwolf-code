@@ -180,3 +180,14 @@ class InstalledOnboardingTests(unittest.TestCase):
             onboarding.controls(oversized, API, ready=ready)
         with self.assertRaisesRegex(ValueError, 'traversal bound'):
             onboarding.controls(oversized, API, ready=lambda: None)
+
+    def test_inventory_bound_retains_only_structured_counts_and_remains_unverified(self):
+        error = onboarding._InventoryBound(4097, 4, 0)
+        app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=lambda: False)
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=API), patch.object(onboarding, 'form', side_effect=error):
+            with self.assertRaises(CaseUnavailable):
+                onboarding.onboard(app)
+        bound = app.observations['native_accessibility_error']['bound']
+        self.assertEqual(bound, {'visited': 4097, 'depth': 4, 'child_count': 0,
+                                 'max_visited': 4096, 'max_depth': 64, 'max_children': 1024})
