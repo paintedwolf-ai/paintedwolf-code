@@ -1,6 +1,5 @@
 //! The executable reads only fixed desktop preference keys; it accepts no requests.
 use desktop_settings_observer::{Frame, Setting, Status, NAMESPACES};
-use gio::prelude::*;
 use glib::{ToVariant, Variant, VariantTy};
 use std::{
     cell::{Cell, RefCell},
@@ -17,21 +16,37 @@ const PATH: &str = "/org/freedesktop/portal/desktop";
 const INTERFACE: &str = "org.freedesktop.portal.Settings";
 const TIMEOUT: Duration = Duration::from_millis(1500);
 
+// gio 0.18 exposes the stable GDBus error domain and codes through its FFI.
+#[derive(Clone, Copy)]
+struct DbCode(i32);
+impl glib::error::ErrorDomain for DbCode {
+    fn domain() -> glib::Quark {
+        unsafe { glib::translate::from_glib(gio::ffi::g_dbus_error_quark()) }
+    }
+    fn code(self) -> i32 {
+        self.0
+    }
+    fn from(code: i32) -> Option<Self> {
+        Some(Self(code))
+    }
+}
 fn status(error: &glib::Error) -> Status {
-    if error.matches(gio::DBusError::AccessDenied)
-        || error.matches(gio::DBusError::AuthFailed)
+    if error.matches(DbCode(gio::ffi::G_DBUS_ERROR_ACCESS_DENIED))
+        || error.matches(DbCode(gio::ffi::G_DBUS_ERROR_AUTH_FAILED))
         || error.matches(gio::IOErrorEnum::PermissionDenied)
     {
         Status::Denied
-    } else if error.matches(gio::DBusError::ServiceUnknown)
-        || error.matches(gio::DBusError::NameHasNoOwner)
-        || error.matches(gio::DBusError::UnknownInterface)
-        || error.matches(gio::DBusError::UnknownMethod)
+    } else if error.matches(DbCode(gio::ffi::G_DBUS_ERROR_SERVICE_UNKNOWN))
+        || error.matches(DbCode(gio::ffi::G_DBUS_ERROR_NAME_HAS_NO_OWNER))
+        || error.matches(DbCode(gio::ffi::G_DBUS_ERROR_UNKNOWN_INTERFACE))
+        || error.matches(DbCode(gio::ffi::G_DBUS_ERROR_UNKNOWN_METHOD))
     {
         Status::Missing
-    } else if error.matches(gio::DBusError::Disconnected) {
+    } else if error.matches(DbCode(gio::ffi::G_DBUS_ERROR_DISCONNECTED)) {
         Status::Disconnected
-    } else if error.matches(gio::DBusError::NoReply) || error.matches(gio::IOErrorEnum::TimedOut) {
+    } else if error.matches(DbCode(gio::ffi::G_DBUS_ERROR_NO_REPLY))
+        || error.matches(gio::IOErrorEnum::TimedOut)
+    {
         Status::TimedOut
     } else {
         Status::Failed
@@ -278,20 +293,23 @@ mod tests {
     fn typed_denial_cannot_become_missing() {
         assert_eq!(
             status(&glib::Error::new(
-                gio::DBusError::AccessDenied,
+                DbCode(gio::ffi::G_DBUS_ERROR_ACCESS_DENIED),
                 "diagnostic"
             )),
             Status::Denied
         );
         assert_eq!(
             status(&glib::Error::new(
-                gio::DBusError::ServiceUnknown,
+                DbCode(gio::ffi::G_DBUS_ERROR_SERVICE_UNKNOWN),
                 "same diagnostic"
             )),
             Status::Missing
         );
         assert_eq!(
-            status(&glib::Error::new(gio::DBusError::Failed, "same diagnostic")),
+            status(&glib::Error::new(
+                DbCode(gio::ffi::G_DBUS_ERROR_FAILED),
+                "same diagnostic"
+            )),
             Status::Failed
         );
     }
