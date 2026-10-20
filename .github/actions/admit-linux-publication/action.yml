@@ -13,6 +13,10 @@ inputs:
   publication_files:
     description: Actual final files selected for the impending publication
     required: true
+  signing:
+    description: Prepare feed signing dependencies for immutable document publication
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -21,6 +25,7 @@ runs:
     - uses: ./.linux-publication-controller/.github/actions/setup-linux-publication
       with:
         controller_root: ${{ inputs.controller_root }}
+        signing: ${{ inputs.signing }}
     - id: admit-final-linux
       name: Reevaluate the installed campaign and imminent publication bytes
       shell: bash

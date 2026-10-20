@@ -1,5 +1,6 @@
 """Delivery staging preserves complete admission and immutable setup identities."""
 import json
+from contextlib import nullcontext
 from pathlib import Path
 import tempfile
 import unittest
@@ -36,8 +37,8 @@ class DeliveryTransportTests(unittest.TestCase):
             selected = Mock(root=root)
             selected.authorize.return_value = ({"repositories": {"generations": [{"manifest": {}}]}}, {"verified_setups": [setup]})
             backend = Mock()
-            backend.put.side_effect = lambda *a: (directory / "setup.deb").write_bytes(b"changed")
-            with patch("scripts.linux_release.publication.immutable.digest", return_value="a"), self.assertRaisesRegex(ValueError, "changed"):
+            backend.put.side_effect = lambda *a, **k: (directory / "setup.deb").write_bytes(b"changed")
+            with patch("scripts.linux_release.publication.immutable.digest", return_value="a"), patch("scripts.linux_release.publication.immutable.captured_setup", return_value=nullcontext(directory)), self.assertRaisesRegex(ValueError, "changed"):
                 publish_setups(selected, backend=backend)
             self.assertEqual(backend.put.call_count, 1)
 

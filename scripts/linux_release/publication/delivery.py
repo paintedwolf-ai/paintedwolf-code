@@ -57,7 +57,7 @@ def repository_facts(selected, inputs, report, backend):
             if {key: setup_fact[key] for key in ("sha256", "bytes")} != {key: checked["package"][key] for key in ("sha256", "bytes")}:
                 raise ValueError("repository setup identity changed after independent admission")
             backend.verify_public(setup_key, setup, expected_identity={key: setup_fact[key] for key in ("sha256", "bytes")})
-        key_fact = artifact(public, base + "/" + public.name, "application/pgp-keys")
+        key_fact = artifact(public, base + "/" + public.name, "text/plain")
         backend.verify_public("generations/" + generation + "/" + public.name, public,
                               expected_identity={key: key_fact[key] for key in ("sha256", "bytes")})
         fields = ("family", "architecture", "channel", "generation", "inventory_sha256",

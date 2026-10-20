@@ -32,3 +32,25 @@ class DocumentRehearsalTests(unittest.TestCase):
                           {"rehearsal": 1, "storage_prefix": "release-system-tests/fixture"}):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError):
                 ImmutableOrigin(**arguments)
+
+    def test_immutable_writer_freezes_only_independently_admitted_bytes(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from scripts.linux_release.publication import immutable
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "document.json"
+            source.write_bytes(b"admitted")
+            expected = {"sha256": hashlib.sha256(b"admitted").hexdigest(), "bytes": 8}
+            backend = ImmutableOrigin(rehearsal=True, storage_prefix="release-system-tests/fixture", origin="https://test.invalid")
+            def write(arguments, **kwargs):
+                captured = Path(arguments[arguments.index("--file") + 1])
+                self.assertNotEqual(captured, source)
+                source.write_bytes(b"transient wrong input")
+                self.assertEqual(captured.read_bytes(), b"admitted")
+            with patch.object(immutable.subprocess, "run", side_effect=write) as transport:
+                backend.put("releases/v1.2.3/distribution.v1.json", source, "application/json", expected_identity=expected)
+                self.assertEqual(transport.call_count, 1)
+            with patch.object(immutable.subprocess, "run") as transport, self.assertRaises(ValueError):
+                backend.put("releases/v1.2.3/distribution.v1.json", source, "application/json", expected_identity=expected)
+            transport.assert_not_called()

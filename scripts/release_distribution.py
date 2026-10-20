@@ -190,13 +190,14 @@ def activate(path: Path, output: Path, storage_prefix: str = "") -> None:
 
 
 def validate_website_receipt(receipt: dict, expected: dict) -> None:
-    fields = {"schema_version", "channel", "version", "manifest_sha256", "withdrawn_version"}
     distribution = "distribution_sha256" in expected
-    if distribution:
-        fields.add("distribution_sha256")
-    if set(receipt) != fields or type(receipt.get("schema_version")) is not int or receipt["schema_version"] != (2 if distribution else 1):
+    version = receipt.get("schema_version")
+    if type(version) is not int or version not in (1, 2) or distribution and version != 2:
         raise ValueError("website release receipt has an unsupported shape")
-    if receipt != {"schema_version": 2 if distribution else 1, **expected}:
+    wanted = {"schema_version": version, **expected}
+    if version == 2 and not distribution:
+        wanted["distribution_sha256"] = None
+    if receipt != wanted:
         raise ValueError("website has not published the requested distribution state")
 
 
@@ -259,7 +260,7 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                 if allow_newer and receipt.get("version") is not None and compare(parse(receipt["version"]), parse(expected["version"])) > 0:
                     if expected["channel"] != "preview" or receipt.get("channel") != "preview" or not re.fullmatch(r"[a-f0-9]{64}", receipt.get("manifest_sha256", "")):
                         raise ValueError("invalid newer Preview receipt")
-                    accepted = {key: receipt[key] for key in expected}
+                    accepted = {key: receipt.get(key) for key in expected}
                 validate_website_receipt(receipt, accepted)
                 no_store(response.headers)
             # Preview builds are offered only on the unlisted preview page.

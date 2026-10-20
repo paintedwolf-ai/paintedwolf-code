@@ -21,6 +21,7 @@ class DocumentPipelineTests(unittest.TestCase):
         final = {'format_version': 1, 'source_commit': source['source_commit'], 'artifacts': [
             {'id': 'app.deb', 'source_commit': source['source_commit'], 'installation': 'deb', 'architecture': 'amd64',
              'identity': {'kind': 'file', 'sha256': hashlib.sha256(raw).hexdigest()}}]}
+        selected.source = source
         selected.authorize.return_value = ({'artifacts': final}, {'accepted': True})
         (released.root / 'catalog.json').write_text(json.dumps({'schema_version': 2, 'platforms': [{
             'updater_key': 'linux-x86_64', 'publication': 'public' if public else 'candidate',
@@ -42,7 +43,7 @@ class DocumentPipelineTests(unittest.TestCase):
             name = 'painted-wolf-code_v1.2.3_linux-x86_64.deb'
             self.assertEqual(types, {name: 'application/vnd.debian.binary-package'})
             self.assertEqual((root / 'public' / name).read_bytes(), (selected.root / 'packages/app.deb').read_bytes())
-            selected.authorize.assert_called_once()
+            self.assertEqual(selected.authorize.call_count, 2)
 
     def test_candidate_linux_cannot_be_promoted_by_an_installed_campaign(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -72,7 +73,7 @@ class DocumentPipelineTests(unittest.TestCase):
                     patch.object(owner, 'retain_campaign', return_value=selected) as retain, \
                     patch.object(owner, 'retain_release', return_value=released), \
                     patch.object(owner, 'package_files', return_value=({}, {'linux-x86_64': {'publication': 'public'}})), \
-                    patch.object(owner, 'prepare', return_value={'publication': 'nonrelease'}) as prepare:
+                    patch.object(owner, 'prepare', side_effect=lambda *args, **kwargs: (args[1].mkdir(), {'publication': 'nonrelease'})[1]) as prepare:
                 owner.produce(None, 'owner/repo', producer, checkout, source['source_commit'], 2, 3, 4, root / 'output',
                               catalog={}, signing_generation=3, package_signing_generation=7, key_fingerprint='e' * 40,
                               repository_base_url='https://example.invalid/linux/repositories')
@@ -83,3 +84,31 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertEqual(request['nix']['cache'], {'enabled': False})
             self.assertEqual(request['aur'], {'enabled': False})
             self.assertFalse(json.loads((root / 'output/preparation.json').read_text())['published'])
+
+    def test_native_collection_keeps_bare_digest_sidecars_and_no_updater(self):
+        from scripts.linux_release.publication.native_artifacts import collect
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected, released, source = self.fixture(root)
+            row = {'publication': 'public', 'package_extensions': ['deb'], 'updater_extension': None}
+            result = collect(selected, {'linux-x86_64': row}, root / 'collected')
+            name = result[0]['file']
+            self.assertEqual((root / 'collected' / (name + '.sha256')).read_text(), result[0]['sha256'] + '\n')
+            self.assertEqual(len(list((root / 'collected').iterdir())), 2)
+            row['updater_extension'] = 'tar.gz'
+            with self.assertRaisesRegex(ValueError, 'in-app updater'):
+                collect(selected, {'linux-x86_64': row}, root / 'refused')
+            self.assertFalse((root / 'refused').exists())
+
+    def test_final_fresh_admission_failure_removes_only_owned_collection(self):
+        from scripts.linux_release.publication.native_artifacts import collect
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected, released, source = self.fixture(root)
+            admitted = selected.authorize.return_value
+            selected.authorize.side_effect = [admitted, ValueError('campaign changed')]
+            with self.assertRaisesRegex(ValueError, 'campaign changed'):
+                collect(selected, {'linux-x86_64': {'publication': 'public', 'package_extensions': ['deb'],
+                                                 'updater_extension': None}}, root / 'collected')
+            self.assertFalse((root / 'collected').exists())
+            self.assertTrue((selected.root / 'packages/app.deb').is_file())

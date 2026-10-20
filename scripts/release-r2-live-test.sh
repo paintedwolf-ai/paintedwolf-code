@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 rehearsal_module=
 case "${1:-}" in
+  --collect-linux-publication) rehearsal_module=scripts.linux_release.publication.native_artifacts ;;
   --prepare-distribution-document) rehearsal_module=scripts.linux_release.publication.document_pipeline ;;
   --local-distribution-document) rehearsal_module=scripts.linux_release.publication.rehearsal ;;
   --retain-release-inputs) rehearsal_module=scripts.linux_release.publication.release_producer ;;

@@ -1,9 +1,10 @@
 """Website acknowledgement binds signed distribution metadata and every package link."""
 import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from scripts.linux_release.publication import website
 from scripts.release_distribution_contract.document_schema import canonical
 ROOT = Path(__file__).resolve().parents[4]
@@ -48,3 +49,21 @@ class WebsiteDistributionTests(unittest.TestCase):
         receipt["distribution_sha256"] = "a" * 64
         with self.assertRaisesRegex(ValueError, "withdrawn"):
             website.public_downloads(receipt)
+
+    def test_incomplete_newer_preview_receipt_refuses_without_an_unhandled_key_error(self):
+        _, _, expected = self.fixture()
+        expected["channel"] = "preview"
+        receipt = {"schema_version": 1, "channel": "preview", "version": "1.2.4", "manifest_sha256": "b" * 64, "withdrawn_version": None}
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(receipt).encode()
+        with patch.object(release.urllib.request, "urlopen", return_value=response), self.assertRaisesRegex(ValueError, "publication was not verified"):
+            release.wait_for_website("https://website.invalid", expected, seconds=0, allow_newer=True)
+
+    def test_legacy_release_accepts_explicit_schema2_null_without_claiming_a_document(self):
+        _, _, expected = self.fixture()
+        expected.pop('distribution_sha256')
+        release.validate_website_receipt({'schema_version': 1, **expected}, expected)
+        release.validate_website_receipt({'schema_version': 2, **expected, 'distribution_sha256': None}, expected)
+        with self.assertRaises(ValueError):
+            release.validate_website_receipt({'schema_version': 2, **expected, 'distribution_sha256': 'b' * 64}, expected)

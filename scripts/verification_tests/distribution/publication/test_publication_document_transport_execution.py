@@ -38,7 +38,7 @@ class DocumentTransportTests(unittest.TestCase):
                              ["releases/v1.2.3/distribution.v1.json", "releases/v1.2.3/distribution.v1.json.sig"])
             self.assertEqual(backend.verify.call_count, 2)
             self.assertEqual(result["distribution_sha256"], hashlib.sha256((root / "distribution.v1.json").read_bytes()).hexdigest())
-            def mutate(*args):
+            def mutate(*args, **kwargs):
                 (root / "distribution.v1.json").write_bytes(b"changed")
             backend.put.side_effect = mutate
             with self.assertRaisesRegex(ValueError, "freshly admitted"):
@@ -49,16 +49,17 @@ class DocumentTransportTests(unittest.TestCase):
             root = Path(temporary)
             _, construct, _, arguments = self.fixture(root)
             payload = owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={},
-                                         bad_distribution_sha256="b" * 64, bad_version="1.2.4")
+                                         bad_distribution_sha256="b" * 64, bad_version="1.2.4", backend=Mock())
             self.assertEqual(payload["distribution_sha256"], hashlib.sha256((root / "distribution.v1.json").read_bytes()).hexdigest())
             self.assertEqual(payload["bad_distribution_sha256"], "b" * 64)
+            self.assertEqual(set(payload), {"channel", "bad_version", "last_good_version", "manifest_sha256", "distribution_sha256", "bad_distribution_sha256"})
             self.assertEqual(payload["manifest_sha256"], "a" * 64)
-            self.assertEqual(construct.call_count, 1)
+            self.assertEqual(construct.call_count, 2)
             with self.assertRaisesRegex(ValueError, "updater digest"):
-                owner.notification(*arguments, authorize=Mock(), manifest_sha256="c" * 64, registry={})
+                owner.notification(*arguments, authorize=Mock(), manifest_sha256="c" * 64, registry={}, backend=Mock())
             with self.assertRaisesRegex(ValueError, "bad distribution"):
                 owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={},
-                                   bad_distribution_sha256="invalid")
+                                   bad_distribution_sha256="invalid", backend=Mock())
 
     def test_failed_crypto_cannot_upload_or_dispatch(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -69,3 +70,14 @@ class DocumentTransportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "signature refused"):
                 owner.publish(*arguments, authorize=Mock(), backend=backend, registry={})
             backend.put.assert_not_called()
+
+    def test_local_admission_alone_cannot_create_a_public_notification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, _, _, arguments = self.fixture(root)
+            with self.assertRaisesRegex(ValueError, "public byte verification"):
+                owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={})
+            backend = Mock()
+            backend.verify.side_effect = ValueError("public object absent")
+            with self.assertRaisesRegex(ValueError, "public object absent"):
+                owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={}, backend=backend)

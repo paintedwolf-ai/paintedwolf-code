@@ -13,7 +13,7 @@ from scripts.release_distribution_contract.document_signing import prepare
 from scripts.release_storage.s3 import request
 from ..r2_objects import rehearsal_environment
 from .document_publication import notification, publish
-from .immutable import ImmutableOrigin
+from .immutable import ImmutableOrigin, identity as file_identity
 
 
 def objects(prefix):
@@ -97,7 +97,7 @@ def run(output):
             controls.append("identical-immutable-replay")
             altered = root / "altered.json"; altered.write_bytes(b"changed immutable document")
             try:
-                backend.put("releases/v0.0.900001/distribution.v1.json", altered, "application/json")
+                backend.put("releases/v0.0.900001/distribution.v1.json", altered, "application/json", expected_identity=file_identity(altered))
             except subprocess.CalledProcessError:
                 controls.append("different-immutable-bytes-refused")
             else:
@@ -122,7 +122,7 @@ def run(output):
             else:
                 raise ValueError("document rehearsal accepted stale authority")
             payload = notification(*arguments, authorize=authorize, registry=registry,
-                manifest_sha256=hashlib.sha256(updater.read_bytes()).hexdigest(), bad_distribution_sha256="d" * 64, bad_version="0.0.900002")
+                manifest_sha256=hashlib.sha256(updater.read_bytes()).hexdigest(), bad_distribution_sha256="d" * 64, bad_version="0.0.900002", backend=backend)
             if payload["distribution_sha256"] != identity["distribution_sha256"] or payload["bad_distribution_sha256"] != "d" * 64:
                 raise ValueError("document notification lost independent selected digests")
             controls.append("release-and-halt-independent-digest-payloads")
