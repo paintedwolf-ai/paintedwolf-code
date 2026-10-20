@@ -210,6 +210,8 @@ pub fn run() {
                 ..
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
+                #[cfg(target_os = "linux")]
+                windows::linux_desktop_settings::portal::shutdown(app);
                 notifications::shutdown(app);
                 if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
                     state.shutdown(app);
