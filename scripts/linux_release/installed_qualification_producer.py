@@ -13,7 +13,7 @@ import tempfile
 
 from .installed_artifact_bundle import download, retain_tree
 from .installed_execution import current_tree, read, registry
-from .installed_campaign import validate_plan
+from .installed_campaign import validate_plan, verify_execution_receipt
 from .installed_provenance import controller_context, select_control, select_plan, verify_producer
 from .installed_results import admit
 from .support_matrix import CATALOG
@@ -111,6 +111,8 @@ def retain_verified(args, producer, tree, catalog, drivers, preparation, fresh):
     plan = validate_inputs(fresh, preparation["selections"], preparation, tree)
     if read(args.execution / "plan.json") != plan or (args.execution / "driver-registry.json").read_bytes() != drivers:
         raise ValueError("executed campaign changed the selected plan or fixed driver registry")
+    for target in plan["targets"]:
+        verify_execution_receipt(args.execution / target["id"],target,preparation["source_commit"],tree)
     final = read(fresh / "controls/final-artifacts.json")
     campaign = read(args.execution / "campaign.json")
     report = admit(catalog, campaign, final, preparation["source_commit"], args.execution / "evidence")
@@ -118,7 +120,7 @@ def retain_verified(args, producer, tree, catalog, drivers, preparation, fresh):
         raise ValueError("only a complete freshly admitted actual installed campaign may be retained")
     for target in plan["targets"]:
         directory = args.execution / target["id"]
-        for name in ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/driver-registry.json"):
+        for name in ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/driver-registry.json", "leaf/execution.json", "execution-request.json"):
             path = directory / name
             if not path.is_file() or path.is_symlink():
                 raise ValueError("raw qualification omitted a selected guest execution receipt")
