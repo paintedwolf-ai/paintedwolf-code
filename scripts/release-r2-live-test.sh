@@ -3,6 +3,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "${1:-}" in
+  --prepare-linux-qualification)
+    shift
+    cd "${ROOT}"
+    exec python3 -m scripts.linux_release.installed_qualification_producer prepare "$@"
+    ;;
+  --retain-linux-qualification)
+    shift
+    cd "${ROOT}"
+    exec python3 -m scripts.linux_release.installed_qualification_producer retain "$@"
+    ;;
+esac
+
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)
