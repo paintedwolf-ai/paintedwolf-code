@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"slices"
 	"syscall"
 	"testing"
 
@@ -28,6 +29,12 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 	}
 	defer other.Close()
 	child := exec.Command(path, "30")
+	child.Env = []string{"SYNTHETIC_FIXTURE=value"}
+	cwd, err := os.Open(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cwd.Close()
 	if err := child.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +48,16 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 	// adapter independently confirms SSTOP rather than trusting that projection.
 	if waited, err := syscall.Wait4(child.Process.Pid, &status, syscall.WUNTRACED, nil); err != nil || waited != child.Process.Pid || status.Exited() || status.Signaled() {
 		t.Fatalf("fixture did not stop: status=%v err=%v", status, err)
+	}
+	observation, err := osprocess.ObserveStoppedLaunch(t.Context(), child.Process.Pid, held, cwd, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observation.ExecutableMatches || !observation.DirectoryMatches || !slices.Equal(observation.Arguments, child.Args) || !slices.Equal(observation.Environment, child.Env) {
+		t.Fatal("stopped launch facts did not match actual fixture image/cwd/argv/environment")
+	}
+	if observation.Security.RealUID != uint32(os.Getuid()) || observation.Security.EffectiveUID != uint32(os.Geteuid()) {
+		t.Fatal("stopped credentials did not match unprivileged fixture")
 	}
 	matched, err := osprocess.MatchStoppedExecutable(child.Process.Pid, held)
 	if err != nil || !matched {
