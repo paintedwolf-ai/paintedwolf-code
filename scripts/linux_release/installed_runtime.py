@@ -143,7 +143,7 @@ def bind(final: dict, source: str, artifact_id: str, file_root: Path, install_ro
     images = manifest(root, native[0])
     if identity["kind"] == "file" and any(str(Path(path).relative_to("/")) not in entries for path in images["images"]):
         raise ValueError("installed manifest names an executable outside the selected final package")
-    launcher = Path("/usr/bin/painted-wolf-code") if identity["kind"] == "file" else output / "bin/painted-wolf-code"
+    launcher = root / "bin/painted-wolf-code" if identity["kind"] == "file" else output / "bin/painted-wolf-code"
     if identity["kind"] == "file":
         if str(launcher) not in images["images"]:
             raise ValueError("final package manifest omits its public application launcher")

@@ -96,6 +96,28 @@ class InstalledRuntimeTests(unittest.TestCase):
                 "scripts.linux_release.installed_runtime.subprocess.run", side_effect=run):
             self.assertEqual(nix_command(Path("/explicit/nix"), "path-info", "/nix/store/output"), b"{}")
 
+    def test_native_launcher_is_the_exact_sealed_desktop_entry_image(self):
+        root = Path("/opt/painted-wolf-code")
+        launcher = root / "bin/painted-wolf-code"
+        source = "a" * 40
+        artifact = {"id": "native-rpm-amd64.rpm", "installation": "rpm", "architecture": "amd64",
+                    "source_commit": source, "identity": {"kind": "file", "sha256": "b" * 64}}
+        final = {"format_version": 1, "source_commit": source, "artifacts": [artifact]}
+        entries = {str((root / "bin" / role).relative_to("/")): {} for role in ROLES}
+        entries[str((root / "manifest.json").relative_to("/"))] = {}
+        images = {str(launcher): {"sha256": "sealed", "bytes": 64}}
+        with patch("scripts.linux_release.installed_runtime.platform.system", return_value="Linux"), patch(
+                "scripts.linux_release.installed_runtime.platform.machine", return_value="x86_64"), patch.object(
+                Path, "resolve", lambda path, **kwargs: path), patch(
+                "scripts.linux_release.installed_runtime.inspect", return_value=entries), patch(
+                "scripts.linux_release.installed_runtime.verify", return_value={"status": "passed"}), patch(
+                "scripts.linux_release.installed_runtime.manifest", return_value={"version": "1.0.2", "images": images}):
+            result = bind(final, source, artifact["id"], Path("/files"), root)
+            self.assertEqual(result["launcher"], {"path": str(launcher), **images[str(launcher)]})
+            images.clear()
+            with self.assertRaisesRegex(ValueError, "public application launcher"):
+                bind(final, source, artifact["id"], Path("/files"), root)
+
     def test_nix_output_hash_and_native_architecture_are_checked_before_cases(self):
         output = "/nix/store/" + "0" * 32 + "-application"
         source = "a" * 40
