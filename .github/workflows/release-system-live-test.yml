@@ -67,8 +67,10 @@ jobs:
         env:
           MODE: ${{ inputs.mode || 'updater' }}
           RECEIPT: ${{ runner.temp }}/native-repositories.json
-          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
-          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
+          RELEASE_TEST_R2_ENDPOINT_URL: ${{ vars.RELEASE_TEST_R2_ENDPOINT_URL }}
+          RELEASE_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_TEST_R2_ACCESS_KEY_ID }}
+          RELEASE_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY }}
+          RELEASE_TEST_R2_SESSION_TOKEN: ${{ secrets.RELEASE_TEST_R2_SESSION_TOKEN }}
           RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
         run: |
@@ -98,7 +100,7 @@ jobs:
     steps:
       - name: Prepare the isolated native Arch toolchain
         run: |
-          pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo unzip
+          pacman -Syu --noconfirm --needed base-devel python git openssl gnupg sudo unzip aws-cli-v2
           curl --fail --location --retry 3 --output /tmp/yay.tar.gz \
             https://github.com/Jguer/yay/releases/download/v13.0.1/yay_13.0.1_x86_64.tar.gz
           printf '%s\n' '1fdfcb5f7f387bc858d3a5754bdf4e4575bfbddac9560535a716d0ed7189c057  /tmp/yay.tar.gz' | sha256sum --check
@@ -132,12 +134,14 @@ jobs:
 
       - name: Exercise isolated signed pacman and AUR delivery
         env:
-          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
-          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
+          RELEASE_TEST_R2_ENDPOINT_URL: ${{ vars.RELEASE_TEST_R2_ENDPOINT_URL }}
+          RELEASE_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_TEST_R2_ACCESS_KEY_ID }}
+          RELEASE_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY }}
+          RELEASE_TEST_R2_SESSION_TOKEN: ${{ secrets.RELEASE_TEST_R2_SESSION_TOKEN }}
           RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
         run: |
-          sudo -H --preserve-env=PATH,RELEASE_TEST_R2_ACCOUNT_ID,RELEASE_TEST_R2_API_TOKEN,RELEASE_TEST_R2_BUCKET,RELEASE_TEST_DOWNLOAD_BASE_URL \
+          sudo -H --preserve-env=PATH,RELEASE_TEST_R2_ENDPOINT_URL,RELEASE_TEST_R2_ACCESS_KEY_ID,RELEASE_TEST_R2_SECRET_ACCESS_KEY,RELEASE_TEST_R2_SESSION_TOKEN,RELEASE_TEST_R2_BUCKET,RELEASE_TEST_DOWNLOAD_BASE_URL \
             -u pw-repository ./task release:live-test -- --local-pacman-repositories --r2 --receipt /tmp/pacman-repositories.json
 
       - name: Retain the pacman repository rehearsal receipt

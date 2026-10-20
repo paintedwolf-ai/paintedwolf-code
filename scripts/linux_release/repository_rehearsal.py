@@ -87,6 +87,8 @@ def rehearse(work: Path, origin: str, certificate: Path, r2_origin: str | None =
     retained = {}
     remote_active = {}
     storage_prefix = "release-system-tests/native-repositories-" + uuid.uuid4().hex
+    if r2_origin is not None:
+        print("Native repository rehearsal prefix: " + storage_prefix, flush=True)
     for version in ["0.0.1", "0.0.2"]:
         fixture_work = work / version
         fixture_work.mkdir()

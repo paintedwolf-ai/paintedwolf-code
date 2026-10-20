@@ -27,6 +27,17 @@ class BucketScopedRepositoryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     r2_objects.rehearsal_environment()
 
+    def test_private_configuration_is_loaded_by_the_shared_owner(self):
+        module = types.ModuleType("scripts.release_storage.rehearsal")
+        module.configuration = Mock(return_value={"fixture": True})
+        module.environment = Mock(return_value=self.environment())
+        with patch.dict(os.environ, {"HOME": "/unused"}, clear=True), \
+                patch.dict(sys.modules, {"scripts.release_storage.rehearsal": module}):
+            self.assertEqual(r2_objects.rehearsal_environment(), "https://test.example.invalid")
+            module.configuration.assert_called_once()
+            module.environment.assert_called_once()
+            self.assertEqual(os.environ["RELEASE_R2_TRANSPORT"], "s3")
+
     def test_all_object_writes_and_cleanup_select_the_s3_owner(self):
         key = "release-system-tests/fixture/object"
         with patch.dict(os.environ, self.environment(), clear=True), patch.object(r2_objects.subprocess, "run") as run:

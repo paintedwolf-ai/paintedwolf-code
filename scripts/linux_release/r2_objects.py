@@ -15,24 +15,20 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def rehearsal_environment() -> str:
-    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
-        required = ["R2_S3_ENDPOINT", "R2_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
-                    "RELEASE_TEST_DOWNLOAD_BASE_URL"]
-        names = {}
-    else:
-        names = {"CLOUDFLARE_ACCOUNT_ID": "RELEASE_TEST_R2_ACCOUNT_ID",
-             "CLOUDFLARE_API_TOKEN": "RELEASE_TEST_R2_API_TOKEN",
-                 "R2_BUCKET": "RELEASE_TEST_R2_BUCKET"}
-        required = [*names.values(), "RELEASE_TEST_DOWNLOAD_BASE_URL"]
+    if os.environ.get("RELEASE_R2_TRANSPORT") != "s3":
+        from scripts.release_storage.rehearsal import configuration, environment
+        configured = environment(configuration(os.environ), os.environ)
+        os.environ.clear()
+        os.environ.update(configured)
+    required = ["R2_S3_ENDPOINT", "R2_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                "RELEASE_TEST_DOWNLOAD_BASE_URL"]
     if any(not os.environ.get(name) for name in required):
-        raise ValueError("explicit RELEASE_TEST_R2_* credentials and test download origin are required")
+        raise ValueError("explicit bucket-scoped S3 credentials and test download origin are required")
     origin = os.environ["RELEASE_TEST_DOWNLOAD_BASE_URL"].rstrip("/")
     parsed = urllib.parse.urlsplit(origin)
     if (parsed.scheme != "https" or not parsed.netloc or parsed.path or parsed.query
             or parsed.fragment or parsed.username):
         raise ValueError("test download base URL must be an HTTPS origin")
-    for destination, source in names.items():
-        os.environ[destination] = os.environ[source]
     return origin
 
 
