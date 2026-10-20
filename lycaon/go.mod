@@ -74,6 +74,7 @@ require (
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.60.1
+	mvdan.cc/sh/v3 v3.14.1
 	pgregory.net/rapid v1.3.0
 )
 
