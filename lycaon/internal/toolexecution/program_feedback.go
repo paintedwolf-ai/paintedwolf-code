@@ -105,7 +105,7 @@ func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract
 	if b.Invocation != inv || b.DefinitionDigest != operation.Definition().Digest() || b.ParentTool != "command" || b.ParentToolCallID != tc.Identity.ToolCallID || b.ParentReceiptID != p.Program.ParentReceiptID || b.LanguageVersion != p.Program.LanguageVersion || p.ParentTool != "command" || p.ParentToolCallID != tc.Identity.ToolCallID || p.ParentSessionID != inv.SessionID || p.Program.ID != inv.Identity.ProgramID || p.Program.CatalogDigest != inv.CatalogDigest {
 		return fmt.Errorf("program feedback provenance does not match actual command child")
 	}
-	if b.Source.Representation != toolcontract.UTF8SourceBytes || b.Source.SourceID == "" || b.Source.Revision == "" || len(b.Source.SHA256) != 64 || b.Source.EndByte < b.Source.StartByte || int64(inv.Span.EndByte) > b.Source.EndByte-b.Source.StartByte {
+	if b.Source.Representation != toolcontract.UTF8SourceBytes || b.Source.SourceID == "" || b.Source.Revision == "" || len(b.Source.SHA256) != 64 || b.Source.EndByte < b.Source.StartByte || int64(inv.Span.StartByte) < b.Source.StartByte || int64(inv.Span.EndByte) > b.Source.EndByte {
 		return fmt.Errorf("program feedback source does not match captured syntax unit")
 	}
 	if inv.SourceUnitID == p.RootSourceUnitID && b.Source.SHA256 != p.Program.SourceDigest {
