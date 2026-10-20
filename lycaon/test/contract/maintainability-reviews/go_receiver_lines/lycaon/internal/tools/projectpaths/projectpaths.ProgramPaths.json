@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/tools/projectpaths/projectpaths.ProgramPaths",
+  "kind": "runtime_service",
+  "workstream": "portable-command-paths",
+  "disposition": "retain",
+  "reason": "Retain one invocation path frame: frozen scope, initial/current directory identity, exact operand binding and the existing authority boundary must agree before bytes or effect coordinates are exposed. Command projection and bounded output already live in distinct files; splitting the frame into forwarding services would obscure the shared identity invariants. Retain the measured 419 lines without growth. Real filesystem identity, symlink/dot-dot, held cwd, native/process interchange and bounded partial-output fixtures support this decision. Native owners retain mutation publication and attribution.",
+  "reviewed_commit": "74035fbcee0c2799c11e7d95c78592e1e8a70326",
+  "ceiling": 419,
+  "boundaries": {
+    "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
+    "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
+    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "a77ec2ad77163bb115a316572f9e27942b9f8c76cfc40d091d51f5fce887b80f"
+  },
+  "reviewed_shape": "c6ae56a53ea33141a767083412111e8aa0cc5b8e4fdff86704fe52fdcbc20da8"
+}
