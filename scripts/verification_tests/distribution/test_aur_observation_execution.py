@@ -109,6 +109,7 @@ class RealLocalGitTests(unittest.TestCase):
             publishing = root / "publisher"
             publishing.mkdir(mode=0o700)
             publisher = FixturePublisher(publishing)
+            Path(publisher.origin).chmod(0o700)
             delivered = publisher.publish(selected, recipe, None)
             reader_root = root / "reader"
             with FixtureOrigin(reader_root, Path(publisher.origin)) as backend:
@@ -126,6 +127,7 @@ class RealLocalGitTests(unittest.TestCase):
             publishing = root / "publisher"
             publishing.mkdir(mode=0o700)
             publisher = FixturePublisher(publishing)
+            Path(publisher.origin).chmod(0o700)
             first = publisher.publish(selected, recipe, None)
             later = {**selected, "version": "1.0.1"}
             publisher.publish(later, recipe, first["commit"])
