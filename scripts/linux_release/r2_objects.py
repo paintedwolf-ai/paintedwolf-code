@@ -64,13 +64,22 @@ def tamper_fixture_object(key: str, source: Path, destination: Path):
     put(key, destination, True)
 
 
-def public_bytes(url: str, source: Path, mutable=False):
+def public_bytes(url: str, source: Path, mutable=False, *, expected_identity=None):
     local = hashlib.sha256()
     with source.open("rb") as stream:
         while chunk := stream.read(1 << 20):
             local.update(chunk)
     expected = local.hexdigest()
     size = source.stat().st_size
+    if expected_identity is not None:
+        if (not isinstance(expected_identity, dict) or set(expected_identity) != {"sha256", "bytes"}
+                or not isinstance(expected_identity["sha256"], str)
+                or not re.fullmatch("[a-f0-9]{64}", expected_identity["sha256"])
+                or type(expected_identity["bytes"]) is not int or expected_identity["bytes"] < 0):
+            raise ValueError("public repository verification requires a typed admitted byte identity")
+        expected, size = expected_identity["sha256"], expected_identity["bytes"]
+        if local.hexdigest() != expected or source.stat().st_size != size:
+            raise ValueError("local repository object differs from its independently admitted identity")
     last = None
     for attempt in range(12):
         try:
