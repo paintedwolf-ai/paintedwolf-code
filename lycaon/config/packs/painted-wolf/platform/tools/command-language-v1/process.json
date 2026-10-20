@@ -65,16 +65,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "jobs",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "jobs-operands-valid",
-        "jobs-option-invalid"
+        "jobs-rejection"
       ]
     },
     {
@@ -143,16 +143,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "wait",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "wait-operands-valid",
-        "wait-option-invalid"
+        "wait-rejection"
       ]
     },
     {
@@ -168,7 +168,11 @@
           ],
           "arity": 1,
           "value_role": "signal",
-          "fixture_id": "kill-option-s"
+          "fixture_id": "kill-option-s",
+          "consumption": "fixed",
+          "sample_values": [
+            "TERM"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. kill [-s SIGNAL|-SIGNAL] [--] JOB ...",
@@ -229,16 +233,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "kill",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "kill-operands-valid",
-        "kill-option-invalid",
+        "kill-rejection",
         "kill-option-s"
       ]
     },
@@ -307,16 +311,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "ps",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "ps-operands-valid",
-        "ps-option-invalid"
+        "ps-rejection"
       ]
     },
     {
@@ -332,7 +336,11 @@
           ],
           "arity": 1,
           "value_role": "endpoint",
-          "fixture_id": "lsof-option-i"
+          "fixture_id": "lsof-option-i",
+          "consumption": "fixed",
+          "sample_values": [
+            ":8080"
+          ]
         },
         {
           "spellings": [
@@ -340,7 +348,11 @@
           ],
           "arity": 1,
           "value_role": "state",
-          "fixture_id": "lsof-option-s"
+          "fixture_id": "lsof-option-s",
+          "consumption": "fixed",
+          "sample_values": [
+            "TCP:LISTEN"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. lsof [-i :PORT|-iTCP:PORT] [-sTCP:LISTEN]",
@@ -401,16 +413,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "lsof",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "lsof-operands-valid",
-        "lsof-option-invalid",
+        "lsof-rejection",
         "lsof-option-i",
         "lsof-option-s"
       ]
@@ -481,16 +493,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "external",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "external-operands-valid",
-        "external-option-invalid"
+        "external-rejection"
       ]
     }
   ]

@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cp-option-r-R"
+          "fixture_id": "cp-option-r-R",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -22,7 +24,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cp-option-f"
+          "fixture_id": "cp-option-f",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -30,7 +34,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cp-option-n"
+          "fixture_id": "cp-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -38,7 +44,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cp-option-p"
+          "fixture_id": "cp-option-p",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [-r|-R] [-f|-n] [-p] [--] SOURCE ... DEST",
@@ -103,16 +111,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "cp",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "cp-operands-valid",
-        "cp-option-invalid",
+        "cp-rejection",
         "cp-option-r-R",
         "cp-option-f",
         "cp-option-n",
@@ -132,7 +140,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "mv-option-f"
+          "fixture_id": "mv-option-f",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -140,7 +150,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "mv-option-n"
+          "fixture_id": "mv-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mv [-f|-n] [--] SOURCE ... DEST",
@@ -205,16 +217,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "mv",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "mv-operands-valid",
-        "mv-option-invalid",
+        "mv-rejection",
         "mv-option-f",
         "mv-option-n"
       ]
@@ -233,7 +245,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rm-option-r-R"
+          "fixture_id": "rm-option-r-R",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -241,7 +255,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rm-option-f"
+          "fixture_id": "rm-option-f",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rm [-r|-R] [-f] [--] PATH ...",
@@ -306,16 +322,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "rm",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "rm-operands-valid",
-        "rm-option-invalid",
+        "rm-rejection",
         "rm-option-r-R",
         "rm-option-f"
       ]
@@ -389,16 +405,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "rmdir",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "rmdir-operands-valid",
-        "rmdir-option-invalid"
+        "rmdir-rejection"
       ]
     },
     {
@@ -415,7 +431,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "mkdir-option-p-parents"
+          "fixture_id": "mkdir-option-p-parents",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -423,7 +441,11 @@
           ],
           "arity": 1,
           "value_role": "mode",
-          "fixture_id": "mkdir-option-m"
+          "fixture_id": "mkdir-option-m",
+          "consumption": "fixed",
+          "sample_values": [
+            "755"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mkdir [-p] [--] PATH ...",
@@ -488,16 +510,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "mkdir",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "mkdir-operands-valid",
-        "mkdir-option-invalid",
+        "mkdir-rejection",
         "mkdir-option-p-parents",
         "mkdir-option-m"
       ]
@@ -515,7 +537,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "touch-option-c"
+          "fixture_id": "touch-option-c",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -523,7 +547,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "touch-option-m"
+          "fixture_id": "touch-option-m",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -531,7 +557,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "touch-option-a"
+          "fixture_id": "touch-option-a",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. touch [--] PATH ...",
@@ -596,16 +624,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "touch",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "touch-operands-valid",
-        "touch-option-invalid",
+        "touch-rejection",
         "touch-option-c",
         "touch-option-m",
         "touch-option-a"
@@ -624,7 +652,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "mktemp-option-d"
+          "fixture_id": "mktemp-option-d",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -632,7 +662,11 @@
           ],
           "arity": 1,
           "value_role": "prefix",
-          "fixture_id": "mktemp-option-t"
+          "fixture_id": "mktemp-option-t",
+          "consumption": "fixed",
+          "sample_values": [
+            "tmp"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. mktemp [-d] [-t PREFIX] [TEMPLATE]",
@@ -697,16 +731,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "mktemp",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "mktemp-operands-valid",
-        "mktemp-option-invalid",
+        "mktemp-rejection",
         "mktemp-option-d",
         "mktemp-option-t"
       ]
@@ -725,7 +759,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tee-option-a-append"
+          "fixture_id": "tee-option-a-append",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tee [-a] [--] [PATH ...]",
@@ -790,16 +826,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "tee",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "tee-operands-valid",
-        "tee-option-invalid",
+        "tee-rejection",
         "tee-option-a-append"
       ]
     },
@@ -870,16 +906,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "chmod",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "chmod-operands-valid",
-        "chmod-option-invalid"
+        "chmod-rejection"
       ]
     },
     {
@@ -949,16 +985,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "chown",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "chown-operands-valid",
-        "chown-option-invalid"
+        "chown-rejection"
       ]
     },
     {
@@ -974,7 +1010,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "edit-option-path"
+          "fixture_id": "edit-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -982,7 +1022,11 @@
           ],
           "arity": 1,
           "value_role": "text",
-          "fixture_id": "edit-option-oldstring"
+          "fixture_id": "edit-option-oldstring",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         },
         {
           "spellings": [
@@ -990,7 +1034,11 @@
           ],
           "arity": 1,
           "value_role": "text",
-          "fixture_id": "edit-option-newstring"
+          "fixture_id": "edit-option-newstring",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         },
         {
           "spellings": [
@@ -998,7 +1046,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "edit-option-replaceall"
+          "fixture_id": "edit-option-replaceall",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
@@ -1063,16 +1113,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "edit",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "edit-operands-valid",
-        "edit-option-invalid",
+        "edit-rejection",
         "edit-option-path",
         "edit-option-oldstring",
         "edit-option-newstring",
@@ -1092,7 +1142,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "replace-lines-option-path"
+          "fixture_id": "replace-lines-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1100,7 +1154,11 @@
           ],
           "arity": 1,
           "value_role": "line",
-          "fixture_id": "replace-lines-option-start"
+          "fixture_id": "replace-lines-option-start",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -1108,7 +1166,11 @@
           ],
           "arity": 1,
           "value_role": "line",
-          "fixture_id": "replace-lines-option-end"
+          "fixture_id": "replace-lines-option-end",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -1116,7 +1178,11 @@
           ],
           "arity": 1,
           "value_role": "text",
-          "fixture_id": "replace-lines-option-content"
+          "fixture_id": "replace-lines-option-content",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. replace-lines --path PATH --start N --end N --content TEXT",
@@ -1181,16 +1247,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "replace-lines",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "replace-lines-operands-valid",
-        "replace-lines-option-invalid",
+        "replace-lines-rejection",
         "replace-lines-option-path",
         "replace-lines-option-start",
         "replace-lines-option-end",
@@ -1210,7 +1276,11 @@
           ],
           "arity": 1,
           "value_role": "pattern",
-          "fixture_id": "code-rewrite-option-pattern"
+          "fixture_id": "code-rewrite-option-pattern",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
         },
         {
           "spellings": [
@@ -1218,7 +1288,11 @@
           ],
           "arity": 1,
           "value_role": "text",
-          "fixture_id": "code-rewrite-option-rewrite"
+          "fixture_id": "code-rewrite-option-rewrite",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         },
         {
           "spellings": [
@@ -1226,7 +1300,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "code-rewrite-option-path"
+          "fixture_id": "code-rewrite-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1234,7 +1312,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "code-rewrite-option-recursive"
+          "fixture_id": "code-rewrite-option-recursive",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1242,7 +1322,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "code-rewrite-option-dryrun"
+          "fixture_id": "code-rewrite-option-dryrun",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
@@ -1313,16 +1395,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "code-rewrite",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "code-rewrite-operands-valid",
-        "code-rewrite-option-invalid",
+        "code-rewrite-rejection",
         "code-rewrite-option-pattern",
         "code-rewrite-option-rewrite",
         "code-rewrite-option-path",
@@ -1343,7 +1425,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "jq-edit-option-path"
+          "fixture_id": "jq-edit-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1351,7 +1437,11 @@
           ],
           "arity": 1,
           "value_role": "query",
-          "fixture_id": "jq-edit-option-query"
+          "fixture_id": "jq-edit-option-query",
+          "consumption": "fixed",
+          "sample_values": [
+            "."
+          ]
         },
         {
           "spellings": [
@@ -1359,7 +1449,11 @@
           ],
           "arity": 1,
           "value_role": "format",
-          "fixture_id": "jq-edit-option-format"
+          "fixture_id": "jq-edit-option-format",
+          "consumption": "fixed",
+          "sample_values": [
+            "json"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq-edit --path PATH --query QUERY [--format FORMAT]",
@@ -1424,16 +1518,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "jq-edit",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "jq-edit-operands-valid",
-        "jq-edit-option-invalid",
+        "jq-edit-rejection",
         "jq-edit-option-path",
         "jq-edit-option-query",
         "jq-edit-option-format"

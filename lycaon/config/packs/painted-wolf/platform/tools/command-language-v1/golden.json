@@ -3,308 +3,506 @@
     {
       "id": "lf-byte-count",
       "program": "printf 'alpha\\nbeta' | wc -l",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "1\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "quoted-metacharacters",
       "program": "printf '%s\\n' 'a;rm -rf x'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "a;rm -rf x\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "quoted-variable",
       "program": "x='a b'; printf '%s\\n' \"$x\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "a b\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "unquoted-variable",
       "program": "x='a b'; printf '<%s>\\n' $x",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "<a>\n<b>\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "unset-empty",
       "program": "printf '<%s>\\n' \"$missing\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "<>\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "substitution-lf",
       "program": "n=$(printf '2\\n\\n'); printf '%s\\n' \"$n\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "2\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "backtick-substitution",
       "program": "printf '%s\\n' \"`printf alpha`\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "alpha\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "conditional-no-match",
       "program": "printf 'a\\n' | grep z || printf 'none\\n'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "none\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "sequence-ordinary-failure",
       "program": "false; printf 'next\\n'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "next\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "conditional-success",
       "program": "true && printf 'yes\\n'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "yes\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "pipeline-rightmost-failure",
       "program": "false | true",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 1,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "untaken-substitution",
       "program": "false && echo \"$(touch ./never)\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 1,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "for-quoted-positional",
       "program": "f() { printf '<%s>\\n' \"$@\"; }; f 'a b' c",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "<a b>\n<c>\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "if-control",
       "program": "if true; then printf 'yes\\n'; else printf 'no\\n'; fi",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "yes\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "for-control",
       "program": "for x in a b; do printf '%s\\n' \"$x\"; done",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "a\nb\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "while-break",
       "program": "while true; do printf 'once\\n'; break; done",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "once\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "group-shared-frame",
       "program": "x=a; { x=b; }; printf '%s\\n' \"$x\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "b\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "subshell-isolated-frame",
       "program": "x=a; ( x=b ); printf '%s\\n' \"$x\"",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "a\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "negated-status",
       "program": "! false",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "literal-heredoc",
       "program": "cat <<'EOF'\n$x\nEOF\n",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "$x\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "expanded-heredoc",
       "program": "x=alpha; cat <<EOF\n$x\nEOF\n",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "alpha\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "tab-heredoc",
       "program": "cat <<-'EOF'\n\talpha\n\tEOF\n",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "alpha\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -312,30 +510,48 @@
       "id": "glob-order",
       "program": "printf '%s\\n' ./*.txt",
       "setup": {
-        "a.txt": "",
-        "b.txt": ""
+        "files": {
+          "a.txt": "",
+          "b.txt": ""
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "./a.txt\n./b.txt\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "glob-no-match",
       "program": "printf '%s\\n' ./missing*.txt",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "./missing*.txt\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -343,31 +559,52 @@
       "id": "source-invalid-unit",
       "program": "printf 'parent\\n'; source -- ./bad.sh",
       "setup": {
-        "bad.sh": "echo x; eval data"
+        "files": {
+          "bad.sh": "echo x; eval data"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "parent\n",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [
+            "printf"
+          ],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent",
+          "source_unit_executions": 0
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "excluded-eval",
       "program": "printf x > ./never; eval data",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 24
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -375,16 +612,25 @@
     {
       "id": "excluded-process-substitution",
       "program": "printf x > ./never; cat <(echo x)",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 24,
           "end_byte": 26
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -392,16 +638,25 @@
     {
       "id": "excluded-trap",
       "program": "printf x > ./never; trap x EXIT",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 24
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -409,16 +664,25 @@
     {
       "id": "excluded-array",
       "program": "printf x > ./never; a=(x y)",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 23
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -426,16 +690,25 @@
     {
       "id": "excluded-options",
       "program": "printf x > ./never; set -e",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 23
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -443,16 +716,25 @@
     {
       "id": "excluded-arithmetic",
       "program": "printf x > ./never; echo $((1+1))",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 25,
           "end_byte": 28
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -460,16 +742,25 @@
     {
       "id": "excluded-brace",
       "program": "printf x > ./never; echo {a,b}",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 25,
           "end_byte": 30
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -477,16 +768,25 @@
     {
       "id": "excluded-here-string",
       "program": "printf x > ./never; cat <<< x",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 24,
           "end_byte": 27
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -494,16 +794,25 @@
     {
       "id": "excluded-case",
       "program": "printf x > ./never; case x in x) true;; esac",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 24
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -511,16 +820,25 @@
     {
       "id": "excluded-until",
       "program": "printf x > ./never; until true; do :; done",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
           "end_byte": 25
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -528,16 +846,25 @@
     {
       "id": "excluded-tilde-user",
       "program": "printf x > ./never; cat ~fixture/input",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 24,
           "end_byte": 32
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -545,16 +872,25 @@
     {
       "id": "excluded-parameter-assignment",
       "program": "printf x > ./never; echo ${x:=a}",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 25,
           "end_byte": 32
+        },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
@@ -563,21 +899,30 @@
       "id": "sed-gnu-inplace",
       "program": "sed -i 's/alpha/beta/' ./input",
       "setup": {
-        "input": "alpha\n"
+        "files": {
+          "input": "alpha\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
           {
             "kind": "document-publication",
             "path": "input",
             "bytes": "beta\n"
           }
         ],
-        "diagnostic": null,
-        "source_span": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -585,21 +930,30 @@
       "id": "sed-bsd-inplace",
       "program": "sed -i '' 's/alpha/beta/' ./input",
       "setup": {
-        "input": "alpha\n"
+        "files": {
+          "input": "alpha\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
           {
             "kind": "document-publication",
             "path": "input",
             "bytes": "beta\n"
           }
         ],
-        "diagnostic": null,
-        "source_span": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -607,15 +961,24 @@
       "id": "sed-range-later-end",
       "program": "sed -n '/x/,/x/p' ./input",
       "setup": {
-        "input": "x\na\nx\nb\n"
+        "files": {
+          "input": "x\na\nx\nb\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "x\na\nx\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -623,15 +986,24 @@
       "id": "stat-gnu-size",
       "program": "stat -c '%s' ./input",
       "setup": {
-        "input": "ab\n"
+        "files": {
+          "input": "ab\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "3\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -639,71 +1011,116 @@
       "id": "stat-bsd-size",
       "program": "stat -f '%z' ./input",
       "setup": {
-        "input": "ab\n"
+        "files": {
+          "input": "ab\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "3\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "base64-gnu",
       "program": "printf QQ== | base64 -d",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "A",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "base64-bsd",
       "program": "printf QQ== | base64 -D",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "A",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "xargs-empty",
       "program": "printf '' | xargs echo",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "xargs-exact-nul",
       "program": "printf 'a b\\0c;d\\0' | xargs -0 printf '<%s>\\n'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "<a b>\n<c;d>\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -711,22 +1128,31 @@
       "id": "search-empty-publication",
       "program": "grep z ./input > ./result",
       "setup": {
-        "input": "a\n",
-        "result": "old\n"
+        "files": {
+          "input": "a\n",
+          "result": "old\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 1,
-        "effects": [
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
           {
             "kind": "document-publication",
             "path": "result",
             "bytes": ""
           }
         ],
-        "diagnostic": null,
-        "source_span": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
@@ -734,201 +1160,327 @@
       "id": "same-file-transform",
       "program": "cat ./settings.json | jq -c '.enabled = true' > ./settings.json",
       "setup": {
-        "settings.json": "{\"enabled\":false}\n"
+        "files": {
+          "settings.json": "{\"enabled\":false}\n"
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
           {
             "kind": "document-publication",
             "path": "settings.json",
             "bytes": "{\"enabled\":true}\n"
           }
         ],
-        "diagnostic": null,
-        "source_span": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "binary-stream",
       "program": "printf 'A\\0B\\r\\n' | base64 -w 0",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "QQBCDQo=",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "early-consumer",
       "program": "printf 'a\\nb\\n' | head -n 1",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "a\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "query-false",
       "program": "printf false | jq -e .",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "false\n",
         "stderr": "",
         "status": 1,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "query-fraction",
       "program": "printf '1.25\\n' | jq -c '. + 0.5'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "1.75\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
         "diagnostic": null,
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "unsupported-option",
       "program": "cat --not-a-version-1-option ./input",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_OPTION_UNSUPPORTED",
-        "source_span": null
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
       "id": "return-control",
       "program": "f() { return 3; printf never; }; f || printf 'handled\\n'",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "handled\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
-        "diagnostic": null
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "exit-control",
       "program": "printf 'before\\n'; exit 7; printf never",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "before\n",
         "stderr": "",
         "status": 7,
-        "effects": [],
-        "diagnostic": null
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "continue-control",
       "program": "for x in a b; do if test \"$x\" = a; then continue; fi; printf '%s\\n' \"$x\"; done",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "b\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
-        "diagnostic": null
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "empty-loop-budget",
       "program": "while true; do :; done",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_LIMIT_EXCEEDED",
         "limit": "loop_iterations",
         "injected_limit": 2,
         "admitted_iterations": 2,
-        "host_terminal": true
+        "host_terminal": true,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "later-inline-syntax",
       "program": "printf x > ./never; printf 'unfinished",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
-        "diagnostic": "COMMAND_SYNTAX_INVALID"
+        "diagnostic": "COMMAND_SYNTAX_INVALID",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "untaken-excluded-syntax",
       "program": "if false; then eval x; fi; printf never",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
-        "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED"
+        "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "program-nul",
       "program": "<bytes supplied by program_hex>",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_INVALID",
-        "program_hex": "7072696e7466206100"
+        "program_hex": "7072696e7466206100",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
     {
       "id": "program-invalid-utf8",
       "program": "<bytes supplied by program_hex>",
-      "setup": {},
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_SYNTAX_INVALID",
-        "program_hex": "7072696e746620ff"
+        "program_hex": "7072696e746620ff",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -936,17 +1488,27 @@
       "id": "terminal-negation",
       "program": "! rm ./protected; printf never",
       "setup": {
-        "protected": "retained\n",
-        "authority": "read-only"
+        "files": {
+          "protected": "retained\n"
+        },
+        "host_facts": {
+          "authority": "read-only"
+        },
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
-        "diagnostic": "READ_ONLY_SURFACE",
+        "diagnostic": "TASK_SCOPE_PROFILE_READ_ONLY",
         "host_terminal": true,
-        "stopped_before": "printf"
+        "stopped_before": "printf",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -954,17 +1516,27 @@
       "id": "terminal-conditional",
       "program": "rm ./protected || printf never",
       "setup": {
-        "protected": "retained\n",
-        "authority": "read-only"
+        "files": {
+          "protected": "retained\n"
+        },
+        "host_facts": {
+          "authority": "read-only"
+        },
+        "helpers": {}
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 2,
-        "effects": [],
-        "diagnostic": "READ_ONLY_SURFACE",
+        "diagnostic": "TASK_SCOPE_PROFILE_READ_ONLY",
         "host_terminal": true,
-        "stopped_before": "printf"
+        "stopped_before": "printf",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -972,15 +1544,24 @@
       "id": "loop-cancellation",
       "program": "while true; do printf x; done",
       "setup": {
-        "cancel_after_statement_visits": 3
+        "files": {},
+        "host_facts": {
+          "cancel_after_statement_visits": 3
+        },
+        "helpers": {}
       },
       "expected": {
         "stdout": "x",
         "stderr": "",
         "status": 2,
-        "effects": [],
         "diagnostic": "COMMAND_CANCELLED",
-        "host_terminal": true
+        "host_terminal": true,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -988,24 +1569,33 @@
       "id": "redirect-bind-left-to-right",
       "program": "external -- fixture-helper > ./out 2>&1",
       "setup": {
-        "fixture-helper": {
-          "stdout": "out\n",
-          "stderr": "err\n",
-          "exit": 0
+        "files": {},
+        "host_facts": {},
+        "helpers": {
+          "fixture-helper": {
+            "stdout": "out\n",
+            "stderr": "err\n",
+            "exit": 0
+          }
         }
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "semantic_effects": [
           {
             "kind": "publication",
             "path": "out",
             "bytes": "out\nerr\n"
           }
         ],
-        "diagnostic": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -1013,24 +1603,33 @@
       "id": "redirect-bind-original-stdout",
       "program": "external -- fixture-helper 2>&1 > ./out",
       "setup": {
-        "fixture-helper": {
-          "stdout": "out\n",
-          "stderr": "err\n",
-          "exit": 0
+        "files": {},
+        "host_facts": {},
+        "helpers": {
+          "fixture-helper": {
+            "stdout": "out\n",
+            "stderr": "err\n",
+            "exit": 0
+          }
         }
       },
       "expected": {
         "stdout": "err\n",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "semantic_effects": [
           {
             "kind": "publication",
             "path": "out",
             "bytes": "out\n"
           }
         ],
-        "diagnostic": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -1038,15 +1637,20 @@
       "id": "owned-background-handle",
       "program": "printf 'background\\n' & h=$!; wait \"$h\"; jobs",
       "setup": {
-        "job_handle_allocator": [
-          "job-fixture-1"
-        ]
+        "files": {},
+        "host_facts": {
+          "job_handle_allocator": [
+            "job-fixture-1"
+          ]
+        },
+        "helpers": {}
       },
       "expected": {
         "stdout": "background\njob-fixture-1 completed 0\n",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "semantic_effects": [
           {
             "kind": "session-job-launch",
             "handle": "job-fixture-1",
@@ -1054,7 +1658,11 @@
             "status": 0
           }
         ],
-        "diagnostic": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -1062,18 +1670,24 @@
       "id": "native-path-exact-handoff",
       "program": "external -- fixture-helper \"$(native_path -- @other/input)\"",
       "setup": {
-        "roots": {
-          "other": "<fixture-root>"
+        "files": {},
+        "host_facts": {
+          "roots": {
+            "other": "<fixture-root>"
+          }
         },
-        "fixture-helper": {
-          "capture_argv": true
+        "helpers": {
+          "fixture-helper": {
+            "capture_argv": true
+          }
         }
       },
       "expected": {
         "stdout": "",
         "stderr": "",
         "status": 0,
-        "effects": [
+        "diagnostic": null,
+        "semantic_effects": [
           {
             "kind": "external-launch",
             "argv": [
@@ -1083,7 +1697,11 @@
             "native_path_grants_added": []
           }
         ],
-        "diagnostic": null
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
     },
@@ -1091,21 +1709,106 @@
       "id": "globstar-preservation",
       "program": "printf '%s\\n' ./**/*.go",
       "setup": {
-        "a.go": "",
-        "sub/b.go": "",
-        "hidden/.x.go": "",
-        "linked": {
-          "symlink": "sub"
-        }
+        "files": {
+          "a.go": "",
+          "sub/b.go": "",
+          "hidden/.x.go": "",
+          "linked": {
+            "symlink": "sub"
+          }
+        },
+        "host_facts": {},
+        "helpers": {}
       },
       "expected": {
         "stdout": "./a.go\n./sub/b.go\n",
         "stderr": "",
         "status": 0,
-        "effects": [],
-        "diagnostic": null
+        "diagnostic": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
       },
       "qualification": "normative contract definition; native runtime qualification pending"
+    },
+    {
+      "id": "dynamic-readonly-binding",
+      "program": "cmd=$(cat ./selector); \"$cmd\" ./target",
+      "setup": {
+        "files": {
+          "selector": "rm\n",
+          "target": "retained\n"
+        },
+        "host_facts": {
+          "authority": "read-only"
+        },
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "TASK_SCOPE_PROFILE_READ_ONLY",
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [
+            "cat"
+          ],
+          "rejected_operation": "rm",
+          "not_started": [
+            "rm effect"
+          ]
+        }
+      },
+      "qualification": "normative definition; native dispatch/evidence qualification pending"
+    },
+    {
+      "id": "partial-write-unknown-http",
+      "program": "printf a > ./first; curl --data a https://api.example.test/effect; printf never",
+      "setup": {
+        "files": {},
+        "host_facts": {
+          "http_outcome": "connection lost after sending request; unknown remote effect"
+        },
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "owner HTTP unknown attempted outcome",
+        "semantic_effects": [
+          {
+            "kind": "publication",
+            "path": "first",
+            "bytes": "a"
+          },
+          {
+            "kind": "http-attempt",
+            "certainty": "unknown"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [
+            "printf",
+            "publication"
+          ],
+          "unknown_operations": [
+            "curl"
+          ],
+          "not_started": [
+            "final printf"
+          ],
+          "whole_program_replay_offered": false,
+          "http_replay_offered": false
+        }
+      },
+      "qualification": "normative fault-injection definition; native recovery qualification pending"
     }
   ]
 }

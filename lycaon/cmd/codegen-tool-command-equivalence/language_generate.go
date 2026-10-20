@@ -77,7 +77,12 @@ func loadLanguageCatalog(root string) (commandsurface.LanguageCatalog, error) {
 	if len(paths) != len(catalog.Language.Sources) {
 		return catalog, fmt.Errorf("language source inventory differs")
 	}
+	sourceNames := map[string]bool{}
 	for _, name := range catalog.Language.Sources {
+		if name != filepath.Base(name) || sourceNames[name] {
+			return catalog, fmt.Errorf("invalid/duplicate source inventory entry %q", name)
+		}
+		sourceNames[name] = true
 		if err := assertRegularFile(filepath.Join(filepath.Dir(paths[0]), name)); err != nil {
 			return catalog, fmt.Errorf("required language source %s: %w", name, err)
 		}
@@ -103,10 +108,20 @@ func validateLanguageCatalog(root string, c commandsurface.LanguageCatalog) erro
 		}
 		limits[limit.ID] = true
 	}
+	owners := map[string]bool{}
+	for _, row := range c.Tools {
+		owners[row.Owner] = true
+	}
 	names := map[string]bool{}
 	for _, command := range c.Commands {
 		if names[command.Name] || command.Name == "" || command.Argv == "" || command.Owner == "" || command.Encoding == "" || len(command.Statuses) == 0 || len(command.Effects) == 0 {
 			return fmt.Errorf("invalid/duplicate command %q", command.Name)
+		}
+		if !owners[command.Owner] {
+			return fmt.Errorf("unknown subsystem owner for %s", command.Name)
+		}
+		if len(command.FixtureIDs) < 2 || command.Unsupported.Kind == "" || command.Unsupported.Code == "" || len(command.Unsupported.Words) == 0 || command.Unsupported.Fallback {
+			return fmt.Errorf("incomplete rejection fixture for %s", command.Name)
 		}
 		names[command.Name] = true
 		for _, effect := range command.Effects {
@@ -122,7 +137,7 @@ func validateLanguageCatalog(root string, c commandsurface.LanguageCatalog) erro
 		}
 		flags := map[string]bool{}
 		for _, form := range command.Forms {
-			if len(form.Spellings) == 0 || form.Arity < -1 || form.Arity > 2 || form.FixtureID == "" {
+			if len(form.Spellings) == 0 || form.Arity < -2 || form.Arity > 2 || form.FixtureID == "" || form.Consumption == "" || (form.Arity >= 0 && len(form.SampleValues) != form.Arity) {
 				return fmt.Errorf("invalid option form for %s", command.Name)
 			}
 			for _, flag := range form.Spellings {
@@ -147,7 +162,12 @@ func validateLanguageCatalog(root string, c commandsurface.LanguageCatalog) erro
 	if len(c.Language.RequiredCommands) != len(c.Commands) {
 		return fmt.Errorf("required command inventory differs")
 	}
+	required := map[string]bool{}
 	for _, name := range c.Language.RequiredCommands {
+		if required[name] {
+			return fmt.Errorf("duplicate required command %s", name)
+		}
+		required[name] = true
 		if !names[name] {
 			return fmt.Errorf("missing required command %s", name)
 		}
@@ -209,8 +229,8 @@ func validateToolDispositions(root string, rows []commandsurface.ToolDisposition
 func languageFormFixtures(c commandsurface.LanguageCatalog) []commandsurface.FormFixture {
 	var fixtures []commandsurface.FormFixture
 	for _, command := range c.Commands {
-		fixtures = append(fixtures, commandsurface.FormFixture{ID: strings.ReplaceAll(command.Name, " ", "-") + "-operands-valid", Kind: "documented-program", Command: command.Name})
-		fixtures = append(fixtures, commandsurface.FormFixture{ID: strings.ReplaceAll(command.Name, " ", "-") + "-option-invalid", Kind: "option-fragment", Command: command.Name, Words: []string{"--not-a-version-1-option"}, Diagnostic: "COMMAND_OPTION_UNSUPPORTED"})
+		fixtures = append(fixtures, commandsurface.FormFixture{ID: strings.ReplaceAll(command.Name, " ", "-") + "-operands-valid", Kind: "illustrative-program", Command: command.Name, Definition: command.Example})
+		fixtures = append(fixtures, commandsurface.FormFixture{ID: command.FixtureIDs[1], Kind: command.Unsupported.Kind, Command: command.Name, Words: command.Unsupported.Words, Diagnostic: command.Unsupported.Code})
 		for _, form := range command.Forms {
 			for i, flag := range form.Spellings {
 				id := form.FixtureID
@@ -218,9 +238,7 @@ func languageFormFixtures(c commandsurface.LanguageCatalog) []commandsurface.For
 					id += "-alias-" + strconv.Itoa(i)
 				}
 				words := []string{flag}
-				for range max(form.Arity, 0) {
-					words = append(words, languageFixtureValue(form.ValueRole))
-				}
+				words = append(words, form.SampleValues...)
 				fixtures = append(fixtures, commandsurface.FormFixture{ID: id, Kind: "option-fragment", Command: command.Name, Words: words, ExpectedForm: form.Spellings[0], Arity: form.Arity})
 			}
 			if form.Arity > 0 {
@@ -233,55 +251,6 @@ func languageFormFixtures(c commandsurface.LanguageCatalog) []commandsurface.For
 		fixtures = append(fixtures, commandsurface.FormFixture{ID: limit.ID + "-over", Kind: "budget-transition", Limit: limit.ID, Value: limit.Maximum + 1, ExpectedForm: limit.Overflow, Diagnostic: limit.Exceeded})
 	}
 	return fixtures
-}
-
-func languageFixtureValue(role string) string {
-	switch role {
-	case "count", "bytes", "width", "start", "context", "line", "group", "count-or-plus-start", "bytes-or-plus-start":
-		return "1"
-	case "path":
-		return "./input"
-	case "pattern", "glob", "separator", "replacement", "text":
-		return "a"
-	case "mode":
-		return "755"
-	case "kind":
-		return "f"
-	case "list", "key":
-		return "1"
-	case "endpoint":
-		return ":8080"
-	case "state":
-		return "TCP:LISTEN"
-	case "name-json-pair":
-		return "{}"
-	case "allowed-config":
-		return "core.fsmonitor=false"
-	case "format":
-		return "json"
-	case "algorithm":
-		return "256"
-	case "assignment":
-		return "fixture=alpha"
-	case "gnu-format":
-		return "%s"
-	case "bsd-format":
-		return "%z"
-	case "script":
-		return "s/a/b/"
-	case "query":
-		return "."
-	case "seconds":
-		return "0"
-	case "method":
-		return "GET"
-	case "header":
-		return "X-Fixture: value"
-	case "signal":
-		return "TERM"
-	default:
-		return "fixture"
-	}
 }
 
 func validateLanguageFixtures(c commandsurface.LanguageCatalog) error {

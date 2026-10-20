@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-n-number"
+          "fixture_id": "cat-option-n-number",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -23,7 +25,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-b-numbernonblank"
+          "fixture_id": "cat-option-b-numbernonblank",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -32,7 +36,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-s-squeezeblank"
+          "fixture_id": "cat-option-s-squeezeblank",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -41,7 +47,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-A-showall"
+          "fixture_id": "cat-option-A-showall",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -50,7 +58,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-v-shownonprinting"
+          "fixture_id": "cat-option-v-shownonprinting",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -59,7 +69,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-E-showends"
+          "fixture_id": "cat-option-E-showends",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -68,7 +80,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "cat-option-T-showtabs"
+          "fixture_id": "cat-option-T-showtabs",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cat [OPTIONS] [--] [PATH ...]",
@@ -129,16 +143,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "cat",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "cat-operands-valid",
-        "cat-option-invalid",
+        "cat-rejection",
         "cat-option-n-number",
         "cat-option-b-numbernonblank",
         "cat-option-s-squeezeblank",
@@ -162,7 +176,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "head-option-n-lines"
+          "fixture_id": "head-option-n-lines",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -171,7 +189,11 @@
           ],
           "arity": 1,
           "value_role": "bytes",
-          "fixture_id": "head-option-c-bytes"
+          "fixture_id": "head-option-c-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -180,7 +202,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "head-option-q-quiet"
+          "fixture_id": "head-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -189,7 +213,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "head-option-v-verbose"
+          "fixture_id": "head-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. head [-n COUNT|-COUNT|-c BYTES] [--] [PATH ...]",
@@ -250,16 +276,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "head",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "head-operands-valid",
-        "head-option-invalid",
+        "head-rejection",
         "head-option-n-lines",
         "head-option-c-bytes",
         "head-option-q-quiet",
@@ -280,7 +306,11 @@
           ],
           "arity": 1,
           "value_role": "count-or-plus-start",
-          "fixture_id": "tail-option-n-lines"
+          "fixture_id": "tail-option-n-lines",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -289,7 +319,11 @@
           ],
           "arity": 1,
           "value_role": "bytes-or-plus-start",
-          "fixture_id": "tail-option-c-bytes"
+          "fixture_id": "tail-option-c-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -298,7 +332,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tail-option-q-quiet"
+          "fixture_id": "tail-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -307,7 +343,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tail-option-v-verbose"
+          "fixture_id": "tail-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tail [-n COUNT|+START|-COUNT|-c BYTES] [--] [PATH ...]",
@@ -368,16 +406,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "tail",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "tail-operands-valid",
-        "tail-option-invalid",
+        "tail-rejection",
         "tail-option-n-lines",
         "tail-option-c-bytes",
         "tail-option-q-quiet",
@@ -397,7 +435,11 @@
           ],
           "arity": 1,
           "value_role": "line-numbering-mode",
-          "fixture_id": "nl-option-b"
+          "fixture_id": "nl-option-b",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
         },
         {
           "spellings": [
@@ -405,7 +447,11 @@
           ],
           "arity": 1,
           "value_role": "start",
-          "fixture_id": "nl-option-v"
+          "fixture_id": "nl-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -413,7 +459,11 @@
           ],
           "arity": 1,
           "value_role": "width",
-          "fixture_id": "nl-option-w"
+          "fixture_id": "nl-option-w",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -421,7 +471,11 @@
           ],
           "arity": 1,
           "value_role": "separator",
-          "fixture_id": "nl-option-s"
+          "fixture_id": "nl-option-s",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. nl [-ba|-bt] [-v START] [-w WIDTH] [-s SEP] [--] [PATH]",
@@ -482,16 +536,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "nl",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "nl-operands-valid",
-        "nl-option-invalid",
+        "nl-rejection",
         "nl-option-b",
         "nl-option-v",
         "nl-option-w",
@@ -512,7 +566,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "file-option-b-brief"
+          "fixture_id": "file-option-b-brief",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -521,7 +577,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "file-option-i-mime"
+          "fixture_id": "file-option-i-mime",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. file [-b] [-i|--mime] [--] PATH ...",
@@ -582,16 +640,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "file",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "file-operands-valid",
-        "file-option-invalid",
+        "file-rejection",
         "file-option-b-brief",
         "file-option-i-mime"
       ]
@@ -609,7 +667,11 @@
           ],
           "arity": 1,
           "value_role": "bytes",
-          "fixture_id": "xxd-option-l"
+          "fixture_id": "xxd-option-l",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -617,7 +679,11 @@
           ],
           "arity": 1,
           "value_role": "offset",
-          "fixture_id": "xxd-option-s"
+          "fixture_id": "xxd-option-s",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         },
         {
           "spellings": [
@@ -625,7 +691,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "xxd-option-p"
+          "fixture_id": "xxd-option-p",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -633,7 +701,11 @@
           ],
           "arity": 1,
           "value_role": "group",
-          "fixture_id": "xxd-option-g"
+          "fixture_id": "xxd-option-g",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xxd [-l BYTES] [-s OFFSET] [-p] [-g GROUP] [--] [PATH]",
@@ -694,16 +766,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "xxd",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "xxd-operands-valid",
-        "xxd-option-invalid",
+        "xxd-rejection",
         "xxd-option-l",
         "xxd-option-s",
         "xxd-option-p",
@@ -723,7 +795,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "hexdump-option-C"
+          "fixture_id": "hexdump-option-C",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -731,7 +805,11 @@
           ],
           "arity": 1,
           "value_role": "bytes",
-          "fixture_id": "hexdump-option-n"
+          "fixture_id": "hexdump-option-n",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -739,7 +817,11 @@
           ],
           "arity": 1,
           "value_role": "offset",
-          "fixture_id": "hexdump-option-s"
+          "fixture_id": "hexdump-option-s",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. hexdump -C [-n BYTES] [-s OFFSET] [--] [PATH ...]",
@@ -800,16 +882,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "hexdump",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "hexdump-operands-valid",
-        "hexdump-option-invalid",
+        "hexdump-rejection",
         "hexdump-option-C",
         "hexdump-option-n",
         "hexdump-option-s"
@@ -829,7 +911,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "shasum-option-c-check"
+          "fixture_id": "shasum-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -837,7 +921,11 @@
           ],
           "arity": 1,
           "value_role": "algorithm",
-          "fixture_id": "shasum-option-a"
+          "fixture_id": "shasum-option-a",
+          "consumption": "fixed",
+          "sample_values": [
+            "256"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. shasum [-c] [-a 1|256|512] [--] [PATH ...]",
@@ -898,16 +986,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "shasum",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "shasum-operands-valid",
-        "shasum-option-invalid",
+        "shasum-rejection",
         "shasum-option-c-check",
         "shasum-option-a"
       ]
@@ -926,7 +1014,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sha256sum-option-c-check"
+          "fixture_id": "sha256sum-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha256sum [-c] [--] [PATH ...]",
@@ -987,16 +1077,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "sha256sum",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sha256sum-operands-valid",
-        "sha256sum-option-invalid",
+        "sha256sum-rejection",
         "sha256sum-option-c-check"
       ]
     },
@@ -1014,7 +1104,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sha1sum-option-c-check"
+          "fixture_id": "sha1sum-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha1sum [-c] [--] [PATH ...]",
@@ -1075,16 +1167,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "sha1sum",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sha1sum-operands-valid",
-        "sha1sum-option-invalid",
+        "sha1sum-rejection",
         "sha1sum-option-c-check"
       ]
     },
@@ -1102,7 +1194,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sha512sum-option-c-check"
+          "fixture_id": "sha512sum-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sha512sum [-c] [--] [PATH ...]",
@@ -1163,16 +1257,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "sha512sum",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sha512sum-operands-valid",
-        "sha512sum-option-invalid",
+        "sha512sum-rejection",
         "sha512sum-option-c-check"
       ]
     },
@@ -1190,7 +1284,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "md5sum-option-c-check"
+          "fixture_id": "md5sum-option-c-check",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. md5sum [-c] [--] [PATH ...]",
@@ -1251,16 +1347,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "md5sum",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "md5sum-operands-valid",
-        "md5sum-option-invalid",
+        "md5sum-rejection",
         "md5sum-option-c-check"
       ]
     },
@@ -1279,7 +1375,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "base64-option-d-decode-D"
+          "fixture_id": "base64-option-d-decode-D",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1288,7 +1386,11 @@
           ],
           "arity": 1,
           "value_role": "width",
-          "fixture_id": "base64-option-w-wrap"
+          "fixture_id": "base64-option-w-wrap",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -1296,7 +1398,11 @@
           ],
           "arity": 1,
           "value_role": "width",
-          "fixture_id": "base64-option-b"
+          "fixture_id": "base64-option-b",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. base64 [-d|--decode|-D] [-w WIDTH|-b WIDTH] [--] [PATH]",
@@ -1357,16 +1463,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "base64",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "base64-operands-valid",
-        "base64-option-invalid",
+        "base64-rejection",
         "base64-option-d-decode-D",
         "base64-option-w-wrap",
         "base64-option-b"
@@ -1387,7 +1493,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "repo-map-option-path"
+          "fixture_id": "repo-map-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1395,7 +1505,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "repo-map-option-depth"
+          "fixture_id": "repo-map-option-depth",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. repo-map [--path PATH] [--depth N]",
@@ -1456,16 +1570,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "repo-map",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "repo-map-operands-valid",
-        "repo-map-option-invalid",
+        "repo-map-rejection",
         "repo-map-option-path",
         "repo-map-option-depth"
       ]
@@ -1483,7 +1597,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "summarize-option-path"
+          "fixture_id": "summarize-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1491,7 +1609,11 @@
           ],
           "arity": 1,
           "value_role": "text",
-          "fixture_id": "summarize-option-focus"
+          "fixture_id": "summarize-option-focus",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. summarize --path PATH [--focus TEXT]",
@@ -1552,16 +1674,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "summarize",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "summarize-operands-valid",
-        "summarize-option-invalid",
+        "summarize-rejection",
         "summarize-option-path",
         "summarize-option-focus"
       ]
@@ -1579,7 +1701,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "outline-option-path"
+          "fixture_id": "outline-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. outline --path PATH",
@@ -1640,16 +1766,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "outline",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "outline-operands-valid",
-        "outline-option-invalid",
+        "outline-rejection",
         "outline-option-path"
       ]
     }

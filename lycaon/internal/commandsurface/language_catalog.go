@@ -36,6 +36,7 @@ type LanguageSpecification struct {
 	Platforms         map[string]string          `json:"platforms"`
 	OptionGrammar     map[string]string          `json:"option_grammar"`
 	Retention         string                     `json:"retention"`
+	SettlementReserve map[string]int64           `json:"settlement_reserve"`
 	SchemaCopy        string                     `json:"schema_copy"`
 }
 
@@ -63,17 +64,27 @@ type CommandSpecification struct {
 	Example              json.RawMessage     `json:"example"`
 	Notes                string              `json:"notes"`
 	Reuse                ReuseReference      `json:"reuse"`
-	Unsupported          json.RawMessage     `json:"unsupported"`
+	Unsupported          RejectionFixture    `json:"unsupported"`
 	FixtureIDs           []string            `json:"fixture_ids"`
 }
 
-// OptionForm freezes spellings and value consumption. Arity -1 is explicitly optional.
+// RejectionFixture specifies a real refused operand/form, rather than treating all dash words as flags.
+type RejectionFixture struct {
+	Kind     string   `json:"kind"`
+	Words    []string `json:"words"`
+	Code     string   `json:"code"`
+	Fallback bool     `json:"fallback"`
+}
+
+// OptionForm freezes spelling and consumption: -1 optional, -2 delimiter-terminated.
 type OptionForm struct {
-	Spellings []string `json:"spellings"`
-	Arity     int      `json:"arity"`
-	ValueRole string   `json:"value_role"`
-	FixtureID string   `json:"fixture_id"`
-	Scope     string   `json:"scope,omitempty"`
+	Spellings    []string `json:"spellings"`
+	Arity        int      `json:"arity"`
+	ValueRole    string   `json:"value_role"`
+	FixtureID    string   `json:"fixture_id"`
+	Scope        string   `json:"scope,omitempty"`
+	Consumption  string   `json:"consumption"`
+	SampleValues []string `json:"sample_values"`
 }
 
 // EffectRequirement names a binder-selected mode, never a prose predicate.
@@ -111,15 +122,16 @@ type ToolDisposition struct {
 // FormFixture is a golden admission fragment, independent from native runtime proof.
 // Complete program/effect cases reside in Contracts and feed the later P02/P04 suites.
 type FormFixture struct {
-	ID           string   `json:"id"`
-	Kind         string   `json:"kind"`
-	Command      string   `json:"command,omitempty"`
-	Words        []string `json:"words,omitempty"`
-	ExpectedForm string   `json:"expected_form,omitempty"`
-	Arity        int      `json:"arity,omitempty"`
-	Diagnostic   string   `json:"diagnostic,omitempty"`
-	Limit        string   `json:"limit,omitempty"`
-	Value        int64    `json:"value,omitempty"`
+	Definition   json.RawMessage `json:"definition,omitempty"`
+	ID           string          `json:"id"`
+	Kind         string          `json:"kind"`
+	Command      string          `json:"command,omitempty"`
+	Words        []string        `json:"words,omitempty"`
+	ExpectedForm string          `json:"expected_form,omitempty"`
+	Arity        int             `json:"arity,omitempty"`
+	Diagnostic   string          `json:"diagnostic,omitempty"`
+	Limit        string          `json:"limit,omitempty"`
+	Value        int64           `json:"value,omitempty"`
 }
 
 // DecodeLanguageCatalog returns detached facts so callers cannot mutate a shared catalog.

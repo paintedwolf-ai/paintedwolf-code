@@ -14,7 +14,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git status-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -23,7 +27,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git status-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -33,7 +41,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git status-option-s-short",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -42,7 +52,9 @@
           "arity": -1,
           "value_role": "optional-v1",
           "fixture_id": "git status-option-porcelain",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "optional-attached-value",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -51,7 +63,11 @@
           "arity": 1,
           "value_role": "mode",
           "fixture_id": "git status-option-untrackedfiles",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "755"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-s|--short] [--porcelain[=v1]] [--untracked-files=all|normal|no] [--] [PATH ...]",
@@ -112,16 +128,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git status",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-status-operands-valid",
-        "git-status-option-invalid",
+        "git-status-rejection",
         "git status-option-C-global",
         "git status-option-c-global",
         "git status-option-s-short",
@@ -143,7 +159,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git diff-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -152,7 +172,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git diff-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -162,7 +186,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git diff-option-cached-staged",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -171,7 +197,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git diff-option-stat",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -180,7 +208,11 @@
           "arity": 1,
           "value_role": "context",
           "fixture_id": "git diff-option-U",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--cached|--staged] [--stat] [-U N] [REF] [--] [PATH ...]",
@@ -241,16 +273,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git diff",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-diff-operands-valid",
-        "git-diff-option-invalid",
+        "git-diff-rejection",
         "git diff-option-C-global",
         "git diff-option-c-global",
         "git diff-option-cached-staged",
@@ -272,7 +304,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git log-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -281,7 +317,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git log-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -291,7 +331,11 @@
           "arity": 1,
           "value_role": "count",
           "fixture_id": "git log-option-n-maxcount",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -300,7 +344,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git log-option-oneline",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-n N|-N] [--oneline] [REF_RANGE] [--] [PATH ...]",
@@ -361,16 +407,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git log",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-log-operands-valid",
-        "git-log-option-invalid",
+        "git-log-rejection",
         "git log-option-C-global",
         "git log-option-c-global",
         "git log-option-n-maxcount",
@@ -391,7 +437,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git show-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -400,7 +450,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git show-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -409,7 +463,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git show-option-stat",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--stat] [REF[:PATH]]",
@@ -470,16 +526,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git show",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-show-operands-valid",
-        "git-show-option-invalid",
+        "git-show-rejection",
         "git show-option-C-global",
         "git show-option-c-global",
         "git show-option-stat"
@@ -499,7 +555,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git blame-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -508,7 +568,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git blame-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -517,7 +581,11 @@
           "arity": 1,
           "value_role": "range",
           "fixture_id": "git blame-option-L",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1,2"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-L START,END] [REF] [--] PATH",
@@ -578,16 +646,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git blame",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-blame-operands-valid",
-        "git-blame-option-invalid",
+        "git-blame-rejection",
         "git blame-option-C-global",
         "git blame-option-c-global",
         "git blame-option-L"
@@ -607,7 +675,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git branch-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -616,7 +688,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git branch-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -625,7 +701,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git branch-option-list",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -634,7 +712,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git branch-option-a",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--list] [-a]",
@@ -695,16 +775,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git branch",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-branch-operands-valid",
-        "git-branch-option-invalid",
+        "git-branch-rejection",
         "git branch-option-C-global",
         "git branch-option-c-global",
         "git branch-option-list",
@@ -725,7 +805,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git tag-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -734,7 +818,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git tag-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -743,7 +831,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git tag-option-list",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] --list [PATTERN]",
@@ -804,16 +894,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git tag",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-tag-operands-valid",
-        "git-tag-option-invalid",
+        "git-tag-rejection",
         "git tag-option-C-global",
         "git tag-option-c-global",
         "git tag-option-list"
@@ -833,7 +923,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git rev-parse-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -842,7 +936,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git rev-parse-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -851,7 +949,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git rev-parse-option-verify",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--verify] REF",
@@ -912,16 +1012,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git rev-parse",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-rev-parse-operands-valid",
-        "git-rev-parse-option-invalid",
+        "git-rev-parse-rejection",
         "git rev-parse-option-C-global",
         "git rev-parse-option-c-global",
         "git rev-parse-option-verify"
@@ -941,7 +1041,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git rev-list-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -950,7 +1054,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git rev-list-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -959,7 +1067,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git rev-list-option-count",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -968,7 +1078,11 @@
           "arity": 1,
           "value_role": "count",
           "fixture_id": "git rev-list-option-n",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--count] [-n N] REF_RANGE",
@@ -1029,16 +1143,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git rev-list",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-rev-list-operands-valid",
-        "git-rev-list-option-invalid",
+        "git-rev-list-rejection",
         "git rev-list-option-C-global",
         "git rev-list-option-c-global",
         "git rev-list-option-count",
@@ -1059,7 +1173,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git merge-base-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1068,7 +1186,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git merge-base-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] REF REF",
@@ -1129,16 +1251,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git merge-base",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-merge-base-operands-valid",
-        "git-merge-base-option-invalid",
+        "git-merge-base-rejection",
         "git merge-base-option-C-global",
         "git merge-base-option-c-global"
       ]
@@ -1157,7 +1279,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git remote-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1166,7 +1292,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git remote-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1175,7 +1305,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git remote-option-v",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-v|get-url NAME]",
@@ -1236,16 +1368,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git remote",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-remote-operands-valid",
-        "git-remote-option-invalid",
+        "git-remote-rejection",
         "git remote-option-C-global",
         "git remote-option-c-global",
         "git remote-option-v"
@@ -1265,7 +1397,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git config-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1274,7 +1410,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git config-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1283,7 +1423,11 @@
           "arity": 1,
           "value_role": "key",
           "fixture_id": "git config-option-get",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -1292,7 +1436,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git config-option-list",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (--get KEY|--list)",
@@ -1353,16 +1499,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git config",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-config-operands-valid",
-        "git-config-option-invalid",
+        "git-config-rejection",
         "git config-option-C-global",
         "git config-option-c-global",
         "git config-option-get",
@@ -1383,7 +1529,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git stash-list-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1392,7 +1542,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git stash-list-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] stash list",
@@ -1453,16 +1607,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git stash-list",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-stash-list-operands-valid",
-        "git-stash-list-option-invalid",
+        "git-stash-list-rejection",
         "git stash-list-option-C-global",
         "git stash-list-option-c-global"
       ]
@@ -1481,7 +1635,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git worktree-list-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1490,7 +1648,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git worktree-list-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1499,7 +1661,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git worktree-list-option-porcelain",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] worktree list [--porcelain]",
@@ -1560,16 +1724,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git worktree-list",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-worktree-list-operands-valid",
-        "git-worktree-list-option-invalid",
+        "git-worktree-list-rejection",
         "git worktree-list-option-C-global",
         "git worktree-list-option-c-global",
         "git worktree-list-option-porcelain"
@@ -1589,7 +1753,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git add-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1598,7 +1766,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git add-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--] PATH ...",
@@ -1663,16 +1835,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git add",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-add-operands-valid",
-        "git-add-option-invalid",
+        "git-add-rejection",
         "git add-option-C-global",
         "git add-option-c-global"
       ]
@@ -1691,7 +1863,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git commit-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1700,7 +1876,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git commit-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1709,7 +1889,11 @@
           "arity": 1,
           "value_role": "message",
           "fixture_id": "git commit-option-m",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         },
         {
           "spellings": [
@@ -1718,7 +1902,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git commit-option-amend",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-m MESSAGE] [--amend] [--] [PATH ...]",
@@ -1783,16 +1969,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git commit",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-commit-operands-valid",
-        "git-commit-option-invalid",
+        "git-commit-rejection",
         "git commit-option-C-global",
         "git commit-option-c-global",
         "git commit-option-m",
@@ -1813,7 +1999,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git restore-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1822,7 +2012,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git restore-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1831,7 +2025,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git restore-option-staged",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1840,7 +2036,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git restore-option-worktree",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1849,7 +2047,11 @@
           "arity": 1,
           "value_role": "ref",
           "fixture_id": "git restore-option-source",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "HEAD"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--staged] [--worktree] [--source REF] [--] PATH ...",
@@ -1914,16 +2116,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git restore",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-restore-operands-valid",
-        "git-restore-option-invalid",
+        "git-restore-rejection",
         "git restore-option-C-global",
         "git restore-option-c-global",
         "git restore-option-staged",
@@ -1945,7 +2147,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git checkout-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -1954,7 +2160,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git checkout-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -1963,7 +2173,11 @@
           "arity": 1,
           "value_role": "branch",
           "fixture_id": "git checkout-option-b",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture-branch"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-b BRANCH] [REF] [--] [PATH ...]",
@@ -2028,16 +2242,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git checkout",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-checkout-operands-valid",
-        "git-checkout-option-invalid",
+        "git-checkout-rejection",
         "git checkout-option-C-global",
         "git checkout-option-c-global",
         "git checkout-option-b"
@@ -2057,7 +2271,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git switch-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2066,7 +2284,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git switch-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2075,7 +2297,11 @@
           "arity": 1,
           "value_role": "branch",
           "fixture_id": "git switch-option-c",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture-branch"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-c BRANCH] [REF]",
@@ -2140,16 +2366,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git switch",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-switch-operands-valid",
-        "git-switch-option-invalid",
+        "git-switch-rejection",
         "git switch-option-C-global",
         "git switch-option-c-global",
         "git switch-option-c"
@@ -2169,7 +2395,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git merge-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2178,7 +2408,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git merge-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2187,7 +2421,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git merge-option-ffonly",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2196,7 +2432,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git merge-option-abort",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only|--abort] [REF]",
@@ -2261,16 +2499,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git merge",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-merge-operands-valid",
-        "git-merge-option-invalid",
+        "git-merge-rejection",
         "git merge-option-C-global",
         "git merge-option-c-global",
         "git merge-option-ffonly",
@@ -2291,7 +2529,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git stash-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2300,7 +2542,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git stash-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2309,7 +2555,11 @@
           "arity": 1,
           "value_role": "message",
           "fixture_id": "git stash-option-m",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
@@ -2374,16 +2624,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git stash",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-stash-operands-valid",
-        "git-stash-option-invalid",
+        "git-stash-rejection",
         "git stash-option-C-global",
         "git stash-option-c-global",
         "git stash-option-m"
@@ -2403,7 +2653,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git reset-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2412,7 +2666,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git reset-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2421,7 +2679,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git reset-option-soft",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2430,7 +2690,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git reset-option-mixed",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2439,7 +2701,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git reset-option-hard",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--soft|--mixed|--hard] [REF] [--] [PATH ...]",
@@ -2504,16 +2768,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git reset",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-reset-operands-valid",
-        "git-reset-option-invalid",
+        "git-reset-rejection",
         "git reset-option-C-global",
         "git reset-option-c-global",
         "git reset-option-soft",
@@ -2535,7 +2799,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git clean-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2544,7 +2812,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git clean-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2553,7 +2825,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git clean-option-f",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2562,7 +2836,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git clean-option-d",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] -f [-d] [--] PATH ...",
@@ -2627,16 +2903,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git clean",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-clean-operands-valid",
-        "git-clean-option-invalid",
+        "git-clean-rejection",
         "git clean-option-C-global",
         "git clean-option-c-global",
         "git clean-option-f",
@@ -2657,7 +2933,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git worktree-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2666,7 +2946,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git worktree-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (add PATH [REF]|remove PATH|prune)",
@@ -2731,16 +3015,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git worktree",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-worktree-operands-valid",
-        "git-worktree-option-invalid",
+        "git-worktree-rejection",
         "git worktree-option-C-global",
         "git worktree-option-c-global"
       ]
@@ -2759,7 +3043,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git fetch-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2768,7 +3056,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git fetch-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
@@ -2834,16 +3126,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git fetch",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-fetch-operands-valid",
-        "git-fetch-option-invalid",
+        "git-fetch-rejection",
         "git fetch-option-C-global",
         "git fetch-option-c-global"
       ]
@@ -2862,7 +3154,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git pull-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2871,7 +3167,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git pull-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         },
         {
           "spellings": [
@@ -2880,7 +3180,9 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "git pull-option-ffonly",
-          "scope": "subcommand"
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only] [REMOTE [REFSPEC]]",
@@ -2946,16 +3248,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git pull",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-pull-operands-valid",
-        "git-pull-option-invalid",
+        "git-pull-rejection",
         "git pull-option-C-global",
         "git pull-option-c-global",
         "git pull-option-ffonly"
@@ -2975,7 +3277,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git push-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -2984,7 +3290,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git push-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
@@ -3050,16 +3360,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git push",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-push-operands-valid",
-        "git-push-option-invalid",
+        "git-push-rejection",
         "git push-option-C-global",
         "git push-option-c-global"
       ]
@@ -3078,7 +3388,11 @@
           "arity": 1,
           "value_role": "path",
           "fixture_id": "git ls-remote-option-C-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -3087,7 +3401,11 @@
           "arity": 1,
           "value_role": "allowed-config",
           "fixture_id": "git ls-remote-option-c-global",
-          "scope": "global"
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [PATTERN ...]]",
@@ -3149,16 +3467,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git ls-remote",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-ls-remote-operands-valid",
-        "git-ls-remote-option-invalid",
+        "git-ls-remote-rejection",
         "git ls-remote-option-C-global",
         "git ls-remote-option-c-global"
       ]
@@ -3176,7 +3494,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "git-option-C"
+          "fixture_id": "git-option-C",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -3184,7 +3506,11 @@
           ],
           "arity": 1,
           "value_role": "allowed-config",
-          "fixture_id": "git-option-c"
+          "fixture_id": "git-option-c",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] SUBCOMMAND ARGS ...",
@@ -3245,16 +3571,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "git",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "git-operands-valid",
-        "git-option-invalid",
+        "git-rejection",
         "git-option-C",
         "git-option-c"
       ]

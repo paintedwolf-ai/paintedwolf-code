@@ -27,14 +27,28 @@ func TestLanguageV1SnapshotsAreDetached(t *testing.T) {
 func TestLanguageV1PreservesDialectAndPublicationChoices(t *testing.T) {
 	c, err := commandsurface.LanguageV1()
 	testutil.FailErr(t, "catalog", err)
-	for name, want := range map[string]string{"sed": "GNU -i", "stat": "-f always BSD", "base64": "-D", "wc": "counts LF", "rg": "-r/--replace"} {
-		help, ok := c.CommandHelp(name)
-		if !ok || !strings.Contains(help, want) {
-			t.Errorf("%s focused help missing %q", name, want)
+	for _, expected := range []struct {
+		name, flag, role string
+		arity            int
+	}{
+		{"sed", "-i", "optional-empty-suffix", -1}, {"stat", "-c", "gnu-format", 1}, {"stat", "-f", "bsd-format", 1}, {"base64", "-D", "boolean", 0}, {"rg", "-r", "replacement", 1}, {"grep", "-r", "boolean", 0}, {"jq", "--argjson", "name-json-pair", 2},
+	} {
+		found := false
+		for _, command := range c.Commands {
+			if command.Name != expected.name {
+				continue
+			}
+			for _, form := range command.Forms {
+				for _, flag := range form.Spellings {
+					if flag == expected.flag && form.ValueRole == expected.role && form.Arity == expected.arity {
+						found = true
+					}
+				}
+			}
 		}
-	}
-	if !strings.Contains(c.Language.Rules["publication"], "comparison 1") {
-		t.Fatal("publication lost complete comparison results")
+		if !found {
+			t.Errorf("missing typed form %+v", expected)
+		}
 	}
 	for _, limit := range c.Language.Limits {
 		if limit.ID == "preview_bytes" && (limit.Exceeded != "" || !strings.Contains(limit.Overflow, "truncate preview")) {

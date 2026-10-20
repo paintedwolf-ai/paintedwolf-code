@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "jq-option-r-rawoutput"
+          "fixture_id": "jq-option-r-rawoutput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -23,7 +25,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "jq-option-c-compactoutput"
+          "fixture_id": "jq-option-c-compactoutput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -32,7 +36,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "jq-option-e-exitstatus"
+          "fixture_id": "jq-option-e-exitstatus",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -41,7 +47,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "jq-option-s-slurp"
+          "fixture_id": "jq-option-s-slurp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -50,7 +58,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "jq-option-n-nullinput"
+          "fixture_id": "jq-option-n-nullinput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -58,7 +68,12 @@
           ],
           "arity": 2,
           "value_role": "name-value-pair",
-          "fixture_id": "jq-option-arg"
+          "fixture_id": "jq-option-arg",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "value"
+          ]
         },
         {
           "spellings": [
@@ -66,7 +81,12 @@
           ],
           "arity": 2,
           "value_role": "name-json-pair",
-          "fixture_id": "jq-option-argjson"
+          "fixture_id": "jq-option-argjson",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "{}"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
@@ -128,16 +148,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "jq",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "jq-operands-valid",
-        "jq-option-invalid",
+        "jq-rejection",
         "jq-option-r-rawoutput",
         "jq-option-c-compactoutput",
         "jq-option-e-exitstatus",
@@ -161,7 +181,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-r-rawoutput"
+          "fixture_id": "yq-option-r-rawoutput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -170,7 +192,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-c-compactoutput"
+          "fixture_id": "yq-option-c-compactoutput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -179,7 +203,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-e-exitstatus"
+          "fixture_id": "yq-option-e-exitstatus",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -188,7 +214,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-s-slurp"
+          "fixture_id": "yq-option-s-slurp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -197,7 +225,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-n-nullinput"
+          "fixture_id": "yq-option-n-nullinput",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -205,7 +235,12 @@
           ],
           "arity": 2,
           "value_role": "name-value-pair",
-          "fixture_id": "yq-option-arg"
+          "fixture_id": "yq-option-arg",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "value"
+          ]
         },
         {
           "spellings": [
@@ -213,7 +248,12 @@
           ],
           "arity": 2,
           "value_role": "name-json-pair",
-          "fixture_id": "yq-option-argjson"
+          "fixture_id": "yq-option-argjson",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "{}"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. yq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
@@ -275,16 +315,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "yq",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "yq-operands-valid",
-        "yq-option-invalid",
+        "yq-rejection",
         "yq-option-r-rawoutput",
         "yq-option-c-compactoutput",
         "yq-option-e-exitstatus",

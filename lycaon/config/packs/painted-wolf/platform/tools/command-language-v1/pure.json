@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sed-option-n-quiet"
+          "fixture_id": "sed-option-n-quiet",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -23,7 +25,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sed-option-E-r"
+          "fixture_id": "sed-option-E-r",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -31,7 +35,11 @@
           ],
           "arity": 1,
           "value_role": "script",
-          "fixture_id": "sed-option-e"
+          "fixture_id": "sed-option-e",
+          "consumption": "fixed",
+          "sample_values": [
+            "s/a/b/"
+          ]
         },
         {
           "spellings": [
@@ -39,7 +47,11 @@
           ],
           "arity": -1,
           "value_role": "optional-empty-suffix",
-          "fixture_id": "sed-option-i"
+          "fixture_id": "sed-option-i",
+          "consumption": "optional-empty-only",
+          "sample_values": [
+            ""
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sed [-n] [-E|-r] [-e SCRIPT ...|SCRIPT] [-i [EMPTY_SUFFIX]] [--] [PATH ...]",
@@ -110,16 +122,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "sed",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sed-operands-valid",
-        "sed-option-invalid",
+        "sed-rejection",
         "sed-option-n-quiet",
         "sed-option-E-r",
         "sed-option-e",
@@ -139,7 +151,11 @@
           ],
           "arity": 1,
           "value_role": "separator",
-          "fixture_id": "awk-option-F"
+          "fixture_id": "awk-option-F",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
         },
         {
           "spellings": [
@@ -147,7 +163,11 @@
           ],
           "arity": 1,
           "value_role": "assignment",
-          "fixture_id": "awk-option-v"
+          "fixture_id": "awk-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture=alpha"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. awk [-F SEP] [-v NAME=VALUE ...] PROGRAM [--] [PATH ...]",
@@ -208,16 +228,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "awk",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "awk-operands-valid",
-        "awk-option-invalid",
+        "awk-rejection",
         "awk-option-F",
         "awk-option-v"
       ]
@@ -275,7 +295,7 @@
           }
         }
       },
-      "notes": "Formats %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G %%; fixed C locale, numeric fractions retained. Backslash a b e f n r t v backslash, octal/hex escapes; unknown conversion rejects. Repeat format for remaining args, missing numeric0/text empty. No %n or host pointer.",
+      "notes": "Formats %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G %%; fixed C locale, numeric fractions retained. Backslash a b e f n r t v backslash, octal/hex escapes; unknown conversion rejects. Repeat format for remaining args, missing numeric0/text empty. No %n or host pointer. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -285,16 +305,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "printf",
-          "--not-a-version-1-option"
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "printf-operands-valid",
-        "printf-option-invalid"
+        "printf-rejection"
       ]
     },
     {
@@ -310,7 +330,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "echo-option-n"
+          "fixture_id": "echo-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -318,7 +340,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "echo-option-e"
+          "fixture_id": "echo-option-e",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -326,7 +350,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "echo-option-E"
+          "fixture_id": "echo-option-E",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. echo [-n] [-e|-E] [--] [TEXT ...]",
@@ -375,7 +401,7 @@
           }
         }
       },
-      "notes": "Default literal escapes, space separator and LF; -n omits LF, -e enables printf-style escapes, -E disables; last wins. Never evaluate text as grammar.",
+      "notes": "Default literal escapes, space separator and LF; -n omits LF, -e enables printf-style escapes, -E disables; last wins. Never evaluate text as grammar. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -385,16 +411,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "echo",
-          "--not-a-version-1-option"
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "echo-operands-valid",
-        "echo-option-invalid",
+        "echo-rejection",
         "echo-option-n",
         "echo-option-e",
         "echo-option-E"
@@ -414,7 +440,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sort-option-r-reverse"
+          "fixture_id": "sort-option-r-reverse",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -423,7 +451,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sort-option-n-numericsort"
+          "fixture_id": "sort-option-n-numericsort",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -432,7 +462,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sort-option-u-unique"
+          "fixture_id": "sort-option-u-unique",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -441,7 +473,11 @@
           ],
           "arity": 1,
           "value_role": "key",
-          "fixture_id": "sort-option-k-key"
+          "fixture_id": "sort-option-k-key",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -450,7 +486,11 @@
           ],
           "arity": 1,
           "value_role": "separator",
-          "fixture_id": "sort-option-t-fieldseparator"
+          "fixture_id": "sort-option-t-fieldseparator",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
         },
         {
           "spellings": [
@@ -459,7 +499,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "sort-option-z-zeroterminated"
+          "fixture_id": "sort-option-z-zeroterminated",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sort [-rnu z] [-k KEY ...] [-t SEP] [--] [PATH ...]",
@@ -520,16 +562,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "sort",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sort-operands-valid",
-        "sort-option-invalid",
+        "sort-rejection",
         "sort-option-r-reverse",
         "sort-option-n-numericsort",
         "sort-option-u-unique",
@@ -552,7 +594,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uniq-option-c-count"
+          "fixture_id": "uniq-option-c-count",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -561,7 +605,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uniq-option-d-repeated"
+          "fixture_id": "uniq-option-d-repeated",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -570,7 +616,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uniq-option-u-unique"
+          "fixture_id": "uniq-option-u-unique",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uniq [-cdu] [--] [INPUT [OUTPUT]]",
@@ -641,16 +689,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "uniq",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "uniq-operands-valid",
-        "uniq-option-invalid",
+        "uniq-rejection",
         "uniq-option-c-count",
         "uniq-option-d-repeated",
         "uniq-option-u-unique"
@@ -670,7 +718,11 @@
           ],
           "arity": 1,
           "value_role": "list",
-          "fixture_id": "cut-option-f-fields"
+          "fixture_id": "cut-option-f-fields",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -679,7 +731,11 @@
           ],
           "arity": 1,
           "value_role": "separator",
-          "fixture_id": "cut-option-d-delimiter"
+          "fixture_id": "cut-option-d-delimiter",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
         },
         {
           "spellings": [
@@ -688,7 +744,11 @@
           ],
           "arity": 1,
           "value_role": "list",
-          "fixture_id": "cut-option-c-characters"
+          "fixture_id": "cut-option-c-characters",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -697,7 +757,11 @@
           ],
           "arity": 1,
           "value_role": "list",
-          "fixture_id": "cut-option-b-bytes"
+          "fixture_id": "cut-option-b-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cut (-f LIST [-d SEP]|-c LIST|-b LIST) [--] [PATH ...]",
@@ -758,16 +822,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "cut",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "cut-operands-valid",
-        "cut-option-invalid",
+        "cut-rejection",
         "cut-option-f-fields",
         "cut-option-d-delimiter",
         "cut-option-c-characters",
@@ -788,7 +852,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tr-option-d-delete"
+          "fixture_id": "tr-option-d-delete",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -797,7 +863,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tr-option-s-squeezerepeats"
+          "fixture_id": "tr-option-s-squeezerepeats",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tr [-d] [-s] SET1 [SET2]",
@@ -858,16 +926,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "tr",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "tr-operands-valid",
-        "tr-option-invalid",
+        "tr-rejection",
         "tr-option-d-delete",
         "tr-option-s-squeezerepeats"
       ]
@@ -886,7 +954,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "xargs-option-0-null"
+          "fixture_id": "xargs-option-0-null",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -895,7 +965,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "xargs-option-n-maxargs"
+          "fixture_id": "xargs-option-n-maxargs",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -903,7 +977,11 @@
           ],
           "arity": 1,
           "value_role": "placeholder",
-          "fixture_id": "xargs-option-I"
+          "fixture_id": "xargs-option-I",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xargs [-0] [-n COUNT] [-I PLACEHOLDER] [--] [COMMAND [ARG ...]]",
@@ -964,16 +1042,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "xargs",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "xargs-operands-valid",
-        "xargs-option-invalid",
+        "xargs-rejection",
         "xargs-option-0-null",
         "xargs-option-n-maxargs",
         "xargs-option-I"
@@ -1044,16 +1122,17 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "test",
-          "--not-a-version-1-option"
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "test-operands-valid",
-        "test-option-invalid"
+        "test-rejection"
       ]
     },
     {
@@ -1121,16 +1200,17 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "[",
-          "--not-a-version-1-option"
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "[-operands-valid",
-        "[-option-invalid"
+        "[-rejection"
       ]
     },
     {
@@ -1198,16 +1278,17 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "[[",
-          "--not-a-version-1-option"
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "[[-operands-valid",
-        "[[-option-invalid"
+        "[[-rejection"
       ]
     },
     {
@@ -1215,7 +1296,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "true",
+      "argv": "true [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. true",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
@@ -1263,7 +1344,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -1273,16 +1354,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "true",
-          "--not-a-version-1-option"
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "true-operands-valid",
-        "true-option-invalid"
+        "true-rejection"
       ]
     },
     {
@@ -1290,7 +1371,7 @@
       "aliases": [],
       "family": "pure",
       "owner": "processes",
-      "argv": "false",
+      "argv": "false [ARG ...]",
       "forms": [],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. false",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
@@ -1338,7 +1419,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -1348,16 +1429,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "false",
-          "--not-a-version-1-option"
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         "false-operands-valid",
-        "false-option-invalid"
+        "false-rejection"
       ]
     },
     {
@@ -1413,7 +1494,7 @@
           }
         }
       },
-      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
       "reuse": {
         "implementation": "lycaon/internal/exec/io.go",
         "tests": [
@@ -1423,16 +1504,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          ":",
-          "--not-a-version-1-option"
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
         ],
-        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "code": "COMMAND_OPERAND_INVALID",
         "fallback": false
       },
       "fixture_ids": [
         ":-operands-valid",
-        ":-option-invalid"
+        ":-rejection"
       ]
     },
     {
@@ -1500,16 +1581,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "sleep",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "sleep-operands-valid",
-        "sleep-option-invalid"
+        "sleep-rejection"
       ]
     },
     {
@@ -1577,16 +1658,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "which",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "which-operands-valid",
-        "which-option-invalid"
+        "which-rejection"
       ]
     },
     {
@@ -1602,7 +1683,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "command-option-v"
+          "fixture_id": "command-option-v",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1610,7 +1693,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "command-option-V"
+          "fixture_id": "command-option-V",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. command (-v|-V) [--] NAME ...",
@@ -1671,16 +1756,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "command",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "command-operands-valid",
-        "command-option-invalid",
+        "command-rejection",
         "command-option-v",
         "command-option-V"
       ]
@@ -1698,7 +1783,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "type-option-a"
+          "fixture_id": "type-option-a",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1706,7 +1793,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "type-option-t"
+          "fixture_id": "type-option-t",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. type [-a|-t] [--] NAME ...",
@@ -1767,16 +1856,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "type",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "type-operands-valid",
-        "type-option-invalid",
+        "type-rejection",
         "type-option-a",
         "type-option-t"
       ]
@@ -1795,7 +1884,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "env-option-i-ignoreenvironment"
+          "fixture_id": "env-option-i-ignoreenvironment",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -1804,7 +1895,11 @@
           ],
           "arity": 1,
           "value_role": "name",
-          "fixture_id": "env-option-u-unset"
+          "fixture_id": "env-option-u-unset",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. env [-i] [-u NAME ...] [NAME=VALUE ...] [COMMAND ARG ...]",
@@ -1870,16 +1965,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "env",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "env-operands-valid",
-        "env-option-invalid",
+        "env-rejection",
         "env-option-i-ignoreenvironment",
         "env-option-u-unset"
       ]
@@ -1949,16 +2044,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "printenv",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "printenv-operands-valid",
-        "printenv-option-invalid"
+        "printenv-rejection"
       ]
     },
     {
@@ -2026,16 +2121,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "export",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "export-operands-valid",
-        "export-option-invalid"
+        "export-rejection"
       ]
     },
     {
@@ -2103,16 +2198,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "unset",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "unset-operands-valid",
-        "unset-option-invalid"
+        "unset-rejection"
       ]
     },
     {
@@ -2180,16 +2275,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "pwd",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "pwd-operands-valid",
-        "pwd-option-invalid"
+        "pwd-rejection"
       ]
     },
     {
@@ -2205,7 +2300,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-a"
+          "fixture_id": "uname-option-a",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2213,7 +2310,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-s"
+          "fixture_id": "uname-option-s",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2221,7 +2320,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-n"
+          "fixture_id": "uname-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2229,7 +2330,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-r"
+          "fixture_id": "uname-option-r",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2237,7 +2340,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-v"
+          "fixture_id": "uname-option-v",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2245,7 +2350,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "uname-option-m"
+          "fixture_id": "uname-option-m",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uname [-a|-s|-n|-r|-v|-m]",
@@ -2306,16 +2413,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "uname",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "uname-operands-valid",
-        "uname-option-invalid",
+        "uname-rejection",
         "uname-option-a",
         "uname-option-s",
         "uname-option-n",
@@ -2389,16 +2496,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "whoami",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "whoami-operands-valid",
-        "whoami-option-invalid"
+        "whoami-rejection"
       ]
     },
     {
@@ -2414,7 +2521,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "id-option-u"
+          "fixture_id": "id-option-u",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2422,7 +2531,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "id-option-g"
+          "fixture_id": "id-option-g",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2430,7 +2541,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "id-option-G"
+          "fixture_id": "id-option-G",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -2438,7 +2551,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "id-option-n"
+          "fixture_id": "id-option-n",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. id [-u|-g|-G] [-n]",
@@ -2499,16 +2614,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "id",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "id-operands-valid",
-        "id-option-invalid",
+        "id-rejection",
         "id-option-u",
         "id-option-g",
         "id-option-G",
@@ -2580,16 +2695,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "hostname",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "hostname-operands-valid",
-        "hostname-option-invalid"
+        "hostname-rejection"
       ]
     },
     {
@@ -2605,7 +2720,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "date-option-u"
+          "fixture_id": "date-option-u",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [+FORMAT]",
@@ -2666,16 +2783,16 @@
         "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
-        "argv": [
-          "date",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "date-operands-valid",
-        "date-option-invalid",
+        "date-rejection",
         "date-option-u"
       ]
     }

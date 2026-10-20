@@ -1077,6 +1077,7 @@ tasks:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
       - internal/commandsurface/language_catalog.go
       - internal/commandsurface/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
@@ -1094,6 +1095,7 @@ tasks:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
       - internal/commandsurface/language_catalog.go
       - internal/commandsurface/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*

@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-r-recursive"
+          "fixture_id": "grep-option-r-recursive",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -22,7 +24,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-R"
+          "fixture_id": "grep-option-R",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -31,7 +35,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-n-linenumber"
+          "fixture_id": "grep-option-n-linenumber",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -40,7 +46,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-i-ignorecase"
+          "fixture_id": "grep-option-i-ignorecase",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -49,7 +57,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-F-fixedstrings"
+          "fixture_id": "grep-option-F-fixedstrings",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -58,7 +68,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-E-extendedregexp"
+          "fixture_id": "grep-option-E-extendedregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -67,7 +79,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-P-perlregexp"
+          "fixture_id": "grep-option-P-perlregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -76,7 +90,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-w-wordregexp"
+          "fixture_id": "grep-option-w-wordregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -85,7 +101,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-v-invertmatch"
+          "fixture_id": "grep-option-v-invertmatch",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -94,7 +112,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-l-fileswithmatches"
+          "fixture_id": "grep-option-l-fileswithmatches",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -103,7 +123,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-L-fileswithoutmatch"
+          "fixture_id": "grep-option-L-fileswithoutmatch",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -112,7 +134,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-c-count"
+          "fixture_id": "grep-option-c-count",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -121,7 +145,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-o-onlymatching"
+          "fixture_id": "grep-option-o-onlymatching",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -130,7 +156,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-q-quiet"
+          "fixture_id": "grep-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -139,7 +167,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-h-nofilename"
+          "fixture_id": "grep-option-h-nofilename",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -148,7 +178,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-H-withfilename"
+          "fixture_id": "grep-option-H-withfilename",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -157,7 +189,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "grep-option-s-nomessages"
+          "fixture_id": "grep-option-s-nomessages",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -166,7 +200,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "grep-option-m-maxcount"
+          "fixture_id": "grep-option-m-maxcount",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -175,7 +213,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "grep-option-A-aftercontext"
+          "fixture_id": "grep-option-A-aftercontext",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -184,7 +226,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "grep-option-B-beforecontext"
+          "fixture_id": "grep-option-B-beforecontext",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -193,7 +239,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "grep-option-C-context"
+          "fixture_id": "grep-option-C-context",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -202,7 +252,11 @@
           ],
           "arity": 1,
           "value_role": "pattern",
-          "fixture_id": "grep-option-e-regexp"
+          "fixture_id": "grep-option-e-regexp",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
         },
         {
           "spellings": [
@@ -210,7 +264,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "grep-option-include"
+          "fixture_id": "grep-option-include",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -218,7 +276,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "grep-option-exclude"
+          "fixture_id": "grep-option-exclude",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -226,7 +288,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "grep-option-excludedir"
+          "fixture_id": "grep-option-excludedir",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
@@ -287,16 +353,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "grep",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "grep-operands-valid",
-        "grep-option-invalid",
+        "grep-rejection",
         "grep-option-r-recursive",
         "grep-option-R",
         "grep-option-n-linenumber",
@@ -338,7 +404,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-n-linenumber"
+          "fixture_id": "rg-option-n-linenumber",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -347,7 +415,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-i-ignorecase"
+          "fixture_id": "rg-option-i-ignorecase",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -356,7 +426,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-F-fixedstrings"
+          "fixture_id": "rg-option-F-fixedstrings",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -365,7 +437,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-E-extendedregexp"
+          "fixture_id": "rg-option-E-extendedregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -374,7 +448,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-P-perlregexp"
+          "fixture_id": "rg-option-P-perlregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -383,7 +459,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-w-wordregexp"
+          "fixture_id": "rg-option-w-wordregexp",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -392,7 +470,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-v-invertmatch"
+          "fixture_id": "rg-option-v-invertmatch",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -401,7 +481,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-l-fileswithmatches"
+          "fixture_id": "rg-option-l-fileswithmatches",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -410,7 +492,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-c-count"
+          "fixture_id": "rg-option-c-count",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -419,7 +503,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-o-onlymatching"
+          "fixture_id": "rg-option-o-onlymatching",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -428,7 +514,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-q-quiet"
+          "fixture_id": "rg-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -437,7 +525,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-H-withfilename"
+          "fixture_id": "rg-option-H-withfilename",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -446,7 +536,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "rg-option-m-maxcount"
+          "fixture_id": "rg-option-m-maxcount",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -455,7 +549,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "rg-option-A-aftercontext"
+          "fixture_id": "rg-option-A-aftercontext",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -464,7 +562,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "rg-option-B-beforecontext"
+          "fixture_id": "rg-option-B-beforecontext",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -473,7 +575,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "rg-option-C-context"
+          "fixture_id": "rg-option-C-context",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -482,7 +588,11 @@
           ],
           "arity": 1,
           "value_role": "pattern",
-          "fixture_id": "rg-option-e-regexp"
+          "fixture_id": "rg-option-e-regexp",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
         },
         {
           "spellings": [
@@ -490,7 +600,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "rg-option-include"
+          "fixture_id": "rg-option-include",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -498,7 +612,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "rg-option-exclude"
+          "fixture_id": "rg-option-exclude",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -506,7 +624,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "rg-option-excludedir"
+          "fixture_id": "rg-option-excludedir",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -515,7 +637,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "rg-option-g-glob"
+          "fixture_id": "rg-option-g-glob",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -524,7 +650,11 @@
           ],
           "arity": 1,
           "value_role": "file-type",
-          "fixture_id": "rg-option-t-type"
+          "fixture_id": "rg-option-t-type",
+          "consumption": "fixed",
+          "sample_values": [
+            "go"
+          ]
         },
         {
           "spellings": [
@@ -533,7 +663,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-S-smartcase"
+          "fixture_id": "rg-option-S-smartcase",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -541,7 +673,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-u"
+          "fixture_id": "rg-option-u",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -549,7 +683,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-hidden"
+          "fixture_id": "rg-option-hidden",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -557,7 +693,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-files"
+          "fixture_id": "rg-option-files",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -566,7 +704,11 @@
           ],
           "arity": 1,
           "value_role": "replacement",
-          "fixture_id": "rg-option-replace"
+          "fixture_id": "rg-option-replace",
+          "consumption": "fixed",
+          "sample_values": [
+            "x"
+          ]
         },
         {
           "spellings": [
@@ -575,7 +717,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-follow"
+          "fixture_id": "rg-option-follow",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -583,7 +727,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-files-without-match"
+          "fixture_id": "rg-option-files-without-match",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -592,7 +738,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-help"
+          "fixture_id": "rg-option-help",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -600,7 +748,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-no-filename"
+          "fixture_id": "rg-option-no-filename",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -608,7 +758,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-no-messages"
+          "fixture_id": "rg-option-no-messages",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -617,7 +769,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "rg-option-case-sensitive"
+          "fixture_id": "rg-option-case-sensitive",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. rg [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
@@ -678,16 +832,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "rg",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "rg-operands-valid",
-        "rg-option-invalid",
+        "rg-rejection",
         "rg-option-n-linenumber",
         "rg-option-i-ignorecase",
         "rg-option-F-fixedstrings",
@@ -736,7 +890,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "find-option-name"
+          "fixture_id": "find-option-name",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -744,7 +902,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "find-option-iname"
+          "fixture_id": "find-option-iname",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -752,7 +914,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "find-option-path"
+          "fixture_id": "find-option-path",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -760,7 +926,11 @@
           ],
           "arity": 1,
           "value_role": "glob",
-          "fixture_id": "find-option-ipath"
+          "fixture_id": "find-option-ipath",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
         },
         {
           "spellings": [
@@ -768,7 +938,11 @@
           ],
           "arity": 1,
           "value_role": "pattern",
-          "fixture_id": "find-option-regex"
+          "fixture_id": "find-option-regex",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
         },
         {
           "spellings": [
@@ -776,7 +950,11 @@
           ],
           "arity": 1,
           "value_role": "kind",
-          "fixture_id": "find-option-type"
+          "fixture_id": "find-option-type",
+          "consumption": "fixed",
+          "sample_values": [
+            "f"
+          ]
         },
         {
           "spellings": [
@@ -784,7 +962,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "find-option-maxdepth"
+          "fixture_id": "find-option-maxdepth",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -792,7 +974,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "find-option-mindepth"
+          "fixture_id": "find-option-mindepth",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         },
         {
           "spellings": [
@@ -800,7 +986,11 @@
           ],
           "arity": 1,
           "value_role": "size",
-          "fixture_id": "find-option-size"
+          "fixture_id": "find-option-size",
+          "consumption": "fixed",
+          "sample_values": [
+            "1c"
+          ]
         },
         {
           "spellings": [
@@ -808,7 +998,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-empty"
+          "fixture_id": "find-option-empty",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -816,7 +1008,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-not"
+          "fixture_id": "find-option-not",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -824,7 +1018,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-a"
+          "fixture_id": "find-option-a",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -832,7 +1028,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-o"
+          "fixture_id": "find-option-o",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -840,7 +1038,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-prune"
+          "fixture_id": "find-option-prune",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -848,7 +1048,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-print"
+          "fixture_id": "find-option-print",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -856,15 +1058,24 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-print0"
+          "fixture_id": "find-option-print0",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
             "-exec"
           ],
-          "arity": 1,
+          "arity": -2,
           "value_role": "command",
-          "fixture_id": "find-option-exec"
+          "fixture_id": "find-option-exec",
+          "consumption": "through-semicolon-or-plus",
+          "sample_values": [
+            "printf",
+            "%s\\n",
+            "{}",
+            ";"
+          ]
         },
         {
           "spellings": [
@@ -872,7 +1083,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "find-option-delete"
+          "fixture_id": "find-option-delete",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. find [PATH ...] [EXPRESSION]",
@@ -948,16 +1161,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "find",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "find-operands-valid",
-        "find-option-invalid",
+        "find-rejection",
         "find-option-name",
         "find-option-iname",
         "find-option-path",

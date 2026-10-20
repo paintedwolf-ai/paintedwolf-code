@@ -14,7 +14,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tar-option-x-extract"
+          "fixture_id": "tar-option-x-extract",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -23,7 +25,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tar-option-t-list"
+          "fixture_id": "tar-option-t-list",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -32,7 +36,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tar-option-c-create"
+          "fixture_id": "tar-option-c-create",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -41,7 +47,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tar-option-z-gzip"
+          "fixture_id": "tar-option-z-gzip",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -50,7 +58,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "tar-option-j-bzip2"
+          "fixture_id": "tar-option-j-bzip2",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -59,7 +69,11 @@
           ],
           "arity": 1,
           "value_role": "archive",
-          "fixture_id": "tar-option-f-file"
+          "fixture_id": "tar-option-f-file",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         },
         {
           "spellings": [
@@ -68,7 +82,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "tar-option-C-directory"
+          "fixture_id": "tar-option-C-directory",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -76,7 +94,11 @@
           ],
           "arity": 1,
           "value_role": "count",
-          "fixture_id": "tar-option-stripcomponents"
+          "fixture_id": "tar-option-stripcomponents",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tar (-x|-t|-c) [-z|-j] -f ARCHIVE [-C DIR] [--strip-components COUNT] [--] [PATH ...]",
@@ -147,16 +169,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "tar",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "tar-operands-valid",
-        "tar-option-invalid",
+        "tar-rejection",
         "tar-option-x-extract",
         "tar-option-t-list",
         "tar-option-c-create",
@@ -180,7 +202,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "unzip-option-l"
+          "fixture_id": "unzip-option-l",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -188,7 +212,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "unzip-option-p"
+          "fixture_id": "unzip-option-p",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -196,7 +222,11 @@
           ],
           "arity": 1,
           "value_role": "path",
-          "fixture_id": "unzip-option-d"
+          "fixture_id": "unzip-option-d",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
         },
         {
           "spellings": [
@@ -204,7 +234,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "unzip-option-o"
+          "fixture_id": "unzip-option-o",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -212,7 +244,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "unzip-option-q"
+          "fixture_id": "unzip-option-q",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unzip [-l|-p] [-d DIR] [-o] [-q] [--] ARCHIVE [MEMBER ...]",
@@ -283,16 +317,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "unzip",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "unzip-operands-valid",
-        "unzip-option-invalid",
+        "unzip-rejection",
         "unzip-option-l",
         "unzip-option-p",
         "unzip-option-d",
@@ -313,7 +347,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "zip-option-r"
+          "fixture_id": "zip-option-r",
+          "consumption": "fixed",
+          "sample_values": []
         },
         {
           "spellings": [
@@ -321,7 +357,9 @@
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "zip-option-q"
+          "fixture_id": "zip-option-q",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. zip [-r] [-q] [--] ARCHIVE PATH ...",
@@ -392,16 +430,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "zip",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "zip-operands-valid",
-        "zip-option-invalid",
+        "zip-rejection",
         "zip-option-r",
         "zip-option-q"
       ]
@@ -481,16 +519,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "gzip",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "gzip-operands-valid",
-        "gzip-option-invalid"
+        "gzip-rejection"
       ]
     },
     {
@@ -568,16 +606,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "gunzip",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "gunzip-operands-valid",
-        "gunzip-option-invalid"
+        "gunzip-rejection"
       ]
     },
     {
@@ -645,16 +683,16 @@
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
-        "argv": [
-          "zcat",
-          "--not-a-version-1-option"
-        ],
         "code": "COMMAND_OPTION_UNSUPPORTED",
-        "fallback": false
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
       },
       "fixture_ids": [
         "zcat-operands-valid",
-        "zcat-option-invalid"
+        "zcat-rejection"
       ]
     }
   ]

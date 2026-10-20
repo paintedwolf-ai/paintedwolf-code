@@ -20,6 +20,7 @@ type ResourceLimit struct {
 	Scope            string   `json:"scope"`
 	Exceeded         string   `json:"exceeded"`
 	Enforcement      string   `json:"enforcement"`
+	BoundaryModel    string   `json:"boundary_model"`
 	Overflow         string   `json:"overflow"`
 	BoundaryFixtures []string `json:"boundary_fixtures"`
 }
