@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/golang/go",
+  "tag": "go1.26.4",
+  "files": [
+    {
+      "path": "src/regexp/syntax/parse.go",
+      "sha256": "d0f657113901da39d6118e4172206a0358b71c96ef43051cc0a741a0a4d04820"
+    },
+    {
+      "path": "src/regexp/syntax/perl_groups.go",
+      "sha256": "d060a0645b60b210eaec7c3dba6d554dc297c14fe71cdbcc9c25b4fc7562c3a4"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    }
+  ]
+}

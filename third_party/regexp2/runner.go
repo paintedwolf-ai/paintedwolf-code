@@ -3,6 +3,7 @@ package regexp2
 import (
 	"bytes"
 	"fmt"
+	"github.com/dlclark/regexp2/v2/internal/budget"
 	"math"
 	"slices"
 	"strconv"
@@ -15,9 +16,10 @@ import (
 )
 
 type Runner struct {
-	re    *Regexp
-	code  *syntax.Code
-	debug bool
+	budget *budget.Meter
+	re     *Regexp
+	code   *syntax.Code
+	debug  bool
 
 	Runtextstart int // starting point for search
 
@@ -155,6 +157,7 @@ func (r *Runner) scan(rt []rune, textInfo *matchText, textstart int, quick bool,
 
 	r.startTimeoutWatch()
 	for {
+		r.budget.Step(1)
 		if minRequiredLength > 0 {
 			if r.code.RightToLeft {
 				if r.Runtextpos < minRequiredLength {
@@ -222,6 +225,7 @@ func executeDefault(r *Runner) error {
 	}
 
 	for {
+		r.budget.Step(1)
 
 		if r.debug {
 			r.dumpState()
@@ -535,6 +539,7 @@ func executeDefault(r *Runner) error {
 			r.trackto(r.stackPeek())
 
 			for r.Crawlpos() != r.stackPeekN(1) {
+				r.budget.Step(1)
 				r.uncapture()
 			}
 
@@ -554,6 +559,7 @@ func executeDefault(r *Runner) error {
 			r.trackPop()
 
 			for r.Crawlpos() != r.trackPeek() {
+				r.budget.Step(1)
 				r.uncapture()
 			}
 
@@ -701,6 +707,7 @@ func executeDefault(r *Runner) error {
 			ch := rune(r.operand(0))
 
 			for c > 0 {
+				r.budget.Step(1)
 				if r.forwardcharnext() != ch {
 					goto BreakBackward
 				}
@@ -720,6 +727,7 @@ func executeDefault(r *Runner) error {
 			ch := rune(r.operand(0))
 
 			for c > 0 {
+				r.budget.Step(1)
 				if r.forwardcharnext() == ch {
 					goto BreakBackward
 				}
@@ -740,6 +748,7 @@ func executeDefault(r *Runner) error {
 			set := r.code.Sets[r.operand(0)]
 
 			for c > 0 {
+				r.budget.Step(1)
 				if !set.CharIn(r.forwardcharnext()) {
 					goto BreakBackward
 				}
@@ -761,6 +770,7 @@ func executeDefault(r *Runner) error {
 			i := c
 
 			for ; i > 0; i-- {
+				r.budget.Step(1)
 				if r.forwardcharnext() != ch {
 					r.backwardnext()
 					break
@@ -786,6 +796,7 @@ func executeDefault(r *Runner) error {
 			i := c
 
 			for ; i > 0; i-- {
+				r.budget.Step(1)
 				if r.forwardcharnext() == ch {
 					r.backwardnext()
 					break
@@ -811,6 +822,7 @@ func executeDefault(r *Runner) error {
 			i := c
 
 			for ; i > 0; i-- {
+				r.budget.Step(1)
 				if !set.CharIn(r.forwardcharnext()) {
 					r.backwardnext()
 					break
@@ -969,6 +981,8 @@ func executeDefault(r *Runner) error {
 // increase the size of stack and track storage
 func (r *Runner) ensureStorage() error {
 	if r.Runstackpos < r.runtrackcount*4 {
+		r.budget.Step(int64(len(r.runstack)))
+		r.budget.Alloc(int64(len(r.runstack)) * 16)
 		doubleIntSlice(&r.runstack, &r.Runstackpos)
 	}
 	if r.Runtrackpos < r.runtrackcount*4 && !r.growTrack() {
@@ -979,6 +993,8 @@ func (r *Runner) ensureStorage() error {
 
 func (r *Runner) ensureStack(plus int) {
 	if r.Runstackpos-plus < r.runtrackcount*4 {
+		r.budget.Step(int64(len(r.runstack)))
+		r.budget.Alloc(int64(len(r.runstack)) * 16)
 		doubleIntSlice(&r.runstack, &r.Runstackpos)
 	}
 }
@@ -995,6 +1011,8 @@ func doubleIntSlice(s *[]int, pos *int) {
 // Save a number on the longjump unrolling stack
 func (r *Runner) crawl(i int) {
 	if r.runcrawlpos == 0 {
+		r.budget.Step(int64(len(r.runcrawl)))
+		r.budget.Alloc(int64(len(r.runcrawl)) * 16)
 		doubleIntSlice(&r.runcrawl, &r.runcrawlpos)
 	}
 	r.runcrawlpos--
@@ -1065,6 +1083,8 @@ func (r *Runner) growTrack() bool {
 		return false
 	}
 
+	r.budget.Step(int64(oldLen))
+	r.budget.Alloc(int64(newLen) * 8)
 	newTrack := make([]int, newLen)
 	copy(newTrack[newLen-oldLen:], r.runtrack)
 	r.Runtrackpos += newLen - oldLen
@@ -1276,6 +1296,7 @@ func (r *Runner) runematch(str []rune) bool {
 
 	if !r.caseInsensitive {
 		for c != 0 {
+			r.budget.Step(1)
 			c--
 			pos--
 			if str[c] != r.Runtext[pos] {
@@ -1284,6 +1305,7 @@ func (r *Runner) runematch(str []rune) bool {
 		}
 	} else {
 		for c != 0 {
+			r.budget.Step(1)
 			c--
 			pos--
 			if str[c] != unicode.ToLower(r.Runtext[pos]) {
@@ -1323,6 +1345,7 @@ func (r *Runner) refmatch(index, len int) bool {
 
 	if !r.caseInsensitive {
 		for c != 0 {
+			r.budget.Step(1)
 			c--
 			cmpos--
 			pos--
@@ -1333,6 +1356,7 @@ func (r *Runner) refmatch(index, len int) bool {
 		}
 	} else {
 		for c != 0 {
+			r.budget.Step(1)
 			c--
 			cmpos--
 			pos--
@@ -1427,6 +1451,7 @@ func findFirstCharDefault(r *Runner) bool {
 	if set.IsSingleton() {
 		ch := set.SingletonChar()
 		for i := r.forwardchars(); i > 0; i-- {
+			r.budget.Step(1)
 			if ch == r.forwardcharnext() {
 				r.backwardnext()
 				return true
@@ -1434,6 +1459,7 @@ func findFirstCharDefault(r *Runner) bool {
 		}
 	} else {
 		for i := r.forwardchars(); i > 0; i-- {
+			r.budget.Step(1)
 			n := r.forwardcharnext()
 			//fmt.Printf("%v in %v: %v\n", string(n), set.String(), set.CharIn(n))
 			if set.CharIn(n) {
@@ -1560,7 +1586,9 @@ func findLeadingStringsLeftToRight(r *Runner, prefixes [][]rune, firstRunes []ru
 	// between possible first runes.
 	if ignoreCase || len(firstRunes) == 0 {
 		for start := r.Runtextpos; start <= latestPossibleStart(r); start++ {
+			r.budget.Step(1)
 			for _, prefix := range prefixes {
+				r.budget.Step(1)
 				if ignoreCase {
 					if helpers.StartsWithIgnoreCase(r.Runtext[start:], prefix) {
 						r.Runtextpos = start
@@ -1578,6 +1606,7 @@ func findLeadingStringsLeftToRight(r *Runner, prefixes [][]rune, firstRunes []ru
 
 	latest := min(latestPossibleStart(r), r.Runtextend-1)
 	for searchAt := r.Runtextpos; searchAt <= latest; {
+		r.budget.Step(1)
 		offset := indexOfAnyRunes(r.Runtext[searchAt:latest+1], firstRunes)
 		if offset < 0 {
 			break
@@ -1585,6 +1614,7 @@ func findLeadingStringsLeftToRight(r *Runner, prefixes [][]rune, firstRunes []ru
 		start := searchAt + offset
 		first := r.Runtext[start]
 		for _, prefix := range prefixes {
+			r.budget.Step(1)
 			if len(prefix) > 0 && prefix[0] == first && helpers.StartsWith(r.Runtext[start:], prefix) {
 				r.Runtextpos = start
 				return true
@@ -1615,6 +1645,7 @@ func indexOfAnyRunes(input, find []rune) int {
 func findFixedDistanceCharLeftToRight(r *Runner, ch rune, distance int) bool {
 	searchStart := r.Runtextpos + distance
 	for searchStart < r.Runtextend {
+		r.budget.Step(1)
 		offset := helpers.IndexOfAny1(r.Runtext[searchStart:], ch)
 		if offset < 0 {
 			r.Runtextpos = r.Runtextend
@@ -1643,6 +1674,7 @@ func findFixedDistanceStringLeftToRight(r *Runner, literal []rune, distance int)
 
 	searchStart := r.Runtextpos + distance
 	for searchStart <= r.Runtextend-len(literal) {
+		r.budget.Step(1)
 		offset := helpers.IndexOf(r.Runtext[searchStart:], literal)
 		if offset < 0 {
 			r.Runtextpos = r.Runtextend
@@ -1672,6 +1704,7 @@ func findFixedDistanceSetsLeftToRight(r *Runner, sets []syntax.FixedDistanceSet)
 	primary := sets[0]
 	searchStart := r.Runtextpos + primary.Distance
 	for searchStart < r.Runtextend {
+		r.budget.Step(1)
 		offset := indexOfSet(r.Runtext[searchStart:], primary)
 		if offset < 0 {
 			r.Runtextpos = r.Runtextend
@@ -1701,6 +1734,7 @@ func findLiteralAfterLoopLeftToRight(r *Runner, literal *syntax.LiteralAfterLoop
 
 	searchStart := r.Runtextpos
 	for searchStart < r.Runtextend {
+		r.budget.Step(1)
 		literalIndex := indexOfLiteralAfterLoop(r, literal, searchStart)
 		if literalIndex < 0 {
 			r.Runtextpos = r.Runtextend
@@ -1709,6 +1743,7 @@ func findLiteralAfterLoopLeftToRight(r *Runner, literal *syntax.LiteralAfterLoop
 
 		start := literalIndex
 		for start > r.Runtextpos && literal.LoopNode.Set.CharIn(r.Runtext[start-1]) {
+			r.budget.Step(1)
 			start--
 		}
 		if hasRequiredLengthAt(r, start) {
@@ -1728,6 +1763,7 @@ func findRequiredLandmarkChainLeftToRight(r *Runner, chain *syntax.RequiredLandm
 	}
 
 	for searchStart := r.Runtextpos; searchStart <= latestPossibleStart(r); {
+		r.budget.Step(1)
 		first, ok := findNextRequiredLandmarkRunes(r.Runtext, searchStart, r.Runtextend, chain.Landmarks[0])
 		if !ok {
 			r.Runtextpos = r.Runtextend
@@ -1736,6 +1772,7 @@ func findRequiredLandmarkChainLeftToRight(r *Runner, chain *syntax.RequiredLandm
 
 		nextStart := first.End
 		for i := 1; i < len(chain.Landmarks); i++ {
+			r.budget.Step(1)
 			landmark, ok := findNextRequiredLandmarkRunes(r.Runtext, nextStart, r.Runtextend, chain.Landmarks[i])
 			if !ok {
 				r.Runtextpos = r.Runtextend
@@ -1749,6 +1786,7 @@ func findRequiredLandmarkChainLeftToRight(r *Runner, chain *syntax.RequiredLandm
 			candidate = r.Runtextpos
 		}
 		for candidate > r.Runtextpos && chain.LeadingLoopSet.CharIn(r.Runtext[candidate-1]) {
+			r.budget.Step(1)
 			candidate--
 		}
 		if hasRequiredLengthAt(r, candidate) {
@@ -1878,6 +1916,7 @@ func indexOfSet(chars []rune, set syntax.FixedDistanceSet) int {
 
 func fixedDistanceSetsMatchAt(r *Runner, sets []syntax.FixedDistanceSet, start int) bool {
 	for _, set := range sets {
+		r.budget.Step(1)
 		index := start + set.Distance
 		if index < 0 || index >= r.Runtextend || !charInFixedDistanceSet(set, r.Runtext[index]) {
 			return false
@@ -1924,8 +1963,10 @@ func (r *Runner) initMatch(textInfo *matchText) {
 
 	if r.runmatch == nil {
 		if r.re.caps != nil {
+			r.budget.Alloc(512 + int64(r.re.capsize)*32)
 			r.runmatch = newMatchSparse(r.re, r.re.caps, r.re.capsize, textInfo, r.Runtextstart)
 		} else {
+			r.budget.Alloc(512 + int64(r.re.capsize)*32)
 			r.runmatch = newMatch(r.re, r.re.capsize, textInfo, r.Runtextstart)
 		}
 	} else {
@@ -1959,6 +2000,7 @@ func (r *Runner) initMatch(textInfo *matchText) {
 		stacksize = 32
 	}
 
+	r.budget.Alloc(int64(tracksize+stacksize+32) * 8)
 	r.runtrack = make([]int, tracksize)
 	r.Runtrackpos = tracksize
 
@@ -2006,6 +2048,11 @@ func (r *Runner) Capture(capnum, start, end int) {
 	}
 
 	r.crawl(capnum)
+	if r.runmatch.matches[capnum] == nil {
+		r.budget.Alloc(16)
+	} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
+		r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
+	}
 	r.runmatch.addMatch(capnum, start, end-start)
 }
 
@@ -2047,6 +2094,11 @@ func (r *Runner) transferCapture(capnum, uncapnum, start, end int) {
 
 	if capnum != -1 {
 		r.crawl(capnum)
+		if r.runmatch.matches[capnum] == nil {
+			r.budget.Alloc(16)
+		} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
+			r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
+		}
 		r.runmatch.addMatch(capnum, start, end-start)
 	}
 }
@@ -2085,6 +2137,7 @@ func (r *Runner) stackDescription(a []int, index int) string {
 
 	buf.WriteRune('(')
 	for i := index; i < len(a); i++ {
+		r.budget.Step(1)
 		if i > index {
 			buf.WriteRune(' ')
 		}
@@ -2115,6 +2168,7 @@ func (r *Runner) textposDescription() string {
 	buf.WriteRune('>')
 
 	for i := r.Runtextpos; i < r.Runtextend; i++ {
+		r.budget.Step(1)
 		buf.WriteString(syntax.CharDescription(r.Runtext[i]))
 	}
 	if buf.Len() >= 64 {
@@ -2168,6 +2222,7 @@ func (r *Runner) decodeString(s string) ([]rune, *[]rune) {
 	buf, pooled := pooledRuneBuffers.get(len(s), r.re.optimizations.MaxCachedRuneBufferLength)
 	n := 0
 	for _, ch := range s {
+		r.budget.Step(1)
 		buf[n] = ch
 		n++
 	}
@@ -2179,6 +2234,7 @@ func (r *Runner) decodeStringWithStart(s string, startAt int) (runes []rune, run
 	n := 0
 	runeStart = -1
 	for strIdx, ch := range s {
+		r.budget.Step(1)
 		if startAt >= 0 && strIdx == startAt {
 			runeStart = n
 		}
@@ -2211,6 +2267,7 @@ func (re *Regexp) putRunner(r *Runner) {
 
 func (r *Runner) LastIndexOfRune(startIndex int, endIndex int, find rune) int {
 	for i := endIndex - 1; i >= startIndex; i-- {
+		r.budget.Step(1)
 		if r.Runtext[i] == find {
 			return i
 		}
@@ -2221,6 +2278,7 @@ func (r *Runner) LastIndexOfRune(startIndex int, endIndex int, find rune) int {
 // Undo captures until it reaches the specified capture position
 func (r *Runner) UncaptureUntil(capturePos int) {
 	for r.Crawlpos() > capturePos {
+		r.budget.Step(1)
 		r.uncapture()
 	}
 }
@@ -2294,6 +2352,7 @@ func (r *Runner) StackPushN(vals ...int) {
 	// check if we need to size up stack
 	r.ensureStack(len(vals))
 	for _, val := range vals {
+		r.budget.Step(1)
 		r.Runstackpos--
 		r.runstack[r.Runstackpos] = val
 	}

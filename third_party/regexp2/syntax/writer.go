@@ -3,19 +3,28 @@ package syntax
 import (
 	"bytes"
 	"fmt"
+	"github.com/dlclark/regexp2/v2/internal/budget"
 	"math"
 	"slices"
 )
 
-func Write(tree *RegexTree) (*Code, error) {
+func Write(tree *RegexTree) (*Code, error) { return write(tree, nil) }
+
+func WriteMetered(tree *RegexTree, m *budget.Meter) (*Code, error) { return write(tree, m) }
+
+func write(tree *RegexTree, m *budget.Meter) (*Code, error) {
+	m.Alloc(2048)
 	w := newWriter(nil)
+	w.budget = m
 	code, err := w.codeFromTree(tree)
 	if err != nil {
 		return nil, err
 	}
 
 	if slices.Contains(code.CaptureSlotInUse, false) {
+		m.Alloc(2048)
 		quickWriter := newWriter(code.CaptureSlotInUse)
+		quickWriter.budget = m
 		quickCode, err := quickWriter.codeFromTree(tree)
 		if err != nil {
 			return nil, err
@@ -36,6 +45,7 @@ func newWriter(quickCaptureSlots []bool) writer {
 }
 
 type writer struct {
+	budget  *budget.Meter
 	emitted []int
 
 	intStack          []int
@@ -89,7 +99,9 @@ func (w *writer) codeFromTree(tree *RegexTree) (*Code, error) {
 	w.counting = true
 
 	for {
+		w.budget.Step(1)
 		if !w.counting {
+			w.budget.Alloc(int64(w.count) * 8)
 			w.emitted = make([]int, w.count)
 		}
 
@@ -99,6 +111,7 @@ func (w *writer) codeFromTree(tree *RegexTree) (*Code, error) {
 		w.emit1(Lazybranch, 0)
 
 		for {
+			w.budget.Step(1)
 			if len(curNode.Children) == 0 {
 				if err := w.emitFragment(curNode.T, curNode, 0); err != nil {
 					return nil, err
@@ -141,6 +154,10 @@ func (w *writer) codeFromTree(tree *RegexTree) (*Code, error) {
 		return &Code{Codes: w.emitted, TrackCount: w.trackcount}, nil
 	}
 
+	if w.budget != nil {
+		w.budget.Alloc(512 + int64(capsize))
+		return &Code{Codes: w.emitted, Strings: w.stringtable, Sets: w.settable, TrackCount: w.trackcount, Caps: w.caps, Capsize: capsize, CaptureSlotInUse: captureSlotsInUse(w.emitted, capsize)}, nil
+	}
 	fcPrefix := getFirstCharsPrefix(tree)
 	prefix := getPrefix(tree)
 	rtl := (tree.Options & RightToLeft) != 0
@@ -405,6 +422,9 @@ func (w *writer) emitCapture(node *RegexNode) bool {
 // To avoid recursion, we use a simple integer stack.
 // This is the push.
 func (w *writer) pushInt(i int) {
+	if len(w.intStack) == cap(w.intStack) {
+		w.budget.Alloc(int64(cap(w.intStack)*2+1) * 8)
+	}
 	w.intStack = append(w.intStack, i)
 }
 
@@ -441,6 +461,7 @@ func (w *writer) setCode(set *CharSet) int {
 		return 0
 	}
 
+	w.budget.Alloc(256 + int64(len(set.ranges))*64)
 	buf := &bytes.Buffer{}
 
 	set.mapHashFill(buf)
@@ -448,7 +469,11 @@ func (w *writer) setCode(set *CharSet) int {
 	i, ok := w.sethash[hash]
 	if !ok {
 		i = len(w.sethash)
+		w.budget.Alloc(128)
 		w.sethash[hash] = i
+		if len(w.settable) == cap(w.settable) {
+			w.budget.Alloc(int64(cap(w.settable)*2+1) * 8)
+		}
 		w.settable = append(w.settable, set)
 	}
 	return i
@@ -461,11 +486,16 @@ func (w *writer) stringCode(str []rune) int {
 		return 0
 	}
 
+	w.budget.Alloc(int64(len(str)) * 4)
 	hash := string(str)
 	i, ok := w.stringhash[hash]
 	if !ok {
 		i = len(w.stringhash)
+		w.budget.Alloc(128)
 		w.stringhash[hash] = i
+		if len(w.stringtable) == cap(w.stringtable) {
+			w.budget.Alloc(int64(cap(w.stringtable)*2+1) * 24)
+		}
 		w.stringtable = append(w.stringtable, str)
 	}
 

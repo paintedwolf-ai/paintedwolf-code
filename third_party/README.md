@@ -104,3 +104,13 @@ The P08 patch adds bounded boolean execution of a host-validated POSIX ERE tree.
 It does not select the P13 PCRE grammar or expose additional regex syntax.
 Existing upstream text parser/matcher entry points retain their behavior.
 The patch and exact metering contract are recorded alongside the selected source.
+
+The predicate grammar adapter also retains the selected Go1.26.4
+`regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
+under `regexp2/syntax/posix/`. Their exact upstream hashes and tag are recorded
+there. Parser nodes use the standard exported AST types; the grammar algorithm
+is unchanged. The narrow patch threads the operation meter through the existing
+parser/helper loops, class sort comparisons and growth sites, and reserves
+source-bounded recursive scratch before parser entry. This closes the otherwise
+uncancelable/unmetered validation step. It does not change standard-library
+consumers elsewhere in the host.
