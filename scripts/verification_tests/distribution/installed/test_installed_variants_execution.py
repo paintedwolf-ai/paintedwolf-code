@@ -21,6 +21,27 @@ class InstalledVariantTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable):
             owner.gnome_monitors({'Desktop': 'Plasma'})
 
+    def test_typed_plasma_session_selects_its_sole_monitor_authority(self):
+        import hashlib
+        from linux_release import installed_plasma
+        variant = {'release': {'os_ids': ['arch'], 'version_id': None, 'snapshot_kind': 'package-inventory', 'channel': None},
+            'display': {'protocol': 'wayland', 'xwayland': 'required', 'clipboard_manager': 'allowed'}, 'scales_percent': [100]}
+        selected = {'kind': 'package-inventory', 'value': hashlib.sha256(json.dumps({}, sort_keys=True).encode()).hexdigest(), 'channel': None}
+        observations = {'os_release': {'ID': 'arch'}, 'packages': {}, 'session': {'Desktop': 'KDE', 'Type': 'wayland'}}
+        monitors = {'scales_percent': [100], 'state': {'kwin': 'typed fixture'}}
+        with patch.object(installed_plasma, 'observe', return_value=monitors) as plasma, \
+                patch.object(owner, 'gnome_monitors') as gnome:
+            result = owner.observe(variant, selected, observations, {})
+        self.assertEqual(result['monitors'], monitors)
+        plasma.assert_called_once_with(observations['session'])
+        gnome.assert_not_called()
+        observations['session']['Desktop'] = 'GNOME'
+        with patch.object(installed_plasma, 'observe') as plasma, \
+                patch.object(owner, 'gnome_monitors', return_value=monitors) as gnome:
+            owner.observe(variant, selected, observations, {})
+        gnome.assert_called_once_with(observations['session'])
+        plasma.assert_not_called()
+
     def test_snapshot_authority_refuses_wrong_channel_shape_and_boolean(self):
         variant = {'release': {'snapshot_kind': 'nixos-revision', 'channel': 'nixos-unstable'}}
         correct = {'kind': 'nixos-revision', 'value': 'a' * 40, 'channel': 'nixos-unstable'}

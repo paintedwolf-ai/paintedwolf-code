@@ -122,7 +122,13 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
                 raise refusal
             observations['saved_file'] = disk
             ui.click('Find in file')
-            ui.fill(ui.api.ROLE_ENTRY, 'Find', 'qualification needle')
+            native = app.binding.get('native_input')
+            if native is not None:
+                from ..installed_input.guest import perform
+                observations['editor_search_keyboard'] = {'physical_vm_keyboard': perform(
+                    native['binding'], native['vm_id'], EntryFocus(app, ui, 'Find'), operation='editor-find-needle-v1')}
+            else:
+                ui.fill(ui.api.ROLE_ENTRY, 'Find', 'qualification needle')
         observations.update(saved_file=disk, normal_find_input_action=True,
             remaining_requirements=['search-result-and-navigation-witness', 'applied-edit-review-interaction',
                                     'owned-project-cleanup'])
