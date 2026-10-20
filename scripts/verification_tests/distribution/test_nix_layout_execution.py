@@ -48,6 +48,18 @@ class NixFinalLayoutTests(unittest.TestCase):
                     "nix_store": "/selected-nix/bin/nix-store"})
                 self.assertNotIn("trusted", receipt)
 
+    def test_distinct_settings_observer_is_required_and_sealed_after_fixups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, root = self.fixture(directory)
+            observer = root / "bin/pw-desktop-settings"
+            observer.write_bytes(observer.read_bytes() + b"final observer bytes")
+            rows = self.seal(output)["executables"]
+            selected = next(row for row in rows if row["path"] == str(observer))
+            self.assertEqual(selected["sha256"], hashlib.sha256(observer.read_bytes()).hexdigest())
+            observer.unlink()
+            with self.assertRaises(ValueError):
+                self.seal(output)
+
     def test_roles_cannot_be_wrappers_symlinks_or_another_architecture(self):
         for mutation in ["script", "symlink", "architecture", "mode"]:
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
