@@ -25,7 +25,7 @@ class NativeBootstrapTests(unittest.TestCase):
         return execution, artifact, binding, inventory
 
     def test_snapshot_precedes_owned_removal_and_absence_has_positive_controls(self):
-        for failure in (None, 'remove', 'process'):
+        for failure in (None, 'remove', 'process', 'version', 'owner'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 execution, artifact, binding, inventory = self.fixture(root)
@@ -37,9 +37,9 @@ class NativeBootstrapTests(unittest.TestCase):
                     if arguments[:3] == ['sudo', '-n', '/usr/bin/python3']:
                         return 0, json.dumps({'format_version': 1, 'matching_processes': [123] if failure == 'process' else []}).encode(), b''
                     if arguments[0] == 'dpkg-deb' or '--showformat=${Version}' in arguments:
-                        return 0, b'1.0', b''
+                        return 0, b'2.0' if failure == 'version' and '--showformat=${Version}' in arguments else b'1.0', b''
                     if '--showformat=${Package}' in arguments:
-                        return 0, b'painted-wolf-code' if arguments[-1] == 'painted-wolf-code' else b'dpkg', b''
+                        return (1 if failure == 'owner' else 0), b'painted-wolf-code' if arguments[-1] == 'painted-wolf-code' else b'dpkg', b''
                     return 1, b'', b''
                 def observe(_):
                     order.append('snapshot')
@@ -53,7 +53,7 @@ class NativeBootstrapTests(unittest.TestCase):
                         patch.object(owner, 'package_inventory', side_effect=observe), \
                         patch.object(owner, 'command', side_effect=command):
                     report = owner.bootstrap({}, 'b' * 40, 'app', root, root / 'install', root / 'output', execution)
-                self.assertEqual(order, ['snapshot', 'remove'])
+                self.assertEqual(order, [] if failure == 'owner' else ['snapshot'] if failure == 'version' else ['snapshot', 'remove'])
                 self.assertFalse(report['gui_initialized'])
                 self.assertFalse(report['pristine_operating_system'])
                 self.assertFalse(report['qualification_authority'])
