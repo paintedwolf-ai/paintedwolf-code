@@ -173,7 +173,7 @@ jobs:
           PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
         run: |
           set -euo pipefail
-          controller=23ba43dc8c99ace21a681106fc559c741479b844
+          controller=70481454abe7489c8b9fd0747f1872c84168aa1c
           git fetch --no-tags origin "$controller"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
           git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
