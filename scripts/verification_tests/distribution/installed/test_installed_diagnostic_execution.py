@@ -46,6 +46,8 @@ class InstalledDiagnosticTests(unittest.TestCase):
             (inputs / 'final-artifacts.json').write_text(json.dumps(
                 {'format_version': 1, 'source_commit': 'b' * 40, 'artifacts': [artifact]}))
             controls = {inputs, inputs / 'packages', inputs / 'candidate-selection.json', inputs / 'final-artifacts.json'}
+            for control in controls:
+                control.chmod(0o755 if control.is_dir() else 0o644)
             original = Path.lstat
             def staged_owner(path, *args, **kwargs):
                 info = original(path, *args, **kwargs)
