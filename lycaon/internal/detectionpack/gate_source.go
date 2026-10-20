@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // GateSource adapts detection matching to the approval gate.
@@ -74,6 +75,9 @@ func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservatio
 	plan, _ := commandsurface.PlanGroups(action.Invocation.Args)
 	roots := effectReachRoots(action.Execution.Contained)
 	processes := commandProcesses(rawCommand, plan)
+	if len(action.Invocation.BoundStages) > 0 {
+		processes = nil
+	}
 	processReach := make([]string, 0, len(processes))
 	for _, process := range processes {
 		processReach = append(processReach, resolveCommandEffectReach(
@@ -82,6 +86,7 @@ func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservatio
 	}
 	evObs := ActionObservation{
 		Tool:                 action.Invocation.Tool,
+		BoundStages:          toolcontract.CloneExecutionStages(action.Invocation.BoundStages),
 		CommandLine:          rawCommand,
 		Plan:                 plan,
 		ProjectDir:           action.Scope.ProjectDir,
@@ -105,6 +110,9 @@ func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservatio
 		TargetFiles:        action.Invocation.Files,
 		EffectReach:        ResolveEffectReach(action.Invocation.Tool, action.Invocation.Args, action.Scope.ProjectDir, roots),
 		ProcessEffectReach: processReach,
+	}
+	if len(action.Invocation.BoundStages) > 0 {
+		evObs.EffectReach = "unproven"
 	}
 	return evObs
 }

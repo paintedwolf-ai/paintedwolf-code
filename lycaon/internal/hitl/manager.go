@@ -2,6 +2,7 @@
 package hitl
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ type ProposedAction struct {
 
 // ActionInvocation captures tool invocation facts.
 type ActionInvocation struct {
+	BoundStages   []toolcontract.ExecutionStage
 	Tool          string
 	Args          map[string]any
 	Files         []string

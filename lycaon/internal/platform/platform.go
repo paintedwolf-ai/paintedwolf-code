@@ -9,14 +9,16 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // PolicyContext is input for unified pre-tool policy evaluation.
 type PolicyContext struct {
-	ProfileID  string
-	ToolAccess sandbox.ToolAccess
-	ToolName   string
-	ToolArgs   map[string]any
+	BoundStages []toolcontract.ExecutionStage
+	ProfileID   string
+	ToolAccess  sandbox.ToolAccess
+	ToolName    string
+	ToolArgs    map[string]any
 	// ResolvedFiles holds physical path identities for the invocation.
 	ResolvedFiles []string
 	// Dynamic tool identities come from the host registry.

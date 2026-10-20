@@ -35,6 +35,11 @@ func TestCommandEffectAdmissionRequiresEveryClassAndBoundChildren(t *testing.T) 
 	if _, err := wrapper.CommandEffects(nil); err == nil {
 		t.Fatal("unbound child admitted")
 	}
+	for _, invalid := range []CommandEffects{0, CommandEffects(255)} {
+		if _, err := wrapper.CommandEffects(&invalid); err == nil {
+			t.Fatal("empty or unknown bound child admitted as read-only")
+		}
+	}
 	bound, err := wrapper.CommandEffects(&mutation)
 	if err != nil || readonly.Allows(bound) || !all.Allows(bound) {
 		t.Fatalf("dynamic mutation effects=%v err=%v", bound.Classes(), err)

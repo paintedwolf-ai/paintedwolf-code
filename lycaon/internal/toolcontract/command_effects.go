@@ -82,7 +82,7 @@ func (r EffectRequirement) CommandEffects(child *CommandEffects) (CommandEffects
 		case "egress":
 			effects |= commandEffectBit(CommandNetworkEgress)
 		case "bound-child-effect-set":
-			if child == nil || *child & ^CommandEffects(15) != 0 {
+			if child == nil || *child == 0 || *child & ^CommandEffects(15) != 0 {
 				return 0, fmt.Errorf("bound child effect set required")
 			}
 			effects |= *child
