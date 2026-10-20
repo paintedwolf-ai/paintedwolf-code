@@ -25,7 +25,14 @@ def verify_inventory(root: Path) -> dict:
         target = root / name
         if target.is_symlink() or file_digest(target) != expected:
             raise ValueError("upgrade fixture checksum differs: " + name)
-    return json.loads((root / "plan.json").read_text())
+    plan = json.loads((root / "plan.json").read_text())
+    if not isinstance(plan, dict) or type(plan.get("format_version")) is not int or plan["format_version"] != 1:
+        raise ValueError("unsupported upgrade fixture format")
+    if not isinstance(plan.get("cases"), list):
+        raise ValueError("upgrade fixture cases must be a list")
+    if not plan["cases"] and plan.get("skip_reason") != "no_automatic_upgrade_source":
+        raise ValueError("upgrade fixture has no supported exclusion reason")
+    return plan
 
 
 def verify_requests(path: Path, case: dict, start: int):

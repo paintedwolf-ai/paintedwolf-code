@@ -18,7 +18,7 @@ class GateTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.fixtures = self.root / "fixtures"
         self.fixtures.mkdir()
-        self.plan = {"source_sha": "a" * 40, "candidate": {"version": "1.1.0"},
+        self.plan = {"format_version": 1, "source_sha": "a" * 40, "candidate": {"version": "1.1.0"},
                      "cases": [], "excluded_sources": [{"source_version": "1.0.1"}],
                      "skip_reason": "no_automatic_upgrade_source"}
         self.evidence = self.root / "evidence"
@@ -176,3 +176,13 @@ class GateTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "cancelled")
         self.assertEqual(receipt["cases"][0]["error"], "cancelled")
         self.assertEqual(cleaned, [True])
+
+    def test_unknown_fixture_formats_and_unexplained_empty_matrices_are_refused(self):
+        for change in ({"format_version": 99}, {"format_version": True}, {"cases": {}}, {"skip_reason": None}):
+            with self.subTest(change=change):
+                original = dict(self.plan)
+                self.plan.update(change)
+                self.inventory()
+                with self.assertRaises(ValueError):
+                    gate.verify_inventory(self.fixtures)
+                self.plan = original

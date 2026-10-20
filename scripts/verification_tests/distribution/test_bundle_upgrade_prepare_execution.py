@@ -39,7 +39,7 @@ class PreparationTests(unittest.TestCase):
         self.archives.mkdir()
         (self.archives / Path(preparation.archive_path(self.candidate)).name).write_bytes(b"exact candidate")
         self.output = self.root / "prepared"
-        self.plan = {"cases": [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview",
+        self.plan = {"format_version": 1, "cases": [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview",
                                "source_feed": "prior", "steps": [self.candidate]}],
                      "feeds": [{"path": "prior", "manifest": self.prior}], "candidate": self.candidate}
         self.patches = [patch.object(preparation, "load_registry", return_value={}),
