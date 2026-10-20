@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import struct
 import threading
-import time
 import unittest
 from unittest.mock import patch
 
@@ -50,15 +49,21 @@ class InstalledSecurityTests(unittest.TestCase):
     def test_successful_cli_requires_owned_inhibitor_and_release(self):
         for observed_pid in [123, 456]:
             active = threading.Event()
+            observed = threading.Event()
             def product(*args, **kwargs):
                 active.set()
-                time.sleep(0.25)
+                if not observed.wait(5):
+                    raise AssertionError("native observer did not sample running product")
                 active.clear()
                 return {'exit_code': 0, 'timed_out': False, 'output_limit': False,
                         'launch_identity': {'pid': 123, 'start_time_ticks': '42'},
                         'stdout': b'', 'stderr': b'success'}
             def observer():
-                return [['sleep', '', '', 'block', 1000, observed_pid]] if active.is_set() else []
+                if not active.is_set():
+                    return []
+                row = ['sleep', '', '', 'block', 1000, observed_pid]
+                observed.set()
+                return [row]
             with self.subTest(observed_pid=observed_pid), patch.object(security, 'run', side_effect=product), \
                     patch.object(security, 'inhibitors', side_effect=observer), patch.object(security.os, 'getuid', return_value=1000):
                 status, facts, streams = security.inhibitor_lifetime({})
