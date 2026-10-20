@@ -155,7 +155,7 @@ export const APPROVALS_SETTINGS_COPY = {
   optionsHeading: "Options",
   baselineHeading: "Always on",
   baselineLines: [
-    "On macOS, commands start in an OS sandbox that keeps their writes to attached folders, temp, and cache.",
+    "On macOS and Linux, commands start in an OS sandbox that keeps their writes to attached folders, temp, and cache.",
     "Reaching past that box takes a request. Your approval level decides when it asks; direct network, local services, and running outside the sandbox ask at every level before first use.",
     "Allowing a folder from a card grants access to it — it does not add it to your attached folders, and it ends on its own.",
   ],
