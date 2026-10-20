@@ -5,7 +5,8 @@ import hashlib
 from pathlib import Path
 import re
 
-from .installed_artifact_bundle import download, retain_tree
+from .installed_artifact_bundle import Limits, download, retain_tree
+from .installed_capacity import limits as campaign_limits
 from .installed_campaign import validate_plan, verify_execution_receipt
 from .installed_execution import registry
 from .installed_provenance import select_control, select_plan, select_qualification, verify_producer
@@ -19,7 +20,9 @@ def materialize(api, repository: str, repository_id: int, run_id: int, source: d
                 catalog: dict, directory: Path) -> tuple[Path, dict]:
     raw_selection = select_qualification(api, repository, repository_id, run_id)
     raw = directory / "raw"
-    download(raw_selection, raw)
+    capacity = campaign_limits(catalog)
+    transport_bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
+    download(raw_selection, raw, limits=transport_bounds)
     if ({path.name for path in raw.iterdir() if path.is_file()} != {"qualification.json"}
             or {path.name for path in raw.iterdir() if path.is_dir()} != {"control-inputs", "installed-campaign"}):
         raise ValueError("raw qualification contains missing or unexpected producer roots")
@@ -46,6 +49,8 @@ def materialize(api, repository: str, repository_id: int, run_id: int, source: d
     plan, _ = document(plan_root / "qualification-plan.json")
     final, _ = document(fresh / "final-artifacts.json")
     selected_source, driver_tree, targets = validate_plan(plan, final)
+    capacity = campaign_limits(catalog, final)
+    execution_bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
     commit = api(f"repos/{repository}/git/commits/{raw_selection['controller_commit']}")
     expected_tree = commit.get("tree", {}).get("sha")
     if (selected_source != source["source_commit"] or not isinstance(expected_tree, str)
@@ -63,7 +68,7 @@ def materialize(api, repository: str, repository_id: int, run_id: int, source: d
         verify_execution_receipt(executed / target["id"],target,source["source_commit"],driver_tree)
     retained = directory / "executed"
     retain_tree(executed, retained, root_files={"campaign.json", "admission.json", "plan.json", "driver-registry.json"},
-                root_dirs={"evidence", *[target["id"] for target in targets]})
+                root_dirs={"evidence", *[target["id"] for target in targets]}, limits=execution_bounds)
     inputs = directory / "inputs"
     retain_tree(fresh, inputs, root_files=CONTROL_FILES, root_dirs=CONTROL_DIRS)
     (inputs / "control-producer.json").unlink()

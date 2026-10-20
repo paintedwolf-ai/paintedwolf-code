@@ -6,6 +6,47 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      linux_operation:
+        description: 'Release publication or a nonpublishing Linux qualification operation'
+        type: choice
+        options: [release, qualify, retain]
+        required: true
+        default: release
+      linux_source_commit:
+        description: 'Immutable application commit for qualification or retention'
+        type: string
+        required: false
+        default: ''
+      linux_source_tree:
+        description: 'Immutable application tree for qualification'
+        type: string
+        required: false
+        default: ''
+      linux_control_run_id:
+        description: 'Successful protected control producer run'
+        type: string
+        required: false
+        default: ''
+      linux_control_artifact_id:
+        description: 'Exact retained control artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_plan_run_id:
+        description: 'Successful protected qualification plan producer run'
+        type: string
+        required: false
+        default: ''
+      linux_plan_artifact_id:
+        description: 'Exact retained qualification plan artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_qualification_run_id:
+        description: 'Successful actual installed qualification run to retain'
+        type: string
+        required: false
+        default: ''
       release_tag:
         description: 'Existing qualified release tag to publish; leave empty for a dry run'
         type: string
@@ -30,6 +71,7 @@ env:
 
 jobs:
   classify:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.linux_operation == 'release' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -939,3 +981,61 @@ jobs:
             gh release create "v${VERSION}" release-artifacts/painted-wolf-code_v${VERSION}_* \
               "${flags[@]}" --title "Painted Wolf Code v${VERSION}" --notes-file "${NOTES}"
           fi
+
+
+  linux-qualification:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'qualify' && inputs.release_tag == '' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/linux-installed-qualification.yml
+    with:
+      source_commit: ${{ inputs.linux_source_commit }}
+      source_tree: ${{ inputs.linux_source_tree }}
+      control_run_id: ${{ inputs.linux_control_run_id }}
+      control_artifact_id: ${{ inputs.linux_control_artifact_id }}
+      qualification_plan_run_id: ${{ inputs.linux_plan_run_id }}
+      qualification_plan_artifact_id: ${{ inputs.linux_plan_artifact_id }}
+
+  linux-retain:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'retain' && inputs.release_tag == '' }}
+    runs-on: [self-hosted, linux, paintedwolf-qualification]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Retain a freshly admitted actual Linux campaign without publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.linux_source_commit }}
+          QUALIFICATION_RUN_ID: ${{ inputs.linux_qualification_run_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          git fetch --no-tags origin "$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          ./task release:live-test -- --retain-linux-campaign \
+            --qualification-run-id "$QUALIFICATION_RUN_ID" --source-commit "$SOURCE_COMMIT" \
+            --source-repository "$PWD" --output "$RUNNER_TEMP/linux-final-admission-inputs"
+      - name: Retain final admission inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-final-admission-inputs
+          path: ${{ runner.temp }}/linux-final-admission-inputs
+          if-no-files-found: error
+          retention-days: 90

@@ -9,7 +9,8 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from .installed_artifact_bundle import retain_tree
+from .installed_artifact_bundle import Limits, retain_tree
+from .installed_capacity import limits as campaign_limits
 from .publication_controller import SelectedCampaign
 from .publication_source import facts
 from .installed_provenance import controller_context
@@ -24,7 +25,10 @@ ROOT_DIRS = {"packages", "evidence", "generations", "nix-cache", "repository-set
 def produce(source: Path, destination: Path, immutable: dict, producer: dict, *, catalog,
             signing_generation: int, key_fingerprint: str, repository_base_url=None) -> dict:
     """Only freshly admitted copied inputs receive the producer binding."""
-    retain_tree(source, destination, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
+    final, _ = document(source / "final-artifacts.json")
+    capacity = campaign_limits(catalog, final)
+    bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
+    retain_tree(source, destination, root_files=ROOT_FILES, root_dirs=ROOT_DIRS, limits=bounds)
     try:
         with (destination / "producer.json").open("x") as stream:
             json.dump({"format_version": 1, **producer,

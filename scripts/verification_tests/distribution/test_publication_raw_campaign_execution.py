@@ -31,8 +31,9 @@ class RawCampaignCompositionTests(unittest.TestCase):
         target={"id":"guest","host":"guest.invalid","port":22,"user":"qualify","identity_file":"/private/key",
                 "known_hosts":"/private/known-hosts","checkout":"/checkout","runtime_bin_dirs":[],"artifact_id":"app",
                 "environment_id":"fixture","final_artifacts":"/inputs/final-artifacts.json","file_root":"/inputs/packages",
-                "install_root":"/opt/painted-wolf-code","output":"/outputs/leaf","nix_program":None,"case_inputs":None}
-        plan={"format_version":1,"source_commit":source["source_commit"],"driver_tree":"d"*40,"targets":[target]}
+                "install_root":"/opt/painted-wolf-code","output":"/outputs/leaf","nix_program":None,"case_inputs":None,"variant_id":"fixture-variant",
+                "snapshot":{"kind":"package-inventory","value":"e"*64,"channel":None}}
+        plan={"format_version":2,"source_commit":source["source_commit"],"driver_tree":"d"*40,"targets":[target]}
         control_root,plan_root,raw=root/"control-payload",root/"plan-payload",root/"raw-payload"
         for name in owner.CONTROL_DIRS:
             (control_root/name).mkdir(parents=True)
@@ -48,9 +49,11 @@ class RawCampaignCompositionTests(unittest.TestCase):
         (executed/"evidence").mkdir(parents=True)
         (executed/"guest").mkdir()
         execution={"format_version":1,"execution_nonce":"1"*32,"source_commit":source["source_commit"],
-                   "driver_tree":"d"*40,"artifact_id":"app","environment_id":"fixture","variant_id":None}
+                   "driver_tree":"d"*40,"artifact_id":"app","environment_id":"fixture","variant_id":"fixture-variant"}
         write(executed/"guest/execution-request.json",execution)
         write(executed/"guest/leaf/execution.json",execution)
+        write(executed/"guest/leaf/variant.json",{"format_version":1,"variant":{"id":"fixture-variant",
+              "release":{"snapshot_kind":"package-inventory","channel":None}},"snapshot":target["snapshot"],"unverified":"fixture"})
         for name,value in [("campaign.json",{**final,"results":[]}),("admission.json",{"accepted":False}),("plan.json",plan)]:
             write(executed/name,value)
         (executed/"driver-registry.json").write_bytes(drivers)
@@ -59,7 +62,7 @@ class RawCampaignCompositionTests(unittest.TestCase):
                  "qualification_plan_run_id":102,"qualification_plan_artifact_id":202}
         write(raw/"qualification.json",binding)
         payloads={201:control_root,202:plan_root,203:raw}
-        def download(selected,destination):
+        def download(selected,destination,**_):
             shutil.copytree(payloads[selected["artifact_id"]],destination)
         return root,source,catalog,controls,plan_selected,raw_selected,download
 
@@ -67,7 +70,9 @@ class RawCampaignCompositionTests(unittest.TestCase):
         root,source,catalog,controls,plan,raw,download=fixture
         work=root/"work"
         work.mkdir()
-        with patch.object(owner,"select_qualification",return_value=raw),patch.object(owner,"select_control",return_value=controls), \
+        with patch.object(owner,"campaign_limits",return_value={"max_files":100000,"max_bytes":64<<30,"max_file":16<<30}), \
+                patch.object(owner,"validate_plan",side_effect=lambda selected,_:(selected["source_commit"],selected["driver_tree"],selected["targets"])), \
+                patch.object(owner,"select_qualification",return_value=raw),patch.object(owner,"select_control",return_value=controls), \
                 patch.object(owner,"select_plan",return_value=plan),patch.object(owner,"download",side_effect=download):
             return owner.materialize(lambda path:{"tree":{"sha":"d"*40}},"owner/repo",42,103,source,catalog,work)
 

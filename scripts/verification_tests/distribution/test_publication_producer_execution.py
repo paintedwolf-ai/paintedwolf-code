@@ -2,7 +2,7 @@
 
 import json
 import io
-from contextlib import redirect_stderr
+from contextlib import nullcontext, redirect_stderr
 import os
 from pathlib import Path
 import tempfile
@@ -10,11 +10,16 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.publication_producer import main, produce, ROOT_FILES, ROOT_DIRS
-from linux_release.installed_artifact_bundle import retain_tree
+from linux_release.installed_artifact_bundle import Limits, retain_tree
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
 class PublicationProducerTests(unittest.TestCase):
+    def setUp(self):
+        capacity=patch("linux_release.publication_producer.campaign_limits",return_value={"max_files":100000,"max_bytes":64<<30,"max_file":16<<30})
+        capacity.start()
+        self.addCleanup(capacity.stop)
+
     def fixture(self, directory):
         source = Path(directory) / "inputs"
         source.mkdir()
@@ -96,10 +101,11 @@ class PublicationProducerTests(unittest.TestCase):
             with self.subTest(constraint=constraint), tempfile.TemporaryDirectory() as directory:
                 source, output, *_ = self.fixture(directory)
                 target = "linux_release.installed_artifact_bundle."
-                manager = patch(target + "MAX_FILES", 1) if constraint == "count" else patch(
+                manager = nullcontext() if constraint == "count" else patch(
                     target + "shutil.disk_usage", return_value=type("Disk", (), {"free": 0})())
                 with manager, self.assertRaises(ValueError):
-                    retain_tree(source, output, root_files=ROOT_FILES, root_dirs=ROOT_DIRS)
+                    retain_tree(source, output, root_files=ROOT_FILES, root_dirs=ROOT_DIRS,
+                                limits=Limits(max_files=1) if constraint=="count" else Limits())
                 self.assertFalse(output.exists())
 
     def test_branch_or_unprotected_workflow_cannot_stamp_production_inputs(self):
