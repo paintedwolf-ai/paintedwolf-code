@@ -53,6 +53,9 @@ func (p *ProfilePolicyEngine) Evaluate(ctx context.Context, eval platform.Policy
 	if profileID == "" {
 		profileID = DefaultToolProfileID
 	}
+	if eval.NativeOperation != nil {
+		return p.evaluateNativeOperation(ctx, profileID, eval)
+	}
 	if err := p.boundary.AssertToolAllowed(ctx, profileID, eval.ToolName, eval.ToolAccess); err != nil {
 		return &platform.PolicyDecision{ //nolint:nilerr // err.Error() carried as BlockReason
 			Blocked:     true,

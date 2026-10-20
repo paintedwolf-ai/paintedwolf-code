@@ -14,11 +14,12 @@ import (
 
 // PolicyContext is input for unified pre-tool policy evaluation.
 type PolicyContext struct {
-	BoundStages []toolcontract.ExecutionStage
-	ProfileID   string
-	ToolAccess  sandbox.ToolAccess
-	ToolName    string
-	ToolArgs    map[string]any
+	NativeOperation *toolcontract.BoundOperation
+	BoundStages     []toolcontract.ExecutionStage
+	ProfileID       string
+	ToolAccess      sandbox.ToolAccess
+	ToolName        string
+	ToolArgs        map[string]any
 	// ResolvedFiles holds physical path identities for the invocation.
 	ResolvedFiles []string
 	// Dynamic tool identities come from the host registry.

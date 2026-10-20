@@ -37,6 +37,11 @@ func (e *Boundary) preInvokePolicyContext(
 		DeclaredDestinations:    append([]string(nil), tc.Direct.DirectIPDeclared...),
 		PackageExecution:        tc.Files.PackageExecution,
 	}
+	if tc.Invocation.NativeOperation != nil {
+		policyEval.NativeOperation = tc.Invocation.NativeOperation
+		policyEval.BoundStages = tc.Invocation.NativeStages
+		policyEval.ActionID = tc.Invocation.ID
+	}
 	if e.Metadata.registry != nil {
 		if meta, ok := e.Metadata.registry.Meta(tool); ok {
 			policyEval.ApprovalCategory = meta.ApprovalCategory

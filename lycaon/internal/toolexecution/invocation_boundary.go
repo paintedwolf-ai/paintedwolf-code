@@ -59,9 +59,11 @@ func (e *Executor) applyPreInvokeBoundary(
 	}
 	// Scratch addresses and globs expand once, before secret resolution and
 	// every card, so each card and the executed argv carry the same arguments.
-	args, err = e.Boundary.expandCommandOperands(ctx, tool, profileID, args, &tc)
-	if err != nil {
-		return nil, tc, err
+	if tc.Invocation.NativeOperation == nil {
+		args, err = e.Boundary.expandCommandOperands(ctx, tool, profileID, args, &tc)
+		if err != nil {
+			return nil, tc, err
+		}
 	}
 	// Capture one immutable version for both review and execution; cards retain references.
 	secrets, resolveErr := e.Secrets.resolveSecretReferences(ctx, tool, args, tc)

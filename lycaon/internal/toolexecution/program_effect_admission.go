@@ -69,30 +69,19 @@ func (s ProgramSurface) ValidateBound(definition toolcontract.OperationDefinitio
 		return err
 	}
 	facts := definition.Facts()
-	for _, spec := range facts.Commands {
-		if spec.Name != command {
-			continue
-		}
-		if s.selection.denied[facts.Identity][command] {
-			return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
-		}
-		for _, requirements := range spec.Effects {
-			if requirements.Mode != mode {
-				continue
-			}
-			required, err := requirements.CommandEffects(child)
-			if err != nil {
-				return err
-			}
-			if s.allowed.Allows(required) {
-				return nil
-			}
-			return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
-		}
+	if s.selection.denied[facts.Identity][command] {
+		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
 	}
-	rejected := s.profileReject("COMMAND_NATIVE_FORM_UNSUPPORTED", facts, invocation)
-	rejected.FailureClass = api.FailureClassHostRejection
-	return rejected
+	bound, err := toolcontract.BindOperation(definition, invocation, command, mode, child)
+	if err != nil {
+		rejected := s.profileReject("COMMAND_NATIVE_FORM_UNSUPPORTED", facts, invocation)
+		rejected.FailureClass = api.FailureClassHostRejection
+		return rejected
+	}
+	if s.allowed.Allows(bound.Effects()) {
+		return nil
+	}
+	return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
 }
 
 func (s ProgramSurface) profileReject(code string, facts toolcontract.OperationFacts, invocation toolcontract.OperationInvocation) *toolrejection.ToolReject {
