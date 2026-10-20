@@ -92,3 +92,17 @@ class PublicationProvenanceTests(unittest.TestCase):
             for identity in (True, 0, 789):
                 with self.subTest(role=name, identity=identity), self.assertRaises(ValueError):
                     selector(api, "owner/repo", 42, 123, identity)
+
+
+class DomainArtifactSelectionTests(unittest.TestCase):
+    def test_invalid_domain_binding_cannot_query_artifacts(self):
+        from linux_release.installed_provenance import artifact_for_run
+        from unittest.mock import Mock
+        api=Mock()
+        for repository,repository_id,run_id,commit,name in [
+                ("owner/repo",True,1,"a"*40,"fixed"),
+                ("owner/repo",1,1,"branch","fixed"),
+                ("owner/repo",1,1,"a"*40,"../untrusted")]:
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                artifact_for_run(api,repository,repository_id,run_id,commit,name)
+        api.assert_not_called()
