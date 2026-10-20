@@ -1,10 +1,10 @@
 """Process-tree observations preserve ownership, lifetime and budget scope."""
 from pathlib import Path
 import os
+import select
 import signal
 import subprocess
 import sys
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -110,13 +110,16 @@ class InstalledPerformanceTreeTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == 'linux', 'actual /proc process-tree observation requires Linux')
     def test_actual_owned_descendants_and_separate_control_process(self):
-        script = ('import subprocess,sys; p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
-                  'print(p.pid,flush=True);sys.stdin.read();p.terminate();p.wait()')
+        script = ('import subprocess,sys; p=subprocess.Popen([sys.executable,"-c",'
+                  '"import time;print(123,flush=True);time.sleep(60)"],stdout=subprocess.PIPE,text=True);'
+                  'assert p.stdout.readline()=="123\\n";print(p.pid,flush=True);'
+                  'sys.stdin.read();p.terminate();p.wait();p.stdout.close()')
         root = subprocess.Popen([sys.executable, '-c', script], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, text=True, start_new_session=True)
         foreign = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'], start_new_session=True)
         try:
-            child = int(root.stdout.readline())
+            self.assertTrue(select.select([root.stdout], [], [], 5)[0], 'owned fixture startup timed out')
+            child = int(root.stdout.readline(32))
             desktop, engine = owner.process_identity(root.pid), owner.process_identity(child)
             result = owner.TreeSampler(desktop, engine).snapshot()
             pids = {row['identity']['pid'] for row in result['processes']}
