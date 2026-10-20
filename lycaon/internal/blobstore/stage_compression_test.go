@@ -19,7 +19,7 @@ func TestPutContextCancellationAfterPlaintextDoesNotPublish(t *testing.T) {
 	root := t.TempDir()
 	source := &cancelAtEOF{Reader: bytes.NewReader(bytes.Repeat([]byte("fixture"), 10000)), cancel: cancel}
 	store := Store{Root: root, Dir: "fixture-output"}
-	blob, err := store.PutContext(ctx, "body.bin", source, bytebound.Materialization(1<<20))
+	blob, err := store.PutStream(ctx, "body.bin", source, bytebound.Materialization(1<<20), fixtureCodecMemory{})
 	if !errors.Is(err, context.Canceled) || blob.ID != "" {
 		t.Fatalf("canceled storage published: %+v %v", blob, err)
 	}
@@ -70,3 +70,7 @@ func (r *cancelAtEOF) Read(p []byte) (int, error) {
 	}
 	return n, err
 }
+
+type fixtureCodecMemory struct{}
+
+func (fixtureCodecMemory) Reserve(context.Context, int64) (func(), error) { return func() {}, nil }

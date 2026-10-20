@@ -34,6 +34,12 @@ type StreamMemoryAdmission interface {
 	Reserve(context.Context, int64) (release func(), err error)
 }
 
+// StreamStateAdmission keeps retained preview and metadata charged separately
+// from transient screening/codec scratch until the spill reference is released.
+type StreamStateAdmission interface {
+	ReserveProgramState(context.Context, int64) (release func(), err error)
+}
+
 type StreamSpillOptions struct {
 	Store         blobstore.Store
 	ClaimID       string
@@ -41,6 +47,7 @@ type StreamSpillOptions struct {
 	PreviewBytes  int
 	Admission     SpillAdmission
 	WorkingMemory StreamMemoryAdmission
+	RetainedState StreamStateAdmission
 }
 
 // StreamSpillLimitError reports an attempted byte admission before disk writes.
@@ -67,12 +74,14 @@ type StreamSpill struct {
 	closed        bool
 	active        int
 	memory        StreamMemoryAdmission
+	releaseState  func()
 }
 
 func RetainScreenedStream(ctx context.Context, input ScreenedStream, options StreamSpillOptions) (*StreamSpill, error) {
-	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
+	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
 		return nil, fmt.Errorf("screened stream spill requires explicit bounded input, claim and quota admission")
 	}
+	defer input.reader.Close()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -86,17 +95,21 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if release == nil {
 		return nil, fmt.Errorf("spill admission returned no release")
 	}
-	memoryRelease, err := options.WorkingMemory.Reserve(ctx, zstdcodec.StreamMemoryReservation)
+	releaseState, err := options.RetainedState.ReserveProgramState(ctx, int64(options.PreviewBytes)+int64(len(options.ClaimID))+4096)
 	if err != nil {
 		release()
 		return nil, err
 	}
-	if memoryRelease == nil {
+	if releaseState == nil {
 		release()
-		return nil, fmt.Errorf("stream memory admission returned no release")
+		return nil, fmt.Errorf("stream state admission returned no release")
 	}
-	defer memoryRelease()
-	defer input.reader.Close()
+	retained := false
+	defer func() {
+		if !retained {
+			releaseState()
+		}
+	}()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -110,7 +123,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store.Dir = ToolOutputSpillDir
 	store.StagedTTL = 7 * 24 * time.Hour
 	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, digest: sha256.New()}
-	blob, err := store.PutContext(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes))
+	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
 	if err != nil {
 		release()
 		return nil, err
@@ -119,7 +132,8 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 		reader.failure = ctx.Err()
 		reader.eof = false
 	}
-	out := &StreamSpill{Blob: blob, Preview: reader.preview, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, store: store, claim: options.ClaimID, release: release, memory: options.WorkingMemory}
+	out := &StreamSpill{Blob: blob, Preview: reader.preview, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, store: store, claim: strings.Clone(options.ClaimID), release: release, memory: options.WorkingMemory, releaseState: releaseState}
+	retained = true
 	if _, err := store.Retain(options.ClaimID, []string{blob.ID}); err != nil {
 		out.Complete = false
 		out.Failure = err
@@ -187,7 +201,9 @@ func (s *StreamSpill) Close() error {
 		return fmt.Errorf("stream spill still retained; accounting remains reserved")
 	}
 	s.closed = true
+	s.Preview = nil
 	s.release()
+	s.releaseState()
 	return nil
 }
 

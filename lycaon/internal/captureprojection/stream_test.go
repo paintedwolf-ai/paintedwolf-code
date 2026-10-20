@@ -15,19 +15,22 @@ import (
 )
 
 type streamMemoryFixture struct {
-	calls, releases int
-	bytes           int64
-	refusal         error
+	calls, releases          int
+	bytes, peak, outstanding int64
+	refusal                  error
 }
 
-func (m *streamMemoryFixture) Reserve(_ context.Context, n int64) (func(), error) {
+func (m *streamMemoryFixture) ReserveBytes(_ context.Context, n int64) error {
 	m.calls++
-	m.bytes = n
 	if m.refusal != nil {
-		return nil, m.refusal
+		return m.refusal
 	}
-	return func() { m.releases++ }, nil
+	m.bytes += n
+	m.outstanding += n
+	m.peak = max(m.peak, m.outstanding)
+	return nil
 }
+func (m *streamMemoryFixture) ReleaseBytes(n int64) { m.releases++; m.outstanding -= n }
 func streamOptionsFixture(memory *streamMemoryFixture) StreamOptions {
 	return StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}}
 }
@@ -74,7 +77,7 @@ func TestScreenStreamExactWholeFieldPolicy(t *testing.T) {
 			if out.String() != expected.Value || metadata.RawBytes != int64(len(raw)) || metadata.EmittedBytes != int64(out.Len()) || metadata.RawSHA256 != digestFixture(raw) || metadata.EmittedSHA256 != digestFixture(out.Bytes()) || !metadata.Complete || !metadata.Redacted {
 				t.Fatalf("wrong complete projection: metadata=%+v bytes_equal=%v", metadata, out.String() == expected.Value)
 			}
-			if memory.calls != 1 || memory.releases != 1 || memory.bytes != 32<<20 || len(spans) != 2 {
+			if memory.calls < 2 || memory.releases < 2 || memory.outstanding != 0 || memory.peak > 32<<20 || len(spans) != 2 {
 				t.Fatalf("lease/spans: %+v %v", memory, spans)
 			}
 			for _, span := range spans {
@@ -202,7 +205,7 @@ func TestScreenStreamTerminalControls(t *testing.T) {
 			if err == nil || metadata.Complete {
 				t.Fatalf("terminal work reported complete: %+v %v", metadata, err)
 			}
-			if memory.refusal == nil && memory.releases != 1 {
+			if memory.refusal == nil && memory.outstanding != 0 {
 				t.Fatalf("lease leaked: %+v", memory)
 			}
 			if mode == "write" && (metadata.EmittedBytes != 7 || metadata.EmittedSHA256 != digestFixture([]byte(secretmatch.RedactedMarker[:7]))) {

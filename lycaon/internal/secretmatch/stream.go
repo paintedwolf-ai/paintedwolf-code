@@ -14,15 +14,17 @@ const referenceContextBytes = len(referenceTokenPrefix) + 36 + 2
 // ScreenBytes screens complete streams using the existing catalog window
 // schedule, global exact-match cursors and union rewrite. check is called before
 // every emitted chunk and final settlement. observe must charge retained metadata.
-// The caller owns the aggregate MemoryBytes lease for the entire call.
-func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer, label string, bounds StreamBounds, check func() error, observe func(context.Context, StreamSpan) error) (result StreamResult, err error) {
+// admission charges actual allocations against an aggregate ledger. Pure local
+// reference callers may pass nil; production capture requires aggregate admission.
+func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer, label string, bounds StreamBounds, admission StreamMemoryAdmission, check func() error, observe func(context.Context, StreamSpan) error) (result StreamResult, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if m == nil || src == nil || dst == nil || bounds.InputBytes <= 0 || bounds.OutputBytes <= 0 || bounds.MemoryBytes <= 0 || bounds.DetectorWork <= 0 {
 		return result, errors.New("invalid stream screening contract")
 	}
-	memory := &streamMemory{maximum: bounds.MemoryBytes}
+	memory := &streamMemory{maximum: bounds.MemoryBytes, ctx: ctx, admission: admission}
+	defer func() { memory.release(memory.used) }()
 	// Fixed hash/context/iterator/control payloads share the operation lease too.
 	if err := memory.take(8192); err != nil {
 		return result, err
@@ -54,6 +56,12 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 	}
 	prefix := ""
 	if strings.TrimSpace(label) != "" {
+		if len(label) >= window {
+			return result, &StreamLimitError{"screen_label_bytes", int64(window), int64(len(label)) + 1}
+		}
+		if err := memory.take(int64(len(label)) + 1); err != nil {
+			return result, err
+		}
 		prefix = label + "="
 	}
 	if len(prefix) > window {

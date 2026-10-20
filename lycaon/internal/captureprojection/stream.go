@@ -10,16 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-// WorkingMemory admits one screen's complete scratch lease against its caller's
-// aggregate operation budget. The returned release belongs to this invocation.
-type WorkingMemory interface {
-	Reserve(context.Context, int64) (func(), error)
-}
-
 // StreamOptions are complete-stream limits and an optional admitted span sink.
 // Observe must reserve any metadata it retains; no span list is retained here.
 type StreamOptions struct {
-	WorkingMemory WorkingMemory
+	WorkingMemory secretmatch.StreamMemoryAdmission
 	Bounds        secretmatch.StreamBounds
 	Observe       func(context.Context, secretmatch.StreamSpan) error
 }
@@ -43,14 +37,10 @@ func (p *Projector) ScreenStream(ctx context.Context, scope Scope, label string,
 		return metadata, ErrUnavailable
 	}
 	ctx = scopeContext(ctx, scope)
-	release, err := options.WorkingMemory.Reserve(ctx, options.Bounds.MemoryBytes)
-	if err != nil {
+	if err := options.WorkingMemory.ReserveBytes(ctx, 1024); err != nil {
 		return metadata, err
 	}
-	if release == nil {
-		return metadata, ErrUnavailable
-	}
-	defer release()
+	defer options.WorkingMemory.ReleaseBytes(1024)
 	if err := p.prepare(ctx, scope); err != nil {
 		return metadata, err
 	}
@@ -65,7 +55,7 @@ func (p *Projector) ScreenStream(ctx context.Context, scope Scope, label string,
 		}
 		return nil
 	}
-	result, err := p.matcher.ScreenBytes(ctx, io.TeeReader(src, raw), streamHashWriter{dst, emitted}, label, options.Bounds, check, options.Observe)
+	result, err := p.matcher.ScreenBytes(ctx, io.TeeReader(src, raw), streamHashWriter{dst, emitted}, label, options.Bounds, options.WorkingMemory, check, options.Observe)
 	metadata.RawBytes = result.InputBytes
 	metadata.EmittedBytes = result.OutputBytes
 	metadata.Redacted = result.Redacted

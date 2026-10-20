@@ -24,7 +24,7 @@ func TestStreamCatalogMatchesWholePolicy(t *testing.T) {
 			raw := strings.Repeat("safe data\n", 48000) + " " + encoded + " " + strings.Repeat("ordinary inert line\n", 18000)
 			want := m.RedactString(context.Background(), raw)
 			var out bytes.Buffer
-			result, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}, nil, nil)
+			result, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}, nil, nil, nil)
 			if err != nil || out.String() != want || !result.Redacted {
 				t.Fatalf("catalog policy differs: err=%v equal=%v result=%+v", err, out.String() == want, result)
 			}

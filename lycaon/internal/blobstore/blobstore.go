@@ -195,13 +195,10 @@ func (s Store) RemoveAtBefore(rel string, cutoff time.Time) (bool, error) {
 
 // Put streams r into the content-addressed layout and returns its wire path.
 func (s Store) Put(name string, r io.Reader, limit bytebound.Materialization) (Blob, error) {
-	return s.PutContext(context.Background(), name, r, limit)
+	return s.put(context.Background(), name, r, limit, nil)
 }
 
-// PutContext uses the same staging and commit path as Put, checking cancellation
-// during copying and compression and before committing the staged body. It does
-// not revoke a commit already completed by the filesystem transaction.
-func (s Store) PutContext(ctx context.Context, name string, r io.Reader, limit bytebound.Materialization) (Blob, error) {
+func (s Store) put(ctx context.Context, name string, r io.Reader, limit bytebound.Materialization, memory StreamMemoryAdmission) (Blob, error) {
 	if ctx == nil {
 		return Blob{}, fmt.Errorf("blobstore: nil context")
 	}
@@ -216,7 +213,7 @@ func (s Store) PutContext(ctx context.Context, name string, r io.Reader, limit b
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, contentDigest, size, err := s.stage(ctx, state, r, limit, leaf)
+	tmpPath, contentDigest, size, err := s.stage(ctx, state, r, limit, leaf, memory)
 	if err != nil {
 		return Blob{}, err
 	}
@@ -260,7 +257,7 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, digest, size, err := s.stage(context.Background(), state, r, limit, leaf)
+	tmpPath, digest, size, err := s.stage(context.Background(), state, r, limit, leaf, nil)
 	if err != nil {
 		return Blob{}, err
 	}
@@ -279,9 +276,25 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 
 // stage copies r into a temp file under Root, hashing as it goes. An oversized
 // body is rejected without ever being committed.
-func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit bytebound.Materialization, leaf string) (tmpPath, digest string, size int64, err error) {
+func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit bytebound.Materialization, leaf string, memory StreamMemoryAdmission) (tmpPath, digest string, size int64, err error) {
 	if limit <= 0 {
 		return "", "", 0, fmt.Errorf("blobstore: materialization bound must be positive, got %d", limit.Int64())
+	}
+	var releaseCopy func()
+	if memory != nil {
+		var err error
+		releaseCopy, err = memory.Reserve(ctx, 64<<10)
+		if err != nil {
+			return "", "", 0, err
+		}
+		if releaseCopy == nil {
+			return "", "", 0, fmt.Errorf("blobstore: copy admission returned no release")
+		}
+		defer func() {
+			if releaseCopy != nil {
+				releaseCopy()
+			}
+		}()
 	}
 	stageDir := filepath.Join(s.dataRoot(), stagingDir)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
@@ -314,6 +327,20 @@ func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit 
 	}
 	// Content identity is fixed above, on the plaintext bytes; compression is
 	// a storage-layer transform applied to the staged file afterward.
+	if releaseCopy != nil {
+		releaseCopy()
+		releaseCopy = nil
+	}
+	if memory != nil {
+		release, err := memory.Reserve(ctx, zstdcodec.StreamMemoryReservation)
+		if err != nil {
+			return cleanup(err)
+		}
+		if release == nil {
+			return cleanup(fmt.Errorf("blobstore: codec admission returned no release"))
+		}
+		defer release()
+	}
 	if err := compressStagedFile(ctx, tmp); err != nil {
 		return cleanup(fmt.Errorf("blobstore: compress staged blob: %w", err))
 	}
@@ -408,7 +435,7 @@ func (s Store) PutDerived(id, name string, r io.Reader, limit bytebound.Material
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, _, _, err := s.stage(context.Background(), state, r, limit, path.Base(rel))
+	tmpPath, _, _, err := s.stage(context.Background(), state, r, limit, path.Base(rel), nil)
 	if err != nil {
 		return err
 	}

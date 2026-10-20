@@ -1,6 +1,7 @@
 package secretmatch
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -15,16 +16,41 @@ func (e *StreamLimitError) Error() string {
 	return fmt.Sprintf("%s: requested %d, maximum %d", e.Resource, e.Observed, e.Maximum)
 }
 
-type streamMemory struct{ maximum, used int64 }
+// StreamMemoryAdmission charges actual reserved payload before allocation. It
+// must refuse unavailable aggregate capacity without waiting on this program.
+// ReleaseBytes returns reservations only after their payload is unreachable.
+type StreamMemoryAdmission interface {
+	ReserveBytes(context.Context, int64) error
+	ReleaseBytes(int64)
+}
+
+type streamMemory struct {
+	maximum, used int64
+	ctx           context.Context
+	admission     StreamMemoryAdmission
+}
 
 func (m *streamMemory) take(n int64) error {
 	if n < 0 || n > m.maximum-m.used {
 		return &StreamLimitError{"screen_memory_bytes", m.maximum, m.used + n}
 	}
+	if m.admission != nil && n > 0 {
+		if err := m.admission.ReserveBytes(m.ctx, n); err != nil {
+			return err
+		}
+	}
 	m.used += n
 	return nil
 }
-func (m *streamMemory) release(n int64)  { m.used -= n }
+func (m *streamMemory) release(n int64) {
+	if n < 0 || n > m.used {
+		panic("invalid stream memory release")
+	}
+	m.used -= n
+	if m.admission != nil && n > 0 {
+		m.admission.ReleaseBytes(n)
+	}
+}
 func (m *streamMemory) available() int64 { return m.maximum - m.used }
 
 // StreamSpan maps one written marker to the input bytes it removed. An observer

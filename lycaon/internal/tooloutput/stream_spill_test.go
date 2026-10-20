@@ -26,7 +26,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	released := 0
 	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader(want))), StreamSpillOptions{
 		Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-stream-1", MaximumBytes: int64(len(want)), PreviewBytes: 3,
-		WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(_ context.Context, n int64) (func(), error) {
+		RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(_ context.Context, n int64) (func(), error) {
 			if n < 3*int64(len(want)) {
 				t.Fatal("staging overlap was not reserved")
 			}
@@ -60,7 +60,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 func TestFailedScreenedProducerRetainsPrefixAsIncomplete(t *testing.T) {
 	cause := errors.New("synthetic producer failure")
 	input := io.MultiReader(bytes.NewReader([]byte("screened prefix")), failureReader{cause})
-	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(input)), StreamSpillOptions{Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-failed-stream", MaximumBytes: 100, PreviewBytes: 4, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil })})
+	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(input)), StreamSpillOptions{Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-failed-stream", MaximumBytes: 100, PreviewBytes: 4, RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil })})
 	testutil.FailErr(t, "retain failed producer prefix", err)
 	defer out.Close()
 	reader, err := out.Open(t.Context())
@@ -76,7 +76,7 @@ func TestFailedScreenedProducerRetainsPrefixAsIncomplete(t *testing.T) {
 func TestSpillQuotaRefusesBeforeStorageAndOtherClaimsKeepAccounting(t *testing.T) {
 	root := t.TempDir()
 	refused := errors.New("synthetic session spill quota")
-	options := StreamSpillOptions{Store: blobstore.Store{Root: root}, ClaimID: "fixture-stream", MaximumBytes: 100, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return nil, refused })}
+	options := StreamSpillOptions{Store: blobstore.Store{Root: root}, ClaimID: "fixture-stream", MaximumBytes: 100, RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return nil, refused })}
 	if out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader([]byte("data")))), options); out != nil || !errors.Is(err, refused) {
 		t.Fatalf("quota refusal=%v", err)
 	}
@@ -116,7 +116,7 @@ func (fixtureStreamMemory) Reserve(context.Context, int64) (func(), error) { ret
 func TestStreamSpillMemoryWaitAllowsReaderClose(t *testing.T) {
 	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader([]byte("fixture")))), StreamSpillOptions{
 		Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-memory-wait", MaximumBytes: 100,
-		WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil }),
+		RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil }),
 	})
 	testutil.FailErr(t, "retain stream", err)
 	defer out.Close()
@@ -172,3 +172,7 @@ func TestStreamSpillMemoryWaitAllowsReaderClose(t *testing.T) {
 type streamMemoryFunc func(context.Context, int64) (func(), error)
 
 func (f streamMemoryFunc) Reserve(ctx context.Context, n int64) (func(), error) { return f(ctx, n) }
+
+func (fixtureStreamMemory) ReserveProgramState(context.Context, int64) (func(), error) {
+	return func() {}, nil
+}
