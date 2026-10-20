@@ -15,10 +15,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def rehearsal_environment() -> str:
-    names = {"CLOUDFLARE_ACCOUNT_ID": "RELEASE_TEST_R2_ACCOUNT_ID",
+    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+        required = ["R2_S3_ENDPOINT", "R2_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                    "RELEASE_TEST_DOWNLOAD_BASE_URL"]
+        names = {}
+    else:
+        names = {"CLOUDFLARE_ACCOUNT_ID": "RELEASE_TEST_R2_ACCOUNT_ID",
              "CLOUDFLARE_API_TOKEN": "RELEASE_TEST_R2_API_TOKEN",
-             "R2_BUCKET": "RELEASE_TEST_R2_BUCKET"}
-    required = [*names.values(), "RELEASE_TEST_DOWNLOAD_BASE_URL"]
+                 "R2_BUCKET": "RELEASE_TEST_R2_BUCKET"}
+        required = [*names.values(), "RELEASE_TEST_DOWNLOAD_BASE_URL"]
     if any(not os.environ.get(name) for name in required):
         raise ValueError("explicit RELEASE_TEST_R2_* credentials and test download origin are required")
     origin = os.environ["RELEASE_TEST_DOWNLOAD_BASE_URL"].rstrip("/")
@@ -50,6 +55,9 @@ def warm_absence(url: str):
 
 def delete_fixture_object(key: str):
     prefix(key, True)
+    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+        subprocess.run(["python3", str(ROOT / "scripts/release_storage/s3.py"), "delete", key], check=True)
+        return
     subprocess.run(["bunx", "wrangler@4.115.0", "r2", "object", "delete",
                     os.environ["R2_BUCKET"] + "/" + key, "--remote"], check=True)
 
@@ -93,6 +101,10 @@ def public_bytes(url: str, source: Path, mutable=False):
 
 
 def current(key: str, directory: Path) -> dict | None:
+    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+        from scripts.release_storage.s3 import read_bytes
+        raw = read_bytes(key)
+        return None if raw is None else json.loads(raw)
     output = directory / "remote-current.json"
     status = subprocess.check_output(["python3", str(ROOT / "scripts/release_distribution.py"),
                                       "storage-read", "--key", key, "--output", str(output)], text=True).strip()
@@ -104,6 +116,12 @@ def current(key: str, directory: Path) -> dict | None:
 
 
 def put(key: str, source: Path, mutable=False):
+    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+        subprocess.run(["python3", str(ROOT / "scripts/release_storage/s3.py"),
+                        "put" if mutable else "immutable", key, str(source), "--content-type", "text/plain",
+                        "--cache-control", "no-cache, no-store, must-revalidate" if mutable
+                        else "public, max-age=31536000, immutable"], check=True)
+        return
     if mutable:
         subprocess.run(["bunx", "wrangler@4.115.0", "r2", "object", "put", os.environ["R2_BUCKET"] + "/" + key,
                         "--file", str(source), "--content-type", "text/plain",
