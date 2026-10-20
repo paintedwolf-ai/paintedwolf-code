@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "acceptance_revision": 1,
+  "qualification": "Normative evaluator fixtures; no native-runtime or live-model result is asserted.",
+  "language_source": "lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json",
+  "cases": [
+    {
+      "id": "first-mutation",
+      "qualification_cases": ["Q20"],
+      "profile": "implement",
+      "setup": {"files": {}, "drafts": {}, "progress": "missing"},
+      "turns": [{"program": "printf 'created\\n' > ./result.txt", "progress_update": {"deliverables": [{"text": "Create result.txt", "state": "in_progress"}]}}],
+      "expected": {"stdout": "", "stderr": "", "status": 0, "host_stop": null, "complete": true, "files": {"result.txt": "created\n"}, "absent": [], "receipts": [{"operation": "progress", "outcome": "completed"}, {"operation": "publish", "path": "result.txt", "outcome": "completed", "accepted": true, "published": true}]},
+      "allowed_partial": [],
+      "required_evidence": ["progress_and_program_separate", "execution_revision", "child_identities"]
+    },
+    {
+      "id": "search-empty-publication",
+      "qualification_cases": ["Q02"],
+      "profile": "implement",
+      "setup": {"files": {"input.txt": "alpha\n", "result.txt": "old\n"}, "drafts": {}, "progress": "valid"},
+      "turns": [{"program": "grep missing ./input.txt > ./result.txt"}],
+      "expected": {"stdout": "", "stderr": "", "status": 1, "host_stop": null, "complete": true, "files": {"input.txt": "alpha\n", "result.txt": ""}, "absent": [], "receipts": [{"operation": "grep", "outcome": "completed", "status": 1, "publication_eligible": true}, {"operation": "publish", "path": "result.txt", "outcome": "completed", "accepted": true, "published": true}]},
+      "allowed_partial": [],
+      "required_evidence": ["typed_complete_result", "child_identities"]
+    },
+    {
+      "id": "same-file-transform",
+      "qualification_cases": ["Q13", "Q14"],
+      "profile": "implement",
+      "setup": {"files": {"settings.json": "{\"enabled\":false}\n"}, "drafts": {}, "progress": "valid"},
+      "turns": [{"program": "cat ./settings.json | jq -c '.enabled = true' > ./settings.json"}],
+      "expected": {"stdout": "", "stderr": "", "status": 0, "host_stop": null, "complete": true, "files": {"settings.json": "{\"enabled\":true}\n"}, "absent": [], "receipts": [{"operation": "publish", "path": "settings.json", "outcome": "completed", "accepted": true, "published": true}]},
+      "allowed_partial": [],
+      "required_evidence": ["execution_revision", "no_conversational_read_base", "child_identities"]
+    }
+  ]
+}
