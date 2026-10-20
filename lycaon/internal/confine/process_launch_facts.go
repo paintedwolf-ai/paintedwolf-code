@@ -25,6 +25,7 @@ type ProcessLaunchFacts struct {
 	PID                                                                  int
 	StartTime                                                            int64
 	Namespaces                                                           [3]string
+	PreExecSecurity                                                      osprocess.ProcessSecurity
 	Security                                                             osprocess.ProcessSecurity
 	SecurityObserved                                                     bool
 	SecurityError                                                        error
@@ -53,6 +54,10 @@ func (p *ProcessPins) LaunchFacts() (ProcessLaunchFacts, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := p.launchFacts
+	if out.PreExecSecurity.Linux != nil {
+		copy := *out.PreExecSecurity.Linux
+		out.PreExecSecurity.Linux = &copy
+	}
 	if out.Security.Linux != nil {
 		copy := *out.Security.Linux
 		out.Security.Linux = &copy

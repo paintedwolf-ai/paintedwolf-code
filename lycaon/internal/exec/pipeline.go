@@ -51,7 +51,7 @@ type PipelineResult struct {
 
 func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts) (*exec.Cmd, func(), error) {
 	confinement := opts.Launch.Confinement
-	if confinement != nil && confine.Available() {
+	if confinement != nil && (confinement.HostExecution || confine.Available()) {
 		self, err := os.Executable()
 		if err != nil {
 			return nil, nil, fmt.Errorf("locate self for sandbox: %w", err)

@@ -32,7 +32,10 @@ func confirmNativeGate(ctx context.Context, state *pendingProcessPins) error {
 		return err
 	}
 	actual, err := os.Stat(filepath.Join("/proc", strconv.Itoa(ready.PID), "fd", strconv.Itoa(ready.ExecutableFD)))
-	if err != nil || !os.SameFile(selected, actual) {
+	if err != nil {
+		return fmt.Errorf("%w: %w", osprocess.ErrExecutableObservationUnavailable, err)
+	}
+	if !os.SameFile(selected, actual) {
 		return ErrLaunchIdentityChanged
 	}
 	directory, err := state.cwd.Stat()
@@ -40,11 +43,21 @@ func confirmNativeGate(ctx context.Context, state *pendingProcessPins) error {
 		return err
 	}
 	actualDirectory, err := os.Stat(filepath.Join("/proc", strconv.Itoa(ready.PID), "cwd"))
-	if err != nil || !os.SameFile(directory, actualDirectory) {
+	if err != nil {
+		return fmt.Errorf("%w: %w", osprocess.ErrExecutableObservationUnavailable, err)
+	}
+	if !os.SameFile(directory, actualDirectory) {
 		return ErrLaunchIdentityChanged
 	}
 	// This is a trusted helper's pre-exec identity, not post-exec credential proof.
 	if ready.Credentials.Uid != uint32(state.security.EffectiveUID) || ready.Credentials.Gid != uint32(state.security.EffectiveGID) {
+		return ErrLaunchIdentityChanged
+	}
+	preExecSecurity, err := osprocess.ProcessCredentials(ready.PID)
+	if err != nil {
+		return err
+	}
+	if state.confined && !state.pins.permitsSecurity(state.security, preExecSecurity, true) {
 		return ErrLaunchIdentityChanged
 	}
 	if err := state.pins.revalidate(ctx, state.arguments[0]); err != nil {
@@ -63,7 +76,7 @@ func confirmNativeGate(ctx context.Context, state *pendingProcessPins) error {
 		return err
 	}
 	facts := ProcessLaunchFacts{
-		Mechanism: HeldBinaryLaunch, SelectedEntryBound: true, DirectoryBound: true, ArgumentsBound: true, EnvironmentBound: true,
+		Mechanism: HeldBinaryLaunch, PreExecSecurity: preExecSecurity, SelectedEntryBound: true, DirectoryBound: true, ArgumentsBound: true, EnvironmentBound: true,
 		AuxiliaryExecutableName: "/proc/self/fd/" + strconv.Itoa(ready.ExecutableFD), PID: ready.PID, StartTime: ready.StartTime, Namespaces: ready.Namespaces,
 	}
 	// Observation is opportunistic and explicitly after release. A short-lived or
