@@ -11,6 +11,7 @@ import tempfile
 import time
 
 from .app import InstalledApp
+from .bialy_performance import reference as bialy_reference
 from .provider import ProviderFixture
 from .performance_resources import TreeSampler, resources, tree_summary
 from .records import CaseUnavailable, retain
@@ -89,6 +90,10 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
     app = InstalledApp(binding)
     samples = {'session.prepare': [], 'prompt.settle': []}
     witnesses = []
+    try:
+        bialy, bialy_streams = bialy_reference(binding)
+    except CaseUnavailable as error:
+        bialy, bialy_streams = {"status": "unverified", "reason": str(error)}, {}
     with tempfile.TemporaryDirectory(prefix='paintedwolf-installed-perf-') as directory:
         project = Path(directory)
         (project / 'fixture.txt').write_text('Installed performance fixture.\n')
@@ -116,9 +121,9 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
         raise ValueError('performance workflow lost its bounded process capture')
     return {'measurements_ms': {key: distribution(value) for key, value in samples.items()},
             'samples_ms': samples, 'failures': enforce(samples, limits()), 'absolute_limits': limits(),
-            'workload': 'deterministic-local-provider-command', 'witnesses': witnesses,
+            'workload': 'deterministic-local-provider-command', 'witnesses': witnesses, 'bialy_reference': bialy,
             'remaining_requirements': ['Bialy-load-reference-and-turn-latency', 'Bialy-quality-parity',
-                                       'parallel-index-search-scan', 'qualified-macos-reference']}, app.streams()
+                                       'parallel-index-search-scan', 'qualified-macos-reference']}, {**app.streams(), **bialy_streams}
 
 
 def resource_samples(binding: dict) -> tuple[dict, dict]:
