@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestLanguageCatalogClosesOverFormsAndStockTools(t *testing.T) {
@@ -44,6 +44,7 @@ func TestLanguageCatalogRejectsIncompleteContracts(t *testing.T) {
 		{"missing disposition", func(c *toolcontract.LanguageCatalog) { c.Tools = c.Tools[1:] }},
 		{"missing semantic contract", func(c *toolcontract.LanguageCatalog) { delete(c.Contracts, "regex") }},
 		{"missing effect mode", func(c *toolcontract.LanguageCatalog) { c.Commands[0].Effects[0].Mode = "" }},
+		{"unknown operation command", func(c *toolcontract.LanguageCatalog) { c.Tools[0].CommandForms = []string{"missing-command"} }},
 		{"unknown limit", func(c *toolcontract.LanguageCatalog) { c.Commands[0].Limits = append(c.Commands[0].Limits, "absent") }},
 		{"duplicate option", func(c *toolcontract.LanguageCatalog) {
 			for i := range c.Commands {

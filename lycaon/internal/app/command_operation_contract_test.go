@@ -62,6 +62,27 @@ func TestCommandCompositionPreservesPublicationAfterAggregateFailure(t *testing.
 	if previews[0].Before.SHA256 != captured.Editor.SHA256 || previews[0].After != "BASE\n" {
 		t.Fatalf("reviewed different bytes: %+v", previews[0])
 	}
+	reviews := 0
+	tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		reviews++
+		if len(changes) != 1 || changes[0].Preview.Before != "base\n" || changes[0].Preview.After != "BASE\n" {
+			return errors.New("review did not receive captured proposal")
+		}
+		before, err := os.ReadFile(changes[0].Path)
+		if err != nil {
+			return err
+		}
+		if string(before) != "base\n" {
+			return errors.New("publication preceded review")
+		}
+		return nil
+	}
+	if err := tctx.ReviewFileChanges(ctx, tools.FileChange{Path: resolved.Abs, Preview: api.ApprovalFileChange{Path: "a.txt", RootID: rootID, Operation: "write", Before: previews[0].Before.Text, After: previews[0].After, BeforeSHA256: previews[0].Before.SHA256, AfterSHA256: previews[0].AfterSHA256}}); err != nil {
+		t.Fatalf("review prepared publication: %v", err)
+	}
+	if reviews != 1 {
+		t.Fatalf("review count=%d", reviews)
+	}
 	edit.ReviewedRevision = previews[0].Before.Revision
 	var publication tools.EditorDocumentApplied
 	var ownerError error
