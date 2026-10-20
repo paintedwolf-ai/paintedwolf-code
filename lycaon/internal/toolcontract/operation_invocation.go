@@ -30,19 +30,30 @@ const (
 
 // OperationInvocation contains immutable admission inputs, not live capabilities.
 // ActorID identifies the person/agent principal through existing people authority.
+type InvocationKind string
+
+const (
+	ProgramChildInvocation   InvocationKind = "program_child"
+	StructuredToolInvocation InvocationKind = "structured_tool"
+)
+
+// Structured invocations carry the actual model call id and no fabricated plan.
+// Program children carry host execution ids, never synthetic model call ids.
 type OperationInvocation struct {
-	Identity      ExecutionIdentity
-	ActorID       string
-	SessionID     string
-	Scope         OperationScope
-	SourceUnitID  string
-	Span          SourceSpan
-	CatalogDigest string
+	Kind            InvocationKind
+	ModelToolCallID string
+	Identity        ExecutionIdentity
+	ActorID         string
+	SessionID       string
+	Scope           OperationScope
+	SourceUnitID    string
+	Span            SourceSpan
+	CatalogDigest   string
 }
 
 func (in OperationInvocation) Validate() error {
-	if in.Identity.ProgramID == "" || in.Identity.NodeID == "" || in.Identity.ExecutionID == "" || in.ActorID == "" || in.SessionID == "" || in.SourceUnitID == "" || in.CatalogDigest == "" {
-		return fmt.Errorf("operation invocation requires explicit identity, actor, session, scope, source and catalog")
+	if in.ActorID == "" || in.SessionID == "" || in.CatalogDigest == "" {
+		return fmt.Errorf("explicit actor, session and catalog required")
 	}
 	switch in.Scope.Kind {
 	case ProjectOperationScope:
@@ -56,11 +67,23 @@ func (in OperationInvocation) Validate() error {
 	default:
 		return fmt.Errorf("explicit project or session operation scope required")
 	}
-	if in.Identity.ExecutionID == in.Identity.ParentExecutionID {
-		return fmt.Errorf("execution cannot parent itself")
-	}
-	if in.Span.StartByte < 0 || in.Span.EndByte < in.Span.StartByte || in.Span.Line < 1 || in.Span.Column < 1 {
-		return fmt.Errorf("invalid operation source span")
+	switch in.Kind {
+	case ProgramChildInvocation:
+		if in.Identity.ProgramID == "" || in.Identity.NodeID == "" || in.Identity.ExecutionID == "" || in.SourceUnitID == "" || in.ModelToolCallID != "" {
+			return fmt.Errorf("program child requires host execution and source identity without a model call")
+		}
+		if in.Identity.ExecutionID == in.Identity.ParentExecutionID {
+			return fmt.Errorf("execution cannot parent itself")
+		}
+		if in.Span.StartByte < 0 || in.Span.EndByte < in.Span.StartByte || in.Span.Line < 1 || in.Span.Column < 1 {
+			return fmt.Errorf("invalid operation source span")
+		}
+	case StructuredToolInvocation:
+		if in.ModelToolCallID == "" || in.Identity != (ExecutionIdentity{}) || in.SourceUnitID != "" || in.Span != (SourceSpan{}) {
+			return fmt.Errorf("structured operation requires an actual model call without fabricated program identity")
+		}
+	default:
+		return fmt.Errorf("explicit invocation kind required")
 	}
 	return nil
 }

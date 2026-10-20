@@ -78,7 +78,7 @@ func TestRetainedOperationCatalogClosesOverTypedCommandReferences(t *testing.T) 
 }
 
 func TestInvocationScopeAdmitsExplicitProjectlessSession(t *testing.T) {
-	invocation := OperationInvocation{Identity: ExecutionIdentity{ProgramID: "p", NodeID: "n", ExecutionID: "e"}, ActorID: "actor", SessionID: "s", Scope: OperationScope{Kind: SessionOperationScope}, SourceUnitID: "source", Span: SourceSpan{Line: 1, Column: 1}, CatalogDigest: LanguageCatalogDigest()}
+	invocation := OperationInvocation{Kind: ProgramChildInvocation, Identity: ExecutionIdentity{ProgramID: "p", NodeID: "n", ExecutionID: "e"}, ActorID: "actor", SessionID: "s", Scope: OperationScope{Kind: SessionOperationScope}, SourceUnitID: "source", Span: SourceSpan{Line: 1, Column: 1}, CatalogDigest: LanguageCatalogDigest()}
 	if err := invocation.Validate(); err != nil {
 		t.Fatalf("projectless explicit session refused: %v", err)
 	}
@@ -86,6 +86,26 @@ func TestInvocationScopeAdmitsExplicitProjectlessSession(t *testing.T) {
 		invocation.Scope = scope
 		if invocation.Validate() == nil {
 			t.Fatalf("contradictory scope admitted: %+v", scope)
+		}
+	}
+}
+
+func TestStructuredInvocationUsesActualCallWithoutProgramIdentity(t *testing.T) {
+	in := OperationInvocation{Kind: StructuredToolInvocation, ModelToolCallID: "actual-model-call", ActorID: "actor", SessionID: "session", Scope: OperationScope{Kind: SessionOperationScope}, CatalogDigest: LanguageCatalogDigest()}
+	if err := in.Validate(); err != nil {
+		t.Fatalf("retained structured context refused: %v", err)
+	}
+	for _, mutate := range []func(*OperationInvocation){
+		func(i *OperationInvocation) { i.ModelToolCallID = "" },
+		func(i *OperationInvocation) { i.Identity.ProgramID = "invented" },
+		func(i *OperationInvocation) { i.SourceUnitID = "invented" },
+		func(i *OperationInvocation) { i.Span.Line = 1 },
+		func(i *OperationInvocation) { i.Kind = ProgramChildInvocation },
+	} {
+		invalid := in
+		mutate(&invalid)
+		if invalid.Validate() == nil {
+			t.Fatalf("contradictory invocation admitted: %+v", invalid)
 		}
 	}
 }

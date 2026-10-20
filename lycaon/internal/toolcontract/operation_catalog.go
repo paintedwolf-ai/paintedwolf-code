@@ -32,11 +32,7 @@ func ToolOperation(name string, schema json.RawMessage, contract Contract) (Oper
 		}
 		for _, command := range catalog.Commands {
 			for _, declared := range disposition.CommandForms {
-				selected := command.Name == declared
-				for _, alias := range command.Aliases {
-					selected = selected || alias == declared
-				}
-				if selected {
+				if command.Name == declared {
 					commands = append(commands, command)
 					break
 				}

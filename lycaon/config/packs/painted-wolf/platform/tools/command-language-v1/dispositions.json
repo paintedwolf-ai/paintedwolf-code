@@ -2289,8 +2289,7 @@
       ],
       "existing_rejection_code": "",
       "command_forms": [
-        "repo-map",
-        "survey-repo"
+        "repo-map"
       ]
     },
     {
