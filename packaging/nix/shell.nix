@@ -30,6 +30,7 @@ in rust.buildRustPackage {
   cargoBuildFeatures = [ "tauri/custom-protocol" ];
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ gtk3 glib webkitgtk_4_1 libsoup_3 openssl ];
+  env.PW_REQUIRE_RELEASE_PROTOCOL = "1";
   env.TAURI_CONFIG = builtins.toJSON {
     build.frontendDist = "${frontend}";
     bundle = {
