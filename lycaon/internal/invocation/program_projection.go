@@ -57,6 +57,16 @@ func (r *SQLRecorder) ProjectProgram(ctx context.Context, sessionID, programID s
 		return out, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	out, err = projectProgram(ctx, tx, sessionID, programID, maximum)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string, maximum int) (ProgramProjection, error) {
+	var out ProgramProjection
+	var err error
 	out.Program, err = readProgram(ctx, tx, sessionID, programID)
 	if err != nil {
 		return out, err
@@ -111,21 +121,13 @@ func (r *SQLRecorder) ProjectProgram(ctx context.Context, sessionID, programID s
 	default:
 		out.FreshInvocationReference = out.Program.SourceRef
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 
 func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind string, maximum int) ([]ExecutionProjection, error) {
-	// This selector is host-owned closed data, never a caller-supplied SQL clause.
-	var condition string
-	switch kind {
-	case "completed":
-		condition = "e.effect_certainty='completed'"
-	case "uncertain":
-		condition = "e.effect_certainty IN ('unknown','attempted')"
-	case "stopped":
-		condition = "(e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))"
-	default:
-		return nil, fmt.Errorf("unknown execution projection selector")
+	condition, err := executionProjectionCondition(kind)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+condition+` ORDER BY e.ordinal DESC LIMIT ?`, program, maximum)
 	if err != nil {
@@ -167,4 +169,20 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 		out = append(out, entry.projection)
 	}
 	return out, nil
+}
+
+func executionProjectionCondition(kind string) (string, error) {
+	// This selector is host-owned closed data, never a caller-supplied SQL clause.
+	var condition string
+	switch kind {
+	case "completed":
+		condition = "e.effect_certainty='completed'"
+	case "uncertain":
+		condition = "e.effect_certainty IN ('unknown','attempted')"
+	case "stopped":
+		condition = "(e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))"
+	default:
+		return "", fmt.Errorf("unknown execution projection selector")
+	}
+	return condition, nil
 }
