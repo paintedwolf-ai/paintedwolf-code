@@ -32,11 +32,13 @@ func SSHKnownHostsPath(c Confinement) string {
 
 // EgressCommand attributes a broker connection to its command.
 type EgressCommand struct {
-	SessionID     string
-	RootSessionID string // coordinator chat id when SessionID is a worker; empty ⇒ SessionID is the chat
-	ProjectID     string
-	ProjectDir    string
-	ToolCallID    string
+	// OwnedLoopbackPorts is conditional per-invocation admission, never a raw grant.
+	OwnedLoopbackPorts []uint16
+	SessionID          string
+	RootSessionID      string // coordinator chat id when SessionID is a worker; empty ⇒ SessionID is the chat
+	ProjectID          string
+	ProjectDir         string
+	ToolCallID         string
 	// ToolName is the argv-running tool associated with this token (command, verify, …).
 	ToolName    string
 	Image       string // semantic tool image when there is no command line

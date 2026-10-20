@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -74,12 +75,14 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 
 // sessionOwnsPorts reports whether every requested port is served by this session.
 // An unnarrowed request is never owned.
-func sessionOwnsPorts(ctx context.Context, provenance LoopbackProvenanceResolver, invokingSessionID, projectDir string, ports []uint16) bool {
+func sessionOwnsPorts(ctx context.Context, provenance LoopbackProvenanceResolver, invokingSessionID, _ string, ports []uint16) bool {
 	if provenance == nil || len(ports) == 0 {
 		return false
 	}
 	for _, p := range ports {
-		if owned, _ := provenance.IsSessionOwned(ctx, invokingSessionID, projectDir, p); !owned {
+		_, v4 := ObserveOwnedSessionListener(ctx, provenance, invokingSessionID, netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), p))
+		_, v6 := ObserveOwnedSessionListener(ctx, provenance, invokingSessionID, netip.AddrPortFrom(netip.IPv6Loopback(), p))
+		if !v4 && !v6 {
 			return false
 		}
 	}

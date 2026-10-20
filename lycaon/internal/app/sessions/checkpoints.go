@@ -87,6 +87,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	r.Manager.SetSandboxLoopbackRuntime(loopbackRT)
 	loopbackProv := session.NewLoopbackProvenance(ctx)
 	r.Manager.SetLoopbackProvenance(loopbackProv)
+	releaseOwnedLoopback := confine.SetOwnedLoopbackResolver(ownedLoopbackResolver(loopbackProv, deps.Execution.Host.Authority.ApprovalPosture))
+	deps.Resources.Track("owned-loopback-observation", 22, releaseOwnedLoopback)
 
 	if err := wireGrantedAccess(r, deps); err != nil {
 		return err

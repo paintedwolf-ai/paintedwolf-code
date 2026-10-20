@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/workscope"
 	"net/netip"
+	"slices"
 )
 
 // OwnedLoopbackResolver observes an exact listener under current session and
@@ -55,7 +56,7 @@ func (b *egressBrokerT) ownedLoopbackFor(ctx context.Context, lineage string, en
 	command, live := b.tokens[lineage]
 	observe := b.ownedLoopback
 	b.mu.Unlock()
-	if !live || observe == nil || command.SessionID == "" || ctx.Err() != nil {
+	if !live || observe == nil || command.SessionID == "" || !slices.Contains(command.OwnedLoopbackPorts, endpoint.Port()) || ctx.Err() != nil {
 		return "", false
 	}
 	return observe.resolve(ctx, command, netip.AddrPortFrom(endpoint.Addr().Unmap(), endpoint.Port()))

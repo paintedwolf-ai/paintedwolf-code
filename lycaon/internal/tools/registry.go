@@ -307,6 +307,8 @@ type InvocationExecution struct {
 
 // InvocationLocal carries local network grants and audit.
 type InvocationLocal struct {
+	// OwnedLoopbackPorts requires fresh exact listener proof at every mediated write.
+	OwnedLoopbackPorts []uint16
 	// ContainerRecorder records container launches for session loopback provenance.
 	ContainerRecorder ContainerRecorder
 	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).

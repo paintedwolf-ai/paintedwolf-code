@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"net/netip"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -21,6 +22,13 @@ func (f fixedProvenance) IsSessionOwned(_ context.Context, _, _ string, port uin
 		return true, ProvenanceEvidence{Method: ProvenanceLineage}
 	}
 	return false, ProvenanceEvidence{Method: ProvenanceUnverified}
+}
+
+func (f fixedProvenance) ObserveSessionListener(_ context.Context, _ string, endpoint netip.AddrPort) (string, bool, error) {
+	if f.owned[endpoint.Port()] {
+		return "fixture-resource", true, nil
+	}
+	return "", false, nil
 }
 
 func (f fixedProvenance) HeldByOther(_ context.Context, _, _ string, port uint16) bool {

@@ -30,6 +30,7 @@ type ActionLease struct {
 // launch gets a lineage; a proxy-only one also registers the broker lease that
 // makes its dials attributable.
 func BindAction(c *Confinement, cmd EgressCommand) (*ActionLease, error) {
+	cmd.OwnedLoopbackPorts = append([]uint16(nil), cmd.OwnedLoopbackPorts...)
 	lease := &ActionLease{cmd: cmd}
 	if c == nil {
 		return lease, nil
