@@ -15,9 +15,21 @@ def graph():
                    'inputDrvs': {}, 'outputs': {'out': {'path': OUTPUT}}}}
 
 
+def schema4(rows):
+    result = {}
+    for path, row in rows.items():
+        row = copy.deepcopy(row)
+        row['version'] = 4
+        row['inputs'] = {'drvs': {key.removeprefix('/nix/store/'): value for key, value in row.pop('inputDrvs').items()}}
+        for output in row.get('outputs', {}).values():
+            output['path'] = output['path'].removeprefix('/nix/store/')
+        result[path.removeprefix('/nix/store/')] = row
+    return {'version': 4, 'derivations': result}
+
+
 class NixScannerToolsTests(unittest.TestCase):
     def test_only_one_reachable_native_scanner_output_is_selected(self):
-        self.assertEqual(host.scanner_derivation(graph(), ROOT, 'aarch64-linux'),
+        self.assertEqual(host.scanner_derivation(schema4(graph()), ROOT, 'aarch64-linux'),
                          {'derivation': TOOL, 'output': OUTPUT, 'executable': EXE, 'system': 'aarch64-linux'})
         for kind in ('disconnected', 'missing', 'architecture', 'output', 'duplicate'):
             rows = graph()
@@ -34,5 +46,5 @@ class NixScannerToolsTests(unittest.TestCase):
                 rows[ROOT]['inputDrvs'][duplicate] = ['out']
                 rows[duplicate] = copy.deepcopy(rows[TOOL])
             with self.subTest(kind=kind), self.assertRaises(ValueError):
-                host.scanner_derivation(rows, ROOT, 'aarch64-linux')
+                host.scanner_derivation(schema4(rows), ROOT, 'aarch64-linux')
 

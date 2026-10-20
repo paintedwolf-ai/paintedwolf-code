@@ -12,9 +12,13 @@ SYSTEMS = {'x86_64': 'x86_64-linux', 'aarch64': 'aarch64-linux'}
 
 def scanner_derivation(graph: dict, root: str, system: str) -> dict:
     if (system not in SYSTEMS.values() or not isinstance(graph, dict)
-            or not 0 < len(graph) <= 100000 or root not in graph):
-        raise ValueError('scanner selection requires the complete selected native derivation graph')
-    if not isinstance(graph[root], dict) or graph[root].get('system') != system:
+            or set(graph) != {'version', 'derivations'} or graph['version'] != 4
+            or not isinstance(graph['derivations'], dict)
+            or not 0 < len(graph['derivations']) <= 100000):
+        raise ValueError('scanner selection requires the complete schema-4 native derivation graph')
+    rows = graph['derivations']
+    root = Path(root).name
+    if root not in rows or rows[root].get('system') != system:
         raise ValueError('application derivation is not for the selected native system')
     pending, visited, matches = [root], set(), []
     while pending:
@@ -22,12 +26,12 @@ def scanner_derivation(graph: dict, root: str, system: str) -> dict:
         if path in visited:
             continue
         visited.add(path)
-        if not isinstance(path, str) or re.fullmatch(STORE + r'\.drv', path) is None:
+        if not isinstance(path, str) or re.fullmatch(STORE.removeprefix('/nix/store/') + r'\.drv', path) is None:
             raise ValueError('derivation graph contains an invalid store identity')
-        row = graph.get(path)
-        if not isinstance(row, dict) or not isinstance(row.get('inputDrvs'), dict):
+        row = rows.get(path)
+        if not isinstance(row, dict) or row.get('version') != 4 or not isinstance(row.get('inputs', {}).get('drvs'), dict):
             raise ValueError('derivation graph is incomplete')
-        pending.extend(row['inputDrvs'])
+        pending.extend(row['inputs']['drvs'])
         environment = row.get('env')
         if not isinstance(environment, dict):
             raise ValueError('derivation graph omitted its typed environment')
@@ -35,12 +39,14 @@ def scanner_derivation(graph: dict, root: str, system: str) -> dict:
             continue
         output = row.get('outputs', {}).get('out', {})
         value = output.get('path')
+        if isinstance(value, str):
+            value = '/nix/store/' + value
         if (row.get('system') != system or not isinstance(value, str)
                 or re.fullmatch(STORE, value) is None
                 or not Path(value).name[33:].startswith(PNAME + '-')
                 or environment.get('out') != value):
             raise ValueError('scanner tools do not have one fixed native output identity')
-        matches.append({'derivation': path, 'output': value,
+        matches.append({'derivation': '/nix/store/' + path, 'output': value,
                         'executable': value + '/bin/opengrep-artifact', 'system': system})
     if len(matches) != 1:
         raise ValueError('selected application must depend on exactly one native scanner build tool')
