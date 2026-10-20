@@ -78,7 +78,8 @@ class Installation:
         self.owned[pid] = (engine, 2)
         self.owned[app_pid] = (app_identity, 1)
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
+            client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with client.open(f"http://127.0.0.1:{port}/health", timeout=2) as response:
                 health = json.load(response)
         except (OSError, ValueError):
             return None

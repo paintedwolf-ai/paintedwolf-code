@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -27,7 +28,8 @@ def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: P
     with (evidence / "semantics.log").open("wb") as log:
         subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
                         "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
-                        "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120)
+                        "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120,
+                       env={**os.environ, "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost"})
 
 
 def staged(records: Path):
