@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts/linux_release/installed_cases",
+  "kind": "module",
+  "workstream": "linux-installed-performance",
+  "disposition": "retain",
+  "reason": "Fixed case-family executors share one final installed-artifact binding and retained evidence owner. Resource observation now has its own cohesive lifetime and counter boundary; registry dispatch remains fixed, and observation cannot grant qualification. Retain the 38 measured immediate members with exact membership review rather than fragment the shared installed execution contract into count-driven packages.",
+  "reviewed_commit": "87a2ae8224044d6f32e40c9b282774e2ba49dcdf",
+  "ceiling": 38,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_helpers_execution.py": "609e6c397df155dd3991da8806d5a1f11509519cc2d42a313cfd9b2f379029ff",
+    "scripts/verification_tests/distribution/installed/test_installed_performance_execution.py": "543076598bb568d750dd6d5fff26fe59b4b7684449d0a73acc20cdfb8bdc7217",
+    "scripts/verification_tests/distribution/installed/test_installed_performance_tree_execution.py": "b2662c50f5ecd49dd99de4e2d318a2a01583a0fdda6907702a9f15a68f10392f"
+  },
+  "reviewed_shape": "460d043fcc6c93121871c0abce514da2419d3dd8fa3b13a550949cc0692f6f15"
+}
