@@ -157,3 +157,26 @@ class InstalledOnboardingTests(unittest.TestCase):
             onboarding.onboard(app)
             inspect.assert_not_called()
             self.assertIsNone(onboarding._password)
+
+    def test_owned_readiness_ends_startup_inventory_without_touching_a_form(self):
+        window, fields, button = form()
+        application = Node(0, children=[window])
+        application.get_process_id = lambda: 123
+        api = SimpleNamespace(**vars(API), Registry=SimpleNamespace(getDesktop=lambda index: Node(0, children=[application])))
+        app = SimpleNamespace(timeout=1, observations={'session': {}}, try_ready=Mock(side_effect=[False, True]))
+        with patch.object(onboarding, 'accessibility_bus', return_value=nullcontext()), patch.object(
+                onboarding, 'load_api', return_value=api), patch.object(onboarding, 'owned_process', return_value=True):
+            onboarding.onboard(app)
+        self.assertIsNone(onboarding._password)
+        for field in fields:
+            field.editor.setTextContents.assert_not_called()
+        button.action.doAction.assert_not_called()
+
+    def test_inventory_readiness_interrupt_preserves_traversal_bounds_when_not_ready(self):
+        oversized = Node(0, children=[Node(0)] * 1025)
+        def ready():
+            raise onboarding._Ready()
+        with self.assertRaises(onboarding._Ready):
+            onboarding.controls(oversized, API, ready=ready)
+        with self.assertRaisesRegex(ValueError, 'traversal bound'):
+            onboarding.controls(oversized, API, ready=lambda: None)
