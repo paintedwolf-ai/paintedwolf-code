@@ -1136,3 +1136,15 @@ The resulting artifacts can be selected by the separate `qualify` operation;
 `retain` freshly admits the executed observations. Preparing controls grants no
 installed qualification or publication authority, and performs no upload to a
 package repository, cache activation or public release.
+
+
+The separate `linux_operation: document` selects an exact completed Linux campaign
+and an independently produced `release-distribution-inputs` artifact. It reruns
+Linux admission, preserves the source catalog's publication flags, copies exact
+installed/native release package bytes into canonical names, and calls the
+maintained distribution document signer. Feed and package signing generations
+remain separate. Its signed metadata explicitly keeps repositories, cache and AUR
+delivery inactive; it does not upload public objects or change channel pointers.
+A catalog whose Linux entries remain candidates cannot produce a public Linux
+document through this operation. Enabled delivery still requires an independent
+fresh transport observer and publication integration.

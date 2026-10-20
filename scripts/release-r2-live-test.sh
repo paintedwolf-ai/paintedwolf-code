@@ -3,6 +3,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == "--prepare-distribution-document" ]]; then
+  shift
+  exec python3 -m scripts.linux_release.publication_document_pipeline "$@"
+fi
 if [[ "${1:-}" == "--retain-release-inputs" ]]; then
   shift
   exec python3 -m scripts.linux_release.publication_release_producer "$@"
