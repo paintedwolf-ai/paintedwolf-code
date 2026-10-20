@@ -11,7 +11,8 @@ import subprocess
 import sys
 import tempfile
 
-from .installed_artifact_bundle import download, retain_tree
+from .installed_capacity import limits as campaign_limits
+from .installed_artifact_bundle import Limits, download, retain_tree
 from .installed_execution import current_tree, read, registry
 from .installed_campaign import validate_plan, verify_execution_receipt
 from .installed_provenance import controller_context, select_control, select_plan, verify_producer
@@ -68,6 +69,8 @@ def prepare(args):
         "controls": select_control(api, repository, producer["repository_id"], args.control_run_id, args.control_artifact_id),
         "plan": select_plan(api, repository, producer["repository_id"], args.qualification_plan_run_id, args.qualification_plan_artifact_id)}
     source = {"source_commit": args.source_commit, "source_tree": args.source_tree}
+    capacity = campaign_limits(catalog, final)
+    bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         download(selections["controls"], args.output / "controls")
@@ -118,16 +121,18 @@ def retain_verified(args, producer, tree, catalog, drivers, preparation, fresh):
         raise ValueError("only a complete freshly admitted actual installed campaign may be retained")
     for target in plan["targets"]:
         directory = args.execution / target["id"]
-        for name in ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/driver-registry.json", "leaf/execution.json", "execution-request.json"):
+        for name in ("managed-execution.log", "transfer.log", "leaf.zip", "leaf/campaign.json", "leaf/binding.json", "leaf/environment.json", "leaf/variant.json", "leaf/driver-registry.json", "leaf/execution.json", "leaf/environment-facts.json", "execution-request.json"):
             path = directory / name
             if not path.is_file() or path.is_symlink():
                 raise ValueError("raw qualification omitted a selected guest execution receipt")
+    capacity = campaign_limits(catalog, final)
+    bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         retain_tree(fresh / "controls", args.output / "control-inputs", root_files=CONTROL_FILES, root_dirs=CONTROL_DIRS)
         targets = {target["id"] for target in plan["targets"]}
         retain_tree(args.execution, args.output / "installed-campaign",
-                    root_files={"campaign.json", "admission.json", "plan.json", "driver-registry.json"}, root_dirs={"evidence", *targets})
+                    root_files={"campaign.json", "admission.json", "plan.json", "driver-registry.json"}, root_dirs={"evidence", *targets}, limits=bounds)
         controls, selected_plan = preparation["selections"]["controls"], preparation["selections"]["plan"]
         document = {"format_version": 1, **producer, "source_commit": preparation["source_commit"], "source_tree": preparation["source_tree"],
                     "catalog_sha256": preparation["catalog_sha256"], "driver_registry_sha256": preparation["driver_registry_sha256"],
