@@ -49,6 +49,7 @@ var helperPinnedCwdFDArg = -1
 var helperPinnedReadyFDArg = -1
 var helperPinnedEntryArg string
 var helperPinnedExecutableFDArg = -1
+var helperPinnedReleaseFDArg = -1
 var helperPinnedFinal bool
 var helperPinnedHostExecution bool
 
@@ -59,12 +60,13 @@ func runHelper(args []string) error {
 	helperPinnedCwdFDArg, helperPinnedReadyFDArg = -1, -1
 	helperPinnedEntryArg = ""
 	helperPinnedExecutableFDArg = -1
+	helperPinnedReleaseFDArg = -1
 	helperPinnedFinal = false
 	helperPinnedHostExecution = false
 	var target []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag, pinExecutableFDFlag:
+		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag, pinExecutableFDFlag, pinReleaseFDFlag:
 			flag := args[i]
 			if i+1 >= len(args) {
 				return fmt.Errorf("%s requires a file descriptor", flag)
@@ -84,13 +86,15 @@ func runHelper(args []string) error {
 				helperPinnedReadyFDArg = fd
 			case pinExecutableFDFlag:
 				helperPinnedExecutableFDArg = fd
+			case pinReleaseFDFlag:
+				helperPinnedReleaseFDArg = fd
 			default:
 				helperRefusalFDArg = fd
 			}
 			i++
 		case pinEntryFlag:
 			if i+1 >= len(args) || args[i+1] == "" {
-				return fmt.Errorf("pinned entry is required")
+				return fmt.Errorf("launch entry is required")
 			}
 			helperPinnedEntryArg = args[i+1]
 			i++
@@ -104,7 +108,7 @@ func runHelper(args []string) error {
 		}
 	}
 	if helperPinnedFinal {
-		if helperPinnedEntryArg == "" || helperPinnedHostExecution || helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 || len(target) == 0 {
+		if helperPinnedEntryArg == "" || helperPinnedHostExecution || helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 || helperPinnedReleaseFDArg < 0 || len(target) == 0 {
 			return fmt.Errorf("invalid inherited final launch descriptors")
 		}
 		if lineageFD >= 0 {
@@ -112,7 +116,7 @@ func runHelper(args []string) error {
 				return err
 			}
 		}
-		return execPinnedTarget(helperPinnedEntryArg, target, helperPinnedCwdFDArg, helperPinnedReadyFDArg)
+		return execNativeTarget(helperPinnedEntryArg, target)
 	}
 	if profileFD < 0 || len(target) == 0 {
 		return fmt.Errorf("usage: %s %s <fd> -- <cmd> [args...]", helperFlag, profileFDFlag)
@@ -139,9 +143,9 @@ func runHelper(args []string) error {
 			}
 		}()
 	}
-	if helperPinnedReadyFDArg >= 0 || helperPinnedCwdFDArg >= 0 || helperPinnedEntryArg != "" || helperPinnedHostExecution {
+	if helperPinnedReadyFDArg >= 0 || helperPinnedCwdFDArg >= 0 || helperPinnedEntryArg != "" {
 		if helperPinnedReadyFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedEntryArg == "" {
-			return fmt.Errorf("pinned helper requires complete descriptor handoff")
+			return fmt.Errorf("native launch helper requires complete descriptor handoff")
 		}
 	}
 
@@ -168,7 +172,7 @@ func runHelper(args []string) error {
 	if helperPinnedHostExecution {
 		// The host selected explicit host execution before constructing this helper.
 		// This never removes an inherited confinement boundary.
-		return execPinnedTarget(resolved, target, helperPinnedCwdFDArg, helperPinnedReadyFDArg)
+		return execNativeTarget(resolved, target)
 	}
 	// The platform applies the boundary, confirms it, and runs the target.
 	return applyAndExec(profile, resolved, target)

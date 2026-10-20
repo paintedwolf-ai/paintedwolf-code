@@ -35,11 +35,15 @@ type openedParent struct {
 type targetAt struct{ parent *openedParent }
 
 func openRoot(path string) (*openedRoot, error) {
+	return openRootFlags(path, unix.O_RDONLY)
+}
+
+func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 	canonical, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve effect root: %w", err)
 	}
-	fd, err := unix.Open(string(filepath.Separator), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	fd, err := unix.Open(string(filepath.Separator), accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, fmt.Errorf("open effect root: %w", err)
 	}
@@ -48,7 +52,7 @@ func openRoot(path string) (*openedRoot, error) {
 			continue
 		}
 		next, openErr := unix.Openat(fd, component,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		_ = unix.Close(fd)
 		if openErr != nil {
 			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {

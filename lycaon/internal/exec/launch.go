@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -23,13 +24,14 @@ const (
 
 // LaunchPlan carries mandatory process authority and attribution.
 type LaunchPlan struct {
-	Kind        LaunchKind
-	Subject     string
-	Confinement *confine.Confinement
-	Environment EnvironmentMode
-	ExtraEnv    []string
-	Pins        *confine.ProcessPins
-	RequirePins bool
+	Kind             LaunchKind
+	Subject          string
+	Confinement      *confine.Confinement
+	Environment      EnvironmentMode
+	ExtraEnv         []string
+	PathAuthority    confine.LaunchPaths
+	InputLimits      confine.LaunchVectorLimits
+	CurrentAuthority func(context.Context) error
 }
 
 // EnvironmentMode selects the process environment.
@@ -40,9 +42,9 @@ const (
 	EnvironmentReduced   EnvironmentMode = "reduced"
 )
 
-// WithPinnedIdentity requires checked entry and directory identity at launch.
-func (p LaunchPlan) WithPinnedIdentity(pins *confine.ProcessPins) LaunchPlan {
-	p.Pins, p.RequirePins = pins, true
+// WithPathAuthority binds the current invocation's existing path authority.
+func (p LaunchPlan) WithPathAuthority(paths confine.LaunchPaths) LaunchPlan {
+	p.PathAuthority = paths
 	return p
 }
 
@@ -97,12 +99,6 @@ func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confineme
 }
 
 func (p LaunchPlan) validate() error {
-	if p.RequirePins && (p.Pins == nil || p.Confinement == nil) {
-		return fmt.Errorf("required process identity capture is unavailable")
-	}
-	if p.Pins != nil && p.Confinement == nil {
-		return fmt.Errorf("process identity capture requires the confinement launch door")
-	}
 	if p.Kind == "" {
 		return fmt.Errorf("process launch plan is required")
 	}

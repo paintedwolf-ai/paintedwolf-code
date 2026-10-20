@@ -1,4 +1,4 @@
-//go:build darwin && cgo
+//go:build darwin
 
 package projectpaths_test
 
@@ -27,14 +27,9 @@ func TestActualLaunchUsesCheckedProgramPathHandles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pins, err := confine.CaptureProcessPins(t.Context(), "/bin/echo", paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pins.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	plan := hostexec.AgentLaunch(hostexec.LaunchAgentCommand, "synthetic checked path launch", &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}).WithPinnedIdentity(pins)
+	plan := hostexec.AgentLaunch(hostexec.LaunchAgentCommand, "synthetic checked path launch", &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}).WithPathAuthority(paths)
 	cmd, cleanup, err := hostexec.PrepareCommand(ctx, "/bin/echo", []string{"literal argument"}, hostexec.ExecOpts{Launch: plan, Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {
 		t.Fatal(err)

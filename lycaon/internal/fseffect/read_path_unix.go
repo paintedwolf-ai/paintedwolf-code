@@ -3,6 +3,7 @@
 package fseffect
 
 import (
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,4 +50,44 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 		return nil, err
 	}
 	return openReadContained(r.root, relative)
+}
+
+// MetadataRoot holds descriptor-relative metadata authority without content-read
+// permission. Execution-only paths never require a source-content read grant.
+type MetadataRoot struct{ root *openedRoot }
+
+func OpenMetadataRoot(path string) (*MetadataRoot, error) {
+	clean, err := cleanReadLocation(Location{Root: path, Rel: "."})
+	if err != nil {
+		return nil, err
+	}
+	root, err := openRootFlags(clean.Root, metadataOpenFlags())
+	if err != nil {
+		return nil, err
+	}
+	return &MetadataRoot{root: root}, nil
+}
+func (r *MetadataRoot) Path() string { return r.root.path }
+func (r *MetadataRoot) Close() error { r.root.close(); return nil }
+func (r *MetadataRoot) OpenExact(rel string) (*os.File, error) {
+	relative, err := exactReadRelative(rel)
+	if err != nil {
+		return nil, err
+	}
+	return walkReadContained(r.root, relative, true, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
+		fd, err := unix.Openat(int(dir.Fd()), name, metadataOpenFlags()|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if err != nil {
+			return nil, err
+		}
+		var actual unix.Stat_t
+		if err := unix.Fstat(fd, &actual); err != nil {
+			_ = unix.Close(fd)
+			return nil, err
+		}
+		if actual.Mode&unix.S_IFMT == unix.S_IFLNK || actual.Dev != expected.Dev || actual.Ino != expected.Ino {
+			_ = unix.Close(fd)
+			return nil, ErrSymlink
+		}
+		return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
+	})
 }

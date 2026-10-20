@@ -127,11 +127,10 @@ func (c SDKConnector) connectStdio(ctx context.Context, entry MCPProviderEntry, 
 	if err != nil {
 		return nil, fmt.Errorf("mcp provider %q: %w", entry.ID, err)
 	}
-	defer spawn.cleanup()
 
 	sdkClient := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "lycaon", Version: version.Version}, clientOptions(opts))
 	advertiseRoots(sdkClient, opts.Roots)
-	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: spawn.cmd}}
+	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: spawn.cmd}, cleanup: spawn.cleanup}
 	session, err := sdkClient.Connect(ctx, transport, nil)
 	if err != nil {
 		// Reap a child created before a failed handshake.
@@ -147,21 +146,22 @@ func (c SDKConnector) connectStdio(ctx context.Context, entry MCPProviderEntry, 
 // starts it, so the group dies with the engine even mid-handshake.
 type trackedTransport struct {
 	*sdkmcp.CommandTransport
-	untrack func()
+	cleanup func()
 }
 
 func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
-	conn, err := t.CommandTransport.Connect(ctx)
-	if cmd := t.Command; cmd != nil && cmd.Process != nil {
-		// hardenSpawn made the server its own group leader.
-		t.untrack = execpkg.TrackProcessGroup(cmd.Process.Pid)
-	}
-	return conn, err
+	var connection sdkmcp.Connection
+	err := execpkg.StartPreparedWith(t.Command, func() error {
+		var err error
+		connection, err = t.CommandTransport.Connect(ctx)
+		return err
+	}, execpkg.TrackProcessGroup)
+	return connection, err
 }
 
 func (t *trackedTransport) release() {
-	if t.untrack != nil {
-		t.untrack()
+	if t.cleanup != nil {
+		t.cleanup()
 	}
 }
 

@@ -1,4 +1,4 @@
-//go:build darwin && cgo
+//go:build darwin
 
 package exec
 
@@ -50,15 +50,10 @@ func TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory(t *testing.T) 
 				t.Fatal(err)
 			}
 			paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
-			pins, err := confine.CaptureProcessPins(t.Context(), entry, paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer pins.Close()
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 			defer cancel()
 			confinement := &confine.Confinement{Roots: []string{directory}, Network: confine.NetworkDeny, HostExecution: host}
-			plan := AgentLaunch(LaunchAgentCommand, "synthetic pinned script fixture", confinement).WithPinnedIdentity(pins)
+			plan := AgentLaunch(LaunchAgentCommand, "synthetic pinned script fixture", confinement).WithPathAuthority(paths)
 			cmd, cleanup, err := PrepareCommand(ctx, "./task", []string{"literal argument"}, ExecOpts{Launch: plan, Dir: directory, Env: []string{"PATH=/usr/bin:/bin"}})
 			if err != nil {
 				t.Fatal(err)
@@ -81,17 +76,6 @@ func TestPinnedLaunchPreservesOrdinaryScriptArgumentsAndDirectory(t *testing.T) 
 	}
 }
 
-func TestRequiredPinsRefuseMissingCaptureBeforeLaunch(t *testing.T) {
-	plan := AgentLaunch(LaunchAgentCommand, "synthetic missing capture", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(nil)
-	cmd, cleanup, err := PrepareCommand(t.Context(), "/bin/echo", nil, ExecOpts{Launch: plan})
-	if cleanup != nil {
-		cleanup()
-	}
-	if cmd != nil || err == nil || errors.Is(err, context.Canceled) {
-		t.Fatal("missing required capture admitted")
-	}
-}
-
 func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *testing.T) {
 	for _, revoke := range []bool{false, true} {
 		t.Run(map[bool]string{false: "replaced entry", true: "revoked admission"}[revoke], func(t *testing.T) {
@@ -102,14 +86,9 @@ func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *test
 				t.Fatal(err)
 			}
 			paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
-			pins, err := confine.CaptureProcessPins(t.Context(), entry, paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer pins.Close()
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 			defer cancel()
-			plan := AgentLaunch(LaunchAgentCommand, "synthetic launch revalidation", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+			plan := AgentLaunch(LaunchAgentCommand, "synthetic launch revalidation", &confine.Confinement{HostExecution: true}).WithPathAuthority(paths)
 			cmd, cleanup, err := PrepareCommand(ctx, "./task", nil, ExecOpts{Launch: plan, Dir: directory, Env: []string{"PATH=/usr/bin:/bin"}})
 			if err != nil {
 				t.Fatal(err)
@@ -150,12 +129,7 @@ func TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
-	pins, err := confine.CaptureProcessPins(t.Context(), entry, paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pins.Close()
-	plan := AgentLaunch(LaunchAgentCommand, "synthetic alias admission", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic alias admission", &confine.Confinement{HostExecution: true}).WithPathAuthority(paths)
 	cmd, cleanup, err := PrepareCommand(t.Context(), alias, nil, ExecOpts{Launch: plan})
 	if cleanup != nil {
 		cleanup()
@@ -167,14 +141,9 @@ func TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand(t *testing.T) {
 
 func TestPinnedHostExecutionPreservesSetuidProcessInspection(t *testing.T) {
 	paths := pinnedLaunchFixture{t.TempDir(), map[string]bool{"/bin/ps": true}}
-	pins, err := confine.CaptureProcessPins(t.Context(), "/bin/ps", paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pins.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	plan := AgentLaunch(LaunchAgentCommand, "synthetic privileged inspection", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic privileged inspection", &confine.Confinement{HostExecution: true}).WithPathAuthority(paths)
 	pid := strconv.Itoa(os.Getpid())
 	cmd, cleanup, err := PrepareCommand(ctx, "/bin/ps", []string{"-p", pid, "-o", "pid="}, ExecOpts{Launch: plan, Env: []string{"PATH=/usr/bin:/bin"}})
 	if err != nil {

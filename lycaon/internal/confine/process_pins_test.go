@@ -23,7 +23,7 @@ func (p *pinPathFixture) OpenExecutable(ctx context.Context, path string) (*os.F
 	if p.refused || !p.allowed[path] {
 		return nil, os.ErrPermission
 	}
-	return os.Open(path)
+	return openNativeLaunchMetadata(path, false)
 }
 func (p *pinPathFixture) OpenCwd(ctx context.Context) (*os.File, error) {
 	if err := ctx.Err(); err != nil {
@@ -32,109 +32,99 @@ func (p *pinPathFixture) OpenCwd(ctx context.Context) (*os.File, error) {
 	if p.refused {
 		return nil, os.ErrPermission
 	}
-	return os.Open(p.cwd)
+	return openNativeLaunchMetadata(p.cwd, true)
 }
-
-func TestLaunchPinsKeepSelectedEntryCwdAndCurrentAdmissionDistinct(t *testing.T) {
+func pinFixtureLimits() LaunchVectorLimits {
+	return LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384}
+}
+func TestLaunchInputsKeepSelectionCwdAndCurrentAuthorityDistinct(t *testing.T) {
 	root := t.TempDir()
 	entry := filepath.Join(root, "fixture-script")
-	if err := os.WriteFile(entry, []byte("#!/bin/sh -e\nprintf synthetic\n"), 0700); err != nil {
+	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf synthetic\n"), 0100); err != nil {
 		t.Fatal(err)
 	}
-	paths := &pinPathFixture{cwd: root, allowed: map[string]bool{entry: true, "/bin/sh": true}}
-	pins, err := CaptureProcessPins(t.Context(), entry, paths, pinFixtureLimits())
+	paths := &pinPathFixture{cwd: root, allowed: map[string]bool{entry: true}}
+	inputs, err := CaptureProcessInputs(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pins.Close()
-	if len(pins.images) != 2 || len(pins.words) != 1 || pins.words[0][0] != "/bin/sh" {
-		t.Fatal("interpreter selection was not captured")
+	defer inputs.Close()
+	if inputs.entry.path != entry {
+		t.Fatal("selected entry changed")
 	}
-	if err := pins.revalidate(t.Context()); err != nil {
+	if err := inputs.revalidate(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	paths.refused = true
-	if err := pins.revalidate(t.Context()); !errors.Is(err, os.ErrPermission) {
-		t.Fatal("held descriptors bypassed current authority")
+	if err := inputs.revalidate(t.Context()); !errors.Is(err, os.ErrPermission) {
+		t.Fatal("held metadata waived current authority")
 	}
 	paths.refused = false
-	if err := os.Rename(entry, entry+".moved"); err != nil {
+	if err := os.Rename(entry, entry+".old"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(entry, []byte("#!/bin/sh -e\nprintf replacement\n"), 0700); err != nil {
+	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf replacement\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := pins.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
-		t.Fatal("replaced selected entry was accepted")
-	}
-	if err := pins.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := pins.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
-		t.Fatal("closed launch pins reopened")
+	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
+		t.Fatal("replaced selected entry accepted")
 	}
 }
-
-func TestLaunchPinsRejectChangedCwdAndCancelledCapture(t *testing.T) {
+func TestLaunchInputsRejectReplacedCwdClosedInputsAndCancelledCapture(t *testing.T) {
 	root := t.TempDir()
 	cwd := filepath.Join(root, "cwd")
 	if err := os.Mkdir(cwd, 0700); err != nil {
 		t.Fatal(err)
 	}
-	entry := filepath.Join(root, "fixture-script")
-	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf synthetic\n"), 0700); err != nil {
+	entry := filepath.Join(root, "entry")
+	if err := os.WriteFile(entry, []byte("native fixture"), 0100); err != nil {
 		t.Fatal(err)
 	}
-	paths := &pinPathFixture{cwd: cwd, allowed: map[string]bool{entry: true, "/bin/sh": true}}
-	pins, err := CaptureProcessPins(t.Context(), entry, paths, pinFixtureLimits())
+	paths := &pinPathFixture{cwd: cwd, allowed: map[string]bool{entry: true}}
+	inputs, err := CaptureProcessInputs(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pins.Close()
-	if err := os.Rename(cwd, cwd+".moved"); err != nil {
+	defer inputs.Close()
+	if err := os.Rename(cwd, cwd+".old"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(cwd, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := pins.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
-		t.Fatal("replacement cwd was accepted")
+	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
+		t.Fatal("replaced cwd accepted")
+	}
+	if err := inputs.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := inputs.revalidate(t.Context()); !errors.Is(err, ErrLaunchIdentityChanged) {
+		t.Fatal("closed input reopened")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if capture, err := CaptureProcessPins(ctx, entry, paths, pinFixtureLimits()); capture != nil || !errors.Is(err, context.Canceled) {
-		t.Fatal("canceled capture was admitted")
+	if inputs, err := CaptureProcessInputs(ctx, entry, paths, pinFixtureLimits()); inputs != nil || !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled capture accepted")
 	}
 }
-
-func pinFixtureLimits() LaunchVectorLimits {
-	return LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384}
-}
-
 func TestLaunchVectorLimitsRefuseBeforeCopyAndPreserveLiteralData(t *testing.T) {
 	limits := LaunchVectorLimits{ArgumentBytes: 4, ArgvBytes: 6, EnvironmentBytes: 4, ExpandedFields: 2}
 	if err := limits.checkCommand("abcd", []string{"ef"}, []string{"K=xy"}); err != nil {
 		t.Fatal(err)
 	}
-	cases := []struct {
-		args, environment []string
-		dimension         string
-	}{
-		{[]string{"abcde"}, nil, "argument_bytes"},
-		{[]string{"abcd", "efg"}, nil, "argv_bytes"},
-		{[]string{"a", "b", "c"}, nil, "expanded_fields"},
-		{[]string{"a"}, []string{"K=xyz"}, "environment_bytes"},
-	}
-	for _, c := range cases {
-		var failure *LaunchVectorLimitError
-		if err := limits.checkCommand(c.args[0], c.args[1:], c.environment); !errors.As(err, &failure) || failure.Dimension != c.dimension {
-			t.Fatalf("wrong typed vector refusal for %s", c.dimension)
+	for _, c := range []struct {
+		args, env []string
+		dimension string
+	}{{[]string{"abcde"}, nil, "argument_bytes"}, {[]string{"abcd", "efg"}, nil, "argv_bytes"}, {[]string{"a", "b", "c"}, nil, "expanded_fields"}, {[]string{"a"}, []string{"K=xyz"}, "environment_bytes"}} {
+		var bound *LaunchVectorLimitError
+		if err := limits.checkCommand(c.args[0], c.args[1:], c.env); !errors.As(err, &bound) || bound.Dimension != c.dimension {
+			t.Fatal("wrong typed vector refusal")
 		}
 	}
 	if err := limits.checkCommand("a\x00b", nil, nil); err == nil {
-		t.Fatal("NUL scalar admitted")
+		t.Fatal("NUL admitted")
 	}
 	if err := (LaunchVectorLimits{}).checkCommand("a", nil, nil); err == nil {
-		t.Fatal("unbounded launch vectors admitted")
+		t.Fatal("missing limits admitted")
 	}
 }

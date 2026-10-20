@@ -81,66 +81,41 @@ ordinary connection admission. These are observations for mediated admission,
 not grants; mediated admission must recheck current identities at each required
 boundary.
 
-Portable external launch freezes the selected entry and interpreter identities,
-real cwd, literal argv/environment and confinement before release to user code.
-A held handle does not waive current path or operation admission. Entry,
-interpreter and cwd replacements refuse release; observed credentials must agree
-with the permitted transition of the captured selection. Native binary image
-observations come from the stopped kernel image rather than a successful stdout
-or a pathname check.
+Portable external launch uses one prepared lifecycle through the existing
+`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
+process producers. Final sanitized environment, PATH selection, real cwd and
+literal argv are captured before helper construction. The helper receives the
+selected native executable path and held cwd, and never resolves a prepared
+command through PATH a second time. A current invocation path owner may supply
+its checked metadata handles; a held handle never grants source-read or execution
+authority. Host-managed native producers retain their existing OS authority.
 
-For shebang entries, the release check verifies the actual interpreter image and
-exact kernel-expanded argv, including the original script pathname and arguments,
-and rechecks the held selected entry. It does not rewrite script paths through
-`/dev/fd` or assert the kernel's historical script vnode under an ABA namespace
-swap. Subsequent interpreter source, import and plugin reads remain ordinary
-confined process reads; they are not immutable captured program source. Native
-header and argument behavior follows [XNU's image activator](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exec.c)
-and [Linux's script loader](https://github.com/torvalds/linux/blob/master/fs/binfmt_script.c).
-On Darwin, required identity capture travels through the existing confinement
-helper. Its native suspended-exec barrier verifies the mapped executable, cwd,
-kernel argv, credentials and current path admission before the existing process
-guard releases user code. Actual ordinary-script fixtures cover both confinement
-and explicitly authorized host execution, plus changed-entry and revoked-read
-refusals without payload effects. Some protected native binaries withhold their
-environment from kernel inspection; observation records that absence explicitly
-rather than reporting an empty environment. The submitted environment remains
-an immutable helper input, and visible environment observations must match it.
+Selection captures metadata identity without reading executable contents or
+preparsing shebangs. Execution-only files and directories retain their native
+permission semantics. Before start and at the actual helper handoff, the initiating
+owner rechecks current authority and captured entry/cwd identity. Existing process
+or process-tree supervision registers before release. The helper then uses
+ordinary native pathname execution with the original literal argv, held cwd and
+frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
+rules. Approved set-user-ID and file-capability behavior is preserved without a
+tracer, descriptor pathname or extra no-new-privileges restriction. Existing
+confinement still applies its own required restrictions.
 
-Approved Darwin set-user-ID execution has an additional unresolved capability:
-the kernel restricts mapped-vnode and cwd inspection after effective identity
-changes. The required-pin privileged process fixture currently refuses before
-release, while the existing explicit host-execution path remains available.
-A process code hash or incarnation alone is not substituted for missing mapped
-identity, cwd and argv proof. This remains required acceptance work.
+These are captured selection and current handoff checks. Native pathname lookup
+is not atomic with the final identity check, and mutable executable/interpreter
+contents are not immutable historical bytes. A stopped postexec image, credential,
+cwd or kernel-expanded argv snapshot is not a universal launch requirement.
+Available native process observations remain separate truthful facts, and absent
+observations never become successful enforcement claims. Exec transport EOF is
+not completed output, effects or recovery proof. Changed identity, current
+authority refusal, cancellation and actual native exec failures stop this launch;
+none selects another execution mechanism or automatically retries it.
 
-Required Linux binary launches select `held_binary_procfd_exec` before admission.
-The existing `unix.Exec` door executes the held ELF image through a verified
-native `/proc/self/fd/N` path, preserving literal argv, the held cwd, sanitized
-environment and native credential transitions. Its kernel `AT_EXECFN` is that
-procfd path; it does not claim pathname-exec equivalence. Procfs identity and
-access are checked before admission and again in the actual inherited boundary.
-There is no pathname fallback, and scripts never use descriptor transport.
-
-The existing owned process guard registers supervision before releasing a
-credentialed pre-exec gate. A self-opened pidfd arrives with kernel sender
-credentials in the same bounded message; the host checks the actual held image,
-cwd, process incarnation, namespaces and current authority before release.
-These are mechanism guarantees, not a stopped postexec snapshot. Later actual
-credential observation can be unavailable, particularly for privileged or
-short-lived processes, and remains explicitly unknown. Control EOF is only the
-exec transport settlement, never proof of completed effects or output. A caller
-requiring a stopped postexec/preinstruction observation receives a capability
-refusal for this mechanism.
-
-Startup tracing cannot silently replace privileged host execution:
-[Linux execve](https://man7.org/linux/man-pages/man2/execve.2.html) suppresses
-set-user-ID, set-group-ID and file capabilities while ptraced. The procfd route
-uses no tracer and adds no no-new-privileges setting beyond the selected existing
-confinement. Script path release, genuine privileged observations and native Linux
-qualification remain acceptance work. Existing optional callers retain their
-actual launch behavior. Component fixtures do not qualify the complete runtime;
-no transitive interpreter, loader or plugin byte-identity guarantee is claimed.
+The earlier experimental optional-pin/stopped-observer and procfd/tracing designs
+are superseded by this single prepared lifecycle. Their helper-only receipts do
+not qualify the corrected actual native path. Complete macOS/Linux managed
+native fixtures, existing caller lifecycle regressions and installed-platform
+qualification remain required; no partial candidate is milestone completion.
 
 Windows qualification requires actual filesystem replacement while handles are
 open, reparse-point and exact-name identity checks, journal/error settlement,

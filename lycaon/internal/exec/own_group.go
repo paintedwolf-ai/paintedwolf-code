@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine"
 	"os/exec"
 )
 
@@ -20,6 +21,9 @@ func RunInOwnGroup(cmd *exec.Cmd) error {
 	}
 	defer guard.release()
 	guard.configure(cmd)
+	if err := confine.ValidateProcessInputs(cmd); err != nil {
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}

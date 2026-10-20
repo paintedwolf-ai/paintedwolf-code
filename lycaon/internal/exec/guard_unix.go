@@ -81,7 +81,7 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	if err := g.confirmLaunch(cmd); err != nil {
 		return err
 	}
-	if err := confine.ConfirmPinnedLaunch(cmd); err != nil {
+	if err := confine.ConfirmProcessLaunch(cmd); err != nil {
 		return err
 	}
 	if !g.belowNormal {

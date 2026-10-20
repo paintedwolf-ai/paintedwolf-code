@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // StartPTY starts a caller-managed pseudo-terminal subprocess.
@@ -21,7 +22,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		return nil, err
 	}
 
-	cmd, cleanup, err := buildExecCmd(ctx, name, args, execOpts)
+	cmd, cleanup, err := prepareNativeCommand(ctx, name, args, execOpts, nil, true)
 	if err != nil {
 		guard.release()
 		return nil, err
@@ -31,12 +32,11 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		guard.release()
 		return nil, err
 	}
-	if err := configureCmdEnv(cmd, execOpts); err != nil {
+	if err := confine.ValidateProcessInputs(cmd); err != nil {
 		cleanup()
 		guard.release()
 		return nil, err
 	}
-	cmd.Env = applyDefaultTERM(cmd.Env, opts.Env, opts.InlineEnv)
 
 	// The controlling terminal also creates the child process group.
 

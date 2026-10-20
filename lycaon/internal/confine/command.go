@@ -15,21 +15,9 @@ func Command(
 	self, name string,
 	args []string,
 	c Confinement,
-	pins ...*ProcessPins,
 ) (*exec.Cmd, func(), error) {
 	if IsHelperInvocation(os.Args) {
 		return nil, func() {}, ErrNestedHelper
-	}
-	if len(pins) > 1 || (len(pins) == 1 && pins[0] == nil) {
-		return nil, func() {}, fmt.Errorf("launch accepts one nonnil pin set")
-	}
-	if len(pins) == 1 {
-		if err := pins[0].limits.checkCommand(name, args, nil); err != nil {
-			return nil, func() {}, err
-		}
-	}
-	if c.HostExecution && len(pins) == 0 {
-		return exec.CommandContext(ctx, name, args...), func() {}, nil
 	}
 	var profile string
 	var err error
@@ -66,16 +54,6 @@ func Command(
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
 	cmd.ExtraFiles = extra
-	closePins := func() {}
-	if len(pins) == 1 {
-		closePins, err = attachPinnedLaunch(ctx, cmd, pins[0], name, args, !c.HostExecution)
-		if err != nil {
-			_ = pr.Close()
-			_ = pw.Close()
-			closeReports()
-			return nil, func() {}, err
-		}
-	}
 	go func() {
 		defer func() { _ = pw.Close() }()
 		_, _ = io.WriteString(pw, profile)
@@ -84,7 +62,6 @@ func Command(
 	// last descendant exits.
 	cleanup := func() {
 		_ = pr.Close()
-		closePins()
 		closeReports()
 		c.lineage.Started()
 	}

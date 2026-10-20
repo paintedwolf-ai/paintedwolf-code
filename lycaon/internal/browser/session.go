@@ -191,18 +191,16 @@ func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string
 	parser := launcher.NewURLParser().Context(ctx)
 	cmd.Stdout = parser
 	cmd.Stderr = parser
-	if err := cmd.Start(); err != nil {
+	if err := execpkg.StartPrepared(cmd); err != nil {
 		profileCleanup()
 		return "", nil, err
 	}
 	// The browser stays in the engine's process group, so it is tracked alone;
 	// its helpers exit with it.
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
 
 	exit := make(chan struct{})
 	go func() {
 		_ = cmd.Wait()
-		untrack()
 		// Natural exits also close the confinement profile pipe.
 		profileCleanup()
 		close(exit)

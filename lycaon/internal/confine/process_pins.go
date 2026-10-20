@@ -1,58 +1,51 @@
 package confine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
-// LaunchPaths opens current authority-checked execution inputs. Each successful
-// open transfers a new handle to the launch operation; no grant is inferred
-// from an absolute spelling or from an already held descriptor.
+// LaunchPaths opens metadata handles under the initiating operation's current
+// authority. It grants no source read, execution permission or path conversion.
 type LaunchPaths interface {
 	OpenExecutable(context.Context, string) (*os.File, error)
 	OpenCwd(context.Context) (*os.File, error)
 }
 
-// ErrLaunchIdentityChanged refuses a changed selection before user code release.
 var ErrLaunchIdentityChanged = errors.New("selected launch identity changed")
 
-// ProcessPins retains the selected entry/interpreter identities and real cwd.
-// Close it after the prepared process has settled. Capture/release checks do not
-// promise immutable files/plugins an interpreter opens after process release.
-type ProcessPins struct {
-	paths              LaunchPaths
-	limits             LaunchVectorLimits
-	images             []pinnedImage
-	words              [][]string
-	cwd                *os.File
-	cwdInfo            os.FileInfo
-	mu                 sync.Mutex
-	closed             bool
-	bound              bool
-	nativeELF          bool
-	launchFacts        ProcessLaunchFacts
-	launchFactsPresent bool
+// ProcessInputs holds the selected native entry and actual cwd across handoff.
+// Kernel pathname lookup is not atomic with the final current-authority check;
+// these facts do not assert immutable historical executable or interpreter bytes.
+type ProcessInputs struct {
+	paths   LaunchPaths
+	limits  LaunchVectorLimits
+	entry   launchEntry
+	cwd     *os.File
+	cwdInfo os.FileInfo
+	mu      sync.Mutex
+	closed  bool
+	bound   bool
 }
-
-type pinnedImage struct {
+type launchEntry struct {
 	path   string
 	file   *os.File
 	info   os.FileInfo
 	change fileChange
 }
+type fileChange struct {
+	Seconds, Nanoseconds int64
+	UID, GID             uint32
+}
 
-// CaptureProcessPins freezes a previously resolved native launch entry. The
-// supplied path owner must apply current invocation authority on every reopen.
-func CaptureProcessPins(ctx context.Context, nativePath string, paths LaunchPaths, limits LaunchVectorLimits) (*ProcessPins, error) {
-	if ctx == nil || paths == nil || !filepath.IsAbs(nativePath) {
-		return nil, fmt.Errorf("launch capture requires context, path admission and a resolved native entry")
+func CaptureProcessInputs(ctx context.Context, path string, paths LaunchPaths, limits LaunchVectorLimits) (*ProcessInputs, error) {
+	if ctx == nil || paths == nil || !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("launch capture requires context, current path authority and resolved native entry")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -60,92 +53,52 @@ func CaptureProcessPins(ctx context.Context, nativePath string, paths LaunchPath
 	if err := limits.validate(); err != nil {
 		return nil, err
 	}
-	p := &ProcessPins{paths: paths, limits: limits}
+	inputs := &ProcessInputs{paths: paths, limits: limits}
 	accepted := false
 	defer func() {
 		if !accepted {
-			_ = p.Close()
+			_ = inputs.Close()
 		}
 	}()
 	var err error
-	p.cwd, err = paths.OpenCwd(ctx)
+	inputs.cwd, err = paths.OpenCwd(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if p.cwd == nil {
-		return nil, fmt.Errorf("cwd admission returned no handle")
+	if inputs.cwd == nil {
+		return nil, fmt.Errorf("cwd authority returned no handle")
 	}
-	p.cwdInfo, err = p.cwd.Stat()
+	inputs.cwdInfo, err = inputs.cwd.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if !p.cwdInfo.IsDir() {
+	if !inputs.cwdInfo.IsDir() {
 		return nil, fmt.Errorf("launch cwd is not a directory")
 	}
-	next := nativePath
-	for depth := 0; depth < maximumInterpreterDepth; depth++ {
-		image, header, err := captureImage(ctx, paths, next)
-		if err != nil {
-			return nil, err
-		}
-		p.images = append(p.images, image)
-		words, err := platformShebang(header)
-		if err != nil {
-			return nil, err
-		}
-		if len(words) == 0 {
-			p.nativeELF = len(p.words) == 0 && bytes.HasPrefix(header, []byte{0x7f, 'E', 'L', 'F'})
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			accepted = true
-			return p, nil
-		}
-		p.words = append(p.words, words)
-		next = words[0]
-	}
-	return nil, fmt.Errorf("interpreter depth exceeds platform launch bound")
-}
-
-func captureImage(ctx context.Context, paths LaunchPaths, path string) (pinnedImage, []byte, error) {
 	file, err := paths.OpenExecutable(ctx, path)
 	if err != nil {
-		return pinnedImage{}, nil, err
+		return nil, err
 	}
 	if file == nil {
-		return pinnedImage{}, nil, fmt.Errorf("executable admission returned no handle")
+		return nil, fmt.Errorf("executable authority returned no metadata handle")
 	}
-	accepted := false
-	defer func() {
-		if !accepted {
-			_ = file.Close()
-		}
-	}()
-	info, err := file.Stat()
+	inputs.entry = launchEntry{path: strings.Clone(path), file: file}
+	inputs.entry.info, err = file.Stat()
 	if err != nil {
-		return pinnedImage{}, nil, err
+		return nil, err
 	}
-	if !info.Mode().IsRegular() {
-		return pinnedImage{}, nil, fmt.Errorf("selected executable is not a regular file")
+	if !inputs.entry.info.Mode().IsRegular() {
+		return nil, fmt.Errorf("selected executable is not a regular file")
 	}
-	change, err := nativeFileChange(info)
+	inputs.entry.change, err = nativeFileChange(inputs.entry.info)
 	if err != nil {
-		return pinnedImage{}, nil, err
+		return nil, err
 	}
-	header := make([]byte, platformShebangBytes)
-	n, err := file.ReadAt(header, 0)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return pinnedImage{}, nil, err
-	}
-	current, err := file.Stat()
-	if err != nil {
-		return pinnedImage{}, nil, err
-	}
-	if !sameImage(info, change, current) {
-		return pinnedImage{}, nil, ErrLaunchIdentityChanged
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	accepted = true
-	return pinnedImage{path: strings.Clone(path), file: file, info: info, change: change}, header[:n], nil
+	return inputs, nil
 }
 
 func sameImage(info os.FileInfo, change fileChange, current os.FileInfo) bool {
@@ -153,7 +106,7 @@ func sameImage(info os.FileInfo, change fileChange, current os.FileInfo) bool {
 	return err == nil && os.SameFile(info, current) && info.Mode() == current.Mode() && info.Size() == current.Size() && info.ModTime().Equal(current.ModTime()) && observed == change
 }
 
-func (p *ProcessPins) revalidate(ctx context.Context, requested ...string) error {
+func (p *ProcessInputs) revalidate(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
@@ -169,77 +122,66 @@ func (p *ProcessPins) revalidate(ctx context.Context, requested ...string) error
 	if cwd == nil {
 		return ErrLaunchIdentityChanged
 	}
-	info, err := cwd.Stat()
+	current, err := cwd.Stat()
 	_ = cwd.Close()
 	if err != nil {
 		return err
 	}
-	if !os.SameFile(info, p.cwdInfo) {
+	if !os.SameFile(p.cwdInfo, current) {
 		return ErrLaunchIdentityChanged
 	}
-	images := p.images
-	// A slash-bearing invocation retains its exact operand spelling. Admit that
-	// spelling too; identity equality alone cannot grant a second pathname.
-	if len(requested) == 1 && strings.ContainsAny(requested[0], "/\\") {
-		image := p.images[0]
-		image.path = requested[0]
-		images = append(append([]pinnedImage(nil), images...), image)
+	file, err := p.paths.OpenExecutable(ctx, p.entry.path)
+	if err != nil {
+		return err
 	}
-	for _, image := range images {
-		current, err := p.paths.OpenExecutable(ctx, image.path)
-		if err != nil {
-			return err
-		}
-		if current == nil {
-			return ErrLaunchIdentityChanged
-		}
-		info, err := current.Stat()
-		_ = current.Close()
-		if err != nil {
-			return err
-		}
-		if !sameImage(image.info, image.change, info) {
-			return ErrLaunchIdentityChanged
-		}
+	if file == nil {
+		return ErrLaunchIdentityChanged
+	}
+	current, err = file.Stat()
+	_ = file.Close()
+	if err != nil {
+		return err
+	}
+	if !sameImage(p.entry.info, p.entry.change, current) {
+		return ErrLaunchIdentityChanged
 	}
 	return nil
 }
 
-func (p *ProcessPins) Close() error {
+func (p *ProcessInputs) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil
 	}
 	p.closed = true
-	var result error
+	var err error
 	if p.cwd != nil {
-		result = p.cwd.Close()
+		err = p.cwd.Close()
 	}
-	for _, image := range p.images {
-		result = errors.Join(result, image.file.Close())
+	if p.entry.file != nil {
+		err = errors.Join(err, p.entry.file.Close())
 	}
-	p.images, p.words, p.paths, p.cwd, p.cwdInfo = nil, nil, nil, nil, nil
-	return result
+	p.paths, p.cwd, p.entry.file = nil, nil, nil
+	return err
 }
 
-func (p *ProcessPins) expectedArguments(original []string) ([]string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return nil, ErrLaunchIdentityChanged
+// NativeLaunchPaths retains ordinary native execution metadata authority for
+// host-selected callers. It does not grant model read access. Portable callers
+// provide the existing invocation path owner instead of deriving a read grant.
+func NativeLaunchPaths(cwd string) LaunchPaths { return nativeLaunchPaths{cwd: cwd} }
+
+type nativeLaunchPaths struct{ cwd string }
+
+func (p nativeLaunchPaths) OpenExecutable(ctx context.Context, path string) (*os.File, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	result := cloneVector(original)
-	for i, words := range p.words {
-		path := p.images[i].path
-		if i == 0 && strings.ContainsRune(original[0], '/') {
-			path = original[0]
-		}
-		next := make([]string, 0, len(words)+len(result))
-		next = append(next, words...)
-		next = append(next, path)
-		next = append(next, result[1:]...)
-		result = next
+	return openNativeLaunchMetadata(path, false)
+}
+func (p nativeLaunchPaths) OpenCwd(ctx context.Context) (*os.File, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return result, nil
+	return openNativeLaunchMetadata(p.cwd, true)
 }

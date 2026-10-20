@@ -76,3 +76,17 @@ func (l LaunchVectorLimits) checkCommand(name string, args, environment []string
 	}
 	return nil
 }
+
+// NativeVectorLimits is the actual platform allowance for retained native
+// producers. Command evaluators also supply their stricter compiled ceilings.
+func NativeVectorLimits() (LaunchVectorLimits, error) {
+	maximum, err := nativeArgumentBudget()
+	if err != nil {
+		return LaunchVectorLimits{}, err
+	}
+	if maximum <= 0 {
+		return LaunchVectorLimits{}, fmt.Errorf("native argument allowance unavailable")
+	}
+	n := int64(maximum)
+	return LaunchVectorLimits{ArgumentBytes: n, ArgvBytes: n, EnvironmentBytes: n, ExpandedFields: n / 8}, nil
+}

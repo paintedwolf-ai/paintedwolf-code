@@ -56,3 +56,44 @@ func pathOperationError(operand string, err error) error {
 	}
 	return err
 }
+
+// OpenMetadata retains reached identity without requesting source content.
+func (p BoundPath) OpenMetadata() (*os.File, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null is not a metadata file")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	root, err := fseffect.OpenMetadataRoot(p.Resolved.Root.Path)
+	if err != nil {
+		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+	}
+	defer root.Close()
+	held, err := root.OpenExact(".")
+	if err != nil {
+		return nil, err
+	}
+	info, err := held.Stat()
+	_ = held.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, p.rootInfo) {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	file, err := root.OpenExact(p.exactRelative)
+	if err != nil {
+		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if p.admitRead != nil {
+		if err := p.admitRead(file.Name()); err != nil {
+			_ = file.Close()
+			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		}
+	}
+	return file, nil
+}

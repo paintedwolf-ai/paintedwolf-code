@@ -69,15 +69,13 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		return nil, fmt.Errorf("decide: engine stdout: %w", err)
 	}
 	cmd.Stderr = stderrLogger{}
-	if err := cmd.Start(); err != nil {
+	if err := execpkg.StartPrepared(cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("decide: start engine: %w", err)
 	}
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
 	proc := &process{
 		cmd: cmd,
 		cleanup: func() {
-			untrack()
 			cleanup()
 		},
 		stdin:    stdin,

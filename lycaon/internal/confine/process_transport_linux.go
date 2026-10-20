@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
@@ -13,72 +14,68 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Namespace relay slots3..6 already carry profile, lineage, signal and control.
-// Explicit copies preserve only the held launch descriptors in slots7..9.
 func pinnedNamespaceTransport(args []string) ([]string, []*os.File, error) {
 	if helperPinnedReadyFDArg < 0 {
 		return args, nil, nil
 	}
-	source := []int{helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedExecutableFDArg}
+	source := []int{helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedReleaseFDArg, helperPinnedExecutableFDArg}
 	files := make([]*os.File, 0, len(source))
+	closeFiles := func() {
+		for _, file := range files {
+			_ = file.Close()
+		}
+	}
 	for _, fd := range source {
 		if fd < 0 {
-			for _, file := range files {
-				_ = file.Close()
-			}
-			return nil, nil, fmt.Errorf("incomplete pinned namespace transport")
+			closeFiles()
+			return nil, nil, fmt.Errorf("incomplete native launch namespace transport")
 		}
 		copied, err := unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)
 		if err != nil {
-			for _, file := range files {
-				_ = file.Close()
-			}
+			closeFiles()
 			return nil, nil, err
 		}
-		files = append(files, os.NewFile(uintptr(copied), "pinned-namespace-input"))
+		files = append(files, os.NewFile(uintptr(copied), "native-launch-input"))
 	}
 	out := append([]string(nil), args...)
-	destinations := map[string]int{pinCwdFDFlag: linuxsandbox.InheritedStartFD, pinReadyFDFlag: linuxsandbox.InheritedStartFD + 1, pinExecutableFDFlag: linuxsandbox.InheritedStartFD + 2}
+	first := linuxsandbox.InheritedStartFD
+	destinations := map[string]int{pinCwdFDFlag: first, pinReadyFDFlag: first + 1, pinReleaseFDFlag: first + 2, pinExecutableFDFlag: first + 3}
 	for i := 0; i < len(out) && out[i] != "--"; i++ {
 		if fd, ok := destinations[out[i]]; ok {
 			if i+1 >= len(out) {
-				for _, file := range files {
-					_ = file.Close()
-				}
-				return nil, nil, fmt.Errorf("missing pinned namespace operand")
+				closeFiles()
+				return nil, nil, fmt.Errorf("missing native launch namespace operand")
 			}
 			out[i+1] = strconv.Itoa(fd)
 			i++
 		}
 	}
-	// Only relay copies keep the control peer alive from here. Closing these
-	// originals also prevents successful exec EOF being held open by the outer helper.
-	for _, fd := range source {
-		_ = syscall.Close(fd)
-	}
-	helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedExecutableFDArg = -1, -1, -1
+	closePinnedHelperInputs()
 	return out, files, nil
 }
 
 func pinnedFinalTarget(self string, target []string) (string, []string, []uintptr, error) {
-	if helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 {
-		return "", nil, nil, fmt.Errorf("incomplete final launch descriptor transport")
+	if helperPinnedExecutableFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedReadyFDArg < 0 || helperPinnedReleaseFDArg < 0 {
+		return "", nil, nil, fmt.Errorf("incomplete final native launch descriptor transport")
 	}
-	files := []uintptr{0, 1, 2, uintptr(helperPinnedExecutableFDArg), uintptr(helperPinnedCwdFDArg), uintptr(helperPinnedReadyFDArg)}
-	args := []string{self, helperFlag, pinFinalFlag, pinEntryFlag, helperPinnedEntryArg, pinExecutableFDFlag, "3", pinCwdFDFlag, "4", pinReadyFDFlag, "5"}
+	files := []uintptr{0, 1, 2, uintptr(helperPinnedCwdFDArg), uintptr(helperPinnedReadyFDArg), uintptr(helperPinnedReleaseFDArg), uintptr(helperPinnedExecutableFDArg)}
+	entry := helperPinnedEntryArg
+	if len(target) > 0 && strings.ContainsRune(target[0], '/') {
+		entry = target[0]
+	}
+	args := []string{self, helperFlag, pinFinalFlag, pinEntryFlag, entry, pinCwdFDFlag, "3", pinReadyFDFlag, "4", pinReleaseFDFlag, "5", pinExecutableFDFlag, "6"}
 	if _, err := unix.FcntlInt(uintptr(lineage.ChildFD), unix.F_GETFD, 0); err == nil {
 		files = append(files, uintptr(lineage.ChildFD))
-		args = append(args, lineageFDFlag, "6")
+		args = append(args, lineageFDFlag, "7")
 	}
-	args = append(append(args, "--"), target...)
-	return self, args, files, nil
+	return self, append(append(args, "--"), target...), files, nil
 }
 
 func closePinnedHelperInputs() {
-	for _, fd := range []int{helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedExecutableFDArg} {
+	for _, fd := range []int{helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedReleaseFDArg, helperPinnedExecutableFDArg} {
 		if fd >= 0 {
 			_ = syscall.Close(fd)
 		}
 	}
-	helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedExecutableFDArg = -1, -1, -1
+	helperPinnedCwdFDArg, helperPinnedReadyFDArg, helperPinnedReleaseFDArg, helperPinnedExecutableFDArg = -1, -1, -1, -1
 }
