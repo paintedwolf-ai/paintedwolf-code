@@ -48,10 +48,13 @@ def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
         if (process_identity(pid) != identity or not owned_process(pid, app)
                 or not ui.visible(node) or not node.getState().contains(ui.api.STATE_FOCUSED)):
             raise CaseUnavailable('normal-owned-editor-focus-unavailable')
-        frames = [window for owner, window in ui.windows()
-                  if owner == identity and window.getState().contains(ui.api.STATE_ACTIVE)]
-        if len(frames) != 1:
-            raise CaseUnavailable('normal-owned-editor-active-frame-unavailable')
+        frames = [(owner, window.getState().contains(ui.api.STATE_ACTIVE)) for owner, window in ui.windows()]
+        if sum(owner == identity and active for owner, active in frames) != 1:
+            refusal = CaseUnavailable('normal-owned-editor-active-frame-unavailable')
+            refusal.observations = {'editor_focus': {'entry_identity': identity,
+                'entry_focused': True, 'owned_frames': [
+                    {'identity': owner, 'active': bool(active)} for owner, active in frames]}}
+            raise refusal
 
     if node.queryComponent().grabFocus() is not True:
         raise CaseUnavailable('normal-owned-editor-focus-refused')
