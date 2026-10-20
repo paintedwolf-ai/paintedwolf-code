@@ -1100,7 +1100,10 @@ identities, healthy engine/schema, startup confirmation, old-bundle removal,
 retained corpus semantics, and another healthy restart. Preview promotion keeps
 the preview preference; retained generations advance through their bridge feeds.
 
-`bundle-upgrade-fixtures` and `bundle-upgrade-evidence` are retained for 14 days.
+Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
+artifact names. A retried desktop job consumes the successful preparation job's
+original artifact; retries preserve earlier diagnostics. Failed preparation retains
+its public source pointers and candidate manifest separately.
 The receipt binds the selected source SHA, candidate version, fixture inventory,
 per-case transitions, and exclusions. Failed cases retain native records and
 engine diagnostics without API tokens. An empty automatic-source matrix records

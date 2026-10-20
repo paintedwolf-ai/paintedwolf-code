@@ -35,6 +35,8 @@ class WorkflowTests(unittest.TestCase):
         execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-immutable:\n", 1)[0]
         publication = workflow.split("  publish-immutable:\n", 1)[1].split("    steps:", 1)[0]
         self.assertIn("needs: [classify, ship-gates, aggregate-release, publication-credentials]", prepare)
+        self.assertIn("fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}", prepare)
+        self.assertIn("name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}", execution)
         self.assertIn("environment: release-publication", prepare)
         self.assertIn("FEED_SIGNING_KEYS_JSON:", prepare)
         self.assertIn("./task upgrade:rehearse -- --prepare-bundle", prepare)
