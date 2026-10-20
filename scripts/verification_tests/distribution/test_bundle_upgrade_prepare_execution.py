@@ -41,7 +41,7 @@ class PreparationTests(unittest.TestCase):
         self.output = self.root / "prepared"
         self.plan = {"format_version": 1, "cases": [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview",
                                "source_manifest": self.prior, "steps": [self.candidate]}],
-                     "feeds": [{"path": "prior", "manifest": self.prior}], "candidate": self.candidate,
+                     "feeds": [{"path": "prior", "channel": "stable", "generation": 1, "manifest": self.prior}], "candidate": self.candidate,
                      "anchors": [{"manifest": self.prior, "verification": "artifact_signature_required"}]}
         self.patches = [patch.object(preparation, "load_registry", return_value={}),
                         patch.object(preparation, "validate_publication"),
