@@ -49,10 +49,12 @@ class NixScannerHostTests(unittest.TestCase):
                 patch.object(host.platform, 'machine', return_value='aarch64'), \
                 patch.object(host, 'Path', side_effect=lambda value: Executable() if value == EXE else native(value)), \
                 patch.object(host, 'POLICY', policy), patch.object(host, 'PROFILES', profiles), \
-                patch.object(host.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as run:
+                patch.object(host.subprocess, 'run', side_effect=[SimpleNamespace(returncode=0),
+                    SimpleNamespace(returncode=0, stdout=(name + ' (unconfined)\n').encode())]) as run:
             report = host.authorize_scanner(EXE)
             self.assertTrue(report['profile_loaded'])
             self.assertFalse(report['policy_changed'])
             self.assertEqual(report['host_userns_restriction'], '1')
-            self.assertEqual(run.call_args.args[0], ['sudo', '-n', 'apparmor_parser', '--replace'])
-            self.assertEqual(run.call_args.kwargs['input'], source.encode())
+            self.assertEqual(run.call_args_list[0].args[0], ['sudo', '-n', 'apparmor_parser', '--replace'])
+            self.assertEqual(run.call_args_list[1].args[0], ['sudo', '-n', 'cat', '/sys/kernel/security/apparmor/profiles'])
+            self.assertEqual(run.call_args_list[0].kwargs['input'], source.encode())
