@@ -23,18 +23,31 @@ func CompressLevel(r io.Reader, level zstd.EncoderLevel) ([]byte, error) {
 
 func compressAt(r io.Reader, opts []zstd.EOption) ([]byte, error) {
 	var out bytes.Buffer
-	encoder, err := zstd.NewWriter(&out, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("zstd writer: %w", err)
-	}
-	if _, err := io.Copy(encoder, r); err != nil {
-		_ = encoder.Close()
-		return nil, err
-	}
-	if err := encoder.Close(); err != nil {
+	if err := compressTo(&out, r, opts); err != nil {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+// CompressTo streams a bounded-window frame without retaining its encoded body.
+// Storage callers account staging bytes separately from encoder working memory.
+func CompressTo(w io.Writer, r io.Reader) error {
+	return compressTo(w, r, []zstd.EOption{zstd.WithEncoderConcurrency(1), zstd.WithWindowSize(64 << 10)})
+}
+
+func compressTo(w io.Writer, r io.Reader, opts []zstd.EOption) error {
+	encoder, err := zstd.NewWriter(w, opts...)
+	if err != nil {
+		return fmt.Errorf("zstd writer: %w", err)
+	}
+	if _, err := io.Copy(encoder, r); err != nil {
+		_ = encoder.Close()
+		return err
+	}
+	if err := encoder.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Decompress decodes a complete zstd object, regardless of the encoder level
