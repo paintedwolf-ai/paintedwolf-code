@@ -100,6 +100,7 @@ def produce(api, repository, producer, source_repository, source_commit, campaig
             from .delivery import ObservedDeliveryReleaseAuthority
             authority = ObservedDeliveryReleaseAuthority(selected, released, producer["controller_commit"])
             request["repositories"], request["nix"]["cache"] = authority.facts()
+            request["aur"] = authority.aur_facts()
         else:
             authority = InactiveDeliveryReleaseAuthority(released, producer["controller_commit"])
         from .distribution import DistributionAuthority
@@ -144,7 +145,7 @@ def produce(api, repository, producer, source_repository, source_commit, campaig
             json.dump({**identity, "published": publish_immutable, "linux_public": linux,
                        "repository_availability": bool(request["repositories"]),
                        "cache_availability": bool(request["nix"] and request["nix"]["cache"]["enabled"]),
-                       "aur_availability": False}, stream, indent=2)
+                       "aur_availability": request["aur"]["enabled"]}, stream, indent=2)
             stream.write("\n")
         return identity
     except BaseException:
