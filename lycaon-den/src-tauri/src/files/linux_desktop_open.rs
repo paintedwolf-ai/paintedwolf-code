@@ -81,7 +81,7 @@ fn xdg_open(uri: &str) -> Result<Via, String> {
 }
 
 pub fn open_uri(uri: &str) -> Result<Via, String> {
-    let parsed = url::Url::parse(uri).map_err(|error| format!("Invalid destination: {error}"))?;
+    let parsed = tauri::Url::parse(uri).map_err(|error| format!("Invalid destination: {error}"))?;
     match gio::AppInfo::default_for_uri_scheme(parsed.scheme()) {
         Some(handler) => launch(handler, uri),
         None => xdg_open(uri),
