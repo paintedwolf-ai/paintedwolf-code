@@ -626,11 +626,10 @@ tasks:
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
-    env:
-      PW_RUST_TEST_COMPONENT: '{{.CLI_ARGS}}'
     cmds:
       - |
-        case "$PW_RUST_TEST_COMPONENT" in
+        component='{{.CLI_ARGS}}'
+        case "$component" in
           "")
             bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
             cargo test --workspace --all-targets --quiet
