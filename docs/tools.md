@@ -8,6 +8,61 @@ Tools are structured capabilities published with argument schema, execution poli
 
 ---
 
+## Portable command language version 1
+
+The [milestone 10](https://github.com/paintedwolf-ai/paintedwolf-code/milestone/10)
+contract is frozen independently from runtime activation. The currently shipped
+command path described below remains in use until its replacements land. The
+versioned catalog does not enable a shell fallback or qualify native execution.
+
+Machine sources live in
+[`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/).
+[`language.json`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json)
+defines the syntax/expansion subset, source coordinates, numeric limits and units,
+status/publication rules, representation, retained output and compact schema copy.
+Each utility family defines argv grammar, option spelling/arity/value role,
+effect modes, platform capabilities, status, encoding, examples and existing
+implementation/test references. The stock disposition inventory covers the live
+manifest, retaining domain operations and naming the future replacement work.
+No routine schema is retired by publishing these contracts.
+
+`./task codegen:tool-command-equivalence` compiles the same catalog into
+`commandsurface.LanguageV1`; its existing `:check` target detects drift.
+`CommandHelp` derives option help from these facts rather than maintaining a
+second executor/prompt option map. P04 consumes the typed facts in its parser;
+P03 binds executable operations through existing subsystem contracts. Pure catalog
+facts carry no grant or execution authority.
+
+The catalog freezes both GNU and BSD `sed -i` without backups, GNU `stat -c`
+and BSD `stat -f` formats, and Base64 `-d`/`-D` decoding. Empty xargs launches
+nothing; `wc -l` counts LF bytes. Ripgrep's conflicting short options retain
+ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
+explicit bounded contract; P13 selects and qualifies an engine rather than
+calling RE2 full PCRE. File signatures name format-identification evidence,
+not archive/database trust.
+
+Native document streams encode accepted text with the captured encoding, BOM
+and newline policy. A checksum and byte count cover that same representation;
+disk provenance remains separate. Exact delivered literal source windows may
+qualify conversational edit evidence, while internal execution reads do not.
+This deliberately replaces the old mixed editor-line/disk-byte wc projection
+for command output. Diff reuses the existing engine; complete stream bounds
+are independent from its old structured preview/context caps.
+
+Overwrite, append and in-place edits capture revisions before producers,
+stage complete output, review exact bytes, then publish each eligible target.
+Native grep no-match and diff differences have ordinary status 1 and complete
+publishable results. Actual utility errors, unknown external nonzero results,
+incomplete input, denied authority, stale revisions and cancellation discard
+uncommitted staging. Earlier committed effects remain; programs are not
+multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
+
+The golden program and option/limit fixture definitions are normative inputs
+for later acceptance suites. Catalog generation, reference probes and unit tests
+are distinct from executing native owners, live model qualification and installed
+platform evidence. macOS/Linux execution and installed qualification remain
+required; Windows-shaped paths and compile results never qualify native Windows.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.

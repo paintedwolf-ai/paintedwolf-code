@@ -102,11 +102,12 @@
       },
       "notes": "sed.json defines address grammar and p/d/q/a/i/c/s. Both GNU -i SCRIPT FILE and BSD -i empty-string SCRIPT FILE mean no-backup replacement; nonempty backup suffix unsupported. P14 parses/transforms; P16 publishes. Reject w/e/r/W/R and s///e/w before effects including computed scripts. Default BRE, -E/-r ERE; output uses original record bytes/newline policy.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -199,11 +200,12 @@
       },
       "notes": "GoAWK v1.32.0 adapter; NoExec/NoFileReads/NoFileWrites; nonnil empty Environ. AWK grammar: BEGIN/END, expression/range patterns, fields $0/$1..$NF, NR/NF, print/printf/sub/gsub/split/length/tolower/toupper; host input files preserve FILENAME/FNR. Refuse system(), pipes, getline secondary files and direct file redirection before effects. Bound work and allocation; no ambient filesystem/environment.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -275,11 +277,12 @@
       },
       "notes": "Formats %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G %%; fixed C locale, numeric fractions retained. Backslash a b e f n r t v backslash, octal/hex escapes; unknown conversion rejects. Repeat format for remaining args, missing numeric0/text empty. No %n or host pointer.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -374,11 +377,12 @@
       },
       "notes": "Default literal escapes, space separator and LF; -n omits LF, -e enables printf-style escapes, -E disables; last wins. Never evaluate text as grammar.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -508,11 +512,12 @@
       },
       "notes": "Byte order, stable exact-byte tie-break; -n exact decimal sign/fraction comparison, no float rounding. KEY start[,end] one-based field[.character], optional n/r flags; default blanks fields, -t one-byte delimiter. Merge-sort byte-metered spill, long record refusal, -z NUL records. Output final record delimiter.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -628,11 +633,12 @@
       },
       "notes": "Adjacent exact-byte records, fixed unpadded count+space, d repeated only,u single only; -d and -u together select none. OUTPUT is staged owner publication.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -744,11 +750,12 @@
       },
       "notes": "LIST one-based N,N-M,-M,N-, comma union in source order, no duplicate output. Exactly one selector; default field tab. -c Unicode scalar, -b exact bytes; invalid text rejects -c. Missing delimiter preserves whole record; no silent byte-character conflation.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -843,11 +850,12 @@
       },
       "notes": "Byte alphabet independent of locale; ranges and ASCII [:class:] plus escapes. Translation pads short SET2 with its final byte; deletion uses SET1; squeeze final chosen set; refuse multibyte class semantics.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -948,11 +956,12 @@
       },
       "notes": "Empty input launches none. Default echo, fixed whitespace splitting with quote/backslash argv grammar; -0 exact NUL-delimited words. -I one input line/record replaces literal placeholder within args; input never reparsed as program. Serial ordered batches, each normal binder/receipt, bound argv. -n positive; -I and -n incompatible.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -980,9 +989,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. test EXPRESSION",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1027,11 +1036,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1056,9 +1066,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [ EXPRESSION ]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1103,11 +1113,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1132,9 +1143,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [[ EXPRESSION ]]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1179,11 +1190,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1208,9 +1220,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. true",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1253,11 +1265,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1282,9 +1295,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. false",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1327,11 +1340,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1356,9 +1370,9 @@
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. : [ARG ...]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete result",
-        "1": "ordinary command failure",
-        "2": "usage or utility error"
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
       },
       "effects": [
         {
@@ -1401,11 +1415,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1477,11 +1492,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1553,11 +1569,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1646,11 +1663,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1741,11 +1759,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1820,7 +1839,7 @@
         "child_executions"
       ],
       "example": {
-        "program": "env",
+        "program": "env -i",
         "stdout": "",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
@@ -1837,16 +1856,18 @@
           },
           "empty-dir": {
             "directory": true
-          }
+          },
+          "environment": {}
         }
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1920,11 +1941,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -1996,11 +2018,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2072,11 +2095,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2148,11 +2172,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2273,11 +2298,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2355,11 +2381,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2464,11 +2491,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2544,11 +2572,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [
@@ -2629,11 +2658,12 @@
       },
       "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
       "reuse": {
-        "implementation": "lycaon/internal/commandsurface/canonical_echo_test.go",
+        "implementation": "lycaon/internal/exec/io.go",
         "tests": [
           "lycaon/internal/commandsurface/plan_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
       },
       "unsupported": {
         "argv": [

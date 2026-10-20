@@ -55,13 +55,14 @@
           }
         }
       },
-      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
+      "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance. Output one LF row: HANDLE STATE STATUS; active status is -, completed ordinary status decimal. Rows use creation order.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/process_tools.go",
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -138,7 +139,8 @@
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -223,7 +225,8 @@
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -300,7 +303,8 @@
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -393,7 +397,8 @@
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -472,7 +477,8 @@
         "tests": [
           "lycaon/internal/tools/native/process_tools_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [

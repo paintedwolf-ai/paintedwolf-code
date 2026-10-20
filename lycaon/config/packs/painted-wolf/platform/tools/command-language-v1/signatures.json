@@ -12,85 +12,99 @@
         "name": "png",
         "prefix_hex": "89504e470d0a1a0a",
         "description": "PNG image data",
-        "mime": "image/png"
+        "mime": "image/png",
+        "minimum_identification_bytes": 8
       },
       {
         "name": "jpeg",
         "prefix_hex": "ffd8ff",
         "description": "JPEG image data",
-        "mime": "image/jpeg"
+        "mime": "image/jpeg",
+        "minimum_identification_bytes": 3
       },
       {
         "name": "gif",
         "prefix_hex": "474946383961",
         "description": "GIF image data",
-        "mime": "image/gif"
+        "mime": "image/gif",
+        "minimum_identification_bytes": 6
       },
       {
         "name": "pdf",
         "prefix_hex": "255044462d",
         "description": "PDF document",
-        "mime": "application/pdf"
+        "mime": "application/pdf",
+        "minimum_identification_bytes": 5
       },
       {
         "name": "zip",
         "prefix_hex": "504b0304",
         "description": "Zip archive data",
-        "mime": "application/zip"
+        "mime": "application/zip",
+        "minimum_identification_bytes": 4
       },
       {
         "name": "gzip",
         "prefix_hex": "1f8b08",
         "description": "gzip compressed data",
-        "mime": "application/gzip"
+        "mime": "application/gzip",
+        "minimum_identification_bytes": 3
       },
       {
         "name": "bzip2",
         "prefix_hex": "425a68",
         "description": "bzip2 compressed data",
-        "mime": "application/x-bzip2"
+        "mime": "application/x-bzip2",
+        "minimum_identification_bytes": 3
       },
       {
         "name": "sqlite",
         "prefix_hex": "53514c69746520666f726d6174203300",
         "description": "SQLite 3.x database",
-        "mime": "application/vnd.sqlite3"
+        "mime": "application/vnd.sqlite3",
+        "minimum_identification_bytes": 16
       },
       {
         "name": "elf",
         "prefix_hex": "7f454c46",
         "description": "ELF executable",
-        "mime": "application/x-executable"
+        "mime": "application/x-executable",
+        "minimum_identification_bytes": 16
       },
       {
         "name": "macho64",
         "prefix_hex": "cffaedfe",
         "description": "Mach-O 64-bit executable",
-        "mime": "application/x-mach-binary"
+        "mime": "application/x-mach-binary",
+        "minimum_identification_bytes": 32
       },
       {
         "name": "pe",
         "prefix_hex": "4d5a",
         "description": "PE executable (validated PE offset/signature required)",
-        "mime": "application/vnd.microsoft.portable-executable"
+        "mime": "application/vnd.microsoft.portable-executable",
+        "minimum_identification_bytes": 88
       },
       {
         "name": "utf8-bom",
         "prefix_hex": "efbbbf",
         "description": "UTF-8 Unicode text with BOM",
-        "mime": "text/plain; charset=utf-8"
+        "mime": "text/plain; charset=utf-8",
+        "minimum_identification_bytes": 5
       },
       {
         "name": "utf16le",
         "prefix_hex": "fffe",
         "description": "UTF-16 little-endian Unicode text",
-        "mime": "text/plain; charset=utf-16le"
+        "mime": "text/plain; charset=utf-16le",
+        "minimum_identification_bytes": 6
       },
       {
         "name": "utf16be",
         "prefix_hex": "feff",
         "description": "UTF-16 big-endian Unicode text",
-        "mime": "text/plain; charset=utf-16be"
+        "mime": "text/plain; charset=utf-16be",
+        "minimum_identification_bytes": 6
       }
     ],
     "structural_signatures": [
@@ -100,6 +114,177 @@
       "GIF87a/GIF89a"
     ],
     "text": "UTF-8 validation and no NUL -> UTF-8 Unicode text/text/plain; empty -> empty/application/x-empty; unknown bytes -> data/application/octet-stream. Declared signature needs complete minimum header; truncated known prefix is data, never fabricate validity.",
-    "fixtures": "For every signature: exact minimum valid header, truncated prefix, offset corruption and unknown suffix. Signatures identify format, not trusted archive/database validity."
+    "fixtures": [
+      {
+        "id": "file-png-header",
+        "input_hex": "89504e470d0a1a0a",
+        "description": "PNG image data",
+        "mime": "image/png",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-png-short",
+        "input_hex": "89504e470d0a1a",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-jpeg-header",
+        "input_hex": "ffd8ff",
+        "description": "JPEG image data",
+        "mime": "image/jpeg",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-jpeg-short",
+        "input_hex": "ffd8",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-gif-header",
+        "input_hex": "474946383961",
+        "description": "GIF image data",
+        "mime": "image/gif",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-gif-short",
+        "input_hex": "4749463839",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-pdf-header",
+        "input_hex": "255044462d",
+        "description": "PDF document",
+        "mime": "application/pdf",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-pdf-short",
+        "input_hex": "25504446",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-zip-header",
+        "input_hex": "504b0304",
+        "description": "Zip archive data",
+        "mime": "application/zip",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-zip-short",
+        "input_hex": "504b03",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-gzip-header",
+        "input_hex": "1f8b08",
+        "description": "gzip compressed data",
+        "mime": "application/gzip",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-gzip-short",
+        "input_hex": "1f8b",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-bzip2-header",
+        "input_hex": "425a68",
+        "description": "bzip2 compressed data",
+        "mime": "application/x-bzip2",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-bzip2-short",
+        "input_hex": "425a",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-sqlite-header",
+        "input_hex": "53514c69746520666f726d6174203300",
+        "description": "SQLite 3.x database",
+        "mime": "application/vnd.sqlite3",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-sqlite-short",
+        "input_hex": "53514c69746520666f726d61742033",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-elf-header",
+        "input_hex": "7f454c46020101000000000000000000",
+        "description": "ELF executable",
+        "mime": "application/x-executable",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-elf-short",
+        "input_hex": "7f454c",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-macho64-header",
+        "input_hex": "cffaedfe00000000000000000000000000000000000000000000000000000000",
+        "description": "Mach-O 64-bit executable",
+        "mime": "application/x-mach-binary",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-macho64-short",
+        "input_hex": "cffaed",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-pe-header",
+        "input_hex": "4d5a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000504500000000000000000000000000000000000000000000",
+        "description": "PE executable (validated PE offset/signature required)",
+        "mime": "application/vnd.microsoft.portable-executable",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-pe-short",
+        "input_hex": "4d",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-utf8-bom-header",
+        "input_hex": "efbbbf610a",
+        "description": "UTF-8 Unicode text with BOM",
+        "mime": "text/plain; charset=utf-8",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-utf8-bom-short",
+        "input_hex": "efbb",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-utf16le-header",
+        "input_hex": "fffe61000a00",
+        "description": "UTF-16 little-endian Unicode text",
+        "mime": "text/plain; charset=utf-16le",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-utf16le-short",
+        "input_hex": "ff",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      },
+      {
+        "id": "file-utf16be-header",
+        "input_hex": "feff0061000a",
+        "description": "UTF-16 big-endian Unicode text",
+        "mime": "text/plain; charset=utf-16be",
+        "qualification": "format identification only; not full-file integrity"
+      },
+      {
+        "id": "file-utf16be-short",
+        "input_hex": "fe",
+        "expected": "data/application/octet-stream unless complete valid UTF-8 text; text precedence applies only after no complete signature"
+      }
+    ],
+    "bom_only": "A complete UTF-8 BOM with no text identifies UTF-8 Unicode text with BOM; UTF-16 BOM alone identifies empty UTF-16 text. A one-byte partial BOM is opaque data.",
+    "structural_validation": "ELF minimum16 bytes with valid class/data/version; Mach-O fixed32/64 header sizes; PE e_lfanew unsigned little-endian at60, bounded <=1MiB and PE signature plus COFF20; invalid offset is data. SQLite exact16-byte header. No full payload validity claim."
   }
 }

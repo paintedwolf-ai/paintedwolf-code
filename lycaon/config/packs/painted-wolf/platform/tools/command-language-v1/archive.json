@@ -143,7 +143,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -278,7 +279,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -386,7 +388,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -474,7 +477,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -560,7 +564,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -636,7 +641,8 @@
         "tests": [
           "lycaon/internal/tools/native/extract_archive_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [

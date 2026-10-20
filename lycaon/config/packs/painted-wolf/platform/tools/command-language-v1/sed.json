@@ -1,6 +1,6 @@
 {
   "sed_contract": {
-    "addresses": "None, one positive line number, $, /BRE/ or two addresses separated comma; second regex searches from first matching line, numeric end before start yields start line. Optional ! negates range.",
+    "addresses": "None, one positive line number, $, /BRE/ or two addresses separated comma; second regex search begins on the line after the first address matched (range at least two lines unless EOF), numeric end before start yields start line. Optional ! negates range.",
     "commands": {
       "p": "print current record",
       "d": "delete current pattern space and start next cycle",
@@ -53,6 +53,7 @@
         "code": "COMMAND_OPTION_UNSUPPORTED",
         "effects": []
       }
-    ]
+    ],
+    "reference": "https://www.gnu.org/software/sed/manual/html_node/Addresses.html"
   }
 }

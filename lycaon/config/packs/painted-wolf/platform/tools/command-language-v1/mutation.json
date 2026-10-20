@@ -95,11 +95,12 @@
       },
       "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/copy.go",
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -196,11 +197,12 @@
       },
       "notes": "Same-root only; cross-root directory moves rejected; preserve unrelated drafts; -f/-n exclusive.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/move.go",
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -296,11 +298,12 @@
       },
       "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/delete.go",
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -382,7 +385,8 @@
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -476,11 +480,12 @@
       },
       "notes": "-p missing parents, existing directory complete no-op; file collision fails. -m numeric/symbolic mode applies to newly created final directories only after platform capability check; existing directories unchanged.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/mkdir.go",
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -587,7 +592,8 @@
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -687,7 +693,8 @@
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -779,7 +786,8 @@
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -811,14 +819,12 @@
       },
       "effects": [
         {
+          "mode": "metadata-attempt",
           "requires": [
-            "read",
             "write",
             "review",
-            "revision",
-            "recovery"
-          ],
-          "mode": "each-target"
+            "platform-metadata-capability"
+          ]
         }
       ],
       "platform_capabilities": [
@@ -854,13 +860,14 @@
           }
         }
       },
-      "notes": "Portable numeric modes and symbolic u/g/o/a with +/-/= rwx; refuse unsupported platform semantics, never pretend ACL equivalence.",
+      "notes": "Portable numeric modes and symbolic u/g/o/a with +/-/= rwx; refuse unsupported platform semantics, never pretend ACL equivalence. Existing lifecycle is effect_attempt; metadata journal attributes actual attempt, not a full mode/uid/gid rollback promise. Preserve actual partial/unknown outcome and source metadata evidence.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/chmod.go",
         "tests": [
           "lycaon/internal/tools/native/source_write_contract_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -891,14 +898,12 @@
       },
       "effects": [
         {
+          "mode": "metadata-attempt",
           "requires": [
-            "read",
             "write",
             "review",
-            "revision",
-            "recovery"
-          ],
-          "mode": "each-target"
+            "platform-metadata-capability"
+          ]
         }
       ],
       "platform_capabilities": [
@@ -934,13 +939,14 @@
           }
         }
       },
-      "notes": "Numeric UID[:GID] only; no ambient account lookup; platform and authority capability check; unavailable on Windows is explicit.",
+      "notes": "Numeric UID[:GID] only; no ambient account lookup; platform and authority capability check; unavailable on Windows is explicit. Existing lifecycle is effect_attempt; metadata journal attributes actual attempt, not a full mode/uid/gid rollback promise. Preserve actual partial/unknown outcome and source metadata evidence.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/chown.go",
         "tests": [
-          "lycaon/internal/tools/native/source_write_contract_test.go"
+          "lycaon/internal/tools/native/chown_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -1049,11 +1055,12 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/edit_apply.go",
         "tests": [
-          "lycaon/internal/tools/native/source_write_contract_test.go"
+          "lycaon/internal/tools/native/edit_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -1166,11 +1173,12 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/replace_lines.go",
         "tests": [
-          "lycaon/internal/tools/native/source_write_contract_test.go"
+          "lycaon/internal/tools/native/replace_lines_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -1297,11 +1305,12 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/code_rewrite.go",
         "tests": [
-          "lycaon/internal/tools/native/source_write_contract_test.go"
+          "lycaon/internal/tools/native/code_rewrite_transaction_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
@@ -1407,11 +1416,12 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/source_write.go",
+        "implementation": "lycaon/internal/tools/native/jq_edit.go",
         "tests": [
-          "lycaon/internal/tools/native/source_write_contract_test.go"
+          "lycaon/internal/tools/native/jq_edit_test.go"
         ],
-        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm."
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [

@@ -267,7 +267,8 @@
         "tests": [
           "lycaon/internal/httpaction/tool_test.go"
         ],
-        "extension": "Retain HTTP owner and request screening; add native CLI presentation/stream adapter."
+        "extension": "Retain HTTP owner and request screening; add native CLI presentation/stream adapter.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
       },
       "unsupported": {
         "argv": [
