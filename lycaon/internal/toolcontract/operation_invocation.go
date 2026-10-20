@@ -28,8 +28,7 @@ const (
 	SessionOperationScope OperationScopeKind = "session"
 )
 
-// OperationInvocation contains immutable admission inputs, not live capabilities.
-// ActorID identifies the person/agent principal through existing people authority.
+// InvocationKind distinguishes retained model calls from host program children.
 type InvocationKind string
 
 const (
@@ -37,6 +36,8 @@ const (
 	StructuredToolInvocation InvocationKind = "structured_tool"
 )
 
+// OperationInvocation contains immutable admission inputs, not live capabilities.
+// ActorID identifies the principal through existing people authority.
 // Structured invocations carry the actual model call id and no fabricated plan.
 // Program children carry host execution ids, never synthetic model call ids.
 type OperationInvocation struct {
@@ -179,6 +180,11 @@ func (r ProducerResult) Validate() error {
 	case ProducerCompleted, ProducerRefused, ProducerInterrupted, ProducerFailed:
 	default:
 		return fmt.Errorf("invalid producer terminal outcome")
+	}
+	switch r.EffectCertainty {
+	case NoEffect, EffectCompleted, EffectAttempted, EffectUnknown:
+	default:
+		return fmt.Errorf("invalid effect certainty")
 	}
 	if r.PublicationEligible && (!r.Complete || r.Terminal != ProducerCompleted || r.StopCode != "") {
 		return fmt.Errorf("incomplete or stopped producer is not publication eligible")
