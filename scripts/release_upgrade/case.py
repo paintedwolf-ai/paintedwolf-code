@@ -34,7 +34,8 @@ def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: P
 
 def verify_preferences(path: Path, channel: str):
     preferences = read_json(path)
-    if not preferences or preferences.get("channel") != channel or preferences.get("automatic_updates_enabled") is not True or preferences.get("rollout_bucket") != 0:
+    expected = {"format_version": 2, "channel": channel, "automatic_updates_enabled": True, "rollout_bucket": 0}
+    if not isinstance(preferences, dict) or any(type(preferences.get(key)) is not type(value) or preferences.get(key) != value for key, value in expected.items()):
         raise ValueError("automatic update preferences changed during activation")
 
 

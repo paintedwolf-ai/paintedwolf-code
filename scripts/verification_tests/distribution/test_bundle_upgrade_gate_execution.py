@@ -149,7 +149,8 @@ class GateTests(unittest.TestCase):
         original = {"format_version": 2, "channel": "preview", "automatic_updates_enabled": True, "rollout_bucket": 0}
         path.write_text(json.dumps(original))
         verify_preferences(path, "preview")
-        for change in ({"channel": "stable"}, {"automatic_updates_enabled": False}, {"rollout_bucket": 1}):
+        for change in ({"channel": "stable"}, {"automatic_updates_enabled": False}, {"rollout_bucket": 1},
+                       {"rollout_bucket": False}, {"rollout_bucket": 0.0}, {"format_version": 99}):
             with self.subTest(change=change):
                 path.write_text(json.dumps({**original, **change}))
                 with self.assertRaisesRegex(ValueError, "preferences changed"):
