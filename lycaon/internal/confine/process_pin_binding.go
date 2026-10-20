@@ -102,6 +102,9 @@ func FreezePinnedLaunch(cmd *exec.Cmd) error {
 	if state.frozen {
 		return fmt.Errorf("pinned launch vectors are already frozen")
 	}
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
 	if err := state.pins.limits.checkCommand(state.arguments[0], state.arguments[1:], cmd.Env); err != nil {
 		return err
 	}

@@ -18,10 +18,11 @@ func (p *ProcessPins) permitsSecurity(before, after osprocess.ProcessSecurity, c
 		return false
 	}
 	uid, gid := before.EffectiveUID == after.EffectiveUID, before.EffectiveGID == after.EffectiveGID
-	for _, image := range p.images {
-		uid = uid || image.info.Mode()&os.ModeSetuid != 0 && image.change.UID == after.EffectiveUID
-		gid = gid || image.info.Mode()&os.ModeSetgid != 0 && image.change.GID == after.EffectiveGID
-	}
+	// Only the observed executable image can justify executable mode transitions.
+	// Script mode bits do not establish an interpreter privilege capability.
+	image := p.images[len(p.images)-1]
+	uid = uid || image.info.Mode()&os.ModeSetuid != 0 && image.change.UID == after.EffectiveUID
+	gid = gid || image.info.Mode()&os.ModeSetgid != 0 && image.change.GID == after.EffectiveGID
 	if !uid || !gid {
 		return false
 	}

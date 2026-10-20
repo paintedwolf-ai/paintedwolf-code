@@ -86,3 +86,50 @@ func TestRequiredPinsRefuseMissingCaptureBeforeLaunch(t *testing.T) {
 		t.Fatal("missing required capture admitted")
 	}
 }
+
+func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *testing.T) {
+	for _, revoke := range []bool{false, true} {
+		t.Run(map[bool]string{false: "replaced entry", true: "revoked admission"}[revoke], func(t *testing.T) {
+			directory := t.TempDir()
+			entry := filepath.Join(directory, "task")
+			original := []byte("#!/bin/sh\nprintf payload > result\n")
+			if err := os.WriteFile(entry, original, 0700); err != nil {
+				t.Fatal(err)
+			}
+			paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
+			pins, err := confine.CaptureProcessPins(t.Context(), entry, paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pins.Close()
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			plan := AgentLaunch(LaunchAgentCommand, "synthetic launch revalidation", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+			cmd, cleanup, err := PrepareCommand(ctx, "./task", nil, ExecOpts{Launch: plan, Dir: directory, Env: []string{"PATH=/usr/bin:/bin"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			if revoke {
+				delete(paths.allowed, entry)
+			} else {
+				if err := os.Rename(entry, entry+".held"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf replacement > result\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err = RunInOwnGroup(cmd)
+			if revoke && !errors.Is(err, os.ErrPermission) {
+				t.Fatalf("current authority refusal lost: %v", err)
+			}
+			if !revoke && !errors.Is(err, confine.ErrLaunchIdentityChanged) {
+				t.Fatalf("changed entry admitted: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(directory, "result")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("payload ran before refusal: %v", err)
+			}
+		})
+	}
+}
