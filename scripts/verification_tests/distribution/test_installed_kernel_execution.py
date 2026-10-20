@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases import kernel
+from linux_release.installed_cases import ipc, kernel
 
 
 class InstalledKernelTests(unittest.TestCase):
@@ -35,3 +35,23 @@ class InstalledKernelTests(unittest.TestCase):
                 self.assertEqual(status, expected)
                 self.assertEqual(list(root.iterdir()), [])
                 self.assertTrue(facts['unconfined_marker_read'])
+
+    def test_system_v_requires_all_three_private_families_and_preserved_host_objects(self):
+        class Host:
+            key = 123
+            created = {'shared_memory': 1, 'semaphore': 2, 'message_queue': 3}
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def intact(self):
+                return True
+        for missing, expected in [(None, 'passed'), ('message_queue_private', 'failed')]:
+            observation = {name + suffix: True for name in Host.created for suffix in ('_hidden', '_private')}
+            if missing:
+                observation.pop(missing)
+            with self.subTest(missing=missing), patch.object(ipc, 'OwnedIPC', Host), \
+                    patch.object(ipc, 'run_script', return_value=(True, {'kernel_observation': observation}, {})):
+                status, facts, streams = ipc.system_v_isolation({})
+                self.assertEqual(status, expected)
+                self.assertTrue(facts['host_objects_preserved'])
