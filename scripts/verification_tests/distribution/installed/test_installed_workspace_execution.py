@@ -10,6 +10,23 @@ from linux_release.installed_input import focus as focus_owner
 
 
 class InstalledWorkspaceTests(unittest.TestCase):
+    def test_native_observer_exception_preserves_partial_delivery_evidence(self):
+        ui = MagicMock()
+        ui.__enter__.return_value = ui
+        error = RuntimeError('unretained native diagnostic prose')
+        error.observations = {'native_input': {'completed': False, 'events': [{'ordinal': 0}]}}
+        error.streams = {'fixed-proof': b'owned partial observation'}
+        with patch.object(workspace, 'DesktopUI', return_value=ui), \
+                patch.object(workspace, 'interactive_window', return_value={}), \
+                patch.object(workspace, 'run', return_value={'exit_code': 0, 'timed_out': False,
+                    'output_limit': False, 'stdout': b'', 'stderr': b''}), \
+                patch.object(workspace, 'fixed_editor_keyboard', side_effect=error):
+            with self.assertRaises(workspace.CaseUnavailable) as refusal:
+                workspace.edit_and_find(SimpleNamespace(binding={}), Path('/owned/fixture'))
+        self.assertEqual(refusal.exception.observations['native_input'], error.observations['native_input'])
+        self.assertEqual(refusal.exception.streams['fixed-proof'], error.streams['fixed-proof'])
+        self.assertNotIn('unretained native diagnostic prose', str(refusal.exception.observations))
+
     def test_actual_file_observation_requires_exact_saved_fixture_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'fixture.txt'
