@@ -223,6 +223,7 @@ class InstalledApp:
         if self.process is None:
             return False
         self.require_running()
+        self.require_engine()
         config = Path.home() / ".config/paintedwolf"
         try:
             return self._bind_engine(private_json(config / "daemon.json"), config)
@@ -242,11 +243,14 @@ class InstalledApp:
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
         if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
+        self.observations["engine_identity"] = engine
         api = EngineAPI(port)
         try:
             health = api.request("GET", "/health")
         except (OSError, ValueError):
+            self.require_engine()
             return False
+        self.require_engine()
         if health["status"] != 200:
             return False
         if process_identity(pid) != engine:
@@ -279,12 +283,23 @@ class InstalledApp:
         self.observations.update({"engine_identity": engine, "engine_port": port, "health": health})
         return True
 
+    def require_engine(self):
+        expected = self.observations.get("engine_identity")
+        if expected is None:
+            return
+        try:
+            actual = process_identity(expected["pid"])
+        except (FileNotFoundError, ProcessLookupError):
+            actual = None
+        if actual != expected:
+            error = CaseFailed("captured installed engine exited or changed during its required interaction")
+            error.observations, error.streams = self.observations, self.streams()
+            raise error
+
     def request(self, method: str, path: str, payload=None) -> dict:
         if self.api is None:
             raise CaseUnavailable("installed application has no captured ready engine")
-        actual = process_identity(self.observations["engine_identity"]["pid"])
-        if actual != self.observations["engine_identity"]:
-            raise ValueError("installed API process identity changed")
+        self.require_engine()
         return self.api.request(method, path, payload)
 
     def stop(self):
