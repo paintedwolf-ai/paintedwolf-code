@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "scripts/verification_tests/distribution/installed",
+  "kind": "test_suite",
+  "workstream": "linux-installed-performance",
+  "disposition": "retain",
+  "reason": "Installed tests cover independent package, lifecycle, desktop, security and evidence claims through the same final-artifact contract. Retain the 53 measured immediate test members; fixed dispatch, budget scope and actual nondumpable process-tree ownership contracts support the new performance boundary. Additional membership requires renewed structural review, not automatic ceiling growth.",
+  "reviewed_commit": "87a2ae8224044d6f32e40c9b282774e2ba49dcdf",
+  "ceiling": 53,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_helpers_execution.py": "609e6c397df155dd3991da8806d5a1f11509519cc2d42a313cfd9b2f379029ff",
+    "scripts/verification_tests/distribution/installed/test_installed_performance_execution.py": "543076598bb568d750dd6d5fff26fe59b4b7684449d0a73acc20cdfb8bdc7217",
+    "scripts/verification_tests/distribution/installed/test_installed_performance_tree_execution.py": "b2662c50f5ecd49dd99de4e2d318a2a01583a0fdda6907702a9f15a68f10392f"
+  },
+  "reviewed_shape": "7d4e6a2966bedda080d31105ae50eef29afb4e081ede619efb3cf59d9e7cb365"
+}
