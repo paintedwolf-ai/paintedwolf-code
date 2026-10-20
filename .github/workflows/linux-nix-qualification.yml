@@ -167,6 +167,38 @@ jobs:
           PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
         run: ./task test:confine:linux -- nix
 
+      - name: Prepare the exact scanner builder executable
+        env:
+          SOURCE_ROOT: ${{ steps.source.outputs.path }}
+          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
+        run: |
+          set -euo pipefail
+          controller=23ba43dc8c99ace21a681106fc559c741479b844
+          git fetch --no-tags origin "$controller"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
+          git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
+          (
+            cd "$RUNNER_TEMP/nix-build-controller"
+            ./task nix:build -- --component scanner-host-tools \
+              --application-source-root "$SOURCE_ROOT" --application-source-commit "$SOURCE_COMMIT"
+          )
+          python3 - <<'SCANNER_PY'
+          import json, os
+          from pathlib import Path
+          from scripts.linux_release.nix_scanner_host import authorize_scanner
+          reports = [json.loads(path.read_text()) for path in
+                     (Path(os.environ['PW_ARTIFACT_ROOT'])/'nix').glob('build-*.json')]
+          reports = [report for report in reports if report.get('component') == 'scanner-host-tools']
+          if len(reports) != 1 or not reports[0].get('passed') or reports[0].get('application', {}).get('source_commit') != os.environ['SOURCE_COMMIT']:
+              raise SystemExit('Missing exact-source native scanner preparation')
+          report = reports[0]
+          selected = report['scanner_tools']
+          if report['builds'][0]['outputs'] != {'out': selected['output']}:
+              raise SystemExit('Realized scanner output differs from admitted derivation')
+          evidence = authorize_scanner(selected['executable'])
+          (Path(os.environ['PW_ARTIFACT_ROOT'])/'scanner-builder-permission.json').write_text(json.dumps(evidence, indent=2)+'\n')
+          SCANNER_PY
+
       - name: Evaluate and build the native application closure
         working-directory: ${{ steps.source.outputs.path }}
         env:
