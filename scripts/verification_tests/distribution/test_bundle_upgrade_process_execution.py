@@ -42,3 +42,29 @@ class ProcessTests(unittest.TestCase):
         with patch.object(process.subprocess, "run") as run:
             installation.launch()
         self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(installation.app)])
+
+    def test_process_ownership_uses_exact_executable_paths(self):
+        installation = self.installation()
+        installation.owned = {}
+        table = "10 /test/Product.app/Contents/MacOS/Product\n11 /other/Product --argument /test/Product.app/Contents/MacOS/Product\n12 /test/Product.app/Contents/MacOS/pw\n"
+        with patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout=table)), \
+             patch.object(process, "process_identity", side_effect=lambda pid: f"identity:{pid}"):
+            installation.capture_owned()
+        self.assertEqual(installation.owned, {10: ("identity:10", 1), 12: ("identity:12", 2)})
+
+    def test_health_requires_owned_app_parentage_and_the_expected_version(self):
+        import io
+        import json
+        installation = self.installation()
+        installation.owned = {10: ("engine", 2), 11: ("app", 1)}
+        for version, status, accepted in (("1.1.0", "ok", True), ("1.0.2", "ok", False), ("1.1.0", "recovery", False)):
+            client = unittest.mock.Mock()
+            client.open.return_value = io.BytesIO(json.dumps({"version": version, "status": status}).encode())
+            with self.subTest(version=version, status=status), \
+                 patch.object(installation, "capture_owned"), \
+                 patch.object(process, "read_json", return_value={"pid": 10, "port": 1234}), \
+                 patch.object(process, "process_identity", side_effect=lambda pid: {10: "engine", 11: "app"}.get(pid)), \
+                 patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout="11")), \
+                 patch.object(process.urllib.request, "build_opener", return_value=client):
+                observed = installation.observe("1.1.0")
+            self.assertEqual(observed is not None, accepted)

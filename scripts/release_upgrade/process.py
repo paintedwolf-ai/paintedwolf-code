@@ -29,7 +29,7 @@ def read_json(path: Path):
 
 
 def process_identity(pid: int) -> str | None:
-    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,command="], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,comm="], capture_output=True, text=True, timeout=5)
     return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -49,15 +49,14 @@ class Installation:
         commands = {str(self.executable): 1, **{str(path): 0 for path in helpers},
                     str(self.app / "Contents/MacOS/pw"): 2,
                     str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
-        rows = subprocess.run(["ps", "-axo", "pid=,command="], check=True, capture_output=True, text=True, timeout=5)
+        rows = subprocess.run(["ps", "-axo", "pid=,comm="], check=True, capture_output=True, text=True, timeout=5)
         for row in rows.stdout.splitlines():
             fields = row.strip().split(None, 1)
-            if len(fields) == 2 and any(fields[1] == command or fields[1].startswith(command + " ") for command in commands):
+            if len(fields) == 2 and fields[1] in commands:
                 pid = int(fields[0])
                 identity = process_identity(pid)
                 if identity:
-                    kind = next(kind for command, kind in commands.items() if fields[1] == command or fields[1].startswith(command + " "))
-                    self.owned[pid] = (identity, kind)
+                    self.owned[pid] = (identity, commands[fields[1]])
 
     def observe(self, version: str):
         self.capture_owned()
@@ -68,12 +67,12 @@ class Installation:
         if pid <= 1 or not 1 <= port <= 65535:
             raise ValueError("invalid rehearsal daemon identity")
         engine = process_identity(pid)
-        if engine is None or str(self.app) + "/Contents/" not in engine:
+        if self.owned.get(pid) != (engine, 2):
             return None
         parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], check=True, capture_output=True, text=True, timeout=5)
         app_pid = int(parent.stdout.strip())
         app_identity = process_identity(app_pid)
-        if not app_identity or str(self.executable) not in app_identity:
+        if self.owned.get(app_pid) != (app_identity, 1):
             return None
         self.owned[pid] = (engine, 2)
         self.owned[app_pid] = (app_identity, 1)
