@@ -25,6 +25,12 @@ class LinuxReleaseAdmissionTests(unittest.TestCase):
                    "environments": [{"id": "fixture", "distribution": "fixture", "release": "1", "architectures": ["amd64"], "installations": ["deb"],
                                      "desktop": "fixture", "display": "Wayland", "session": "fixture", "portal": "fixture", "security": "fixture",
                                      "scaling": "100%", "coverage": "native fixture", "issues": [457]}]}
+        catalog["environments"][0]["qualification"] = {
+            "releases": [{"id": "fixture", "os_ids": ["fixture"], "version_id": "1",
+                          "snapshot_kind": "package-inventory", "channel": None}],
+            "display": {"protocol": "wayland", "xwayland": "disabled", "clipboard_manager": "absent"},
+            "scaling": {"uniform_percent": [100, 150], "uniform_capabilities": [],
+                        "mixed_percent": [100, 150], "mixed_capabilities": []}}
         files = root / "packages"
         files.mkdir()
         (files / "app").write_bytes(b"final package")
