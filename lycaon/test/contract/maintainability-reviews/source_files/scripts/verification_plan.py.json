@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/verification_plan.py",
+  "kind": "module",
+  "workstream": "desktop-settings-observation",
+  "disposition": "retain",
+  "reason": "The single verification catalog validator owns supported selection grammar and rejects undeclared arguments before admission. A bounded exact component literal extends that existing owner without arbitrary Cargo or configuration selectors.",
+  "reviewed_commit": "ab7e8d41137786c92146abe484cae09af067ef91",
+  "ceiling": 375,
+  "boundaries": {
+    "scripts/verification_tests/scheduler/test_planning_execution.py": "71d9ac3fe89254273c8ddb6b156f4b1d9a853e51bda983cdb27f83470b2565dd"
+  }
+}

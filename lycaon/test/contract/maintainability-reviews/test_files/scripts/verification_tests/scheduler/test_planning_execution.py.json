@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "scripts/verification_tests/scheduler/test_planning_execution.py",
+  "kind": "test_suite",
+  "workstream": "desktop-settings-observation",
+  "disposition": "retain",
+  "reason": "This cohesive planning suite tests catalog grammar, pre-admission argument refusal and exclusive versus shareable requests. Retain the small fixed component negative cases beside their existing selection authority contracts.",
+  "reviewed_commit": "ab7e8d41137786c92146abe484cae09af067ef91",
+  "ceiling": 457,
+  "boundaries": {
+    "scripts/verification_plan.py": "4c8be4b179fd6996a262fbdf91bafc47e50693a2ec6c282b2d7a98300e568b66"
+  }
+}
