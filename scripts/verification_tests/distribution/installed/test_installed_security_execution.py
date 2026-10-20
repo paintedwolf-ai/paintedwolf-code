@@ -100,3 +100,18 @@ class InstalledSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 security.execute({'case_inputs': {'security': {'format_version': True}}},
                                  'vault', 'wrong-launcher-and-memory', Path('/unused'))
+
+    def test_shell_and_engine_hardening_require_same_uid_denial_and_stable_identity(self):
+        before = ('42', [1000] * 4, 0)
+        for denied, after, expected in [(True, before, True), (False, before, False),
+                                        (True, ('43', [1000] * 4, 0), False)]:
+            with self.subTest(denied=denied, after=after), patch.object(
+                    security, 'process_identity', side_effect=[before, after]), patch.object(
+                    security, 'memory_read_denied', return_value=denied), patch.object(security.os, 'getuid', return_value=1000):
+                passed, facts = security.protected_process(123, 42)
+            self.assertEqual(passed, expected)
+            self.assertEqual(facts['pid'], 123)
+        for uids, caps in [([0] * 4, 0), ([1000] * 4, 1)]:
+            with patch.object(security, 'process_identity', return_value=('42', uids, caps)), patch.object(
+                    security, 'memory_read_denied', return_value=True), patch.object(security.os, 'getuid', return_value=1000):
+                self.assertFalse(security.protected_process(123, 42)[0])
