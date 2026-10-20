@@ -15,19 +15,12 @@ import (
 // Invoke binds path utility operands after normal per-child operation admission.
 // It does not run a shell, call a JSON tool, or inherit authority from stdout.
 func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	output, err := p.commandOutput(ctx, request.OperationID, request.Arguments)
+	err := p.commandOutput(ctx, request.OperationID, request.Arguments, streams.Output)
 	var pathErr *PathError
 	if errors.As(err, &pathErr) {
 		span := request.Invocation.Span
-		data := map[string]any{"path": pathErr.Operand, "reason": pathErr.Cause.Error(), "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "command": pathErr.Command, "expected_form": pathErr.ExpectedForm}
+		data := map[string]any{"path": pathErr.Operand, "reason": pathErr.Cause.Error(), "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "command": pathErr.Command, "expected_form": pathErr.ExpectedForm, "resource_unit": pathErr.ResourceUnit}
 		err = errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: data})
-	}
-	if err == nil && streams.Output != nil {
-		var n int
-		n, err = streams.Output.Write(output)
-		if err == nil && n != len(output) {
-			err = io.ErrShortWrite
-		}
 	}
 	if err == nil {
 		err = ctx.Err()
@@ -48,95 +41,99 @@ func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.Operat
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 }
 
-func (p *ProgramPaths) commandOutput(ctx context.Context, name string, args []string) ([]byte, error) {
+func (p *ProgramPaths) commandOutput(ctx context.Context, name string, args []string, output io.Writer) error {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	for _, arg := range args {
 		if int64(len(arg)) > p.argumentLimit {
-			return nil, pathLimit("argument_bytes", p.argumentLimit, int64(len(arg)))
+			return pathLimit("argument_bytes", "bytes", p.argumentLimit, int64(len(arg)))
 		}
 		if strings.IndexByte(arg, 0) >= 0 {
-			return nil, invalidOperand(arg, "NUL in scalar operand")
+			return invalidOperand(arg, "NUL in scalar operand")
 		}
 	}
 	if name == "native_path" {
-		return p.convertCommand(ctx, args)
+		return p.convertCommand(ctx, args, output)
 	}
 	if name == "readlink" {
-		return p.linkCommand(ctx, args)
+		return p.linkCommand(ctx, args, output)
 	}
+	output = newPathOutput(ctx, output, p.outputLimit)
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
 	} else if len(args) > 0 && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
-		return nil, p.unsupportedOption(name, args[0])
+		return p.unsupportedOption(name, args[0])
 	}
 	switch name {
 	case "basename":
 		if len(args) < 1 || len(args) > 2 {
-			return nil, invalidOperand(name, "expected PATH and optional SUFFIX")
+			return invalidOperand(name, "expected PATH and optional SUFFIX")
 		}
 		suffix := ""
 		if len(args) == 2 {
 			suffix = args[1]
 		}
-		return []byte(PathBase(args[0], suffix) + "\n"), nil
+		_, err := io.WriteString(output, PathBase(args[0], suffix)+"\n")
+		return err
 	case "dirname":
 		if len(args) != 1 {
-			return nil, invalidOperand(name, "expected one PATH")
+			return invalidOperand(name, "expected one PATH")
 		}
-		return []byte(PathDir(args[0]) + "\n"), nil
+		_, err := io.WriteString(output, PathDir(args[0])+"\n")
+		return err
 	case "pwd":
 		if len(args) != 0 {
-			return nil, invalidOperand(name, "pwd accepts no operands")
+			return invalidOperand(name, "pwd accepts no operands")
 		}
 		if _, err := p.Bind(ctx, ".", false); err != nil {
-			return nil, err
+			return err
 		}
-		return []byte(p.cwd.Resolved.DisplayPath + "\n"), nil
+		_, err := io.WriteString(output, p.cwd.Resolved.DisplayPath+"\n")
+		return err
 	case "cd":
 		if len(args) > 1 {
-			return nil, invalidOperand(name, "cd accepts at most one PATH")
+			return invalidOperand(name, "cd accepts at most one PATH")
 		}
 		if len(args) == 0 {
 			info, err := directoryInfo(p.initial)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if !os.SameFile(info, p.initialInfo) {
-				return nil, invalidOperand("cd", "initial invocation directory identity changed")
+				return invalidOperand("cd", "initial invocation directory identity changed")
 			}
 			p.cwd = p.initial
 			p.cwdInfo = info
-			return nil, nil
+			return nil
 		}
-		return nil, p.Chdir(ctx, args[0])
+		return p.Chdir(ctx, args[0])
 	case "realpath":
 		if len(args) == 0 {
-			return nil, invalidOperand(name, "expected at least one PATH")
+			return invalidOperand(name, "expected at least one PATH")
 		}
-		return p.pathOutput(ctx, args, true)
+		return p.pathOutput(ctx, args, true, output)
 	default:
-		return nil, invalidOperand(name, "not a path operation")
+		return invalidOperand(name, "not a path operation")
 	}
 }
 
-func (p *ProgramPaths) convertCommand(ctx context.Context, args []string) ([]byte, error) {
+func (p *ProgramPaths) convertCommand(ctx context.Context, args []string, output io.Writer) error {
 	nul := false
 	if len(args) > 0 && args[0] == "-0" {
 		nul = true
 		args = args[1:]
 	}
 	if len(args) > 0 && args[0] != "--" && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
-		return nil, p.unsupportedOption("native_path", args[0])
+		return p.unsupportedOption("native_path", args[0])
 	}
 	if len(args) < 2 || args[0] != "--" {
-		return nil, invalidOperand("native_path", "expected [-0] -- PATH ...")
+		return invalidOperand("native_path", "expected [-0] -- PATH ...")
 	}
-	return p.NativePaths(ctx, args[1:], nul)
+	return p.NativePaths(ctx, args[1:], nul, output)
 }
 
-func (p *ProgramPaths) linkCommand(ctx context.Context, args []string) ([]byte, error) {
+func (p *ProgramPaths) linkCommand(ctx context.Context, args []string, output io.Writer) error {
 	canonical := false
 	if len(args) > 0 && args[0] == "-f" {
 		canonical = true
@@ -145,16 +142,15 @@ func (p *ProgramPaths) linkCommand(ctx context.Context, args []string) ([]byte, 
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
 	} else if len(args) > 0 && len(args[0]) > 1 && strings.HasPrefix(args[0], "-") {
-		return nil, p.unsupportedOption("readlink", args[0])
+		return p.unsupportedOption("readlink", args[0])
 	}
 	if len(args) == 0 {
-		return nil, invalidOperand("readlink", "expected at least one PATH")
+		return invalidOperand("readlink", "expected at least one PATH")
 	}
-	return p.pathOutput(ctx, args, canonical)
+	return p.pathOutput(ctx, args, canonical, newPathOutput(ctx, output, p.outputLimit))
 }
 
-func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical bool) ([]byte, error) {
-	var output []byte
+func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical bool, output io.Writer) error {
 	for _, arg := range args {
 		var path string
 		var err error
@@ -164,19 +160,16 @@ func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical 
 			path, err = p.LinkTarget(ctx, arg)
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := validateOutputPath(path, false); err != nil {
-			return nil, err
+			return err
 		}
-		total := int64(len(output)) + int64(len(path)) + 1
-		if total > p.outputLimit {
-			return nil, pathLimit("stream_bytes", p.outputLimit, total)
+		if _, err := io.WriteString(output, path+"\n"); err != nil {
+			return err
 		}
-		output = append(output, []byte(path)...)
-		output = append(output, '\n')
 	}
-	return output, nil
+	return nil
 }
 
 var _ commandprogram.OperationDispatcher = (*ProgramPaths)(nil)

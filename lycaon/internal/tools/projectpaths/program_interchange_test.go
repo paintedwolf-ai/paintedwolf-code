@@ -84,7 +84,7 @@ func TestNativePathConversionCannotWidenAProcessBoundary(t *testing.T) {
 	tc.Source.Roots = append(tc.Source.Roots, projectroot.RootRef{ID: "secondary", Label: "secondary", Path: secondary})
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	converted, err := p.NativePaths(t.Context(), []string{"@secondary/private"}, false)
+	converted, err := captureNativePaths(t.Context(), p, []string{"@secondary/private"}, false)
 	testutil.FailErr(t, "convert separate root", err)
 	process := confine.Confinement{Roots: []string{tc.ActiveRootPath()}, ReadDenyPaths: []string{secondary}, Network: confine.NetworkDeny}
 	target := strings.TrimSuffix(string(converted), "\n")
@@ -108,7 +108,7 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	operand := root + "/link/../same"
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	converted, err := p.NativePaths(t.Context(), []string{operand}, true)
+	converted, err := captureNativePaths(t.Context(), p, []string{operand}, true)
 	testutil.FailErr(t, "convert exact native spelling", err)
 	if string(converted) != operand+"\x00" {
 		t.Fatalf("conversion changed operand: %q", converted)

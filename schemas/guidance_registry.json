@@ -534,7 +534,7 @@
       "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }}."
+      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",

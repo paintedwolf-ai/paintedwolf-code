@@ -135,6 +135,12 @@ by `..`; the confined descriptor walk checks the actual reached identity before
 exposing file bytes or metadata. Root replacement invalidates a prior binding.
 Path conversion returns an absolute native spelling without granting access or
 recording a mutation. External argv remains literal.
+Path helpers emit bounded chunks through the supplied writer and meter byte
+ceilings before ingress. Conversion validates operands before emitting a list;
+a later utility or writer failure retains any delivered prefix as incomplete
+and never establishes redirect publication eligibility. No complete output list
+is allocated by the path helper.
+
 
 `native_path -0 -- PATH ...` emits exact NUL-delimited path bytes, including
 newlines and non-Unicode Linux names. Darwin and Windows explicitly refuse

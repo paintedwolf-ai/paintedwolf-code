@@ -51,6 +51,9 @@ func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
 		if reject.Data["source_start_byte"] != 7 || reject.Data["source_end_byte"] != 20 || reject.Data["source_line"] != 2 || reject.Data["source_column"] != 3 {
 			t.Fatalf("source coordinates lost: %+v", reject.Data)
 		}
+		if fixture.code == "COMMAND_LIMIT_EXCEEDED" && (reject.Data["resource_unit"] != "bytes" || reject.Data["maximum"] != int64(131072) || reject.Data["observed"] != int64(131073)) {
+			t.Fatalf("typed resource bound lost: %+v", reject.Data)
+		}
 		reject.Data["tool"] = "command"
 		rendered, err := formatter.Format(reject.Code, reject.Data)
 		contractcheck.FailErr(t, "render actual path refusal", err)

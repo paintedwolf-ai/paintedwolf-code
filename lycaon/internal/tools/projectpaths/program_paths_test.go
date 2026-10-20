@@ -116,7 +116,7 @@ func TestProgramPathConversionDoesNotRecordOrGrantMutation(t *testing.T) {
 	tc, root, recorder := scratchToolContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	converted, err := p.NativePaths(t.Context(), []string{"./new file"}, true)
+	converted, err := captureNativePaths(t.Context(), p, []string{"./new file"}, true)
 	testutil.FailErr(t, "convert path", err)
 	if !bytes.Equal(converted, append([]byte(filepath.Join(tc.ActiveRootPath(), "new file")), 0)) {
 		t.Fatalf("converted=%q", converted)
@@ -161,7 +161,7 @@ func TestProgramPathPreservesNonUnicodeNulLists(t *testing.T) {
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
 	if runtime.GOOS == "darwin" {
-		_, err := p.NativePaths(t.Context(), []string{name}, true)
+		_, err := captureNativePaths(t.Context(), p, []string{name}, true)
 		var pathErr *projectpaths.PathError
 		if !errors.As(err, &pathErr) || pathErr.Code != "COMMAND_OPERAND_INVALID" {
 			t.Fatalf("unrepresentable Darwin name did not refuse explicitly: %v", err)
@@ -169,12 +169,12 @@ func TestProgramPathPreservesNonUnicodeNulLists(t *testing.T) {
 		return
 	}
 	testutil.FailErr(t, "seed native byte name", os.WriteFile(filepath.Join(root, name), []byte("native bytes"), 0600))
-	got, err := p.NativePaths(t.Context(), []string{name}, true)
+	got, err := captureNativePaths(t.Context(), p, []string{name}, true)
 	testutil.FailErr(t, "convert native byte list", err)
 	if !bytes.Equal(got, append([]byte(filepath.Join(root, name)), 0)) {
 		t.Fatalf("lost native byte name: %q", got)
 	}
-	if _, err := p.NativePaths(t.Context(), []string{name}, false); err == nil {
+	if _, err := captureNativePaths(t.Context(), p, []string{name}, false); err == nil {
 		t.Fatal("unrepresentable scalar accepted")
 	}
 }
@@ -207,6 +207,12 @@ func TestProgramPathsAuthorizeActualLinkIdentity(t *testing.T) {
 	if _, err := p.Canonical(t.Context(), "alias"); err == nil {
 		t.Fatal("canonical metadata bypassed actual target authority")
 	}
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Arguments: []string{"--", "alias"}}, commandprogram.Streams{})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code {
+		t.Fatalf("scope refusal became ordinary failure: result=%+v err=%v", result, err)
+	}
+
 	if _, err := p.LinkTarget(t.Context(), "../secret"); err == nil {
 		t.Fatal("link metadata bypassed entry authority")
 	}
@@ -350,7 +356,7 @@ func TestNativeUnicodeNormalizationSpellingRemainsExact(t *testing.T) {
 	testutil.FailErr(t, "bind Unicode fixture", err)
 	for _, name := range []string{"é", "e\u0301"} {
 		testutil.FailErr(t, "seed exact Unicode spelling", os.WriteFile(filepath.Join(root, name), []byte(name), 0600))
-		converted, err := p.NativePaths(t.Context(), []string{name}, true)
+		converted, err := captureNativePaths(t.Context(), p, []string{name}, true)
 		testutil.FailErr(t, "convert exact Unicode spelling", err)
 		if string(converted) != filepath.Join(root, name)+"\x00" {
 			t.Fatalf("normalization changed native spelling: %q", converted)
@@ -376,17 +382,39 @@ func TestNativeScalarRefusesTrailingLfWithoutChangingNulList(t *testing.T) {
 	testutil.FailErr(t, "bind newline fixture", err)
 	name := "trailing\n"
 	testutil.FailErr(t, "seed trailing LF name", os.WriteFile(filepath.Join(root, name), []byte("exact"), 0600))
-	if _, err := p.NativePaths(t.Context(), []string{name}, false); err == nil {
+	if _, err := captureNativePaths(t.Context(), p, []string{name}, false); err == nil {
 		t.Fatal("scalar conversion accepted a name substitution would change")
 	}
-	exact, err := p.NativePaths(t.Context(), []string{name}, true)
+	exact, err := captureNativePaths(t.Context(), p, []string{name}, true)
 	testutil.FailErr(t, "convert exact NUL operand", err)
 	if string(exact) != filepath.Join(root, name)+"\x00" {
 		t.Fatalf("NUL conversion changed terminal LF: %q", exact)
 	}
-	interior, err := p.NativePaths(t.Context(), []string{"line\nbreak"}, false)
+	interior, err := captureNativePaths(t.Context(), p, []string{"line\nbreak"}, false)
 	testutil.FailErr(t, "convert representable interior LF", err)
 	if string(interior) != filepath.Join(root, "line\nbreak")+"\n" {
 		t.Fatalf("interior LF changed: %q", interior)
 	}
+}
+
+func captureNativePaths(ctx context.Context, p *projectpaths.ProgramPaths, operands []string, nul bool) ([]byte, error) {
+	var output bytes.Buffer
+	err := p.NativePaths(ctx, operands, nul, &output)
+	return output.Bytes(), err
+}
+
+func TestPathStreamingSeparatesDeliveredPrefixFromCompleteness(t *testing.T) {
+	tc, root := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind streaming fixture", err)
+	var output bytes.Buffer
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "native_path", Arguments: []string{"--", "a.go", "/dev/null"}}, commandprogram.Streams{Output: &output})
+	if err == nil || output.Len() != 0 || result.PublicationEligible {
+		t.Fatalf("invalid conversion exposed unvalidated prefix: output=%q result=%+v err=%v", output.String(), result, err)
+	}
+	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Arguments: []string{"--", "a.go", "missing"}}, commandprogram.Streams{Output: &output})
+	if !errors.Is(err, os.ErrNotExist) || output.String() != filepath.Join(fspath.CanonicalPath(root), "a.go")+"\n" || result.Complete || result.PublicationEligible || result.Terminal != toolcontract.ProducerFailed {
+		t.Fatalf("partial output reported complete: output=%q result=%+v err=%v", output.String(), result, err)
+	}
+	testutil.FailErr(t, "validate incomplete producer", result.Validate())
 }

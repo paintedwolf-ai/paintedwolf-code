@@ -26,6 +26,7 @@ type PathError struct {
 	Observed     int64
 	Command      string
 	ExpectedForm string
+	ResourceUnit string
 }
 
 func (e *PathError) Error() string { return fmt.Sprintf("%s: path %q: %v", e.Code, e.Operand, e.Cause) }
@@ -77,7 +78,7 @@ func (p BoundPath) Open() (*os.File, error) {
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			file.Close()
-			return nil, err
+			return nil, pathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil
@@ -144,7 +145,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		return BoundPath{}, err
 	}
 	if int64(len(operand)) > p.argumentLimit {
-		return BoundPath{}, pathLimit("argument_bytes", p.argumentLimit, int64(len(operand)))
+		return BoundPath{}, pathLimit("argument_bytes", "bytes", p.argumentLimit, int64(len(operand)))
 	}
 	if err := ValidateNativeOperand(operand); err != nil {
 		return BoundPath{}, err
@@ -265,40 +266,63 @@ func readRelative(path string) string {
 	return filepath.FromSlash(path)
 }
 
-// NativePaths converts identities, not authority. Scalar output is UTF-8;
-// NUL-delimited lists preserve native Unix filename bytes, including newlines.
-func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul bool) ([]byte, error) {
-	var out []byte
+// NativePaths validates exact conversion operands before streaming bounded
+// chunks. It grants no authority and never materializes a complete path list.
+func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul bool, output io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var total int64
 	for _, operand := range operands {
-		bound, err := p.Bind(ctx, operand, false)
+		native, err := p.nativePath(ctx, operand, nul)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if bound.Null {
-			return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: operand, Cause: errors.New("null device has no ordinary path identity")}
-		}
-		native := bound.Resolved.Abs
-		if !nul && strings.HasSuffix(native, "\n") {
-			return nil, invalidOperand(operand, "native path ending LF is not representable in scalar substitution")
-		}
-		if err := validateOutputPath(native, nul); err != nil {
-			return nil, err
-		}
-		if int64(len(out))+int64(len(native))+1 > p.outputLimit {
-			return nil, pathLimit("stream_bytes", p.outputLimit, int64(len(out))+int64(len(native))+1)
-		}
-		out = append(out, []byte(native)...)
-		if nul {
-			out = append(out, 0)
-		} else {
-			out = append(out, '\n')
+		total += int64(len(native)) + 1
+		if total > p.outputLimit {
+			return pathLimit("stream_bytes", "bytes", p.outputLimit, total)
 		}
 	}
-	return out, nil
+	writer := newPathOutput(ctx, output, p.outputLimit)
+	delimiter := "\n"
+	if nul {
+		delimiter = "\x00"
+	}
+	for _, operand := range operands {
+		native, err := p.nativePath(ctx, operand, nul)
+		if err != nil {
+			return err
+		}
+		if _, err := io.WriteString(writer, native); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(writer, delimiter); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func pathLimit(id string, maximum, observed int64) error {
-	return &PathError{Code: "COMMAND_LIMIT_EXCEEDED", LimitID: id, Maximum: maximum, Observed: observed, Cause: errors.New("path resource limit exceeded")}
+func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool) (string, error) {
+	bound, err := p.Bind(ctx, operand, false)
+	if err != nil {
+		return "", err
+	}
+	if bound.Null {
+		return "", invalidOperand(operand, "null device has no ordinary path identity")
+	}
+	native := bound.Resolved.Abs
+	if !nul && strings.HasSuffix(native, "\n") {
+		return "", invalidOperand(operand, "native path ending LF is not representable in scalar substitution")
+	}
+	if err := validateOutputPath(native, nul); err != nil {
+		return "", err
+	}
+	return native, nil
+}
+
+func pathLimit(id, unit string, maximum, observed int64) error {
+	return &PathError{Code: "COMMAND_LIMIT_EXCEEDED", LimitID: id, ResourceUnit: unit, Maximum: maximum, Observed: observed, Cause: errors.New("path resource limit exceeded")}
 }
 
 // OpenReader exposes a typed null input as EOF, retaining ordinary file opens.

@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // openRoot checks the held directory, including replacement between path checks.
@@ -37,8 +39,20 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 }
 
 func pathOperationError(operand string, err error) error {
+	var reject *toolrejection.ToolReject
+	var pathErr *PathError
+	if errors.As(err, &reject) || errors.As(err, &pathErr) {
+		return err
+	}
 	if errors.Is(err, fseffect.ErrUnsupported) {
 		return &PathError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Operand: operand, Cause: err}
+	}
+	if errors.Is(err, fseffect.ErrSymlink) {
+		return errors.Join(err, mapResolveErr(errors.Join(sandbox.ErrPathEscape, err), operand))
+	}
+	var scope *sandbox.ScopeError
+	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
+		return errors.Join(err, mapResolveErr(err, operand))
 	}
 	return err
 }
