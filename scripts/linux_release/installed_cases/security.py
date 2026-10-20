@@ -22,7 +22,7 @@ from .process import run
 from .terminal import terminal_interaction
 from .browser import browser_sandbox
 from .products import require_owned_guest
-from .records import CaseUnavailable, retain
+from .records import CaseUnavailable, CaseFailed, retain
 from .security_boundary import filesystem_egress
 
 SOCKET = Path('/run/painted-wolf-code/vault-identity.sock')
@@ -205,6 +205,9 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
                       {'reason': 'installed-app-interaction-driver-required'})
     try:
         status, observations, streams = probe(binding)
+    except CaseFailed as error:
+        status, observations, streams = ('failed', getattr(error, 'observations', {'reason': str(error)}),
+                                         getattr(error, 'streams', {}))
     except CaseUnavailable as error:
         status, observations, streams = ('unverified',
             getattr(error, 'observations', {'reason': 'installed-app-interaction-unavailable'}),
