@@ -27,12 +27,11 @@ def public_key(value: str) -> str:
     return name
 
 
-def validate_request(request: dict, policy: dict) -> None:
-    fields = {"schema_version", "mode", "version", "application_commit", "flake_lock_sha256", "system", "outputs", "cache_prefix"}
-    if not isinstance(request, dict) or set(request) != fields or type(request["schema_version"]) is not int or request["schema_version"] != 1:
-        raise ValueError("Nix cache request has an unsupported shape")
-    if request["mode"] not in {"production", "rehearsal"}:
-        raise ValueError("Nix cache mode must be explicit")
+def validate_source_request(request: dict) -> None:
+    fields = {"schema_version", "version", "application_commit", "flake_lock_sha256", "system", "outputs"}
+    if (not isinstance(request, dict) or set(request) != fields or type(request["schema_version"]) is not int
+            or request["schema_version"] != 1):
+        raise ValueError("Nix source request has an unsupported shape")
     parse(request["version"])
     for key, length in [("application_commit", 40), ("flake_lock_sha256", 64)]:
         if not isinstance(request[key], str) or not re.fullmatch(r"[a-f0-9]{" + str(length) + "}", request[key]):
@@ -44,6 +43,16 @@ def validate_request(request: dict, policy: dict) -> None:
         not isinstance(path, str) or not re.fullmatch(STORE_PATH, path) for path in outputs
     ) or len(set(outputs)) != len(outputs):
         raise ValueError("Nix cache requires explicit unique built store outputs")
+
+
+def validate_request(request: dict, policy: dict) -> None:
+    fields = {"schema_version", "mode", "version", "application_commit", "flake_lock_sha256", "system", "outputs", "cache_prefix"}
+    if not isinstance(request, dict) or set(request) != fields or type(request["schema_version"]) is not int or request["schema_version"] != 1:
+        raise ValueError("Nix cache request has an unsupported shape")
+    if request["mode"] not in {"production", "rehearsal"}:
+        raise ValueError("Nix cache mode must be explicit")
+    validate_source_request({key: request[key] for key in
+                             ("schema_version", "version", "application_commit", "flake_lock_sha256", "system", "outputs")})
     prefix = request["cache_prefix"]
     if request["mode"] == "production":
         if prefix != "nix-cache":

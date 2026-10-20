@@ -7,6 +7,10 @@ if [[ "${1:-}" == --r2-nix-cache && $# -eq 1 ]]; then
   cd "${ROOT}"
   exec python3 -m scripts.nix_cache.rehearsal_r2
 fi
+if [[ "${1:-}" == --local-nix-source && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.source_rehearsal
+fi
 if [[ "${1:-}" == --local-nix-cache && $# -eq 1 ]]; then
   cd "${ROOT}"
   exec python3 -m scripts.nix_cache.rehearsal
