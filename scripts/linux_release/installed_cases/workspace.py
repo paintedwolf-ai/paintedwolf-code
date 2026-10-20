@@ -8,8 +8,8 @@ import stat
 import tempfile
 import time
 
-from .app import InstalledApp
-from .desktop_ui import DesktopUI, interactive_window
+from .app import InstalledApp, process_identity
+from .desktop_ui import DesktopUI, interactive_window, owned_process
 from .records import CaseFailed, CaseUnavailable, retain
 from .process import run
 
@@ -34,6 +34,54 @@ def observed_file(path: Path) -> dict:
         os.close(descriptor)
 
 
+def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
+    if native is None:
+        import gi
+        gi.require_version('Atspi', '2.0')
+        from gi.repository import Atspi
+        native = Atspi
+    node = ui.find(ui.api.ROLE_ENTRY, 'Contents of ' + path.name)
+    pid = node.get_process_id()
+    identity = process_identity(pid)
+
+    def require_focus():
+        if (process_identity(pid) != identity or not owned_process(pid, app)
+                or not ui.visible(node) or not node.getState().contains(ui.api.STATE_FOCUSED)):
+            raise CaseUnavailable('normal-owned-editor-focus-unavailable')
+        frames = [window for owner, window in ui.windows()
+                  if owner == identity and window.getState().contains(ui.api.STATE_ACTIVE)]
+        if len(frames) != 1:
+            raise CaseUnavailable('normal-owned-editor-active-frame-unavailable')
+
+    if node.queryComponent().grabFocus() is not True:
+        raise CaseUnavailable('normal-owned-editor-focus-refused')
+    require_focus()
+    control = 1 << int(native.ModifierType.CONTROL)
+
+    def event(value, text, kind):
+        require_focus()
+        if native.generate_keyboard_event(value, text, kind) is not True:
+            raise CaseUnavailable('normal-editor-keyboard-synthesis-unavailable')
+        require_focus()
+
+    def chord(symbol):
+        locked = False
+        try:
+            locked = True
+            event(control, None, native.KeySynthType.LOCKMODIFIERS)
+            event(ord(symbol), None, native.KeySynthType.SYM)
+        finally:
+            if locked and native.generate_keyboard_event(control, None, native.KeySynthType.UNLOCKMODIFIERS) is not True:
+                raise ValueError('normal editor modifier release failed')
+        require_focus()
+
+    chord('a')
+    event(0, AFTER, native.KeySynthType.STRING)
+    chord('s')
+    return {'normal_keyboard_replace_and_save': True, 'focused_entry': True,
+            'active_owned_frame': True, 'ui_identity': identity, 'text_readback': False}
+
+
 def edit_and_find(app, path: Path) -> tuple[dict, dict]:
     observations, streams = {'interactive': interactive_window(app)}, {}
     try:
@@ -56,8 +104,13 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
                 raise CaseFailed('installed CLI refused the owned fixture project')
             ui.click('Files')
             ui.click(path.name)
-            ui.fill(ui.api.ROLE_ENTRY, 'Contents of ' + path.name, AFTER)
-            ui.click('Save')
+            try:
+                ui.fill(ui.api.ROLE_ENTRY, 'Contents of ' + path.name, AFTER)
+            except CaseUnavailable as error:
+                if 'desktop_mutation' not in getattr(error, 'observations', {}):
+                    raise
+                observations.update(error.observations)
+            observations['editor_keyboard'] = fixed_editor_keyboard(app, ui, path)
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 disk = observed_file(path)
@@ -76,6 +129,11 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
         error.observations = {**observations, **getattr(error, 'observations', {})}
         error.streams = {**streams, **getattr(error, 'streams', {})}
         raise
+    except Exception as error:
+        refusal = CaseUnavailable('normal-native-editor-interaction-unavailable')
+        refusal.observations = {**observations, 'native_editor_exception_type': type(error).__name__}
+        refusal.streams = streams
+        raise refusal from None
 
 
 def fixture_path(root: Path) -> Path:
