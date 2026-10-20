@@ -124,6 +124,15 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "--execute-plan":
         from .installed_campaign import main as execute_plan
         return execute_plan(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--prepare-candidate":
+        from .installed_candidate_inputs import main as prepare_candidate
+        return prepare_candidate(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--prepare-hosted-plan":
+        from .hosted_installed_plan import main as prepare_hosted_plan
+        return prepare_hosted_plan(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--hosted-runtime":
+        from .hosted_installed import main as hosted_runtime
+        return hosted_runtime(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=CATALOG)
     parser.add_argument("--campaign", type=Path, required=True)

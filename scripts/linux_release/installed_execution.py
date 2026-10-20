@@ -18,6 +18,7 @@ from .installed_environment import collect
 from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, observe
+from .installed_monitors import prepare as prepare_monitors
 
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
@@ -114,6 +115,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         raise ValueError("installed environment collector differs from the selected catalog")
     variant_error = None
     try:
+        observations["monitor_preparation"] = prepare_monitors(binding, observations["session"], variant["scales_percent"])
         variant_observation = observe(variant, snapshot, observations, binding)
     except CaseUnavailable as error:
         variant_error = str(error)
