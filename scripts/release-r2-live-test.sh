@@ -3,6 +3,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --local-pacman-construction ]]; then
+  shift
+  exec python3 - "$ROOT" "$@" <<'PACMAN_PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv.pop(1))
+sys.path.insert(0, str(root / "scripts"))
+from linux_release.arch_substrate_rehearsal import main
+main()
+PACMAN_PY
+fi
+
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)
