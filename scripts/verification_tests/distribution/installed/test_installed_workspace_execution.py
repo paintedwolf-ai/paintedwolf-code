@@ -79,6 +79,13 @@ class InstalledWorkspaceTests(unittest.TestCase):
             with self.assertRaises(workspace.CaseUnavailable):
                 workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
             native.generate_keyboard_event.assert_not_called()
+            node.getState.return_value.contains.return_value = True
+            frame.getState.return_value.contains.return_value = False
+            with self.assertRaises(workspace.CaseUnavailable) as refusal:
+                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+            self.assertEqual(refusal.exception.observations['editor_focus']['owned_frames'], [
+                {'identity': identity, 'active': False}])
+            native.generate_keyboard_event.assert_not_called()
 
     def test_missing_editor_retains_bound_process_and_capture_evidence(self):
         app = MagicMock()
