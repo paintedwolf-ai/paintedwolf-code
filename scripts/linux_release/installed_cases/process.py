@@ -10,7 +10,8 @@ import stat
 import subprocess
 import threading
 
-from ..installed_runtime import unchanged
+from ..installed_runtime import unchanged, file_identity
+from .records import CaseUnavailable
 from scripts.harness.supervise import stop_stack
 
 LIMIT = 8 << 20
@@ -23,10 +24,24 @@ def identity(pid: int) -> dict:
     return {"pid": pid, "start_time_ticks": int(row[19])}
 
 
+def probe_path(binding: dict, role: str) -> Path:
+    if role != 'ocr-observer':
+        return unchanged(binding, role)
+    path = Path(binding['install_root']) / 'engine-root/ocr/bin/tesseract'
+    expected = binding['images'].get(str(path))
+    if expected is None:
+        raise CaseUnavailable('selected installed manifest has no sealed OCR observer image')
+    actual = file_identity(path)
+    actual.pop('header')
+    if actual != expected or not actual['mode'] & 0o111 or actual['mode'] & 0o7000:
+        raise ValueError('selected OCR observer differs from the final installed image')
+    return path
+
+
 def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
     if platform.system() != "Linux":
         raise ValueError("installed native process probes require Linux")
-    path = unchanged(binding, role)
+    path = probe_path(binding, role)
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     process = None
     try:
@@ -80,7 +95,7 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
             for reader in readers:
                 reader.join(timeout=2)
             raise ValueError("native probe left a descendant holding its evidence channels")
-        unchanged(binding, role)
+        probe_path(binding, role)
         return {"launch_identity": launch_identity, "exit_code": process.returncode, "timed_out": timed_out, "output_limit": overflow.is_set(),
                 **{name: bytes(data) for name, data in streams.items()}}
     finally:
