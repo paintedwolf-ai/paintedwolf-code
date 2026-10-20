@@ -24,8 +24,6 @@ class CaseTests(unittest.TestCase):
         executable.write_bytes(b"prior executable")
         prepared = work / ".paintedwolf-update-candidate.app"
         new_executable = prepared / "Contents/MacOS/Product"
-        new_executable.parent.mkdir(parents=True)
-        new_executable.write_bytes(b"candidate executable")
         step = manifest("1.1.0")
         candidate = {"version": "1.1.0", "channel": "stable" if wrong_channel else "preview", "platform": "darwin-aarch64",
                      "signing_generation": 1, "artifact_url": step["platforms"]["darwin-aarch64"]["url"],
@@ -38,6 +36,8 @@ class CaseTests(unittest.TestCase):
         def launch():
             launches.append(True)
             if len(launches) == 1:
+                new_executable.parent.mkdir(parents=True)
+                new_executable.write_bytes(b"candidate executable")
                 records.mkdir(parents=True)
                 (records / "ready.json").write_text(json.dumps({"candidate": candidate, "prepared_bundle": str(prepared)}))
             if len(launches) == 2:
