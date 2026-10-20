@@ -57,6 +57,18 @@ func programOutcomeFacts(p invocation.ProgramProjection) (map[string]any, error)
 		facts["program_stopped_details"] = stopped
 		facts["program_stopped_details_omitted"] = omitted > 0
 	}
+	if p.Progress != nil {
+		progress := p.Progress
+		if progress.ProgramID != p.Program.ID || progress.ExecutionID == "" || progress.ExecutionID != p.Program.ProgressRef || progress.State != p.Program.ProgressState {
+			return nil, fmt.Errorf("progress observation contradicts program projection")
+		}
+		execution, identityOmitted := programFeedbackReference(progress.ExecutionID)
+		detail, detailOmitted := programFeedbackReference(progress.DetailRef)
+		facts["program_progress_owner_invoked"] = progress.OwnerInvoked
+		facts["program_progress_execution_id"] = execution
+		facts["program_progress_detail_ref"] = detail
+		facts["program_progress_ref_omitted"] = progressOmitted || identityOmitted || detailOmitted
+	}
 	// The recorder proves eligibility from actual reached/start markers and exact
 	// source retention. Defense in depth refuses contradictory compact inputs.
 	if p.FreshInvocationReference != "" && (p.CompletedEffects != 0 || p.UncertainEffects != 0 || p.ExecutedChildren != 0 || p.OmittedEffects != 0 || p.OmittedUnknown != 0 || p.FreshInvocationLimitation != "" || p.Program.State != "rejected") {

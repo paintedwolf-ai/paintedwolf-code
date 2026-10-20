@@ -32,7 +32,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	denied := f.childFor(t, "write")
 	code := "COMMAND_EFFECT_NOT_ALLOWED"
 	testutil.FailErr(t, "settle refused child", f.recorder.SettleChild(t.Context(), denied.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:scope-refusal"}))
-	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail", ProgressState: "unchanged"}))
+	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail"}))
 	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "large": strings.Repeat("x", 40<<10)}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
 	memory := &feedbackMemory{}
@@ -93,12 +93,25 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	remote := f.childFor(t, "http_request")
 	f.start(t, remote)
 	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
-	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial", ProgressState: "unchanged"}))
+	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
 	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
 	memory := &feedbackMemory{}
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}, remote, cause)
 	testutil.FailErr(t, "prepare partial effect projection", err)
 	defer prepared.Close()
+	details := prepared.Rejection.Data
+	completed, ok := details["program_completed_details"].([]any)
+	if !ok || len(completed) != 1 {
+		t.Fatalf("completed owner detail absent: %+v", details)
+	}
+	writeDetail := completed[0].(map[string]any)
+	if writeDetail["execution_id"] != write.Invocation().Identity.ExecutionID || writeDetail["recovery_ref"] != "journal:completed-write" || writeDetail["accepted_revision"] != "revision2" || writeDetail["published_revision"] != "revision2" {
+		t.Fatalf("write observation lost: %+v", writeDetail)
+	}
+	unknown, ok := details["program_unknown_details"].([]any)
+	if !ok || len(unknown) != 1 || unknown[0].(map[string]any)["execution_id"] != remote.Invocation().Identity.ExecutionID {
+		t.Fatalf("unknown dynamic effect lost: %+v", details)
+	}
 	message := api.Message{ID: "fixture-partial-result", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "actual-model-call", Outcome: api.ToolResultOutcomeError, Feedback: []api.ToolFeedback{{Code: cause.Code, Details: prepared.Rejection.Data}}}}
 	var content string
 	for _, m := range transcript.Project([]api.Message{message}) {
@@ -106,7 +119,7 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 			content = m.Content
 		}
 	}
-	for _, fact := range []string{`"program_completed_effects":1`, `"program_uncertain_effects":1`, `"program_replay_available":false`, `"details_omitted":true`, `"program_detail_ref":"output:program-partial"`} {
+	for _, fact := range []string{`"program_completed_effects":1`, `"program_uncertain_effects":1`, `"program_replay_available":false`, `"details_omitted":true`, `"program_detail_ref":"output:program-partial"`, `"program_effect_details_omitted":true`} {
 		if !strings.Contains(content, fact) {
 			t.Fatalf("compact projection lost %s: %s", fact, content)
 		}

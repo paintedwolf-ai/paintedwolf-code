@@ -27,6 +27,7 @@ var diagnosticFields = []string{
 	"program_id", "execution_id", "node_id", "source_unit_id", "model_tool_call_id", "program_detail_ref",
 	"program_replay_limitation", "program_static_not_started", "program_static_untaken",
 	"program_progress_state", "program_progress_ref", "program_progress_ref_omitted",
+	"program_progress_owner_invoked", "program_progress_execution_id", "program_progress_detail_ref",
 	"program_completed_details_retained_omitted", "program_unknown_details_retained_omitted", "program_stopped_details_omitted",
 	"program_stopped_details", "program_completed_details", "program_unknown_details",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
@@ -57,7 +58,7 @@ func boundedHostDiagnostics(details map[string]any, limit int) map[string]any {
 	for _, name := range []string{"program_completed_details", "program_unknown_details", "program_stopped_details"} {
 		rows, _ := source[name].([]any)
 		kept, _ := out[name].([]any)
-		if len(kept) < len(rows) {
+		if _, present := out["program_effect_details_omitted"]; present && len(kept) < len(rows) {
 			out["program_effect_details_omitted"] = true
 		}
 	}
