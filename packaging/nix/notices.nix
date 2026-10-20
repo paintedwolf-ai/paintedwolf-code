@@ -11,9 +11,9 @@ let
     buildGoModule = buildGoModule.override { go = tools.go; };
   };
   engine = callPackage ./engine.nix { inherit source; };
-  goInventory = engine.overrideAttrs (_: {
+  goInventory = engine.overrideAttrs (old: {
     pname = "painted-wolf-code-go-notices";
-    nativeBuildInputs = [ goLicenses ];
+    nativeBuildInputs = old.nativeBuildInputs ++ [ goLicenses ];
     preBuild = "";
     buildPhase = ''
       runHook preBuild
