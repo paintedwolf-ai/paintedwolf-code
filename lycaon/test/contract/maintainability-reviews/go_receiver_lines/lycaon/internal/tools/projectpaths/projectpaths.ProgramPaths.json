@@ -5,7 +5,7 @@
   "workstream": "portable-command-paths",
   "disposition": "retain",
   "reason": "Retain the invocation path frame at 437 lines: initial/current directory identity, exact operand resolution and current read/mutation scope belong to one operation boundary. P06 adds executable-input capture through the same Bind/Open jailed reader and held cwd; it grants no external execution permission. Extracting another path service would hide the identity and admission relationship. Command projection and streaming output remain separate files. The real checked-handle native launch and target-refusal fixtures passed, alongside the inherited exact-name, symlink/dot-dot, cwd, interchange and bounded-output contracts. Future growth requires another cohesion review.",
-  "reviewed_commit": "228fbe29da",
+  "reviewed_commit": "228fbe29da978ace733ab62e4cf56153f5225164",
   "ceiling": 437,
   "boundaries": {
     "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",

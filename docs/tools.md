@@ -107,6 +107,13 @@ environment from kernel inspection; observation records that absence explicitly
 rather than reporting an empty environment. The submitted environment remains
 an immutable helper input, and visible environment observations must match it.
 
+Approved Darwin set-user-ID execution has an additional unresolved capability:
+the kernel restricts mapped-vnode and cwd inspection after effective identity
+changes. The required-pin privileged process fixture currently refuses before
+release, while the existing explicit host-execution path remains available.
+A process code hash or incarnation alone is not substituted for missing mapped
+identity, cwd and argv proof. This remains required acceptance work.
+
 Required Linux identity release remains unavailable pending its native helper
 integration. Startup tracing cannot silently replace privileged host execution:
 [Linux execve](https://man7.org/linux/man-pages/man2/execve.2.html) suppresses
