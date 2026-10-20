@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -157,9 +158,17 @@ func TestProgramNullOperandIsTypedAndEmpty(t *testing.T) {
 func TestProgramPathPreservesNonUnicodeNulLists(t *testing.T) {
 	tc, root := readSessionContext(t)
 	name := string([]byte{'n', 0xff})
-	testutil.FailErr(t, "seed native byte name", os.WriteFile(filepath.Join(root, name), []byte("native bytes"), 0600))
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
+	if runtime.GOOS == "darwin" {
+		_, err := p.NativePaths(t.Context(), []string{name}, true)
+		var pathErr *projectpaths.PathError
+		if !errors.As(err, &pathErr) || pathErr.Code != "COMMAND_OPERAND_INVALID" {
+			t.Fatalf("unrepresentable Darwin name did not refuse explicitly: %v", err)
+		}
+		return
+	}
+	testutil.FailErr(t, "seed native byte name", os.WriteFile(filepath.Join(root, name), []byte("native bytes"), 0600))
 	got, err := p.NativePaths(t.Context(), []string{name}, true)
 	testutil.FailErr(t, "convert native byte list", err)
 	if !bytes.Equal(got, append([]byte(filepath.Join(root, name)), 0)) {
@@ -300,5 +309,84 @@ func TestNativeCaseSpellingRetainsFilesystemIdentity(t *testing.T) {
 		if string(a) != "upper" || string(b) != "lower" {
 			t.Fatal("distinct case-sensitive entries were collapsed")
 		}
+	}
+}
+
+func TestOpenCwdRetainsCheckedDirectoryAcrossReplacement(t *testing.T) {
+	tc, root := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "pkg")
+	testutil.FailErr(t, "bind current directory", err)
+	held, err := p.OpenCwd(t.Context())
+	testutil.FailErr(t, "hold checked directory", err)
+	defer held.Close()
+	before, err := held.Stat()
+	testutil.FailErr(t, "capture held identity", err)
+	testutil.FailErr(t, "move cwd fixture", os.Rename(filepath.Join(root, "pkg"), filepath.Join(root, "moved")))
+	testutil.FailErr(t, "replace cwd spelling", os.Mkdir(filepath.Join(root, "pkg"), 0700))
+	if replacement, err := p.OpenCwd(t.Context()); err == nil {
+		replacement.Close()
+		t.Fatal("cwd replacement inherited captured identity")
+	}
+	after, err := held.Stat()
+	testutil.FailErr(t, "inspect retained handle", err)
+	if !os.SameFile(before, after) {
+		t.Fatal("held cwd identity changed")
+	}
+	entries, err := held.ReadDir(-1)
+	testutil.FailErr(t, "read retained directory", err)
+	if len(entries) != 1 || entries[0].Name() != "b.go" {
+		t.Fatal("held directory observed replacement")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := p.OpenCwd(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled cwd open=%v", err)
+	}
+}
+
+func TestNativeUnicodeNormalizationSpellingRemainsExact(t *testing.T) {
+	tc, root := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind Unicode fixture", err)
+	for _, name := range []string{"é", "e\u0301"} {
+		testutil.FailErr(t, "seed exact Unicode spelling", os.WriteFile(filepath.Join(root, name), []byte(name), 0600))
+		converted, err := p.NativePaths(t.Context(), []string{name}, true)
+		testutil.FailErr(t, "convert exact Unicode spelling", err)
+		if string(converted) != filepath.Join(root, name)+"\x00" {
+			t.Fatalf("normalization changed native spelling: %q", converted)
+		}
+		bound, err := p.Bind(t.Context(), name, false)
+		testutil.FailErr(t, "bind actual Unicode entry", err)
+		file, err := bound.Open()
+		testutil.FailErr(t, "open actual Unicode entry", err)
+		native, err := io.ReadAll(file)
+		file.Close()
+		testutil.FailErr(t, "read native Unicode entry", err)
+		actual, err := os.ReadFile(filepath.Join(root, name))
+		testutil.FailErr(t, "read physical Unicode entry", err)
+		if !bytes.Equal(native, actual) {
+			t.Fatal("native normalization identity differs from OS")
+		}
+	}
+}
+
+func TestNativeScalarRefusesTrailingLfWithoutChangingNulList(t *testing.T) {
+	tc, root := readSessionContext(t)
+	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
+	testutil.FailErr(t, "bind newline fixture", err)
+	name := "trailing\n"
+	testutil.FailErr(t, "seed trailing LF name", os.WriteFile(filepath.Join(root, name), []byte("exact"), 0600))
+	if _, err := p.NativePaths(t.Context(), []string{name}, false); err == nil {
+		t.Fatal("scalar conversion accepted a name substitution would change")
+	}
+	exact, err := p.NativePaths(t.Context(), []string{name}, true)
+	testutil.FailErr(t, "convert exact NUL operand", err)
+	if string(exact) != filepath.Join(root, name)+"\x00" {
+		t.Fatalf("NUL conversion changed terminal LF: %q", exact)
+	}
+	interior, err := p.NativePaths(t.Context(), []string{"line\nbreak"}, false)
+	testutil.FailErr(t, "convert representable interior LF", err)
+	if string(interior) != filepath.Join(root, "line\nbreak")+"\n" {
+		t.Fatalf("interior LF changed: %q", interior)
 	}
 }

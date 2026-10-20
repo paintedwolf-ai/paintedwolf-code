@@ -182,5 +182,5 @@ func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical 
 var _ commandprogram.OperationDispatcher = (*ProgramPaths)(nil)
 
 func (p *ProgramPaths) unsupportedOption(command, word string) error {
-	return &PathError{Code: "COMMAND_OPTION_UNSUPPORTED", Operand: word, Command: command, ExpectedForm: p.forms[command], Cause: errors.New("supported form: " + p.forms[command] + "; use -- before path operands")}
+	return &PathError{Code: "COMMAND_OPTION_UNSUPPORTED", Operand: word, Command: command, ExpectedForm: p.forms[command], Cause: errors.New("unsupported native option")}
 }

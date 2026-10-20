@@ -23,3 +23,14 @@ func TestWindowsPathDesignShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestDarwinRefusesNonUnicodeNativeRepresentation(t *testing.T) {
+	if err := projectpaths.ValidatePlatformOperand(string([]byte{'n', 0xff}), "darwin"); err == nil {
+		t.Fatal("Darwin accepted an unrepresentable byte name")
+	}
+	for _, path := range []string{"é", "e\u0301", "Case", "case", "line\nbreak"} {
+		if err := projectpaths.ValidatePlatformOperand(path, "darwin"); err != nil {
+			t.Fatalf("representable exact name %q refused: %v", path, err)
+		}
+	}
+}

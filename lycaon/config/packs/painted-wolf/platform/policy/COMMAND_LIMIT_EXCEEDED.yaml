@@ -20,10 +20,11 @@ copy:
   what: 'Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }}.'
   cause: 'A declared host resource ceiling stopped new admission. Earlier completed effects remain authoritative.'
   why: 'Started operations retain their terminal settlement and recovery contracts. Exhaustion cannot erase completed effects or authorize replay.'
-  fix: 'Reduce the requested work within the declared limit. earlier parent effects remain recorded; inspect them before proposing a new action.'
+  fix: 'Reduce the requested work within the declared limit. Earlier parent effects remain recorded; inspect them before proposing a new action.'
+  instead: 'Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-message: command resource admission stopped
 x-paintedwolf-scenarios:
 - id: captured_unit
   vars:
@@ -34,4 +35,4 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_LIMIT_EXCEEDED'
   - ast_nodes
-  - earlier parent effects
+  - Earlier parent effects

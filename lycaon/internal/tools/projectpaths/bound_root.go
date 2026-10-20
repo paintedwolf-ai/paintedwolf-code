@@ -1,6 +1,7 @@
 package projectpaths
 
 import (
+	"errors"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -33,4 +34,11 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 		return nil, err
 	}
 	return root, nil
+}
+
+func pathOperationError(operand string, err error) error {
+	if errors.Is(err, fseffect.ErrUnsupported) {
+		return &PathError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Operand: operand, Cause: err}
+	}
+	return err
 }

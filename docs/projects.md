@@ -137,7 +137,9 @@ Path conversion returns an absolute native spelling without granting access or
 recording a mutation. External argv remains literal.
 
 `native_path -0 -- PATH ...` emits exact NUL-delimited path bytes, including
-newlines and non-Unicode Unix names. Scalar conversion requires UTF-8; scalar
+newlines and non-Unicode Linux names. Darwin and Windows explicitly refuse
+non-Unicode native operands rather than replacing bytes. Scalar conversion requires UTF-8
+and refuses terminal LF, which command substitution would strip; scalar
 substitution's separate NUL refusal belongs to the evaluator. Windows-shaped
 validation refuses ambiguous drive-relative and reserved-device spellings;
 actual Windows adapter qualification is tracked separately. `/dev/null` (and

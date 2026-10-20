@@ -32,3 +32,27 @@ func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (B
 	bound.Resolved.ScopeRel = logical.ScopeRel
 	return bound, info, nil
 }
+
+// OpenCwd returns a held directory only after checking the invocation's captured
+// cwd identity. Launch adapters retain this handle while freezing launch inputs.
+func (p *ProgramPaths) OpenCwd(ctx context.Context) (*os.File, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if p.cwd.Resolved.Abs == "" {
+		return nil, invalidOperand("", "invocation cwd is not bound")
+	}
+	file, err := p.cwd.Open()
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err == nil && !os.SameFile(info, p.cwdInfo) {
+		err = invalidOperand(p.cwd.Resolved.DisplayPath, "invocation directory identity changed")
+	}
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}

@@ -2,9 +2,6 @@ package projectpaths
 
 import (
 	"context"
-	"errors"
-
-	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // Canonical resolves only through the confined filesystem reader. Like the
@@ -21,31 +18,28 @@ func (p *ProgramPaths) LinkTarget(ctx context.Context, operand string) (string, 
 func (p *ProgramPaths) inspectPath(ctx context.Context, operand string, canonical bool) (string, error) {
 	bound, err := p.Bind(ctx, operand, false)
 	if err != nil {
-		return "", err
+		return "", pathOperationError(operand, err)
 	}
 	if bound.Null {
 		return "", invalidOperand(operand, "null device is not a directory entry")
 	}
 	root, err := bound.openRoot()
 	if err != nil {
-		return "", err
+		return "", pathOperationError(operand, err)
 	}
 	defer root.Close()
 	if canonical {
 		actual, err := root.Canonical(bound.exactRelative)
 		if err != nil {
-			return "", err
+			return "", pathOperationError(operand, err)
 		}
 		if bound.admitRead != nil {
 			if err := bound.admitRead(actual); err != nil {
-				return "", err
+				return "", pathOperationError(operand, err)
 			}
 		}
 		return actual, nil
 	}
 	target, err := root.Readlink(bound.exactRelative, bound.admitRead)
-	if errors.Is(err, fseffect.ErrUnsupported) {
-		return "", &PathError{Code: "COMMAND_PLATFORM_UNAVAILABLE", Operand: operand, Cause: err}
-	}
-	return target, err
+	return target, pathOperationError(operand, err)
 }

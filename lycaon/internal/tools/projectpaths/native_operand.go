@@ -21,9 +21,13 @@ func ValidateNativeOperand(operand string) error {
 	return ValidatePlatformOperand(operand, runtime.GOOS)
 }
 
+// ValidatePlatformOperand checks representation without rewriting path bytes.
 func ValidatePlatformOperand(operand, platform string) error {
 	if operand == "" || strings.IndexByte(operand, 0) >= 0 {
 		return invalidOperand(operand, "empty path or NUL in path")
+	}
+	if platform == "darwin" && !utf8.ValidString(operand) {
+		return invalidOperand(operand, "Darwin native path is not representable as UTF-8")
 	}
 	if platform != "windows" {
 		return nil
@@ -85,7 +89,7 @@ func invalidOperand(operand, reason string) error {
 }
 func validateOutputPath(path string, nul bool) error {
 	if !nul && !utf8.ValidString(path) {
-		return invalidOperand(path, "scalar path is not representable as UTF-8; use a NUL list")
+		return invalidOperand(path, "scalar path is not representable as UTF-8")
 	}
 	return nil
 }

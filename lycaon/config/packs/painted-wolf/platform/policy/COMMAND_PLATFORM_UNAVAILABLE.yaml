@@ -18,6 +18,7 @@ copy:
   cause: The platform adapter cannot provide the required confined path operation.
   why: A successful command must preserve exact identity and the existing authority boundary.
   fix: Inspect the typed operation details and available command forms. This refusal does not authorize external fallback or replay of earlier effects.
+  instead: Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: native command operation is unavailable

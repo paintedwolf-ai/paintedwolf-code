@@ -67,12 +67,12 @@ func (p BoundPath) Open() (*os.File, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return nil, err
+		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
-		return nil, err
+		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
@@ -154,13 +154,11 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	}
 	addressed := operand
 	if p.cwd.Resolved.Abs != "" {
-		info, err := directoryInfo(p.cwd)
+		held, err := p.OpenCwd(ctx)
 		if err != nil {
 			return BoundPath{}, err
 		}
-		if !os.SameFile(info, p.cwdInfo) {
-			return BoundPath{}, invalidOperand(operand, "invocation directory identity changed")
-		}
+		held.Close()
 		if !filepath.IsAbs(operand) && !strings.HasPrefix(operand, "@") {
 			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
@@ -280,6 +278,9 @@ func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul b
 			return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: operand, Cause: errors.New("null device has no ordinary path identity")}
 		}
 		native := bound.Resolved.Abs
+		if !nul && strings.HasSuffix(native, "\n") {
+			return nil, invalidOperand(operand, "native path ending LF is not representable in scalar substitution")
+		}
 		if err := validateOutputPath(native, nul); err != nil {
 			return nil, err
 		}

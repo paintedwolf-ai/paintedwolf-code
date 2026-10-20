@@ -22,12 +22,12 @@ func (p BoundPath) MutationTarget() (Resolved, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return Resolved{}, err
+		return Resolved{}, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	actual, err := root.Canonical(parent)
 	if err != nil {
-		return Resolved{}, err
+		return Resolved{}, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	return p.admitMutation(filepath.Join(actual, name))
 }
