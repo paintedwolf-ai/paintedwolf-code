@@ -59,7 +59,7 @@ class UpgradePlanTests(unittest.TestCase):
     def test_skipped_generations_follow_each_channel_bridge(self):
         feeds = [snapshot("stable", manifest("1.0.2")),
                  snapshot("preview", manifest("1.1.0", 1, 2)),
-                 snapshot("stable", manifest("1.2.0", 2))]
+                 snapshot("stable", manifest("1.2.0", 2), 2)]
         with patch("release_upgrade_plan.generation", return_value={"bridge_version": "1.1.0"}):
             result = plan(manifest("1.3.0-rc.1", 2), self.registry, feeds)
         source = next(case for case in result["cases"] if case["source_version"] == "1.0.2")
