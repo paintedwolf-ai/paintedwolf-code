@@ -2,6 +2,8 @@
 from contextlib import nullcontext
 import hashlib
 import json
+import os
+import signal
 from pathlib import Path
 import tempfile
 import sys
@@ -85,7 +87,13 @@ class NativeBootstrapTests(unittest.TestCase):
     def test_supervisor_captures_real_exit_and_bounds_output(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.assertEqual(supervisor.captured_child([sys.executable, '-c', 'print("observed");raise SystemExit(7)'], root, root), 7)
+            kill = os.killpg
+            def held_group(pid, number):
+                self.assertIsNotNone(os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT))
+                self.assertEqual(number, signal.SIGKILL)
+                return kill(pid, number)
+            with patch.object(supervisor.os, 'killpg', side_effect=held_group):
+                self.assertEqual(supervisor.captured_child([sys.executable, '-c', 'print("observed");raise SystemExit(7)'], root, root), 7)
             self.assertEqual((root / 'bootstrap-supervision.stdout').read_bytes(), b'observed\n')
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -123,6 +131,7 @@ class NativeBootstrapTests(unittest.TestCase):
                 self.assertEqual(supervisor.verify(root, selected, account, execution), receipt)
                 child.assert_called_once_with(supervisor.invocation(root, account), root / 'home/controller', root)
                 receipt['exit_code'] = 7
+                (root / 'bootstrap-supervision.json').chmod(0o600)
                 (root / 'bootstrap-supervision.json').write_text(json.dumps(receipt))
                 with self.assertRaises(ValueError):
                     supervisor.verify(root, selected, account, execution)
