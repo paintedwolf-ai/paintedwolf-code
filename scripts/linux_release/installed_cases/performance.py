@@ -14,7 +14,7 @@ from .app import InstalledApp, process_identity
 from .provider import ProviderFixture
 from .records import CaseUnavailable, retain
 from .security_boundary import successful_invocation
-from .workflow import ToolTurn, accepted
+from .workflow import ToolTurn, accepted, wait_settled
 
 SAMPLES = 20
 BUDGET_PATH = Path(__file__).resolve().parents[3] / 'lycaon/cmd/lycaon-perf/budgets.json'
@@ -110,18 +110,6 @@ def start_samples(binding: dict) -> tuple[dict, dict]:
             'engine_identities': engine_ids, 'cache_state': 'uncontrolled',
             'remaining_requirements': ['boot-bound-cold-launch', 'qualified-macos-reference', 'GUI-responsiveness']}, \
            {key: bytes(value) for key, value in streams.items()}
-
-
-def wait_settled(app, session_id: str):
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        session = accepted(app, 'GET', '/v1/sessions/' + session_id, None, {200})
-        if session.get('status') == 'idle':
-            return
-        if session.get('status') == 'error':
-            raise ValueError('performance fixture session failed before settlement')
-        time.sleep(0.05)
-    raise ValueError('performance fixture session did not settle within its bounded interval')
 
 
 def workflow_samples(binding: dict) -> tuple[dict, dict]:

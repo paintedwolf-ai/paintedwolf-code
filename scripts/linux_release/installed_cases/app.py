@@ -13,7 +13,7 @@ import urllib.parse
 
 from .app_api import EngineAPI
 from .products import require_owned_guest
-from .records import CaseUnavailable
+from .records import CaseUnavailable, CaseFailed
 from ..installed_environment import graphical_session
 from ..installed_runtime import file_identity
 from scripts.harness.supervise import stop_stack
@@ -146,7 +146,7 @@ class InstalledApp:
             return self.wait_ready()
         except BaseException as error:
             self.stop()
-            if isinstance(error, CaseUnavailable):
+            if isinstance(error, (CaseUnavailable, CaseFailed)):
                 error.observations, error.streams = self.observations, self.streams()
             raise
 
@@ -193,21 +193,36 @@ class InstalledApp:
             raise ValueError("installed application must be launched before readiness capture")
         deadline = time.monotonic() + self.timeout
         try:
-            while time.monotonic() < deadline and self.process.poll() is None and not self._overflow.is_set():
+            while time.monotonic() < deadline:
                 if self.try_ready():
                     return self
                 time.sleep(0.1)
-            self.observations["exit_code"] = self.process.poll()
+            self.require_running()
             raise CaseUnavailable("installed application did not reach an owned engine API; onboarding or a native interaction driver may be required")
         except BaseException as error:
             self.stop()
-            if isinstance(error, CaseUnavailable):
+            if isinstance(error, (CaseUnavailable, CaseFailed)):
                 error.observations, error.streams = self.observations, self.streams()
             raise
 
+    def require_running(self):
+        if self.process is None:
+            raise ValueError('installed application has no captured launch process')
+        code = self.process.poll()
+        if code is not None:
+            self.observations['exit_code'] = code
+            error = CaseFailed('selected installed application exited before its required interaction; exit code ' + str(code))
+        elif self._overflow.is_set():
+            error = CaseFailed('selected installed application exceeded its bounded startup output')
+        else:
+            return
+        error.observations, error.streams = self.observations, self.streams()
+        raise error
+
     def try_ready(self) -> bool:
-        if self.process is None or self.process.poll() is not None or self._overflow.is_set():
+        if self.process is None:
             return False
+        self.require_running()
         config = Path.home() / ".config/paintedwolf"
         try:
             return self._bind_engine(private_json(config / "daemon.json"), config)

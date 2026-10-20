@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import time
 import uuid
 
@@ -21,6 +22,18 @@ def identity(document: dict) -> str:
     if not isinstance(value, str) or str(uuid.UUID(value)) != value:
         raise ValueError('installed API returned an invalid resource identity')
     return value
+
+
+def wait_settled(app, session_id: str):
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        session = accepted(app, 'GET', '/v1/sessions/' + session_id, None, {200})
+        if session.get('status') == 'idle':
+            return
+        if session.get('status') == 'error':
+            raise ValueError('installed fixture session failed before settlement')
+        time.sleep(0.05)
+    raise ValueError('installed fixture session did not settle within its bounded interval')
 
 
 class ToolTurn:
@@ -71,8 +84,13 @@ class ToolTurn:
             raise
 
     def submit(self):
+        names = [call.get('name') for call in self.provider.calls]
+        if not 1 <= len(names) <= 16 or any(not isinstance(name, str) or
+                re.fullmatch(r'[a-z][a-z0-9_]{0,63}', name) is None for name in names):
+            raise ValueError('installed fixture task requires bounded exact tool identifiers')
+        task = 'Run the installed qualification fixture using these tools: ' + ', '.join(names) + '.'
         accepted(self.app, 'POST', f'/v1/sessions/{self.session_id}/prompts', {
-            'operation_id': str(uuid.uuid4()), 'text': 'Run the installed qualification fixture.'}, {202})
+            'operation_id': str(uuid.uuid4()), 'text': task}, {202})
 
     def results(self) -> list[dict]:
         document = accepted(self.app, 'GET', f'/v1/sessions/{self.session_id}/messages?limit=500', None, {200})

@@ -9,12 +9,11 @@ from .package_payload import inspect
 from .package_native import command, current_package, operations, owner_commands
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
+from .native_workflows import native_lock
+from . import package_helpers
 
 
-def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> dict:
-    if (capability, case) != ("installation", "package-ownership-and-removal"):
-        return retain(binding, capability, case, evidence_root, "unverified",
-                      {"reason": "native interaction driver or selected lifecycle fixtures required"})
+def removal(binding: dict, capability: str, case: str, evidence_root: Path) -> dict:
     require_owned_guest(binding)
     package = current_package(binding)
     family = binding["artifact"]["installation"]
@@ -65,3 +64,14 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
             observations["restoration_error"] = str(error)
             status = "failed"
     return retain(binding, capability, case, evidence_root, status, observations, streams)
+
+
+def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> dict:
+    if capability == "installation" and case in package_helpers.CASES:
+        return package_helpers.execute(binding, capability, case, evidence_root)
+    if (capability, case) == ("installation", "package-ownership-and-removal"):
+        require_owned_guest(binding)
+        with native_lock():
+            return removal(binding, capability, case, evidence_root)
+    return retain(binding, capability, case, evidence_root, "unverified",
+                  {"reason": "native interaction driver or selected lifecycle fixtures required"})

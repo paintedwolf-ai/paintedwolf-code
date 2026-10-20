@@ -20,21 +20,28 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
         if not isinstance(artifacts, list) or not artifacts or any(not isinstance(item, dict) for item in artifacts):
             raise ValueError('campaign capacity requires independently selected final artifacts')
         selections = [(item['id'], item['installation'], item['architecture']) for item in artifacts]
-    targets, cases = set(), 0
+    targets, native_targets, cases = set(), set(), 0
     for artifact_id, installation, architecture in selections:
         for row in rows:
             if (row['installation'], row['architecture']) != (installation, architecture):
                 continue
             variants = requirements(catalog, row['environment'], row['capability'])
             cases += len(variants) * len(row['cases'])
-            targets.update((artifact_id, row['environment'], item['id']) for item in variants)
+            selected_targets = {(artifact_id, row['environment'], item['id']) for item in variants}
+            targets.update(selected_targets)
+            if installation in {'deb', 'rpm', 'pacman'}:
+                native_targets.update(selected_targets)
     if not targets:
         raise ValueError('campaign capacity selected no catalog targets')
-    # Both transported leaf and normative controller evidence are retained. Each case
-    # owns one observation, up to MAX_STREAMS streams, plus a possible failure record.
-    case_files = cases * (MAX_STREAMS + 2) * 2
+    # Both transported leaf and normative controller evidence are retained. A case
+    # can preserve its bounded partial record and a separate captured-product
+    # failure record (each up to MAX_STREAMS streams), plus a generic failure.
+    case_files = cases * (2 * MAX_STREAMS + 3) * 2
     # Includes per-case directory entries, per-target metadata/logs/ZIP and top-level
     # aggregate documents. Control bytes remain under their separate fixed limits.
-    maximum_files = case_files + cases * 4 + len(targets) * 32 + 128
+    # A native target may also own pre-bind installation and immediate first-launch journals, bounded by
+    # the same stream contract, with both leaf and controller copies/directories.
+    transaction_files = len(native_targets) * 2 * (MAX_STREAMS + 3) * 2
+    maximum_files = case_files + cases * 4 + len(targets) * 32 + transaction_files + 128
     return {'max_files': maximum_files, 'max_bytes': MAX_BYTES, 'max_file': MAX_FILE,
             'targets': len(targets), 'case_observations': cases}

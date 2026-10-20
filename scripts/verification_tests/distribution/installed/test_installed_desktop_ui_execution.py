@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import desktop_ui as ui
-from linux_release.installed_cases.records import CaseUnavailable
+from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
 API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5,
                       STATE_DEFUNCT=10, STATE_SHOWING=11, STATE_SENSITIVE=12, STATE_ENABLED=13)
@@ -93,3 +93,27 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             with self.assertRaises(CaseUnavailable) as error:
                 actor.fill(API.ROLE_ENTRY, 'Message', 'private fixture content')
         self.assertNotIn('fixture', str(error.exception))
+
+    def test_accessibility_tree_actions_have_one_shared_wall_clock_bound(self):
+        api, window = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
+        with ui.DesktopUI(self.app, api) as desktop:
+            with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
+                with self.assertRaises(CaseUnavailable):
+                    desktop.find(API.ROLE_PUSH_BUTTON, 'Send')
+            with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
+                with self.assertRaises(CaseUnavailable):
+                    list(desktop.descendants(window))
+
+    def test_observed_product_crash_is_failed_instead_of_missing_ui_fixture(self):
+        api, _ = surface([])
+        self.app.process = SimpleNamespace(poll=lambda: -6)
+        with patch.object(ui, 'load_api', return_value=api):
+            with self.assertRaises(CaseFailed) as failure:
+                ui.interactive_window(self.app)
+            self.assertNotIsInstance(failure.exception, CaseUnavailable)
+            self.assertEqual(failure.exception.observations["launcher_exit_code"], -6)
+        self.app.process = SimpleNamespace(poll=lambda: 0)
+        with patch.object(ui, 'load_api', return_value=api):
+            with self.assertRaises(CaseFailed) as failure:
+                ui.interactive_window(self.app)
+            self.assertNotIsInstance(failure.exception, CaseUnavailable)

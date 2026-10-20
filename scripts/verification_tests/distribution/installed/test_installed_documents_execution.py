@@ -125,6 +125,21 @@ class InstalledDocumentsTests(unittest.TestCase):
             self.assertEqual(process.probe_path(binding, 'pw'), Path('/ordinary'))
             unchanged.assert_called_once_with(binding, 'pw')
 
+    def test_resource_observer_roles_are_fixed_and_manifest_bound(self):
+        expected = {'ocr-observer': 'engine-root/ocr/bin/tesseract',
+                    'git-observer': 'engine-root/gitengine/bin/git',
+                    'git-lfs-observer': 'engine-root/gitengine/bin/git-lfs',
+                    'browser-observer': 'engine-root/browser/chrome-headless-shell'}
+        self.assertEqual(process.RESOURCE_ROLES, expected)
+        identity = {'sha256': 'a' * 64, 'bytes': 42, 'mode': 0o755, 'device': 1, 'inode': 2}
+        for role, relative in expected.items():
+            path = Path('/selected') / relative
+            binding = {'install_root': '/selected', 'images': {str(path): identity}, 'resource_path': '/foreign'}
+            with self.subTest(role=role), patch.object(process, 'file_identity', return_value=dict(identity, header=b'ELF')):
+                self.assertEqual(process.probe_path(binding, role), path)
+            with self.assertRaises(CaseUnavailable):
+                process.probe_path(dict(binding, images={}), role)
+
     def test_vision_capability_is_explicit_and_never_changes_normal_fixtures(self):
         arguments = (SimpleNamespace(), SimpleNamespace(), Path('/unused'))
         self.assertNotIn('vision', workflow.ToolTurn(*arguments).capabilities)

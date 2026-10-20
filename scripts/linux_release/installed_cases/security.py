@@ -17,10 +17,13 @@ from .app import InstalledApp
 from .ipc import system_v_isolation
 from .lifecycle import background_cancel
 from .crash import detached_cleanup, host_execution_lifetime
-from .kernel import private_shared_memory, restricted_namespaces
+from .kernel import private_shared_memory, restricted_namespaces, helper_boundary
 from .process import run
+from .terminal import terminal_interaction
+from .browser import browser_sandbox
+from .browser_network import denied_local_services, allowed_local_server
 from .products import require_owned_guest
-from .records import CaseUnavailable, retain
+from .records import CaseUnavailable, CaseFailed, retain
 from .security_boundary import filesystem_egress
 
 SOCKET = Path('/run/painted-wolf-code/vault-identity.sock')
@@ -176,12 +179,17 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
              'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
-PROBES = {('processes', 'host-execution-lifetime'): host_execution_lifetime,
+PROBES = {('browser', 'denied-local-services'): denied_local_services,
+          ('browser', 'allowed-local-server'): allowed_local_server,
+          ('browser', 'browser-sandbox-composition'): browser_sandbox,
+          ('processes', 'terminal-interaction'): terminal_interaction,
+          ('processes', 'host-execution-lifetime'): host_execution_lifetime,
           ('processes', 'background-cancel'): background_cancel,
           ('processes', 'setsid-and-double-fork'): detached_cleanup,
           ('confinement', 'system-v-ipc-isolation'): system_v_isolation,
           ('confinement', 'private-shared-memory'): private_shared_memory,
           ('confinement', 'restricted-user-namespaces'): restricted_namespaces,
+          ('confinement', 'helper-boundary-and-descendants'): helper_boundary,
           ('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
           ('session', 'inhibitor-lifetime'): inhibitor_lifetime,
           ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory}
@@ -200,6 +208,9 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
                       {'reason': 'installed-app-interaction-driver-required'})
     try:
         status, observations, streams = probe(binding)
+    except CaseFailed as error:
+        status, observations, streams = ('failed', getattr(error, 'observations', {'reason': str(error)}),
+                                         getattr(error, 'streams', {}))
     except CaseUnavailable as error:
         status, observations, streams = ('unverified',
             getattr(error, 'observations', {'reason': 'installed-app-interaction-unavailable'}),

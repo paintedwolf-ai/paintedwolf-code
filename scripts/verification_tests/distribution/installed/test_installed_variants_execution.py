@@ -112,3 +112,15 @@ class CatalogCapacityTests(unittest.TestCase):
             self.assertGreaterEqual(selected['max_files'], 4 * (capacity.MAX_STREAMS + 1) * 2)
             with self.assertRaises(ValueError):
                 capacity.limits({}, {'artifacts': []})
+
+    def test_native_preinstallation_journal_has_independent_transport_capacity(self):
+        from linux_release import installed_capacity as capacity
+        row = {'installation': 'rpm', 'architecture': 'amd64', 'environment': 'desktop',
+               'capability': 'windowing', 'cases': ['resize']}
+        with patch.object(capacity, 'expand', return_value=[row]), \
+                patch.object(capacity, 'requirements', return_value=[{'id': 'baseline'}]):
+            native = capacity.limits({})
+            row['installation'] = 'nix'
+            immutable = capacity.limits({})
+        self.assertEqual(native['max_files'] - immutable['max_files'], 2 * (capacity.MAX_STREAMS + 3) * 2)
+        self.assertEqual(native['max_bytes'], immutable['max_bytes'])

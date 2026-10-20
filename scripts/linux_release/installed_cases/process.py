@@ -15,6 +15,10 @@ from .records import CaseUnavailable
 from scripts.harness.supervise import stop_stack
 
 LIMIT = 8 << 20
+RESOURCE_ROLES = {'ocr-observer': 'engine-root/ocr/bin/tesseract',
+                  'git-observer': 'engine-root/gitengine/bin/git',
+                  'git-lfs-observer': 'engine-root/gitengine/bin/git-lfs',
+                  'browser-observer': 'engine-root/browser/chrome-headless-shell'}
 
 
 def identity(pid: int) -> dict:
@@ -25,16 +29,16 @@ def identity(pid: int) -> dict:
 
 
 def probe_path(binding: dict, role: str) -> Path:
-    if role != 'ocr-observer':
+    if role not in RESOURCE_ROLES:
         return unchanged(binding, role)
-    path = Path(binding['install_root']) / 'engine-root/ocr/bin/tesseract'
+    path = Path(binding['install_root']) / RESOURCE_ROLES[role]
     expected = binding['images'].get(str(path))
     if expected is None:
-        raise CaseUnavailable('selected installed manifest has no sealed OCR observer image')
+        raise CaseUnavailable('selected installed manifest has no sealed resource observer image')
     actual = file_identity(path)
     actual.pop('header')
     if actual != expected or not actual['mode'] & 0o111 or actual['mode'] & 0o7000:
-        raise ValueError('selected OCR observer differs from the final installed image')
+        raise ValueError('selected resource observer differs from the final installed image')
     return path
 
 

@@ -124,6 +124,9 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "--execute-plan":
         from .installed_campaign import main as execute_plan
         return execute_plan(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "--diagnose-first-launch":
+        from .installed_cases.desktop import diagnostic_main
+        return diagnostic_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--prepare-candidate":
         from .installed_candidate_inputs import main as prepare_candidate
         return prepare_candidate(sys.argv[2:])

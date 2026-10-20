@@ -174,7 +174,7 @@ def read_pixels(binding: dict, raw: bytes) -> tuple[dict, dict]:
 
 
 def visual_roundtrip(binding: dict, secret: bool) -> tuple[dict, dict]:
-    from .performance import wait_settled
+    from .workflow import wait_settled
     app = InstalledApp(binding)
     observations, streams = {}, {}
     with tempfile.TemporaryDirectory(prefix='paintedwolf-installed-visual-') as directory:

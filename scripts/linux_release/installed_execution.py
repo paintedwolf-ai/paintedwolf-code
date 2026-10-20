@@ -13,7 +13,7 @@ import sys
 
 from . import installed_evidence as evidence
 from .installed_cases.products import require_owned_guest
-from .installed_cases.records import CaseUnavailable, retain
+from .installed_cases.records import CaseFailed, CaseUnavailable, retain
 from .installed_environment import collect
 from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
@@ -22,8 +22,8 @@ from .installed_monitors import prepare as prepare_monitors
 
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
-FAMILIES = {"documents": "products", "installation": "packages", "conversation": "desktop",
-            "git": "desktop", "files": "desktop", "external-files": "desktop", "clipboard": "desktop",
+FAMILIES = {"documents": "products", "installation": "packages", "conversation": "conversation",
+            "git": "desktop", "files": "workspace", "external-files": "desktop", "clipboard": "desktop",
             "input": "desktop", "windowing": "desktop", "accessibility": "desktop",
             "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "performance",
             **{capability: "security" for capability in SECURITY},
@@ -49,7 +49,7 @@ def current_tree(root: Path) -> str:
 
 
 def driver_family(capability: str, installation: str) -> str | None:
-    return "nix" if capability in NIX and installation not in {"deb", "rpm", "pacman"} else FAMILIES.get(capability)
+    return "nix_workflows" if capability in NIX and installation not in {"deb", "rpm", "pacman"} else FAMILIES.get(capability)
 
 
 def case_family(capability: str, case: str, installation: str) -> str | None:
@@ -110,12 +110,25 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     if current_tree(root) != evidence.source(driver_tree):
         raise ValueError("installed driver source differs from the independently selected tree")
     guest = require_owned_guest({"install_root": str(install_root), "artifact": artifact})
+    if case_inputs is not None and (not isinstance(case_inputs, dict)
+            or set(case_inputs) - {"native_packages", "nix", "security", "desktop"}
+            or any(not isinstance(value, dict) for value in case_inputs.values())):
+        raise ValueError("installed case inputs require known typed driver-family objects")
+    output.mkdir(parents=True, mode=0o700, exist_ok=False)
+    retained = output / "evidence"
+    retained.mkdir()
+    from .installed_cases.native_workflows import prepare_install
+    transaction = prepare_install(final, source, artifact_id, file_root, install_root, case_inputs, retained)
+    if transaction is not None and transaction["status"] != "passed":
+        raise ValueError("fresh native installation failed; retained transaction requires recovery review")
     binding = bind(final, source, artifact_id, file_root, install_root, nix_program)
     if case_inputs is not None:
-        if (not isinstance(case_inputs, dict) or set(case_inputs) - {"native_packages", "nix", "security", "desktop"}
-                or any(not isinstance(value, dict) for value in case_inputs.values())):
-            raise ValueError("installed case inputs require known typed driver-family objects")
         binding["case_inputs"] = case_inputs
+    if transaction is not None:
+        binding["installation_transaction"] = transaction
+        binding["execution_nonce"] = execution_nonce
+        from .installed_cases.desktop import prepare_first_launch
+        binding["first_launch_transaction"] = prepare_first_launch(binding, retained)
     facts, observations = collect(environments[environment_id], binding, guest, variant["display"]["protocol"])
     if facts.keys() != set(catalog["recorded_environment_facts"]):
         raise ValueError("installed environment collector differs from the selected catalog")
@@ -126,9 +139,6 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     except CaseUnavailable as error:
         variant_error = str(error)
         variant_observation = {"format_version": 1, "variant": variant, "snapshot": snapshot, "unverified": variant_error}
-    output.mkdir(parents=True, mode=0o700, exist_ok=False)
-    retained = output / "evidence"
-    retained.mkdir()
     for name, document in (("binding.json", binding), ("environment.json", observations), ("environment-facts.json", facts),
                            ("driver-registry.json", registry(catalog, artifact["installation"])), ("variant.json", variant_observation)):
         (output / name).write_text(json.dumps(document, sort_keys=True, indent=2) + "\n")
@@ -139,6 +149,12 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
             try:
                 result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
                           if variant_error else execute_case(binding, row["capability"], case, retained))
+            except CaseFailed as error:
+                failed_case = case if not (retained / row["capability"] / case).exists() else case + "-product-failure"
+                result = retain(binding, row["capability"], failed_case, retained, "failed",
+                                {"reason": str(error), **getattr(error, "observations", {})},
+                                getattr(error, "streams", None))
+                result["id"] = case
             except CaseUnavailable as error:
                 result = retain(binding, row["capability"], case, retained, "unverified",
                                 {"reason": str(error), **getattr(error, "observations", {})}, getattr(error, "streams", None))

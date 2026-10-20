@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases import performance
+from linux_release.installed_cases import performance, workflow
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -65,13 +65,13 @@ class InstalledPerformanceTests(unittest.TestCase):
 
     def test_settlement_requires_normal_session_idle_after_tool_completion(self):
         app = SimpleNamespace()
-        with patch.object(performance, 'accepted', side_effect=[{'status': 'running'}, {'status': 'idle'}]) as request, \
-                patch.object(performance.time, 'sleep'):
-            performance.wait_settled(app, 'session')
+        with patch.object(workflow, 'accepted', side_effect=[{'status': 'running'}, {'status': 'idle'}]) as request, \
+                patch.object(workflow.time, 'sleep'):
+            workflow.wait_settled(app, 'session')
             self.assertEqual(request.call_count, 2)
-        with patch.object(performance, 'accepted', return_value={'status': 'error'}):
+        with patch.object(workflow, 'accepted', return_value={'status': 'error'}):
             with self.assertRaises(ValueError):
-                performance.wait_settled(app, 'session')
+                workflow.wait_settled(app, 'session')
 
     def test_architecture_contract_cannot_pass_without_actual_baseline(self):
         binding = {'artifact': {'architecture': 'amd64'}}
