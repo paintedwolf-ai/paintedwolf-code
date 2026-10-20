@@ -21,8 +21,8 @@ const ENVIRONMENT: [&str; 6] = [
     "LC_CTYPE",
     "TZ",
 ];
-fn command(image: &image::Image) -> Command {
-    let mut command = Command::new(image.executable());
+fn command(executable: &Path) -> Command {
+    let mut command = Command::new(executable);
     command
         .env_clear()
         .stdin(Stdio::piped())
@@ -77,7 +77,7 @@ fn one(
     mut observe: impl FnMut(Frame),
 ) -> io::Result<Status> {
     let image = image::Image::open(shell)?;
-    let mut child = command(&image).spawn()?;
+    let mut child = command(&image.executable()).spawn()?;
     let stdout = child
         .stdout
         .take()
@@ -169,6 +169,48 @@ pub fn watch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fixed_child_observes_only_safe_environment_and_no_inherited_fds() {
+        if std::env::var_os("PW_OBSERVER_TEST_CHILD").is_none() {
+            return;
+        }
+        assert_eq!(unsafe { libc::prctl(libc::PR_GET_DUMPABLE) }, 1);
+        assert_eq!(
+            unsafe { libc::prctl(libc::PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) },
+            1
+        );
+        for (name, _) in std::env::vars_os() {
+            assert!(ENVIRONMENT.iter().any(|key| name == *key) || name == "PW_OBSERVER_TEST_CHILD");
+        }
+        let descriptor: i32 = std::env::var("PW_OBSERVER_TEST_CHILD")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(unsafe { libc::fcntl(descriptor, libc::F_GETFD) }, -1);
+    }
+    #[test]
+    fn actual_exec_clears_environment_descriptors_and_reaps_owned_child() {
+        use std::os::fd::AsRawFd;
+        let secret = std::fs::File::open("/dev/null").unwrap();
+        let descriptor = unsafe { libc::fcntl(secret.as_raw_fd(), libc::F_DUPFD, 200) };
+        assert!(descriptor >= 200);
+        let mut child = command(&std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "process::tests::fixed_child_observes_only_safe_environment_and_no_inherited_fds",
+                "--nocapture",
+            ])
+            .env("PW_OBSERVER_TEST_CHILD", descriptor.to_string())
+            .spawn()
+            .unwrap();
+        unsafe {
+            libc::close(descriptor);
+        }
+        let result = child.wait().unwrap();
+        assert!(result.success());
+        stop(&mut child);
+        assert!(child.try_wait().unwrap().is_some());
+    }
     #[test]
     fn environment_never_inherits_parent_credentials() {
         assert!(!ENVIRONMENT.iter().any(|name| name.contains("TOKEN")
