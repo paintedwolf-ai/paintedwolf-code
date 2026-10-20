@@ -168,6 +168,7 @@ def diagnostic_main(arguments: list[str]) -> int:
     parser.add_argument('--execution-nonce', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--continue-installed', action='store_true')
+    parser.add_argument('--input-vm-id')
     args = parser.parse_args(arguments)
     try:
         source = evidence.source(args.source_commit)
@@ -219,6 +220,14 @@ def diagnostic_main(arguments: list[str]) -> int:
             binding = bind(final, source, args.artifact_id, inputs / 'packages', Path('/opt/painted-wolf-code'))
             binding.update(case_inputs=case_inputs, installation_transaction=transaction,
                            execution_nonce=args.execution_nonce)
+            if args.input_vm_id is not None:
+                from ..installed_input.mailbox import Mailbox
+                execution = {'format_version': 1, 'execution_nonce': args.execution_nonce,
+                    'source_commit': source, 'driver_tree': driver_tree, 'artifact_id': args.artifact_id,
+                    'environment_id': 'diagnostic-desktop', 'variant_id': 'diagnostic-native-input'}
+                mailbox = Mailbox(execution, args.input_vm_id)
+                mailbox.create()
+                binding['native_input'] = {'format_version': 1, 'vm_id': args.input_vm_id, 'binding': execution}
             first = (observe_startup(binding, retained, "continued-startup",
                 {"execution_nonce": args.execution_nonce, "existing_profile_preserved": True})
                 if args.continue_installed else prepare_first_launch(binding, retained))

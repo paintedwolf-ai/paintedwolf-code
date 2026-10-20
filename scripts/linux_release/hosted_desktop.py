@@ -15,6 +15,7 @@ import time
 from .installed_environment import release
 
 USER = 'paintedwolf-test'
+INSTALL_PARENT = Path('/opt')
 PACKAGES = ['gdm3', 'gnome-session', 'gnome-shell', 'gnome-settings-daemon', 'gnome-keyring',
             'at-spi2-core', 'python3-pyatspi', 'dbus-x11', 'xserver-xorg-core',
             'xserver-xorg-video-dummy', 'xserver-xorg-input-libinput', 'x11-xserver-utils',
@@ -80,6 +81,33 @@ def selected_controller(environment: dict, explicit: str | None) -> str:
     return selected
 
 
+def prepare_install_parent() -> dict:
+    validate_host(os.environ, os.getuid(), platform.machine(), release())
+    path = INSTALL_PARENT
+    if path.resolve(strict=True) != path or os.path.lexists(path / 'painted-wolf-code'):
+        raise ValueError('hosted package preparation preserves existing or nonphysical installation owners')
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        before = os.fstat(descriptor)
+        mode = stat.S_IMODE(before.st_mode)
+        if (not stat.S_ISDIR(before.st_mode) or (before.st_uid, before.st_gid) != (0, 0)
+                or mode not in {0o755, 0o777}):
+            raise ValueError('hosted installation parent has an undeclared owner or permission policy')
+        if mode == 0o777:
+            # Hosted runners can supply /opt world-writable; package trust requires
+            # an administrator-owned ancestor before any installed code can run.
+            os.fchmod(descriptor, 0o755)
+        after, current = os.fstat(descriptor), path.lstat()
+        identity = lambda info: (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode)
+        if (identity(after) != identity(current) or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
+                or (after.st_uid, after.st_gid) != (0, 0) or stat.S_IMODE(after.st_mode) != 0o755):
+            raise ValueError('hosted installation parent changed during secure preparation')
+        return {'path': '/opt', 'uid': 0, 'gid': 0, 'before_mode': mode, 'prepared_mode': 0o755,
+                'device': after.st_dev, 'inode': after.st_ino}
+    finally:
+        os.close(descriptor)
+
+
 def desktop_record(environment: dict, controller: str, checkout: Path, session: dict, account) -> dict:
     return {'format_version': 1, 'controller_commit': selected_controller(environment, controller),
             'workflow_commit': environment['GITHUB_SHA'], 'github_run_id': environment['GITHUB_RUN_ID'],
@@ -107,6 +135,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
         pass
     else:
         raise ValueError('hosted desktop account already exists; preserving its owner')
+    install_parent = prepare_install_parent()
     run(['apt-get', 'update'])
     run(['apt-get', 'install', '-y', '--no-install-recommends', *PACKAGES])
     run(['useradd', '--create-home', '--shell', '/bin/bash', USER])
@@ -170,6 +199,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     os.lchown(home / '.Xauthority', account.pw_uid, account.pw_gid)
     fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': '/opt/painted-wolf-code'}) + '\n')
     result = desktop_record(os.environ, selected, controller, session, account)
+    result['install_parent_preparation'] = install_parent
     fresh(output, json.dumps(result, indent=2, sort_keys=True) + '\n')
     return result
 
