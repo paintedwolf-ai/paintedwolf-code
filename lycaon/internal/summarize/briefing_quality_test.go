@@ -44,7 +44,9 @@ func TestBriefingRetainsRelevantSectionAcrossDefinitionDensity(t *testing.T) {
 }
 
 func TestNextActionArgumentsAreExecutableReadRange(t *testing.T) {
-	raw, err := json.Marshal(NextAction{Tool: "read", Path: "source.go", Lines: "40-63", Why: "Inspect source detail"})
+	actionInput, err := (NextAction{Tool: "read", Path: "source.go", Lines: "40-63", Why: "Inspect source detail"}).PortableInspection()
+	testutil.FailErr(t, "select explicit active portable entry", err)
+	raw, err := json.Marshal(actionInput)
 	testutil.FailErr(t, "encode read action", err)
 	var action struct {
 		Tool string
@@ -148,7 +150,9 @@ func TestSourceFocusUsesCodeIdentifiersForBroadQuestion(t *testing.T) {
 func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
 	path := "src/quote'$(touch marker);\\native\nfile.go"
 	for _, tool := range []string{"read", "grep", "find", "list_dir"} {
-		raw, err := json.Marshal(NextAction{Tool: tool, Path: path, Pattern: "a'$(false)"})
+		action, err := (NextAction{Tool: tool, Path: path, Pattern: "a'$(false)"}).PortableInspection()
+		testutil.FailErr(t, "select explicit portable action", err)
+		raw, err := json.Marshal(action)
 		testutil.FailErr(t, "encode actual inspection action", err)
 		var wire actionWire
 		testutil.FailErr(t, "decode command action", json.Unmarshal(raw, &wire))
@@ -179,11 +183,21 @@ func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"bad\x00path", "bad\xffpath"} {
-		if _, err := json.Marshal(NextAction{Tool: "read", Path: path}); err == nil {
+		if _, err := (NextAction{Tool: "read", Path: path}).PortableInspection(); err == nil {
 			t.Fatal("unrepresentable command source silently changed")
 		}
 	}
 	if _, err := json.Marshal(NextAction{Tool: "read", Path: "source", Lines: "1-2;false"}); err == nil {
 		t.Fatal("invalid range admitted")
+	}
+}
+
+func TestOrdinarySummarizeRetainsReachableStructuredAction(t *testing.T) {
+	raw, err := json.Marshal(NextAction{Tool: "read", Path: "source.go", Lines: "40-63"})
+	testutil.FailErr(t, "encode ordinary structured action", err)
+	var action actionWire
+	testutil.FailErr(t, "inspect ordinary action", json.Unmarshal(raw, &action))
+	if action.Tool != "read" || action.Args.Path != "source.go" || action.Args.Offset != 40 || action.Args.Limit != 24 || action.Args.Command != "" {
+		t.Fatalf("ordinary consumer prematurely activated portable entry: %s", raw)
 	}
 }

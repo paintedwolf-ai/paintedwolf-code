@@ -28,7 +28,13 @@ func (l *ProgramFeedbackLease) Close() {
 	if l == nil {
 		return
 	}
-	l.once.Do(func() { l.Binding = ProgramExecutionBinding{}; l.Projection = ProgramProjection{}; l.release() })
+	l.once.Do(func() {
+		l.Binding = ProgramExecutionBinding{}
+		l.Projection = ProgramProjection{}
+		if l.release != nil {
+			l.release()
+		}
+	})
 }
 
 // ReadProgramFeedback measures and hydrates the exact same read snapshot. A

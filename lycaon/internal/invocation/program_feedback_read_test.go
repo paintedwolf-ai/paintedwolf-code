@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -67,4 +68,12 @@ func TestProgramFeedbackStateRefusalPrecedesHydration(t *testing.T) {
 	if lease != nil || !errors.Is(err, denied) || held != 0 {
 		t.Fatalf("state refusal lost or base lease leaked: %v held=%d", err, held)
 	}
+}
+
+func TestProgramFeedbackLeaseZeroAndNilClose(t *testing.T) {
+	var absent *invocation.ProgramFeedbackLease
+	absent.Close()
+	var zero invocation.ProgramFeedbackLease
+	zero.Close()
+	zero.Close()
 }

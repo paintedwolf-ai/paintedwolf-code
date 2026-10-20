@@ -6196,6 +6196,8 @@ export interface components {
                 task?: string;
                 pattern?: string;
                 cursor?: string;
+                offset?: number;
+                limit?: number;
             };
             /** @enum {string} */
             kind: "inspect" | "continue";

@@ -16459,6 +16459,10 @@ components:
               type: string
             cursor:
               type: string
+            offset:
+              type: integer
+            limit:
+              type: integer
         kind:
           type: string
           enum:
