@@ -76,6 +76,66 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
+ - name: paintedwolf.native_operation
+   type: string
+ - name: paintedwolf.program_id
+   type: string
+ - name: paintedwolf.execution_id
+   type: string
+ - name: paintedwolf.node_id
+   type: string
+ - name: paintedwolf.source_unit_id
+   type: string
+ - name: paintedwolf.model_tool_call_id
+   type: string
+ - name: paintedwolf.native_command
+   type: string
+ - name: paintedwolf.program_completed_effects
+   type: int
+ - name: paintedwolf.program_uncertain_effects
+   type: int
+ - name: paintedwolf.program_executed_children
+   type: int
+ - name: paintedwolf.program_executed_reads
+   type: int
+ - name: paintedwolf.program_static_not_started
+   type: int
+ - name: paintedwolf.program_static_untaken
+   type: int
+ - name: paintedwolf.program_completed_details_retained_omitted
+   type: int
+ - name: paintedwolf.program_unknown_details_retained_omitted
+   type: int
+ - name: paintedwolf.program_effect_details_omitted
+   type: bool
+ - name: paintedwolf.program_stopped_details_omitted
+   type: bool
+ - name: paintedwolf.program_completed_details
+   type: list<map>
+ - name: paintedwolf.program_unknown_details
+   type: list<map>
+ - name: paintedwolf.program_stopped_details
+   type: list<map>
+ - name: paintedwolf.program_detail_ref
+   type: string
+ - name: paintedwolf.program_progress_state
+   type: string
+ - name: paintedwolf.program_progress_ref
+   type: string
+ - name: paintedwolf.program_progress_ref_omitted
+   type: bool
+ - name: paintedwolf.program_progress_owner_invoked
+   type: bool
+ - name: paintedwolf.program_progress_execution_id
+   type: string
+ - name: paintedwolf.program_progress_detail_ref
+   type: string
+ - name: paintedwolf.program_replay_available
+   type: bool
+ - name: paintedwolf.program_replay_source_ref
+   type: string
+ - name: paintedwolf.program_replay_limitation
+   type: string
  - name: paintedwolf.json_unescaped_newline
    type: bool
  - name: paintedwolf.json_unexpected_end
