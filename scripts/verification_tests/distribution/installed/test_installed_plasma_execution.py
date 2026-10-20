@@ -1,5 +1,4 @@
 """Plasma monitor observations retain typed compositor authority and exact active scales."""
-import copy
 import json
 import os
 import unittest
