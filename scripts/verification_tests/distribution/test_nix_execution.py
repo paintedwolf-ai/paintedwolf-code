@@ -89,6 +89,14 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv e
                 self.assertEqual(command[-1], "git+file://" + str(self.root) + "#checks." + system + ".nixos-module")
                 self.assertIn("--no-write-lock-file", command)
 
+    def test_finalized_scanner_has_a_fixed_native_component_selection(self):
+        with patch.object(nix.platform, "system", return_value="Linux"), \
+                patch.object(nix.platform, "machine", return_value="x86_64"):
+            command = nix.command("build", self.root, "scanner-finalized")
+            self.assertEqual(command[-1], "git+file://" + str(self.root) + "#packages.x86_64-linux.scanner-finalized")
+            self.assertIn("sandbox", command)
+            self.assertIn("true", command)
+
     def test_archive_exports_only_after_build_and_keeps_credentials_out(self):
         with tempfile.TemporaryDirectory() as parent:
             archive = Path(parent) / "closure"
