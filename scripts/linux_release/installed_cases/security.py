@@ -21,6 +21,7 @@ from .kernel import private_shared_memory, restricted_namespaces, helper_boundar
 from .process import run
 from .terminal import terminal_interaction
 from .browser import browser_sandbox
+from .browser_network import denied_local_services, allowed_local_server
 from .products import require_owned_guest
 from .records import CaseUnavailable, CaseFailed, retain
 from .security_boundary import filesystem_egress
@@ -178,7 +179,9 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
              'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
-PROBES = {('browser', 'browser-sandbox-composition'): browser_sandbox,
+PROBES = {('browser', 'denied-local-services'): denied_local_services,
+          ('browser', 'allowed-local-server'): allowed_local_server,
+          ('browser', 'browser-sandbox-composition'): browser_sandbox,
           ('processes', 'terminal-interaction'): terminal_interaction,
           ('processes', 'host-execution-lifetime'): host_execution_lifetime,
           ('processes', 'background-cancel'): background_cancel,
