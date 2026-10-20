@@ -45,6 +45,8 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
             except CaseUnavailable:
                 pass
             observations['normal_optional_setup_skip'] = skipped
+            if skipped:
+                ui.find(ui.api.ROLE_PUSH_BUTTON, 'Open a folder…')
             opened = run(app.binding, 'pw', ['open', str(path.parent)], timeout=30)
             observations['project_open'] = {key: value for key, value in opened.items() if key not in {'stdout', 'stderr'}}
             streams = {'project-open-' + name: opened[name][:512 << 10] for name in ('stdout', 'stderr')}
