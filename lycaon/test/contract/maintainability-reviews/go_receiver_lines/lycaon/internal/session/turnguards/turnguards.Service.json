@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/session/turnguards/turnguards.Service",
+  "kind": "runtime_service",
+  "workstream": "coordinator-communication",
+  "disposition": "retain",
+  "reason": "The service composes pre-invoke observers and policy admission. Wait visibility adds one observer call; transcript inspection stays in the coordinator guard and does not create another admission owner.",
+  "reviewed_commit": "5a4ee0af96857664ba3f7212498f74fe8792a3f1",
+  "ceiling": 438,
+  "boundaries": {
+    "lycaon/internal/session/wait_visibility_guard_test.go": "ab6282d74bf781d89c86ca851b0530a085df237a52a0e67a36b959d574ba5ee0"
+  },
+  "reviewed_shape": "ad8e5f5e9a89fa8c36873e56efa46ff61ea5f2bf9991ad442e021eff568d6dc5"
+}

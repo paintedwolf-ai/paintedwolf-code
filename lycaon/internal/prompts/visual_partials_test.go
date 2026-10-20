@@ -53,7 +53,7 @@ func TestClaimEvidenceTableCoversAllRows(t *testing.T) {
 		"screenshots are not measurements",
 		"terminal_snapshot",
 		"terminal_capture",
-		"surface_snapshot{tui}",
+		"tui#",
 		"piped",
 		"screen evidence",
 		"visual self-review",
@@ -75,6 +75,7 @@ func TestClaimEvidenceTableCoversAllRows(t *testing.T) {
 		"terminal_open", "terminal_send", "terminal_read",
 		"page_open", "page_act", "page_snapshot", "page_close",
 		"TUI_NOT_DRIVEN",
+		"surface_snapshot",
 	} {
 		if strings.Contains(out, banned) {
 			t.Fatalf("procedural detail %q must not appear in the claim-evidence floor", banned)
@@ -122,7 +123,7 @@ func TestClaimEvidenceRowsGateOnTools(t *testing.T) {
 		"agent_skills":                  listedSkills("verify-terminal-change"),
 	})
 	testutil.FailErr(t, "render claim-evidence terminal-only", err)
-	for _, want := range []string{"terminal_snapshot", "surface_snapshot{tui}", "piped", "screen evidence", "verify-terminal-change"} {
+	for _, want := range []string{"terminal_snapshot", "tui#", "piped", "screen evidence", "verify-terminal-change"} {
 		if !strings.Contains(terminalOnly, want) {
 			t.Fatalf("terminal row missing %q; got %q", want, terminalOnly)
 		}
@@ -136,7 +137,7 @@ func TestClaimEvidenceRowsGateOnTools(t *testing.T) {
 		"agent_skills":                 listedSkills("verify-terminal-change"),
 	})
 	testutil.FailErr(t, "render claim-evidence sealed-only", err)
-	for _, want := range []string{"terminal_capture", "surface_snapshot{tui}", "flat", "verify-terminal-change"} {
+	for _, want := range []string{"terminal_capture", "tui#", "flat", "verify-terminal-change"} {
 		if !strings.Contains(sealedOnly, want) {
 			t.Fatalf("sealed terminal row missing %q; got %q", want, sealedOnly)
 		}
@@ -272,6 +273,7 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 		"PRESENT_MARKDOWN_EMBED",
 		"![caption](artifact-uuid)",
 		"proof_json.visual_artifact_ids",
+		"surface_snapshot",
 	} {
 		if strings.Contains(both, banned) {
 			t.Fatalf("show guidance restates presentation mechanics %q; that is the closeout contract's to state", banned)
@@ -289,7 +291,7 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 	if !strings.Contains(terminalOnly, "Snapshot the terminal") || !strings.Contains(terminalOnly, "terminal_snapshot") {
 		t.Fatalf("expected terminal show path; got %q", terminalOnly)
 	}
-	for _, want := range []string{"terminal_open", "terminal_send", "surface_snapshot{tui}", "verify-terminal-change"} {
+	for _, want := range []string{"terminal_open", "terminal_send", "tui#", "verify-terminal-change"} {
 		if !strings.Contains(terminalOnly, want) {
 			t.Fatalf("terminal-only show path missing %q; got %q", want, terminalOnly)
 		}
@@ -308,7 +310,7 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 		"agent_skills":                 listedSkills("verify-terminal-change"),
 	})
 	testutil.FailErr(t, "render show partial sealed-only", err)
-	for _, want := range []string{"terminal_capture", "same call", "surface_snapshot{tui}", "never replay saved output"} {
+	for _, want := range []string{"terminal_capture", "same call", "tui#", "never replay saved output"} {
 		if !strings.Contains(sealedOnly, want) {
 			t.Fatalf("sealed-only show path missing %q; got %q", want, sealedOnly)
 		}
@@ -421,7 +423,7 @@ func TestInvestigateShellRendersLoadedVisualProcedure(t *testing.T) {
 		"Visual evidence",
 		"Snapshot the running UI",
 		"Snapshot the terminal",
-		"surface_snapshot{tui}",
+		"tui#",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("investigate shell missing section/progress token %q", want)

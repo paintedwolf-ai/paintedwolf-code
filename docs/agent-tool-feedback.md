@@ -27,6 +27,19 @@ program output are unaffected. Exact replacement calls require representable
 paths and known output bytes; uncertain quoting, expansion, or output options
 retain recovery guidance without synthesized file content.
 
+## Internal tool-step notes
+
+Assistant text accompanying native tool calls is an internal working note, hidden
+from the user. Model-facing transcript projection labels that visibility while
+preserving the note, tool calls, arguments, results, and model reasoning. The
+frame is catalog-authored and carries no instruction authority. It appears only
+on nonempty tool-step text; public agent notes and final no-tool replies retain
+their presentation.
+
+Framing happens after canonical history and reasoning rehydration. Repeated
+projection is idempotent. Stored messages and the user-facing transcript remain
+unchanged; execution and completion still come from tool results.
+
 ## Source text in model requests
 
 Successful native content, symbol, and range reads retain their structured result
@@ -57,6 +70,32 @@ Lifecycle anchors determine when feedback is emitted. One anchor catalog drives 
 
 The channel follows the event lifecycle. A tool argument error is immediate; a closeout-grounding failure discovered after the model stops is a next-turn nudge; a background scan completion is a completion item.
 
+## User updates before waiting
+
+`WAIT_HIDDEN_TEXT` blocks a coordinator `wait` when its current tool batch
+contains nonempty assistant text, `surface_note` is offered, and no agent note
+has been committed in that batch. Tool-step assistant text is hidden from the
+user; waiting does not publish it. A prior batch's note does not satisfy this
+boundary, and a rejected note does not count as a committed update.
+
+The model can send a grounded `surface_note` with `wait`, or retry `wait` with
+empty assistant text if no user update is needed. The host does not classify
+what the text means or demand notes on ordinary action calls. Workers and
+surfaces without `surface_note` are unaffected.
+
+## Argument and artifact recovery
+
+Schema rejection repairs the rejected argument object; it does not recommend a
+whole-file write merely because an edit is malformed. Source-read prerequisites
+from an earlier mismatch still apply. Explicit full-file writes remain available
+under their normal admission rules.
+
+Unknown visual IDs distinguish an empty current-turn inventory from available
+stills. Recovery names page capture or snapshot tools only when offered on the
+rejected request; otherwise it can suggest offered discovery or report the
+limitation. A source write is not a rendered capture, and discovering a tool does
+not execute it. Existing artifact provenance and note grounding remain enforced.
+
 ## Compact reject block (spec posture)
 
 The spec-posture template ([`reject/spec-posture-block.md`](../lycaon/config/packs/painted-wolf/platform/guidance/reject/spec-posture-block.md)) renders:
@@ -80,12 +119,64 @@ A block answers four questions without narrating implementation: which transitio
 
 ### Typed detail conventions
 
+Oversized feedback preserves a small set of actionable host observations
+through the shared transcript projection: identities, parser locations, failed
+fields, and bounded issue or browser-state inventories. Ordinary diagnostic
+fallbacks have a 2 KiB encoded limit; review fallbacks retain their 12 KiB limit.
+Each selected value is at most 1 KiB, lists retain at most eight entries, and
+nested repairs stop after two levels. Values deeper than ten JSON containers
+are omitted. Bounds include JSON escaping and omission metadata.
+
+Selected values remain complete; a replacement call is never trimmed into a
+different executable operation. The original result stays unchanged, with
+omission markers and its durable result reference on the projected fallback.
+This presentation boundary does not alter OAR facts, selection, copy grammar,
+or occurrence delivery.
+
 - Browser action failures retain the original zero-based `index` and a bounded `completed_actions` prefix (index, type, locators per completed step). Those effects remain applied; the failing step may also have taken effect before settling failed. `interactive_controls` retains observed control names, text, and disabled state; `interactive_truncated` says the inventory is partial. An absent disabled value is unknown, not enabled. Successful idle waits return the settled control state.
 - Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/toolrejection/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
 
 - `TOOL_ARGS_INVALID` explains a schema failure in terms of what the caller wrote ([`tools/argdiag`](../lycaon/internal/tools/argdiag)). A member that a closed object does not declare, and that exactly one adjacent object (its parent or one child) declares and lacks, is reported as `misplaced_fields` with `found_under` and `belongs_under`, at any depth. A string in a declared object or array slot is JSON text: `json_encoded` when it parses, `json_malformed` when it does not. Malformed text names where reading stopped — `json_open_paths` for containers still open at the end, or the 1-based byte of an unexpected token, unterminated string, or trailing text — and the members its structure misplaces as written; `close_before` names where an object read too far should have closed. Members written after the value closed are `json_trailing_members`, placed under `json_trailing_belongs_under`: the slot when it declares them, or the object beside it when the text swallowed the call's other arguments. When every finding is repairable and the repaired call validates, `replacement_args_json` restates it, up to 3 KB; the host never applies a repair itself.
 
+Missing arguments publish `missing_required_arguments` from actual validation
+failures at the root schema and instance. The JSON observation names missing
+arguments, directly declared types where known, and received keys. It is capped
+at 1 KiB after encoding, with at most eight missing and eight received names;
+names over 128 bytes are omitted whole and counts record omissions. Oversized
+received-key samples are removed before missing names. If no missing name fits,
+the generic diagnostic remains.
+
+Requirements from alternative schema branches, referenced schemas, or nested
+objects do not become unconditional root requirements. Referenced or union
+property types remain unspecified. OAR uses the declared string fact through
+standard copy interpolation; it does not parse diagnostic prose or synthesize
+argument values. Existing exact replacement guidance remains available.
+
 An argument validator can also report `inapplicable_fields` when named fields do not apply to the current host state. This is an observation of validation, published as the typed OAR fact `paintedwolf.inapplicable_fields`. The `TOOL_ARGS_INVALID` rule renders the instruction to omit those fields and preserve the remaining arguments; the host does not rewrite or execute a repaired call.
+
+## Bounded host diagnostics
+
+When generic feedback leaves the agent guessing, extend the failing subsystem's
+typed observations first. Useful details identify the failed operation, the
+observed constraint or parser state, and the smallest available recovery step.
+Unknown locations, effects, and causes remain unknown. Catalog copy consumes
+those facts through the existing OAR anchor; error prose never selects policy.
+
+Bound diagnostics before rendering: cap encoded bytes, item counts, nesting,
+and any source excerpt. Keep complete records and mark omitted details rather
+than cutting JSON or source tokens mid-value. Prefer a durable result reference
+over copying full arguments, schemas, documents, or logs into the prompt.
+Each producer needs an explicit bound; the outer feedback projection limit is
+not a target size for individual errors. Repeated delivery also needs a lifecycle
+bound, through the existing recovery allowance or OAR occurrence conditions.
+Do not silently drop resolved OAR occurrences or rewrite canonical history.
+
+Provider JSON recovery currently has three closed diagnostic categories:
+unescaped newline, unexpected end, and invalid escape. They render fixed-size
+copy with no provider text or argument contents interpolated. The provider
+does not supply the dropped arguments, so this feedback cannot identify a field,
+byte offset, container stack, or repaired call. Unknown parser errors retain
+generic guidance. Recovery retains its existing two-attempt allowance.
 
 ## Reachable-remedy rule
 
@@ -231,12 +322,24 @@ Matched results explain how to recover their public records when no body is pres
 
 `update_progress` reports `status: updated` or `status: unchanged`; this is a
 checklist write result, not gate admission. An identical write adds no revision
-or progress event. Pending rows permit implementation. A successful worker
+or progress event and does not reset tool-repetition tracking. Rewording an
+all-terminal checklist retains the same repetition identity until intervening
+work changes the state. Pending rows permit implementation. A successful worker
 finish can latch reconciliation before further dispatch or editing; an unchanged
 checklist does not clear that latch. Closeout recovery keeps unfinished rows
 pending and directs the coordinator to continue with tools. Completed work is
-recorded before the final response. A tool-free response ends the turn, so
+recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
 continuing progress updates use `surface_note`.
+
+### Rejected source candidates
+
+`MUTATION_BROKE_PARSE` locations describe the proposed candidate, which was not saved
+at the rejected path. The mutation producer supplies `mutation_new_path` from
+its observed before-state. OAR uses that fact to distinguish retrying creation
+from reading the saved file before repair. This observation does not establish
+that the path is still absent: a later writer may have created it. Multi-file
+rewrite feedback remains scoped to each rejected path; successful siblings may
+already have been saved.
 
 ### Editing after source discovery
 
@@ -324,3 +427,40 @@ identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
+
+### Current execution observations
+
+The coordinator receives a bounded information anchor after its board, from paired invocation
+receipts in the current user intent's retained history. Catalog instructions retain
+system authority; receipt fields and arguments remain separately marked data. It distinguishes tool
+completion from a command owner's source-bound verdict. It does not infer task
+completion, execute retries, or change the selected verification method.
+
+Unexecuted file mutations and progress-gated calls remain visible after tool loading
+or a checklist update. A later
+successful call with the same tool and argument digest retires that reminder;
+other operations may supersede the work without being treated as an exact retry.
+A new user intent clears the projection. Three rejected calls and three execution
+receipts are shown, with explicit omitted counts. Oversized argument values are
+omitted rather than rewritten into partial commands. The selected project check
+is included when execution observations exist.
+
+Recorded verdicts describe their original source, not a new freshness assertion.
+Full results and arguments remain in history. Live-job command previews are
+limited to 64 runes; stable handles and output controls retain access to details.
+
+Live evaluation uses captured provider requests and independent artifact checks.
+A better next action in a replay is insufficient to establish reliable recovery
+through an entire task.
+
+The execution projection is silent on successful execution paths without pending
+rejected operations. Output retrieval alone does not clear a failed execution
+observation. Each rejected operation records only prerequisite calls completed
+after that rejection; those historical events do not assert current tool availability,
+permission, or task completion. Rebuilding the projection never modifies canonical
+messages or invocation receipts.
+
+Rejected source mutations remain in these observations even when their handler
+started. The summary distinguishes rejection after invocation from a call that
+never executed; it does not infer whether a file exists, remains unchanged, or
+has partial effects. This distinction applies across supported languages.

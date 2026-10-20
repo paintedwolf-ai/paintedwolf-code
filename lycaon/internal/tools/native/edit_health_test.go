@@ -28,6 +28,9 @@ func TestMutationHealthFlagsRegression(t *testing.T) {
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
+	if reject.Data["mutation_new_path"] != false {
+		t.Fatalf("existing path reported as new: %+v", reject.Data)
+	}
 	got, err := os.ReadFile(filepath.Join(tmpDir, "a.go"))
 	testutil.FailErr(t, "read", err)
 	if string(got) != cleanGoFixture {
@@ -70,6 +73,9 @@ func TestMutationHealthRejectsBrokenNewFile(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
+	}
+	if reject.Data["mutation_new_path"] != true {
+		t.Fatalf("missing new-path observation: %+v", reject.Data)
 	}
 	if _, statErr := os.Stat(filepath.Join(tmpDir, "new.py")); !os.IsNotExist(statErr) {
 		t.Fatalf("broken new file was applied: %v", statErr)
@@ -156,6 +162,40 @@ func TestWriteGoWithoutFinalNewlinePreservesSourceAndParseGuard(t *testing.T) {
 			testutil.FailErr(t, "read preserved source", err)
 			if string(got) != string(source) {
 				t.Fatal("rejected overwrite changed valid source")
+			}
+		})
+	}
+}
+
+func TestWritePythonShortStringRejectsBeforeMutation(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		name := "new"
+		if existing {
+			name = "existing"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "app.py")
+			original := "print('ready')\n"
+			if existing {
+				testutil.FailErr(t, "seed valid Python", os.WriteFile(path, []byte(original), 0600))
+			}
+			tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
+			_, err := tool.Run(t.Context(), map[string]any{
+				"path": "app.py", "content": "print(f\"Words: {words}\nCharacters: {chars}\")\n",
+			}, nativefixture.Context(root))
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
+				t.Fatalf("invalid Python rejection = %v", err)
+			}
+			got, err := os.ReadFile(path)
+			if existing {
+				testutil.FailErr(t, "read preserved Python", err)
+				if string(got) != original {
+					t.Fatalf("rejected write changed source: %q", got)
+				}
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("rejected new file exists: %q, err=%v", got, err)
 			}
 		})
 	}

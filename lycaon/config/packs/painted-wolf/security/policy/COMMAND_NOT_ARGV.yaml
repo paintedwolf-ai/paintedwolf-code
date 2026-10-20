@@ -17,6 +17,7 @@ requires:
   - paintedwolf.use_pipeline_array
   - paintedwolf.use_stdin_param
   - paintedwolf.use_background_param
+  - paintedwolf.directory_change
   - paintedwolf.env_assignment
   - paintedwolf.use_substitution_result
   - paintedwolf.scratch_var
@@ -31,7 +32,11 @@ copy:
   what: '{% if paintedwolf.shell_metacharacters %}command rejected — unquoted shell metacharacters in `{{ paintedwolf.command
     }}`{% else %}command `{{ paintedwolf.command }}` is not a single argv vector{% endif %}'
   cause: '{{ paintedwolf.rejection_reason }}'
-  why: '{% if paintedwolf.terminal_capture %}
+  why: '{% if paintedwolf.directory_change %}
+
+    Each invocation starts in its own `cwd`; running `cd` cannot change the working directory of later commands.
+
+    {% else %}{% if paintedwolf.terminal_capture %}
 
     `command` with `terminal_capture` captures one program in one terminal screen. Sequences and pipelines run multiple
     programs; shell substitutions are not expanded.
@@ -52,8 +57,13 @@ copy:
     `>>`, `2>`, `&>`, `2>&1`) are wired by the host; here-documents are not. Inside quotes all of them are literal
     argument text.
 
-    {% endif %}{% endif %}'
-  fix: '{% if paintedwolf.terminal_capture %}
+    {% endif %}{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.directory_change %}
+
+    Remove `cd` and its directory argument from `command`. Set `cwd` to that directory and start `command` with
+    the executable. For the workspace root use `cwd: "."`; for a subdirectory use its workspace-relative path.
+
+    {% else %}{% if paintedwolf.terminal_capture %}
 
     Keep `terminal_capture` and send one argv line. The result already includes `exit_code`; do not append `echo
     $?`. Put environment assignments in `env`. For composed execution, omit `terminal_capture` and use the sequence
@@ -99,15 +109,26 @@ copy:
     Retry with one argv vector per stage (e.g. `go test ./...`, `pytest .`, `cargo test`), a `&&` sequence, or a
     `pipeline` array.
 
-    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{%
+    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{%
     else %}{% if not paintedwolf.reissue_via_command %}`&&`/`||`/`;`/`|` sequence/pipe commands,
     `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form
-    under `command`{% endif %}{% endif %}'
+    under `command`{% endif %}{% endif %}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_surface
 x-paintedwolf-message: command rejected
 x-paintedwolf-scenarios:
+- id: directory_change
+  tool: command
+  vars:
+    command: cd src && tool --check
+    reason: '`cd` changes only its own process; pass cwd'
+    directory_change: true
+  expect_contains:
+  - 'Code: COMMAND_NOT_ARGV'
+  - Remove `cd` and its directory argument
+  - 'cwd: "."'
+  - Set `cwd` and remove `cd` from `command`
 - id: capture_sequence
   tool: command
   vars:

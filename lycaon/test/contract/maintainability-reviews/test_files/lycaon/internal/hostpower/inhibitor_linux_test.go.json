@@ -4,11 +4,12 @@
   "kind": "test_suite",
   "workstream": "linux-native-service-capabilities",
   "disposition": "retain",
-  "reason": "Retain the shared private-bus fixtures and three inhibition protocol contracts as one bounded suite. Provider selection, descriptor lifetime, portal attribution, and explicit release reuse the same isolated bus and native service fixtures. New activation and owner-replacement contracts live in separate feature suites. The measured 512-line suite has no growth allowance; any growth renews this decision.",
-  "reviewed_commit": "b982e678efe3325ffeec6ec9a05db7c6742b536a",
-  "ceiling": 512,
+  "reason": "Retain the shared private-bus fixtures and three inhibition protocol contracts as one bounded suite within a 525-line ceiling. Provider selection, descriptor lifetime, portal attribution, and explicit release reuse the same isolated bus and native service fixtures, while readiness requires the same bounded authenticated connection used by each consumer. New activation and owner-replacement contracts live in separate feature suites.",
+  "reviewed_commit": "d08dbf4181a8647c8744b0f69b6f7505d7c562a5",
+  "ceiling": 525,
   "boundaries": {
-    "lycaon/internal/hostpower/inhibitor_linux_test.go": "a5a19ab44e02493b4155947f59d5a4faa3dc8f7e8610d8ac1e277a02308f4775",
-    "lycaon/internal/hostpower/activation_linux_test.go": "935ddfb96151862b8aa45e4c2e63526447addf010c233f1994f277c06e6cefd0"
+    "lycaon/internal/hostpower/inhibitor_linux_test.go": "f1ea6abb4ba0e92a580aab5fc859870dd4492d7778032897b49512bba82b3853",
+    "lycaon/internal/hostpower/activation_linux_test.go": "935ddfb96151862b8aa45e4c2e63526447addf010c233f1994f277c06e6cefd0",
+    "lycaon/internal/linuxbus/connection_linux.go": "e9637bdc91c89c3a151930a080a4f9d70b680acd830e958e044e64843af36ae2"
   }
 }

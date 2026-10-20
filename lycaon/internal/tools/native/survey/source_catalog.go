@@ -99,15 +99,16 @@ func sourceInventoryForScope(
 		svc = sourcecatalog.Process()
 	}
 	whole := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID, catalogDir: base, rootID: root.ID, base: base}
-	if base != "." {
-		if svc.BoundaryPath(ctx, root.Path, base, true) != "" {
-			scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
-			snapshot, err := svc.ObserveDependencyScope(ctx, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path})
-			if err != nil {
-				return sourceInventory{}, err
-			}
-			return reportedInventory(ctx, scoped, snapshot, false), nil
+	// Scratch writes have no project watcher; explicitly scoped trees need a fresh walk.
+	if root.ID == projectroot.VirtualScratchLabel || (base != "." && svc.BoundaryPath(ctx, root.Path, base, true) != "") {
+		scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
+		snapshot, err := svc.ObserveDependencyScope(ctx, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path})
+		if err != nil {
+			return sourceInventory{}, err
 		}
+		return reportedInventory(ctx, scoped, snapshot, false), nil
+	}
+	if base != "." {
 		// Reuse ready parent snapshot to avoid re-crawling subtrees.
 		current := svc.Current(ctx, projectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
 		if current.State == sourcecatalog.StateReady {

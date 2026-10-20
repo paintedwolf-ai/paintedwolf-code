@@ -20,4 +20,6 @@ Filters = [
     # The bundled browser ships identical locale and hyphenation files.
     "files-duplicated-waste",
     "files-duplicate",
+    # Domain vocabulary in the package summary and description.
+    "spelling-error \\('(Agentic|toolchain)',",
 ]
