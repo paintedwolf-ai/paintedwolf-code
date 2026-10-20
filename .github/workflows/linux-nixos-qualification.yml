@@ -30,6 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         desktop: [gnome, plasma]
+        channel: [nixos-26.05, nixos-unstable]
         architecture: [amd64, arm64]
         include:
           - runner: ubuntu-24.04
@@ -160,13 +161,29 @@ jobs:
             --nix-extra-conf-file "$install_root/nix.conf"
           printf '%s\n' /nix/var/nix/profiles/default/bin >> "$GITHUB_PATH"
 
+      - name: Select the independently pinned image factory and managed controller
+        run: |
+          set -euo pipefail
+          controller=23ba43dc8c99ace21a681106fc559c741479b844
+          factory=07a9d9f539ef98aa8c317add962ebb6f215f4022
+          git fetch --no-tags origin "$controller"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
+          git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
+          git fetch --no-tags origin "$factory"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$factory" ]]
+          git worktree add --detach "$RUNNER_TEMP/nixos-factory-source" "$factory"
+          [[ "$(git -C "$RUNNER_TEMP/nixos-factory-source" rev-parse 'HEAD^{tree}')" == 7eca733ff503da02ebf663f9ed69ba6fe50336b7 ]]
+
       - name: Build and archive the native NixOS desktop factory
-        working-directory: ${{ steps.source.outputs.path }}
+        working-directory: ${{ runner.temp }}/nix-build-controller
         env:
           DESKTOP: ${{ matrix.desktop }}
         run: |
           set -euo pipefail
-          ./task nix:build -- --component "nixos-$DESKTOP-vm" --archive-dir "$RUNNER_TEMP/nixos-factory"
+          ./task nix:build -- --component "nixos-$DESKTOP-vm" --archive-dir "$RUNNER_TEMP/nixos-factory" \
+            --factory-source-root "$RUNNER_TEMP/nixos-factory-source" \
+            --factory-source-commit 07a9d9f539ef98aa8c317add962ebb6f215f4022 \
+            --factory-channel '${{ matrix.channel }}' 
 
       - name: Bind the factory to the exact retained application closure
         env:
@@ -179,12 +196,15 @@ jobs:
             --evidence "$PW_ARTIFACT_ROOT" --archive "$RUNNER_TEMP/nixos-factory" --desktop "$DESKTOP" \
             --source-commit "$SOURCE_COMMIT" --source-tree "$EXPECTED_TREE" \
             --lock-sha256 "$(sha256sum '${{ steps.source.outputs.path }}/flake.lock' | cut -d' ' -f1)" \
-            --architecture "$EXPECTED_MACHINE" --controller-commit "$GITHUB_SHA"
+            --architecture "$EXPECTED_MACHINE" --controller-commit "$GITHUB_SHA" \
+            --factory-source-commit 07a9d9f539ef98aa8c317add962ebb6f215f4022 \
+            --factory-source-tree 7eca733ff503da02ebf663f9ed69ba6fe50336b7 \
+            --factory-channel '${{ matrix.channel }}' 
 
       - name: Retain the nonrelease native desktop factory
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: nixos-${{ matrix.desktop }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          name: nixos-${{ matrix.channel }}-${{ matrix.desktop }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
           path: ${{ runner.temp }}/nixos-factory
           if-no-files-found: error
           compression-level: 0
@@ -194,7 +214,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: nixos-${{ matrix.desktop }}-qualification-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          name: nixos-${{ matrix.channel }}-${{ matrix.desktop }}-qualification-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
           path: ${{ runner.temp }}/vm-qualification-evidence
           if-no-files-found: warn
           retention-days: 14
