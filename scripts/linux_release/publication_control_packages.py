@@ -19,7 +19,7 @@ ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
 def stage(document, inputs, destination, source, families, architectures):
     selected = copy.deepcopy(artifacts(document, source["source_commit"]))
     if (not families or not set(families) <= FAMILIES or not architectures
-            or not set(architectures) <= ARCHITECTURES):
+            or not set(architectures) <= set(ARCHITECTURES)):
         raise ValueError("control inputs require explicit native families and architectures")
     if any(row["installation"] not in families or row["architecture"] not in architectures
            or row["identity"]["kind"] != "file" for row in selected.values()):
