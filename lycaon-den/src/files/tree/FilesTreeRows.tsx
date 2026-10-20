@@ -770,6 +770,7 @@ function NamingRow(props: {
           ctx.setNamingDraft(d().rootId, d().dir, e.currentTarget.value)
         }
         onKeyDown={(e) => {
+          if (e.isComposing || e.keyCode === 229) return;
           if (e.key === "Enter") {
             e.preventDefault();
             void ctx.submitName(

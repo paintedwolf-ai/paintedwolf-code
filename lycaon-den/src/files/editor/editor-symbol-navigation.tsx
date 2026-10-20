@@ -135,6 +135,7 @@ export function FilesSymbolMenu(props: { symbols: ReturnType<typeof createEditor
         onDismiss={() => props.symbols.closeSymbolMenu("keep")}
         testId="files-crumb-symbol-menu"
         onKeyDown={(e) => {
+          if (e.isComposing || e.keyCode === 229) return;
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
