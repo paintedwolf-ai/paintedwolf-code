@@ -44,7 +44,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             application_commit: str | None = None) -> int:
     scanner_source = None
     if application_root is not None or application_commit is not None:
-        if component != "scanner-host-tools" or operation != "build" or application_root is None or application_commit is None:
+        if component != "scanner-host-tools" or application_root is None or application_commit is None:
             raise ValueError("Explicit application input is restricted to scanner host-tools builds")
         if not application_root.is_absolute() or application_root.resolve() != application_root:
             raise ValueError("Application input must be a physical absolute checkout")
@@ -88,8 +88,6 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     if prepare_factory_lock:
         return prepare_lock(root, factory_root, factory_commit, role, environment, report)
     if component == "scanner-host-tools":
-        if operation != "build":
-            raise ValueError("Scanner host tools require a native build")
         invocation, report["scanner_tools"] = nix_scanner_tools.command(
             NIX, scanner_source or "git+file://" + str(root), environment)
         if scanner_source is not None:
@@ -98,6 +96,9 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
                                                        cwd=application_root, text=True).strip(),
                 "lock_sha256": hashlib.sha256(factory_source.committed(
                     application_root, application_commit, "flake.lock")).hexdigest()}
+    if component == "scanner-host-tools" and operation == "check":
+        report["passed"] = True
+        return retain_report(root, report, 0)
     result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
@@ -116,12 +117,16 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             result = nix_archive.copy_closure(NIX, outputs, archive, environment)
             report["archive"] = {"path": str(archive), "publication": "nonrelease"}
             report["passed"] = result.returncode == 0
+    return retain_report(root, report, result.returncode)
+
+
+def retain_report(root, report, status):
     directory = artifact_root(root) / "nix"
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{operation}-{time.time_ns()}.json"
+    path = directory / f"{report['operation']}-{time.time_ns()}.json"
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"Nix {operation} report: {path}")
-    return result.returncode
+    print(f"Nix {report['operation']} report: {path}")
+    return status
 
 
 def prepare_lock(root, factory_root, commit, role, environment, report):

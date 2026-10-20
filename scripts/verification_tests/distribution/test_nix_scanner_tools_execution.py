@@ -54,7 +54,8 @@ class NixScannerToolsTests(unittest.TestCase):
 
     def test_preparation_queries_only_the_pinned_application_and_builds_its_selected_tool(self):
         source = 'git+file:///source?rev=' + 'a' * 40
-        with patch.object(host.platform, 'machine', return_value='aarch64'), \
+        with patch.object(host.platform, 'system', return_value='Linux'), \
+                patch.object(host.platform, 'machine', return_value='aarch64'), \
                 patch.object(host.subprocess, 'run', side_effect=[SimpleNamespace(stdout=ROOT),
                     SimpleNamespace(stdout=json.dumps(schema4(graph())))]) as run:
             invocation, selected = host.command(['nix'], source, {'PATH': '/fixed'})

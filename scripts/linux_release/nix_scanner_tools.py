@@ -27,7 +27,7 @@ def scanner_derivation(graph: dict, root: str, system: str) -> dict:
             continue
         visited.add(path)
         if not isinstance(path, str) or re.fullmatch(STORE.removeprefix('/nix/store/') + r'\.drv', path) is None:
-            raise ValueError('derivation graph contains an invalid store identity')
+            raise ValueError('derivation graph contains an invalid store identity: ' + repr(path)[:256])
         row = rows.get(path)
         if not isinstance(row, dict) or row.get('version') != 4 or not isinstance(row.get('inputs', {}).get('drvs'), dict):
             raise ValueError('derivation graph is incomplete')
@@ -55,6 +55,8 @@ def scanner_derivation(graph: dict, root: str, system: str) -> dict:
 
 
 def command(nix, source, environment):
+    if platform.system() != 'Linux' or platform.machine() not in SYSTEMS:
+        raise ValueError('scanner preparation requires a supported native Linux host')
     system = SYSTEMS[platform.machine()]
     selected = source + '#packages.' + system + '.default'
     result = subprocess.run(nix + ['eval', '--raw', '--no-write-lock-file', selected + '.drvPath'],
