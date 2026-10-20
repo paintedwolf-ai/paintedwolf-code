@@ -674,6 +674,119 @@ type HistoryStorageClock struct {
 	Generation int64 `json:"generation"`
 }
 
+type InvocationProgramDeliveries struct {
+	ID             string `json:"id"`
+	OutputID       string `json:"output_id"`
+	ResponseID     string `json:"response_id"`
+	DeliveryID     string `json:"delivery_id"`
+	StartByte      int64  `json:"start_byte"`
+	EndByte        int64  `json:"end_byte"`
+	SourceOwnerRef string `json:"source_owner_ref"`
+	MappingsJson   string `json:"mappings_json"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type InvocationProgramExecutions struct {
+	ID                      string         `json:"id"`
+	ProgramID               string         `json:"program_id"`
+	NodeID                  string         `json:"node_id"`
+	Ordinal                 int64          `json:"ordinal"`
+	ParentExecutionID       string         `json:"parent_execution_id"`
+	ActorID                 string         `json:"actor_id"`
+	ScopeJson               string         `json:"scope_json"`
+	OperationID             string         `json:"operation_id"`
+	DefinitionDigest        string         `json:"definition_digest"`
+	DefinitionJson          string         `json:"definition_json"`
+	ArgumentsDigest         string         `json:"arguments_digest"`
+	ReviewedArgumentsDigest string         `json:"reviewed_arguments_digest"`
+	ArgumentsRef            string         `json:"arguments_ref"`
+	Canonical               string         `json:"canonical"`
+	State                   string         `json:"state"`
+	Owner                   string         `json:"owner"`
+	Lifecycle               string         `json:"lifecycle"`
+	OwnerStarted            int64          `json:"owner_started"`
+	OwnerInvoked            int64          `json:"owner_invoked"`
+	StatusCode              sql.NullInt64  `json:"status_code"`
+	StopCode                string         `json:"stop_code"`
+	HostStopCode            string         `json:"host_stop_code"`
+	OutputPublishable       int64          `json:"output_publishable"`
+	Complete                int64          `json:"complete"`
+	PublicationEligible     int64          `json:"publication_eligible"`
+	PublicationBasis        int64          `json:"publication_basis"`
+	EffectCertainty         string         `json:"effect_certainty"`
+	EvidenceKind            string         `json:"evidence_kind"`
+	EvidenceRef             string         `json:"evidence_ref"`
+	OwnerRef                string         `json:"owner_ref"`
+	RecoveryRef             string         `json:"recovery_ref"`
+	HeldVersionID           string         `json:"held_version_id"`
+	AcceptedRevision        string         `json:"accepted_revision"`
+	PublishedRevision       string         `json:"published_revision"`
+	DetailRef               string         `json:"detail_ref"`
+	ApprovalRef             string         `json:"approval_ref"`
+	StartedAt               string         `json:"started_at"`
+	SettledAt               sql.NullString `json:"settled_at"`
+}
+
+type InvocationProgramNodes struct {
+	ProgramID    string `json:"program_id"`
+	NodeID       string `json:"node_id"`
+	SourceUnitID string `json:"source_unit_id"`
+	StartByte    int64  `json:"start_byte"`
+	EndByte      int64  `json:"end_byte"`
+	Line         int64  `json:"line"`
+	ColumnNumber int64  `json:"column_number"`
+	State        string `json:"state"`
+}
+
+type InvocationProgramOutputs struct {
+	ID                string `json:"id"`
+	ProgramID         string `json:"program_id"`
+	ExecutionID       string `json:"execution_id"`
+	Stream            string `json:"stream"`
+	Reference         string `json:"reference"`
+	RetentionClaimID  string `json:"retention_claim_id"`
+	InitiatingClaimID string `json:"initiating_claim_id"`
+	BlobJson          string `json:"blob_json"`
+	Complete          int64  `json:"complete"`
+	Redacted          int64  `json:"redacted"`
+	MappingsJson      string `json:"mappings_json"`
+	CreatedAt         string `json:"created_at"`
+}
+
+type InvocationProgramSources struct {
+	ProgramID      string `json:"program_id"`
+	SourceUnitID   string `json:"source_unit_id"`
+	SourceID       string `json:"source_id"`
+	Revision       string `json:"revision"`
+	Representation string `json:"representation"`
+	Sha256         string `json:"sha256"`
+	StartByte      int64  `json:"start_byte"`
+	EndByte        int64  `json:"end_byte"`
+	DetailRef      string `json:"detail_ref"`
+}
+
+type InvocationPrograms struct {
+	ID              string         `json:"id"`
+	ParentReceiptID string         `json:"parent_receipt_id"`
+	RootExecutionID string         `json:"root_execution_id"`
+	LanguageVersion int64          `json:"language_version"`
+	CatalogDigest   string         `json:"catalog_digest"`
+	SourceUnitID    string         `json:"source_unit_id"`
+	SourceDigest    string         `json:"source_digest"`
+	SourceRef       string         `json:"source_ref"`
+	SourceExact     int64          `json:"source_exact"`
+	PlanRef         string         `json:"plan_ref"`
+	SyntaxValidated int64          `json:"syntax_validated"`
+	State           string         `json:"state"`
+	StatusCode      sql.NullInt64  `json:"status_code"`
+	StopCode        string         `json:"stop_code"`
+	DetailRef       string         `json:"detail_ref"`
+	ProgressState   string         `json:"progress_state"`
+	ProgressRef     string         `json:"progress_ref"`
+	StartedAt       string         `json:"started_at"`
+	SettledAt       sql.NullString `json:"settled_at"`
+}
+
 type InvocationReceipts struct {
 	ID                   string         `json:"id"`
 	ProjectID            string         `json:"project_id"`
