@@ -242,14 +242,7 @@ class InstalledApp:
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
         if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
-        token_path = config / "api.token"
-        descriptor = os.open(token_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(descriptor, "rb") as stream:
-            info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096:
-                raise ValueError("installed API token is not a private owned file")
-            token = stream.read(4097).decode().strip()
-        api = EngineAPI(port, token)
+        api = EngineAPI(port)
         try:
             health = api.request("GET", "/health")
         except (OSError, ValueError):
@@ -258,6 +251,30 @@ class InstalledApp:
             return False
         if process_identity(pid) != engine:
             raise ValueError("installed engine changed during readiness capture")
+        # GUI launches keep their bearer in native memory. Public health proves
+        # readiness; a pre-existing standalone token must independently authenticate.
+        token_path = config / "api.token"
+        try:
+            descriptor = os.open(token_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            descriptor = None
+        private_available = False
+        if descriptor is not None:
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096:
+                    raise ValueError("installed API token is not a private owned file")
+                token = stream.read(4097).decode().strip()
+            candidate = EngineAPI(port, token)
+            try:
+                private_available = candidate.request("GET", "/v1/providers")["status"] == 200
+            except (OSError, ValueError):
+                private_available = False
+            if private_available:
+                api = candidate
+        if process_identity(pid) != engine:
+            raise ValueError("installed engine changed during private API observation")
+        self.observations["private_api_available"] = private_available
         self.api = api
         self.observations.update({"engine_identity": engine, "engine_port": port, "health": health})
         return True
