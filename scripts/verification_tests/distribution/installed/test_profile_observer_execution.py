@@ -119,3 +119,17 @@ class ProfileObserverTests(unittest.TestCase):
         self.writer.commit()
         with self.assertRaises(ValueError):
             observer.invocations(self.app, SESSION, ['command'])
+
+    def test_shipped_schema_supports_the_fixed_read_projections(self):
+        self.writer.close()
+        self.path.unlink()
+        self.writer = sqlite3.connect(self.path)
+        self.addCleanup(self.writer.close)
+        self.writer.execute('PRAGMA journal_mode=WAL')
+        source = Path(__file__).resolve().parents[4] / 'lycaon/internal/db/schema.sql'
+        self.writer.executescript(source.read_text())
+        self.writer.execute('PRAGMA user_version=4')
+        for path in (self.path, Path(str(self.path) + '-wal'), Path(str(self.path) + '-shm')):
+            path.chmod(0o600)
+        self.assertEqual(observer.sessions_for_project(self.app, PROJECT), [])
+        self.assertEqual(observer.invocations(self.app, SESSION, ['command']), [])
