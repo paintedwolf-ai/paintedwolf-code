@@ -51,7 +51,7 @@ def schema(connection):
 
 
 @contextmanager
-def _database(app):
+def profile(app):
     require_owned_guest(app.binding)
     app.require_running()
     app.require_engine()
@@ -63,38 +63,47 @@ def _database(app):
     image = expected['device'], expected['inode'], expected['bytes']
     if engine_image(engine['pid']) != image:
         raise ValueError('profile observer engine image differs from the installed artifact')
-    profile = Path.home() / '.config/paintedwolf'
-    path = profile / 'store.db'
-    for ancestor in (profile.parent, profile.parent.parent):
+    directory = Path.home() / '.config/paintedwolf'
+    for ancestor in (directory.parent, directory.parent.parent):
         info = ancestor.lstat()
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022
                 or ancestor.resolve(strict=True) != ancestor):
             raise ValueError('profile observation crosses an unsafe owned ancestor')
-    before = physical(profile, True), physical(path)
-    # Do not use immutable=1: it ignores live WAL commits. Existing sidecars
-    # avoid creating an observer-owned WAL/SHM pair in the product profile.
-    for suffix in ('-wal', '-shm'):
-        physical(Path(str(path) + suffix))
-    connection = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)
-    deadline, instructions = time.monotonic() + 2, 0
-    def progress():
-        nonlocal instructions
-        instructions += 1000
-        return int(instructions > 200000 or time.monotonic() > deadline)
-    connection.set_progress_handler(progress, 1000)
-    try:
-        connection.execute('PRAGMA query_only = ON')
-        connection.execute('PRAGMA trusted_schema = OFF')
-        connection.execute('BEGIN')
-        schema(connection)
-        yield connection
-        app.require_running()
-        app.require_engine()
-        if (app.observations.get('engine_identity') != engine or engine_image(engine['pid']) != image
-                or (physical(profile, True), physical(path)) != before):
-            raise ValueError('captured profile or engine changed during observation')
-    finally:
-        connection.close()
+    before = physical(directory, True)
+    yield directory
+    app.require_running()
+    app.require_engine()
+    if (app.observations.get('engine_identity') != engine or engine_image(engine['pid']) != image
+            or physical(directory, True) != before):
+        raise ValueError('captured profile or engine changed during observation')
+
+
+@contextmanager
+def _database(app):
+    with profile(app) as directory:
+        path = directory / 'store.db'
+        before = physical(path)
+        # Do not use immutable=1: it ignores live WAL commits. Existing sidecars
+        # avoid creating an observer-owned WAL/SHM pair in the product profile.
+        for suffix in ('-wal', '-shm'):
+            physical(Path(str(path) + suffix))
+        connection = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)
+        deadline, instructions = time.monotonic() + 2, 0
+        def progress():
+            nonlocal instructions
+            instructions += 1000
+            return int(instructions > 200000 or time.monotonic() > deadline)
+        connection.set_progress_handler(progress, 1000)
+        try:
+            connection.execute('PRAGMA query_only = ON')
+            connection.execute('PRAGMA trusted_schema = OFF')
+            connection.execute('BEGIN')
+            schema(connection)
+            yield connection
+            if physical(path) != before:
+                raise ValueError('captured profile or engine changed during observation')
+        finally:
+            connection.close()
 
 
 def rows(cursor):
