@@ -46,7 +46,7 @@ class ProcessTests(unittest.TestCase):
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
         installation.owned = {}
-        table = f"10 1 {installation.executable}\n11 1 /other/Product --argument {installation.executable}\n12 10 {installation.app / 'Contents/MacOS/pw'}\n13 12 /bin/resource\n14 99 /bin/unrelated\n"
+        table = f"10 1 {installation.executable}\n11 1 /other/Product --argument {installation.executable}\n12 10 {installation.app / 'Contents/MacOS/pw'}\n13 12 /bin/resource\n14 99 /bin/unrelated\nmalformed\n15 0\n"
         with patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout=table)), \
              patch.object(process, "process_identity", side_effect=lambda pid: f"identity:{pid}"):
             installation.capture_owned()
@@ -68,3 +68,17 @@ class ProcessTests(unittest.TestCase):
                  patch.object(process.urllib.request, "build_opener", return_value=client):
                 observed = installation.observe("1.1.0")
             self.assertEqual(observed is not None, accepted)
+
+    def test_startup_recovery_ends_the_staged_app_without_running_its_quit_handler(self):
+        installation = self.installation()
+        installation.owned = {10: ("app", 1), 11: ("engine", 2)}
+        identities = {10: "app", 11: "engine"}
+        signals = []
+        def kill(pid, sig):
+            signals.append((pid, sig))
+            identities.pop(pid)
+        with patch.object(installation, "capture_owned"), \
+             patch.object(process, "process_identity", side_effect=lambda pid: identities.get(pid)), \
+             patch.object(process.os, "kill", side_effect=kill):
+            installation.stop(crash_app=True)
+        self.assertEqual(signals, [(10, signal.SIGKILL), (11, signal.SIGTERM)])

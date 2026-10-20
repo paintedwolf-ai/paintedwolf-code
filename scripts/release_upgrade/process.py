@@ -51,7 +51,7 @@ class Installation:
                     str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
         result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True, timeout=5)
         rows = [row.strip().split(None, 2) for row in result.stdout.splitlines()]
-        rows = [(int(pid), int(parent), executable) for pid, parent, executable in rows if pid.isdigit() and parent.isdigit()]
+        rows = [(int(row[0]), int(row[1]), row[2]) for row in rows if len(row) == 3 and row[0].isdigit() and row[1].isdigit()]
         for pid, _, executable in rows:
             if executable in commands:
                 identity = process_identity(pid)
@@ -98,15 +98,15 @@ class Installation:
     def healthy(self, version: str):
         return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
 
-    def stop(self):
+    def stop(self, crash_app=False):
         self.capture_owned()
         errors = []
         # Retire helpers and app supervision before stopping captured engines.
-        for pid, (identity, _) in sorted(self.owned.items(), key=lambda item: item[1][1]):
+        for pid, (identity, kind) in sorted(self.owned.items(), key=lambda item: item[1][1]):
             if process_identity(pid) != identity:
                 continue
             try:
-                os.kill(pid, signal.SIGTERM)
+                os.kill(pid, signal.SIGKILL if crash_app and kind == 1 else signal.SIGTERM)
             except ProcessLookupError:
                 continue
             deadline = time.monotonic() + 10

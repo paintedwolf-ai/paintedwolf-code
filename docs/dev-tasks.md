@@ -1094,7 +1094,9 @@ prepares it through the same target with `--prepare-bundle --manifest PATH
 --archives DIR --source DIR --output DIR`. Each case installs
 an unmodified prior app in writable scratch space, materializes its exact corpus,
 and enables automatic updates with rollout bucket zero. After automatic staging,
-it stops the captured app and engine, then launches that installation again.
+it terminates the staged source process and stops its captured engine, then
+launches that installation again to exercise startup activation. The installed
+bundle must remain unchanged until that launch.
 The shipped helper performs activation and relaunch. Assertions require the
 prepared bundle's inode at the installation path, matching executable and release
 identities, healthy engine/schema, startup confirmation, old-bundle removal,

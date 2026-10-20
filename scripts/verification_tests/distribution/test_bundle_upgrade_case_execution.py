@@ -64,6 +64,8 @@ class CaseTests(unittest.TestCase):
                 result = driver.run_case(case, plan, root, work, config, evidence)
                 self.assertEqual(result["result"], "passed")
                 self.assertEqual(len(launches), 3)
+                self.assertEqual(result["activation_trigger"], "startup_after_staging")
+                installation.stop.assert_any_call(crash_app=True)
                 self.assertEqual(semantics.call_count, 3)
                 self.assertTrue((evidence / "1.1.0-transaction.json").exists())
             self.assertGreaterEqual(installation.stop.call_count, 1)

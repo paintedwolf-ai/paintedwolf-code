@@ -107,7 +107,9 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
             prepared = Path(ready["prepared_bundle"])
             prepared_inode = prepared.stat().st_ino
             prior_inode = app.stat().st_ino
-            installation.stop()
+            installation.stop(crash_app=True)
+            if app.stat().st_ino != prior_inode:
+                raise ValueError("the staged source activated before its startup rehearsal")
             installation.launch()
             after = installation.healthy(version)
             verify_preferences(preferences, case["channel"])
@@ -131,7 +133,8 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         restart = installation.healthy(plan["candidate"]["version"])
         verify_preferences(preferences, case["channel"])
         verify_semantics(config, fixture, restart, evidence)
-        return {"id": case["id"], "result": "passed", "steps": observations, "restart_health": restart["health"]}
+        return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
+                "steps": observations, "restart_health": restart["health"]}
     finally:
         try:
             installation.stop()
