@@ -20539,6 +20539,10 @@ components:
         invocation:
           x-go-pointer: true
           $ref: '#/components/schemas/InvocationReceipt'
+        command_program:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramReceipt'
+          description: Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads.
         tool:
           type: string
           description: Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row.
@@ -27283,6 +27287,70 @@ components:
           x-go-pointer: true
           type: string
           format: date-time
+    CommandProgramReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - parent_receipt_id
+        - language_version
+        - catalog_digest
+        - source_digest
+        - source_ref
+        - state
+        - progress_state
+        - detail_ref
+        - started_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_receipt_id:
+          type: string
+          format: uuid
+        language_version:
+          type: integer
+        catalog_digest:
+          type: string
+        source_digest:
+          type: string
+        source_ref:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - rejected
+            - failed
+            - interrupted
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        detail_ref:
+          type: string
+        progress_state:
+          type: string
+          enum:
+            - unchanged
+            - committed
+            - rejected
+            - unknown
+        progress_ref:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        settled_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     ToolResultOutcome:
       type: string
       enum:
@@ -29003,70 +29071,46 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next search page; absent when the search reached the end of the content.
-    CommandProgramReceipt:
+    CommandProgramProgressReceipt:
       x-go-generate: true
       type: object
       additionalProperties: false
+      description: Existing progress owner's envelope invocation, independent of shell effects.
       required:
-        - id
-        - parent_receipt_id
-        - language_version
-        - catalog_digest
-        - source_digest
-        - source_ref
+        - execution_id
+        - program_id
+        - root_session_id
         - state
-        - progress_state
+        - owner_invoked
+        - arguments_digest
+        - arguments_ref
         - detail_ref
-        - started_at
       properties:
-        id:
+        execution_id:
           type: string
           format: uuid
-        parent_receipt_id:
+        program_id:
           type: string
           format: uuid
-        language_version:
-          type: integer
-        catalog_digest:
+        root_session_id:
           type: string
-        source_digest:
-          type: string
-        source_ref:
-          type: string
+          format: uuid
         state:
           type: string
           enum:
             - running
-            - waiting
-            - completed
-            - rejected
-            - failed
-            - interrupted
-        status_code:
-          type: integer
-          minimum: 0
-          maximum: 255
-          x-go-pointer: true
-        stop_code:
-          type: string
-        detail_ref:
-          type: string
-        progress_state:
-          type: string
-          enum:
             - unchanged
             - committed
             - rejected
             - unknown
-        progress_ref:
+        owner_invoked:
+          type: boolean
+        arguments_digest:
           type: string
-        started_at:
+        arguments_ref:
           type: string
-          format: date-time
-        settled_at:
+        detail_ref:
           type: string
-          format: date-time
-          x-go-pointer: true
     CommandExecutionReceipt:
       x-go-generate: true
       type: object
@@ -29113,6 +29157,21 @@ components:
           type: string
         reviewed_arguments_digest:
           type: string
+        reviewed_arguments_ref:
+          type: string
+        native_command:
+          type: string
+        effect_mode:
+          type: string
+        effect_classes:
+          type: array
+          items:
+            type: string
+            enum:
+              - read_only
+              - mutation
+              - external_exec
+              - network_egress
         arguments_ref:
           type: string
         command:
@@ -29220,6 +29279,9 @@ components:
       properties:
         program:
           $ref: '#/components/schemas/CommandProgramReceipt'
+        progress:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramProgressReceipt'
         executions:
           type: array
           items:

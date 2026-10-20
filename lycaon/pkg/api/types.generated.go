@@ -1276,16 +1276,20 @@ type CodeScanPage struct {
 
 // CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
 type CommandExecutionReceipt struct {
-	ID                      string `json:"id"`
-	ProgramID               string `json:"program_id"`
-	NodeID                  string `json:"node_id"`
-	ParentExecutionID       string `json:"parent_execution_id"`
-	Owner                   string `json:"owner"`
-	Lifecycle               string `json:"lifecycle"`
-	DefinitionDigest        string `json:"definition_digest"`
-	ArgumentsDigest         string `json:"arguments_digest"`
-	ReviewedArgumentsDigest string `json:"reviewed_arguments_digest,omitempty"`
-	ArgumentsRef            string `json:"arguments_ref"`
+	ID                      string   `json:"id"`
+	ProgramID               string   `json:"program_id"`
+	NodeID                  string   `json:"node_id"`
+	ParentExecutionID       string   `json:"parent_execution_id"`
+	Owner                   string   `json:"owner"`
+	Lifecycle               string   `json:"lifecycle"`
+	DefinitionDigest        string   `json:"definition_digest"`
+	ArgumentsDigest         string   `json:"arguments_digest"`
+	ReviewedArgumentsDigest string   `json:"reviewed_arguments_digest,omitempty"`
+	ReviewedArgumentsRef    string   `json:"reviewed_arguments_ref,omitempty"`
+	NativeCommand           string   `json:"native_command,omitempty"`
+	EffectMode              string   `json:"effect_mode,omitempty"`
+	EffectClasses           []string `json:"effect_classes,omitempty"`
+	ArgumentsRef            string   `json:"arguments_ref"`
 	// Compact display only. Not authority or replay input.
 	Command string `json:"command"`
 	State   string `json:"state"`
@@ -1367,6 +1371,18 @@ type CommandProgramNode struct {
 	State        string `json:"state"`
 }
 
+// CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
+type CommandProgramProgressReceipt struct {
+	ExecutionID     string `json:"execution_id"`
+	ProgramID       string `json:"program_id"`
+	RootSessionID   string `json:"root_session_id"`
+	State           string `json:"state"`
+	OwnerInvoked    bool   `json:"owner_invoked"`
+	ArgumentsDigest string `json:"arguments_digest"`
+	ArgumentsRef    string `json:"arguments_ref"`
+	DetailRef       string `json:"detail_ref"`
+}
+
 // CommandProgramReceipt
 type CommandProgramReceipt struct {
 	ID              string     `json:"id"`
@@ -1387,8 +1403,9 @@ type CommandProgramReceipt struct {
 
 // CommandProgramReceiptPage
 type CommandProgramReceiptPage struct {
-	Program    CommandProgramReceipt     `json:"program"`
-	Executions []CommandExecutionReceipt `json:"executions"`
+	Program    CommandProgramReceipt          `json:"program"`
+	Progress   *CommandProgramProgressReceipt `json:"progress,omitempty"`
+	Executions []CommandExecutionReceipt      `json:"executions"`
 	// Known static nodes only; never speculative future loop iterations.
 	Nodes             []CommandProgramNode `json:"nodes"`
 	ExecutionsOmitted int                  `json:"executions_omitted"`
@@ -8017,6 +8034,8 @@ type ToolResult struct {
 	// Host-resolved readable target retained with the result and screened before title formatting. Exact routing identifiers remain in tool_args.
 	DisplaySubject string             `json:"display_subject,omitempty"`
 	Invocation     *InvocationReceipt `json:"invocation,omitempty"`
+	// Host portable-program receipt. Its presence excludes legacy stdout fingerprinting; only explicitly confirmed delivered source mappings establish native source observations. Execution pins are not reads.
+	CommandProgram *CommandProgramReceipt `json:"command_program,omitempty"`
 	// Name of the tool that produced this result. Carried on the result row so Den renders completed tool cards after the host replaces the assistant tool_calls batch on a reused row.
 	Tool string `json:"tool,omitempty"`
 	// ID of the tool call this result answers, anchoring search reveal to the originating tool chicklet.

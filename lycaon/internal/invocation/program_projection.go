@@ -13,6 +13,7 @@ import (
 // OAR owns dispositions and copy; workflow owners supply outstanding obligations.
 // Static counts never predict future loop or function invocations.
 type ProgramProjection struct {
+	Progress                  *api.CommandProgramProgressReceipt
 	ParentToolCallID          string
 	ParentTool                string
 	ParentSessionID           string
@@ -61,6 +62,10 @@ func (r *SQLRecorder) ProjectProgram(ctx context.Context, sessionID, programID s
 		return out, err
 	}
 	out.DetailReference = out.Program.DetailRef
+	out.Progress, err = readProgramProgress(ctx, tx, programID)
+	if err != nil {
+		return out, err
+	}
 	if err = tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
 		return out, err
 	}

@@ -34,6 +34,10 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 	if r == nil || r.database == nil {
 		return fmt.Errorf("invocation recorder is not configured")
 	}
+	classes, err := json.Marshal(operation.Effects().Classes())
+	if err != nil {
+		return err
+	}
 	scope, err := json.Marshal(in.Scope)
 	if err != nil {
 		return err
@@ -43,7 +47,7 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=?,reviewed_arguments_ref=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, reviewedReference, in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=?,reviewed_arguments_ref=?,native_command=?,effect_mode=?,effect_classes_json=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, reviewedReference, operation.Command(), operation.Mode(), string(classes), in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
 	if err != nil {
 		return err
 	}
@@ -111,12 +115,10 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in Ch
 // ProgramSettlement is the process owner's aggregate statement. Child evidence
 // remains independently queryable and is never rewritten by this transition.
 type ProgramSettlement struct {
-	State             string
-	Status            *int
-	StopCode          string
-	DetailReference   string
-	ProgressState     string
-	ProgressReference string
+	State           string
+	Status          *int
+	StopCode        string
+	DetailReference string
 }
 
 func (s ProgramSettlement) validate() error {
@@ -131,18 +133,7 @@ func (s ProgramSettlement) validate() error {
 	if s.DetailReference == "" {
 		return fmt.Errorf("aggregate requires retained detail")
 	}
-	switch s.ProgressState {
-	case "unchanged":
-		if s.ProgressReference != "" {
-			return fmt.Errorf("unchanged progress cannot claim update")
-		}
-	case "committed", "rejected", "unknown":
-		if s.ProgressReference == "" {
-			return fmt.Errorf("progress outcome requires owner reference")
-		}
-	default:
-		return fmt.Errorf("explicit progress outcome required")
-	}
+
 	return nil
 }
 
@@ -164,7 +155,7 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in Pr
 	if count != 0 {
 		return fmt.Errorf("program has %d unsettled children", count)
 	}
-	transition, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state=?,status_code=?,stop_code=?,detail_ref=?,progress_state=?,progress_ref=?,settled_at=? WHERE id=? AND state IN ('running','waiting')`, in.State, in.Status, in.StopCode, in.DetailReference, in.ProgressState, in.ProgressReference, time.Now().UTC().Format(time.RFC3339Nano), programID)
+	transition, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state=?,status_code=?,stop_code=?,detail_ref=?,settled_at=? WHERE id=? AND state IN ('running','waiting')`, in.State, in.Status, in.StopCode, in.DetailReference, time.Now().UTC().Format(time.RFC3339Nano), programID)
 	if err != nil {
 		return err
 	}

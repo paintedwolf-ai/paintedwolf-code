@@ -26,6 +26,10 @@ func (r *SQLRecorder) InterruptPrograms(ctx context.Context, sessionID, detailRe
 	if err != nil {
 		return 0, err
 	}
+	_, err = tx.ExecContext(ctx, `UPDATE invocation_program_progress SET state='unknown',detail_ref=?,settled_at=? WHERE state='running' AND session_id=?`, detailReference, at, sessionID)
+	if err != nil {
+		return 0, err
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state='interrupted',status_code=NULL,stop_code='TOOL_OWNER_INTERRUPTED',detail_ref=?,settled_at=? WHERE state IN ('running','waiting') AND parent_receipt_id IN (SELECT id FROM invocation_receipts WHERE session_id=?)`, detailReference, at, sessionID)
 	if err != nil {
 		return 0, err
