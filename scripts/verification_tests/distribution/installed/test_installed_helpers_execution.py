@@ -11,7 +11,7 @@ from scripts.linux_release.installed_cases.app_api import EngineAPI
 from scripts.linux_release.installed_campaign import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
 from scripts.linux_release.installed_cases.records import retain
-from scripts.linux_release.installed_execution import driver_family, execute_case
+from scripts.linux_release.installed_execution import case_family, driver_family, execute_case
 from scripts.linux_release.installed_transfer import export, receive
 
 
@@ -45,6 +45,11 @@ class InstalledHelperTests(unittest.TestCase):
         self.assertEqual(driver_family("updates", "deb"), "packages")
         self.assertEqual(driver_family("updates", "nix"), "nix")
         self.assertEqual(driver_family("session", "rpm"), "security")
+        self.assertEqual(driver_family("performance", "deb"), "performance")
+        for case in ("redacted-send", "ocr-and-documents"):
+            self.assertEqual(case_family("documents", case, "deb"), "documents")
+        self.assertEqual(case_family("documents", "scanner-startup", "deb"), "products")
+        self.assertEqual(case_family("installation", "launcher-arguments", "deb"), "desktop")
 
     def test_api_rejects_external_and_redirect_authority_before_network(self):
         api = EngineAPI(19876, "private-token")
