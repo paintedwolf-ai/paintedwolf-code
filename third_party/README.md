@@ -52,13 +52,14 @@ The module metadata checksum is
 The upstream license and source notices remain in the module directory.
 
 The portable command host uses the selected syntax parser, never the interpreter.
-P04 adds a narrow parser scratch budget patch: allocation and recursive-entry
-reservations precede parser growth. Exact selected-tree node/depth admission stays
+P04 adds bounded parser, brace-classification and static quote-removal operations:
+allocation and recursive-entry reservations precede parser growth. Exact selected-tree node/depth admission stays
 in the host before constructing its plan; transient parser wrappers are scratch.
 The host reserves the full scratch allowance against its aggregate budget before
 parsing. An exhausted scratch budget returns a typed refusal with no partial tree.
 The modifications are recorded in [mvdan-sh.patch](mvdan-sh.patch). Only
-`syntax.Parse` activates `WithBudget(Budget{MaxBytes: ...})`; other parser entry
+`syntax.Parse` activates `WithBudget(Budget{MaxBytes: ...})` or the shared
+`WithBudget(Budget{Pool: ...})`; other parser entry
 points explicitly refuse that option. The host's selected allowance is 32 MiB
 from `evaluation_memory_bytes`, reserved before constructing the parser. All
 active parse calls, retained state and old/new host-plan overlap must fit the
@@ -78,10 +79,53 @@ than an extra node/frame-count or grammar-depth limit. Allocator/runtime global
 metadata and process RSS are distinct measurements, not represented as exact
 per-parser heap measurements.
 
-The private budget abort is recovered only by `Parse`; unrelated panics propagate.
+The private budget abort is recovered by `Parse` and bounded brace classification;
+unrelated panics propagate.
 Scratch exhaustion returns `BudgetError` with the refused byte reservation and
 no partial tree. `syntax/budget_test.go` covers exact reservation boundaries,
 valid 8192-node/depth-64/1-MiB units, dense and malformed deep syntax, parser reuse,
 unsupported entry points and unrelated panics. The exact selected-tree limits
 remain host admission checks before host-plan allocation. These source-level
 controls do not establish installed-platform qualification.
+
+
+`syntax.NewAllocationBudget` creates one invocation-local logical ledger. Pass it
+through `syntax.Budget.Pool`, `syntax.ClassifyBraces`, `expand.StaticLiteral` and
+host lowering; caller allocations use `ReserveHeap` or `ReserveBytes` before
+allocation. `UsedBytes` reports the shared ledger, while `Parser.ScratchBytes`
+reports the parser's cumulative charged heap after active frames unwind. Old and
+new backing storage remains charged across phases until the source unit is
+discarded. The isolated `MaxBytes` parser API keeps independent reservations when
+a parser is reused. These are conservative allocation reservations, distinct from
+process RSS, allocator-global metadata and the host's retained-program ledger.
+
+`ClassifyBraces` runs the same selected `SplitBraces` algorithm with guarded
+allocation. It reports actual unquoted expansion without mutating the input;
+malformed and quoted braces retain their literal semantics. Existing upstream
+`SplitBraces` consumers remain for the general expansion API and its fixtures.
+`StaticLiteral` admits only literal and ordinary single/double-quoted parts;
+parameters, substitutions, dollar quotes and tilde/brace expansion are deferred.
+It has no environment or filesystem callback. A single pre-sized output replaces
+the general expander's fragment-per-escape storage. Both paths share the selected
+escape-removal walker, including Unicode escapes and double-quote distinctions;
+the host does not implement a second quote grammar. The new fixtures cover a
+1 MiB escaped word, malformed brace amplification, detached output, parser reuse,
+and a shared parse/quote/lowering allocation at its exact ceiling and one byte over.
+
+To reproduce or update this copy, verify the complete release archive against the
+module checksum above, extract it into a clean directory, and apply
+`mvdan-sh.patch` with `patch -p1`. The patch includes every modified upstream file
+and all added budget/helper/test files; compare the resulting module tree byte for
+byte with this copy. Regenerate the complete patch against that verified upstream
+tree whenever owned module files change. Review the pinned commit/checksums,
+`lycaon/go.mod` replacement and this record together. Run the selected syntax and
+expand suites through root `./task test:digest -- mvdan.cc/sh/v3/syntax
+mvdan.cc/sh/v3/expand`, followed by the affected host parser contracts. Remove the
+local replacement only when upstream supplies all required bounds and semantics.
+
+The ordinary selected-library run is a unit/seed-corpus check. Upstream short-mode
+external-shell confirmation, quote seeds requiring the declared Bash version,
+unquotable quote seeds, invalid-shell parse/print seeds and unsupported language
+variant seeds have separate skip conditions. A passing ordinary run does not
+establish reference-shell confirmation, sustained fuzzing, native runtime or
+installed-platform qualification. No new helper fixture skips its acceptance.
