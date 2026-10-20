@@ -111,6 +111,53 @@ execution callers must retain the applicable leases while values remain reachabl
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
 
+
+### Complete byte streams
+
+`commandprogram.BytePipe` uses unbuffered `io.Pipe` backpressure and an explicit
+ingress byte budget. EOF, producer failure, deliberate consumer closure,
+cancellation and budget refusal have separate typed settlement facts. A preview,
+receipt, digest or truncation notice is never a pipeline source. Here-document
+and native-null inputs use the same exact byte endpoints; typed null sinks count
+ingress without opening a platform device or resolving secret references.
+
+`ScreenedPipe` connects the existing capture projection to that byte plane.
+Screening reserves actual payload/candidate capacities incrementally against the
+caller's aggregate working-memory ledger before allocation. It reuses the
+catalog window schedule, exact-value policy and interval rewrite; independent
+chunk screening is not equivalent. Managed-value and classification changes
+stop complete publication. Raw received hashes and emitted screened hashes stay
+separate, and emitted bytes preserve NUL, CRLF and invalid UTF-8 outside declared
+redactions. No general transform receives a secret-resolution API.
+
+`tooloutput.RetainScreenedStream` spools only already-screened bytes through the
+existing blob store's staging, compression, commit, retention and recovery claims.
+The plaintext and compressed staging overlap is admitted against spill quota;
+codec scratch is admitted after input EOF, when upstream screening can release
+its scratch. Preview and metadata have a separate retained-state lease. A
+readable failure prefix remains incomplete. Canceling input closes its source;
+copy/compression cancellation refuses a not-yet-committed body. Each live body
+reference has its own retention claim, separate from its initiating operation.
+Closing a spill releases its display preview and refuses future opens; body/disk
+accounting remains until active readers and recovery claims permit physical
+collection. `TransferBody` first durably attaches the exact reference, then moves
+the same claim and body leases into the existing invocation/output lifecycle.
+A failed attachment leaves the wrapper responsible. Preview closure cannot
+release a transferred body's quota. Bounded spill reads use one decoder worker,
+an8MiB history ceiling and admitted32MiB scratch; complete bodies may exceed
+that history size. Generic blob readers retain their existing profile. Callers
+keep applicable leases while their references remain reachable. These are
+logical capacity reservations, not process RSS.
+
+`StreamSourceMapping` carries only candidate ranges beside exact bytes. Its
+capture pin and digest stay unchanged when an exact presentation slice narrows
+the separate mapped range. `ProjectStreamMappings` admits and retains that
+metadata for explicitly exact slices; unspecified/arbitrary transforms drop it.
+Unseen retained bytes and printed source-like text establish no model read base.
+A source operation and the existing delivery boundary must still attribute the
+actual page before it qualifies as conversational evidence. These stream ports
+do not activate the later command-entry integration by themselves.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.

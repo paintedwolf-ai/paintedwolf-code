@@ -40,7 +40,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	got, err := io.ReadAll(reader)
 	testutil.FailErr(t, "read full retained stream", err)
 	sum := sha256.Sum256(want)
-	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
+	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || cap(out.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("spill confused preview and content: %+v bytes=%d", out, len(got))
 	}
 	if err := out.Close(); err == nil || released != 0 {
@@ -123,7 +123,7 @@ func TestStreamSpillMemoryWaitAllowsReaderClose(t *testing.T) {
 	first, err := out.Open(t.Context())
 	testutil.FailErr(t, "open first reader", err)
 	entered, proceed := make(chan struct{}), make(chan struct{})
-	out.memory = streamMemoryFunc(func(ctx context.Context, _ int64) (func(), error) {
+	out.body.memory = streamMemoryFunc(func(ctx context.Context, _ int64) (func(), error) {
 		close(entered)
 		select {
 		case <-proceed:
