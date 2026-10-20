@@ -78,11 +78,28 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertEqual(ui.click.call_args_list[0].args, ('Skip',))
             ui.find.assert_called_once_with(ui.api.ROLE_PUSH_BUTTON, 'Open a folder…')
             self.assertEqual(ui.fill.call_args_list[0].args, (2, 'Contents of ' + path.name, workspace.EDITOR_TEXT))
-            self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Editor command or search', 'qualification needle'))
+            self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Find', 'qualification needle'))
             self.assertIn('applied-edit-review-interaction', result['remaining_requirements'])
             cli.assert_called_once_with({}, 'pw', ['open', str(path.parent)], timeout=30)
             self.assertEqual([call.args[0] for call in ui.click.call_args_list[:3]], ['Skip', 'Files', path.name])
             self.assertEqual(streams['project-open-stdout'], b'opened')
+
+    def test_saved_bytes_remain_observed_when_later_search_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'fixture.txt'
+            path.write_text(workspace.EDITOR_TEXT)
+            ui = MagicMock()
+            ui.__enter__.return_value = ui
+            ui.fill.side_effect = [None, workspace.CaseUnavailable('search unavailable')]
+            with patch.object(workspace, 'DesktopUI', return_value=ui), \
+                    patch.object(workspace, 'interactive_window', return_value={}), \
+                    patch.object(workspace, 'fixed_editor_keyboard', return_value={'completed': True}), \
+                    patch.object(workspace, 'run', return_value={'exit_code': 0, 'timed_out': False,
+                        'output_limit': False, 'stdout': b'', 'stderr': b''}):
+                with self.assertRaises(workspace.CaseUnavailable) as refusal:
+                    workspace.edit_and_find(SimpleNamespace(binding={}), path)
+            self.assertTrue(refusal.exception.observations['saved_file']['expected_content'])
+            self.assertEqual(refusal.exception.observations['saved_file']['bytes'], len(workspace.EDITOR_TEXT.encode()))
 
     def test_fixed_keyboard_requires_owned_focus_and_releases_modifiers_on_failure(self):
         identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}

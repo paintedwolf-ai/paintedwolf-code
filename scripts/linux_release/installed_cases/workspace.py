@@ -120,8 +120,9 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
                 refusal.observations = {'saved_file': disk,
                     'keyboard_delivery': {'dispatch_accepted': True, 'effect_observed': False}}
                 raise refusal
+            observations['saved_file'] = disk
             ui.click('Find in file')
-            ui.fill(ui.api.ROLE_ENTRY, 'Editor command or search', 'qualification needle')
+            ui.fill(ui.api.ROLE_ENTRY, 'Find', 'qualification needle')
         observations.update(saved_file=disk, normal_find_input_action=True,
             remaining_requirements=['search-result-and-navigation-witness', 'applied-edit-review-interaction',
                                     'owned-project-cleanup'])
