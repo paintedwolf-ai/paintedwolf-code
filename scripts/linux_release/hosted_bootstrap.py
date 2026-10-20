@@ -113,6 +113,8 @@ def verify(root, selected, account, execution):
     expected = {'format_version': 1, 'execution': execution, 'controller_commit': selected['controller_commit'],
         'controller_tree': selected['controller_tree'], 'arguments': invocation(root, account), 'exit_code': 0,
         'observer_uid': 0, 'observer_euid': 0}
-    if read(path) != expected:
+    actual = read(path)
+    if (actual != expected or any(type(actual.get(key)) is not int for key in
+            ('format_version', 'exit_code', 'observer_uid', 'observer_euid'))):
         raise ValueError('bootstrap supervision differs from its actual selected successful invocation')
     return expected
