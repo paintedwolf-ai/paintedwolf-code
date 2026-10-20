@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/settings/appearance/KeyboardSettingsPanel.tsx",
+  "kind": "module",
+  "workstream": "linux-ime-commit-key",
+  "disposition": "retain",
+  "reason": "Retain the existing shortcut capture and keyboard settings lifecycle. The composition correction adds only a direct legacy229 refusal alongside the existing native composition fact, without new dependencies, state owners or effects. Splitting keyboard event predicates from the actual owner would obscure the interaction boundary. The current eight-suite original-surface cohort passed223 contracts. Ceiling is the current measurement with no growth allowance or hard-limit change.",
+  "reviewed_commit": "c11f68a15424132977cd3288c91e14a46c90b1cd",
+  "ceiling": 561,
+  "boundaries": {
+    "lycaon-den/src/components/settings/appearance/KeyboardSettingsPanel.test.tsx": "0efb7f2b72cc033c78c6f5b1a18234464e57c81e94be62a1a62fdd04b42b4d9a"
+  }
+}

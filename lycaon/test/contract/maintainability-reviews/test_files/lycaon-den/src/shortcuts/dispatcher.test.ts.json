@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/shortcuts/dispatcher.test.ts",
+  "kind": "test_suite",
+  "workstream": "linux-ime-commit-key",
+  "disposition": "retain",
+  "reason": "Retain the existing shortcut scope, contribution identity and input-method behavior suite. The composition correction adds only a direct legacy229 refusal alongside the existing native composition fact, without new dependencies, state owners or effects. Splitting keyboard event predicates from the actual owner would obscure the interaction boundary. The current eight-suite original-surface cohort passed223 contracts. Ceiling is the current measurement with no growth allowance or hard-limit change.",
+  "reviewed_commit": "c11f68a15424132977cd3288c91e14a46c90b1cd",
+  "ceiling": 936,
+  "boundaries": {
+    "lycaon-den/src/shortcuts/dispatcher.ts": "f7d7e30ab5acc5e1e27ef1b86866fd4cf334f1b64bf50ab65fd08bac963c5462"
+  }
+}
