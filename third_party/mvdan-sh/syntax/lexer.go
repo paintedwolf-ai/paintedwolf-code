@@ -62,6 +62,8 @@ const (
 )
 
 func (p *Parser) rune() rune {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.r == '\n' || p.r == escNewl {
 		// p.r instead of b so that newline
 		// character positions don't have col 0.
@@ -122,7 +124,7 @@ retry:
 			p.lastBquoteEsc = bquotes
 		}
 		if p.litBs != nil {
-			p.litBs = append(p.litBs, b)
+			p.litBs = budgetAppend(p, p.litBs, b)
 		}
 		p.w, p.r = 1, rune(b)
 		return p.r
@@ -137,7 +139,7 @@ decodeRune:
 		}
 	}
 	if p.litBs != nil {
-		p.litBs = append(p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
+		p.litBs = budgetAppend(p, p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
 	}
 	p.bsp += uint(w)
 	if p.r == utf8.RuneError && w == 1 {
@@ -153,6 +155,8 @@ decodeRune:
 // The number of read bytes is returned, which is at least one
 // unless a read error occurred, such as [io.EOF].
 func (p *Parser) fill() (n int) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.readEOF || p.r == runeEOF {
 		// If the reader already gave us [io.EOF], do not try again.
 		// If we decided to stop for any reason, do not bother reading either.
@@ -191,6 +195,8 @@ readAgain:
 }
 
 func (p *Parser) nextKeepSpaces() {
+	p.enterFrame()
+	defer p.leaveFrame()
 	r := p.r
 	if p.quote != hdocBody && p.quote != hdocBodyTabs {
 		// Heredocs handle escaped newlines in a special way, but others do not.
@@ -239,6 +245,8 @@ func (p *Parser) nextKeepSpaces() {
 }
 
 func (p *Parser) next() {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.r == runeEOF {
 		p.tok = _EOF
 		return
@@ -317,7 +325,7 @@ skipSpace:
 				case '\n', runeEOF:
 					break runeLoop
 				case escNewl:
-					p.litBs = append(p.litBs, '\\', '\n')
+					p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
 					break runeLoop
 				case '`':
 					if p.backquoteEnd() {
@@ -327,7 +335,7 @@ skipSpace:
 				r = p.rune()
 			}
 			if p.keepComments {
-				*p.curComs = append(*p.curComs, Comment{
+				*p.curComs = budgetAppend(p, *p.curComs, Comment{
 					Hash: p.pos,
 					Text: p.endLit(),
 				})
@@ -420,6 +428,8 @@ skipSpace:
 // extendedGlob determines whether we're parsing a Bash extended globbing expression.
 // For example, whether `*` or `@` are followed by `(` to form `@(foo)`.
 func (p *Parser) extendedGlob() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.lang.in(LangZsh) {
 		// Zsh supports Bash extended globs via the KSH_GLOB option.
 		// In Bash we would parse extended globs as [ExtGlob] nodes,
@@ -445,6 +455,8 @@ func (p *Parser) extendedGlob() bool {
 }
 
 func (p *Parser) peek() byte {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if int(p.bsp) >= len(p.bs) {
 		p.fill()
 	}
@@ -455,6 +467,8 @@ func (p *Parser) peek() byte {
 }
 
 func (p *Parser) peekTwo() (byte, byte) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// TODO: This should loop for slow readers, e.g. those providing one byte at
 	// a time. Use a loop and test it with [testing/iotest.OneByteReader].
 	if int(p.bsp+1) >= len(p.bs) {
@@ -470,6 +484,8 @@ func (p *Parser) peekTwo() (byte, byte) {
 }
 
 func (p *Parser) regToken(r rune) token {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch r {
 	case '\'':
 		p.rune()
@@ -685,6 +701,8 @@ func (p *Parser) regToken(r rune) token {
 }
 
 func (p *Parser) dqToken(r rune) token {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch r {
 	case '"':
 		p.rune()
@@ -717,6 +735,8 @@ func (p *Parser) dqToken(r rune) token {
 }
 
 func (p *Parser) paramToken(r rune) token {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch r {
 	case '}':
 		p.rune()
@@ -811,6 +831,8 @@ func (p *Parser) paramToken(r rune) token {
 }
 
 func (p *Parser) arithmToken(r rune) token {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch r {
 	case '!':
 		if p.rune() == '=' {
@@ -969,6 +991,8 @@ func (p *Parser) arithmToken(r rune) token {
 }
 
 func (p *Parser) newLit(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch {
 	case r < utf8.RuneSelf:
 		p.litBs = p.litBuf[:1]
@@ -978,21 +1002,25 @@ func (p *Parser) newLit(r rune) {
 		p.litBs = p.litBuf[:0]
 	default:
 		w := utf8.RuneLen(r)
-		p.litBs = append(p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
+		p.litBs = budgetAppend(p, p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
 	}
 }
 
 func (p *Parser) endLit() (s string) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.r == runeEOF || p.r == escNewl {
-		s = string(p.litBs)
+		s = p.budgetString(p.litBs)
 	} else {
-		s = string(p.litBs[:len(p.litBs)-p.w])
+		s = p.budgetString(p.litBs[:len(p.litBs)-p.w])
 	}
 	p.litBs = nil
 	return s
 }
 
 func (p *Parser) isLitRedir() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	lit := p.litBs[:len(p.litBs)-1]
 	if lit[0] == '{' && lit[len(lit)-1] == '}' {
 		name := lit[1 : len(lit)-1]
@@ -1002,8 +1030,9 @@ func (p *Parser) isLitRedir() bool {
 				name = name[:i]
 			}
 		}
-		return ValidName(string(name))
+		return ValidName(p.budgetString(name))
 	}
+	p.reserveHeap(int64(len(lit))) // Reserve the helper's possible byte-to-string copy.
 	return numberLiteral(lit)
 }
 
@@ -1034,6 +1063,8 @@ func paramNameStartRune[T rune | byte](r T) bool {
 }
 
 func (p *Parser) advanceLitOther(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	tok := _LitWord
 loop:
 	for p.newLit(r); r != runeEOF; r = p.rune() {
@@ -1076,6 +1107,8 @@ loop:
 // zshNumRange peeks at the bytes after '<' to check for a zsh numeric
 // range glob pattern like <->, <5->, <-10>, or <5-10>.
 func (p *Parser) zshNumRange() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Peeking a handful of bytes here should be enough.
 	// TODO: This should loop for slow readers, e.g. those providing one byte at
 	// a time. Use a loop and test it with [testing/iotest.OneByteReader].
@@ -1097,6 +1130,8 @@ func (p *Parser) zshNumRange() bool {
 }
 
 func (p *Parser) advanceLitNone(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.eqlOffs = -1
 	tok := _LitWord
 loop:
@@ -1165,6 +1200,8 @@ loop:
 }
 
 func (p *Parser) advanceLitDquote(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	tok := _LitWord
 loop:
 	for p.newLit(r); r != runeEOF; r = p.rune() {
@@ -1182,6 +1219,8 @@ loop:
 }
 
 func (p *Parser) advanceLitHdoc(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Unlike the rest of nextKeepSpaces quote states, we handle escaped
 	// newlines here. If lastTok==_Lit, then we know we're following an
 	// escaped newline, so the first line can't end the heredoc.
@@ -1250,6 +1289,8 @@ func (p *Parser) advanceLitHdoc(r rune) {
 }
 
 func (p *Parser) quotedHdocWord() *Word {
+	p.enterFrame()
+	defer p.leaveFrame()
 	r := p.r
 	p.newLit(r)
 	pos := p.nextPos()
@@ -1272,7 +1313,7 @@ func (p *Parser) quotedHdocWord() *Word {
 					break runeLoop
 				}
 			case escNewl:
-				p.litBs = append(p.litBs, '\\', '\n')
+				p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
 				break runeLoop
 			}
 			r = p.rune()
@@ -1297,6 +1338,8 @@ func (p *Parser) quotedHdocWord() *Word {
 }
 
 func (p *Parser) advanceLitRe(r rune) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	for p.newLit(r); ; r = p.rune() {
 		switch r {
 		case '\\':

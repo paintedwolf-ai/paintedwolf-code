@@ -240,9 +240,13 @@ func NewParser(options ...ParserOption) *Parser {
 //
 // Parse can be called more than once, but not concurrently. That is, a
 // Parser can be reused once it is done working.
-func (p *Parser) Parse(r io.Reader, name string) (*File, error) {
+func (p *Parser) Parse(r io.Reader, name string) (file *File, err error) {
 	p.reset()
-	p.f = &File{Name: name}
+	defer p.finishBudget(&file, &err)
+	p.beginBudget()
+	p.enterFrame()
+	defer p.leaveFrame()
+	p.f = budgetNode(p, File{Name: name})
 	p.src = r
 	p.rune()
 	p.next()
@@ -259,6 +263,8 @@ func (p *Parser) Parse(r io.Reader, name string) (*File, error) {
 //
 // Deprecated: use [Parser.StmtsSeq].
 func (p *Parser) Stmts(r io.Reader, fn func(*Stmt) bool) error {
+	p.enterFrame()
+	defer p.leaveFrame()
 	for stmt, err := range p.StmtsSeq(r) {
 		if err != nil {
 			return err
@@ -272,8 +278,13 @@ func (p *Parser) Stmts(r io.Reader, fn func(*Stmt) bool) error {
 
 // StmtsSeq reads and parses statements one at a time via an iterator.
 func (p *Parser) StmtsSeq(r io.Reader) iter.Seq2[*Stmt, error] {
+	if p.budgetConfigured {
+		return func(yield func(*Stmt, error) bool) { yield(nil, p.unsupportedBudgetEntry()) }
+	}
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.reset()
-	p.f = &File{}
+	p.f = budgetNode(p, File{})
 	p.src = r
 	return func(yield func(*Stmt, error) bool) {
 		p.rune()
@@ -325,6 +336,8 @@ func (w *wrappedReader) Read(p []byte) (n int, err error) {
 //
 // Deprecated: use [Parser.InteractiveSeq].
 func (p *Parser) Interactive(r io.Reader, fn func([]*Stmt) bool) error {
+	p.enterFrame()
+	defer p.leaveFrame()
 	for stmts, err := range p.InteractiveSeq(r) {
 		if err != nil {
 			return err
@@ -362,10 +375,12 @@ func (p *Parser) Interactive(r io.Reader, fn func([]*Stmt) bool) error {
 // If the callback function returns false, parsing is stopped and the function
 // is not called again.
 func (p *Parser) InteractiveSeq(r io.Reader) iter.Seq2[[]*Stmt, error] {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return func(yield func([]*Stmt, error) bool) {
 		w := wrappedReader{p: p, rd: r, yield: yield}
 		for stmts, err := range p.StmtsSeq(&w) {
-			w.accumulated = append(w.accumulated, stmts)
+			w.accumulated = budgetAppend(p, w.accumulated, stmts)
 			if err != nil {
 				if !yield(w.accumulated, err) {
 					break
@@ -395,6 +410,8 @@ func (p *Parser) InteractiveSeq(r io.Reader) iter.Seq2[[]*Stmt, error] {
 //
 // Deprecated: use [Parser.WordsSeq].
 func (p *Parser) Words(r io.Reader, fn func(*Word) bool) error {
+	p.enterFrame()
+	defer p.leaveFrame()
 	for w, err := range p.WordsSeq(r) {
 		if err != nil {
 			return err
@@ -416,8 +433,13 @@ func (p *Parser) Words(r io.Reader, fn func(*Word) bool) error {
 // a non-space byte such as a newline or a letter before finishing the parsing
 // of a word. This will be fixed in the future.
 func (p *Parser) WordsSeq(r io.Reader) iter.Seq2[*Word, error] {
+	if p.budgetConfigured {
+		return func(yield func(*Word, error) bool) { yield(nil, p.unsupportedBudgetEntry()) }
+	}
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.reset()
-	p.f = &File{}
+	p.f = budgetNode(p, File{})
 	p.src = r
 	return func(yield func(*Word, error) bool) {
 		p.rune()
@@ -449,8 +471,13 @@ func (p *Parser) WordsSeq(r io.Reader) iter.Seq2[*Word, error] {
 // Similarly, the here-document word parsed here cannot be ended by any
 // delimiter other than reaching the end of the input.
 func (p *Parser) Document(r io.Reader) (*Word, error) {
+	if p.budgetConfigured {
+		return nil, p.unsupportedBudgetEntry()
+	}
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.reset()
-	p.f = &File{}
+	p.f = budgetNode(p, File{})
 	p.src = r
 	p.rune()
 	p.quote = hdocBody
@@ -464,8 +491,13 @@ func (p *Parser) Document(r io.Reader) (*Word, error) {
 // Arithmetic parses a single arithmetic expression. That is, as if the input
 // were within the $(( and )) tokens.
 func (p *Parser) Arithmetic(r io.Reader) (ArithmExpr, error) {
+	if p.budgetConfigured {
+		return nil, p.unsupportedBudgetEntry()
+	}
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.reset()
-	p.f = &File{}
+	p.f = budgetNode(p, File{})
 	p.src = r
 	p.rune()
 	p.quote = arithmExpr
@@ -477,11 +509,15 @@ func (p *Parser) Arithmetic(r io.Reader) (ArithmExpr, error) {
 // Parser holds the internal state of the parsing mechanism of a
 // program.
 type Parser struct {
-	src io.Reader
-	bs  []byte // current chunk of read bytes
-	bsp uint   // offset within [Parser.bs] for the rune after [Parser.r]
-	r   rune   // next rune; [runeEOF] when it went past EOF, or we stopped
-	w   int    // width of [Parser.r]
+	budget                     Budget
+	scratchUsed, scratchFrames int64
+	budgetActive               bool
+	budgetConfigured           bool
+	src                        io.Reader
+	bs                         []byte // current chunk of read bytes
+	bsp                        uint   // offset within [Parser.bs] for the rune after [Parser.r]
+	r                          rune   // next rune; [runeEOF] when it went past EOF, or we stopped
+	w                          int    // width of [Parser.r]
 
 	f *File
 
@@ -553,6 +589,8 @@ type Parser struct {
 // It is only safe to call while the parser is blocked on a read. For an example
 // use case, see [Parser.Interactive].
 func (p *Parser) Incomplete() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// If there are any open nodes, we need to finish them.
 	// If we're constructing a literal, we need to finish it.
 	return p.openNodes > 0 || len(p.litBs) > 0
@@ -584,6 +622,8 @@ func (p *Parser) reset() {
 
 // nextPos returns the position of the next rune, [Parser.r].
 func (p *Parser) nextPos() Pos {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Basic protection against offset overflow;
 	// note that an offset of 0 is valid, so we leave the maximum.
 	offset := min(p.offs+int64(p.bsp)-int64(p.w), offsetMax)
@@ -598,8 +638,10 @@ func (p *Parser) nextPos() Pos {
 }
 
 func (p *Parser) lit(pos Pos, val string) *Lit {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if len(p.litBatch) == 0 {
-		p.litBatch = make([]Lit, 32)
+		p.litBatch = budgetMake[Lit](p, 32, 32)
 	}
 	l := &p.litBatch[0]
 	p.litBatch = p.litBatch[1:]
@@ -615,8 +657,10 @@ type wordAlloc struct {
 }
 
 func (p *Parser) wordAnyNumber() *Word {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if len(p.wordBatch) == 0 {
-		p.wordBatch = make([]wordAlloc, 32)
+		p.wordBatch = budgetMake[wordAlloc](p, 32, 32)
 	}
 	alloc := &p.wordBatch[0]
 	p.wordBatch = p.wordBatch[1:]
@@ -626,8 +670,10 @@ func (p *Parser) wordAnyNumber() *Word {
 }
 
 func (p *Parser) wordOne(part WordPart) *Word {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if len(p.wordBatch) == 0 {
-		p.wordBatch = make([]wordAlloc, 32)
+		p.wordBatch = budgetMake[wordAlloc](p, 32, 32)
 	}
 	alloc := &p.wordBatch[0]
 	p.wordBatch = p.wordBatch[1:]
@@ -638,10 +684,12 @@ func (p *Parser) wordOne(part WordPart) *Word {
 }
 
 func (p *Parser) call(w *Word) *CallExpr {
-	var alloc struct {
+	p.enterFrame()
+	defer p.leaveFrame()
+	alloc := budgetNode(p, struct {
 		ce CallExpr
 		ws [4]*Word
-	}
+	}{})
 	ce := &alloc.ce
 	ce.Args = alloc.ws[:1]
 	ce.Args[0] = w
@@ -701,17 +749,23 @@ type saveState struct {
 }
 
 func (p *Parser) preNested(quote quoteState) (s saveState) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	s.quote, s.buriedHdocs = p.quote, p.buriedHdocs
 	p.buriedHdocs, p.quote = len(p.heredocs), quote
 	return s
 }
 
 func (p *Parser) postNested(s saveState) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.quote, p.buriedHdocs = s.quote, s.buriedHdocs
 }
 
 func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
-	buf := make([]byte, 0, 4)
+	p.enterFrame()
+	defer p.leaveFrame()
+	buf := budgetMake[byte](p, 0, 4)
 	didUnquote := false
 	for _, wp := range w.Parts {
 		buf, didUnquote = p.unquotedWordPart(buf, wp, false)
@@ -720,20 +774,22 @@ func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
 }
 
 func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byte, quoted bool) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch wp := wp.(type) {
 	case *Lit:
 		for i := 0; i < len(wp.Value); i++ {
 			if b := wp.Value[i]; b == '\\' && !quotes {
 				if i++; i < len(wp.Value) {
-					buf = append(buf, wp.Value[i])
+					buf = budgetAppend(p, buf, wp.Value[i])
 				}
 				quoted = true
 			} else {
-				buf = append(buf, b)
+				buf = budgetAppend(p, buf, b)
 			}
 		}
 	case *SglQuoted:
-		buf = append(buf, []byte(wp.Value)...)
+		buf = budgetAppendString(p, buf, wp.Value)
 		quoted = true
 	case *DblQuoted:
 		for _, wp2 := range wp.Parts {
@@ -745,6 +801,8 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 }
 
 func (p *Parser) doHeredocs() {
+	p.enterFrame()
+	defer p.leaveFrame()
 	hdocs := p.heredocs[p.buriedHdocs:]
 	if len(hdocs) == 0 {
 		// Nothing do do; don't even issue a read.
@@ -762,7 +820,7 @@ func (p *Parser) doHeredocs() {
 			p.quote = hdocBodyTabs
 		}
 		stop, quoted := p.unquotedWordBytes(r.Word)
-		p.hdocStops = append(p.hdocStops, stop)
+		p.hdocStops = budgetAppend(p, p.hdocStops, stop)
 		if i > 0 && p.r == '\n' {
 			p.rune()
 		}
@@ -781,6 +839,8 @@ func (p *Parser) doHeredocs() {
 }
 
 func (p *Parser) got(tok token) bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.tok == tok {
 		p.next()
 		return true
@@ -789,6 +849,8 @@ func (p *Parser) got(tok token) bool {
 }
 
 func (p *Parser) gotRsrv(val string) (Pos, bool) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos := p.pos
 	if p.tok == _LitWord && p.val == val {
 		p.next()
@@ -798,6 +860,8 @@ func (p *Parser) gotRsrv(val string) (Pos, bool) {
 }
 
 func (p *Parser) recoverError() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.recoveredErrors < p.recoverErrorsMax {
 		p.recoveredErrors++
 		return true
@@ -822,20 +886,28 @@ func (t token) Format(f fmt.State, verb rune) {
 }
 
 func (p *Parser) followErr(pos Pos, left, right any) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.posErr(pos, "%#q must be followed by %#q", left, right)
 }
 
 func (p *Parser) followErrExp(pos Pos, left any) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.followErr(pos, left, noQuote("an expression"))
 }
 
 func (p *Parser) follow(lpos Pos, left string, tok token) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if !p.got(tok) {
 		p.followErr(lpos, left, tok)
 	}
 }
 
 func (p *Parser) followRsrv(lpos Pos, left, val string) Pos {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos, ok := p.gotRsrv(val)
 	if !ok {
 		if p.recoverError() {
@@ -847,6 +919,8 @@ func (p *Parser) followRsrv(lpos Pos, left, val string) Pos {
 }
 
 func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, []Comment) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Language variants disallowing empty command lists:
 	// * [LangPOSIX]: "A list is a sequence of one or more AND-OR lists...".
 	// * [LangBash]: "A list is a sequence of one or more pipelines..."
@@ -868,7 +942,7 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, [
 			return nil, nil // allow an empty list
 		}
 		if p.recoverError() {
-			return []*Stmt{{Position: recoveredPos}}, nil
+			return budgetAppend(p, []*Stmt(nil), budgetNode(p, Stmt{Position: recoveredPos})), nil
 		}
 		p.followErr(lpos, left, noQuote("a statement list"))
 	}
@@ -876,10 +950,12 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, [
 }
 
 func (p *Parser) followWordTok(tok token, pos Pos) *Word {
+	p.enterFrame()
+	defer p.leaveFrame()
 	w := p.getWord()
 	if w == nil {
 		if p.recoverError() {
-			return p.wordOne(&Lit{ValuePos: recoveredPos})
+			return p.wordOne(budgetNode(p, Lit{ValuePos: recoveredPos}))
 		}
 		p.followErr(pos, tok, noQuote("a word"))
 	}
@@ -887,6 +963,8 @@ func (p *Parser) followWordTok(tok token, pos Pos) *Word {
 }
 
 func (p *Parser) stmtEnd(n Node, start, end string) Pos {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos, ok := p.gotRsrv(end)
 	if !ok {
 		if p.recoverError() {
@@ -898,14 +976,20 @@ func (p *Parser) stmtEnd(n Node, start, end string) Pos {
 }
 
 func (p *Parser) quoteErr(lpos Pos, quote token) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.posErr(lpos, "reached %#q without closing quote %#q", p.tok, quote)
 }
 
 func (p *Parser) matchingErr(lpos Pos, left, right token) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.posErr(lpos, "reached %#q without matching %#q with %#q", p.tok, left, right)
 }
 
 func (p *Parser) matched(lpos Pos, left, right token) Pos {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos := p.pos
 	if !p.got(right) {
 		if p.recoverError() {
@@ -917,6 +1001,8 @@ func (p *Parser) matched(lpos Pos, left, right token) Pos {
 }
 
 func (p *Parser) errPass(err error) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.err == nil {
 		p.err = err
 		p.bsp = uint(len(p.bs)) + 1
@@ -1031,24 +1117,31 @@ func (e LangError) Error() string {
 }
 
 func (p *Parser) posErr(pos Pos, format string, args ...any) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// for i, arg := range args {
 	// 	if arg, ok := arg.(fmt.Stringer); ok && arg != _EOF {
 	// 		args[i] = quotedToken(arg)
 	// 	}
 	// }
+	p.reserveHeap(1024) // Error boxing and fixed diagnostic record.
 	p.errPass(ParseError{
 		Filename:   p.f.Name,
 		Pos:        pos,
-		Text:       fmt.Sprintf(format, args...),
+		Text:       p.budgetFormat(format, args...),
 		Incomplete: p.tok == _EOF && p.Incomplete(),
 	})
 }
 
 func (p *Parser) curErr(format string, args ...any) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.posErr(p.pos, format, args...)
 }
 
 func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.lang.in(langSet) {
 		return
 	}
@@ -1057,16 +1150,19 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 		// just mention "bash" rather than "bash/bats" for the sake of clarity.
 		langSet &^= LangBats
 	}
+	p.reserveHeap(1024) // Error boxing, fixed record and the bounded language set.
 	p.errPass(LangError{
 		Filename: p.f.Name,
 		Pos:      pos,
-		Feature:  fmt.Sprintf(format, a...),
+		Feature:  p.budgetFormat(format, a...),
 		Langs:    slices.Collect(langSet.bits()),
 		LangUsed: p.lang,
 	})
 }
 
 func (p *Parser) stmts(yield func(*Stmt, error) bool, stops ...string) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	gotEnd := true
 loop:
 	for p.tok != _EOF {
@@ -1116,10 +1212,12 @@ loop:
 }
 
 func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	var stmts []*Stmt
 	var last []Comment
 	fn := func(s *Stmt, err error) bool {
-		stmts = append(stmts, s)
+		stmts = budgetAppend(p, stmts, s)
 		return true
 	}
 	p.stmts(fn, stops...)
@@ -1150,6 +1248,8 @@ func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
 }
 
 func (p *Parser) invalidStmtStart() {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case semicolon, and, or, andAnd, orOr, andPipe, andBang:
 		p.curErr("%#q can only immediately follow a statement", p.tok)
@@ -1161,6 +1261,8 @@ func (p *Parser) invalidStmtStart() {
 }
 
 func (p *Parser) getWord() *Word {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if w := p.wordAnyNumber(); len(w.Parts) > 0 && p.err == nil {
 		return w
 	}
@@ -1168,6 +1270,8 @@ func (p *Parser) getWord() *Word {
 }
 
 func (p *Parser) getLit() *Lit {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.tok.isLit() {
 		l := p.lit(p.pos, p.val)
 		p.next()
@@ -1177,6 +1281,8 @@ func (p *Parser) getLit() *Lit {
 }
 
 func (p *Parser) wordParts(wps []WordPart) []WordPart {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.quote == noState {
 		p.quote = unquotedWordCont
 		defer func() { p.quote = noState }()
@@ -1191,7 +1297,7 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 			}
 			return wps
 		}
-		wps = append(wps, n)
+		wps = budgetAppend(p, wps, n)
 		if p.spaced {
 			return wps
 		}
@@ -1199,12 +1305,16 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 }
 
 func (p *Parser) ensureNoNested(pos Pos) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if p.forbidNested {
 		p.posErr(pos, "expansions not allowed in heredoc words")
 	}
 }
 
 func (p *Parser) wordPart() WordPart {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case _Lit, _LitWord, _LitRedir:
 		l := p.lit(p.pos, p.val)
@@ -1218,11 +1328,11 @@ func (p *Parser) wordPart() WordPart {
 			fallthrough
 		case ' ', '\t', '\n':
 			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${ stmts;}`")
-			cs := &CmdSubst{
+			cs := budgetNode(p, CmdSubst{
 				Left:     p.pos,
 				TempFile: p.r != '|',
 				ReplyVar: p.r == '|',
-			}
+			})
 			old := p.preNested(subCmdBraces)
 			p.rune() // don't tokenize '|'
 			p.next()
@@ -1240,7 +1350,7 @@ func (p *Parser) wordPart() WordPart {
 	case dollDblParen, dollBrack:
 		p.ensureNoNested(p.pos)
 		left := p.tok
-		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
+		ar := budgetNode(p, ArithmExp{Left: p.pos, Bracket: left == dollBrack})
 		old := p.preNested(arithmExpr)
 		p.next()
 		if p.got(hash) {
@@ -1280,7 +1390,7 @@ func (p *Parser) wordPart() WordPart {
 		fallthrough
 	case cmdIn, cmdOut:
 		p.ensureNoNested(p.pos)
-		ps := &ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos}
+		ps := budgetNode(p, ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos})
 		old := p.preNested(subCmd)
 		p.next()
 		ps.Stmts, ps.Last = p.stmtList()
@@ -1288,7 +1398,7 @@ func (p *Parser) wordPart() WordPart {
 		ps.Rparen = p.matched(ps.OpPos, token(ps.Op), rightParen)
 		return ps
 	case sglQuote, dollSglQuote:
-		sq := &SglQuoted{Left: p.pos, Dollar: p.tok == dollSglQuote}
+		sq := budgetNode(p, SglQuoted{Left: p.pos, Dollar: p.tok == dollSglQuote})
 		r := p.r
 		for p.newLit(r); ; r = p.rune() {
 			switch r {
@@ -1304,7 +1414,7 @@ func (p *Parser) wordPart() WordPart {
 				p.next()
 				return sq
 			case escNewl:
-				p.litBs = append(p.litBs, '\\', '\n')
+				p.litBs = budgetAppend(p, p.litBs, '\\', '\n')
 			case runeEOF:
 				p.tok = _EOF
 				if p.recoverError() {
@@ -1326,7 +1436,7 @@ func (p *Parser) wordPart() WordPart {
 			return nil
 		}
 		p.ensureNoNested(p.pos)
-		cs := &CmdSubst{Left: p.pos, Backquotes: true}
+		cs := budgetNode(p, CmdSubst{Left: p.pos, Backquotes: true})
 		old := p.preNested(subCmdBckquo)
 		p.openBquotes++
 		if old.quote == dblQuotes {
@@ -1383,7 +1493,7 @@ func (p *Parser) wordPart() WordPart {
 		return nil
 	case globQuest, globStar, globPlus, globAt, globExcl:
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "extended globs")
-		eg := &ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos}
+		eg := budgetNode(p, ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos})
 		lparens := 1
 		r := p.r
 	globLoop:
@@ -1412,7 +1522,9 @@ func (p *Parser) wordPart() WordPart {
 }
 
 func (p *Parser) cmdSubst() *CmdSubst {
-	cs := &CmdSubst{Left: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	cs := budgetNode(p, CmdSubst{Left: p.pos})
 	old := p.preNested(subCmd)
 	p.next()
 	cs.Stmts, cs.Last = p.stmtList()
@@ -1422,12 +1534,14 @@ func (p *Parser) cmdSubst() *CmdSubst {
 }
 
 func (p *Parser) dblQuoted() *DblQuoted {
-	alloc := &struct {
+	p.enterFrame()
+	defer p.leaveFrame()
+	alloc := budgetNode(p, struct {
 		quoted DblQuoted
 		parts  [1]WordPart
 	}{
 		quoted: DblQuoted{Left: p.pos, Dollar: p.tok == dollDblQuote},
-	}
+	})
 	q := &alloc.quoted
 	old := p.quote
 	p.quote = dblQuotes
@@ -1450,13 +1564,15 @@ func (p *Parser) dblQuoted() *DblQuoted {
 // does not form a valid parameter expansion, in which case it should be parsed
 // as a literal.
 func (p *Parser) paramExp() *ParamExp {
+	p.enterFrame()
+	defer p.leaveFrame()
 	old := p.quote
 	p.quote = runeByRune
 	// [ParamExp.Short] means we are parsing $exp rather than ${exp}.
-	pe := &ParamExp{
+	pe := budgetNode(p, ParamExp{
 		Dollar: p.pos,
 		Short:  p.tok == dollar,
-	}
+	})
 	if !pe.Short && p.r == '(' {
 		p.checkLang(pe.Pos(), LangZsh, `parameter expansion flags`)
 		// For now, for simplicity, we parse flags as just a literal.
@@ -1583,7 +1699,7 @@ zshPrefixLoop:
 	switch p.tok {
 	case slash, dblSlash: // pattern search and replace
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
-		pe.Repl = &Replace{All: p.tok == dblSlash}
+		pe.Repl = budgetNode(p, Replace{All: p.tok == dblSlash})
 		p.quote = paramExpRepl
 		p.next()
 		pe.Repl.Orig = p.getWord()
@@ -1602,12 +1718,12 @@ zshPrefixLoop:
 					p.matchingErr(pe.Dollar, dollBrace, rightBrace)
 					break loop
 				case '}':
-					pe.Modifiers = append(pe.Modifiers, p.lit(pos, p.endLit()))
+					pe.Modifiers = budgetAppend(p, pe.Modifiers, p.lit(pos, p.endLit()))
 					pe.Rbrace = p.nextPos()
 					p.rune()
 					break loop
 				case ':':
-					pe.Modifiers = append(pe.Modifiers, p.lit(pos, p.endLit()))
+					pe.Modifiers = budgetAppend(p, pe.Modifiers, p.lit(pos, p.endLit()))
 					p.rune()
 					pos = p.nextPos()
 					p.newLit(p.r)
@@ -1618,7 +1734,7 @@ zshPrefixLoop:
 			return pe
 		}
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
-		pe.Slice = &Slice{}
+		pe.Slice = budgetNode(p, Slice{})
 		colonPos := p.pos
 		p.quote = paramExpSlice
 		if p.next(); p.tok != colon {
@@ -1663,7 +1779,7 @@ zshPrefixLoop:
 				p.curErr("nested parameter expansion cannot be followed by a word")
 			}
 		} else {
-			p.curErr("not a valid parameter expansion operator: %#q", string(tokRune))
+			p.curErr("not a valid parameter expansion operator: %#q", p.budgetRune(tokRune))
 		}
 	}
 	if p.tok != _EOF && p.tok != rightBrace {
@@ -1679,6 +1795,8 @@ zshPrefixLoop:
 // Only the long form allows a quoted nested expansion like ${#"$(foo)"} or EOF;
 // in the short form the prefix rune is the parameter itself, as in "$#" or $#"$foo".
 func (p *Parser) paramNameStart(pe *ParamExp) bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	r := p.peek()
 	if paramNameStartRune(r) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
 		p.rune()
@@ -1688,6 +1806,8 @@ func (p *Parser) paramNameStart(pe *ParamExp) bool {
 }
 
 func (p *Parser) nestedParameterStart(pe *ParamExp) (left token, quotePos Pos) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if pe.Short {
 		return illegalTok, Pos{}
 	}
@@ -1720,6 +1840,8 @@ func (p *Parser) nestedParameterStart(pe *ParamExp) (left token, quotePos Pos) {
 }
 
 func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Check for Zsh nested parameter expressions like ${(f)"$(foo)"}.
 	if left, quotePos := p.nestedParameterStart(pe); left != illegalTok {
 		var wp WordPart
@@ -1741,11 +1863,11 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 					p.quoteErr(quotePos, dblQuote)
 				}
 			}
-			pe.NestedParam = &DblQuoted{
+			pe.NestedParam = budgetNode(p, DblQuoted{
 				Left:  quotePos,
 				Right: p.nextPos(),
-				Parts: []WordPart{wp},
-			}
+				Parts: budgetAppend(p, []WordPart(nil), wp),
+			})
 			p.rune()
 		} else {
 			pe.NestedParam = wp
@@ -1767,13 +1889,13 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 	case '@', '*', '#', '!', '$':
 		r, pos := p.r, p.nextPos()
 		p.rune()
-		pe.Param = p.lit(pos, string(r))
+		pe.Param = p.lit(pos, p.budgetRune(r))
 	default:
 		// Note that $1a is equivalent to ${1}a, but ${1a} is not.
 		// POSIX Shell says the latter is unspecified behavior, so match Bash's behavior.
 		pos := p.nextPos()
 		if pe.Short && singleRuneParam(p.r) {
-			p.val = string(p.r)
+			p.val = p.budgetRune(p.r)
 			p.rune()
 		} else {
 			for p.newLit(p.r); p.r != runeEOF; p.rune() {
@@ -1799,6 +1921,8 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 }
 
 func (p *Parser) paramExpExp() *Expansion {
+	p.enterFrame()
+	defer p.leaveFrame()
 	op := ParExpOperator(p.tok)
 	switch op {
 	case MatchEmpty, ArrayExclude, ArrayIntersect:
@@ -1820,10 +1944,12 @@ func (p *Parser) paramExpExp() *Expansion {
 			p.curErr("invalid @ expansion operator %#q", p.val)
 		}
 	}
-	return &Expansion{Op: op, Word: p.getWord()}
+	return budgetNode(p, Expansion{Op: op, Word: p.getWord()})
 }
 
 func (p *Parser) eitherIndex() ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	old := p.quote
 	lpos := p.pos
 	p.quote = paramExpArithm
@@ -1838,7 +1964,9 @@ func (p *Parser) eitherIndex() ArithmExpr {
 }
 
 func (p *Parser) zshSubFlags() *FlagsArithm {
-	zf := &FlagsArithm{}
+	p.enterFrame()
+	defer p.leaveFrame()
+	zf := budgetNode(p, FlagsArithm{})
 	// Lex flags as raw text, like paramExp does for ${(flags)...}.
 	lparen := p.pos
 	old := p.quote
@@ -1867,6 +1995,8 @@ func (p *Parser) zshSubFlags() *FlagsArithm {
 }
 
 func (p *Parser) stopToken() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case _EOF, _Newl, semicolon, and, or, andAnd, orOr, orAnd, andPipe, andBang,
 		dblSemicolon, semiAnd, dblSemiAnd, semiOr, rightParen:
@@ -1878,6 +2008,8 @@ func (p *Parser) stopToken() bool {
 }
 
 func (p *Parser) backquoteEnd() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.lastBquoteEsc < p.openBquotes
 }
 
@@ -1910,6 +2042,8 @@ func numberLiteral[T string | []byte](val T) bool {
 }
 
 func (p *Parser) hasValidIdent() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if !p.tok.isLit() {
 		return false
 	}
@@ -1927,7 +2061,9 @@ func (p *Parser) hasValidIdent() bool {
 }
 
 func (p *Parser) getAssign(needEqual bool) *Assign {
-	as := &Assign{}
+	p.enterFrame()
+	defer p.leaveFrame()
+	as := budgetNode(p, Assign{})
 	if p.eqlOffs > 0 { // foo=bar
 		nameEnd := p.eqlOffs
 		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
@@ -1994,7 +2130,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 	}
 	if as.Value == nil && p.tok == leftParen {
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "arrays")
-		as.Array = &ArrayExpr{Lparen: p.pos}
+		as.Array = budgetNode(p, ArrayExpr{Lparen: p.pos})
 		newQuote := p.quote
 		if p.lang.in(langBashLike | LangZsh) {
 			newQuote = arrayElems
@@ -2003,7 +2139,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		p.next()
 		p.got(_Newl)
 		for p.tok != _EOF && p.tok != rightParen {
-			ae := &ArrayElem{}
+			ae := budgetNode(p, ArrayElem{})
 			ae.Comments, p.accComs = p.accComs, nil
 			if p.tok == leftBrack {
 				left := p.pos
@@ -2026,11 +2162,11 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 			if len(p.accComs) > 0 {
 				c := p.accComs[0]
 				if c.Pos().Line() == ae.End().Line() {
-					ae.Comments = append(ae.Comments, c)
+					ae.Comments = budgetAppend(p, ae.Comments, c)
 					p.accComs = p.accComs[1:]
 				}
 			}
-			as.Array.Elems = append(as.Array.Elems, ae)
+			as.Array.Elems = budgetAppend(p, as.Array.Elems, ae)
 			p.got(_Newl)
 		}
 		as.Array.Last, p.accComs = p.accComs, nil
@@ -2040,13 +2176,15 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		if as.Value == nil {
 			as.Value = w
 		} else {
-			as.Value.Parts = append(as.Value.Parts, w.Parts...)
+			as.Value.Parts = budgetAppend(p, as.Value.Parts, w.Parts...)
 		}
 	}
 	return as
 }
 
 func (p *Parser) peekRedir() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case _LitRedir, rdrOut, appOut, rdrIn, rdrInOut, dplIn, dplOut,
 		rdrClob, appClob, hdoc, dashHdoc, wordHdoc,
@@ -2057,6 +2195,8 @@ func (p *Parser) peekRedir() bool {
 }
 
 func (p *Parser) doRedirect(s *Stmt) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	var r *Redirect
 	if s.Redirs == nil {
 		var alloc struct {
@@ -2065,10 +2205,10 @@ func (p *Parser) doRedirect(s *Stmt) {
 		}
 		s.Redirs = alloc.redirs[:0]
 		r = &alloc.redir
-		s.Redirs = append(s.Redirs, r)
+		s.Redirs = budgetAppend(p, s.Redirs, r)
 	} else {
-		r = &Redirect{}
-		s.Redirs = append(s.Redirs, r)
+		r = budgetNode(p, Redirect{})
+		s.Redirs = budgetAppend(p, s.Redirs, r)
 	}
 	r.N = p.getLit()
 	if r.N != nil && r.N.Value[0] == '{' {
@@ -2086,14 +2226,14 @@ func (p *Parser) doRedirect(s *Stmt) {
 	case Hdoc, DashHdoc:
 		old := p.quote
 		p.quote, p.forbidNested = hdocWord, true
-		p.heredocs = append(p.heredocs, r)
+		p.heredocs = budgetAppend(p, p.heredocs, r)
 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
 		p.quote, p.forbidNested = old, false
 		if p.tok == _Newl {
 			if len(p.accComs) > 0 {
 				c := p.accComs[0]
 				if c.Pos().Line() == s.End().Line() {
-					s.Comments = append(s.Comments, c)
+					s.Comments = budgetAppend(p, s.Comments, c)
 					p.accComs = p.accComs[1:]
 				}
 			}
@@ -2108,8 +2248,10 @@ func (p *Parser) doRedirect(s *Stmt) {
 }
 
 func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos, ok := p.gotRsrv("!")
-	s := &Stmt{Position: pos}
+	s := budgetNode(p, Stmt{Position: pos})
 	if ok {
 		s.Negated = true
 		if p.stopToken() {
@@ -2129,23 +2271,23 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 			// right recursion should only read a single element
 			return s
 		}
-		b := &BinaryCmd{
+		b := budgetNode(p, BinaryCmd{
 			OpPos: p.pos,
 			Op:    BinCmdOperator(p.tok),
 			X:     s,
-		}
+		})
 		p.next()
 		p.got(_Newl)
 		b.Y = p.getStmt(false, true, false)
 		if b.Y == nil || p.err != nil {
 			if p.recoverError() {
-				b.Y = &Stmt{Position: recoveredPos}
+				b.Y = budgetNode(p, Stmt{Position: recoveredPos})
 			} else {
 				p.followErr(b.OpPos, b.Op, noQuote("a statement"))
 				return nil
 			}
 		}
-		s = &Stmt{Position: s.Position}
+		s = budgetNode(p, Stmt{Position: s.Position})
 		s.Cmd = b
 		s.Comments, b.X.Comments = b.X.Comments, nil
 	}
@@ -2171,7 +2313,7 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 	if len(p.accComs) > 0 && !binCmd && !fnBody {
 		c := p.accComs[0]
 		if c.Pos().Line() == s.End().Line() {
-			s.Comments = append(s.Comments, c)
+			s.Comments = budgetAppend(p, s.Comments, c)
 			p.accComs = p.accComs[1:]
 		}
 	}
@@ -2179,6 +2321,8 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 }
 
 func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+	p.enterFrame()
+	defer p.leaveFrame()
 	s.Comments, p.accComs = p.accComs, nil
 	for p.peekRedir() {
 		p.doRedirect(s)
@@ -2192,7 +2336,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		case "{}":
 			// Zsh treats closing braces in a special way, allowing this.
 			if p.lang.in(LangZsh) {
-				s.Cmd = &Block{Lbrace: p.pos, Rbrace: posAddCol(p.pos, 1)}
+				s.Cmd = budgetNode(p, Block{Lbrace: p.pos, Rbrace: posAddCol(p.pos, 1)})
 				p.next()
 			}
 		case "if":
@@ -2284,7 +2428,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		} else {
 			w := p.wordOne(name)
 			if p.lang.in(LangZsh) && !p.spaced {
-				w.Parts = append(w.Parts, p.wordParts(nil)...)
+				w.Parts = budgetAppend(p, w.Parts, p.wordParts(nil)...)
 			}
 			p.callExpr(s, w, false)
 		}
@@ -2343,18 +2487,18 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			// we parse |& as two tokens.
 			break
 		}
-		b := &BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s}
+		b := budgetNode(p, BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s})
 		p.next()
 		p.got(_Newl)
-		if b.Y = p.gotStmtPipe(&Stmt{Position: p.pos}, true); b.Y == nil || p.err != nil {
+		if b.Y = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), true); b.Y == nil || p.err != nil {
 			if p.recoverError() {
-				b.Y = &Stmt{Position: recoveredPos}
+				b.Y = budgetNode(p, Stmt{Position: recoveredPos})
 			} else {
 				p.followErr(b.OpPos, b.Op, noQuote("a statement"))
 				break
 			}
 		}
-		s = &Stmt{Position: s.Position}
+		s = budgetNode(p, Stmt{Position: s.Position})
 		s.Cmd = b
 		s.Comments, b.X.Comments = b.X.Comments, nil
 		// in "! x | y", the bang applies to the entire pipeline
@@ -2365,7 +2509,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 }
 
 func (p *Parser) subshell(s *Stmt) {
-	sub := &Subshell{Lparen: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	sub := budgetNode(p, Subshell{Lparen: p.pos})
 	old := p.preNested(subCmd)
 	p.next()
 	sub.Stmts, sub.Last = p.followStmts("(", sub.Lparen)
@@ -2375,7 +2521,9 @@ func (p *Parser) subshell(s *Stmt) {
 }
 
 func (p *Parser) arithmExpCmd(s *Stmt) {
-	ar := &ArithmCmd{Left: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	ar := budgetNode(p, ArithmCmd{Left: p.pos})
 	old := p.preNested(arithmExprCmd)
 	p.next()
 	if p.got(hash) {
@@ -2388,7 +2536,9 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
 }
 
 func (p *Parser) block(s *Stmt) {
-	b := &Block{Lbrace: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	b := budgetNode(p, Block{Lbrace: p.pos})
 	p.next()
 	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, "}")
 	if pos, ok := p.gotRsrv("}"); ok {
@@ -2402,14 +2552,16 @@ func (p *Parser) block(s *Stmt) {
 }
 
 func (p *Parser) ifClause(s *Stmt) {
-	rootIf := &IfClause{Position: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	rootIf := budgetNode(p, IfClause{Position: p.pos})
 	p.next()
 	rootIf.Cond, rootIf.CondLast = p.followStmts("if", rootIf.Position, "then")
 	rootIf.ThenPos = p.followRsrv(rootIf.Position, "if <cond>", "then")
 	rootIf.Then, rootIf.ThenLast = p.followStmts("then", rootIf.ThenPos, "fi", "elif", "else")
 	curIf := rootIf
 	for p.tok == _LitWord && p.val == "elif" {
-		elf := &IfClause{Position: p.pos}
+		elf := budgetNode(p, IfClause{Position: p.pos})
 		curIf.Last = p.accComs
 		p.accComs = nil
 		p.next()
@@ -2422,7 +2574,7 @@ func (p *Parser) ifClause(s *Stmt) {
 	if elsePos, ok := p.gotRsrv("else"); ok {
 		curIf.Last = p.accComs
 		p.accComs = nil
-		els := &IfClause{Position: elsePos}
+		els := budgetNode(p, IfClause{Position: elsePos})
 		els.Then, els.ThenLast = p.followStmts("else", els.Position, "fi")
 		curIf.Else = els
 		curIf = els
@@ -2438,7 +2590,9 @@ func (p *Parser) ifClause(s *Stmt) {
 }
 
 func (p *Parser) whileClause(s *Stmt, until bool) {
-	wc := &WhileClause{WhilePos: p.pos, Until: until}
+	p.enterFrame()
+	defer p.leaveFrame()
+	wc := budgetNode(p, WhileClause{WhilePos: p.pos, Until: until})
 	rsrv := "while"
 	rsrvCond := "while <cond>"
 	if wc.Until {
@@ -2454,7 +2608,9 @@ func (p *Parser) whileClause(s *Stmt, until bool) {
 }
 
 func (p *Parser) forClause(s *Stmt) {
-	fc := &ForClause{ForPos: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	fc := budgetNode(p, ForClause{ForPos: p.pos})
 	p.next()
 	fc.Loop = p.loop(fc.ForPos)
 
@@ -2468,7 +2624,7 @@ func (p *Parser) forClause(s *Stmt) {
 		fc.DoPos = p.followRsrv(fc.ForPos, "for foo [in words]", start)
 	}
 
-	s.Comments = append(s.Comments, p.accComs...)
+	s.Comments = budgetAppend(p, s.Comments, p.accComs...)
 	p.accComs = nil
 	fc.Do, fc.DoLast = p.followStmts(start, fc.DoPos, end)
 	fc.DonePos = p.stmtEnd(fc, "for", end)
@@ -2476,12 +2632,14 @@ func (p *Parser) forClause(s *Stmt) {
 }
 
 func (p *Parser) loop(fpos Pos) Loop {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case leftParen, dblLeftParen:
 		p.checkLang(p.pos, langBashLike|LangZsh, "c-style fors")
 	}
 	if p.tok == dblLeftParen {
-		cl := &CStyleLoop{Lparen: p.pos}
+		cl := budgetNode(p, CStyleLoop{Lparen: p.pos})
 		old := p.preNested(arithmExprCmd)
 		p.next()
 		cl.Init = p.arithmExpr(false)
@@ -2500,7 +2658,9 @@ func (p *Parser) loop(fpos Pos) Loop {
 }
 
 func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
-	wi := &WordIter{}
+	p.enterFrame()
+	defer p.leaveFrame()
+	wi := budgetNode(p, WordIter{})
 	if wi.Name = p.getLit(); wi.Name == nil {
 		p.followErr(fpos, ftok, noQuote("a literal"))
 	}
@@ -2515,7 +2675,7 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 			if w := p.getWord(); w == nil {
 				p.curErr("word list can only contain words")
 			} else {
-				wi.Items = append(wi.Items, w)
+				wi.Items = budgetAppend(p, wi.Items, w)
 			}
 		}
 		p.got(semicolon)
@@ -2528,7 +2688,9 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 }
 
 func (p *Parser) selectClause(s *Stmt) {
-	fc := &ForClause{ForPos: p.pos, Select: true}
+	p.enterFrame()
+	defer p.leaveFrame()
+	fc := budgetNode(p, ForClause{ForPos: p.pos, Select: true})
 	p.next()
 	fc.Loop = p.wordIter("select", fc.ForPos)
 	fc.DoPos = p.followRsrv(fc.ForPos, "select foo [in words]", "do")
@@ -2538,7 +2700,9 @@ func (p *Parser) selectClause(s *Stmt) {
 }
 
 func (p *Parser) caseClause(s *Stmt) {
-	cc := &CaseClause{Case: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	cc := budgetNode(p, CaseClause{Case: p.pos})
 	p.next()
 	cc.Word = p.getWord()
 	if cc.Word == nil {
@@ -2561,16 +2725,18 @@ func (p *Parser) caseClause(s *Stmt) {
 }
 
 func (p *Parser) caseItems(stop string) (items []*CaseItem) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.got(_Newl)
 	for p.tok != _EOF && (p.tok != _LitWord || p.val != stop) {
-		ci := &CaseItem{}
+		ci := budgetNode(p, CaseItem{})
 		ci.Comments, p.accComs = p.accComs, nil
 		p.got(leftParen)
 		for p.tok != _EOF {
 			if w := p.getWord(); w == nil {
 				p.curErr("case patterns must consist of words")
 			} else {
-				ci.Patterns = append(ci.Patterns, w)
+				ci.Patterns = budgetAppend(p, ci.Patterns, w)
 			}
 			if p.tok == rightParen {
 				break
@@ -2587,10 +2753,10 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 		case dblSemicolon, semiAnd, dblSemiAnd, semiOr:
 		default:
 			ci.Op = Break
-			items = append(items, ci)
+			items = budgetAppend(p, items, ci)
 			return items
 		}
-		ci.Last = append(ci.Last, p.accComs...)
+		ci.Last = budgetAppend(p, ci.Last, p.accComs...)
 		p.accComs = nil
 		ci.OpPos = p.pos
 		ci.Op = CaseOperator(p.tok)
@@ -2614,16 +2780,18 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 			}
 			split = i
 		}
-		ci.Comments = append(ci.Comments, p.accComs[:split]...)
+		ci.Comments = budgetAppend(p, ci.Comments, p.accComs[:split]...)
 		p.accComs = p.accComs[split:]
 
-		items = append(items, ci)
+		items = budgetAppend(p, items, ci)
 	}
 	return items
 }
 
 func (p *Parser) testClause(s *Stmt) {
-	tc := &TestClause{Left: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	tc := budgetNode(p, TestClause{Left: p.pos})
 	old := p.preNested(testExpr)
 	p.next()
 	if tc.X = p.testExprBinary(false); tc.X == nil {
@@ -2638,6 +2806,8 @@ func (p *Parser) testClause(s *Stmt) {
 }
 
 func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.got(_Newl)
 	var left TestExpr
 	if pastAndOr {
@@ -2666,11 +2836,11 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	default:
 		p.curErr("not a valid test operator: %#q", p.tok)
 	}
-	b := &BinaryTest{
+	b := budgetNode(p, BinaryTest{
 		OpPos: p.pos,
 		Op:    BinTestOperator(p.tok),
 		X:     left,
-	}
+	})
 	switch b.Op {
 	case AndTest, OrTest:
 		p.next()
@@ -2698,6 +2868,8 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 }
 
 func (p *Parser) testExprUnary() TestExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case _EOF, rightParen:
 		return nil
@@ -2715,7 +2887,7 @@ func (p *Parser) testExprUnary() TestExpr {
 	}
 	switch p.tok {
 	case exclMark:
-		u := &UnaryTest{OpPos: p.pos, Op: TsNot}
+		u := budgetNode(p, UnaryTest{OpPos: p.pos, Op: TsNot})
 		p.next()
 		if u.X = p.testExprBinary(false); u.X == nil {
 			p.followErrExp(u.OpPos, u.Op)
@@ -2725,12 +2897,12 @@ func (p *Parser) testExprUnary() TestExpr {
 		tsSocket, tsSmbLink, tsSticky, tsGIDSet, tsUIDSet, tsGrpOwn,
 		tsUsrOwn, tsModif, tsRead, tsWrite, tsExec, tsNoEmpty,
 		tsFdTerm, tsEmpStr, tsNempStr, tsOptSet, tsVarSet, tsRefVar:
-		u := &UnaryTest{OpPos: p.pos, Op: UnTestOperator(p.tok)}
+		u := budgetNode(p, UnaryTest{OpPos: p.pos, Op: UnTestOperator(p.tok)})
 		p.next()
 		u.X = p.followWordTok(token(u.Op), u.OpPos)
 		return u
 	case leftParen:
-		pe := &ParenTest{Lparen: p.pos}
+		pe := budgetNode(p, ParenTest{Lparen: p.pos})
 		p.next()
 		if pe.X = p.testExprBinary(false); pe.X == nil {
 			p.followErrExp(pe.Lparen, leftParen)
@@ -2752,23 +2924,25 @@ func (p *Parser) testExprUnary() TestExpr {
 }
 
 func (p *Parser) declClause(s *Stmt) {
-	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
+	p.enterFrame()
+	defer p.leaveFrame()
+	ds := budgetNode(p, DeclClause{Variant: p.lit(p.pos, p.val)})
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
 		if p.hasValidIdent() {
-			ds.Args = append(ds.Args, p.getAssign(false))
+			ds.Args = budgetAppend(p, ds.Args, p.getAssign(false))
 		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
 			p.curErr("invalid var name")
 		} else if p.tok == _LitWord && ValidName(p.val) {
-			ds.Args = append(ds.Args, &Assign{
+			ds.Args = budgetAppend(p, ds.Args, budgetNode(p, Assign{
 				Naked: true,
 				Name:  p.getLit(),
-			})
+			}))
 		} else if w := p.getWord(); w != nil {
-			ds.Args = append(ds.Args, &Assign{
+			ds.Args = budgetAppend(p, ds.Args, budgetNode(p, Assign{
 				Naked: true,
 				Value: w,
-			})
+			}))
 		} else {
 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))
 		}
@@ -2792,38 +2966,42 @@ func isBashCompoundCommand(tok token, val string) bool {
 }
 
 func (p *Parser) timeClause(s *Stmt) {
-	tc := &TimeClause{Time: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	tc := budgetNode(p, TimeClause{Time: p.pos})
 	p.next()
 	if _, ok := p.gotRsrv("-p"); ok {
 		tc.PosixFormat = true
 	}
-	tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+	tc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
 	s.Cmd = tc
 }
 
 func (p *Parser) coprocClause(s *Stmt) {
-	cc := &CoprocClause{Coproc: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	cc := budgetNode(p, CoprocClause{Coproc: p.pos})
 	if p.next(); isBashCompoundCommand(p.tok, p.val) {
 		// has no name
-		cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+		cc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
 		s.Cmd = cc
 		return
 	}
 	cc.Name = p.getWord()
-	cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+	cc.Stmt = p.gotStmtPipe(budgetNode(p, Stmt{Position: p.pos}), false)
 	if cc.Stmt == nil {
 		if cc.Name == nil {
 			p.posErr(cc.Coproc, "coproc clause requires a command")
 			return
 		}
 		// name was in fact the stmt
-		cc.Stmt = &Stmt{Position: cc.Name.Pos()}
+		cc.Stmt = budgetNode(p, Stmt{Position: cc.Name.Pos()})
 		cc.Stmt.Cmd = p.call(cc.Name)
 		cc.Name = nil
 	} else if cc.Name != nil {
 		if call, ok := cc.Stmt.Cmd.(*CallExpr); ok {
 			// name was in fact the start of a call
-			call.Args = append([]*Word{cc.Name}, call.Args...)
+			call.Args = budgetAppend(p, budgetAppend(p, []*Word(nil), cc.Name), call.Args...)
 			cc.Name = nil
 		}
 	}
@@ -2831,7 +3009,9 @@ func (p *Parser) coprocClause(s *Stmt) {
 }
 
 func (p *Parser) letClause(s *Stmt) {
-	lc := &LetClause{Let: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	lc := budgetNode(p, LetClause{Let: p.pos})
 	old := p.preNested(arithmExprLet)
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
@@ -2839,7 +3019,7 @@ func (p *Parser) letClause(s *Stmt) {
 		if x == nil {
 			break
 		}
-		lc.Exprs = append(lc.Exprs, x)
+		lc.Exprs = budgetAppend(p, lc.Exprs, x)
 	}
 	if len(lc.Exprs) == 0 {
 		p.followErrExp(lc.Let, "let")
@@ -2849,11 +3029,13 @@ func (p *Parser) letClause(s *Stmt) {
 }
 
 func (p *Parser) bashFuncDecl(s *Stmt) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	fpos := p.pos
 	p.next()
-	names := make([]*Lit, 0, 1)
+	names := budgetMake[*Lit](p, 0, 1)
 	for p.tok == _LitWord && p.val != "{" {
-		names = append(names, p.lit(p.pos, p.val))
+		names = budgetAppend(p, names, p.lit(p.pos, p.val))
 		p.next()
 	}
 	hasParens := p.got(leftParen)
@@ -2877,7 +3059,9 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 }
 
 func (p *Parser) testDecl(s *Stmt) {
-	td := &TestDecl{Position: p.pos}
+	p.enterFrame()
+	defer p.leaveFrame()
+	td := budgetNode(p, TestDecl{Position: p.pos})
 	p.next()
 	if td.Description = p.getWord(); td.Description == nil {
 		p.followErr(td.Position, "@test", noQuote("a description word"))
@@ -2889,6 +3073,8 @@ func (p *Parser) testDecl(s *Stmt) {
 }
 
 func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Note that we'll only keep the first error that happens.
 	if len(ce.Args) > 0 {
 		if cmd := ce.Args[0].Lit(); isBashCompoundCommand(_LitWord, cmd) {
@@ -2899,12 +3085,14 @@ func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
 }
 
 func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	ce := p.call(w)
 	if w == nil {
 		ce.Args = ce.Args[:0]
 	}
 	if assign {
-		ce.Assigns = append(ce.Assigns, p.getAssign(true))
+		ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
 	}
 loop:
 	for {
@@ -2914,7 +3102,7 @@ loop:
 			break loop
 		case _LitWord:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
+				ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
 				break
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
@@ -2928,15 +3116,15 @@ loop:
 			w := p.wordOne(p.lit(p.pos, p.val))
 			p.next()
 			if p.lang.in(LangZsh) && !p.spaced {
-				w.Parts = append(w.Parts, p.wordParts(nil)...)
+				w.Parts = budgetAppend(p, w.Parts, p.wordParts(nil)...)
 			}
-			ce.Args = append(ce.Args, w)
+			ce.Args = budgetAppend(p, ce.Args, w)
 		case _Lit:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
+				ce.Assigns = budgetAppend(p, ce.Assigns, p.getAssign(true))
 				break
 			}
-			ce.Args = append(ce.Args, p.wordAnyNumber())
+			ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
 		case bckQuote:
 			if p.backquoteEnd() {
 				break loop
@@ -2945,12 +3133,12 @@ loop:
 		case dollBrace, dollDblParen, dollParen, dollar, cmdIn, assgnParen, cmdOut,
 			sglQuote, dollSglQuote, dblQuote, dollDblQuote, dollBrack,
 			globQuest, globStar, globPlus, globAt, globExcl:
-			ce.Args = append(ce.Args, p.wordAnyNumber())
+			ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
 		case dblLeftParen:
 			p.curErr("%#q can only be used to open an arithmetic cmd", p.tok)
 		case leftParen:
 			if p.lang.in(LangZsh) && p.r != ')' {
-				ce.Args = append(ce.Args, p.wordAnyNumber())
+				ce.Args = budgetAppend(p, ce.Args, p.wordAnyNumber())
 				break
 			}
 			p.unexpectedInCallExpr(ce)
@@ -2980,11 +3168,13 @@ loop:
 }
 
 func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) {
-	fd := &FuncDecl{
+	p.enterFrame()
+	defer p.leaveFrame()
+	fd := budgetNode(p, FuncDecl{
 		Position: pos,
 		RsrvWord: long,
 		Parens:   withParens,
-	}
+	})
 	if len(names) == 1 {
 		fd.Name = names[0]
 	} else {

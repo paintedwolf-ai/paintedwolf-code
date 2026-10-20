@@ -3,16 +3,22 @@ package syntax
 // compact specifies whether we allow spaces between expressions.
 // This is true for let
 func (p *Parser) arithmExpr(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprComma(compact)
 }
 
 // These function names are inspired by Bash's expr.c
 
 func (p *Parser) arithmExprComma(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprAssign, Comma)
 }
 
 func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Assign is different from the other binary operators because it's
 	// right-associative and needs to check that it's placed after a name
 	value := p.arithmExprTernary(compact)
@@ -33,17 +39,19 @@ func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
 		if y == nil {
 			p.followErrExp(pos, tok)
 		}
-		return &BinaryArithm{
+		return budgetNode(p, BinaryArithm{
 			OpPos: pos,
 			Op:    BinAritOperator(tok),
 			X:     value,
 			Y:     y,
-		}
+		})
 	}
 	return value
 }
 
 func (p *Parser) arithmExprTernary(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	value := p.arithmExprLor(compact)
 	if BinAritOperator(p.tok) != TernQuest || (compact && p.spaced) {
 		return value
@@ -70,60 +78,82 @@ func (p *Parser) arithmExprTernary(compact bool) ArithmExpr {
 	if falseExpr == nil {
 		p.followErrExp(colonPos, TernColon)
 	}
-	return &BinaryArithm{
+	return budgetNode(p, BinaryArithm{
 		OpPos: questPos,
 		Op:    TernQuest,
 		X:     value,
-		Y: &BinaryArithm{
+		Y: budgetNode(p, BinaryArithm{
 			OpPos: colonPos,
 			Op:    TernColon,
 			X:     trueExpr,
 			Y:     falseExpr,
-		},
-	}
+		}),
+	})
 }
 
 func (p *Parser) arithmExprLor(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprLand, OrArit, XorBool)
 }
 
 func (p *Parser) arithmExprLand(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprBor, AndArit)
 }
 
 func (p *Parser) arithmExprBor(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprBxor, Or)
 }
 
 func (p *Parser) arithmExprBxor(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprBand, Xor)
 }
 
 func (p *Parser) arithmExprBand(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprEquality, And)
 }
 
 func (p *Parser) arithmExprEquality(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprComparison, Eql, Neq)
 }
 
 func (p *Parser) arithmExprComparison(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprShift, Lss, Gtr, Leq, Geq)
 }
 
 func (p *Parser) arithmExprShift(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprAddition, Shl, Shr)
 }
 
 func (p *Parser) arithmExprAddition(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprMultiplication, Add, Sub)
 }
 
 func (p *Parser) arithmExprMultiplication(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.arithmExprBinary(compact, p.arithmExprPower, Mul, Quo, Rem)
 }
 
 func (p *Parser) arithmExprPower(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	// Power is different from the other binary operators because it's right-associative
 	value := p.arithmExprUnary(compact)
 	if BinAritOperator(p.tok) != Pow || (compact && p.spaced) {
@@ -141,22 +171,24 @@ func (p *Parser) arithmExprPower(compact bool) ArithmExpr {
 	if y == nil {
 		p.followErrExp(pos, op)
 	}
-	return &BinaryArithm{
+	return budgetNode(p, BinaryArithm{
 		OpPos: pos,
 		Op:    BinAritOperator(op),
 		X:     value,
 		Y:     y,
-	}
+	})
 }
 
 func (p *Parser) arithmExprUnary(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if !compact {
 		p.got(_Newl)
 	}
 
 	switch UnAritOperator(p.tok) {
 	case Not, BitNegation, Plus, Minus:
-		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
+		ue := budgetNode(p, UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)})
 		p.nextArithOp(compact)
 		if ue.X = p.arithmExprUnary(compact); ue.X == nil {
 			p.followErrExp(ue.OpPos, ue.Op)
@@ -167,10 +199,12 @@ func (p *Parser) arithmExprUnary(compact bool) ArithmExpr {
 }
 
 func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	var x ArithmExpr
 	switch p.tok {
 	case addAdd, subSub:
-		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
+		ue := budgetNode(p, UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)})
 		p.nextArith(compact)
 		if p.tok != _LitWord {
 			p.followErr(ue.OpPos, ue.Op, noQuote("a literal"))
@@ -182,7 +216,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 			x = p.zshSubFlags()
 			break
 		}
-		pe := &ParenArithm{Lparen: p.pos}
+		pe := budgetNode(p, ParenArithm{Lparen: p.pos})
 		p.nextArithOp(compact)
 		pe.X = p.followArithm(leftParen, pe.Lparen)
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)
@@ -200,7 +234,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 			x = p.wordOne(l)
 			break
 		}
-		pe := &ParamExp{Short: true, Param: l}
+		pe := budgetNode(p, ParamExp{Short: true, Param: l})
 		pe.Index = p.eitherIndex()
 		x = p.wordOne(pe)
 	case bckQuote:
@@ -229,12 +263,12 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		if !isArithName(x) {
 			p.curErr("%#q must follow a name", p.tok)
 		}
-		u := &UnaryArithm{
+		u := budgetNode(p, UnaryArithm{
 			Post:  true,
 			OpPos: p.pos,
 			Op:    UnAritOperator(p.tok),
 			X:     x,
-		}
+		})
 		p.nextArith(compact)
 		return u
 	}
@@ -244,6 +278,8 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 // nextArith consumes a token.
 // It returns true if compact and the token was followed by spaces
 func (p *Parser) nextArith(compact bool) bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	p.next()
 	if compact && p.spaced {
 		return true
@@ -255,6 +291,8 @@ func (p *Parser) nextArith(compact bool) bool {
 }
 
 func (p *Parser) nextArithOp(compact bool) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	pos := p.pos
 	tok := p.tok
 	if p.nextArith(compact) {
@@ -264,6 +302,8 @@ func (p *Parser) nextArithOp(compact bool) {
 
 // arithmExprBinary is used for all left-associative binary operators
 func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, operators ...BinAritOperator) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	value := nextOp(compact)
 	for {
 		var foundOp BinAritOperator
@@ -289,12 +329,12 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
 			p.followErrExp(pos, foundOp)
 		}
 
-		value = &BinaryArithm{
+		value = budgetNode(p, BinaryArithm{
 			OpPos: pos,
 			Op:    foundOp,
 			X:     value,
 			Y:     y,
-		}
+		})
 	}
 }
 
@@ -314,6 +354,8 @@ func isArithName(left ArithmExpr) bool {
 }
 
 func (p *Parser) followArithm(ftok token, fpos Pos) ArithmExpr {
+	p.enterFrame()
+	defer p.leaveFrame()
 	x := p.arithmExpr(false)
 	if x == nil {
 		p.followErrExp(fpos, ftok)
@@ -322,10 +364,14 @@ func (p *Parser) followArithm(ftok token, fpos Pos) ArithmExpr {
 }
 
 func (p *Parser) peekArithmEnd() bool {
+	p.enterFrame()
+	defer p.leaveFrame()
 	return p.tok == rightParen && p.r == ')'
 }
 
 func (p *Parser) arithmMatchingErr(pos Pos, left, right token) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	switch p.tok {
 	case _Lit, _LitWord:
 		p.curErr("not a valid arithmetic operator: %#q", p.val)
@@ -346,12 +392,16 @@ func (p *Parser) arithmMatchingErr(pos Pos, left, right token) {
 }
 
 func (p *Parser) matchedArithm(lpos Pos, left, right token) {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if !p.got(right) {
 		p.arithmMatchingErr(lpos, left, right)
 	}
 }
 
 func (p *Parser) arithmEnd(ltok token, lpos Pos, old saveState) Pos {
+	p.enterFrame()
+	defer p.leaveFrame()
 	if !p.peekArithmEnd() {
 		if p.recoverError() {
 			return recoveredPos
