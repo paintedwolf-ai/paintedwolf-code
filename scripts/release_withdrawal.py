@@ -49,7 +49,7 @@ def token_for(channel: str) -> str:
     return "painted-wolf-code" + ("@preview" if channel == "preview" else "")
 
 
-def prepare(distribution: dict) -> dict:
+def prepare(distribution: dict, *, distribution_documents=False) -> dict:
     tap = os.environ["HOMEBREW_TAP_REPO"]
     tap_token, website_token = os.environ["HOMEBREW_TAP_TOKEN"], os.environ["WWW_DISPATCH_TOKEN"]
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", tap) or not tap_token or not website_token:
@@ -84,7 +84,11 @@ def prepare(distribution: dict) -> dict:
             if not re.fullmatch(r"[0-9a-f]{64}", checksum) or f'version "{good}"'.encode() not in replacement or f'sha256 "{checksum}"'.encode() not in replacement:
                 raise ValueError("last-good cask does not match the immutable package checksum")
             manifest_digest = hashlib.sha256(download(f"updates/releases/{good}.json")).hexdigest()
-        rows.append({"channel": channel, "bad": bad, "last_good": good, "path": path,
+        document_digests = {}
+        if distribution_documents:
+            from scripts.linux_release.publication.withdrawal import digests
+            document_digests = digests(bad, good, manifest_digest)
+        rows.append({**document_digests, "channel": channel, "bad": bad, "last_good": good, "path": path,
                      "sha": current["sha"] if change_tap else None, "change_tap": change_tap,
                      "content": base64.b64encode(replacement).decode() if replacement is not None else None,
                      "manifest_sha256": manifest_digest})
@@ -102,10 +106,12 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
                 release = channel["release"]
                 if release is not None and release["version"] == row["bad"]:
                     raise ValueError("website still advertises the withdrawn version")
-                wait_for_website("https://paintedwolf.ai", {"channel": row["channel"],
-                    "version": release["version"] if release else None,
+                expected = {"channel": row["channel"], "version": release["version"] if release else None,
                     "manifest_sha256": release["manifest_sha256"] if release else None,
-                    "withdrawn_version": channel["withdrawn_version"]})
+                    "withdrawn_version": channel["withdrawn_version"]}
+                if "distribution_sha256" in row:
+                    expected["distribution_sha256"] = release["distribution_sha256"] if release else None
+                wait_for_website("https://paintedwolf.ai", expected)
                 return
         if time.monotonic() >= deadline:
             raise ValueError("website has not recorded the withdrawal")
@@ -113,6 +119,12 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
 
 
 def apply(prepared: dict) -> None:
+    for row in prepared["channels"]:
+        if "distribution_sha256" in row or "bad_distribution_sha256" in row:
+            from scripts.linux_release.publication.withdrawal import digests
+            expected = digests(row["bad"], row["last_good"], row["manifest_sha256"])
+            if any(row.get(key) != value for key, value in expected.items()):
+                raise ValueError("halt distribution identities changed after preparation")
     errors = []
     for row in prepared["channels"]:
         try:
@@ -129,6 +141,10 @@ def apply(prepared: dict) -> None:
         try:
             payload = {"channel": row["channel"], "bad_version": row["bad"], "last_good_version": row["last_good"],
                        "manifest_sha256": row["manifest_sha256"]}
+            if "distribution_sha256" in row or "bad_distribution_sha256" in row:
+                if not {"distribution_sha256", "bad_distribution_sha256"} <= row.keys():
+                    raise ValueError("halt requires both selected distribution identities")
+                payload.update({key: row[key] for key in ("distribution_sha256", "bad_distribution_sha256")})
             api(os.environ["WWW_DISPATCH_TOKEN"], "repos/paintedwolf-ai/paintedwolf-www/dispatches", "POST",
                 {"event_type": "painted-wolf-release-halt", "client_payload": payload})
             wait_for_withdrawal(row)
@@ -159,12 +175,13 @@ def main() -> None:
     parser.add_argument("operation", choices=("prepare", "apply"))
     parser.add_argument("--file", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--distribution-documents", action="store_true")
     args = parser.parse_args()
     value = json.loads(args.file.read_text())
     if args.operation == "prepare":
         if args.output is None:
             parser.error("prepare requires --output")
-        args.output.write_text(json.dumps(prepare(value), indent=2) + "\n")
+        args.output.write_text(json.dumps(prepare(value, distribution_documents=args.distribution_documents), indent=2) + "\n")
     else:
         apply(value)
 

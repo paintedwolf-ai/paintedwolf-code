@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import tempfile
 
 from .authority import PREFIX
 from .distribution import InactiveDeliveryReleaseAuthority
@@ -33,7 +34,13 @@ def repository_facts(selected, inputs, report, backend):
         observed = observe(manifest, directory, operation, backend=backend)["facts"]
         base = backend.public + "/generations/" + generation
         if manifest["family"] == "pacman":
-            setup = directory / "client.conf"
+            from ..pacman_publication import configuration
+            with tempfile.TemporaryDirectory(prefix="public-pacman-setup-") as temporary:
+                setup = Path(temporary) / "client.conf"
+                setup.write_text(configuration(manifest, observed["base_url"], manifest["key_fingerprint"]))
+                setup_key = "generations/" + generation + "/client.conf"
+                setup_fact = artifact(setup, backend.public + "/" + setup_key, "text/plain")
+                backend.verify_public(setup_key, setup, expected_identity={key: setup_fact[key] for key in ("sha256", "bytes")})
             setup_key = "generations/" + generation + "/client.conf"
             content_type = "text/plain"
         else:
@@ -45,8 +52,11 @@ def repository_facts(selected, inputs, report, backend):
             content_type = "application/vnd.debian.binary-package" if manifest["family"] == "deb" else "application/x-rpm"
             if artifact(setup, backend.public + "/" + setup_key, content_type)["sha256"] != checked["package"]["sha256"]:
                 raise ValueError("repository setup changed after independent admission")
-        setup_fact = artifact(setup, backend.public + "/" + setup_key, content_type)
-        backend.verify_public(setup_key, setup, expected_identity={key: setup_fact[key] for key in ("sha256", "bytes")})
+        if manifest["family"] != "pacman":
+            setup_fact = artifact(setup, backend.public + "/" + setup_key, content_type)
+            if {key: setup_fact[key] for key in ("sha256", "bytes")} != {key: checked["package"][key] for key in ("sha256", "bytes")}:
+                raise ValueError("repository setup identity changed after independent admission")
+            backend.verify_public(setup_key, setup, expected_identity={key: setup_fact[key] for key in ("sha256", "bytes")})
         key_fact = artifact(public, base + "/" + public.name, "application/pgp-keys")
         backend.verify_public("generations/" + generation + "/" + public.name, public,
                               expected_identity={key: key_fact[key] for key in ("sha256", "bytes")})

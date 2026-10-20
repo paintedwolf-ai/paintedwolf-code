@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -64,12 +65,17 @@ def package_files(selected, released, source, destination):
 
 
 def produce(api, repository, producer, source_repository, source_commit, campaign_run_id,
-            release_run_id, release_artifact_id, destination, *, catalog, signing_generation, package_signing_generation, key_fingerprint, repository_base_url, enabled_delivery=False):
+            release_run_id, release_artifact_id, destination, *, catalog, signing_generation, package_signing_generation, key_fingerprint, repository_base_url, enabled_delivery=False, publish_immutable=False, delivery_expected=None):
+    if type(enabled_delivery) is not bool or type(publish_immutable) is not bool:
+        raise ValueError("document delivery operations require explicit booleans")
+    if delivery_expected is not None and not (enabled_delivery and publish_immutable):
+        raise ValueError("delivery activation requires explicit observed publication mode")
     if (destination.exists() or destination.is_symlink()
             or destination.resolve().is_relative_to(source_repository.resolve())):
         raise ValueError("distribution preparation requires fresh independent retained inputs")
     source = facts(source_repository, source_commit)
     destination.mkdir(mode=0o700)
+    publication_started = False
     try:
         selected = retain_campaign(api, repository, producer["repository_id"], campaign_run_id, source_repository,
             source_commit, destination / "linux", catalog=catalog, signing_generation=package_signing_generation,
@@ -88,6 +94,11 @@ def produce(api, repository, producer, source_repository, source_commit, campaig
         if type(enabled_delivery) is not bool or enabled_delivery and not linux:
             raise ValueError("enabled Linux delivery requires explicit public source catalog policy")
         if enabled_delivery:
+            if delivery_expected is not None:
+                from .delivery_publication import publish as publish_delivery
+                from .authority import repository_origin
+                publication_started = True
+                publish_delivery(selected, origin=repository_origin(request["origin"]), expected=delivery_expected)
             from .delivery import ObservedDeliveryReleaseAuthority
             authority = ObservedDeliveryReleaseAuthority(selected, released, producer["controller_commit"])
             request["repositories"], request["nix"]["cache"] = authority.facts()
@@ -95,15 +106,38 @@ def produce(api, repository, producer, source_repository, source_commit, campaig
             authority = InactiveDeliveryReleaseAuthority(released, producer["controller_commit"])
         identity = prepare(selected, destination / "document", request, released.root / "catalog.json",
                            released.root / "updater.json", destination / "packages", authorize_release=authority)
+        if type(publish_immutable) is not bool:
+            raise ValueError("document publication requires an explicit boolean operation")
+        if publish_immutable:
+            from .distribution import DistributionAuthority
+            from .document_publication import publish, notification
+            from .immutable import ImmutableOrigin
+            callback = DistributionAuthority(selected, authorize_release=authority)
+            publication_started = True
+            publish(destination / "document", request, released.root / "catalog.json",
+                    released.root / "updater.json", destination / "packages", authorize=callback,
+                    backend=ImmutableOrigin())
+            updater_sha256 = hashlib.sha256((released.root / "updater.json").read_bytes()).hexdigest()
+            payload = notification(destination / "document", request, released.root / "catalog.json",
+                    released.root / "updater.json", destination / "packages", authorize=callback,
+                    manifest_sha256=updater_sha256)
+            with (destination / "notification.json").open("x") as stream:
+                json.dump(payload, stream, sort_keys=True); stream.write("\n")
         with (destination / "preparation.json").open("x") as stream:
-            json.dump({**identity, "published": False, "linux_public": linux,
+            json.dump({**identity, "published": publish_immutable, "linux_public": linux,
                        "repository_availability": bool(request["repositories"]),
                        "cache_availability": bool(request["nix"] and request["nix"]["cache"]["enabled"]),
                        "aur_availability": False}, stream, indent=2)
             stream.write("\n")
         return identity
     except BaseException:
-        shutil.rmtree(destination)
+        if publication_started:
+            with (destination / "publication-failure.json").open("x") as stream:
+                json.dump({"schema_version": 1, "status": "incomplete", "immutable_objects_may_exist": True,
+                           "mutable_activation": False, "notification_dispatched": False}, stream)
+                stream.write("\n")
+        else:
+            shutil.rmtree(destination)
         raise
 
 
@@ -115,6 +149,8 @@ def main(arguments=None):
     for name in ("campaign-run-id", "release-run-id", "release-artifact-id"):
         parser.add_argument("--" + name, type=int, required=True)
     parser.add_argument("--observe-enabled-delivery", action="store_true")
+    parser.add_argument("--publish-immutable", action="store_true")
+    parser.add_argument("--delivery-policy", type=Path)
     args = parser.parse_args(arguments)
     try:
         producer = controller_context(os.environ)
@@ -126,12 +162,14 @@ def main(arguments=None):
         from ..support_matrix import CATALOG
         signing, _ = selection(signing_catalog, False)
         catalog, _ = document(CATALOG)
+        from .delivery_publication import load_policy
+        expected = load_policy(args.delivery_policy) if args.delivery_policy is not None else None
         produce(api, os.environ["GITHUB_REPOSITORY"], producer, args.source_repository, args.source_commit,
                 args.campaign_run_id, args.release_run_id, args.release_artifact_id, args.output,
                 catalog=catalog, signing_generation=load_registry()["signing_generation"],
                 package_signing_generation=signing["generation"], key_fingerprint=signing["fingerprint"],
                 repository_base_url=repository_origin(os.environ["LINUX_REPOSITORY_ORIGIN"]) + "/" + PREFIX,
-                enabled_delivery=args.observe_enabled_delivery)
+                enabled_delivery=args.observe_enabled_delivery, publish_immutable=args.publish_immutable, delivery_expected=expected)
         print(f"Nonpublishing distribution document prepared: {args.output}")
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
         parser.exit(1, "Distribution document preparation refused: " + str(error) + "\n")

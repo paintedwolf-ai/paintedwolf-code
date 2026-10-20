@@ -1148,3 +1148,23 @@ delivery inactive; it does not upload public objects or change channel pointers.
 A catalog whose Linux entries remain candidates cannot produce a public Linux
 document through this operation. Enabled delivery still requires an independent
 fresh transport observer and publication integration.
+
+The protected `linux_operation=document` path defaults to preparation only.
+`linux_document_observe_delivery=true` requires a public Linux source catalog and
+fresh repository/cache transport observations; it does not activate delivery.
+`linux_document_publish=true` explicitly enables immutable document upload and the
+website notification after public byte verification. Both switches default to false.
+An optional `LINUX_DELIVERY_POLICY` physical owner-controlled file additionally
+selects native delivery publication. Its exact format is
+`{"format_version":1,"expected":{"<admitted-generation-sha256>":null}}`, with
+each value the independently selected predecessor SHA-256 or null for an absent
+channel. It must cover every admitted generation. With this policy, all native
+generations stage before opt-in setup/cache publication and channel activation.
+This mode requires both explicit switches and never enables AUR availability.
+Failed external writes retain `publication-failure.json` and the selected inputs;
+immutable partial objects may remain, and no notification is dispatched.
+Notifications carry independent updater and distribution digests. Website
+acknowledgement verifies schema-2 receipts and every package link from the signed
+distribution document, including newer Preview state after Stable promotion.
+These controls are implementation interfaces; defining them does not authorize a
+production run, release, or activation during a nonpublishing rehearsal.

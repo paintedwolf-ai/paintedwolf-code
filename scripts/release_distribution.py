@@ -190,9 +190,13 @@ def activate(path: Path, output: Path, storage_prefix: str = "") -> None:
 
 
 def validate_website_receipt(receipt: dict, expected: dict) -> None:
-    if set(receipt) != {"schema_version", "channel", "version", "manifest_sha256", "withdrawn_version"} or receipt.get("schema_version") != 1:
+    fields = {"schema_version", "channel", "version", "manifest_sha256", "withdrawn_version"}
+    distribution = "distribution_sha256" in expected
+    if distribution:
+        fields.add("distribution_sha256")
+    if set(receipt) != fields or type(receipt.get("schema_version")) is not int or receipt["schema_version"] != (2 if distribution else 1):
         raise ValueError("website release receipt has an unsupported shape")
-    if receipt != {"schema_version": 1, **expected}:
+    if receipt != {"schema_version": 2 if distribution else 1, **expected}:
         raise ValueError("website has not published the requested distribution state")
 
 
@@ -208,13 +212,15 @@ class WebsiteDownloads(HTMLParser):
             self.channels[channel].append(attrs.get("href"))
 
 
-def validate_website_downloads(html: str, expected: dict) -> None:
+def validate_website_downloads(html: str, expected: dict, distribution_urls=None) -> None:
     parser = WebsiteDownloads()
     parser.feed(html)
     version = expected["version"]
     urls = [] if version is None else [
         f"https://downloads.paintedwolf.dev/releases/v{version}/painted-wolf-code_v{version}_darwin-aarch64.dmg"]
-    if parser.channels[expected["channel"]] != urls:
+    if distribution_urls is not None:
+        urls = distribution_urls
+    if sorted(parser.channels[expected["channel"]]) != sorted(urls):
         raise ValueError("website download links do not match its publication confirmation")
 
 
@@ -264,7 +270,11 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                 raw = response.read(2 * 1024 * 1024 + 1)
                 if len(raw) > 2 * 1024 * 1024:
                     raise ValueError("website download page exceeds its bound")
-                validate_website_downloads(raw.decode(), accepted)
+                urls = None
+                if "distribution_sha256" in accepted:
+                    from scripts.linux_release.publication.website import public_downloads
+                    urls = public_downloads(accepted)
+                validate_website_downloads(raw.decode(), accepted, urls)
             return
         except (OSError, ValueError) as error:
             last_error = str(error)
@@ -298,6 +308,7 @@ def main() -> None:
     website.add_argument("--channel", choices=("stable", "preview"), required=True)
     website.add_argument("--version")
     website.add_argument("--manifest-sha256")
+    website.add_argument("--distribution-sha256")
     website.add_argument("--withdrawn-version")
     website.add_argument("--verify-promotion", action="store_true")
     website.add_argument("--generation", type=int, default=1)
@@ -322,8 +333,11 @@ def main() -> None:
     else:
         channels = publication_channels(args.channel, args.version, args.generation) if args.verify_promotion else [args.channel]
         for channel in channels:
-            wait_for_website(args.base_url, {"channel": channel, "version": args.version,
-                             "manifest_sha256": args.manifest_sha256, "withdrawn_version": args.withdrawn_version},
+            expected = {"channel": channel, "version": args.version,
+                        "manifest_sha256": args.manifest_sha256, "withdrawn_version": args.withdrawn_version}
+            if args.distribution_sha256 is not None:
+                expected["distribution_sha256"] = args.distribution_sha256
+            wait_for_website(args.base_url, expected,
                              allow_newer=args.verify_promotion and args.channel == "stable" and channel == "preview")
 
 

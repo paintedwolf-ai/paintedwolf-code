@@ -12,6 +12,16 @@ on:
         options: [release, controls, qualify, retain, document]
         required: true
         default: release
+      linux_document_observe_delivery:
+        description: 'Require fresh advertised Linux repository and cache delivery observations'
+        type: boolean
+        required: false
+        default: false
+      linux_document_publish:
+        description: 'Publish admitted immutable document bytes and notify the website'
+        type: boolean
+        required: false
+        default: false
       linux_candidate_run_id:
         description: 'Successful complete native candidate producer run'
         type: string
@@ -1192,7 +1202,7 @@ jobs:
         with:
           bun-version-file: .bun-version
           no-cache: true
-      - name: Prepare a signed document with repository, cache and AUR delivery inactive
+      - name: Prepare the explicitly selected signed distribution document
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ inputs.linux_source_commit }}
@@ -1201,8 +1211,23 @@ jobs:
           RELEASE_ARTIFACT_ID: ${{ inputs.linux_release_inputs_artifact_id }}
           LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+          LINUX_DELIVERY_POLICY: ${{ vars.LINUX_DELIVERY_POLICY }}
+          OBSERVE_DELIVERY: ${{ inputs.linux_document_observe_delivery }}
+          PUBLISH_DOCUMENT: ${{ inputs.linux_document_publish }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
+          extra=()
+          [[ "$OBSERVE_DELIVERY" == false || "$OBSERVE_DELIVERY" == true ]]
+          [[ "$PUBLISH_DOCUMENT" == false || "$PUBLISH_DOCUMENT" == true ]]
+          if [[ "$OBSERVE_DELIVERY" == true ]]; then extra+=(--observe-enabled-delivery); fi
+          if [[ "$PUBLISH_DOCUMENT" == true ]]; then
+            extra+=(--publish-immutable)
+            if [[ -n "$LINUX_DELIVERY_POLICY" ]]; then extra+=(--delivery-policy "$LINUX_DELIVERY_POLICY"); fi
+          fi
           [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
           [[ "$CAMPAIGN_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           git fetch --no-tags origin "$SOURCE_COMMIT"
@@ -1210,13 +1235,38 @@ jobs:
           ./task release:live-test -- --prepare-distribution-document \
             --source-repository "$PWD" --source-commit "$SOURCE_COMMIT" \
             --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$RELEASE_RUN_ID" \
-            --release-artifact-id "$RELEASE_ARTIFACT_ID" --output "$RUNNER_TEMP/distribution-preparation"
-      - name: Retain nonpublishing signed distribution metadata
+            --release-artifact-id "$RELEASE_ARTIFACT_ID" --output "$RUNNER_TEMP/distribution-preparation" "${extra[@]}"
+      - name: Notify the website only after immutable public verification
+        if: ${{ inputs.linux_document_publish }}
+        env:
+          GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/distribution-preparation/notification.json" "$RUNNER_TEMP/distribution-notification.json" <<'PYTHON'
+          import json,sys
+          with open(sys.argv[1]) as source:
+              payload = json.load(source)
+          with open(sys.argv[2], "x") as output:
+              json.dump({"event_type": "painted-wolf-release", "client_payload": payload}, output)
+          PYTHON
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/distribution-notification.json"
+          payload="$RUNNER_TEMP/distribution-preparation/notification.json"
+          python3 scripts/release_distribution.py website --channel "$(jq -r .channel "$payload")" \
+            --version "$(jq -r .version "$payload")" --manifest-sha256 "$(jq -r .manifest_sha256 "$payload")" \
+            --distribution-sha256 "$(jq -r .distribution_sha256 "$payload")" --verify-promotion \
+            --generation "$(jq -r .signing_generation packaging/update-keys.json)"
+      - name: Retain signed distribution metadata and publication diagnostics
+        if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-distribution-document
           path: |
             ${{ runner.temp }}/distribution-preparation/document/*
             ${{ runner.temp }}/distribution-preparation/preparation.json
+            ${{ runner.temp }}/distribution-preparation/notification.json
+            ${{ runner.temp }}/distribution-preparation/publication-failure.json
           if-no-files-found: error
           retention-days: 90
