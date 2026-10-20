@@ -667,6 +667,7 @@ jobs:
   prepare-bundle-upgrade:
     outputs:
       fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}
+      matrix: ${{ steps.prepare.outputs.matrix }}
     needs: [classify, ship-gates, aggregate-release, publication-credentials]
     if: ${{ !cancelled() && needs.aggregate-release.result == 'success' && (needs.publication-credentials.result == 'success' || needs.classify.outputs.publish == 'false') }}
     runs-on: ubuntu-latest
@@ -705,6 +706,7 @@ jobs:
           name: release-public-artifacts
           path: release-public-artifacts
       - name: Pin upgrade sources and sign isolated channel fixtures
+        id: prepare
         working-directory: .release-controller
         env:
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
@@ -734,6 +736,10 @@ jobs:
 
   bundle-upgrade:
     needs: [classify, prepare-bundle-upgrade]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -755,14 +761,14 @@ jobs:
           path: ${{ runner.temp }}/bundle-upgrade-fixtures
       - name: Exercise automatic desktop upgrades before publication
         run: |
-          ./task upgrade:rehearse -- --bundle \
+          ./task upgrade:rehearse -- --bundle --case "${{ matrix.case_id }}" \
             --fixtures "${RUNNER_TEMP}/bundle-upgrade-fixtures" \
             --evidence "${RUNNER_TEMP}/bundle-upgrade-evidence"
       - name: Retain desktop activation evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: bundle-upgrade-evidence-${{ github.run_attempt }}
+          name: bundle-upgrade-evidence-${{ matrix.case_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/bundle-upgrade-evidence
           if-no-files-found: error
           retention-days: 14
@@ -770,7 +776,7 @@ jobs:
         if: always()
         timeout-minutes: 5
         with:
-          name: release-bundle-upgrade-${{ github.run_attempt }}
+          name: release-bundle-upgrade-${{ matrix.case_id }}-${{ github.run_attempt }}
           status: ${{ job.status }}
 
   publish-immutable:

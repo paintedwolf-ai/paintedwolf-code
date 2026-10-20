@@ -113,6 +113,11 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
     return result
 
 
+def case_matrix(plan: dict) -> dict:
+    rows = [{"case_id": case["id"]} for case in plan["cases"]]
+    return {"include": rows or [{"case_id": "not_applicable"}]}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -120,7 +125,10 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    prepare(args.manifest, args.archives, args.source, args.output)
+    result = prepare(args.manifest, args.archives, args.source, args.output)
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write("matrix=" + json.dumps(case_matrix(result), separators=(",", ":")) + "\n")
 
 
 if __name__ == "__main__":

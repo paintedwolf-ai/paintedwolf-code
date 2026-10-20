@@ -22,6 +22,7 @@ class GateTests(unittest.TestCase):
                      "cases": [], "excluded_sources": [{"source_version": "1.0.1"}],
                      "skip_reason": "no_automatic_upgrade_source"}
         self.evidence = self.root / "evidence"
+        self.case_id = "not_applicable"
 
     def inventory(self):
         (self.fixtures / "plan.json").write_text(json.dumps(self.plan))
@@ -30,7 +31,7 @@ class GateTests(unittest.TestCase):
     def test_no_automatic_source_records_not_applicable_without_mutating_the_host(self):
         self.inventory()
         with patch.object(gate, "require_disposable_host") as guard:
-            gate.rehearse(self.fixtures, self.evidence)
+            gate.rehearse(self.fixtures, self.evidence, self.case_id)
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["result"], "not_applicable")
         self.assertEqual(receipt["reason"], self.plan["skip_reason"])
@@ -49,12 +50,13 @@ class GateTests(unittest.TestCase):
                     gate.verify_inventory(self.fixtures)
 
     def test_failed_host_admission_retains_a_failed_source_bound_receipt(self):
-        self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["cases"] = [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}]
+        self.case_id = "1.0.2-preview"
         self.plan["skip_reason"] = None
         self.inventory()
         with patch.object(gate, "require_disposable_host", side_effect=ValueError("not disposable")):
             with self.assertRaisesRegex(ValueError, "not disposable"):
-                gate.rehearse(self.fixtures, self.evidence)
+                gate.rehearse(self.fixtures, self.evidence, self.case_id)
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["result"], "failed")
         self.assertEqual(receipt["source_sha"], self.plan["source_sha"])
@@ -127,7 +129,8 @@ class GateTests(unittest.TestCase):
 
     def test_case_diagnostics_survive_a_separate_host_cleanup_failure(self):
         from contextlib import contextmanager
-        self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["cases"] = [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}]
+        self.case_id = "1.0.2-preview"
         self.plan["skip_reason"] = None
         self.inventory()
         @contextmanager
@@ -140,7 +143,7 @@ class GateTests(unittest.TestCase):
              patch.object(gate, "local_origin", origin), \
              patch.object(gate, "run_case", side_effect=ValueError("candidate rejected")):
             with self.assertRaisesRegex(ValueError, "host cleanup failed"):
-                gate.rehearse(self.fixtures, self.evidence)
+                gate.rehearse(self.fixtures, self.evidence, self.case_id)
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["cases"][0]["error"], "candidate rejected")
         self.assertEqual(receipt["error"], "host cleanup failed")
@@ -160,7 +163,8 @@ class GateTests(unittest.TestCase):
 
     def test_interruption_retains_cancelled_evidence_and_exits_the_host_context(self):
         from contextlib import contextmanager
-        self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["cases"] = [{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}]
+        self.case_id = "1.0.2-preview"
         self.plan["skip_reason"] = None
         self.inventory()
         cleaned = []
@@ -174,7 +178,7 @@ class GateTests(unittest.TestCase):
              patch.object(gate, "local_origin", origin), \
              patch.object(gate, "run_case", side_effect=KeyboardInterrupt("cancelled")):
             with self.assertRaises(KeyboardInterrupt):
-                gate.rehearse(self.fixtures, self.evidence)
+                gate.rehearse(self.fixtures, self.evidence, self.case_id)
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["result"], "cancelled")
         self.assertEqual(receipt["cases"][0]["error"], "cancelled")

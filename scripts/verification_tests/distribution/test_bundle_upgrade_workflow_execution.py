@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class WorkflowTests(unittest.TestCase):
     def test_existing_task_dispatches_bundle_mode_without_building_a_replacement(self):
-        result = subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence"],
+        result = subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence", "--case", "1.0.2-preview"],
                                 cwd=ROOT, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("bundle-rehearse --fixtures /fixtures --evidence /evidence", " ".join((result.stdout + result.stderr).split()))
@@ -45,6 +45,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)
         self.assertNotIn("secrets.", execution)
         self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)
+        self.assertIn("max-parallel: 1", execution)
+        self.assertIn("matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}", execution)
+        self.assertIn('matrix.case_id', execution)
         self.assertIn("aggregate-release, bundle-upgrade]", publication)
         self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
         self.assertIn("if: always()", execution)

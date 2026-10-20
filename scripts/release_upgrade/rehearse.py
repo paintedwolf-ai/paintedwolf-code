@@ -49,9 +49,9 @@ def verify_requests(path: Path, case: dict, start: int):
             raise ValueError("upgrade did not fetch every authenticated fixture route")
 
 
-def rehearse(root: Path, evidence: Path):
+def rehearse(root: Path, evidence: Path, case_id: str):
     evidence.mkdir(parents=True, exist_ok=False)
-    receipt = {"format_version": 1, "result": "failed", "cases": []}
+    receipt = {"format_version": 1, "result": "failed", "case_id": case_id, "cases": []}
     config = None
     try:
         plan = verify_inventory(root)
@@ -59,13 +59,23 @@ def rehearse(root: Path, evidence: Path):
                         "excluded_sources": plan["excluded_sources"], "inventory_sha256": file_digest(root / "inventory.json")})
         shutil.copyfile(root / "plan.json", evidence / "plan.json")
         if not plan["cases"]:
+            if case_id != "not_applicable":
+                raise ValueError("the fixture has no executable upgrade cases")
             receipt.update({"result": "not_applicable", "reason": plan["skip_reason"]})
             return receipt
+        selected = [case for case in plan["cases"] if case["id"] == case_id]
+        if len(selected) != 1:
+            raise ValueError("select exactly one case from the prepared upgrade plan")
+        from release_semver import parse
+        case = selected[0]
+        parse(case["source_version"])
+        if case["channel"] not in ("stable", "preview") or case_id != f"{case['source_version']}-{case['channel']}":
+            raise ValueError("upgrade case identity is invalid")
         config = require_disposable_host()
         with tempfile.TemporaryDirectory(prefix="bundle-upgrade-") as directory:
             work = Path(directory).resolve()
             with local_origin(root, work, evidence):
-                for case in plan["cases"]:
+                for case in selected:
                     case_work = work / case["id"]
                     case_work.mkdir()
                     receipt["cases"].append({"id": case["id"], "result": "failed"})
@@ -95,13 +105,14 @@ def rehearse(root: Path, evidence: Path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, required=True)
+    parser.add_argument("--case", dest="case_id", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     def interrupted(number, _frame):
         raise KeyboardInterrupt(f"Desktop rehearsal interrupted by signal {number}")
     previous = {number: signal.signal(number, interrupted) for number in (signal.SIGINT, signal.SIGTERM)}
     try:
-        rehearse(args.fixtures.resolve(), args.evidence.resolve())
+        rehearse(args.fixtures.resolve(), args.evidence.resolve(), args.case_id)
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)

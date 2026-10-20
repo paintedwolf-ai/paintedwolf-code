@@ -1077,8 +1077,9 @@ fixture pointers. Only public keys, signed pointers, archives, and corpus data
 reach the desktop runner; artifact-signing credentials stay in the build job and
 feed-signing credentials stay in preparation.
 
-The gate uses a disposable GitHub-hosted arm64 macOS runner with an absent product
-store and its actual account home. It refuses local and self-hosted execution.
+Each source/channel case uses a fresh GitHub-hosted arm64 macOS runner with an
+absent product store and its actual account home. Cases run serially, isolating
+Keychain state as well as files while keeping the declared runner footprint. It refuses local and self-hosted execution.
 This makes the updater's normal LaunchServices relaunch use the same installation
 and data root without changing the shipped binary or adding runtime overrides.
 The runner launch environment sets `LYCAON_LLM_MOCK=1` across helper relaunches
@@ -1088,7 +1089,7 @@ allowlisted paths and retains request evidence. Cleanup removes its certificate
 and hosts entry and stops its captured server process; cleanup failures fail the
 gate. Cancellation records an interrupted result and attempts the same cleanup.
 
-`./task upgrade:rehearse -- --bundle --fixtures <directory> --evidence <directory>`
+`./task upgrade:rehearse -- --bundle --case <id> --fixtures <directory> --evidence <directory>`
 uses the prepared artifact without rebuilding the candidate. The protected job
 prepares it through the same target with `--prepare-bundle --manifest PATH
 --archives DIR --source DIR --output DIR`. Each case installs
