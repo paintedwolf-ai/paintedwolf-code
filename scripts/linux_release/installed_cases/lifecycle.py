@@ -242,13 +242,5 @@ def scenario(binding: dict, cancel: bool, host_execution: bool = False) -> tuple
         cleanup(owned)
 
 
-def detached_cleanup(binding):
-    return scenario(binding, False)
-
-
 def background_cancel(binding):
     return scenario(binding, True)
-
-
-def host_execution_lifetime(binding):
-    return scenario(binding, True, True)

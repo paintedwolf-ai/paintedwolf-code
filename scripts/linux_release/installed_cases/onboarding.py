@@ -111,7 +111,7 @@ def complete(selected, owner: tuple) -> dict:
     except Exception:
         # D-Bus or toolkit exception prose must never carry input values into evidence.
         raise CaseUnavailable('normal native vault form interaction is unavailable') from None
-    return {'mode': mode, 'ui_identity': identity, 'password_retained': False, 'normal_action': True}
+    return {'mode': mode, 'ui_identity': identity, 'password_in_evidence': False, 'normal_action': True}
 
 
 @contextmanager
