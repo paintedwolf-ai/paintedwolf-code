@@ -39,12 +39,13 @@ p.write_text(json.dumps(s));raise SystemExit(code)
                 stub.write_text('#!/bin/sh\nexit 0\n')
                 stub.chmod(0o755)
             script = ROOT / 'packaging/linux' / family / ('postinst' if family == 'deb' else 'post')
-            wrapper = '''[() {
+            wrapper = '''fixture_test() {
 case "$1:$2" in
 -f:/usr/lib/systemd/system/paintedwolf-vault-identity.socket|-d:/run/systemd/system) return 0;;
 esac
 command [ "$@"
 }
+alias '['=fixture_test
 set -- ''' + ' '.join(shlex.quote(value) for value in arguments) + '\n. ' + shlex.quote(str(script))
             result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ,
                 'PATH': str(root), 'SERVICE_STATE': str(state)}, capture_output=True, text=True, timeout=15)
