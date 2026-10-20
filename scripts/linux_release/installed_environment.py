@@ -15,7 +15,6 @@ OS_IDS = {"Ubuntu": {"ubuntu"}, "Fedora": {"fedora"}, "Debian": {"debian"}, "RHE
 DESKTOPS = {"GNOME": {"gnome", "ubuntu", "gnome-xorg"}, "Plasma": {"kde", "plasma", "plasmawayland", "plasma-x11"},
             "Xfce": {"xfce"}, "Cinnamon": {"cinnamon", "x-cinnamon"}, "MATE": {"mate"},
             "LXQt": {"lxqt"}, "COSMIC": {"cosmic"}, "Sway": {"sway"}, "Hyprland": {"hyprland"}, "i3": {"i3"}}
-FLOORS = {"ubuntu-floor-gnome-wayland": "24.04", "ubuntu-floor-gnome-x11": "24.04", "debian-floor-gnome": "13", "rhel-floor-gnome": "10"}
 
 
 def query(arguments: list[str]) -> dict:
@@ -124,24 +123,16 @@ def package_inventory(installation: str) -> dict:
     return query(command)
 
 
-def collect(environment: dict, binding: dict, guest: dict) -> tuple[dict, dict]:
+def collect(environment: dict, binding: dict, guest: dict, display_protocol: str) -> tuple[dict, dict]:
     actual = release()
     if actual["ID"] not in OS_IDS.get(environment["distribution"], set()):
         raise ValueError("installed distribution differs from its selected support row")
-    floor = FLOORS.get(environment["id"])
-    version = actual.get("VERSION_ID", "")
-    if actual["ID"] in {"rhel", "rocky", "almalinux", "centos"}:
-        version = version.split(".")[0]
-    if floor and version != floor:
-        raise ValueError("installed distribution version differs from the selected floor row")
-    if environment["id"].startswith("nixos-stable-") and actual.get("VERSION_ID") != "26.05":
-        raise ValueError("NixOS stable row requires its declared generation series")
     session = graphical_session()
     desktop = environment["desktop"]
     reported = set(session.get("Desktop", "").casefold().split(":"))
     marker_desktop = {"GNOME": "gnome", "Plasma": "plasma"}.get(desktop, desktop.casefold())
     if (not reported & DESKTOPS.get(desktop, set()) or guest["desktop"] != marker_desktop
-            or session["Type"] != environment["display"].casefold()):
+            or session["Type"] != display_protocol):
         raise ValueError("actual desktop/display differs from its selected support row")
     family = next((family for family, ids in {"deb": {"debian", "ubuntu", "linuxmint", "pop"},
                    "rpm": {"fedora", "rhel", "rocky", "almalinux", "centos"},

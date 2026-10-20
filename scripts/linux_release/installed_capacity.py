@@ -9,21 +9,25 @@ MAX_BYTES = 64 << 30
 MAX_FILE = 16 << 30
 
 
-def limits(catalog: dict, final: dict) -> dict:
-    artifacts = final.get('artifacts')
-    if not isinstance(artifacts, list) or not artifacts:
-        raise ValueError('campaign capacity requires independently selected final artifacts')
+def limits(catalog: dict, final: dict | None = None) -> dict:
     rows = expand(catalog)
+    if final is None:
+        # Transport planning uses catalog combinations and grants no artifact admission.
+        selections = [(installation + '-' + architecture, installation, architecture)
+                      for installation, architecture in sorted({(row['installation'], row['architecture']) for row in rows})]
+    else:
+        artifacts = final.get('artifacts')
+        if not isinstance(artifacts, list) or not artifacts or any(not isinstance(item, dict) for item in artifacts):
+            raise ValueError('campaign capacity requires independently selected final artifacts')
+        selections = [(item['id'], item['installation'], item['architecture']) for item in artifacts]
     targets, cases = set(), 0
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            raise ValueError('campaign capacity requires typed artifact records')
+    for artifact_id, installation, architecture in selections:
         for row in rows:
-            if (row['installation'], row['architecture']) != (artifact['installation'], artifact['architecture']):
+            if (row['installation'], row['architecture']) != (installation, architecture):
                 continue
             variants = requirements(catalog, row['environment'], row['capability'])
             cases += len(variants) * len(row['cases'])
-            targets.update((artifact['id'], row['environment'], item['id']) for item in variants)
+            targets.update((artifact_id, row['environment'], item['id']) for item in variants)
     if not targets:
         raise ValueError('campaign capacity selected no catalog targets')
     # Both transported leaf and normative controller evidence are retained. Each case
