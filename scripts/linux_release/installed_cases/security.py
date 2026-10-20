@@ -115,11 +115,14 @@ def service_pid() -> int:
                       'org.freedesktop.systemd1.Manager', 'GetUnit', 's', UNIT], 'o')
     if len(unit) != 1 or not isinstance(unit[0], str) or not unit[0].startswith('/org/freedesktop/systemd1/unit/'):
         raise ValueError('identity service unit has an invalid object path')
-    value = bus_value(['get-property', 'org.freedesktop.systemd1', unit[0],
-                      'org.freedesktop.systemd1.Service', 'MainPID'], 'u')
-    if len(value) != 1 or type(value[0]) is not int or value[0] <= 1:
+    row = json.loads(observe(['busctl', '--system', '--json=short', 'get-property',
+                             'org.freedesktop.systemd1', unit[0], 'org.freedesktop.systemd1.Service', 'MainPID']))
+    if not isinstance(row, dict) or row.get('type') != 'u' or type(row.get('data')) is not int:
+        raise ValueError('identity service PID property has an invalid typed scalar shape')
+    if row['data'] <= 1:
         raise OSError('identity service is not running')
-    return value[0]
+    return row['data']
+
 
 
 def process_identity(pid: int) -> tuple[str, list[int], int]:

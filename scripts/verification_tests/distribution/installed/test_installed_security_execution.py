@@ -126,3 +126,14 @@ class InstalledSecurityTests(unittest.TestCase):
         self.assertEqual(result[4], 'failed')
         self.assertEqual(result[5]['observer_phase'], 'service-image')
         self.assertNotIn('do not retain', json.dumps(result[5]))
+
+    def test_main_pid_property_is_a_typed_scalar_not_a_method_return_tuple(self):
+        unit = '/org/freedesktop/systemd1/unit/owned'
+        with patch.object(security, 'bus_value', return_value=[unit]), patch.object(
+                security, 'observe', return_value=b'{"type":"u","data":321}'):
+            self.assertEqual(security.service_pid(), 321)
+        for data in (True, [321], '321'):
+            with patch.object(security, 'bus_value', return_value=[unit]), patch.object(
+                    security, 'observe', return_value=json.dumps({'type': 'u', 'data': data}).encode()):
+                with self.subTest(data=data), self.assertRaises(ValueError):
+                    security.service_pid()
