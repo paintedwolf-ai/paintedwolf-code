@@ -68,8 +68,9 @@ fn run(program: &str, args: &[&str]) -> Result<(), String> {
 fn open_default_application(path: &Path, window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        use crate::files::linux_desktop_open::{open_file, ParentWindow};
-        return open_file(&ParentWindow::of(window), path).map(|_| ());
+        let _ = window;
+        use crate::files::linux_desktop_open::open_file;
+        return open_file(path).map(|_| ());
     }
     #[cfg(not(target_os = "linux"))]
     {

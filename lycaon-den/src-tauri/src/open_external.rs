@@ -132,9 +132,10 @@ fn replace_tokens(mut input: &str, pairs: &[(&str, &str)]) -> String {
 }
 
 fn spawn_argv(program: &str, args: &[&str]) -> Result<(), String> {
-    let status = Command::new(program)
-        .args(args)
-        .status()
+    let mut command = Command::new(program);
+    command.args(args);
+    crate::child_credentials::prepare(&mut command);
+    let status = command.status()
         .map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
@@ -245,8 +246,9 @@ fn spawn_system_browser(url: &str, window: &tauri::WebviewWindow) -> Result<(), 
     }
     #[cfg(target_os = "linux")]
     {
-        use crate::files::linux_desktop_open::{open_uri, ParentWindow};
-        open_uri(&ParentWindow::of(window), url).map(|_| ())
+        let _ = window;
+        use crate::files::linux_desktop_open::open_uri;
+        open_uri(url).map(|_| ())
     }
     #[cfg(target_os = "windows")]
     {

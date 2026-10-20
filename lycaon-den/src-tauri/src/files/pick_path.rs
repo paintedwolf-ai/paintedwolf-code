@@ -46,13 +46,9 @@ pub async fn pick_path(
 ) -> Result<Option<PickedPath>, String> {
     let picked = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "linux")]
-        if matches!(options.target, PickTarget::Folder) {
-            return super::linux_folder_picker::pick(&window, &options.title)
-                .map(|picked| picked.map(|path| (path, None)));
-        }
+        { super::linux_path_picker::pick(&window, options) }
         #[cfg(not(target_os = "linux"))]
-        let _ = window;
-        Ok::<_, String>(run_picker(options))
+        { let _ = window; Ok::<_, String>(run_picker(options)) }
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -70,6 +66,7 @@ pub async fn pick_path(
 }
 
 /// The picked path and the byte access that pick confers.
+#[cfg(not(target_os = "linux"))]
 fn run_picker(options: PickOptions) -> Option<(std::path::PathBuf, Option<GrantMode>)> {
     let dialog = rfd::FileDialog::new().set_title(&options.title);
     match &options.target {
