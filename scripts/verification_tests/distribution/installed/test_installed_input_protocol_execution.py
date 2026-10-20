@@ -40,6 +40,17 @@ class InstalledInputProtocolTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 protocol.event_sha256('editor-replace-save-v1', ordinal)
 
+    def test_search_operation_types_only_the_fixed_needle_and_return(self):
+        rows = protocol.steps('editor-find-needle-v1')
+        self.assertEqual(rows, (('ctrl', 'a'), *(('spc',) if c == ' ' else (c,) for c in 'qualification needle'), ('ret',)))
+        self.assertEqual(len(rows), 22)
+        self.assertNotIn(('ctrl', 's'), rows)
+        binding, request, _ = self.fixture()
+        request['operation'] = 'editor-find-needle-v1'
+        request['text'] = 'other needle'
+        with self.assertRaises(ValueError):
+            protocol.request(request, binding)
+
     def test_embedded_entry_with_exact_active_owned_frame_is_structurally_bound(self):
         binding, request, ack = self.fixture()
         self.assertIs(protocol.request(request, binding), request)

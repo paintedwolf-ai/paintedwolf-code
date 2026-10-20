@@ -45,32 +45,50 @@ def verify_deliveries(directory, execution, selected):
     if path.stat().st_size > MAX_LOG:
         raise ValueError('native input delivery log exceeds its bound')
     rows = [decode(raw) for raw in path.read_bytes().splitlines()]
-    guest = None
+    records = []
     if leaf.exists():
         if leaf.stat().st_size > 1 << 20:
             raise ValueError('native input guest observations exceed their case bound')
         import json
         observations = json.loads(leaf.read_bytes())['observations']
-        guest = observations.get('native_input') or observations.get('editor_keyboard', {}).get('physical_vm_keyboard')
-    events = guest.get('events', []) if guest else []
-    if len(events) != len(rows):
+        for key in ('editor_keyboard', 'editor_search_keyboard'):
+            value = observations.get(key, {}).get('physical_vm_keyboard')
+            if value is not None:
+                records.append(value)
+        if observations.get('native_input') is not None:
+            records.append(observations['native_input'])
+    operations = ('editor-replace-save-v1', 'editor-find-needle-v1')
+    if len(records) > len(operations) or any(not isinstance(record, dict) for record in records):
+        raise ValueError('native input has unexpected fixed transactions')
+    if sum(len(record.get('events', [])) for record in records) != len(rows):
         raise ValueError('native input host and guest delivery counts differ')
-    seen, transaction, ordinal = set(), None, 0
-    for row, event in zip(rows, events):
-        if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', 'focus_after'}:
-            raise ValueError('native input retained delivery has an unknown shape')
-        pending = protocol.request(row['request'], execution)
-        delivered = protocol.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
-        if pending['transaction_id'] != transaction:
-            if pending['transaction_id'] in seen or ordinal and ordinal != len(protocol.steps('editor-replace-save-v1')):
-                raise ValueError('native input retained transactions overlap or replay')
-            transaction, ordinal = pending['transaction_id'], 0
-            seen.add(transaction)
-        if pending['ordinal'] != ordinal or event != {'request': pending, 'delivery': delivered, 'focus_after': pending['focus']}:
-            raise ValueError('native input host and guest focus or physical delivery differ')
-        ordinal += 1
-    if guest and guest.get('completed') is True and ordinal != len(protocol.steps('editor-replace-save-v1')):
-        raise ValueError('native input guest completion lacks its full physical input sequence')
+    seen, offset = set(), 0
+    for index, record in enumerate(records):
+        operation = operations[index]
+        events = record.get('events')
+        if (record.get('operation') != operation or record.get('vm_id') != selected['vm_id']
+                or type(record.get('format_version')) is not int or record['format_version'] != 1
+                or type(record.get('completed')) is not bool or not isinstance(events, list)
+                or record.get('text_readback', False) is not False
+                or len(events) > len(protocol.steps(operation))
+                or record['completed'] and len(events) != len(protocol.steps(operation))
+                or not record['completed'] and index != len(records) - 1):
+            raise ValueError('native input completion differs from its fixed physical sequence')
+        transaction = protocol.nonce(record.get('transaction_id'))
+        if transaction in seen:
+            raise ValueError('native input retained transactions overlap or replay')
+        seen.add(transaction)
+        for ordinal, event in enumerate(events):
+            row = rows[offset]
+            offset += 1
+            if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', 'focus_after'}:
+                raise ValueError('native input retained delivery has an unknown shape')
+            pending = protocol.request(row['request'], execution)
+            delivered = protocol.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
+            if (pending['transaction_id'] != transaction or pending['operation'] != operation
+                    or pending['ordinal'] != ordinal
+                    or event != {'request': pending, 'delivery': delivered, 'focus_after': pending['focus']}):
+                raise ValueError('native input host and guest focus or physical delivery differ')
 
 
 def adapter(value):

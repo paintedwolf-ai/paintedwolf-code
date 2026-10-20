@@ -8,6 +8,9 @@ import threading
 
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
+GUI_PORT = 50179
+GUI_LABEL = 'Installed UI qualification'
+GUI_ENDPOINT = f'http://127.0.0.1:{GUI_PORT}/v1'
 
 
 class ProviderFixture:
@@ -23,6 +26,13 @@ class ProviderFixture:
         self.lock = threading.Lock()
         self.server = None
         self.thread = None
+        self.gui_purpose = False
+
+    @classmethod
+    def gui(cls, calls: list[dict]):
+        fixture = cls(calls)
+        fixture.gui_purpose = True
+        return fixture
 
     def completion(self, request: dict) -> dict:
         if not isinstance(request, dict) or request.get('model') != MODEL:
@@ -108,7 +118,13 @@ class ProviderFixture:
                 except (ValueError, TypeError, OSError):
                     self.respond(400, {'error': 'fixture-request-refused'})
 
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        try:
+            self.server = ThreadingHTTPServer(('127.0.0.1', GUI_PORT if self.gui_purpose else 0), Handler)
+        except OSError:
+            if self.gui_purpose:
+                from .records import CaseUnavailable
+                raise CaseUnavailable('fixed-GUI-provider-port-unavailable') from None
+            raise
         self.server.daemon_threads = True
         self.base_url = f'http://127.0.0.1:{self.server.server_port}/v1'
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

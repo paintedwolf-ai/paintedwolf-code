@@ -9,16 +9,17 @@ from .mailbox import Mailbox
 from ..installed_cases.records import CaseUnavailable
 
 
-def perform(execution: dict, vm_id: str, actor, mailbox=None) -> dict:
+def perform(execution: dict, vm_id: str, actor, mailbox=None, *, operation='editor-replace-save-v1') -> dict:
+    sequence = protocol.steps(operation)
     mailbox = mailbox or Mailbox(execution, vm_id)
     mailbox.attach()
     transaction = secrets.token_hex(16)
     events = []
     try:
-        for ordinal, _ in enumerate(protocol.steps('editor-replace-save-v1')):
+        for ordinal, _ in enumerate(sequence):
             before = actor.observe()
             pending = protocol.request({'format_version': 1, 'binding': execution,
-                'transaction_id': transaction, 'operation': 'editor-replace-save-v1',
+                'transaction_id': transaction, 'operation': operation,
                 'ordinal': ordinal, 'focus': before}, execution)
             mailbox.write('request.json', pending)
             deadline = time.monotonic() + 10
@@ -38,8 +39,8 @@ def perform(execution: dict, vm_id: str, actor, mailbox=None) -> dict:
             mailbox.clear_completed(pending)
     except BaseException as error:
         error.observations = {**getattr(error, 'observations', {}), 'native_input': {
-            'format_version': 1, 'vm_id': vm_id, 'transaction_id': transaction,
+            'format_version': 1, 'vm_id': vm_id, 'transaction_id': transaction, 'operation': operation,
             'completed': False, 'events': events}}
         raise
-    return {'format_version': 1, 'vm_id': vm_id, 'transaction_id': transaction,
+    return {'format_version': 1, 'vm_id': vm_id, 'transaction_id': transaction, 'operation': operation,
             'completed': True, 'events': events, 'text_readback': False}

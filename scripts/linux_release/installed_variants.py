@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-from .installed_environment import query
+from .installed_environment import DESKTOPS, query
 from .installed_cases.records import CaseUnavailable
 
 
@@ -51,7 +51,12 @@ def observe(variant: dict, selected_snapshot: dict, observations: dict, binding:
             raise ValueError('actual installed package snapshot differs from the independently selected plan')
     if variant['display']['xwayland'] == 'disabled' or variant['display']['clipboard_manager'] == 'absent':
         raise CaseUnavailable('actual-xwayland-and-clipboard-absence-observer-required')
-    monitors = gnome_monitors(observations['session'])
+    session = observations['session']
+    if session.get('Desktop', '').casefold() in DESKTOPS['Plasma']:
+        from .installed_plasma import observe as plasma_monitors
+        monitors = plasma_monitors(session)
+    else:
+        monitors = gnome_monitors(session)
     if monitors['scales_percent'] != sorted(variant['scales_percent']):
         raise ValueError('actual logical monitor scales differ from the selected qualification variant')
     return {'format_version': 1, 'variant': variant, 'snapshot': selected_snapshot, 'monitors': monitors, 'factory': factory}

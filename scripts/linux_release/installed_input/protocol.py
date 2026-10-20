@@ -28,12 +28,18 @@ def _editor_steps() -> tuple[tuple[str, ...], ...]:
 
 
 _EDITOR_STEPS = _editor_steps()
+_SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
+                  for char in 'qualification needle'), ('ret',))
 
 
 def steps(operation: str) -> tuple[tuple[str, ...], ...]:
-    if operation != 'editor-replace-save-v1' or not isinstance(operation, str):
+    if not isinstance(operation, str):
         raise ValueError('native input requires a fixed declared operation')
-    return _EDITOR_STEPS
+    if operation == 'editor-replace-save-v1':
+        return _EDITOR_STEPS
+    if operation == 'editor-find-needle-v1':
+        return _SEARCH_STEPS
+    raise ValueError('native input requires a fixed declared operation')
 
 
 def event_sha256(operation: str, ordinal: int) -> str:
