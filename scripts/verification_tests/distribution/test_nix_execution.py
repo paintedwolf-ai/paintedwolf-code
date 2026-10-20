@@ -48,14 +48,16 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv e
     def reports(self):
         return [json.loads(path.read_text()) for path in (self.root / "artifacts/nix").glob("*.json")]
 
-    def test_readonly_settings_component_keeps_normal_sandbox_and_native_system(self):
-        with patch.object(nix.platform, "system", return_value="Linux"), \
-                patch.object(nix.platform, "machine", return_value="x86_64"):
-            command = nix.command("build", self.root, "desktop-settings-observer")
-        self.assertIn("desktop-settings-observer", nix.COMPONENTS)
-        self.assertEqual(command[-1], "git+file://" + str(self.root) + "#packages.x86_64-linux.desktop-settings-observer")
-        self.assertEqual(command[command.index("sandbox") + 1], "true")
-        self.assertIn("--no-write-lock-file", command)
+    def test_fixed_desktop_components_keep_normal_sandbox_and_native_system(self):
+        for component in ("desktop-settings-observer", "desktop-shell-check"):
+            with self.subTest(component=component), \
+                    patch.object(nix.platform, "system", return_value="Linux"), \
+                    patch.object(nix.platform, "machine", return_value="x86_64"):
+                command = nix.command("build", self.root, component)
+                self.assertIn(component, nix.COMPONENTS)
+                self.assertEqual(command[-1], "git+file://" + str(self.root) + "#packages.x86_64-linux." + component)
+                self.assertEqual(command[command.index("sandbox") + 1], "true")
+                self.assertIn("--no-write-lock-file", command)
 
     def test_evaluation_keeps_the_lock_and_cannot_receive_publication_credentials(self):
         before = (self.root / "flake.lock").read_bytes()
