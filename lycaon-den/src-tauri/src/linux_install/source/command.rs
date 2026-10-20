@@ -48,11 +48,14 @@ impl Reader for OsReader {
         #[cfg(target_os = "linux")]
         {
             use std::os::{fd::AsRawFd, unix::process::CommandExt};
-            let child = Command::new(program).args(args).env_clear()
+            let mut command = Command::new(program);
+            command.args(args).env_clear()
                 .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin").env("LC_ALL", "C")
                 .current_dir("/")
                 .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())
-                .process_group(0).spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
+                .process_group(0);
+            crate::child_credentials::prepare(&mut command);
+            let child = command.spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
                     QueryReason::AdapterUnavailable
                 } else { QueryReason::QueryFailed })?;
             let mut child = OwnedChild(child, false);

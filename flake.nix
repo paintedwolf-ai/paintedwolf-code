@@ -44,6 +44,17 @@
           bialy = pkgs.callPackage ./packaging/nix/bialy.nix { source = self; };
           document-core = pkgs.callPackage ./packaging/nix/document-core.nix { source = self; };
           shell = pkgs.callPackage ./packaging/nix/shell.nix { source = self; inherit frontend; };
+          desktopTests = [
+            "windows::linux_desktop_settings::portal::tests::managed_shutdown_joins_the_worker_and_is_idempotent"
+            "windows::linux_desktop_settings::portal::tests::dropping_one_observer_does_not_stop_another_owner"
+            "child_credentials::tests::external_exec_keeps_only_the_real_group"
+            "child_credentials::tests::generic_shell_permission_is_unavailable_on_linux"
+            "files::linux_desktop_open::tests::only_unanswered_file_manager_interfaces_allow_an_alternative"
+            "files::linux_desktop_open::tests::local_file_uris_preserve_reserved_and_unicode_bytes"
+            "files::linux_path_picker::tests::default_size_fits_logical_workarea_including_two_hundred_percent_scale"
+            "files::linux_path_picker::tests::selections_retain_folder_read_and_save_authority"
+            "files::linux_path_picker::tests::options_refuse_nonlocal_save_names_and_filter_patterns"
+          ];
           bound-engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
             scannerIdentityFile = "${resources}/scanner-identity.base64";
@@ -57,36 +68,34 @@
           desktop-shell-check = shell.overrideAttrs (_: {
             doCheck = true;
             cargoCheckType = "release";
+            cargoCheckFeatures = [ "tauri/custom-protocol" ];
             nativeCheckInputs = [ pkgs.python3 ];
             preCheck = ''
-              # A filter with no matching tests must never qualify this component.
               (
                 cd lycaon-den/src-tauri
                 cargo test --locked --offline --quiet --profile release \
+                  --features tauri/custom-protocol \
                   --target ${pkgs.stdenv.hostPlatform.rust.rustcTarget} \
                   --package painted-wolf-code --lib \
-                  windows::linux_desktop_settings::portal::tests \
-                  -- --list --format terse > "$TMPDIR/desktop-observer-tests"
+                  -- --exact ${pkgs.lib.escapeShellArgs desktopTests} \
+                  --list --format terse > "$TMPDIR/protected-desktop-tests"
               )
-              python3 - "$TMPDIR/desktop-observer-tests" <<'OBSERVER_TESTS'
+              python3 - "$TMPDIR/protected-desktop-tests" <<'DESKTOP_TESTS'
               from pathlib import Path
               import sys
               path = Path(sys.argv[1])
               if path.stat().st_size > 16384:
-                  raise SystemExit('Desktop observer test registry exceeds its bound')
-              rows = path.read_text().splitlines()
-              prefix = 'windows::linux_desktop_settings::portal::tests::'
-              expected = {prefix + name + ': test' for name in (
-                  'managed_shutdown_joins_the_worker_and_is_idempotent',
-                  'dropping_one_observer_does_not_stop_another_owner')}
-              actual = [row for row in rows if row and row != '2 tests, 0 benchmarks']
-              if len(actual) != 2 or set(actual) != expected:
-                  raise SystemExit('Desktop observer lifecycle test identities differ')
-              print('Both fixed desktop observer lifecycle tests are registered')
-              OBSERVER_TESTS
+                  raise SystemExit('Protected desktop test registry exceeds its bound')
+              expected = {name + ': test' for name in ${builtins.toJSON desktopTests}}
+              actual = [row for row in path.read_text().splitlines()
+                        if row and row != f'{len(expected)} tests, 0 benchmarks']
+              if len(actual) != len(expected) or set(actual) != expected:
+                  raise SystemExit('Protected desktop test identities differ')
+              print('All nine fixed protected desktop tests are registered')
+              DESKTOP_TESTS
             '';
-            cargoTestFlags = [ "--package" "painted-wolf-code" "--lib"
-              "windows::linux_desktop_settings::portal::tests" ];
+            cargoTestFlags = [ "--package" "painted-wolf-code" "--lib" ];
+            checkFlags = [ "--exact" ] ++ desktopTests;
           });
           desktop-settings-observer = pkgs.callPackage ./packaging/nix/desktop-settings.nix { source = self; };
           default = pkgs.callPackage ./packaging/nix/application.nix {
