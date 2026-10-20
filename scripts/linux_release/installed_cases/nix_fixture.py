@@ -60,30 +60,53 @@ def store_file(value: dict, fields: set[str]) -> Path:
     return path
 
 
-def derivation(graph: dict, record: dict) -> dict:
-    selected = record['cancellation']
+def derivation(graph: dict, record: dict, role: str = 'cancellation') -> dict:
+    if role not in {'cancellation', 'remote_builder'}:
+        raise ValueError('Nix fixture derivative role is not declared')
+    selected = record[role]
+    extra = {'uri', 'ssh_key', 'known_hosts', 'known_hosts_sha256', 'server'} if role == 'remote_builder' else set()
     if (not isinstance(selected, dict) or set(selected) != {
-            'derivation', 'derivation_sha256', 'output', 'token', 'arguments'}
+            'derivation', 'derivation_sha256', 'output', 'token', 'arguments'} | extra
             or not re.fullmatch('[0-9a-f]{32}', selected.get('token', ''))
             or STORE.fullmatch(selected.get('derivation', '')) is None
             or not selected['derivation'].endswith('.drv') or STORE.fullmatch(selected.get('output', '')) is None):
-        raise ValueError('Nix cancellation fixture has an invalid derivative identity')
+        raise ValueError('Nix fixture has an invalid derivative identity')
     builder, token = record['static_builder']['path'], selected['token']
-    arguments = ['sh', '-c', cancellation_script(builder, token)]
+    script = cancellation_script(builder, token) if role == 'cancellation' else (
+        f'{builder} mkdir -p \"$out\"; {builder} echo {token} > \"$out/result\"')
+    arguments = ['sh', '-c', script]
     rows = graph.get('derivations')
     name = Path(selected['derivation']).name
     if (graph.get('version') != 4 or not isinstance(rows, dict) or set(rows) != {name}
             or not isinstance(rows[name], dict)):
         raise ValueError('Nix fixture requires the exact pinned derivation graph')
     row = rows[name]
-    expected_env = {'allowSubstitutes': '', 'builder': builder, 'name': 'paintedwolf-nix-cancel-' + token,
-                    'out': selected['output'], 'preferLocalBuild': '1', 'system': record['system']}
+    prefix = 'paintedwolf-nix-cancel-' if role == 'cancellation' else 'paintedwolf-nix-remote-'
+    expected_env = {'allowSubstitutes': '', 'builder': builder, 'name': prefix + token,
+                    'out': selected['output'], 'system': record['system']}
+    if role == 'cancellation':
+        expected_env['preferLocalBuild'] = '1'
     if (row.get('version') != 4 or row.get('system') != record['system'] or row.get('builder') != builder
             or row.get('args') != arguments or selected['arguments'] != arguments
             or row.get('env') != expected_env or row.get('inputs') != {'drvs': {}, 'srcs': [Path(builder).parts[3]]}
             or row.get('outputs') != {'out': {'path': Path(selected['output']).name}}):
-        raise ValueError('Nix cancellation derivative differs from its fixed sandboxed fixture')
+        raise ValueError('Nix derivative differs from its fixed sandboxed fixture')
     return selected
+
+
+def path_presence(document: dict, output: str) -> bool:
+    if not isinstance(document, dict) or set(document) != {output}:
+        raise ValueError('Nix store query did not identify the exact selected output')
+    row = document[output]
+    if row is None:
+        return False
+    if not isinstance(row, dict) or not isinstance(row.get('narHash'), str):
+        raise ValueError('Nix store query omitted its typed output metadata')
+    return True
+
+
+def realized(program: Path, output: str) -> bool:
+    return path_presence(json.loads(nix_command(program, 'path-info', '--json', '--json-format', '1', output)), output)
 
 
 def load(binding: dict) -> dict:

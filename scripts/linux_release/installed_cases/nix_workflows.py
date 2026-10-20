@@ -193,6 +193,11 @@ def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
 
 
 def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> dict:
+    if (capability, case) == ('development', 'remote-builder-authority'):
+        from .nix_remote import scenario
+        require_owned_guest(binding)
+        status, observations, streams = scenario(binding)
+        return retain(binding, capability, case, evidence_root, status, observations, streams)
     if (capability, case) == ('development', 'cancellation-and-no-silent-escalation'):
         from .nix_cancellation import scenario
         require_owned_guest(binding)

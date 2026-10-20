@@ -49,6 +49,14 @@ class InstalledNixFixtureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fixture.derivation(graph, record)
 
+    def test_missing_output_is_typed_null_even_when_cli_exit_succeeds(self):
+        output = '/nix/store/' + 'f' * 32 + '-output'
+        self.assertFalse(fixture.path_presence({output: None}, output))
+        self.assertTrue(fixture.path_presence({output: {'narHash': 'sha256-actual'}}, output))
+        for document in [{}, {output: {}}, {output: 'missing'}, {'foreign': None}]:
+            with self.assertRaises(ValueError):
+                fixture.path_presence(document, output)
+
     def test_observer_is_fixed_and_does_not_enumerate_unrelated_processes(self):
         compile(fixture.OBSERVER, '<fixed-nix-observer>', 'exec')
         self.assertIn("'nix-daemon.service'", fixture.OBSERVER)
