@@ -17,6 +17,10 @@ from .installed_environment import release
 USER = 'paintedwolf-test'
 INSTALL_PARENT = Path('/opt')
 SHARED_PARENT = Path('/usr/share')
+DESKTOP_PARENTS = tuple(Path('/usr/share') / part for part in (
+    'applications', 'icons', 'icons/hicolor', 'icons/hicolor/32x32', 'icons/hicolor/32x32/apps',
+    'icons/hicolor/128x128', 'icons/hicolor/128x128/apps',
+    'icons/hicolor/256x256', 'icons/hicolor/256x256/apps'))
 PACKAGES = ['gdm3', 'gnome-session', 'gnome-shell', 'gnome-settings-daemon', 'gnome-keyring',
             'at-spi2-core', 'python3-pyatspi', 'dbus-x11', 'xserver-xorg-core',
             'xserver-xorg-video-dummy', 'xserver-xorg-input-libinput', 'x11-xserver-utils',
@@ -85,7 +89,7 @@ def selected_controller(environment: dict, explicit: str | None) -> str:
 def prepare_install_parent(path=None) -> dict:
     validate_host(os.environ, os.getuid(), platform.machine(), release())
     path = INSTALL_PARENT if path is None else path
-    if path not in {INSTALL_PARENT, SHARED_PARENT}:
+    if path not in {INSTALL_PARENT, SHARED_PARENT, *DESKTOP_PARENTS}:
         raise ValueError('hosted package preparation refuses undeclared shared ancestors')
     if path.resolve(strict=True) != path or os.path.lexists(path / 'painted-wolf-code'):
         raise ValueError('hosted package preparation preserves existing or nonphysical installation owners')
@@ -140,6 +144,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
         raise ValueError('hosted desktop account already exists; preserving its owner')
     install_parent = prepare_install_parent()
     shared_parent = prepare_install_parent(SHARED_PARENT)
+    desktop_parents = [prepare_install_parent(path) for path in DESKTOP_PARENTS if path.exists() or path.is_symlink()]
     run(['apt-get', 'update'])
     run(['apt-get', 'install', '-y', '--no-install-recommends', *PACKAGES])
     run(['useradd', '--create-home', '--shell', '/bin/bash', USER])
@@ -205,6 +210,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     result = desktop_record(os.environ, selected, controller, session, account)
     result['install_parent_preparation'] = install_parent
     result['shared_parent_preparation'] = shared_parent
+    result['desktop_parent_preparation'] = desktop_parents
     fresh(output, json.dumps(result, indent=2, sort_keys=True) + '\n')
     return result
 
