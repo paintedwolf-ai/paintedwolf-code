@@ -33,8 +33,8 @@ def retain(binding: dict, capability: str, case: str, evidence_root: Path, statu
     document = {"format_version": 1, "source_commit": binding["source_commit"],
                 "artifact": binding["artifact"], "capability": capability,
                 "case": case, "status": status, "observations": observations}
-    raw = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
-    if len(raw) > MAX_OBSERVATION_BYTES or len(raw) + sum(map(len, streams.values())) > MAX_CASE_BYTES:
+    document_raw = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
+    if len(document_raw) > MAX_OBSERVATION_BYTES or len(document_raw) + sum(map(len, streams.values())) > MAX_CASE_BYTES:
         raise ValueError("installed case observations exceed the aggregate evidence contract")
     directory = evidence_root / capability / case
     directory.mkdir(parents=True, exist_ok=False)
@@ -47,7 +47,7 @@ def retain(binding: dict, capability: str, case: str, evidence_root: Path, statu
                         "sha256": hashlib.sha256(raw).hexdigest()})
     path = directory / "execution.json"
     with path.open("xb") as stream:
-        stream.write(raw)
+        stream.write(document_raw)
     records.append({"path": path.relative_to(evidence_root).as_posix(),
-                    "sha256": hashlib.sha256(raw).hexdigest()})
+                    "sha256": hashlib.sha256(document_raw).hexdigest()})
     return {"id": case, "status": status, "evidence": records}
