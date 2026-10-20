@@ -62,6 +62,11 @@ def filesystem_egress(binding: dict) -> tuple[str, dict, dict]:
         stream.write(b'public qualification fixture')
     protected.chmod(0o600)
     try:
+        with outside.open('xb') as stream:
+            stream.write(b'public write fixture')
+        baseline = {'outside_write': outside.read_bytes() == b'public write fixture',
+                    'protected_read': protected.read_bytes() == b'public qualification fixture'}
+        outside.unlink()
         with tempfile.TemporaryDirectory(prefix='paintedwolf-command-') as directory, socket.socket() as listener:
             project = Path(directory)
             script = project / 'boundary.py'
@@ -69,6 +74,10 @@ def filesystem_egress(binding: dict) -> tuple[str, dict, dict]:
             listener.bind(('127.0.0.1', 0))
             listener.listen(1)
             port = listener.getsockname()[1]
+            with socket.create_connection(('127.0.0.1', port), timeout=3):
+                peer, _ = listener.accept()
+                peer.close()
+            baseline['local_connect'] = True
             command = shlex.join([str(Path(sys.executable).resolve()), str(script), str(outside), str(protected), str(port)])
             with ProviderFixture([{'name': 'command', 'arguments': {'command': command}}]) as provider:
                 with InstalledApp(binding) as app, ToolTurn(app, provider, project) as turn:
@@ -76,14 +85,17 @@ def filesystem_egress(binding: dict) -> tuple[str, dict, dict]:
                     results = turn.wait()
                     witness = turn.workspace / 'qualification-observation.json'
                     if not witness.is_file() or witness.is_symlink() or witness.stat().st_size > 4096:
-                        return 'failed', {'reason': 'installed-command-produced-no-bounded-observation',
-                                          'turn': turn.observations, 'app': app.observations}, app.streams()
-                    observation = json.loads(witness.read_bytes())
-                    passed = (successful_invocation(results) and not outside.exists()
-                              and all(observation.get(name) is True for name in
-                                      ('outside_write', 'protected_read', 'local_connect')))
-                    facts = {'kernel_observation': observation, 'turn': turn.observations,
-                             'provider': provider.observations, 'app': app.observations}
+                        passed = False
+                        facts = {'reason': 'installed-command-produced-no-bounded-observation',
+                                 'turn': turn.observations, 'app': app.observations, 'unconfined_baseline': baseline}
+                    else:
+                        observation = json.loads(witness.read_bytes())
+                        passed = (successful_invocation(results) and not outside.exists()
+                                  and all(baseline.values()) and all(observation.get(name) is True for name in
+                                          ('outside_write', 'protected_read', 'local_connect')))
+                        facts = {'kernel_observation': observation, 'turn': turn.observations,
+                                 'provider': provider.observations, 'app': app.observations,
+                                 'unconfined_baseline': baseline}
                 return 'passed' if passed else 'failed', facts, app.streams()
     finally:
         protected.unlink(missing_ok=True)
