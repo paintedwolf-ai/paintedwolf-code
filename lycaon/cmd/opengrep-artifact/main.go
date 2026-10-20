@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
@@ -32,6 +33,7 @@ type options struct {
 }
 
 func run() (string, error) {
+	confine.EnableAutoConfine()
 	var opts options
 	flag.StringVar(&opts.mode, "mode", "stage", "fetch, select, audit, identity, stage, verify, resolve, finalize-consumer, or relocate-consumer")
 	flag.StringVar(&opts.root, "root", "", "artifact staging root")
