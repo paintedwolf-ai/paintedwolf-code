@@ -54,6 +54,7 @@
             source = self;
           };
           inherit frontend resources shell bialy document-core bound-engine;
+          desktop-settings-observer = pkgs.callPackage ./packaging/nix/desktop-settings.nix { source = self; };
           default = pkgs.callPackage ./packaging/nix/application.nix {
             source = self;
             engine = bound-engine;
