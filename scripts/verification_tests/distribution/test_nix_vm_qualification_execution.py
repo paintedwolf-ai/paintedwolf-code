@@ -106,6 +106,16 @@ class NixVMQualificationTests(unittest.TestCase):
         self.assertEqual(nix_hash(bytes(32)), "sha256:" + "0" * 52)
         self.assertEqual(nix_hash(b"\xff" * 32), "sha256:1" + "z" * 51)
 
+    def test_cache_links_refuse_before_following_foreign_payloads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.cache(root)
+            payload = root / "nar/0.nar.xz"
+            payload.unlink()
+            payload.symlink_to(root / "missing-foreign-payload")
+            with self.assertRaisesRegex(ValueError, "only regular files"):
+                validate_cache(root, self.app["closure"])
+
 
 if __name__ == "__main__":
     unittest.main()
