@@ -57,8 +57,8 @@ def validate_host(environment: dict, uid: int, machine: str, distribution: dict)
         raise ValueError('hosted desktop preparation requires its exact controller commit')
 
 
-def run(arguments: list[str], *, input: bytes | None = None, timeout=1200) -> bytes:
-    result = subprocess.run(arguments, input=input, capture_output=True, timeout=timeout,
+def run(arguments: list[str], *, input: bytes | None = None, timeout=1200, cwd=None) -> bytes:
+    result = subprocess.run(arguments, input=input, capture_output=True, timeout=timeout, cwd=cwd,
                             env={**os.environ, 'DEBIAN_FRONTEND': 'noninteractive', 'LC_ALL': 'C.UTF-8'})
     if result.returncode or len(result.stdout) + len(result.stderr) > 16 << 20:
         raise OSError('hosted desktop preparation command failed or exceeded its output bound: ' + arguments[0])
@@ -100,7 +100,7 @@ def prepare(checkout: Path, output: Path) -> dict:
     controller = home / 'controller'
     run(['git', '-c', 'safe.directory=' + str(checkout), 'clone', '--no-local',
          str(checkout), str(controller)], timeout=120)
-    run(['chown', '-R', USER + ':' + account.pw_name, str(controller)])
+    run(['chown', '-R', str(account.pw_uid) + ':' + str(account.pw_gid), str(controller)])
     (home / '.ssh').mkdir(mode=0o700)
     os.chown(home / '.ssh', account.pw_uid, account.pw_gid)
     fresh(Path('/etc/sudoers.d/paintedwolf-qualification'), USER + ' ALL=(ALL) NOPASSWD: ALL\n', 0o440)
@@ -133,7 +133,7 @@ def prepare(checkout: Path, output: Path) -> dict:
     while time.monotonic() < deadline:
         try:
             raw = run(['runuser', '-u', USER, '--', 'env',
-                       'HOME=' + str(home), 'PYTHONPATH=' + str(controller / 'scripts'), '/usr/bin/python3', '-c', probe], timeout=15)
+                       'HOME=' + str(home), 'PYTHONPATH=' + str(controller / 'scripts'), '/usr/bin/python3', '-c', probe], timeout=15, cwd=home)
             session = json.loads(raw)
             if session.get('Type') == 'x11' and session.get('Active') == 'yes':
                 break
