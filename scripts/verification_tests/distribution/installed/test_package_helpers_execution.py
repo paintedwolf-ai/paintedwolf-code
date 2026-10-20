@@ -39,7 +39,7 @@ class PackageHelperTests(unittest.TestCase):
             return {"exit_code": 127 if mutation == "failed-helper" and role == "git-observer" else probe[3],
                     "timed_out": mutation == "timeout", "output_limit": False,
                     "launch_identity": {"pid": 22, "start_time_ticks": 33},
-                    "stdout": role.encode(), "stderr": b""}
+                    "stdout": b"x" * ((4 << 20) + 1) if mutation == "joined-output-limit" and role == "pw" else role.encode(), "stderr": b""}
         with patch.object(owner, "require_owned_guest"), patch.object(owner, "run", side_effect=run) as probes, \
                 patch.object(owner, "InstalledApp", side_effect=App) as application, \
                 patch.object(owner, "interactive_window", return_value={"owned": True}):
@@ -79,3 +79,13 @@ class PackageHelperTests(unittest.TestCase):
         self.assertFalse(any("--no-sandbox" in item[2] for item in owner.PROBES))
         with self.assertRaisesRegex(ValueError, "different fixed case"):
             owner.execute(self.fixture(), "updates", "all-helpers-and-resources", Path("/unused"))
+
+    def test_joined_helper_channel_limit_retains_failed_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result, _, application = self.execute(root, mutation="joined-output-limit")
+            self.assertEqual(result["status"], "failed")
+            self.assertLessEqual((root / "installation/all-helpers-and-resources/helpers-stdout.bin").stat().st_size, 8 << 20)
+            journal = json.loads((root / "installation/all-helpers-and-resources/execution.json").read_text())
+            self.assertTrue(journal["observations"]["output_limit"])
+            application.assert_not_called()
