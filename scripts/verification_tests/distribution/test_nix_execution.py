@@ -111,7 +111,7 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv e
             archive = Path(parent) / "closure"
             self.assertEqual(self.invoke("build", archive), 0)
             calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
-            self.assertEqual(calls[-1]["args"][-4:], ["copy", "--to", archive.as_uri(), "/nix/store/fixture"])
+            self.assertEqual(calls[-1]["args"][-4:], ["copy", "--to", archive.resolve().as_uri(), "/nix/store/fixture"])
             self.assertTrue(all(not call["credentials"] for call in calls))
             self.assertEqual(self.reports()[0]["archive"]["publication"], "nonrelease")
             with self.assertRaises(ValueError):
