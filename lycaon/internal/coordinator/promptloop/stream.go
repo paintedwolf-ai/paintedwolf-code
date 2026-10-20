@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -51,6 +52,8 @@ func (l *modelTurn) runAssistantStreamTurn(
 		messageID = st.ensureCoordinatorDraftSlot()
 	}
 	outputID := uuid.NewString()
+	ctx, capture := trainingcapture.Begin(ctx, sessionID, messageID, outputID)
+	defer capture.Flush(ctx)
 	assistantMsg := newProvisionalAssistantMessage(api.Message{
 		ID:        messageID,
 		CreatedAt: time.Now().UTC(),
@@ -187,6 +190,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		}
 		st.output.id = committed.ID
 		canonicalOutputID = committed.ID
+		trainingcapture.Settled(ctx, committed.ID, wireAssistant)
 	}
 	if l.Deps.UpdateMessage != nil {
 		if err := l.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, wireAssistant); err != nil {
@@ -317,9 +321,11 @@ func (l *modelTurn) completeStream(
 	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
+	req = trainingcapture.Prepare(ctx, req)
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
+	trainingcapture.Observe(ctx, collected.completion, collectErr != nil)
 	if collectErr != nil {
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {

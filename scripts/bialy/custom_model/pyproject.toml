@@ -1,0 +1,8 @@
+[project]
+name = "paintedwolf-custom-model-experiments"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = ["torch>=2.8,<3", "transformers>=5.9,<6", "peft>=0.18,<1", "safetensors>=0.6,<1", "jsonschema>=4.25,<5", "gguf>=0.17,<1"]
+
+[tool.uv]
+package = false

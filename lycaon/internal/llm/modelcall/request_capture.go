@@ -12,12 +12,15 @@ import (
 type RequestControlCapture struct {
 	mu       sync.Mutex
 	requests []map[string]json.RawMessage
+	// Wire receives serialized adapter requests only for an opted-in collection.
+	Wire *WireCapture
 }
 
 func (c *RequestControlCapture) Record(body []byte) {
 	if c == nil {
 		return
 	}
+	c.Wire.Record(body)
 	var wire map[string]json.RawMessage
 	if json.Unmarshal(body, &wire) != nil {
 		return
