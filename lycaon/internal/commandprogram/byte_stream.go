@@ -37,6 +37,7 @@ type StreamCompletion struct {
 type StreamLimitError struct {
 	Limit             string
 	Maximum, Observed int64
+	Overflow          bool
 }
 
 func (e *StreamLimitError) Error() string {
@@ -61,12 +62,16 @@ func NewByteBudget(limit string, maximum int64) (*ByteBudget, error) {
 func (b *ByteBudget) Charge(n int64) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if n < 0 || n > b.maximum-b.used {
-		observed := b.maximum + 1
-		if n >= 0 && n <= int64(^uint64(0)>>1)-b.used {
+	if n < 0 {
+		return fmt.Errorf("stream charge must not be negative")
+	}
+	if n > b.maximum-b.used {
+		overflow := n > int64(^uint64(0)>>1)-b.used
+		observed := int64(^uint64(0) >> 1)
+		if !overflow {
 			observed = b.used + n
 		}
-		return &StreamLimitError{Limit: b.limit, Maximum: b.maximum, Observed: observed}
+		return &StreamLimitError{Limit: b.limit, Maximum: b.maximum, Observed: observed, Overflow: overflow}
 	}
 	b.used += n
 	return nil
