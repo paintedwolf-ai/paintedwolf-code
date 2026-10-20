@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.3-rc1]
+
+First release candidate for 1.0.3, published on the preview channel to
+distrust the compromised eMudhra intermediate certificates and to exercise the
+signed desktop self-upgrade release gate.
+
+### Security
+
+- The engine and desktop app no longer trust the eight eMudhra intermediate
+  certificates whose private keys are recoverable, on Go 1.26.10,
+  rustls-webpki 0.103.16, and webpki-roots 1.0.10. On Linux, bundled Git
+  relies on the system's `ca-certificates` update for the same protection.
+
 ## [1.0.2]
 
 ### Added
