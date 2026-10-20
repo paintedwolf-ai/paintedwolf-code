@@ -317,7 +317,8 @@ func TestReleaseBlastRadiusCredentialedLiveTestIsIsolated(t *testing.T) {
 		"vars.RELEASE_TEST_R2_ENDPOINT_URL",
 		"secrets.RELEASE_TEST_R2_ACCESS_KEY_ID",
 		"secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY",
-		"run: ./task release:live-test",
+		"updater) ./task release:live-test ;;",
+		"./task release:live-test -- --local-native-repositories --r2 --receipt",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("weekly release live-test workflow missing %q", needle)
