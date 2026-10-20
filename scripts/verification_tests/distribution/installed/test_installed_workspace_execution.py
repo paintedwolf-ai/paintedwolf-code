@@ -41,7 +41,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertTrue(result['normal_optional_setup_skip'])
             self.assertEqual(ui.click.call_args_list[0].args, ('Skip',))
             ui.find.assert_called_once_with(ui.api.ROLE_PUSH_BUTTON, 'Open a folder…')
-            self.assertEqual(ui.fill.call_args_list[0].args, (1, 'Contents of ' + path.name, workspace.AFTER))
+            self.assertEqual(ui.fill.call_args_list[0].args, (2, 'Contents of ' + path.name, workspace.AFTER))
             self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Editor command or search', 'qualification needle'))
             self.assertIn('applied-edit-review-interaction', result['remaining_requirements'])
             cli.assert_called_once_with({}, 'pw', ['open', str(path.parent)], timeout=30)
