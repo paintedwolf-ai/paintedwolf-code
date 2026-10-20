@@ -9,11 +9,15 @@ from release_semver import parse
 
 
 def load_platforms(path: Path) -> dict[str, dict]:
-    catalog = json.loads(path.read_text(encoding="utf-8"))
+    return parse_platforms(path.read_bytes())
+
+
+def parse_platforms(raw: bytes) -> dict[str, dict]:
+    catalog = json.loads(raw)
     if not isinstance(catalog, dict):
         raise ValueError("release platform catalog must be an object")
     rows = catalog.get("platforms")
-    if catalog.get("schema_version") != 2 or not isinstance(rows, list) or not rows:
+    if type(catalog.get("schema_version")) is not int or catalog["schema_version"] != 2 or not isinstance(rows, list) or not rows:
         raise ValueError("release platform catalog has an unsupported shape")
     result = {}
     extension_pattern = r"[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*"
