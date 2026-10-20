@@ -103,8 +103,16 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
             directory.mkdir(parents=True, exist_ok=True)
             pointer = directory / f"latest-{case['channel']}-key-{number}.json"
             if not pointer.exists():
-                pointer.write_text(json.dumps(step, indent=2) + "\n")
-                signature = sign(pointer, number, registry)
+                if step["version"] == candidate["version"]:
+                    pointer.write_text(json.dumps(step, indent=2) + "\n")
+                    signature = sign(pointer, number, registry)
+                else:
+                    retained = next(row for row in result["feeds"] if row["channel"] == case["channel"] and row["generation"] == number)
+                    if retained["manifest"] != step:
+                        raise ValueError("bridge offer differs from its authenticated source pointer")
+                    original = output / "sources" / retained["path"]
+                    shutil.copyfile(original, pointer)
+                    signature = original.with_suffix(".json.sig")
                 shutil.copyfile(pointer, directory / "latest.json")
                 shutil.copyfile(signature, directory / "latest.json.sig")
     result["source_sha"] = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()

@@ -61,6 +61,28 @@ class GateTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "failed")
         self.assertEqual(receipt["source_sha"], self.plan["source_sha"])
 
+    def test_one_selected_case_owns_the_runner_and_receipt(self):
+        from contextlib import nullcontext
+        self.plan["cases"] = [{"id": f"1.0.2-{channel}", "source_version": "1.0.2", "channel": channel}
+                              for channel in ("stable", "preview")]
+        self.plan["skip_reason"] = None
+        self.inventory()
+        config = self.root / "config"
+        def run_case(case, _plan, _fixtures, _work, target, _evidence):
+            target.mkdir()
+            return {"id": case["id"], "result": "passed"}
+        with patch.object(gate, "require_disposable_host", return_value=config), \
+             patch.object(gate, "local_origin", return_value=nullcontext()), \
+             patch.object(gate, "run_case", side_effect=run_case) as execute, \
+             patch.object(gate, "verify_requests"):
+            gate.rehearse(self.fixtures, self.evidence, "1.0.2-preview")
+        execute.assert_called_once()
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["result"], "passed")
+        self.assertEqual(receipt["plan_case_count"], 2)
+        self.assertEqual(receipt["cases"], [{"id": "1.0.2-preview", "result": "passed"}])
+        self.assertFalse(config.exists())
+
     def test_unsigned_baseline_metadata_cannot_authorize_execution(self):
         self.plan["anchors"] = [{"verification": "artifact_signature_required"}]
         self.inventory()

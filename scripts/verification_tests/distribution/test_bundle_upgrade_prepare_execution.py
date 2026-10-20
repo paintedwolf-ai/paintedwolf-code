@@ -82,6 +82,37 @@ class PreparationTests(unittest.TestCase):
                 self.prepare()
             signer.assert_not_called()
 
+    def test_retained_bridge_pointer_and_signature_are_served_byte_for_byte(self):
+        bridge = manifest("1.0.3")
+        bridge["update_keys"]["embedded_generation"] = 2
+        self.candidate["update_keys"]["signing_generation"] = 2
+        self.pointer.write_text(json.dumps(self.candidate))
+        self.plan["cases"][0]["steps"] = [bridge, self.candidate]
+        relative = "updates/preview/key-1/latest.json"
+        self.plan["feeds"].append({"channel": "preview", "generation": 1, "path": relative, "manifest": bridge})
+        fixture = self.source / "lycaon/testdata/upgrade-corpus/1.0.3"
+        fixture.mkdir()
+        (fixture / "MANIFEST.json").write_text('{"app_version":"1.0.3","schema_version":5}')
+        original = json.dumps(bridge, separators=(",", ":")).encode() + b"\n"
+        def capture(_origin, _candidate, destination):
+            pointer = destination / relative
+            pointer.parent.mkdir(parents=True)
+            pointer.write_bytes(original)
+            pointer.with_suffix(".json.sig").write_bytes(b"original authenticated bridge signature")
+            return copy.deepcopy(self.plan)
+        def sign(pointer, *_):
+            signature = Path(str(pointer) + ".sig")
+            signature.write_text("signed candidate")
+            return signature
+        with patch.object(preparation, "capture_sources", side_effect=capture), \
+             patch.object(preparation, "verify"), patch.object(preparation, "sign", side_effect=sign) as signer:
+            self.prepare()
+        signer.assert_called_once()
+        self.assertEqual(signer.call_args.args[1], 2)
+        offered = self.output / "offers/preview/key-1/latest.json"
+        self.assertEqual(offered.read_bytes(), original)
+        self.assertEqual(offered.with_suffix(".json.sig").read_bytes(), b"original authenticated bridge signature")
+
     def test_uncovered_baseline_cannot_be_marked_authenticated(self):
         self.plan["anchors"][0]["manifest"] = manifest("1.0.3")
         with patch.object(preparation, "verify"), patch.object(preparation, "sign") as signer:

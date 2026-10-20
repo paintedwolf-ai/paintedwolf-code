@@ -1073,9 +1073,19 @@ The release workflow rehearses automatic updates for direct-download macOS
 installations shipped in the 1.0.2 line and later. The existing sidecar/store rehearsal continues to cover earlier manual
 clients. A protected preparation job authenticates and freezes prior feeds,
 verifies prior archives and the exact candidate archive, and signs channel-bound
-fixture pointers. Only public keys, signed pointers, archives, and corpus data
+candidate pointers. Retained bridge pointers and their signatures are served
+byte for byte from the authenticated source snapshot. Only public keys, signed pointers, archives, and corpus data
 reach the desktop runner; artifact-signing credentials stay in the build job and
 feed-signing credentials stay in preparation.
+
+After 1.0.2 ships, its immutable release manifest remains a permanent automatic
+updater baseline alongside the active stable and preview sources. This covers
+installations that skip releases even after both mutable pointers advance.
+Archived baseline metadata records `artifact_signature_required` until preparation
+verifies its exact version-bound archive signature against the retained public
+key. Executable fixtures require `artifact_signature_verified`; metadata alone
+cannot authorize a baseline app. Every skipped trust generation follows its
+registered channel bridge before reaching the candidate.
 
 Each source/channel case uses a fresh GitHub-hosted arm64 macOS runner with an
 absent product store and its actual account home. Cases run serially, isolating
