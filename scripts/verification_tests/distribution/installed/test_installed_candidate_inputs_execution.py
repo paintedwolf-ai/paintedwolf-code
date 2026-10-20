@@ -11,7 +11,7 @@ from linux_release import installed_candidate_inputs as owner
 
 
 class CandidateInstalledInputsTests(unittest.TestCase):
-    def fixture(self, root, partial=False):
+    def fixture(self, root, partial=False, include_pacman=False):
         payload=root/'artifact'
         payload.mkdir()
         source={'source_commit':'a'*40,'source_tree':'b'*40,'version':'1.2.3','release_build':14,'channel':'stable'}
@@ -21,7 +21,7 @@ class CandidateInstalledInputsTests(unittest.TestCase):
         selection={'artifact_id':12,'artifact_bytes':100,'artifact_sha256':'d'*64}
         rows=[]
         for family,extension in owner.EXTENSIONS.items():
-            if partial and family=='pacman':
+            if partial and family=='pacman' and not include_pacman:
                 continue
             name='painted-wolf-code_v1.2.3_linux-aarch64.'+extension
             raw=('actual '+family+' selected bytes').encode()
@@ -75,6 +75,36 @@ class CandidateInstalledInputsTests(unittest.TestCase):
             self.assertEqual({row['installation'] for row in final['artifacts']},{'deb','rpm'})
             self.assertTrue(report['partial'])
             self.assertIs(report['qualification_authority'],False)
+
+    def test_partial_pacman_retains_final_bytes_without_candidate_authority(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            report=self.prepare(root,self.fixture(root,True,include_pacman=True),True)
+            final=json.loads((root/'prepared/final-artifacts.json').read_text())
+            self.assertEqual({row['installation'] for row in final['artifacts']},{'deb','rpm','pacman'})
+            row=next(row for row in final['artifacts'] if row['installation']=='pacman')
+            package=root/'prepared/packages'/row['id']
+            self.assertEqual(hashlib.sha256(package.read_bytes()).hexdigest(),row['identity']['sha256'])
+            self.assertIs(report['partial'],True)
+            self.assertIs(report['qualification_authority'],False)
+            self.assertIs(report['publication_authority'],False)
+
+    def test_partial_pacman_cannot_use_another_archive_extension_or_cpu(self):
+        for mutation in ('extension','cpu'):
+            with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary)
+                fixture=self.fixture(root,True,include_pacman=True)
+                document_path=fixture[0]/'diagnostics.json'
+                document=json.loads(document_path.read_text())
+                row=next(row for row in document['packages'] if '/pacman/' in row['source_path'])
+                if mutation=='extension':
+                    row['source_path']=row['source_path'].replace('.pkg.tar.zst','.pkg.tar.xz')
+                else:
+                    row['source_path']=row['source_path'].replace('aarch64-unknown-linux-gnu','x86_64-unknown-linux-gnu')
+                document_path.write_text(json.dumps(document))
+                with self.assertRaises(ValueError):
+                    self.prepare(root,fixture,True)
+                self.assertFalse((root/'prepared').exists())
 
     def test_wrong_source_cpu_and_tampered_bytes_refuse_without_retained_output(self):
         for mutation in ('source','cpu','bytes'):
