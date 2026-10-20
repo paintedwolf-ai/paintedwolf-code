@@ -66,7 +66,9 @@ class InstalledSecurityTests(unittest.TestCase):
                 observed.set()
                 return [row]
             with self.subTest(observed_pid=observed_pid), patch.object(security, 'run', side_effect=product), \
-                    patch.object(security, 'inhibitors', side_effect=observer), patch.object(security.os, 'getuid', return_value=1000):
+                    patch.object(security, 'inhibitors', side_effect=observer), patch.object(
+                    security, 'execution_session', return_value={'Remote': False, 'Active': True, 'Type': 'wayland'}), \
+                    patch.object(security.os, 'getuid', return_value=1000):
                 status, facts, streams = security.inhibitor_lifetime({})
                 self.assertEqual(status, 'passed' if observed_pid == 123 else 'failed')
                 self.assertEqual(facts['after'], [])
@@ -115,3 +117,46 @@ class InstalledSecurityTests(unittest.TestCase):
             with patch.object(security, 'process_identity', return_value=('42', uids, caps)), patch.object(
                     security, 'memory_read_denied', return_value=True), patch.object(security.os, 'getuid', return_value=1000):
                 self.assertFalse(security.protected_process(123, 42)[0])
+
+    def test_security_failure_retains_typed_phase_without_exception_prose(self):
+        error = ValueError('do not retain diagnostic text')
+        error.observations = {'observer_phase': 'service-image', 'error_type': 'ValueError'}
+        with patch.object(security, 'require_owned_guest'), patch.dict(security.PROBES, {
+                ('vault', 'wrong-launcher-and-memory'): lambda binding: (_ for _ in ()).throw(error)}), patch.object(
+                security, 'retain', side_effect=lambda *args: args):
+            result = security.execute({'case_inputs': {}}, 'vault', 'wrong-launcher-and-memory', Path('/unused'))
+        self.assertEqual(result[4], 'failed')
+        self.assertEqual(result[5]['observer_phase'], 'service-image')
+        self.assertNotIn('do not retain', json.dumps(result[5]))
+
+    def test_main_pid_property_is_a_typed_scalar_not_a_method_return_tuple(self):
+        unit = '/org/freedesktop/systemd1/unit/owned'
+        with patch.object(security, 'bus_value', return_value=[unit]), patch.object(
+                security, 'observe', return_value=b'{"type":"u","data":321}'):
+            self.assertEqual(security.service_pid(), 321)
+        for data in (True, [321], '321'):
+            with patch.object(security, 'bus_value', return_value=[unit]), patch.object(
+                    security, 'observe', return_value=json.dumps({'type': 'u', 'data': data}).encode()):
+                with self.subTest(data=data), self.assertRaises(ValueError):
+                    security.service_pid()
+
+    def test_remote_or_inactive_inhibitor_fixture_is_not_product_failure(self):
+        for session in [{'Remote': True, 'Active': True, 'Type': 'tty'},
+                        {'Remote': False, 'Active': False, 'Type': 'wayland'}]:
+            with patch.object(security, 'execution_session', return_value=session), patch.object(security, 'run') as product:
+                status, facts, streams = security.inhibitor_lifetime({})
+            self.assertEqual(status, 'unverified')
+            self.assertEqual(facts['execution_session'], session)
+            product.assert_not_called()
+
+    def test_execution_session_preserves_typed_logind_properties(self):
+        values = [{'type': 'b', 'data': True}, {'type': 'b', 'data': True}, {'type': 's', 'data': 'tty'}]
+        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
+                security, 'observe', side_effect=[json.dumps(value).encode() for value in values]):
+            facts = security.execution_session()
+        self.assertIs(facts['Remote'], True)
+        self.assertEqual(facts['Type'], 'tty')
+        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
+                security, 'observe', return_value=b'{"type":"b","data":[true]}'):
+            with self.assertRaises(ValueError):
+                security.execution_session()

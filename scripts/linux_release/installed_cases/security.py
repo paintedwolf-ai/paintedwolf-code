@@ -58,7 +58,28 @@ def inhibitors() -> list:
     return rows
 
 
+def execution_session() -> dict:
+    pid = os.getpid()
+    paths = bus_value(['call', 'org.freedesktop.login1', '/org/freedesktop/login1',
+                       'org.freedesktop.login1.Manager', 'GetSessionByPID', 'u', str(pid)], 'o')
+    if len(paths) != 1 or not isinstance(paths[0], str) or not paths[0].startswith('/org/freedesktop/login1/session/'):
+        raise ValueError('native execution has an invalid logind session path')
+    result = {'pid': pid, 'session_object': paths[0]}
+    for name, kind in [('Remote', 'b'), ('Active', 'b'), ('Type', 's')]:
+        row = json.loads(observe(['busctl', '--system', '--json=short', 'get-property',
+                                 'org.freedesktop.login1', paths[0], 'org.freedesktop.login1.Session', name]))
+        expected = bool if kind == 'b' else str
+        if not isinstance(row, dict) or row.get('type') != kind or type(row.get('data')) is not expected:
+            raise ValueError('native execution has an invalid typed logind property')
+        result[name] = row['data']
+    return result
+
+
 def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
+    context = execution_session()
+    if context['Remote'] or not context['Active'] or context['Type'] not in {'x11', 'wayland'}:
+        return 'unverified', {'reason': 'inhibitor-requires-local-graphical-execution-session',
+                              'execution_session': context}, {}
     baseline = inhibitors()
     observed = []
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -77,7 +98,7 @@ def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
     passed = (result['exit_code'] == 0 and not result['timed_out'] and not result['output_limit']
               and bool(held) and not any(row[5] == pid for row in final))
     return ('passed' if passed else 'failed',
-            {'launch_identity': identity, 'before': baseline, 'held': held, 'after': final,
+            {'execution_session': context, 'launch_identity': identity, 'before': baseline, 'held': held, 'after': final,
              'exit_code': result['exit_code'], 'timed_out': result['timed_out'],
              'output_limit': result['output_limit']},
             {name: result[name] for name in ('stdout', 'stderr')})
@@ -115,11 +136,14 @@ def service_pid() -> int:
                       'org.freedesktop.systemd1.Manager', 'GetUnit', 's', UNIT], 'o')
     if len(unit) != 1 or not isinstance(unit[0], str) or not unit[0].startswith('/org/freedesktop/systemd1/unit/'):
         raise ValueError('identity service unit has an invalid object path')
-    value = bus_value(['get-property', 'org.freedesktop.systemd1', unit[0],
-                      'org.freedesktop.systemd1.Service', 'MainPID'], 'u')
-    if len(value) != 1 or type(value[0]) is not int or value[0] <= 1:
+    row = json.loads(observe(['busctl', '--system', '--json=short', 'get-property',
+                             'org.freedesktop.systemd1', unit[0], 'org.freedesktop.systemd1.Service', 'MainPID']))
+    if not isinstance(row, dict) or row.get('type') != 'u' or type(row.get('data')) is not int:
+        raise ValueError('identity service PID property has an invalid typed scalar shape')
+    if row['data'] <= 1:
         raise OSError('identity service is not running')
-    return value[0]
+    return row['data']
+
 
 
 def process_identity(pid: int) -> tuple[str, list[int], int]:
@@ -154,34 +178,46 @@ def protected_process(pid: int, expected_start: int) -> tuple[bool, dict]:
 
 
 def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
-    info, parent = SOCKET.lstat(), SOCKET.parent.stat()
-    if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0 or parent.st_uid != 0 or parent.st_mode & 0o022:
-        raise ValueError('identity socket is not selected by the administrator')
-    with socket.socket(socket.AF_UNIX) as stream:
-        stream.settimeout(5)
-        stream.connect(str(SOCKET))
-        outcome = refusal(stream)
-    pid = service_pid()
-    start, uids, capabilities = process_identity(pid)
-    image = observe(['sudo', '-n', 'readlink', '-e', f'/proc/{pid}/exe']).decode().strip()
-    expected = unchanged(binding, 'pw-vault-identity')
-    if Path(image).resolve() != expected.resolve():
-        raise ValueError('identity service is not the selected installed image')
-    denied = memory_read_denied(pid)
-    stable = service_pid() == pid and process_identity(pid) == (start, uids, capabilities)
-    passed = (outcome['status'] == 'refused' and outcome['code'] == 'executable_mismatch'
-              and not outcome['identity_returned'] and outcome['launcher_pid'] == 0
-              and all(uid not in {0, os.getuid()} for uid in uids)
-              and capabilities == 1 << 19 and denied and stable)
-    with InstalledApp(binding) as app:
-        engine = app.observations['engine_identity']
-        engine_passed, engine_observations = protected_process(engine['pid'], engine['start_time_ticks'])
-        shell = app.observations['launch_identity']
-        shell_passed, shell_observations = protected_process(shell['pid'], shell['start_time_ticks'])
-    return ('passed' if passed and engine_passed and shell_passed else 'failed',
-            {'engine': engine_observations, 'shell': shell_observations, 'app': app.observations, 'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
-             'service_uids': uids, 'effective_capabilities': capabilities,
-             'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
+    phase = "service-socket-ownership"
+    try:
+        info, parent = SOCKET.lstat(), SOCKET.parent.stat()
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0 or parent.st_uid != 0 or parent.st_mode & 0o022:
+            raise ValueError('identity socket is not selected by the administrator')
+        phase = "service-protocol-refusal"
+        with socket.socket(socket.AF_UNIX) as stream:
+            stream.settimeout(5)
+            stream.connect(str(SOCKET))
+            outcome = refusal(stream)
+        phase = "service-owner"
+        pid = service_pid()
+        phase = "service-process-credentials"
+        start, uids, capabilities = process_identity(pid)
+        phase = "service-image"
+        image = observe(['sudo', '-n', 'readlink', '-e', f'/proc/{pid}/exe']).decode().strip()
+        expected = unchanged(binding, 'pw-vault-identity')
+        if Path(image).resolve() != expected.resolve():
+            raise ValueError('identity service is not the selected installed image')
+        phase = "service-memory-and-stability"
+        denied = memory_read_denied(pid)
+        stable = service_pid() == pid and process_identity(pid) == (start, uids, capabilities)
+        passed = (outcome['status'] == 'refused' and outcome['code'] == 'executable_mismatch'
+                  and not outcome['identity_returned'] and outcome['launcher_pid'] == 0
+                  and all(uid not in {0, os.getuid()} for uid in uids)
+                  and capabilities == 1 << 19 and denied and stable)
+        phase = "installed-gui-and-engine"
+        with InstalledApp(binding) as app:
+            engine = app.observations['engine_identity']
+            engine_passed, engine_observations = protected_process(engine['pid'], engine['start_time_ticks'])
+            shell = app.observations['launch_identity']
+            shell_passed, shell_observations = protected_process(shell['pid'], shell['start_time_ticks'])
+        return ('passed' if passed and engine_passed and shell_passed else 'failed',
+                {'engine': engine_observations, 'shell': shell_observations, 'app': app.observations, 'refusal': outcome, 'service_pid': pid, 'start_time_ticks': start,
+                 'service_uids': uids, 'effective_capabilities': capabilities,
+                 'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
+        error.observations = {"observer_phase": phase, "error_type": type(error).__name__,
+                              **getattr(error, "observations", {})}
+        raise
 
 
 PROBES = {('browser', 'denied-local-services'): denied_local_services,
@@ -220,8 +256,10 @@ def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> d
         status, observations, streams = ('unverified',
             getattr(error, 'observations', {'reason': 'installed-app-interaction-unavailable'}),
             getattr(error, 'streams', {}))
-    except (OSError, subprocess.SubprocessError):
-        status, observations, streams = 'unverified', {'reason': 'native-security-observer-unavailable'}, {}
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-        status, observations, streams = 'failed', {'reason': 'native-security-contract-refused'}, {}
+    except (OSError, subprocess.SubprocessError) as error:
+        status, observations, streams = 'unverified', {'reason': 'native-security-observer-unavailable',
+            **getattr(error, 'observations', {})}, getattr(error, 'streams', {})
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
+        status, observations, streams = 'failed', {'reason': 'native-security-contract-refused',
+            **getattr(error, 'observations', {})}, getattr(error, 'streams', {})
     return retain(binding, capability, case, evidence_root, status, observations, streams)
