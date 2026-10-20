@@ -66,7 +66,9 @@ class InstalledSecurityTests(unittest.TestCase):
                 observed.set()
                 return [row]
             with self.subTest(observed_pid=observed_pid), patch.object(security, 'run', side_effect=product), \
-                    patch.object(security, 'inhibitors', side_effect=observer), patch.object(security.os, 'getuid', return_value=1000):
+                    patch.object(security, 'inhibitors', side_effect=observer), patch.object(
+                    security, 'execution_session', return_value={'Remote': False, 'Active': True, 'Type': 'wayland'}), \
+                    patch.object(security.os, 'getuid', return_value=1000):
                 status, facts, streams = security.inhibitor_lifetime({})
                 self.assertEqual(status, 'passed' if observed_pid == 123 else 'failed')
                 self.assertEqual(facts['after'], [])
@@ -137,3 +139,24 @@ class InstalledSecurityTests(unittest.TestCase):
                     security, 'observe', return_value=json.dumps({'type': 'u', 'data': data}).encode()):
                 with self.subTest(data=data), self.assertRaises(ValueError):
                     security.service_pid()
+
+    def test_remote_or_inactive_inhibitor_fixture_is_not_product_failure(self):
+        for session in [{'Remote': True, 'Active': True, 'Type': 'tty'},
+                        {'Remote': False, 'Active': False, 'Type': 'wayland'}]:
+            with patch.object(security, 'execution_session', return_value=session), patch.object(security, 'run') as product:
+                status, facts, streams = security.inhibitor_lifetime({})
+            self.assertEqual(status, 'unverified')
+            self.assertEqual(facts['execution_session'], session)
+            product.assert_not_called()
+
+    def test_execution_session_preserves_typed_logind_properties(self):
+        values = [{'type': 'b', 'data': True}, {'type': 'b', 'data': True}, {'type': 's', 'data': 'tty'}]
+        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
+                security, 'observe', side_effect=[json.dumps(value).encode() for value in values]):
+            facts = security.execution_session()
+        self.assertIs(facts['Remote'], True)
+        self.assertEqual(facts['Type'], 'tty')
+        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
+                security, 'observe', return_value=b'{"type":"b","data":[true]}'):
+            with self.assertRaises(ValueError):
+                security.execution_session()

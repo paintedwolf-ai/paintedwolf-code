@@ -58,7 +58,28 @@ def inhibitors() -> list:
     return rows
 
 
+def execution_session() -> dict:
+    pid = os.getpid()
+    paths = bus_value(['call', 'org.freedesktop.login1', '/org/freedesktop/login1',
+                       'org.freedesktop.login1.Manager', 'GetSessionByPID', 'u', str(pid)], 'o')
+    if len(paths) != 1 or not isinstance(paths[0], str) or not paths[0].startswith('/org/freedesktop/login1/session/'):
+        raise ValueError('native execution has an invalid logind session path')
+    result = {'pid': pid, 'session_object': paths[0]}
+    for name, kind in [('Remote', 'b'), ('Active', 'b'), ('Type', 's')]:
+        row = json.loads(observe(['busctl', '--system', '--json=short', 'get-property',
+                                 'org.freedesktop.login1', paths[0], 'org.freedesktop.login1.Session', name]))
+        expected = bool if kind == 'b' else str
+        if not isinstance(row, dict) or row.get('type') != kind or type(row.get('data')) is not expected:
+            raise ValueError('native execution has an invalid typed logind property')
+        result[name] = row['data']
+    return result
+
+
 def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
+    context = execution_session()
+    if context['Remote'] or not context['Active'] or context['Type'] not in {'x11', 'wayland'}:
+        return 'unverified', {'reason': 'inhibitor-requires-local-graphical-execution-session',
+                              'execution_session': context}, {}
     baseline = inhibitors()
     observed = []
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -77,7 +98,7 @@ def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
     passed = (result['exit_code'] == 0 and not result['timed_out'] and not result['output_limit']
               and bool(held) and not any(row[5] == pid for row in final))
     return ('passed' if passed else 'failed',
-            {'launch_identity': identity, 'before': baseline, 'held': held, 'after': final,
+            {'execution_session': context, 'launch_identity': identity, 'before': baseline, 'held': held, 'after': final,
              'exit_code': result['exit_code'], 'timed_out': result['timed_out'],
              'output_limit': result['output_limit']},
             {name: result[name] for name in ('stdout', 'stderr')})
