@@ -12,6 +12,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
+from contextlib import nullcontext
 
 from . import installed_evidence as evidence
 from .installed_execution import read, registry
@@ -20,10 +22,13 @@ from .installed_transfer import receive
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, snapshot, aggregate
 from .installed_capacity import limits
+from .installed_input.controller import Bridge, adapter, verify_deliveries
+
+PLAN_FORMAT_VERSION = 3
 
 FIELDS = {"id", "host", "port", "user", "identity_file", "known_hosts", "checkout",
           "runtime_bin_dirs", "artifact_id", "environment_id", "final_artifacts", "file_root",
-          "install_root", "output", "nix_program", "case_inputs", "variant_id", "snapshot"}
+          "install_root", "output", "nix_program", "case_inputs", "variant_id", "snapshot", "input_adapter"}
 
 
 def absolute(value):
@@ -35,6 +40,9 @@ def absolute(value):
 def command(target: dict, arguments: list[str]) -> list[str]:
     if set(target) != FIELDS:
         raise ValueError("guest target does not match the fixed execution contract")
+    selected_input = adapter(target['input_adapter'])
+    if selected_input is not None and target['host'] != '127.0.0.1':
+        raise ValueError('fixed QEMU input requires its lease-bound local guest endpoint')
     if not evidence.IDENTIFIER.fullmatch(target["id"]) or not re.fullmatch(r"[A-Za-z0-9_.-]+", target["host"]):
         raise ValueError("guest identity is invalid")
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", target["user"]) or type(target["port"]) is not int or not 0 < target["port"] < 65536:
@@ -59,11 +67,33 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
         if value is None and field in {"nix_program", "case_inputs"}:
             continue
         arguments.extend(["--" + field.replace("_", "-"), absolute(value)])
+    selected_input = adapter(target['input_adapter'])
+    if selected_input is not None:
+        arguments.extend(['--input-vm-id', selected_input['vm_id']])
     directory = output / target["id"]
     directory.mkdir(mode=0o700)
     (directory / "execution-request.json").write_text(json.dumps(request, sort_keys=True) + "\n")
-    with (directory / "managed-execution.log").open("xb") as log:
-        result = subprocess.run(command(target, arguments), stdout=log, stderr=subprocess.STDOUT, check=False)
+    mailbox_command = command(target, ['python3', '-m', 'scripts.linux_release.installed_input.mailbox',
+        '--binding', json.dumps(request, sort_keys=True, separators=(',', ':')),
+        '--vm-id', selected_input['vm_id']]) if selected_input else None
+    context = Bridge(selected_input, request, mailbox_command, directory) if selected_input else nullcontext()
+    with context as bridge, (directory / "managed-execution.log").open("xb") as log:
+        if bridge is not None and bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
+            raise ValueError('fixed native input lease differs from selected SSH guest')
+        result = subprocess.Popen(command(target, arguments), stdout=log, stderr=subprocess.STDOUT)
+        try:
+            while result.poll() is None:
+                if bridge is not None:
+                    bridge.require_healthy()
+                time.sleep(0.1)
+        except BaseException:
+            result.terminate()
+            try:
+                result.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                result.kill()
+                result.wait(timeout=5)
+            raise
     if result.returncode not in {0, 1}:
         raise ValueError("guest managed execution failed before retaining an installed campaign")
     archive = directory / "leaf.zip"
@@ -95,12 +125,13 @@ def verify_execution_receipt(directory: Path, target: dict, source: str, tree: s
             or variant["variant"].get("id") != target["variant_id"]):
         raise ValueError("retained variant observation differs from the independently selected execution plan")
     snapshot(variant["snapshot"], variant["variant"])
+    verify_deliveries(directory, request, target.get('input_adapter'))
     return receipt
 
 
 def validate_plan(plan: dict, final: dict, catalog: dict | None = None) -> tuple:
     evidence.object_fields(plan, {"format_version", "source_commit", "driver_tree", "targets"})
-    if type(plan["format_version"]) is not int or plan["format_version"] != 2:
+    if type(plan["format_version"]) is not int or plan["format_version"] != PLAN_FORMAT_VERSION:
         raise ValueError("unsupported installed guest plan")
     source, tree = evidence.source(plan["source_commit"]), evidence.source(plan["driver_tree"])
     expected = evidence.artifacts(final, source)
