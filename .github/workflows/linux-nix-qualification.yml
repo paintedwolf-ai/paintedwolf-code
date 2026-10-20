@@ -213,7 +213,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized ]]
-          ./task nix:check -- --component "$COMPONENT"
+          ./task nix:check
           ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure"
 
       - name: Bind the retained closure to the selected source
