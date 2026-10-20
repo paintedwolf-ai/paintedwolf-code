@@ -51,7 +51,7 @@ func TestRuntimeDescriptorsNondumpableHelper(t *testing.T) {
 
 func TestRuntimeDescriptorGaugeCannotBeSuppliedByAnotherSubsystem(t *testing.T) {
 	input := map[string]int64{"process_fds": 999999, "db_reader_open": 2}
-	actual := runtimeGauges(input)
+	actual := captureRuntimeGauges(input)
 	if actual["process_fds"] <= 0 || actual["process_fds"] == input["process_fds"] || actual["db_reader_open"] != 2 {
 		t.Fatalf("runtime gauges did not retain a real process observation: %+v", actual)
 	}

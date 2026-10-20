@@ -219,12 +219,12 @@ func RecordRuntimeSample(gauges map[string]int64) {
 			HeapAllocBytes: mem.HeapAlloc, HeapInUseBytes: mem.HeapInuse,
 			HeapObjects: mem.HeapObjects, StackInUseBytes: mem.StackInuse,
 			Goroutines: runtime.NumGoroutine(), GCCount: mem.NumGC,
-			GCPauseTotalNS: mem.PauseTotalNs, Gauges: runtimeGauges(gauges),
+			GCPauseTotalNS: mem.PauseTotalNs, Gauges: captureRuntimeGauges(gauges),
 		},
 	})
 }
 
-func runtimeGauges(in map[string]int64) map[string]int64 {
+func captureRuntimeGauges(in map[string]int64) map[string]int64 {
 	out := make(map[string]int64, len(in))
 	for key, value := range in {
 		out[key] = value
