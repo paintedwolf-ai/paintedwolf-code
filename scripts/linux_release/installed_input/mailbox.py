@@ -52,7 +52,8 @@ class Mailbox:
             identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
             if identity(before) != identity(after) or identity(after) != identity(path.lstat()):
                 raise ValueError('native input VM marker changed during observation')
-            if decode(raw) != {'format_version': 1, 'vm_id': self.vm_id}:
+            document = decode(raw)
+            if type(document.get('format_version')) is not int or document != {'format_version': 1, 'vm_id': self.vm_id}:
                 raise ValueError('native input guest differs from the selected VM identity')
         finally:
             os.close(descriptor)

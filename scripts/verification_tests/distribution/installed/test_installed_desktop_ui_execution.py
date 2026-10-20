@@ -42,6 +42,32 @@ def surface(children):
 
 
 class DesktopUIOwnershipTests(unittest.TestCase):
+    def test_interactive_retry_requires_same_owned_identity_and_one_deadline(self):
+        api, _ = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
+        witness = {'normal_actionable_control': True}
+        with patch.object(ui, 'load_api', return_value=api), patch.object(ui.time, 'sleep'), \
+                patch.object(ui.DesktopUI, 'interactive', side_effect=[IndexError(), witness]) as observe:
+            self.assertEqual(ui.interactive_window(self.app), witness)
+        self.assertEqual(observe.call_count, 2)
+        self.assertEqual(observe.call_args_list[0].args, observe.call_args_list[1].args)
+        with patch.object(ui, 'load_api', return_value=api), \
+                patch.object(ui.DesktopUI, 'interactive', side_effect=IndexError()) as observe, \
+                patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
+            with self.assertRaises(CaseFailed):
+                ui.interactive_window(self.app)
+        observe.assert_called_once()
+
+    def test_negative_child_count_invalidates_whole_inventory_without_actions(self):
+        class Invalidated(Node):
+            @property
+            def childCount(self):
+                return -1
+        node = Invalidated(API.ROLE_FRAME)
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(node))
+        node.action.doAction.assert_not_called()
+
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
         class Oversized(Node):
             reads = 0

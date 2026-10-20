@@ -2,6 +2,7 @@
 import io
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -9,7 +10,26 @@ from linux_release.installed_input import mailbox, protocol
 
 
 class NativeInputMailboxTests(unittest.TestCase):
+    def test_root_vm_marker_refuses_boolean_version_even_when_identity_matches(self):
+        actor = mailbox.Mailbox.__new__(mailbox.Mailbox)
+        actor.vm_id = 'owned-fedora'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'marker.json'
+            for version in (1, True):
+                path.write_text('{"format_version":' + ('true' if version is True else '1') + ',"vm_id":"owned-fedora"}')
+                info = path.stat()
+                values = {name: getattr(info, name) for name in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')}
+                values.update(st_uid=0, st_gid=0, st_mode=0o100444)
+                with patch.object(mailbox, 'Path', return_value=path), \
+                        patch.object(mailbox.os, 'fstat', return_value=SimpleNamespace(**values)):
+                    if version is True:
+                        with self.assertRaises(ValueError):
+                            self.marker_owner(actor)
+                    else:
+                        self.assertIsNone(self.marker_owner(actor))
+
     def setUp(self):
+        self.marker_owner = mailbox.Mailbox.marker
         marker = patch.object(mailbox.Mailbox, 'marker')
         marker.start()
         self.addCleanup(marker.stop)

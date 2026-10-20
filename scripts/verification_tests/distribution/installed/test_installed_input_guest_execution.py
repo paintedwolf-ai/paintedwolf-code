@@ -8,6 +8,16 @@ from linux_release.installed_input import controller, guest, protocol
 
 
 class GuestInputTests(unittest.TestCase):
+    def test_mailbox_transport_has_one_deadline_even_when_bytes_keep_arriving(self):
+        bridge = controller.Bridge.__new__(controller.Bridge)
+        bridge.process, bridge.selector = Mock(), Mock()
+        bridge.selector.select.return_value = True
+        with patch.object(controller.time, 'monotonic', side_effect=[0, 1, 6]), \
+                patch.object(controller.os, 'read', return_value=b' '):
+            with self.assertRaisesRegex(ValueError, 'response time'):
+                bridge.exchange({'operation': 'poll'})
+        bridge.selector.select.assert_called_once_with(4)
+
     def setUp(self):
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
