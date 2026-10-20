@@ -111,17 +111,27 @@ def local_origin(root: Path, work: Path, evidence: Path):
     finally:
         errors = []
         if process is not None:
+            owner = process.pid
             try:
                 if process.poll() is None:
-                    owner = json.loads(ready.read_text())["pid"] if ready.exists() else process.pid
-                    if type(owner) is not int or owner <= 1:
+                    captured = json.loads(ready.read_text())["pid"] if ready.exists() else process.pid
+                    if type(captured) is not int or captured <= 1:
                         raise ValueError("invalid captured HTTPS server PID")
+                    owner = captured
                     run(["sudo", "-n", "kill", "-TERM", str(owner)])
                 process.wait(timeout=15)
             except (OSError, ValueError, subprocess.SubprocessError) as error:
                 errors.append(str(error))
                 if process.poll() is None:
-                    run(["sudo", "-n", "kill", "-KILL", str(process.pid)])
+                    for pid in dict.fromkeys((owner, process.pid)):
+                        try:
+                            run(["sudo", "-n", "kill", "-KILL", str(pid)], check=False)
+                        except (OSError, subprocess.SubprocessError) as failure:
+                            errors.append(str(failure))
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired as failure:
+                        errors.append(str(failure))
         for needed, action in ((mapped, lambda: change_hosts(line, True)),
                                (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-Z", fingerprint, KEYCHAIN]))):
             if needed:
