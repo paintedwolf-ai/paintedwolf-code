@@ -1,0 +1,32 @@
+oar: '1.0'
+id: COMMAND_OPERATION_NOT_ALLOWED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, permission_profile, paintedwolf.expected_form, paintedwolf.source_line, paintedwolf.source_column]
+when: paintedwolf.rejection_code == "COMMAND_OPERATION_NOT_ALLOWED"
+effect: block
+copy:
+  what: 'The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**.'
+  cause: The active profile explicitly excludes this operation or its public command form.
+  why: Discovering a command or receiving an outer approval does not authorize its child effects. Earlier completed operations remain authoritative.
+  fix: >-
+    {% if paintedwolf.expected_form %}Available forms for this operation: {{ paintedwolf.expected_form }}.{% else %}This operation has no available form on the active surface. Report the scope limitation or use an offered workflow closeout action.{% endif %}
+  instead: Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_operation_admission
+x-paintedwolf-message: native operation is explicitly excluded by the active profile
+x-paintedwolf-scenarios:
+  - id: read-only-write
+    vars:
+      tool: command
+      permission_profile: worker_readonly
+      expected_form: read_only
+      source_line: 2
+      source_column: 3
+    expect_contains:
+      - 'Code: COMMAND_OPERATION_NOT_ALLOWED'
+      - worker_readonly
+      - '2:3'
+      - Do not retry through external

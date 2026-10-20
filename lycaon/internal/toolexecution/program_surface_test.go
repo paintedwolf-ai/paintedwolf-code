@@ -2,9 +2,9 @@ package toolexecution
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -13,58 +13,54 @@ import (
 
 type programVisibility struct{ calls []string }
 
-func (p *programVisibility) Evaluate(_ context.Context, in platform.PolicyContext) (*platform.PolicyDecision, error) {
-	p.calls = append(p.calls, in.ToolName)
-	return &platform.PolicyDecision{Allowed: in.ToolName == "read"}, nil
+func (*programVisibility) Evaluate(context.Context, platform.PolicyContext) (*platform.PolicyDecision, error) {
+	return &platform.PolicyDecision{Allowed: false}, nil
+}
+func (p *programVisibility) CommandOperationAllowed(_ context.Context, _, identity, _ string) (bool, error) {
+	p.calls = append(p.calls, identity)
+	return identity == "read", nil
 }
 
-func TestProgramSurfaceRequiresExplicitVisibleSelection(t *testing.T) {
-	registry := tools.NewDefaultRegistry()
-	for _, name := range []string{"read", "write"} {
-		contract, ok := toolcontract.Lookup(name)
-		if !ok {
-			t.Fatalf("missing retained contract %s", name)
-		}
-		testutil.FailErr(t, "register retained fixture", registry.RegisterDefinition(tools.Definition{
-			Meta: tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}}, Contract: contract,
-			Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-				t.Fatal("discovery executed a handler")
-				return "", nil
-			},
-		}))
+func nativeDefinition(t *testing.T, name string) toolcontract.OperationDefinition {
+	t.Helper()
+	contract, ok := toolcontract.Lookup(name)
+	if !ok {
+		t.Fatalf("missing retained owner contract %s", name)
 	}
-	policy := &programVisibility{}
-	executor := NewExecutor(policy, registry, "implement")
-	offered, definitions, err := executor.Metadata.OfferProgramOperations(t.Context(), platform.ToolFilter{ProfileID: "readonly"}, []string{"read", "write"})
-	testutil.FailErr(t, "freeze active operation surface", err)
-	if len(definitions) != 1 || definitions[0].Facts().Identity != "read" || len(policy.calls) != 2 {
-		t.Fatalf("surface=%v policy=%v", definitions, policy.calls)
+	definition, err := toolcontract.ToolOperation(name, json.RawMessage(`{"type":"object"}`), contract)
+	testutil.FailErr(t, "compile actual public native definition", err)
+	return definition
+}
+
+func TestProgramSurfaceRequiresExplicitNativeSelection(t *testing.T) {
+	// No JSON handlers or schemas are registered. They neither expose a hidden
+	// operation nor control whether these typed native bindings can be offered.
+	executor := NewExecutor(&programVisibility{}, tools.NewDefaultRegistry(), "fixture")
+	read, write := nativeDefinition(t, "read"), nativeDefinition(t, "write")
+	selection, err := executor.Metadata.SelectNativeOperations(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{read, write})
+	testutil.FailErr(t, "freeze explicit native bindings", err)
+	definitions := selection.Definitions()
+	if len(definitions) != 1 || definitions[0].Digest() != read.Digest() {
+		t.Fatalf("native surface=%v", definitions)
 	}
-	read, _ := registry.Definition("read")
-	if definitions[0].Digest() != read.Operation.Digest() {
-		t.Fatal("surface recompiled or changed registered definition")
+	if err := selection.offered.Validate(write, toolcontract.OperationInvocation{}); err == nil {
+		t.Fatal("excluded native binding became callable")
 	}
-	// Registration cannot make an excluded operation available to direct binding.
-	write, _ := registry.Definition("write")
-	called := false
-	_, err = commandprogram.Invoke(t.Context(), offered, commandprogram.Binding[string, string]{Definition: write.Operation, InvokeOwner: func(context.Context, toolcontract.OperationInvocation, string) (string, error) {
-		called = true
-		return "", nil
-	}}, toolcontract.OperationInvocation{}, "")
-	if err == nil || called {
-		t.Fatalf("hidden binding err=%v invoked=%v", err, called)
+	definitions[0] = write
+	if selection.Definitions()[0].Digest() != read.Digest() {
+		t.Fatal("presentation changed frozen native selection")
 	}
-	_, none, err := executor.Metadata.OfferProgramOperations(t.Context(), platform.ToolFilter{ProfileID: "readonly"}, nil)
-	testutil.FailErr(t, "freeze empty active surface", err)
-	if len(none) != 0 {
-		t.Fatal("registry leaked into empty active surface")
+	empty, err := executor.Metadata.SelectNativeOperations(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, nil)
+	testutil.FailErr(t, "freeze empty native selection", err)
+	if len(empty.Definitions()) != 0 {
+		t.Fatal("registration leaked into empty native surface")
 	}
-	for _, active := range [][]string{{"read", "read"}, {""}, {"unregistered"}} {
-		if _, _, err := executor.Metadata.OfferProgramOperations(t.Context(), platform.ToolFilter{ProfileID: "readonly"}, active); err == nil {
-			t.Fatalf("invalid active selection admitted %v", active)
+	for _, active := range [][]toolcontract.OperationDefinition{{read, read}, {nativeDefinition(t, "update_progress")}, {toolcontract.OperationDefinition{}}} {
+		if _, err := executor.Metadata.SelectNativeOperations(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, active); err == nil {
+			t.Fatal("invalid or hidden structured-only binding admitted")
 		}
 	}
-	if _, _, err := executor.Metadata.OfferProgramOperations(t.Context(), platform.ToolFilter{}, []string{"read"}); err == nil {
+	if _, err := executor.Metadata.SelectNativeOperations(t.Context(), platform.ToolFilter{}, []toolcontract.OperationDefinition{read}); err == nil {
 		t.Fatal("implicit profile admitted")
 	}
 }

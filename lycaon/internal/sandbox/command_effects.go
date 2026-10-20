@@ -19,3 +19,25 @@ func (b *Boundary) CommandEffects(ctx context.Context, profileID string) (toolco
 	}
 	return profile.CommandEffects, nil
 }
+
+// CommandOperationAllowed preserves explicit profile denies across both retained
+// operation identities and public command forms without requiring JSON schemas.
+func (b *Boundary) CommandOperationAllowed(ctx context.Context, profileID, identity, command string) (bool, error) {
+	profile, ok := b.lookupProfile(ctx, profileID)
+	if !ok {
+		return false, fmt.Errorf("unknown tool profile %q", profileID)
+	}
+	if profile.ToolDenied(identity) {
+		return false, nil
+	}
+	identities, err := toolcontract.CommandPolicyIdentities(command)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range identities {
+		if profile.ToolDenied(candidate) {
+			return false, nil
+		}
+	}
+	return true, nil
+}

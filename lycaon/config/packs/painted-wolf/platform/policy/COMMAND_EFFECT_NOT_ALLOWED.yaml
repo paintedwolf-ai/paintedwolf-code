@@ -11,7 +11,8 @@ copy:
   what: 'The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**.'
   cause: Its bound effect set is not permitted by the active command surface.
   why: Discovering a command or receiving an outer approval does not authorize its child effects. Earlier completed operations remain authoritative.
-  fix: 'Use only the active effect classes ({{ paintedwolf.expected_form }}). On a read-only surface, inspect with read-only operations and report findings or close out through an offered workflow action.'
+  fix: >-
+    {% if paintedwolf.expected_form %}Available forms for this operation: {{ paintedwolf.expected_form }}.{% else %}This operation has no available form on the active surface. Report the scope limitation or use an offered workflow closeout action.{% endif %}
   instead: Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_effect_admission

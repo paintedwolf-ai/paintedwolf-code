@@ -7,37 +7,62 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// OfferProgramOperations freezes only explicitly selected, profile-visible
-// operations. Registry presence and command discovery are not exposure grants.
-// Each reached child still enters normal execution and effect admission.
-func (e *Metadata) OfferProgramOperations(ctx context.Context, filter platform.ToolFilter, active []string) (commandprogram.OfferedOperations, []toolcontract.OperationDefinition, error) {
-	if e == nil || e.registry == nil || filter.ProfileID == "" {
-		return commandprogram.Offer(), nil, fmt.Errorf("program surface requires registry and explicit profile")
+// NativeOperationSelection freezes host-selected typed definitions independently
+// of retained JSON handlers. Definitions carry no execution grants.
+type NativeOperationSelection struct {
+	offered     commandprogram.OfferedOperations
+	known       commandprogram.OfferedOperations
+	definitions []toolcontract.OperationDefinition
+	denied      map[string]map[string]bool
+}
+
+// Definitions returns detached immutable declarations for catalog presentation.
+func (s NativeOperationSelection) Definitions() []toolcontract.OperationDefinition {
+	return append([]toolcontract.OperationDefinition(nil), s.definitions...)
+}
+
+// SelectNativeOperations admits only explicit public native bindings. Registering
+// an unrelated hidden JSON handler cannot add it to this catalog.
+func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.ToolFilter, active []toolcontract.OperationDefinition) (NativeOperationSelection, error) {
+	if e == nil || filter.ProfileID == "" {
+		return NativeOperationSelection{}, fmt.Errorf("native operation surface requires explicit profile")
 	}
-	definitions := make([]toolcontract.OperationDefinition, 0, len(active))
-	seen := make(map[string]bool, len(active))
-	for _, identity := range active {
-		if identity == "" || seen[identity] {
-			return commandprogram.Offer(), nil, fmt.Errorf("program surface requires unique nonempty operation identities")
-		}
-		seen[identity] = true
-		registered, ok := e.registry.Definition(identity)
-		if !ok {
-			return commandprogram.Offer(), nil, fmt.Errorf("program operation %q has no registered implementation", identity)
-		}
-		decision, err := tools.EvaluateListVisible(ctx, e.policy, platform.PolicyContext{
-			ProfileID: filter.ProfileID, ToolAccess: filter.ToolAccess, ToolName: identity,
-		})
-		if err != nil {
-			return commandprogram.Offer(), nil, err
-		}
-		if decision == nil || !decision.Allowed {
-			continue
-		}
-		definitions = append(definitions, registered.Operation)
+	policy, ok := e.policy.(interface {
+		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
+	})
+	if !ok {
+		return NativeOperationSelection{}, fmt.Errorf("native operation profile policy required")
 	}
-	return commandprogram.Offer(definitions...), definitions, nil
+	selected := NativeOperationSelection{denied: map[string]map[string]bool{}}
+	seen := map[string]bool{}
+	for _, definition := range active {
+		if err := definition.ValidateNativeCommands(); err != nil {
+			return NativeOperationSelection{}, err
+		}
+		facts := definition.Facts()
+		if seen[facts.Identity] {
+			return NativeOperationSelection{}, fmt.Errorf("duplicate native operation %q", facts.Identity)
+		}
+		seen[facts.Identity] = true
+		denied := map[string]bool{}
+		anyAllowed := false
+		for _, command := range facts.Commands {
+			allowed, err := policy.CommandOperationAllowed(ctx, filter.ProfileID, facts.Identity, command.Name)
+			if err != nil {
+				return NativeOperationSelection{}, err
+			}
+			denied[command.Name] = !allowed
+			anyAllowed = anyAllowed || allowed
+		}
+		selected.denied[facts.Identity] = denied
+		if anyAllowed {
+			selected.definitions = append(selected.definitions, definition)
+			selected.denied[facts.Identity] = denied
+		}
+	}
+	selected.known = commandprogram.Offer(active...)
+	selected.offered = commandprogram.Offer(selected.definitions...)
+	return selected, nil
 }

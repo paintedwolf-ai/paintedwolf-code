@@ -15,3 +15,12 @@ func (p *ApprovalPolicyEngine) FreezeCommandProfile(ctx context.Context, profile
 	}
 	return p.profile.FreezeCommandProfile(ctx, profileID)
 }
+
+// CommandOperationAllowed preserves native binding exclusions without consulting
+// the retired standalone schema surface.
+func (p *ApprovalPolicyEngine) CommandOperationAllowed(ctx context.Context, profileID, identity, command string) (bool, error) {
+	if p == nil || p.profile == nil {
+		return false, fmt.Errorf("command profile policy required")
+	}
+	return p.profile.CommandOperationAllowed(ctx, profileID, identity, command)
+}

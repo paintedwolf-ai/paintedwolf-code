@@ -566,6 +566,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "One command operand cannot be used as supplied."
     },
+    "COMMAND_OPERATION_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_operation_admission",
+      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+    },
     "COMMAND_OPTION_UNSUPPORTED": {
       "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
       "category": "recoverable",

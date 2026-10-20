@@ -23,6 +23,10 @@ func (p programEffectPolicy) FreezeCommandProfile(ctx context.Context, _ string)
 	return ctx, p.effects, nil
 }
 
+func (programEffectPolicy) CommandOperationAllowed(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+
 func TestBoundProgramModePreservesProfileAndSourceInEffectRefusal(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"read", "write"} {
@@ -39,7 +43,7 @@ func TestBoundProgramModePreservesProfileAndSourceInEffectRefusal(t *testing.T) 
 	for _, profile := range []string{"worker_readonly", "explore_readonly", "plan_review_readonly", "observe_investigate", "observe_plan", "observe_synthesis", "spec"} {
 		t.Run(profile, func(t *testing.T) {
 			executor := NewExecutor(programEffectPolicy{effects: readonly}, registry, profile)
-			surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: profile}, []string{"read", "write"})
+			surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: profile}, []toolcontract.OperationDefinition{read.Operation, write.Operation})
 			testutil.FailErr(t, "freeze read-only operation surface", err)
 			readMode := read.Operation.Facts().Commands[0].Effects[0].Mode
 			testutil.FailErr(t, "admit read-only catalog mode", surface.ValidateBound(read.Operation, invocation, "cat", readMode, nil))
@@ -69,7 +73,7 @@ func TestProgramSurfaceFreezesProductionProfileAndWorkerOverlayTogether(t *testi
 		if lookups > 1 {
 			return []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true, "write": true}, CommandEffects: all}}
 		}
-		return []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true}, CommandEffects: readOnly}}
+		return []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true}, DenyTools: []string{"write"}, CommandEffects: readOnly}}
 	})
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"read", "write"} {
@@ -81,13 +85,13 @@ func TestProgramSurfaceFreezesProductionProfileAndWorkerOverlayTogether(t *testi
 	}
 	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), registry, "fixture")
 	ctx := sandbox.WithSessionID(t.Context(), "worker-session")
-	surface, err := executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: "fixture"}, []string{"read", "write"})
+	surface, err := executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{nativeDefinition(t, "read"), nativeDefinition(t, "write")})
 	testutil.FailErr(t, "freeze production approval/profile boundary", err)
 	if lookups != 1 || !surface.allowed.Allows(readOnly) || surface.allowed.Allows(all) {
 		t.Fatalf("profile capture changed between effect and exposure: lookups=%d classes=%v", lookups, surface.allowed.Classes())
 	}
 	write, _ := registry.Definition("write")
-	if err := surface.offered.Validate(write.Operation, toolcontract.OperationInvocation{}); err == nil {
+	if err := surface.selection.offered.Validate(write.Operation, toolcontract.OperationInvocation{}); err == nil {
 		t.Fatal("later overlay leaked hidden write into frozen surface")
 	}
 }
