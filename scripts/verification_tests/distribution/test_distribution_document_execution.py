@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.release_distribution_contract.document import construct
+from scripts.release_distribution_contract import document_signing
 from scripts.release_distribution_contract.document_schema import canonical, decode, validate
 
 
@@ -90,3 +92,43 @@ class DistributionDocumentTests(unittest.TestCase):
         document['platforms']['linux-x86_64']['packages']['deb']['url'] += '?redirect=1'
         with self.assertRaises(ValueError):
             validate(document)
+
+    def prepare(self, name, signer=None):
+        return document_signing.prepare(self.root / name, self.request, self.catalog, self.updater, self.artifacts,
+            authorize=lambda binding: True, registry={}, signer=signer or (lambda path, number, registry: 'fixture signature'))
+
+    def test_signing_repeats_fresh_fact_admission_and_retains_nonpublishing_identity(self):
+        observed = []
+        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'maintained public key'}), \
+                patch.object(document_signing, 'check') as metadata, patch.object(document_signing, 'verify') as crypto:
+            result = document_signing.prepare(self.root / 'signed', self.request, self.catalog, self.updater, self.artifacts,
+                authorize=lambda binding: observed.append(binding) or True, registry={},
+                signer=lambda path, number, registry: 'fixture signature')
+        self.assertEqual(len(observed), 2)
+        raw = (self.root / 'signed/distribution.v1.json').read_bytes()
+        self.assertEqual(result['distribution_sha256'], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(result['publication'], 'nonrelease')
+        metadata.assert_called_once()
+        crypto.assert_called_once_with(self.root / 'signed/distribution.v1.json', 'fixture signature', 'maintained public key')
+        self.assertEqual((self.root / 'signed/distribution.v1.json.sig').read_text(), 'fixture signature')
+
+    def test_after_signing_package_changes_and_crypto_failure_refuse_identity(self):
+        def mutate(path, number, registry):
+            next(self.artifacts.iterdir()).write_bytes(b'changed after signing')
+            return 'fixture signature'
+        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'fixture'}), \
+                patch.object(document_signing, 'check'), patch.object(document_signing, 'verify'):
+            with self.assertRaises(ValueError):
+                self.prepare('mutated', mutate)
+        self.assertFalse((self.root / 'mutated/distribution-identity.json').exists())
+        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'fixture'}), \
+                patch.object(document_signing, 'check'), patch.object(document_signing, 'verify', side_effect=ValueError('bad signature')):
+            with self.assertRaises(ValueError):
+                self.prepare('invalid')
+        self.assertFalse((self.root / 'invalid/distribution-identity.json').exists())
+
+    def test_production_cannot_replace_the_maintained_signing_registry(self):
+        self.request['mode'] = 'production'
+        self.request['origin'] = 'https://downloads.paintedwolf.dev'
+        with self.assertRaises(ValueError):
+            self.prepare('foreign-registry')
