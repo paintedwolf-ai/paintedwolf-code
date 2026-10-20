@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/heldcall"
+ "github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -87,6 +88,9 @@ func TestCommandCompositionPreservesPublicationAfterAggregateFailure(t *testing.
 	edit.ReviewedRevision = previews[0].Before.Revision
 	var publication tools.EditorDocumentApplied
 	var ownerError error
+ var latch commandprogram.OutcomeLatch
+ control, err := commandprogram.NewStatusControl(&latch)
+ if err != nil { t.Fatalf("create status control: %v", err) }
 	supervisor := heldcall.New(nil, nil)
 	t.Cleanup(func() {
 		if err := supervisor.Close(context.Background()); err != nil {
@@ -95,8 +99,21 @@ func TestCommandCompositionPreservesPublicationAfterAggregateFailure(t *testing.
 	})
 	outcome, err := supervisor.Run(ctx, heldcall.Spec{ProjectID: project.ID, SessionID: tctx.Identity.SessionID, ToolCallID: "model-command-call", Tool: "command", ArgsDigest: "fixture-composition", Budget: time.Minute}, func(opCtx context.Context) heldcall.Settled {
 		publication, ownerError = adapter.ApplyAgentEdit(opCtx, project.ID, edit)
-		// A later stage fails. The earlier owner result remains authoritative.
-		return heldcall.Settled{Tool: "command", Outcome: api.ToolResultOutcomeError, Content: "fixture later stage failed"}
+		if ownerError == nil {
+            ownerError = control.Record("published-edit", toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.ZeroStatusPublication, EffectCertainty: toolcontract.EffectCompleted}, true, false)
+        }
+        // A later real review refuses another mutation. Neither shell negation
+        // nor exit0 can clear that stop or roll back the earlier publication.
+        refused := errors.New("fixture reviewer refused second edit")
+        tctx.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return refused }
+        reviewErr := tctx.ReviewFileChanges(opCtx, tools.FileChange{Path: resolved.Abs, Preview: api.ApprovalFileChange{Path: "a.txt", RootID: rootID, Operation: "write", Before: transformed, After: "never published\n"}})
+        if !errors.Is(reviewErr, refused) { t.Errorf("second review did not refuse: %v", reviewErr) }
+        if err := control.Record("refused-edit", toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.NoEffect}, true, true); err != nil { t.Errorf("record refusal: %v", err) }
+        if err := control.Exit(0); err == nil { t.Error("exit0 erased refusal") }
+        for _, connector := range []commandprogram.StatusConnector{commandprogram.StatusSequence, commandprogram.StatusAnd, commandprogram.StatusOr} {
+            if run, err := control.ShouldRun(connector); run || err == nil { t.Errorf("connector %v admitted after refusal: run=%t err=%v", connector, run, err) }
+        }
+        return heldcall.Settled{Tool: "command", Outcome: api.ToolResultOutcomeError, Content: "fixture later stage failed"}
 	})
 	if err != nil || ownerError != nil || outcome.Settled == nil || outcome.Settled.Outcome != api.ToolResultOutcomeError {
 		t.Fatalf("aggregate=%+v err=%v owner=%v", outcome, err, ownerError)
