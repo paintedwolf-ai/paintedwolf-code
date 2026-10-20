@@ -8,13 +8,14 @@ import stat
 import tempfile
 import time
 
-from .app import InstalledApp, process_identity
-from .desktop_ui import DesktopUI, interactive_window, owned_process
+from .app import InstalledApp
+from .desktop_ui import DesktopUI, interactive_window
+from ..installed_input.focus import EntryFocus
+from ..installed_input.protocol import EDITOR_TEXT
 from .records import CaseFailed, CaseUnavailable, retain
 from .process import run
 
 BEFORE = 'Installed editor fixture.\nFind the qualification needle.\n'
-AFTER = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 
 
 def observed_file(path: Path) -> dict:
@@ -29,52 +30,30 @@ def observed_file(path: Path) -> dict:
         if identity(before) != identity(after) or identity(after) != identity(path.lstat()):
             raise ValueError('installed editor fixture changed during observation')
         return {'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
-                'expected_content': raw == AFTER.encode(), 'regular_owned_file': True}
+                'expected_content': raw == EDITOR_TEXT.encode(), 'regular_owned_file': True}
     finally:
         os.close(descriptor)
 
 
 def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
+    selected = getattr(app, 'binding', {}).get('native_input')
+    if selected is not None:
+        from ..installed_input.guest import perform
+        if not isinstance(selected, dict) or set(selected) != {'format_version', 'vm_id', 'binding'} or selected['format_version'] != 1:
+            raise ValueError('native input configuration differs from its fixed binding')
+        return {'physical_vm_keyboard': perform(selected['binding'], selected['vm_id'],
+            EntryFocus(app, ui, 'Contents of ' + path.name))}
     if native is None:
         import gi
         gi.require_version('Atspi', '2.0')
         from gi.repository import Atspi
         native = Atspi
-    node = ui.find(ui.api.ROLE_ENTRY, 'Contents of ' + path.name)
-    pid = node.get_process_id()
-    identity = process_identity(pid)
+    actor = EntryFocus(app, ui, 'Contents of ' + path.name)
+    identity = actor.entry
 
     def require_focus():
-        if (process_identity(pid) != identity or not owned_process(pid, app)
-                or not ui.visible(node) or not node.getState().contains(ui.api.STATE_FOCUSED)):
-            raise CaseUnavailable('normal-owned-editor-focus-unavailable')
-        parent, seen, frame = node, set(), None
-        for _ in range(64):
-            parent = parent.get_parent()
-            if parent is None:
-                break
-            marker = hash(parent)
-            if marker in seen:
-                raise ValueError('native editor accessible parent chain cycles')
-            seen.add(marker)
-            if parent.getRole() in {ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG}:
-                frame = parent
-                break
-        if frame is None:
-            raise CaseUnavailable('normal-owned-editor-container-unavailable')
-        frame_pid = frame.get_process_id()
-        frame_identity = process_identity(frame_pid)
-        active = frame.getState().contains(ui.api.STATE_ACTIVE)
-        if (frame_identity != app.observations['launch_identity'] or not owned_process(frame_pid, app)
-                or not ui.visible(frame) or not active or process_identity(frame_pid) != frame_identity):
-            refusal = CaseUnavailable('normal-owned-editor-active-frame-unavailable')
-            refusal.observations = {'editor_focus': {'entry_identity': identity,
-                'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
-            raise refusal
+        actor.observe()
 
-    if node.queryComponent().grabFocus() is not True:
-        raise CaseUnavailable('normal-owned-editor-focus-refused')
-    require_focus()
     control = 1 << int(native.ModifierType.CONTROL)
 
     def event(value, text, kind):
@@ -95,7 +74,7 @@ def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
         require_focus()
 
     chord('a')
-    event(0, AFTER, native.KeySynthType.STRING)
+    event(0, EDITOR_TEXT, native.KeySynthType.STRING)
     chord('s')
     return {'normal_keyboard_replace_and_save': True, 'focused_entry': True,
             'active_owned_frame': True, 'ui_identity': identity, 'text_readback': False}
@@ -124,7 +103,7 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
             ui.click('Files')
             ui.click(path.name)
             try:
-                ui.fill(ui.api.ROLE_ENTRY, 'Contents of ' + path.name, AFTER)
+                ui.fill(ui.api.ROLE_ENTRY, 'Contents of ' + path.name, EDITOR_TEXT)
             except CaseUnavailable as error:
                 if 'desktop_mutation' not in getattr(error, 'observations', {}):
                     raise

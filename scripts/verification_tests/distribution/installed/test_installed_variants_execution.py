@@ -77,8 +77,8 @@ class InstalledPlanVariantTests(unittest.TestCase):
                   'runtime_bin_dirs': [], 'artifact_id': 'selected', 'environment_id': 'fedora',
                   'final_artifacts': '/final.json', 'file_root': '/packages', 'install_root': '/opt/product',
                   'output': '/fresh/output', 'nix_program': None, 'case_inputs': None,
-                  'variant_id': 'floor-scale-100', 'snapshot': {'kind': 'package-inventory', 'value': 'f' * 64, 'channel': None}}
-        plan = {'format_version': 2, 'source_commit': 'a' * 40, 'driver_tree': 'b' * 40, 'targets': [target]}
+                  'variant_id': 'floor-scale-100', 'snapshot': {'kind': 'package-inventory', 'value': 'f' * 64, 'channel': None}, 'input_adapter': None}
+        plan = {'format_version': campaign.PLAN_FORMAT_VERSION, 'source_commit': 'a' * 40, 'driver_tree': 'b' * 40, 'targets': [target]}
         row = {'environment': 'fedora', 'installation': 'rpm', 'architecture': 'amd64', 'capability': 'windowing'}
         variant = {'id': target['variant_id'], 'release': {'snapshot_kind': 'package-inventory', 'channel': None}}
         with patch.object(campaign.evidence, 'artifacts', return_value={'selected': {'installation': 'rpm', 'architecture': 'amd64'}}), \
