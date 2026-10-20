@@ -4,12 +4,15 @@
   "kind": "module",
   "workstream": "linux-nix-cache-admission",
   "disposition": "retain",
-  "reason": "Retain the existing isolated R2 rehearsal owner at 370 code lines, including eight lines that dispatch the whole local Nix cache rehearsal to its own adapter before credential setup. No Nix cache lifecycle is added to the R2 controller. Native Nix 2.35.3 exercised disposable signatures, cold closure import, corruption, missing dependencies, rotation, wrong architecture, and production fixture refusal at the reviewed commit. The complete dispatch and focused admission/rehearsal boundaries are pinned; no growth allowance is retained.",
-  "reviewed_commit": "9a39be6850ca9880353daf14b084210687a6bf4f",
-  "ceiling": 370,
+  "reason": "Retain the existing isolated R2 rehearsal owner at 374 code lines. Its twelve Nix dispatch lines select either the local cache rehearsal or the bucket-scoped S3 rehearsal before legacy credential setup; lifecycle, private configuration and signing remain in their adapter owners. The shared fixture owns disposable closure construction, while separate local and S3 drivers own their transport scenarios. At 6b8ce1db5c, the managed runner passed 531 tests with one platform skip; native Nix 2.35.3 passed sixteen local controls and nine actual S3/HTTPS controls including cold substitution, interruption, exact recovery, rotation, withdrawal and independently audited empty-prefix cleanup. Retain this explicit dispatcher boundary with no further growth allowance.",
+  "reviewed_commit": "6b8ce1db5c07087aeed321babd8905d9636d63be",
+  "ceiling": 374,
   "boundaries": {
-    "scripts/release-r2-live-test.sh": "13ae08e3387eae0364e46829a123d1b9a4e3c42d41c85aaec741239c36cd5bdb",
-    "scripts/nix_cache/rehearsal.py": "33894bea868017038316ef3decae730637db7070c078d79efcd54e366df40a0d",
-    "scripts/verification_tests/distribution/test_nix_cache_execution.py": "ccb1be139050c27a8773b67c72a106d28bce0ba95dde5826c239a917ab3377ca"
+    "scripts/release-r2-live-test.sh": "2e2aa389b6a6b34176452c79dae10c0edf1ea2807018349c73557106febc7f6c",
+    "scripts/nix_cache/rehearsal.py": "3295017ea274a30b695428377756db859ea4e60f4669672f7d289b359f3214a1",
+    "scripts/nix_cache/rehearsal_fixture.py": "b2ba6e30fe33f89722a945c4b768174d8b8e049f8dffda10bb4568426e3507a9",
+    "scripts/nix_cache/rehearsal_r2.py": "6cf3886672c6f25691a92a4a5e7996653301b27defd53c50efa8581aaf64d87a",
+    "scripts/verification_tests/distribution/test_nix_cache_live_execution.py": "14d5580b3df90e288d265ac6c8401153c91b212089dbd9331263834f56622c1c",
+    "scripts/verification_tests/distribution/test_nix_cache_publication_execution.py": "2c25a2bcb225b712f9eab42f038faeaaee5601b03bf1f34081fb48cb4ed8a9ae"
   }
 }
