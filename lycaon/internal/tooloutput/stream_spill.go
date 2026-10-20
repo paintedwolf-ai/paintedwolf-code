@@ -130,7 +130,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store := options.Store
 	store.Dir = ToolOutputSpillDir
 	store.StagedTTL = 7 * 24 * time.Hour
-	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, digest: sha256.New()}
+	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), digest: sha256.New()}
 	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
 	if err != nil {
 		release()

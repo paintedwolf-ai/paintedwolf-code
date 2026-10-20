@@ -40,7 +40,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	got, err := io.ReadAll(reader)
 	testutil.FailErr(t, "read full retained stream", err)
 	sum := sha256.Sum256(want)
-	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
+	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || cap(out.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("spill confused preview and content: %+v bytes=%d", out, len(got))
 	}
 	if err := out.Close(); err == nil || released != 0 {

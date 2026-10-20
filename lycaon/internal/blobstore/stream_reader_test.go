@@ -2,6 +2,7 @@ package blobstore
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"os"
@@ -52,5 +53,24 @@ func TestStreamReaderPreservesExistingRecompressedBytes(t *testing.T) {
 	testutil.FailErr(t, "close decoder", reader.Close())
 	if !bytes.Equal(got, want) {
 		t.Fatal("bounded reader changed actual body bytes")
+	}
+}
+
+func TestBoundedStreamReaderDoesNotCapCompleteBodyAtHistoryLimit(t *testing.T) {
+	store := Store{Root: t.TempDir(), Dir: "fixture-streams"}
+	want := bytes.Repeat([]byte("fixture complete body bytes "), 400000)
+	blob, err := store.Put("large-fixture.bin", bytes.NewReader(want), bytebound.Materialization(len(want)))
+	testutil.FailErr(t, "stage body larger than decoder history", err)
+	_, err = store.Recompress(blob)
+	testutil.FailErr(t, "recompress large existing body", err)
+	reader, err := store.OpenStream(blob)
+	testutil.FailErr(t, "open large bounded stream", err)
+	digest := sha256.New()
+	n, err := io.Copy(digest, reader)
+	testutil.FailErr(t, "stream complete large body", err)
+	testutil.FailErr(t, "close large decoder", reader.Close())
+	expected := sha256.Sum256(want)
+	if n != int64(len(want)) || !bytes.Equal(digest.Sum(nil), expected[:]) {
+		t.Fatal("history ceiling truncated complete body")
 	}
 }
