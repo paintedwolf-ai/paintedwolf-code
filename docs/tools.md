@@ -97,8 +97,23 @@ swap. Subsequent interpreter source, import and plugin reads remain ordinary
 confined process reads; they are not immutable captured program source. Native
 header and argument behavior follows [XNU's image activator](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_exec.c)
 and [Linux's script loader](https://github.com/torvalds/linux/blob/master/fs/binfmt_script.c).
-The capture and stopped-image components do not qualify the complete helper
-release protocol while its integration and actual ordinary-script fixtures remain.
+On Darwin, required identity capture travels through the existing confinement
+helper. Its native suspended-exec barrier verifies the mapped executable, cwd,
+kernel argv, credentials and current path admission before the existing process
+guard releases user code. Actual ordinary-script fixtures cover both confinement
+and explicitly authorized host execution, plus changed-entry and revoked-read
+refusals without payload effects. Some protected native binaries withhold their
+environment from kernel inspection; observation records that absence explicitly
+rather than reporting an empty environment. The submitted environment remains
+an immutable helper input, and visible environment observations must match it.
+
+Required Linux identity release remains unavailable pending its native helper
+integration. Startup tracing cannot silently replace privileged host execution:
+[Linux execve](https://man7.org/linux/man-pages/man2/execve.2.html) suppresses
+set-user-ID, set-group-ID and file capabilities while ptraced. Existing optional
+callers retain their actual launch behavior; portable callers requesting required
+identity capture refuse an unavailable capability. Neither these component
+fixtures nor a refusal result qualifies the complete command runtime.
 
 Windows qualification requires actual filesystem replacement while handles are
 open, reparse-point and exact-name identity checks, journal/error settlement,
