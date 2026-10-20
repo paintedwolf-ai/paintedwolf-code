@@ -91,6 +91,7 @@ def bootstrap(final, source, artifact_id, packages: Path, install: Path, output:
                 report['preparation_error_type'] = type(error).__name__
                 return finish(output, report)
             images = [[value['device'], value['inode']] for value in binding['images'].values()]
+            owner_verified = False
             try:
                 # This independent observation precedes the qualification leaf.
                 owner_query = {'deb': ['dpkg-query', '--show', '--showformat=${Package}', PACKAGE],
@@ -99,6 +100,7 @@ def bootstrap(final, source, artifact_id, packages: Path, install: Path, output:
                 code, owner = run('installed-owner', owner_query)
                 if code or owner != PACKAGE:
                     raise ValueError('bootstrap selected native ownership changed before removal')
+                owner_verified = True
                 inventory = package_inventory(family)
                 if inventory['exit_code'] or inventory.get('stderr'):
                     raise CaseUnavailable('bootstrap package inventory was not completely observed')
@@ -111,9 +113,22 @@ def bootstrap(final, source, artifact_id, packages: Path, install: Path, output:
                 observations['inventory_error_type'] = type(error).__name__
             finally:
                 try:
+                    if not owner_verified:
+                        raise ValueError('bootstrap removal refused after native ownership changed')
                     # Revalidate sealed bytes after inventory, immediately before destructive removal.
                     bind(final, source, artifact_id, packages, install)
                     observations['selected_payload_revalidated'] = True
+                    versions = {
+                        'deb': (['dpkg-deb', '--field', str(package), 'Version'],
+                                ['dpkg-query', '--show', '--showformat=${Version}', PACKAGE]),
+                        'rpm': (['rpm', '--query', '--package', '--queryformat', '%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}', str(package)],
+                                ['rpm', '--query', '--queryformat', '%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}', PACKAGE]),
+                        'pacman': (['pacman', '--query', '--file', str(package)], ['pacman', '--query', PACKAGE])}
+                    selected_query, installed_query = versions[family]
+                    code, selected_version = run('selected-version', selected_query)
+                    actual_code, actual_version = run('installed-version', installed_query)
+                    if code or actual_code or not selected_version or actual_version != selected_version:
+                        raise ValueError('bootstrap native version changed before owned removal')
                     remove, _ = operations(family, package, PACKAGE)
                     if family == 'deb':
                         remove = ['sudo', '-n', 'dpkg', '--purge', PACKAGE]
