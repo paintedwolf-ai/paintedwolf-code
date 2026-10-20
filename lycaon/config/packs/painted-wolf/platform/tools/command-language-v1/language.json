@@ -118,7 +118,8 @@
     "source_encoding": "Submitted/source syntax units are UTF-8 without BOM or NUL. Source -- captures original representation and refuses unsupported encoding/BOM at reached-unit admission, retaining prior parent effects. SourceSpan offsets name those exact UTF-8 captured bytes, not re-encoded UTF-16 bytes.",
     "aggregate_memory": "Variable_count and per-value bounds do not authorize their product allocation. Charge aggregate state and intermediate expansion memory before allocation, including simultaneous old/new values; refuse before exceeding invocation caps.",
     "effective_limits": "Here-doc bytes count within program/source-unit bytes; effective admissible body size is min(here-document remaining, enclosing source/program bytes after syntax). Counter-boundary fixtures isolate counters; complete golden programs must satisfy all dimensions. argv/environment ceilings are host maxima; platform launch also applies frozen OS argv+environment bound and rejects COMMAND_OPERAND_INVALID before spawn if narrower, preserving native/external dispatch semantics.",
-    "settlement_reservation": "Inside aggregate trace ceilings reserve32 events/16384 bytes PER live child execution plus32/16384 for the parent and, when separately admitted,32/16384 for progress. Count simultaneous native stages, external/background jobs and held effects cumulatively. Admit no child unless every already-started execution plus parent/progress retains its own final-settlement reservation. Release a reservation only after authoritative settlement; elapsed time or stop acknowledgement cannot release it. Exhaustion closes new admission while started work settles from reserved capacity. Never drop terminal facts; storage failure follows existing host-fault/owner recovery semantics."
+    "settlement_reservation": "Inside aggregate trace ceilings reserve32 events/16384 bytes PER live child execution plus32/16384 for the parent and, when separately admitted,32/16384 for progress. Count simultaneous native stages, external/background jobs and held effects cumulatively. Admit no child unless every already-started execution plus parent/progress retains its own final-settlement reservation. Release a reservation only after authoritative settlement; elapsed time or stop acknowledgement cannot release it. Exhaustion closes new admission while started work settles from reserved capacity. Never drop terminal facts; storage failure follows existing host-fault/owner recovery semantics.",
+    "parser_memory": "Reserve parser scratch against the enclosing program before parsing; charge upstream backing capacities and recursive frames before allocation. Selected-tree node/depth thresholds apply before host-plan allocation. Source capture enforces its input ceiling before materialization. Retained source/host plans and snapshot copies consume aggregate program_state_bytes separately, including old/new overlap; the evaluator owns those leases."
   },
   "limits": [
     {
@@ -243,7 +244,7 @@
         "ast_depth-at",
         "ast_depth-over"
       ],
-      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "enforcement": "Count selected upstream syntax nodes/parent edges on the complete tree before allocating the host plan or dispatching effects. Independently reserve and meter parser scratch before each upstream allocation and recursive frame; temporary parser wrappers do not count as selected syntax nodes.",
       "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects",
       "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
     },
@@ -257,7 +258,7 @@
         "ast_nodes-at",
         "ast_nodes-over"
       ],
-      "enforcement": "Check before allocation, enqueue or effect; charge nested work to aggregate scope; no silent clamp.",
+      "enforcement": "Count selected upstream syntax nodes/parent edges on the complete tree before allocating the host plan or dispatching effects. Independently reserve and meter parser scratch before each upstream allocation and recursive frame; temporary parser wrappers do not count as selected syntax nodes.",
       "overflow": "terminal structured refusal; discard uncommitted staging; retain earlier effects",
       "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
     },
@@ -909,7 +910,7 @@
       "id": "evaluation_memory_bytes",
       "maximum": 33554432,
       "unit": "bytes",
-      "scope": "query/AWK/regex operation",
+      "scope": "parser scratch or query/AWK/regex operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
       "overflow": "terminal structured refusal; retain actual earlier effects",
       "enforcement": "Meter before work/allocation; adapters must cancel or isolate evaluation before ceiling.",

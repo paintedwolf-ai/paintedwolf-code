@@ -566,6 +566,7 @@
       "emit": "guard:command_composition_redirect",
       "summary": "One command operand cannot be used as supplied."
     },
+<<<<<<< HEAD
     "COMMAND_OPERATION_NOT_ALLOWED": {
       "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
@@ -578,6 +579,8 @@
       "emit": "guard:command_composition_redirect",
       "summary": "An option is unsupported for native {{ paintedwolf.command }}."
     },
+=======
+>>>>>>> 4a6c9e2094
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
       "category": "recoverable",
@@ -601,6 +604,18 @@
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
+    },
+    "COMMAND_SYNTAX_INVALID": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+    },
+    "COMMAND_SYNTAX_UNSUPPORTED": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",

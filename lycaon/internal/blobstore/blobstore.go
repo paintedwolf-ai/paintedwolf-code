@@ -3,6 +3,7 @@ package blobstore
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -194,6 +195,16 @@ func (s Store) RemoveAtBefore(rel string, cutoff time.Time) (bool, error) {
 
 // Put streams r into the content-addressed layout and returns its wire path.
 func (s Store) Put(name string, r io.Reader, limit bytebound.Materialization) (Blob, error) {
+	return s.put(context.Background(), name, r, limit, nil)
+}
+
+func (s Store) put(ctx context.Context, name string, r io.Reader, limit bytebound.Materialization, memory StreamMemoryAdmission) (Blob, error) {
+	if ctx == nil {
+		return Blob{}, fmt.Errorf("blobstore: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return Blob{}, err
+	}
 	if !s.Available() {
 		return Blob{}, ErrNoStore
 	}
@@ -202,7 +213,7 @@ func (s Store) Put(name string, r io.Reader, limit bytebound.Materialization) (B
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, contentDigest, size, err := s.stage(state, r, limit, leaf)
+	tmpPath, contentDigest, size, err := s.stage(ctx, state, r, limit, leaf, memory)
 	if err != nil {
 		return Blob{}, err
 	}
@@ -213,6 +224,9 @@ func (s Store) Put(name string, r io.Reader, limit bytebound.Materialization) (B
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if err := s.pruneExpiredLocked(state, time.Now()); err != nil {
+		return Blob{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return Blob{}, err
 	}
 	if err := s.commitContentAddressed(tmpPath, rel, contentDigest); err != nil {
@@ -243,7 +257,7 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, digest, size, err := s.stage(state, r, limit, leaf)
+	tmpPath, digest, size, err := s.stage(context.Background(), state, r, limit, leaf, nil)
 	if err != nil {
 		return Blob{}, err
 	}
@@ -262,9 +276,25 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 
 // stage copies r into a temp file under Root, hashing as it goes. An oversized
 // body is rejected without ever being committed.
-func (s Store) stage(state *storeState, r io.Reader, limit bytebound.Materialization, leaf string) (tmpPath, digest string, size int64, err error) {
+func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit bytebound.Materialization, leaf string, memory StreamMemoryAdmission) (tmpPath, digest string, size int64, err error) {
 	if limit <= 0 {
 		return "", "", 0, fmt.Errorf("blobstore: materialization bound must be positive, got %d", limit.Int64())
+	}
+	var releaseCopy func()
+	if memory != nil {
+		var err error
+		releaseCopy, err = memory.Reserve(ctx, 64<<10)
+		if err != nil {
+			return "", "", 0, err
+		}
+		if releaseCopy == nil {
+			return "", "", 0, fmt.Errorf("blobstore: copy admission returned no release")
+		}
+		defer func() {
+			if releaseCopy != nil {
+				releaseCopy()
+			}
+		}()
 	}
 	stageDir := filepath.Join(s.dataRoot(), stagingDir)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
@@ -288,7 +318,7 @@ func (s Store) stage(state *storeState, r io.Reader, limit bytebound.Materializa
 	}
 	hasher := sha256.New()
 	// One byte past the bound distinguishes "exactly at the limit" from "over".
-	n, err := io.Copy(io.MultiWriter(tmp, hasher), io.LimitReader(r, limit.Int64()+1))
+	n, err := io.Copy(io.MultiWriter(tmp, hasher), io.LimitReader(contextReader{ctx: ctx, source: r}, limit.Int64()+1))
 	if err != nil {
 		return cleanup(fmt.Errorf("blobstore: copy body: %w", err))
 	}
@@ -297,7 +327,21 @@ func (s Store) stage(state *storeState, r io.Reader, limit bytebound.Materializa
 	}
 	// Content identity is fixed above, on the plaintext bytes; compression is
 	// a storage-layer transform applied to the staged file afterward.
-	if err := compressStagedFile(tmp); err != nil {
+	if releaseCopy != nil {
+		releaseCopy()
+		releaseCopy = nil
+	}
+	if memory != nil {
+		release, err := memory.Reserve(ctx, zstdcodec.StreamMemoryReservation)
+		if err != nil {
+			return cleanup(err)
+		}
+		if release == nil {
+			return cleanup(fmt.Errorf("blobstore: codec admission returned no release"))
+		}
+		defer release()
+	}
+	if err := compressStagedFile(ctx, tmp); err != nil {
 		return cleanup(fmt.Errorf("blobstore: compress staged blob: %w", err))
 	}
 	if err := fssync.File(tmp); err != nil {
@@ -308,29 +352,6 @@ func (s Store) stage(state *storeState, r io.Reader, limit bytebound.Materializa
 		return "", "", 0, fmt.Errorf("blobstore: close staging file: %w", err)
 	}
 	return tmpPath, hex.EncodeToString(hasher.Sum(nil)), n, nil
-}
-
-// compressStagedFile rewrites tmp's plaintext contents as a zstd frame,
-// in place, leaving the file positioned as os.CreateTemp left it (open,
-// at end-of-file) so the caller's Sync/Close sequence is unchanged.
-func compressStagedFile(tmp *os.File) error {
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("rewind plaintext: %w", err)
-	}
-	compressed, err := zstdcodec.Compress(tmp)
-	if err != nil {
-		return fmt.Errorf("compress: %w", err)
-	}
-	if err := tmp.Truncate(0); err != nil {
-		return fmt.Errorf("truncate plaintext: %w", err)
-	}
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("rewind for compressed write: %w", err)
-	}
-	if _, err := tmp.Write(compressed); err != nil {
-		return fmt.Errorf("write compressed body: %w", err)
-	}
-	return nil
 }
 
 func (s Store) releaseStage(state *storeState, path string) {
@@ -414,7 +435,7 @@ func (s Store) PutDerived(id, name string, r io.Reader, limit bytebound.Material
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, _, _, err := s.stage(state, r, limit, path.Base(rel))
+	tmpPath, _, _, err := s.stage(context.Background(), state, r, limit, path.Base(rel), nil)
 	if err != nil {
 		return err
 	}
