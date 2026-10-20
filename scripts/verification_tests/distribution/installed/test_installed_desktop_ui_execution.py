@@ -93,3 +93,13 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             with self.assertRaises(CaseUnavailable) as error:
                 actor.fill(API.ROLE_ENTRY, 'Message', 'private fixture content')
         self.assertNotIn('fixture', str(error.exception))
+
+    def test_accessibility_tree_actions_have_one_shared_wall_clock_bound(self):
+        api, window = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
+        with ui.DesktopUI(self.app, api) as desktop:
+            with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
+                with self.assertRaises(CaseUnavailable):
+                    desktop.find(API.ROLE_PUSH_BUTTON, 'Send')
+            with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
+                with self.assertRaises(CaseUnavailable):
+                    list(desktop.descendants(window))

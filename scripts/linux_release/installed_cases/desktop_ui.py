@@ -73,11 +73,14 @@ class DesktopUI:
         return (not state.contains(self.api.STATE_DEFUNCT) and state.contains(self.api.STATE_SHOWING)
                 and state.contains(self.api.STATE_SENSITIVE) and state.contains(self.api.STATE_ENABLED))
 
-    def windows(self):
+    def windows(self, deadline=None):
+        deadline = time.monotonic() + 15 if deadline is None else deadline
         desktop = self.api.Registry.getDesktop(0)
         if not 0 <= desktop.childCount <= 256:
             raise ValueError('native accessibility application inventory exceeds its bound')
         for index in range(desktop.childCount):
+            if time.monotonic() >= deadline:
+                raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
@@ -86,15 +89,20 @@ class DesktopUI:
             if not 0 <= application.childCount <= 64:
                 raise ValueError('installed window inventory exceeds its bound')
             for offset in range(application.childCount):
+                if time.monotonic() >= deadline:
+                    raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
 
-    def descendants(self, window):
+    def descendants(self, window, deadline=None):
+        deadline = time.monotonic() + 15 if deadline is None else deadline
         pending, visited = [(window, 0)], 0
         while pending:
+            if time.monotonic() >= deadline:
+                raise CaseUnavailable('normal-native-control-observation-deadline')
             node, depth = pending.pop()
             visited += 1
             if visited > 4096 or depth > 64 or not 0 <= node.childCount <= 1024:
@@ -105,9 +113,9 @@ class DesktopUI:
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
-        matches = []
-        for identity, window in self.windows():
-            for node in self.descendants(window):
+        matches, deadline = [], time.monotonic() + 15
+        for identity, window in self.windows(deadline):
+            for node in self.descendants(window, deadline):
                 if node.getRole() == role and self.visible(node) and node.name == name:
                     matches.append((identity, node))
         if len(matches) != 1:
@@ -139,10 +147,11 @@ class DesktopUI:
     def interactive(self) -> dict | None:
         controls = {self.api.ROLE_PUSH_BUTTON, self.api.ROLE_ENTRY, self.api.ROLE_PASSWORD_TEXT}
         decoration = {'Close', 'Minimize', 'Maximize', 'Restore'}
-        for identity, window in self.windows():
+        deadline = time.monotonic() + 15
+        for identity, window in self.windows(deadline):
             if window.getRole() != self.api.ROLE_FRAME:
                 continue
-            for node in self.descendants(window):
+            for node in self.descendants(window, deadline):
                 role = node.getRole()
                 if role in controls and self.visible(node) and node.name and node.name not in decoration:
                     if role == self.api.ROLE_PUSH_BUTTON and node.queryAction().nActions != 1:
