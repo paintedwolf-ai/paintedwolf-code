@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -43,9 +44,13 @@ func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID,
 			return out, err
 		}
 	}
-	// A writer transaction gives the returned parent, child counts and page one
-	// coherent snapshot; no post-commit read decides an accepted transition.
-	tx, err := r.database.BeginTx(ctx, nil)
+	// Read one consistent snapshot without serializing the durable writer.
+	var tx *sql.Tx
+	if reader, ok := r.database.(db.ReadHandle); ok {
+		tx, err = reader.BeginReadTx(ctx)
+	} else {
+		tx, err = r.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	}
 	if err != nil {
 		return out, err
 	}
