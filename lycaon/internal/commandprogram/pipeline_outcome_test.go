@@ -91,3 +91,22 @@ func TestPipelineHostRefusalAndBudgetCannotBeMasked(t *testing.T) {
 		t.Fatal("pipeline resource refusal was not terminal")
 	}
 }
+
+func TestNativeConsumerClosureDoesNotRepairUnresolvedOwnerEffect(t *testing.T) {
+	for _, certainty := range []toolcontract.EffectCertainty{toolcontract.EffectUnknown, toolcontract.EffectAttempted} {
+		pipe := fixturePipe(t, t.Context(), 100)
+		testutil.FailErr(t, "close prefix consumer", pipe.CloseConsumer())
+		producer := stageOutcome("effectful-producer", 141)
+		producer.Result.Terminal = toolcontract.ProducerFailed
+		producer.Result.Complete = false
+		producer.Result.EffectCertainty = certainty
+		producer.RequiredInputComplete = false
+		producer.Closure = NativeConsumerClosure(pipe, ErrConsumerClosed, "effectful-producer", "head")
+		latch := &OutcomeLatch{}
+		out, err := SettlePipeline("pipeline", []PipelineStageOutcome{producer, stageOutcome("head", 0)}, latch)
+		testutil.FailErr(t, "settle unresolved native effect", err)
+		if out.Complete || out.PublicationEligible || out.Status != 141 || latch.AdmitNext() == nil {
+			t.Fatalf("byte closure repaired owner result: %+v", out)
+		}
+	}
+}

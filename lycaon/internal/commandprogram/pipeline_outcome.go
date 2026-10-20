@@ -13,11 +13,12 @@ import (
 type ConsumerClosure struct {
 	producer, consumer string
 	recognized         bool
+	external           bool
 }
 
 // ExternalConsumerClosure carries the existing executor's signal classification.
 func ExternalConsumerClosure(stage lyexec.StageRun, producerID, consumerID string) ConsumerClosure {
-	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: stage.ExpectedConsumerClosure()}
+	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: stage.ExpectedConsumerClosure(), external: true}
 }
 
 // NativeConsumerClosure recognizes only the canonical close returned by this
@@ -89,6 +90,9 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		// A consumer must have an ordinary settled result. Its utility error and
 		// publication eligibility remain independent later factors; normalizing the
 		// producer's pipe closure cannot erase the consumer's own failed outcome.
+		if expected && !closure.external && (result.EffectCertainty == toolcontract.EffectAttempted || result.EffectCertainty == toolcontract.EffectUnknown) {
+			expected = false
+		}
 		if expected {
 			consumer := stages[i+1].Result
 			expected = result.StopCode == "" && (result.Terminal == toolcontract.ProducerFailed || result.Terminal == toolcontract.ProducerCompleted) && consumer.Validate() == nil && (consumer.Terminal == toolcontract.ProducerCompleted || consumer.Terminal == toolcontract.ProducerFailed) && consumer.StopCode == "" && stages[i+1].RequiredInputComplete

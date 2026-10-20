@@ -100,3 +100,33 @@ func TestExitStatusMisuseDoesNotWrapOrExit(t *testing.T) {
 		}
 	}
 }
+
+func TestLatchedStopStatusSurvivesLateSuccessfulChild(t *testing.T) {
+	flow, err := NewStatusControl(&OutcomeLatch{})
+	testutil.FailErr(t, "create control", err)
+	testutil.FailErr(t, "record refusal", flow.Record("refused", toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.EffectUnknown}, true, false))
+	testutil.FailErr(t, "retain late child settlement", flow.Record("late-success", completedOutcome(0), true, false))
+	if flow.Status() != 1 {
+		t.Fatal("late successful child erased stopping status")
+	}
+}
+func TestSubstitutionIdentityAndCompletenessCannotBeHiddenByStatus(t *testing.T) {
+	for _, status := range []int{0, 1, 2} {
+		flow, err := NewStatusControl(&OutcomeLatch{})
+		testutil.FailErr(t, "create control", err)
+		if err := flow.AdmitSubstitution("incomplete-child", PipelineOutcome{Status: status, Complete: false}); err == nil {
+			t.Fatalf("incomplete status%d admitted", status)
+		}
+		if run, err := flow.ShouldRun(StatusSequence); run || err == nil {
+			t.Fatal("incomplete required output allowed continuation")
+		}
+		flow, err = NewStatusControl(&OutcomeLatch{})
+		testutil.FailErr(t, "create identity control", err)
+		if err := flow.AdmitSubstitution("", PipelineOutcome{Status: status, Complete: true}); err == nil {
+			t.Fatal("missing dynamic identity admitted")
+		}
+		if run, err := flow.ShouldRun(StatusSequence); run || err == nil {
+			t.Fatal("missing identity left admission open")
+		}
+	}
+}

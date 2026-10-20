@@ -70,6 +70,13 @@ func (s *StatusControl) Record(executionID string, result toolcontract.ProducerR
 	if err := s.latch.Record(executionID, result, requiredInputComplete); err != nil {
 		return err
 	}
+	if stop, stopped := s.latch.Stop(); stopped {
+		s.status = stop.Result.Status
+		if s.status < 0 || s.status > 255 {
+			s.status = 2
+		}
+		return nil
+	}
 	if s.exited {
 		return nil
 	}
@@ -125,16 +132,16 @@ func (s *StatusControl) AdmitSubstitution(executionID string, result PipelineOut
 	if err := s.latch.AdmitNext(); err != nil {
 		return err
 	}
-	if result.Status < 0 || result.Status > 255 {
-		invalid := toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.NoEffect}
+	if executionID == "" || result.Status < 0 || result.Status > 255 {
+		invalid := toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.EffectUnknown}
 		return s.latch.Record(executionID, invalid, true)
-	}
-	if result.Status != 0 {
-		return &SubstitutionFailure{Status: result.Status, Complete: result.Complete}
 	}
 	if !result.Complete {
 		_ = s.latch.Record(executionID, toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.EffectUnknown}, false)
 		return s.latch.AdmitNext()
+	}
+	if result.Status != 0 {
+		return &SubstitutionFailure{Status: result.Status, Complete: true}
 	}
 	return nil
 }
