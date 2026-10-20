@@ -38,9 +38,11 @@ class NativeWorkflowTests(unittest.TestCase):
                 return 0, b"painted-wolf-code\n", b""
             if "mktemp" in arguments:
                 return 0, b"/var/tmp/paintedwolf-native-1234567890\n", b""
+            if mutation == "joined-output-limit" and arguments[:3] == ["sudo", "-n", "install"]:
+                return 0, b"", b"e" * ((4 << 20) + 1)
             if "sha256sum" in arguments:
                 digest = "d" * 64 if mutation == "snapshot-changed" else "b" * 64
-                return 0, (digest + "  /var/tmp/paintedwolf-native-1234567890/package.deb\n").encode(), b""
+                return 0, (digest + "  /var/tmp/paintedwolf-native-1234567890/package.deb\n").encode(), b"e" * ((4 << 20) + 1) if mutation == "joined-output-limit" else b""
             if "--purge" in arguments and mutation == "rollback-failed":
                 return 1, b"", b"fixture rollback failure"
             return 0, b"", b""
@@ -129,3 +131,11 @@ class NativeWorkflowTests(unittest.TestCase):
                                           Path("/opt/painted-wolf-code"), inputs, output)
                 guest.assert_not_called()
                 command.assert_not_called()
+
+    def test_joined_transaction_channel_limit_retains_failure_and_restoration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, _, output = self.execute(directory, mutation="joined-output-limit")
+            self.assertEqual(result["status"], "failed")
+            self.assertTrue(result["observations"]["output_limit"])
+            self.assertTrue(result["observations"]["restored_absence"])
+            self.assertLessEqual((output / "installation/preinstallation-transaction/transaction-operations-stderr.bin").stat().st_size, 8 << 20)
