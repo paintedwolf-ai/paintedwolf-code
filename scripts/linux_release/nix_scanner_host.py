@@ -13,7 +13,6 @@ PNAME = 'painted-wolf-code-scanner-build-tools'
 STORE = r'/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._-]+'
 SYSTEMS = {'x86_64': 'x86_64-linux', 'aarch64': 'aarch64-linux'}
 POLICY = Path('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')
-PROFILES = Path('/sys/kernel/security/apparmor/profiles')
 
 
 

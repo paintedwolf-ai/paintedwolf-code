@@ -34,7 +34,6 @@ class NixScannerHostTests(unittest.TestCase):
         name, source = host.profile_source(EXE)
         native = Path
         policy = SimpleNamespace(exists=lambda: True, read_text=lambda: '1\n')
-        profiles = SimpleNamespace(read_text=lambda: name + ' (unconfined)\n')
         class Executable:
             parts = native(EXE).parts
             def lstat(self):
@@ -48,7 +47,7 @@ class NixScannerHostTests(unittest.TestCase):
                 patch.object(host.platform, 'system', return_value='Linux'), \
                 patch.object(host.platform, 'machine', return_value='aarch64'), \
                 patch.object(host, 'Path', side_effect=lambda value: Executable() if value == EXE else native(value)), \
-                patch.object(host, 'POLICY', policy), patch.object(host, 'PROFILES', profiles), \
+                patch.object(host, 'POLICY', policy), \
                 patch.object(host.subprocess, 'run', side_effect=[SimpleNamespace(returncode=0),
                     SimpleNamespace(returncode=0, stdout=(name + ' (unconfined)\n').encode())]) as run:
             report = host.authorize_scanner(EXE)
