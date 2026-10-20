@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -56,7 +55,11 @@ func (s *processResourceSampler) loop() {
 
 func (s *processResourceSampler) capture(ctx context.Context) {
 	rss, rssErr := currentRSSBytes(ctx, s.pid)
-	fds, fdErr := currentFDCount(ctx, s.pid)
+	var fds int
+	var fdErr error
+	if runtime.GOOS != "linux" {
+		fds, fdErr = currentFDCount(ctx, s.pid)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if rssErr != nil || fdErr != nil {
@@ -168,16 +171,6 @@ func parseRSSBytes(value string) (int64, error) {
 }
 
 func currentFDCount(parent context.Context, pid int) (int, error) {
-	if runtime.GOOS == "linux" {
-		entries, err := os.ReadDir(filepath.Join("/proc", strconv.Itoa(pid), "fd"))
-		if err != nil {
-			return 0, fmt.Errorf("measure process descriptors: %w", err)
-		}
-		if len(entries) == 0 {
-			return 0, fmt.Errorf("process descriptor measurement is empty")
-		}
-		return len(entries), nil
-	}
 	if runtime.GOOS != "darwin" {
 		return 0, fmt.Errorf("process descriptor measurement is unsupported on %s", runtime.GOOS)
 	}

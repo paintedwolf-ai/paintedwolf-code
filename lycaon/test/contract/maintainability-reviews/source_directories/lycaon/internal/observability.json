@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/observability",
+  "kind": "module",
+  "workstream": "performance-resource-observation",
+  "disposition": "retain",
+  "reason": "The 26 immediate source and test members implement bounded diagnostic capture and its sink/redaction lifecycle. The added Linux nondumpable subprocess contract tests the existing runtime sampler directly; moving that contract elsewhere would hide its privacy/resource boundary. Retain this exact membership without introducing another telemetry package or exposing resource authority to callers.",
+  "reviewed_commit": "f04f72d953abeb58454581b13875454852bb317f",
+  "ceiling": 26,
+  "boundaries": {
+    "lycaon/cmd/lycaon-perf/capture_integrity_test.go": "06e57286822e028cb748043f650c2ba1ed653be29186b0b41a6e4465b3fbf62e",
+    "lycaon/cmd/lycaon-perf/runtime_capture_linux_test.go": "3ff46609d4fd5172e2ef282f38d90a6c3576ba5c23134dee4f460db751f5c9c9",
+    "lycaon/internal/observability/performance_descriptors_linux_test.go": "d4e908fbe610e688c14c3755e7d5ce86c27dce26d1097be1cbef2ed9fc2378d8"
+  },
+  "reviewed_shape": "554582cdb33aeec5812e166ddd163e3d20b76f1ca868fcc798a5a2b843a30f69"
+}

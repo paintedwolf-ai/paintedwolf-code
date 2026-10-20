@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/cmd/lycaon-perf/main.runState",
+  "kind": "runtime_service",
+  "workstream": "performance-resource-observation",
+  "disposition": "retain",
+  "reason": "The 539 measured receiver lines own one benchmark process lifecycle, fixture journey and report. Runtime sample ingestion now has its own file; it still needs the same workload interval and report state. Descriptor collection adds no runtime dependencies or receiver fields. Retain this bounded orchestrator while focused contracts enforce truthful missing-measurement refusal and pre-shutdown growth.",
+  "reviewed_commit": "f04f72d953abeb58454581b13875454852bb317f",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/cmd/lycaon-perf/capture_integrity_test.go": "06e57286822e028cb748043f650c2ba1ed653be29186b0b41a6e4465b3fbf62e",
+    "lycaon/cmd/lycaon-perf/runtime_capture_linux_test.go": "3ff46609d4fd5172e2ef282f38d90a6c3576ba5c23134dee4f460db751f5c9c9",
+    "lycaon/internal/observability/performance_descriptors_linux_test.go": "d4e908fbe610e688c14c3755e7d5ce86c27dce26d1097be1cbef2ed9fc2378d8"
+  },
+  "reviewed_shape": "28564e9b75e92f3945fa49f3c040a6a1211caa0bf8937d65d2663aa0632a46d1"
+}
