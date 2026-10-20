@@ -128,6 +128,7 @@ wheel-glide = { path = "crates/wheel-glide" }
 # use the GTK display connection the shell already runs on.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+webkit2gtk = "=2.0.2"
 gdkx11 = "0.18"
 gdkwayland-sys = "0.18"
 

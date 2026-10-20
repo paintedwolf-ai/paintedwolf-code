@@ -61,9 +61,13 @@ pub async fn read_clipboard_text(
 /// Pastes into the focused web view through the system paste action, the
 /// same path Edit > Paste takes.
 #[tauri::command]
-pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn paste_into_focused_view(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = window;
         app.run_on_main_thread(|| {
             let Some(mtm) = objc2::MainThreadMarker::new() else {
                 return;
@@ -75,10 +79,30 @@ pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
+        use gtk::prelude::WidgetExt;
+        use webkit2gtk::WebViewExt;
         let _ = app;
-        Err("system paste is available on macOS only".to_string())
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        window
+            .with_webview(move |view| {
+                let view = view.inner();
+                let result = if view.has_focus() {
+                    view.execute_editing_command("Paste");
+                    Ok(())
+                } else {
+                    Err("paste view is no longer focused".to_string())
+                };
+                let _ = reply.send(result);
+            })
+            .map_err(|error| error.to_string())?;
+        receiver.await.map_err(|_| "paste view closed".to_string())?
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (app, window);
+        Err("system paste is unavailable on this platform".to_string())
     }
 }
 
