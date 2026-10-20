@@ -60,3 +60,19 @@ class AnchorPlanTests(unittest.TestCase):
         case = next(case for case in result["cases"] if case["source_version"] == "1.0.2")
         self.assertEqual([step["version"] for step in case["steps"]], ["1.1.0", "1.2.0", "1.4.0-rc1"])
         self.assertEqual([step["update_keys"]["signing_generation"] for step in case["steps"]], [1, 2, 3])
+
+    def test_public_source_capture_includes_the_retained_baseline_in_its_saved_plan(self):
+        import json
+        from pathlib import Path
+        import tempfile
+        from release_control import capture_sources
+        candidate = manifest("1.1.0-rc1")
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch("update_keys.load_registry", return_value={"generations": [{"generation": 1}]}), \
+             patch("release_upgrade.feeds.capture", return_value=None), \
+             patch("release_upgrade.baseline.capture", return_value=[anchor(manifest("1.0.2"))]):
+            result = capture_sources("https://downloads.paintedwolf.dev", candidate, Path(temporary))
+            saved = json.loads((Path(temporary) / "plan.json").read_text())
+        self.assertEqual(saved, result)
+        self.assertEqual(result["cases"][0]["source_version"], "1.0.2")
+        self.assertEqual(result["cases"][0]["channel"], "preview")
