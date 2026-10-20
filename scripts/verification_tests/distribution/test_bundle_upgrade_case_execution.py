@@ -15,7 +15,7 @@ class CaseTests(unittest.TestCase):
     def exercise(self, wrong_channel=False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
+        root = Path(temporary.name).resolve()
         work, config, evidence = root / "work", root / "config", root / "evidence"
         work.mkdir()
         app = work / "Product.app"
