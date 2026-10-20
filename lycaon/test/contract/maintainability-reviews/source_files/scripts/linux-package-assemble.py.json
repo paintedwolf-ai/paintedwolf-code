@@ -5,10 +5,10 @@
   "workstream": "linux-native-packages",
   "disposition": "retain",
   "reason": "Retain the common tree sealing and native format dispatch owner within its existing 365-line ceiling. Family conversion removes only empty ancestors of removed optional fragments, preserving shared files and intentional empty payload directories. Native CPU substrate preparation, archive metadata admission and candidate inventory remain in named linux_release adapters; focused payload conversion and native makepkg contracts verify those boundaries.",
-  "reviewed_commit": "79435515f3a2f913618eb660e5909c4adc02eeba",
+  "reviewed_commit": "b64e3c1f8d15279ee9674ce7317fe97d04889956",
   "ceiling": 365,
   "boundaries": {
     "scripts/verification_tests/distribution/test_arch_package_execution.py": "ec38ba1e036119447c935a8e167dc8f6dc03ac45966d9d9ab55099e4442b8d57",
-    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "507a51ee4edaa661eb1157817f0d8ec0525b59c3e30676a80ada198534348cb9"
+    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "be9b6f3dcc7cea9f3660cb6cf9898338a5ce5525fe31ca226c4e91b49a012a63"
   }
 }
