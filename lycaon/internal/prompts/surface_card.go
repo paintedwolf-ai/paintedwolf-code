@@ -18,7 +18,7 @@ type SurfaceCardVars struct {
 	MayEdit     bool
 	MayRun      bool
 	MayDispatch bool
-	// EditDeferred selects the "until requested" wording over a flat denial.
+	// EditDeferred distinguishes unloaded editing tools from unavailable ones.
 	EditDeferred bool
 	// OnlyTools enumerates sticky tools when no rule or capability summarizes them.
 	OnlyTools []string

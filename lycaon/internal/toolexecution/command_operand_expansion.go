@@ -25,7 +25,7 @@ func (e *Boundary) expandCommandOperands(
 	args map[string]any,
 	tc *tools.ToolContext,
 ) (map[string]any, error) {
-	if tool != "command" && tool != "verify" {
+	if tool != "command" && tool != "verify" && tool != "terminal_open" {
 		return args, nil
 	}
 	// A plan that does not parse has nothing to expand: the handler refuses

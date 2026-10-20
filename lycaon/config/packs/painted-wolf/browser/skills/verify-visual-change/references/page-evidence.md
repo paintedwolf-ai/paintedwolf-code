@@ -80,7 +80,7 @@ N action steps produce N+1 settled frames (navigate idle + after each action). D
 | Kind | Tool | Grounds |
 |---|---|---|
 | `render` | `render_view` | Design intent only — never observed runtime |
-| `page` / `surface_snapshot` | `capture_page` | Running-page appearance and behavior (structure + console/log required) |
+| `page` (`page#`) | `capture_page` / `page_snapshot` | Running-page appearance and behavior (structure + console/log required) |
 | `page_geometry` | `measure_page` | Rendered state plus numeric layout/style (size, gap, align, overlap, contrast) and pointer reach |
 
 ## Presentation

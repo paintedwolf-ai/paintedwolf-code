@@ -4,6 +4,9 @@ import "github.com/lycaon/lycaon/internal/oarcore"
 
 // Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
 var occurrenceFactDecls = []factDecl{
+	{"json_unescaped_newline", oarcore.TypeBool, FactTierHost, ""},
+	{"json_unexpected_end", oarcore.TypeBool, FactTierHost, ""},
+	{"json_invalid_escape", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_discovery_status", oarcore.TypeString, FactTierHost, ""},
 	{"tool_discovery_has_more", oarcore.TypeBool, FactTierHost, ""},
 	{"syntax_override_reason", oarcore.TypeString, FactTierHost, ""},
@@ -232,6 +235,7 @@ var occurrenceFactDecls = []factDecl{
 	{"can_recall", oarcore.TypeBool, FactTierHost, ""},
 	{"entries", oarcore.TypeString, FactTierHost, ""},
 	{"entry", oarcore.TypeString, FactTierHost, ""},
+	{"directory_change", oarcore.TypeBool, FactTierHost, ""},
 	{"env_assignment", oarcore.TypeBool, FactTierHost, ""},
 	{"error", oarcore.TypeString, FactTierHost, ""},
 	{"escape", oarcore.TypeString, FactTierHost, ""},
@@ -308,6 +312,7 @@ var occurrenceFactDecls = []factDecl{
 	{"overlap_job_ids", oarcore.TypeListString, FactTierHost, ""},
 	{"overlay_id", oarcore.TypeString, FactTierHost, ""},
 	{"page_key", oarcore.TypeString, FactTierHost, ""},
+	{"mutation_new_path", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_timed_out", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_canceled", oarcore.TypeBool, FactTierHost, ""},
 	{"parse_syntax_error", oarcore.TypeBool, FactTierHost, ""},
@@ -405,6 +410,7 @@ var occurrenceFactDecls = []factDecl{
 	{"year", oarcore.TypeString, FactTierHost, ""},
 	{"misplaced_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"inapplicable_fields", oarcore.TypeListString, FactTierHost, ""},
+	{"missing_required_arguments", oarcore.TypeString, FactTierHost, ""},
 	{"found_under", oarcore.TypeString, FactTierHost, ""},
 	{"belongs_under", oarcore.TypeString, FactTierHost, ""},
 	{"close_before", oarcore.TypeString, FactTierHost, ""},

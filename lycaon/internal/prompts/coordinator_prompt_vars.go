@@ -5,6 +5,7 @@ import "strings"
 // CoordinatorPromptGates are turn-scoped prompt conditions.
 type CoordinatorPromptGates struct {
 	PendingOverlayPromote bool
+	ProgressMissing       bool
 	// VerifyRequired reflects the active phase evidence gate.
 	VerifyRequired bool
 	// VerifyCommand is the project's declared test command, or empty when undeclared.
@@ -55,6 +56,7 @@ func MergeCoordinatorPromptVars(
 	}
 	MergeVisualShowVars(offered, requestable, into)
 	into["more_tools_loadable"] = len(requestable) > 0
+	into["progress_missing"] = gates.ProgressMissing
 	into["verify_required"] = gates.VerifyRequired
 	into["verify_command"] = strings.TrimSpace(gates.VerifyCommand)
 	return nil

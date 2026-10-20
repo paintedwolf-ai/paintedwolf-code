@@ -1,7 +1,7 @@
 # Anchor catalog SSOT, validated by schemas/anchors.schema.json.
 # Host code emits catalog ids only. Spec: docs/agent-prompt-template.md
 
-schema_version: "2.0"
+schema_version: "2.1"
 
 anchors:
   # ── Inform plane ────────────────────────────────────────────────────────────
@@ -594,6 +594,22 @@ anchors:
     envelope:
       vars:
         offered_tools: { type: "string[]", required: true }
+
+  - id: inject.execution_state
+    title: Execution observations inject
+    description: Bounded current-intent invocation outcomes from retained host receipts.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        view: { type: "string", required: true }
+        operations: { type: "object[]", required: true }
+        executions: { type: "object[]", required: true }
+        operations_omitted: { type: "int", required: true }
+        executions_omitted: { type: "int", required: true }
+        checklist_updated: { type: "bool", required: true }
+        declared_command: { type: "string", required: true }
 
   - id: inject.command_jobs
     title: Live handles inject

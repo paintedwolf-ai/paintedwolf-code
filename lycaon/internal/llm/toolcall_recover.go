@@ -16,8 +16,10 @@ import (
 
 // Text recovery accepts only declared envelope markers.
 var (
-	toolCallTagRE   = regexp.MustCompile(`(?is)<tool_call>\s*(.*?)\s*</tool_call>`)
-	toolCallsPrefix = "[TOOL_CALLS]"
+	toolCallTagRE      = regexp.MustCompile(`(?is)<tool_call>\s*(.*?)\s*</tool_call>`)
+	xmlFunctionBlockRE = regexp.MustCompile(`(?is)<function=([a-zA-Z0-9_-]+)>\s*(.*?)\s*</function>`)
+	xmlParamBlockRE    = regexp.MustCompile(`(?is)<parameter=([a-zA-Z0-9_-]+)>(.*?)</parameter>`)
+	toolCallsPrefix    = "[TOOL_CALLS]"
 )
 
 // proseToolCall accepts the declared argument field variants.
@@ -98,16 +100,18 @@ func validRecoveredToolCalls(calls []api.ToolCall, offered []tools.ToolMeta) boo
 // recoverToolCallsFromProse parses declared envelope forms.
 func recoverToolCallsFromProse(content string) (calls []api.ToolCall, detected bool) {
 	content = strings.TrimSpace(content)
-	if matches := toolCallTagRE.FindAllStringSubmatch(content, -1); len(matches) > 0 && strings.TrimSpace(toolCallTagRE.ReplaceAllString(content, "")) == "" {
-		detected = true
-		for _, m := range matches {
-			var valid bool
-			calls, valid = appendParsed(calls, m[1])
-			if !valid {
-				return nil, true
+	if tail := lineStartToolCallTail(content); tail != "" {
+		if matches := toolCallTagRE.FindAllStringSubmatch(tail, -1); len(matches) > 0 && strings.TrimSpace(toolCallTagRE.ReplaceAllString(tail, "")) == "" {
+			detected = true
+			for _, m := range matches {
+				var valid bool
+				calls, valid = appendParsed(calls, m[1])
+				if !valid {
+					return nil, true
+				}
 			}
+			return calls, detected
 		}
-		return calls, detected
 	}
 
 	if strings.HasPrefix(content, toolCallsPrefix) {
@@ -121,6 +125,30 @@ func recoverToolCallsFromProse(content string) (calls []api.ToolCall, detected b
 		calls, _ = appendParsed(calls, content)
 	}
 	return calls, detected
+}
+
+func lineStartToolCallTail(content string) string {
+	if strings.HasPrefix(content, "```") {
+		return ""
+	}
+	if strings.HasPrefix(content, "<tool_call>") {
+		return content
+	}
+	inFence := false
+	for i := 0; i < len(content); {
+		trimmed := strings.TrimLeft(content[i:], " \t")
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+		} else if !inFence && strings.HasPrefix(trimmed, "<tool_call>") {
+			return trimmed
+		}
+		nl := strings.IndexByte(content[i:], '\n')
+		if nl < 0 {
+			break
+		}
+		i += nl + 1
+	}
+	return ""
 }
 
 // looksLikeToolCall reports JSON that names a tool and its args.
@@ -138,6 +166,9 @@ func looksLikeToolCall(s string) bool {
 // appendParsed rejects the whole batch if any call is malformed.
 func appendParsed(calls []api.ToolCall, raw string) ([]api.ToolCall, bool) {
 	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "<function=") {
+		return appendParsedXML(calls, raw)
+	}
 	var batch []proseToolCall
 	if strings.HasPrefix(raw, "[") {
 		if err := json.Unmarshal([]byte(raw), &batch); err != nil {
@@ -161,6 +192,47 @@ func appendParsed(calls []api.ToolCall, raw string) ([]api.ToolCall, bool) {
 		calls = append(calls, call)
 	}
 	return calls, true
+}
+
+func appendParsedXML(calls []api.ToolCall, raw string) ([]api.ToolCall, bool) {
+	fnMatches := xmlFunctionBlockRE.FindAllStringSubmatch(raw, -1)
+	if len(fnMatches) == 0 || strings.TrimSpace(xmlFunctionBlockRE.ReplaceAllString(raw, "")) != "" {
+		return nil, false
+	}
+	for _, fn := range fnMatches {
+		name := strings.TrimSpace(fn[1])
+		body := strings.TrimSpace(fn[2])
+		args := make(map[string]any)
+		if body != "" {
+			paramMatches := xmlParamBlockRE.FindAllStringSubmatch(body, -1)
+			if len(paramMatches) == 0 || strings.TrimSpace(xmlParamBlockRE.ReplaceAllString(body, "")) != "" {
+				return nil, false
+			}
+			for _, pm := range paramMatches {
+				args[strings.TrimSpace(pm[1])] = trimXMLParameterValue(pm[2])
+			}
+		}
+		calls = append(calls, api.ToolCall{
+			ID:   fmt.Sprintf("recovered-%d", len(calls)+1),
+			Name: name,
+			Args: args,
+		})
+	}
+	return calls, true
+}
+
+func trimXMLParameterValue(s string) string {
+	if strings.HasPrefix(s, "\r\n") {
+		s = s[2:]
+	} else if strings.HasPrefix(s, "\n") {
+		s = s[1:]
+	}
+	if strings.HasSuffix(s, "\r\n") {
+		s = s[:len(s)-2]
+	} else if strings.HasSuffix(s, "\n") {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func toolCallFromProse(p proseToolCall, index int) (api.ToolCall, bool) {
