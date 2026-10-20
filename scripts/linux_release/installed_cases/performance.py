@@ -10,8 +10,9 @@ import statistics
 import tempfile
 import time
 
-from .app import InstalledApp, process_identity
+from .app import InstalledApp
 from .provider import ProviderFixture
+from .performance_resources import TreeSampler, resources, tree_summary
 from .records import CaseUnavailable, retain
 from .security_boundary import successful_invocation
 from .workflow import ToolTurn, accepted, wait_settled
@@ -52,34 +53,6 @@ def enforce(samples: dict[str, list[float]], absolute: dict) -> list[dict]:
         if measured['p95'] > absolute[name]:
             failures.append({'metric': name, 'p95': measured['p95'], 'absolute_limit': absolute[name]})
     return failures
-
-
-def resources(identity: dict) -> dict:
-    pid = identity['pid']
-    if process_identity(pid) != identity:
-        raise ValueError('resource observation lost its captured engine identity')
-    raw_stat = Path(f'/proc/{pid}/stat').read_text().rpartition(') ')[2].split()
-    status = Path(f'/proc/{pid}/status').read_text()
-    if process_identity(pid) != identity or len(raw_stat) < 22:
-        raise ValueError('resource observation changed engine identity')
-    fields = {}
-    for line in status.splitlines():
-        key, separator, value = line.partition(':')
-        if separator and key in {'VmRSS', 'voluntary_ctxt_switches', 'nonvoluntary_ctxt_switches'}:
-            if key in fields:
-                raise ValueError('resource observation has duplicate fields')
-            fields[key] = value.strip()
-    rss = fields.get('VmRSS', '').split()
-    if len(rss) != 2 or rss[1] != 'kB' or not rss[0].isdecimal() or int(rss[0]) <= 0:
-        raise ValueError('engine RSS observation is missing or invalid')
-    switches = [fields.get(key, '') for key in ('voluntary_ctxt_switches', 'nonvoluntary_ctxt_switches')]
-    if any(not value.isdecimal() for value in switches):
-        raise ValueError('engine context-switch observation is missing or invalid')
-    if any(not raw_stat[index].isdecimal() for index in (11, 12)):
-        raise ValueError('engine CPU observation is invalid')
-    return {'at_monotonic': time.monotonic(), 'rss_bytes': int(rss[0]) * 1024,
-            'cpu_ticks': int(raw_stat[11]) + int(raw_stat[12]),
-            'context_switches': sum(map(int, switches)), 'identity': identity}
 
 
 def start_samples(binding: dict) -> tuple[dict, dict]:
@@ -150,12 +123,17 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
 
 def resource_samples(binding: dict) -> tuple[dict, dict]:
     app = InstalledApp(binding)
-    samples = []
+    samples, desktop_samples, unavailable = [], [], []
     try:
         with app:
             identity = app.observations['engine_identity']
+            desktop = TreeSampler(app.observations['launch_identity'], identity)
             for index in range(31):
                 samples.append(resources(identity))
+                try:
+                    desktop_samples.append(desktop.snapshot())
+                except CaseUnavailable as error:
+                    unavailable.append({'sample': index, 'reason': str(error)})
                 if index < 30:
                     time.sleep(1)
     finally:
@@ -174,11 +152,14 @@ def resource_samples(binding: dict) -> tuple[dict, dict]:
     elapsed = samples[-1]['at_monotonic'] - samples[0]['at_monotonic']
     if elapsed <= 0:
         raise ValueError('performance resource sample interval is empty')
+    desktop_report = tree_summary(desktop_samples) if len(desktop_samples) >= 2 else None
     return {'samples': samples, 'scope': 'captured-installed-engine', 'peak_rss_bytes': peak,
             'rss_growth_bytes': growth, 'elapsed_seconds': elapsed, 'failures': failures,
             'idle_cpu_percent': 100 * (samples[-1]['cpu_ticks'] - samples[0]['cpu_ticks']) / os.sysconf('SC_CLK_TCK') / elapsed,
             'main_thread_context_switches_per_second': (samples[-1]['context_switches'] - samples[0]['context_switches']) / elapsed,
-            'absolute_limits': absolute, 'remaining_requirements': ['total-desktop-process-tree',
+            'absolute_limits': absolute, 'desktop_tree': desktop_report,
+            'desktop_tree_incomplete_snapshots': unavailable,
+            'remaining_requirements': ['declared-whole-desktop-resource-budgets',
                 'sustained-mixed-load-soak', 'wakeups', 'declared-idle-CPU-budget', 'qualified-macos-reference']}, app.streams()
 
 

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases import performance, workflow
+from linux_release.installed_cases import performance, performance_resources, workflow
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -49,19 +49,19 @@ class InstalledPerformanceTests(unittest.TestCase):
         status = 'VmRSS:\t1024 kB\nvoluntary_ctxt_switches:\t2\nnonvoluntary_ctxt_switches:\t3\n'
         def read(path, *args, **kwargs):
             return raw_stat if path.name == 'stat' else status
-        with patch.object(performance, 'process_identity', return_value=identity), patch.object(Path, 'read_text', read):
-            report = performance.resources(identity)
+        with patch.object(performance_resources, 'process_identity', return_value=identity), patch.object(Path, 'read_text', read):
+            report = performance_resources.resources(identity)
             self.assertEqual(report['rss_bytes'], 1 << 20)
             self.assertEqual(report['cpu_ticks'], 7)
             self.assertEqual(report['context_switches'], 5)
             for changed in ['', status.replace('1024 kB', '0 kB'), status + 'VmRSS: 1024 kB\n']:
                 status_before, status = status, changed
                 with self.assertRaises(ValueError):
-                    performance.resources(identity)
+                    performance_resources.resources(identity)
                 status = status_before
-        with patch.object(performance, 'process_identity', return_value=dict(identity, start_time_ticks=10)):
+        with patch.object(performance_resources, 'process_identity', return_value=dict(identity, start_time_ticks=10)):
             with self.assertRaises(ValueError):
-                performance.resources(identity)
+                performance_resources.resources(identity)
 
     def test_settlement_requires_normal_session_idle_after_tool_completion(self):
         app = SimpleNamespace()
