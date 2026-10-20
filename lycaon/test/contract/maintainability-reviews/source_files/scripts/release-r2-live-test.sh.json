@@ -4,11 +4,11 @@
   "kind": "construction",
   "workstream": "linux-native-packages",
   "disposition": "retain",
-  "reason": "Retain the measured 379-line isolated rehearsal transaction at its current bound. Three literal local component modes share a single fixed module exec before credentialed publication prerequisites; all legacy storage lifecycle, cleanup and signer controls remain together below it. Package probing owns its separate exact operation lease and cleanup in package_probe, not this dispatcher. The isolated PATH contract and actual managed Noble retained-byte differential prove component dispatch requires no publishing toolchain; 526 managed contracts passed.",
-  "reviewed_commit": "b64e3c1f8d15279ee9674ce7317fe97d04889956",
+  "reason": "Retain the measured 379-line isolated rehearsal transaction at its current bound. Three literal local component modes share a single fixed module exec before credentialed publication prerequisites; all legacy storage lifecycle, cleanup and signer controls remain together below it. Package probing owns its separate exact operation lease and cleanup in package_probe, not this dispatcher. The isolated PATH contract and actual managed Noble retained-byte differential prove component dispatch requires no publishing toolchain; 528 managed contracts passed. The reviewed diagnostic retains its unreaped leader until owned-group cleanup and removes an attempted exact profile after uncertain parser completion; the final restricted-kernel differential and negative contracts verify both lifecycle boundaries.",
+  "reviewed_commit": "c289207fec48e0790ab7786309a3f09bea87047c",
   "ceiling": 379,
   "boundaries": {
-    "scripts/verification_tests/distribution/test_package_probe_execution.py": "689bc2d4c7fcc9263971a2726c0682aca8cf24d8fa1a4547e79d9d15d24785f2",
-    "scripts/linux_release/package_probe.py": "235c8136656df75d8d6473f450430bd9d152ef0e5297d1b7949d80a72d8a895d"
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "843e6f693b9a5b7e74ec29cce8073058959aab8ae7f4ec83740be04ad0f4c9be",
+    "scripts/linux_release/package_probe.py": "f4e349f56f1c743a51a242ba8c9945fa5b4214bbfd9aae44b3319d309565e2d9"
   }
 }
