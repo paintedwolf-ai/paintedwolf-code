@@ -18,7 +18,7 @@ esac
 if [[ -n "${rehearsal_module}" ]]; then
   shift
   cd "${ROOT}"
-  PYTHONPATH="${ROOT}/scripts" exec python3 -m "${rehearsal_module}" "${rehearsal_prefix[@]}" "$@"
+  PYTHONPATH="${ROOT}/scripts" exec python3 -m "${rehearsal_module}" ${rehearsal_prefix[@]+"${rehearsal_prefix[@]}"} "$@"
 fi
 [[ $# -eq 0 ]] || { echo "error: unknown release rehearsal arguments" >&2; exit 1; }
 for executable in bun curl jq python3 ruby; do
