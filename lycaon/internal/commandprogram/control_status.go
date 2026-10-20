@@ -67,15 +67,16 @@ func (s *StatusControl) ShouldRun(connector StatusConnector) (bool, error) {
 // Record keeps original ordinary status except for explicit shell negation.
 // Host stops retain their original status and cannot be converted to a branch.
 func (s *StatusControl) Record(executionID string, result toolcontract.ProducerResult, requiredInputComplete, negated bool) error {
-	if err := s.latch.Record(executionID, result, requiredInputComplete); err != nil {
-		return err
-	}
+	err := s.latch.Record(executionID, result, requiredInputComplete)
 	if stop, stopped := s.latch.Stop(); stopped {
 		s.status = stop.Result.Status
 		if s.status < 0 || s.status > 255 {
 			s.status = 2
 		}
-		return nil
+		return err
+	}
+	if err != nil {
+		return err
 	}
 	if s.exited {
 		return nil
@@ -127,7 +128,7 @@ func (e *SubstitutionFailure) Error() string {
 }
 
 // AdmitSubstitution checks the settled subprogram before admitting its parent.
-// Missing required successful output latches; ordinary nonzero remains ordinary.
+// Missing required complete output latches; ordinary nonzero remains ordinary.
 func (s *StatusControl) AdmitSubstitution(executionID string, result PipelineOutcome) error {
 	if err := s.latch.AdmitNext(); err != nil {
 		return err
@@ -137,7 +138,7 @@ func (s *StatusControl) AdmitSubstitution(executionID string, result PipelineOut
 		return s.latch.Record(executionID, invalid, true)
 	}
 	if !result.Complete {
-		_ = s.latch.Record(executionID, toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.EffectUnknown}, false)
+		_ = s.latch.Record(executionID, toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.EffectUnknown}, false)
 		return s.latch.AdmitNext()
 	}
 	if result.Status != 0 {

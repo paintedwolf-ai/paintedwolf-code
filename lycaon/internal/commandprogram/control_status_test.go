@@ -130,3 +130,11 @@ func TestSubstitutionIdentityAndCompletenessCannotBeHiddenByStatus(t *testing.T)
 		}
 	}
 }
+
+func TestInvalidChildCannotLeaveVisibleSuccess(t *testing.T) {
+	flow, err := NewStatusControl(&OutcomeLatch{})
+	testutil.FailErr(t, "create control", err)
+	if err := flow.Record("invalid-child", toolcontract.ProducerResult{Status: -1, Terminal: toolcontract.ProducerCompleted, EffectCertainty: toolcontract.EffectUnknown}, true, false); err == nil || flow.Status() != 2 {
+		t.Fatal("invalid child retained visible success")
+	}
+}

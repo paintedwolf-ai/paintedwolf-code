@@ -90,6 +90,9 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		// A consumer must have an ordinary settled result. Its utility error and
 		// publication eligibility remain independent later factors; normalizing the
 		// producer's pipe closure cannot erase the consumer's own failed outcome.
+		// A native byte close cannot settle an unresolved mutation. External
+		// process effects retain their existing uncertainty independently of the
+		// executor's sealed expected-SIGPIPE classification.
 		if expected && !closure.external && (result.EffectCertainty == toolcontract.EffectAttempted || result.EffectCertainty == toolcontract.EffectUnknown) {
 			expected = false
 		}
