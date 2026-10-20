@@ -12,7 +12,7 @@ from verification_tests.distribution.test_bundle_upgrade_prepare_execution impor
 
 
 class CaseTests(unittest.TestCase):
-    def exercise(self, wrong_channel=False):
+    def exercise(self, fault=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -25,7 +25,7 @@ class CaseTests(unittest.TestCase):
         prepared = work / ".paintedwolf-update-candidate.app"
         new_executable = prepared / "Contents/MacOS/Product"
         step = manifest("1.1.0")
-        candidate = {"version": "1.1.0", "channel": "stable" if wrong_channel else "preview", "platform": "darwin-aarch64",
+        candidate = {"version": "1.1.0", "channel": "stable" if fault == "channel" else "preview", "platform": "darwin-aarch64",
                      "signing_generation": 1, "artifact_url": step["platforms"]["darwin-aarch64"]["url"],
                      "artifact_signature": step["platforms"]["darwin-aarch64"]["signature"], "release_id": "release"}
         case = {"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview", "protocol": "native-v2", "steps": [step]}
@@ -41,25 +41,33 @@ class CaseTests(unittest.TestCase):
                 records.mkdir(parents=True)
                 (records / "ready.json").write_text(json.dumps({"candidate": candidate, "prepared_bundle": str(prepared)}))
             if len(launches) == 2:
-                saved = work / "saved.app"
-                app.rename(saved)
-                prepared.rename(app)
-                saved.rename(prepared)
+                if fault == "exchange":
+                    executable.write_bytes(b"candidate executable")
+                else:
+                    saved = work / "saved.app"
+                    app.rename(saved)
+                    prepared.rename(app)
+                    saved.rename(prepared)
                 shutil.rmtree(prepared)
                 transaction = {"id": "transaction", "phase": "startup_confirmed", "candidate": candidate,
                                "target": str(app), "prepared_bundle": str(prepared),
                                "next_hash": hashlib.sha256(b"candidate executable").hexdigest()}
+                if fault == "hash":
+                    transaction["next_hash"] = "0" * 64
                 (records / "transaction.json").write_text(json.dumps(transaction))
         installation.launch.side_effect = launch
-        installation.healthy.side_effect = lambda version: {"health": {"version": version, "status": "ok", "schema_version": 5}, "port": 1234}
+        installation.healthy.side_effect = lambda version: {"health": {"version": version, "status": "ok",
+            "schema_version": 6 if fault == "schema" and version == "1.1.0" else 5}, "port": 1234}
         with patch.object(driver, "materialize", side_effect=lambda *_: config.mkdir()), \
              patch.object(driver.subprocess, "run"), \
              patch.object(driver, "Installation", return_value=installation), \
              patch.object(driver, "verify_semantics") as semantics:
-            if wrong_channel:
-                with self.assertRaisesRegex(ValueError, "unexpected release"):
+            if fault:
+                message = {"channel": "unexpected release", "exchange": "did not exchange",
+                           "hash": "executable differs", "schema": "unexpected schema"}[fault]
+                with self.assertRaisesRegex(ValueError, message):
                     driver.run_case(case, plan, root, work, config, evidence)
-                self.assertEqual(len(launches), 1)
+                self.assertEqual(len(launches), 1 if fault == "channel" else 2)
             else:
                 result = driver.run_case(case, plan, root, work, config, evidence)
                 self.assertEqual(result["result"], "passed")
@@ -74,4 +82,13 @@ class CaseTests(unittest.TestCase):
         self.exercise()
 
     def test_a_different_staged_channel_cannot_reach_activation(self):
-        self.exercise(wrong_channel=True)
+        self.exercise(fault="channel")
+
+    def test_healthy_startup_cannot_substitute_for_the_prepared_bundle_inode(self):
+        self.exercise(fault="exchange")
+
+    def test_startup_confirmation_cannot_substitute_for_the_installed_executable_hash(self):
+        self.exercise(fault="hash")
+
+    def test_upgraded_health_must_report_the_candidate_schema(self):
+        self.exercise(fault="schema")
