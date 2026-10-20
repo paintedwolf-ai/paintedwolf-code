@@ -40,7 +40,20 @@ def command(operation: str, root: Path, component: str = "default", source: str 
 def execute(operation: str, root: Path = ROOT, component: str = "default",
             archive_dir: Path | None = None, factory_root: Path | None = None,
             factory_commit: str | None = None, factory_channel: str | None = None,
-            prepare_factory_lock: bool = False) -> int:
+            prepare_factory_lock: bool = False, application_root: Path | None = None,
+            application_commit: str | None = None) -> int:
+    scanner_source = None
+    if application_root is not None or application_commit is not None:
+        if component != "scanner-host-tools" or operation != "build" or application_root is None or application_commit is None:
+            raise ValueError("Explicit application input is restricted to scanner host-tools builds")
+        if not application_root.is_absolute() or application_root.resolve() != application_root:
+            raise ValueError("Application input must be a physical absolute checkout")
+        import re
+        if not re.fullmatch("[0-9a-f]{40}", application_commit):
+            raise ValueError("Application input requires a full immutable commit")
+        if subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=application_root, text=True).strip() != str(application_root):
+            raise ValueError("Application input must name the Git root")
+        scanner_source = "git+file://" + str(application_root) + "?rev=" + application_commit
     role = None
     if any(value is not None for value in (factory_root, factory_commit, factory_channel)):
         if not all(value is not None for value in (factory_root, factory_commit, factory_channel)):
@@ -78,7 +91,13 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         if operation != "build":
             raise ValueError("Scanner host tools require a native build")
         invocation, report["scanner_tools"] = nix_scanner_tools.command(
-            NIX, "git+file://" + str(root), environment)
+            NIX, scanner_source or "git+file://" + str(root), environment)
+        if scanner_source is not None:
+            report["application"] = {"source_commit": application_commit,
+                "source_tree": subprocess.check_output(["git", "rev-parse", application_commit + "^{tree}"],
+                                                       cwd=application_root, text=True).strip(),
+                "lock_sha256": hashlib.sha256(factory_source.committed(
+                    application_root, application_commit, "flake.lock")).hexdigest()}
     result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
@@ -133,11 +152,14 @@ def main() -> int:
     parser.add_argument("--factory-source-commit")
     parser.add_argument("--factory-channel", choices=factory_source.CHANNELS)
     parser.add_argument("--prepare-factory-lock", action="store_true")
+    parser.add_argument("--application-source-root", type=Path)
+    parser.add_argument("--application-source-commit")
     args = parser.parse_args()
     try:
         return execute(args.operation, component=args.component, archive_dir=args.archive_dir,
                        factory_root=args.factory_source_root, factory_commit=args.factory_source_commit,
-                       factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock)
+                       factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock,
+                       application_root=args.application_source_root, application_commit=args.application_source_commit)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
