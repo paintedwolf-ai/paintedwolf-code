@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COMMAND_LIMIT_EXCEEDED
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.source_line
+  - paintedwolf.source_column
+  - paintedwolf.expected_form
+when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
+effect: block
+copy:
+  what: 'Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}.'
+  cause: 'A declared host resource ceiling stopped new admission. Earlier completed effects remain authoritative.'
+  why: 'Started operations retain their terminal settlement and recovery contracts. Exhaustion cannot erase completed effects or authorize replay.'
+  fix: 'Reduce the requested work within the declared limit. Earlier parent effects remain recorded; inspect them before proposing a new action.'
+  instead: 'Expected: {{ paintedwolf.expected_form }}.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command syntax unit was not admitted
+x-paintedwolf-scenarios:
+- id: captured_unit
+  vars:
+    tool: command
+    source_line: 3
+    source_column: 7
+    expected_form: supported syntax
+  expect_contains:
+  - 'Code: COMMAND_LIMIT_EXCEEDED'
+  - '3:7'
+  - earlier parent effects

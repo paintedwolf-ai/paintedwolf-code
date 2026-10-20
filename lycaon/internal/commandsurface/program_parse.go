@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -40,14 +41,35 @@ func (d *SyntaxDiagnostic) Error() string {
 
 // ParsedProgram retains a private validated tree; Snapshot returns detached data.
 // Neither parsing nor a snapshot grants permission to dispatch an operation.
-type ParsedProgram struct{ plan ProgramSnapshot }
+type ParsedProgram struct {
+	plan   ProgramSnapshot
+	source []byte
+}
 
 func (p *ParsedProgram) Snapshot() ProgramSnapshot { return cloneProgram(p.plan) }
+
+// Source returns the original unit bytes for exact span inspection, not replay.
+func (p *ParsedProgram) Source() []byte { return bytes.Clone(p.source) }
+
+var programLanguage = sync.OnceValues(toolcontract.LanguageV1)
+
+// SyntaxUnitByteLimit reports the compiled pre-allocation input ceiling.
+func SyntaxUnitByteLimit(sourced bool) int64 {
+	catalog, err := programLanguage()
+	if err != nil {
+		return 0
+	}
+	id := "program_bytes"
+	if sourced {
+		id = "source_bytes"
+	}
+	return languageLimit(catalog, id)
+}
 
 // ParseProgram validates the complete syntax unit before exposing any plan.
 // It only uses the upstream syntax package, never its interpreter or executor.
 func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	catalog, catalogErr := toolcontract.LanguageV1()
+	catalog, catalogErr := programLanguage()
 	if catalogErr != nil {
 		return nil, fmt.Errorf("load compiled command catalog: %w", catalogErr)
 	}
@@ -62,7 +84,11 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "language version 1"}
 	}
 	if !utf8.Valid(source) || bytes.IndexByte(source, 0) >= 0 || bytes.HasPrefix(source, []byte{0xef, 0xbb, 0xbf}) {
-		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_INVALID", Span: unitStart(), Expected: "UTF-8 source without BOM or NUL"}
+		code := "COMMAND_SYNTAX_INVALID"
+		if options.Sourced {
+			code = "COMMAND_OPERAND_INVALID"
+		}
+		return nil, &SyntaxDiagnostic{Code: code, Span: unitStart(), Expected: "UTF-8 source without BOM or NUL"}
 	}
 	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(bytes.NewReader(source), options.SourceName)
 	if err != nil {
@@ -84,7 +110,7 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 		sum := sha256.Sum256(raw)
 		digest = hex.EncodeToString(sum[:])
 	}
-	return &ParsedProgram{plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: options.SourceName, Statements: statements}}, nil
+	return &ParsedProgram{source: bytes.Clone(source), plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: options.SourceName, Statements: statements}}, nil
 }
 
 func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {
