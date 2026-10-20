@@ -44,10 +44,11 @@ class ProfileObserverTests(unittest.TestCase):
             json.dumps({'tool_call_id': 'fixed-command-1', 'tool': 'command', 'outcome': 'completed',
                         'content': 'SECRET RESULT', 'tool_args': {'secret': 'SECRET ARG'}}), 'SECRET PROMPT'))
         self.writer.commit()
-        self.app = SimpleNamespace(binding={}, observations={'engine_identity': {'pid': 123, 'start_time_ticks': 9}},
+        self.app = SimpleNamespace(binding={'install_root': '/owned', 'images': {'/owned/bin/pw': {'device': 1, 'inode': 2, 'bytes': 3}}}, observations={'engine_identity': {'pid': 123, 'start_time_ticks': 9}},
                                    require_running=Mock(), require_engine=Mock())
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
         self.stack.enter_context(patch.object(observer, 'require_owned_guest'))
+        self.stack.enter_context(patch.object(observer, 'engine_image', return_value=(1, 2, 3)))
 
     def test_live_wal_commit_is_visible_without_copy_checkpoint_or_payload_retention(self):
         self.assertEqual(observer.project_for_owned_root(self.app, self.fixture), {'project_id': PROJECT, 'root_id': ROOT})
@@ -107,3 +108,8 @@ class ProfileObserverTests(unittest.TestCase):
             observer.sessions_for_project(self.app, PROJECT)
         with self.assertRaises(ValueError):
             observer.invocations(self.app, SESSION, ['arbitrary'])
+
+    def test_same_process_exec_to_another_image_is_refused(self):
+        with patch.object(observer, 'engine_image', side_effect=[(1, 2, 3), (1, 5, 8)]):
+            with self.assertRaises(ValueError):
+                observer.sessions_for_project(self.app, PROJECT)
