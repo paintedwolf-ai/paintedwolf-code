@@ -380,6 +380,7 @@ export function HomeView(props: Props) {
                   );
                 }}
                 onKeyDown={(e) => {
+                  if (e.isComposing || e.keyCode === 229) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     void submit();

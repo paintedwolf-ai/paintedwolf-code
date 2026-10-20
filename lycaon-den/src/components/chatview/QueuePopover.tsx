@@ -330,6 +330,7 @@ export function QueuePopover(props: Props) {
                             rows={3}
                             value={item.text}
                             onKeyDown={(e) => {
+                              if (e.isComposing || e.keyCode === 229) return;
                               if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
                                 saveEdit(item);

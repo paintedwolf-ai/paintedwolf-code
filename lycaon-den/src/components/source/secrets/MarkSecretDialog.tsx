@@ -194,6 +194,7 @@ export function MarkSecretDialog(props: Props) {
                     value={name()}
                     onInput={(e) => setName(e.currentTarget.value)}
                     onKeyDown={(e) => {
+                      if (e.isComposing || e.keyCode === 229) return;
                       if (e.key === "Enter" && canSubmit()) void submit();
                     }}
                   />

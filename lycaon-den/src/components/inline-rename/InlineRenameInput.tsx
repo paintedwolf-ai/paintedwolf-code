@@ -73,6 +73,7 @@ export function InlineRenameInput(props: InlineRenameInputProps) {
         finish(props.shouldCommitOnBlur?.(draft()) === false ? "cancel" : "commit")
       }
       onKeyDown={(e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter") {
           e.preventDefault();
           finish("commit");

@@ -431,6 +431,7 @@ export function AskUserDock(props: Props) {
                 disabled={submitting()}
                 onInput={(event) => setSecretValue(event.currentTarget.value)}
                 onKeyDown={(event) => {
+                  if (event.isComposing || event.keyCode === 229) return;
                   if (event.key === "Enter" && answerReady()) {
                     event.preventDefault();
                     void resolveSecret();
