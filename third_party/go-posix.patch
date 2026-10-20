@@ -1,0 +1,729 @@
+--- a/syntax/posix/parse.go
++++ b/syntax/posix/parse.go
+@@ -7,0 +8,2 @@
++	"github.com/dlclark/regexp2/v2/internal/budget"
++	standard "regexp/syntax"
+@@ -56 +58 @@
+-type Flags uint16
++type Flags = standard.Flags
+@@ -127,0 +130 @@
++	budget      *budget.Meter
+@@ -141,0 +145,2 @@
++	p.budget.Step(1)
++
+@@ -146,0 +152 @@
++		p.budget.Alloc(256)
+@@ -154,0 +161,2 @@
++	p.budget.Step(1)
++
+@@ -162,0 +171,2 @@
++	p.budget.Step(1)
++
+@@ -170,0 +181,2 @@
++	p.budget.Step(1)
++
+@@ -200,0 +213 @@
++		p.budget.Alloc(256)
+@@ -202,0 +216,2 @@
++			p.budget.Step(1)
++
+@@ -212,0 +228,2 @@
++	p.budget.Step(1)
++
+@@ -229,0 +247,2 @@
++			p.budget.Step(1)
++
+@@ -233,0 +253,2 @@
++			p.budget.Step(1)
++
+@@ -253,0 +275 @@
++	p.budget.Alloc(128)
+@@ -258,0 +281,2 @@
++	p.budget.Step(1)
++
+@@ -262,0 +287 @@
++		p.budget.Alloc(256)
+@@ -264,0 +290,2 @@
++			p.budget.Step(1)
++
+@@ -273,0 +301,2 @@
++	p.budget.Step(1)
++
+@@ -280,0 +310,2 @@
++		p.budget.Step(1)
++
+@@ -285,0 +317 @@
++	p.budget.Alloc(128)
+@@ -293,0 +326,2 @@
++	p.budget.Step(1)
++
+@@ -325 +359 @@
+-	p.stack = append(p.stack, re)
++	p.stack = appendMetered(p.budget, p.stack, re)
+@@ -339,0 +374,2 @@
++	p.budget.Step(1)
++
+@@ -352 +388 @@
+-	re2.Rune = append(re2.Rune, re1.Rune...)
++	re2.Rune = appendMetered(p.budget, re2.Rune, re1.Rune...)
+@@ -368,0 +405,2 @@
++	p.budget.Step(1)
++
+@@ -372 +410 @@
+-		r = minFoldRune(r)
++		r = minFoldRune(r, p.budget)
+@@ -380 +418,3 @@
+-func minFoldRune(r rune) rune {
++func minFoldRune(r rune, meter *budget.Meter) rune {
++	meter.Step(1)
++
+@@ -386,0 +427,2 @@
++		meter.Step(1)
++
+@@ -394,0 +437,2 @@
++	p.budget.Step(1)
++
+@@ -404,0 +449,2 @@
++	p.budget.Step(1)
++
+@@ -436 +482 @@
+-	if op == OpRepeat && (min >= 2 || max >= 2) && !repeatIsValid(re, 1000) {
++	if op == OpRepeat && (min >= 2 || max >= 2) && !repeatIsValid(re, 1000, p.budget) {
+@@ -452 +498,3 @@
+-func repeatIsValid(re *Regexp, n int) bool {
++func repeatIsValid(re *Regexp, n int, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -469 +517,3 @@
+-		if !repeatIsValid(sub, n) {
++		m.Step(1)
++
++		if !repeatIsValid(sub, n, m) {
+@@ -477,0 +528,2 @@
++	p.budget.Step(1)
++
+@@ -482,0 +535,2 @@
++		p.budget.Step(1)
++
+@@ -497,0 +552,2 @@
++	p.budget.Step(1)
++
+@@ -501,0 +558,2 @@
++		p.budget.Step(1)
++
+@@ -510 +568 @@
+-		cleanAlt(subs[len(subs)-1])
++		cleanAlt(subs[len(subs)-1], p.budget)
+@@ -523 +581,3 @@
+-func cleanAlt(re *Regexp) {
++func cleanAlt(re *Regexp, m *budget.Meter) {
++	m.Step(1)
++
+@@ -526 +586 @@
+-		re.Rune = cleanClass(&re.Rune)
++		re.Rune = cleanClass(&re.Rune, m)
+@@ -540 +600 @@
+-			re.Rune = append(re.Rune0[:0], re.Rune...)
++			re.Rune = appendMetered(m, re.Rune0[:0], re.Rune...)
+@@ -549,0 +610,2 @@
++	p.budget.Step(1)
++
+@@ -555,0 +618,2 @@
++		p.budget.Step(1)
++
+@@ -557 +621 @@
+-			re.Sub = append(re.Sub, sub.Sub...)
++			re.Sub = appendMetered(p.budget, re.Sub, sub.Sub...)
+@@ -560 +624 @@
+-			re.Sub = append(re.Sub, sub)
++			re.Sub = appendMetered(p.budget, re.Sub, sub)
+@@ -589,0 +654,2 @@
++	p.budget.Step(1)
++
+@@ -599,0 +666,2 @@
++		p.budget.Step(1)
++
+@@ -612,0 +681,2 @@
++					p.budget.Step(1)
++
+@@ -633 +703 @@
+-			out = append(out, sub[start])
++			out = appendMetered(p.budget, out, sub[start])
+@@ -638 +708 @@
+-			prefix.Rune = append(prefix.Rune[:0], str...)
++			prefix.Rune = appendMetered(p.budget, prefix.Rune[:0], str...)
+@@ -640,0 +711,2 @@
++				p.budget.Step(1)
++
+@@ -647,2 +719,2 @@
+-			re.Sub = append(re.Sub[:0], prefix, suffix)
+-			out = append(out, re)
++			re.Sub = appendMetered(p.budget, re.Sub[:0], prefix, suffix)
++			out = appendMetered(p.budget, out, re)
+@@ -669,0 +742,2 @@
++		p.budget.Step(1)
++
+@@ -678 +752 @@
+-			if first != nil && first.Equal(ifirst) &&
++			if first != nil && equalMetered(first, ifirst, p.budget) &&
+@@ -680 +754 @@
+-				(isCharClass(first) || (first.Op == OpRepeat && first.Min == first.Max && isCharClass(first.Sub[0]))) {
++				(isCharClass(first, p.budget) || (first.Op == OpRepeat && first.Min == first.Max && isCharClass(first.Sub[0], p.budget))) {
+@@ -693 +767 @@
+-			out = append(out, sub[start])
++			out = appendMetered(p.budget, out, sub[start])
+@@ -697,0 +772,2 @@
++				p.budget.Step(1)
++
+@@ -705,2 +781,2 @@
+-			re.Sub = append(re.Sub[:0], prefix, suffix)
+-			out = append(out, re)
++			re.Sub = appendMetered(p.budget, re.Sub[:0], prefix, suffix)
++			out = appendMetered(p.budget, out, re)
+@@ -718,0 +795,2 @@
++		p.budget.Step(1)
++
+@@ -725 +803 @@
+-		if i < len(sub) && isCharClass(sub[i]) {
++		if i < len(sub) && isCharClass(sub[i], p.budget) {
+@@ -734 +812 @@
+-			out = append(out, sub[start])
++			out = appendMetered(p.budget, out, sub[start])
+@@ -739,0 +818,2 @@
++				p.budget.Step(1)
++
+@@ -747 +827,3 @@
+-				mergeCharClass(sub[start], sub[j])
++				p.budget.Step(1)
++
++				mergeCharClass(sub[start], sub[j], p.budget)
+@@ -750,2 +832,2 @@
+-			cleanAlt(sub[start])
+-			out = append(out, sub[start])
++			cleanAlt(sub[start], p.budget)
++			out = appendMetered(p.budget, out, sub[start])
+@@ -756 +838 @@
+-			out = append(out, sub[i])
++			out = appendMetered(p.budget, out, sub[i])
+@@ -765,0 +848,2 @@
++		p.budget.Step(1)
++
+@@ -769 +853 @@
+-		out = append(out, sub[i])
++		out = appendMetered(p.budget, out, sub[i])
+@@ -778,0 +863,2 @@
++	p.budget.Step(1)
++
+@@ -790,0 +877,2 @@
++	p.budget.Step(1)
++
+@@ -827,0 +916,2 @@
++	p.budget.Step(1)
++
+@@ -844,0 +935,2 @@
++	p.budget.Step(1)
++
+@@ -867 +959,4 @@
+-func literalRegexp(s string, flags Flags) *Regexp {
++func literalRegexp(s string, flags Flags, m *budget.Meter) *Regexp {
++	m.Step(1)
++
++	m.Alloc(256)
+@@ -872,6 +967,3 @@
+-		if len(re.Rune) >= cap(re.Rune) {
+-			// string is too long to fit in Rune0.  let Go handle it
+-			re.Rune = []rune(s)
+-			break
+-		}
+-		re.Rune = append(re.Rune, c)
++		m.Step(1)
++
++		re.Rune = appendMetered(m, re.Rune, c)
+@@ -888,4 +980,6 @@
+-	return parse(s, flags)
+-}
+-
+-func parse(s string, flags Flags) (_ *Regexp, err error) {
++	return parse(s, flags, nil)
++}
++
++func parse(s string, flags Flags, m *budget.Meter) (_ *Regexp, err error) {
++	m.Step(1)
++
+@@ -907 +1001 @@
+-		if err := checkUTF8(s); err != nil {
++		if err := checkUTF8(s, m); err != nil {
+@@ -910 +1004 @@
+-		return literalRegexp(s, flags), nil
++		return literalRegexp(s, flags, m), nil
+@@ -919,0 +1014,2 @@
++	p.budget = m
++	m.Alloc(int64(len(s)+1) * 2048)
+@@ -923,0 +1020,2 @@
++		m.Step(1)
++
+@@ -928 +1026 @@
+-			if c, t, err = nextRune(t); err != nil {
++			if c, t, err = nextRune(t, m); err != nil {
+@@ -1035 +1133,3 @@
+-						c, rest, err := nextRune(lit)
++						m.Step(1)
++
++						c, rest, err := nextRune(lit, m)
+@@ -1102,0 +1203,2 @@
++	p.budget.Step(1)
++
+@@ -1141,0 +1244,2 @@
++	p.budget.Step(1)
++
+@@ -1172 +1276 @@
+-			if err = checkUTF8(t); err != nil {
++			if err = checkUTF8(t, p.budget); err != nil {
+@@ -1180 +1284 @@
+-		if err = checkUTF8(name); err != nil {
++		if err = checkUTF8(name, p.budget); err != nil {
+@@ -1183 +1287 @@
+-		if !isValidCaptureName(name) {
++		if !isValidCaptureName(name, p.budget) {
+@@ -1203 +1307,3 @@
+-		if c, t, err = nextRune(t); err != nil {
++		p.budget.Step(1)
++
++		if c, t, err = nextRune(t, p.budget); err != nil {
+@@ -1260 +1366,3 @@
+-func isValidCaptureName(name string) bool {
++func isValidCaptureName(name string, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -1265 +1373,3 @@
+-		if c != '_' && !isalnum(c) {
++		m.Step(1)
++
++		if c != '_' && !isalnum(c, m) {
+@@ -1273,0 +1384,2 @@
++	p.budget.Step(1)
++
+@@ -1282,0 +1395,2 @@
++		p.budget.Step(1)
++
+@@ -1289,0 +1404,2 @@
++		p.budget.Step(1)
++
+@@ -1302 +1418,3 @@
+-func isCharClass(re *Regexp) bool {
++func isCharClass(re *Regexp, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -1310 +1428,3 @@
+-func matchRune(re *Regexp, r rune) bool {
++func matchRune(re *Regexp, r rune, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -1315,0 +1436,2 @@
++			m.Step(1)
++
+@@ -1330,0 +1453,2 @@
++	p.budget.Step(1)
++
+@@ -1345 +1469,3 @@
+-func mergeCharClass(dst, src *Regexp) {
++func mergeCharClass(dst, src *Regexp, m *budget.Meter) {
++	m.Step(1)
++
+@@ -1351 +1477 @@
+-		if matchRune(src, '\n') {
++		if matchRune(src, '\n', m) {
+@@ -1357 +1483 @@
+-			dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags)
++			dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags, m)
+@@ -1359 +1485 @@
+-			dst.Rune = appendClass(dst.Rune, src.Rune)
++			dst.Rune = appendClass(dst.Rune, src.Rune, m)
+@@ -1367,2 +1493,2 @@
+-		dst.Rune = appendLiteral(dst.Rune[:0], dst.Rune[0], dst.Flags)
+-		dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags)
++		dst.Rune = appendLiteral(dst.Rune[:0], dst.Rune[0], dst.Flags, m)
++		dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags, m)
+@@ -1375,0 +1502,2 @@
++	p.budget.Step(1)
++
+@@ -1379 +1507 @@
+-	if n >= 3 && p.stack[n-2].Op == opVerticalBar && isCharClass(p.stack[n-1]) && isCharClass(p.stack[n-3]) {
++	if n >= 3 && p.stack[n-2].Op == opVerticalBar && isCharClass(p.stack[n-1], p.budget) && isCharClass(p.stack[n-3], p.budget) {
+@@ -1387 +1515 @@
+-		mergeCharClass(re3, re1)
++		mergeCharClass(re3, re1, p.budget)
+@@ -1400 +1528 @@
+-				cleanAlt(p.stack[n-3])
++				cleanAlt(p.stack[n-3], p.budget)
+@@ -1411,0 +1540,2 @@
++	p.budget.Step(1)
++
+@@ -1445,0 +1576,2 @@
++	p.budget.Step(1)
++
+@@ -1450 +1582 @@
+-	c, t, err := nextRune(t)
++	c, t, err := nextRune(t, p.budget)
+@@ -1458 +1590 @@
+-		if c < utf8.RuneSelf && !isalnum(c) {
++		if c < utf8.RuneSelf && !isalnum(c, p.budget) {
+@@ -1476,0 +1609,2 @@
++			p.budget.Step(1)
++
+@@ -1490 +1624 @@
+-		if c, t, err = nextRune(t); err != nil {
++		if c, t, err = nextRune(t, p.budget); err != nil {
+@@ -1500,0 +1635,2 @@
++				p.budget.Step(1)
++
+@@ -1504 +1640 @@
+-				if c, t, err = nextRune(t); err != nil {
++				if c, t, err = nextRune(t, p.budget); err != nil {
+@@ -1510 +1646 @@
+-				v := unhex(c)
++				v := unhex(c, p.budget)
+@@ -1527,2 +1663,2 @@
+-		x := unhex(c)
+-		if c, t, err = nextRune(t); err != nil {
++		x := unhex(c, p.budget)
++		if c, t, err = nextRune(t, p.budget); err != nil {
+@@ -1531 +1667 @@
+-		y := unhex(c)
++		y := unhex(c, p.budget)
+@@ -1561,0 +1698,2 @@
++	p.budget.Step(1)
++
+@@ -1565,0 +1704,12 @@
++	if p.flags&ScalarCollation != 0 && len(s) >= 2 && s[0] == '[' && (s[1] == '.' || s[1] == '=') {
++		end := strings.Index(s[2:], string(s[1])+"]")
++		if end < 0 {
++			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s}
++		}
++		name := s[2 : 2+end]
++		ch, width := utf8.DecodeRuneInString(name)
++		if !utf8.ValidString(name) || width != len(name) || len(name) == 0 {
++			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s[:end+4]}
++		}
++		return ch, s[end+4:], nil
++	}
+@@ -1572 +1722 @@
+-	return nextRune(s)
++	return nextRune(s, p.budget)
+@@ -1585,0 +1736,2 @@
++	p.budget.Step(1)
++
+@@ -1599,0 +1752,2 @@
++	p.budget.Step(1)
++
+@@ -1617,0 +1772,2 @@
++	p.budget.Step(1)
++
+@@ -1620 +1776 @@
+-			r = appendNegatedClass(r, g.class)
++			r = appendNegatedClass(r, g.class, p.budget)
+@@ -1622 +1778 @@
+-			r = appendClass(r, g.class)
++			r = appendClass(r, g.class, p.budget)
+@@ -1626 +1782 @@
+-		tmp = appendFoldedClass(tmp, g.class)
++		tmp = appendFoldedClass(tmp, g.class, p.budget)
+@@ -1628 +1784 @@
+-		tmp = cleanClass(&p.tmpClass)
++		tmp = cleanClass(&p.tmpClass, p.budget)
+@@ -1630 +1786 @@
+-			r = appendNegatedClass(r, tmp)
++			r = appendNegatedClass(r, tmp, p.budget)
+@@ -1632 +1788 @@
+-			r = appendClass(r, tmp)
++			r = appendClass(r, tmp, p.budget)
+@@ -1663 +1819,4 @@
+-func initCategoryAliases() {
++func initCategoryAliases(m *budget.Meter) {
++	m.Step(1)
++
++	m.Alloc(int64(len(unicode.Categories)+len(unicode.Scripts)+len(unicode.Properties)) * 256)
+@@ -1666 +1825,3 @@
+-		categoryAliases.m[canonicalName(name)] = actual
++		m.Step(1)
++
++		categoryAliases.m[canonicalName(name, m)] = actual
+@@ -1675 +1836,3 @@
+-func canonicalName(name string) string {
++func canonicalName(name string, m *budget.Meter) string {
++	m.Step(1)
++
+@@ -1678,0 +1842,2 @@
++		m.Step(1)
++
+@@ -1697,0 +1863 @@
++			m.Alloc(int64(len(name)))
+@@ -1704 +1870 @@
+-		b = append(b, c)
++		b = appendMetered(m, b, c)
+@@ -1715,2 +1881,4 @@
+-func unicodeTable(name string) (tab, fold *unicode.RangeTable, sign int) {
+-	name = canonicalName(name)
++func unicodeTable(name string, m *budget.Meter) (tab, fold *unicode.RangeTable, sign int) {
++	m.Step(1)
++
++	name = canonicalName(name, m)
+@@ -1740 +1908 @@
+-	categoryAliases.once.Do(initCategoryAliases)
++	categoryAliases.once.Do(func() { initCategoryAliases(m) })
+@@ -1751,0 +1920,2 @@
++	p.budget.Step(1)
++
+@@ -1762 +1932 @@
+-	c, t, err := nextRune(t)
++	c, t, err := nextRune(t, p.budget)
+@@ -1775 +1945 @@
+-			if err = checkUTF8(s); err != nil {
++			if err = checkUTF8(s, p.budget); err != nil {
+@@ -1782 +1952 @@
+-		if err = checkUTF8(name); err != nil {
++		if err = checkUTF8(name, p.budget); err != nil {
+@@ -1793 +1963 @@
+-	tab, fold, tsign := unicodeTable(name)
++	tab, fold, tsign := unicodeTable(name, p.budget)
+@@ -1803 +1973 @@
+-			r = appendTable(r, tab)
++			r = appendTable(r, tab, p.budget)
+@@ -1805 +1975 @@
+-			r = appendNegatedTable(r, tab)
++			r = appendNegatedTable(r, tab, p.budget)
+@@ -1812,2 +1982,2 @@
+-		tmp = appendTable(tmp, tab)
+-		tmp = appendTable(tmp, fold)
++		tmp = appendTable(tmp, tab, p.budget)
++		tmp = appendTable(tmp, fold, p.budget)
+@@ -1815 +1985 @@
+-		tmp = cleanClass(&p.tmpClass)
++		tmp = cleanClass(&p.tmpClass, p.budget)
+@@ -1817 +1987 @@
+-			r = appendClass(r, tmp)
++			r = appendClass(r, tmp, p.budget)
+@@ -1819 +1989 @@
+-			r = appendNegatedClass(r, tmp)
++			r = appendNegatedClass(r, tmp, p.budget)
+@@ -1827,0 +1998,2 @@
++	p.budget.Step(1)
++
+@@ -1841 +2013 @@
+-			re.Rune = append(re.Rune, '\n', '\n')
++			re.Rune = appendMetered(p.budget, re.Rune, '\n', '\n')
+@@ -1847,0 +2020,2 @@
++		p.budget.Step(1)
++
+@@ -1903 +2077 @@
+-			class = appendRange(class, lo, hi)
++			class = appendRange(class, lo, hi, p.budget)
+@@ -1905 +2079 @@
+-			class = appendFoldedRange(class, lo, hi)
++			class = appendFoldedRange(class, lo, hi, p.budget)
+@@ -1912 +2086 @@
+-	class = cleanClass(&re.Rune)
++	class = cleanClass(&re.Rune, p.budget)
+@@ -1914 +2088 @@
+-		class = negateClass(class)
++		class = negateClass(class, p.budget)
+@@ -1923 +2097,2 @@
+-func cleanClass(rp *[]rune) []rune {
++func cleanClass(rp *[]rune, m *budget.Meter) []rune {
++	m.Step(1)
+@@ -1926 +2101 @@
+-	sort.Sort(ranges{rp})
++	sort.Sort(ranges{p: rp, budget: m})
+@@ -1935,0 +2111,2 @@
++		m.Step(1)
++
+@@ -1955 +2132,3 @@
+-func inCharClass(r rune, class []rune) bool {
++func inCharClass(r rune, class []rune, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -1970 +2149,3 @@
+-func appendLiteral(r []rune, x rune, flags Flags) []rune {
++func appendLiteral(r []rune, x rune, flags Flags, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -1972,3 +2153,3 @@
+-		return appendFoldedRange(r, x, x)
+-	}
+-	return appendRange(r, x, x)
++		return appendFoldedRange(r, x, x, m)
++	}
++	return appendRange(r, x, x, m)
+@@ -1978 +2159,3 @@
+-func appendRange(r []rune, lo, hi rune) []rune {
++func appendRange(r []rune, lo, hi rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -1984 +2167,3 @@
+-	for i := 2; i <= 4; i += 2 { // twice, using i=2, i=4
++	for i := 2; i <= 4; i += 2 {
++		m.Step(1)
++		// twice, using i=2, i=4
+@@ -1999 +2184 @@
+-	return append(r, lo, hi)
++	return appendMetered(m, r, lo, hi)
+@@ -2011 +2196,3 @@
+-func appendFoldedRange(r []rune, lo, hi rune) []rune {
++func appendFoldedRange(r []rune, lo, hi rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2015 +2202 @@
+-		return appendRange(r, lo, hi)
++		return appendRange(r, lo, hi, m)
+@@ -2019 +2206 @@
+-		return appendRange(r, lo, hi)
++		return appendRange(r, lo, hi, m)
+@@ -2023 +2210 @@
+-		r = appendRange(r, lo, minFold-1)
++		r = appendRange(r, lo, minFold-1, m)
+@@ -2028 +2215 @@
+-		r = appendRange(r, maxFold+1, hi)
++		r = appendRange(r, maxFold+1, hi, m)
+@@ -2034 +2221,3 @@
+-		r = appendRange(r, c, c)
++		m.Step(1)
++
++		r = appendRange(r, c, c, m)
+@@ -2037 +2226,3 @@
+-			r = appendRange(r, f, f)
++			m.Step(1)
++
++			r = appendRange(r, f, f, m)
+@@ -2046 +2237,3 @@
+-func appendClass(r []rune, x []rune) []rune {
++func appendClass(r []rune, x []rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2048 +2241,3 @@
+-		r = appendRange(r, x[i], x[i+1])
++		m.Step(1)
++
++		r = appendRange(r, x[i], x[i+1], m)
+@@ -2054 +2249,3 @@
+-func appendFoldedClass(r []rune, x []rune) []rune {
++func appendFoldedClass(r []rune, x []rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2056 +2253,3 @@
+-		r = appendFoldedRange(r, x[i], x[i+1])
++		m.Step(1)
++
++		r = appendFoldedRange(r, x[i], x[i+1], m)
+@@ -2063 +2262,3 @@
+-func appendNegatedClass(r []rune, x []rune) []rune {
++func appendNegatedClass(r []rune, x []rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2065,0 +2267,2 @@
++		m.Step(1)
++
+@@ -2068 +2271 @@
+-			r = appendRange(r, nextLo, lo-1)
++			r = appendRange(r, nextLo, lo-1, m)
+@@ -2073 +2276 @@
+-		r = appendRange(r, nextLo, unicode.MaxRune)
++		r = appendRange(r, nextLo, unicode.MaxRune, m)
+@@ -2079 +2282,3 @@
+-func appendTable(r []rune, x *unicode.RangeTable) []rune {
++func appendTable(r []rune, x *unicode.RangeTable, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2080,0 +2286,2 @@
++		m.Step(1)
++
+@@ -2083 +2290 @@
+-			r = appendRange(r, lo, hi)
++			r = appendRange(r, lo, hi, m)
+@@ -2087 +2294,3 @@
+-			r = appendRange(r, c, c)
++			m.Step(1)
++
++			r = appendRange(r, c, c, m)
+@@ -2090,0 +2300,2 @@
++		m.Step(1)
++
+@@ -2093 +2304 @@
+-			r = appendRange(r, lo, hi)
++			r = appendRange(r, lo, hi, m)
+@@ -2097 +2308,3 @@
+-			r = appendRange(r, c, c)
++			m.Step(1)
++
++			r = appendRange(r, c, c, m)
+@@ -2104 +2317,3 @@
+-func appendNegatedTable(r []rune, x *unicode.RangeTable) []rune {
++func appendNegatedTable(r []rune, x *unicode.RangeTable, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2106,0 +2322,2 @@
++		m.Step(1)
++
+@@ -2110 +2327 @@
+-				r = appendRange(r, nextLo, lo-1)
++				r = appendRange(r, nextLo, lo-1, m)
+@@ -2115,0 +2333,2 @@
++			m.Step(1)
++
+@@ -2117 +2336 @@
+-				r = appendRange(r, nextLo, c-1)
++				r = appendRange(r, nextLo, c-1, m)
+@@ -2122,0 +2342,2 @@
++		m.Step(1)
++
+@@ -2126 +2347 @@
+-				r = appendRange(r, nextLo, lo-1)
++				r = appendRange(r, nextLo, lo-1, m)
+@@ -2131,0 +2353,2 @@
++			m.Step(1)
++
+@@ -2133 +2356 @@
+-				r = appendRange(r, nextLo, c-1)
++				r = appendRange(r, nextLo, c-1, m)
+@@ -2139 +2362 @@
+-		r = appendRange(r, nextLo, unicode.MaxRune)
++		r = appendRange(r, nextLo, unicode.MaxRune, m)
+@@ -2146 +2369,3 @@
+-func negateClass(r []rune) []rune {
++func negateClass(r []rune, m *budget.Meter) []rune {
++	m.Step(1)
++
+@@ -2149,0 +2375,2 @@
++		m.Step(1)
++
+@@ -2162 +2389 @@
+-		r = append(r, nextLo, unicode.MaxRune)
++		r = appendMetered(m, r, nextLo, unicode.MaxRune)
+@@ -2172 +2399,2 @@
+-	p *[]rune
++	p      *[]rune
++	budget *budget.Meter
+@@ -2175,0 +2404 @@
++	ra.budget.Step(1)
+@@ -2193 +2422,3 @@
+-func checkUTF8(s string) error {
++func checkUTF8(s string, m *budget.Meter) error {
++	m.Step(1)
++
+@@ -2194,0 +2426,2 @@
++		m.Step(1)
++
+@@ -2204 +2437,3 @@
+-func nextRune(s string) (c rune, t string, err error) {
++func nextRune(s string, m *budget.Meter) (c rune, t string, err error) {
++	m.Step(1)
++
+@@ -2212 +2447,3 @@
+-func isalnum(c rune) bool {
++func isalnum(c rune, m *budget.Meter) bool {
++	m.Step(1)
++
+@@ -2216 +2453,3 @@
+-func unhex(c rune) rune {
++func unhex(c rune, m *budget.Meter) rune {
++	m.Step(1)
++
