@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import secrets
+import re
 import time
 
 from .app import process_identity
@@ -105,6 +106,31 @@ def complete(selected, owner: tuple) -> dict:
     return {'mode': mode, 'ui_identity': identity, 'password_in_evidence': False, 'normal_action': True}
 
 
+def native_error(error):
+    facts = {'phase': 'vault-form-inventory', 'exception_type': type(error).__name__}
+    for name in ('domain', 'code'):
+        value = getattr(error, name, None)
+        if ((name == 'code' and type(value) is int and 0 <= value < 1 << 31)
+                or (name == 'domain' and isinstance(value, str)
+                    and re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', value))):
+            facts[name] = value
+    if 'domain' in facts:
+        try:
+            from gi.repository import Gio
+            remote = Gio.DBusError.get_remote_error(error)
+            if isinstance(remote, str) and re.fullmatch(r'[A-Za-z0-9_.]{1,128}', remote):
+                facts['remote_error'] = remote
+        except (ImportError, TypeError, AttributeError):
+            pass
+    frames, frame = [], error.__traceback__
+    while frame is not None and len(frames) < 8:
+        frames.append({'file': Path(frame.tb_frame.f_code.co_filename).name,
+                       'function': frame.tb_frame.f_code.co_name, 'line': frame.tb_lineno})
+        frame = frame.tb_next
+    facts['stack'] = frames
+    return facts
+
+
 def onboard(app):
     deadline, acted, api = time.monotonic() + min(app.timeout, 60), False, None
     owner = (os.getuid(), str(Path.home()))
@@ -124,14 +150,14 @@ def onboard(app):
                     if selected:
                         app.observations['onboarding'] = complete(selected, owner)
                         acted = True
-                except IndexError:
+                except IndexError as error:
+                    app.observations['native_accessibility_last_retry'] = native_error(error)
                     key = 'native_accessibility_inventory_retries'
                     app.observations[key] = app.observations.get(key, 0) + 1
                 except (ValueError, CaseUnavailable):
                     raise
                 except Exception as error:
-                    app.observations['native_accessibility_error'] = {
-                        'phase': 'vault-form-inventory', 'exception_type': type(error).__name__}
+                    app.observations['native_accessibility_error'] = native_error(error)
                     raise CaseUnavailable('normal native vault accessibility is unavailable') from None
             time.sleep(0.1)
     app.require_running()
