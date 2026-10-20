@@ -52,7 +52,8 @@ def command(target: dict, arguments: list[str]) -> list[str]:
         raise ValueError("guest runtime directories are invalid")
     path = ":".join([*bins, "/usr/local/bin", "/usr/bin", "/bin"])
     script = "cd " + shlex.quote(absolute(target["checkout"])) + " && exec env " + shlex.quote("PATH=" + path) + " " + shlex.join(arguments)
-    return ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes",
+    return ["ssh", "-F", "/dev/null", "-o", "IdentityAgent=none", "-o", "GlobalKnownHostsFile=/dev/null",
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes",
             "-o", "UserKnownHostsFile=" + absolute(target["known_hosts"]), "-i", absolute(target["identity_file"]),
             "-p", str(target["port"]), target["user"] + "@" + target["host"], script]
 
