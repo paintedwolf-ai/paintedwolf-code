@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from linux_release.payload import load
+from linux_release.arch import write_payload
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -69,6 +70,37 @@ class LinuxPayloadTests(unittest.TestCase):
             self.assertIn("/usr/lib/systemd/system/vault.service", rpm)
             self.assertIn("/etc/apparmor.d/painted-wolf-code", deb)
             self.assertNotIn("/etc/apparmor.d/painted-wolf-code", rpm)
+
+    def test_removed_family_fragment_does_not_leave_a_foreign_pacman_directory(self):
+        assembler = module("linux-package-assemble")
+        for foreign in [False, True]:
+            with self.subTest(foreign=foreign), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                profile = root / "packaging/linux/apparmor/painted-wolf-code"
+                profile.parent.mkdir(parents=True)
+                profile.write_text("packaged profile")
+                source = root / "deb-tree"
+                binary = source / "opt/painted-wolf-code/bin/pw"
+                binary.parent.mkdir(parents=True)
+                binary.write_bytes(b"sealed executable")
+                empty = source / "usr/share/painted-wolf-code/empty"
+                empty.mkdir(parents=True)
+                installed = source / "etc/apparmor.d/painted-wolf-code"
+                installed.parent.mkdir(parents=True)
+                installed.write_bytes(profile.read_bytes())
+                if foreign:
+                    (installed.parent / "foreign-profile").write_text("must not discard")
+                tree = assembler.rpm_tree(root, source, root / "pacman-tree")
+                self.assertEqual(installed.read_bytes(), profile.read_bytes())
+                self.assertEqual((tree / binary.relative_to(source)).read_bytes(), binary.read_bytes())
+                self.assertTrue((tree / empty.relative_to(source)).is_dir())
+                if foreign:
+                    self.assertTrue((tree / "etc/apparmor.d/foreign-profile").is_file())
+                    with self.assertRaisesRegex(ValueError, "unexpected pacman configuration"):
+                        write_payload(tree, root / "payload.tar.xz", 1234)
+                else:
+                    self.assertFalse((tree / "etc/apparmor.d").exists())
+                    write_payload(tree, root / "payload.tar.xz", 1234)
 
     def test_rpm_removal_does_not_invoke_policy_tools_or_touch_user_state(self):
         with tempfile.TemporaryDirectory() as directory:

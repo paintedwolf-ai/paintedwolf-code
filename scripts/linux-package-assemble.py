@@ -224,7 +224,12 @@ def rpm_tree(root: Path, deb_tree: Path, destination: Path) -> Path:
     rpm_only = config.optional_files(root, "rpm")
     subprocess.run(["cp", "-al", f"{deb_tree}/.", str(destination)], check=True)
     for installed in deb_only.keys() - rpm_only.keys():
-        (destination / installed.lstrip("/")).unlink()
+        target = destination / installed.lstrip("/")
+        target.unlink()
+        parent = target.parent
+        while parent != destination and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
     for installed in rpm_only.keys() - deb_only.keys():
         target = destination / installed.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
