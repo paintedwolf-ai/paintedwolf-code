@@ -9,6 +9,8 @@ import shutil
 import stat
 import subprocess
 
+EXTENSIONS = {"deb": ".deb", "rpm": ".rpm", "pacman": ".pkg.tar.zst"}
+
 
 def retain(source, output, controller):
     if not re.fullmatch("[a-f0-9]{40}",controller):
@@ -21,7 +23,8 @@ def retain(source, output, controller):
     commit,tree=git("HEAD"),git("HEAD^{tree}")
     bundle=source/"lycaon-den/src-tauri/target"
     selected=sorted(path for path in bundle.glob("*/release/bundle/*/*")
-                    if path.name.startswith("painted-wolf-code") and path.suffix in {".deb",".rpm"} and path.is_file())
+                    if path.parent.name in EXTENSIONS and path.name.startswith("painted-wolf-code")
+                    and path.name.endswith(EXTENSIONS[path.parent.name]) and path.is_file())
     if not selected or len(selected)>16:
         raise ValueError("partial diagnostics require a bounded nonempty native package set")
     output.mkdir(parents=True,mode=0o700)
