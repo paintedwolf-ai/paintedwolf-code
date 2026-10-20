@@ -13,15 +13,17 @@ import (
 // byte endpoint. Raw source bytes never enter the pipe or its retained output.
 // Source.Close must unblock a pending Read, as with a process output pipe.
 type ScreenedPipe struct {
-	pipe     *BytePipe
-	source   io.ReadCloser
-	done     chan struct{}
-	once     sync.Once
-	mu       sync.Mutex
-	settled  bool
-	cancel   context.CancelCauseFunc
-	metadata captureprojection.StreamMetadata
-	err      error
+	pipe        *BytePipe
+	source      io.ReadCloser
+	done        chan struct{}
+	once        sync.Once
+	sourceOnce  sync.Once
+	sourceError error
+	mu          sync.Mutex
+	settled     bool
+	cancel      context.CancelCauseFunc
+	metadata    captureprojection.StreamMetadata
+	err         error
 }
 
 func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector, scope captureprojection.Scope, label string, source io.ReadCloser, options captureprojection.StreamOptions, budget *ByteBudget) (*ScreenedPipe, error) {
@@ -37,13 +39,13 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 	go func() {
 		select {
 		case <-screenCtx.Done():
-			_ = source.Close()
+			_ = out.closeSource()
 		case <-out.done:
 		}
 	}()
 	go func() {
 		defer close(out.done)
-		defer source.Close()
+		defer out.closeSource()
 		metadata, err := projector.ScreenStream(screenCtx, scope, label, source, pipe, options)
 		out.mu.Lock()
 		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
@@ -75,9 +77,14 @@ func (s *ScreenedPipe) Close() error {
 			s.cancel(ErrConsumerClosed)
 		}
 		s.mu.Unlock()
-		err = s.source.Close()
+		err = s.closeSource()
 	})
 	return err
+}
+
+func (s *ScreenedPipe) closeSource() error {
+	s.sourceOnce.Do(func() { s.sourceError = s.source.Close() })
+	return s.sourceError
 }
 
 // Wait returns the capture owner's final hashes and revision facts separately

@@ -123,7 +123,7 @@ func TestStreamSpillMemoryWaitAllowsReaderClose(t *testing.T) {
 	first, err := out.Open(t.Context())
 	testutil.FailErr(t, "open first reader", err)
 	entered, proceed := make(chan struct{}), make(chan struct{})
-	out.memory = streamMemoryFunc(func(ctx context.Context, _ int64) (func(), error) {
+	out.body.memory = streamMemoryFunc(func(ctx context.Context, _ int64) (func(), error) {
 		close(entered)
 		select {
 		case <-proceed:
