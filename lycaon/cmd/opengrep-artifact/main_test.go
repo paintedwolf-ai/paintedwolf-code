@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -82,7 +83,14 @@ func TestReleaseCommandsRequireExplicitAuthority(t *testing.T) {
 }
 
 func TestArtifactCLIRequiresConfinement(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	if os.Getenv("PW_ARTIFACT_POLICY_CHILD") != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestArtifactCLIRequiresConfinement$")
+		cmd.Env = append(os.Environ(), "PW_ARTIFACT_POLICY_CHILD=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("fresh CLI process: %v\n%s", err, output)
+		}
+		return
+	}
 	previousFlags, previousArgs := flag.CommandLine, os.Args
 	t.Cleanup(func() { flag.CommandLine, os.Args = previousFlags, previousArgs })
 	flag.CommandLine = flag.NewFlagSet("opengrep-artifact", flag.ContinueOnError)
