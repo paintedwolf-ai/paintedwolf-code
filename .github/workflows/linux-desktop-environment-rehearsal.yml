@@ -1,0 +1,46 @@
+name: Linux desktop environment rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Native hosted CPU architecture
+        type: choice
+        options: [arm64, amd64]
+        default: arm64
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: linux-desktop-environment-${{ inputs.architecture }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'paintedwolf-ai/paintedwolf-code'
+    runs-on: ${{ inputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Verify controller contracts
+        run: ./task test:runner
+      - name: Prepare the disposable graphical account
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PYTHONPATH="$GITHUB_WORKSPACE/scripts" /usr/bin/python3 -m linux_release.hosted_desktop \
+            --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/paintedwolf-desktop/facts.json"
+      - name: Retain measured environment facts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-environment-${{ inputs.architecture }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/paintedwolf-desktop/facts.json
+          if-no-files-found: error
