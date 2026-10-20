@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
     arguments_digest TEXT NOT NULL,
     reviewed_arguments_digest TEXT NOT NULL DEFAULT '',
+    reviewed_arguments_ref TEXT NOT NULL DEFAULT '',
     arguments_ref TEXT NOT NULL,
     canonical TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('prepared','waiting','running','completed','refused','failed','interrupted')),

@@ -39,6 +39,27 @@ func (s ProgramStart) validate() error {
 	if err := s.Version.Validate(); err != nil {
 		return err
 	}
+	limits, err := receiptLimits()
+	if err != nil {
+		return err
+	}
+	if int64(len(s.Nodes)) > limits.nodes || int64(len(s.Sources)) > limits.events {
+		return fmt.Errorf("program receipt metadata exceeds catalog count ceiling")
+	}
+	bytes := int64(len(s.PlanReference) + len(s.Version.SourceReference))
+	for _, source := range s.Sources {
+		bytes += 512 + int64(len(source.UnitID)+len(source.Pin.SourceID)+len(source.Pin.Revision)+len(source.DetailReference))
+		if bytes > limits.bytes {
+			return fmt.Errorf("program source metadata exceeds trace byte ceiling")
+		}
+	}
+	for _, node := range s.Nodes {
+		bytes += 128 + int64(len(node.ID)+len(node.SourceUnitID))
+		if bytes > limits.bytes {
+			return fmt.Errorf("program node metadata exceeds trace byte ceiling")
+		}
+	}
+
 	if len(s.Sources) == 0 || (s.SyntaxValidated && s.PlanReference == "") || (!s.SyntaxValidated && (s.PlanReference != "" || len(s.Nodes) != 0)) {
 		return fmt.Errorf("program requires retained plan, source and static nodes")
 	}
@@ -63,7 +84,7 @@ func (s ProgramStart) validate() error {
 	nodes := make(map[string]bool, len(s.Nodes))
 	for _, node := range s.Nodes {
 		source, ok := sources[node.SourceUnitID]
-		if !ok || node.ID == "" || nodes[node.ID] || node.Span.Line < 1 || node.Span.Column < 1 || node.Span.StartByte < source.StartByte || node.Span.EndByte < node.Span.StartByte || node.Span.EndByte > source.EndByte {
+		if !ok || node.ID == "" || nodes[node.ID] || node.Span.Line < 1 || node.Span.Column < 1 || int64(node.Span.StartByte) < source.StartByte || node.Span.EndByte < node.Span.StartByte || int64(node.Span.EndByte) > source.EndByte {
 			return fmt.Errorf("invalid or duplicate static program node")
 		}
 		nodes[node.ID] = true
@@ -157,7 +178,7 @@ func validateChildParent(ctx context.Context, tx *sql.Tx, in ChildStart) error {
 		return fmt.Errorf("child program identity: %w", err)
 	}
 	v := in.Invocation
-	if parent != in.ParentReceiptID || session != v.SessionID || catalog != v.CatalogDigest || unit != v.SourceUnitID || start != v.Span.StartByte || end != v.Span.EndByte || line != v.Span.Line || column != v.Span.Column || (state != "running" && state != "waiting") {
+	if parent != in.ParentReceiptID || session != v.SessionID || catalog != v.CatalogDigest || unit != v.SourceUnitID || start != int64(v.Span.StartByte) || end != int64(v.Span.EndByte) || line != v.Span.Line || column != v.Span.Column || (state != "running" && state != "waiting") {
 		return fmt.Errorf("child differs from its retained program")
 	}
 	if id.ParentExecutionID == root {

@@ -23,7 +23,7 @@ func validDigest(s string) bool {
 // BeforeNativeOwner implements the existing admission consumer port. A committed
 // start marker is a conservative recovery obligation, not proof of an effect.
 // No operation is dispatched if the durable marker cannot be acknowledged.
-func (r *SQLRecorder) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest string) error {
+func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest, reviewedReference string) error {
 	in := operation.Invocation()
 	if err := in.Validate(); err != nil {
 		return err
@@ -43,7 +43,7 @@ func (r *SQLRecorder) BeforeNativeOwner(ctx context.Context, operation toolcontr
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=?,reviewed_arguments_ref=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, reviewedReference, in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
 	if err != nil {
 		return err
 	}
