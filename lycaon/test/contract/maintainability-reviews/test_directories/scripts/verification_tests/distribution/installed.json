@@ -4,25 +4,28 @@
   "kind": "test_suite",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain exactly 53 installed qualification suites after independently reviewing the added bootstrap suite and changed host/runtime/editor guards. Native effect ordering and recovery, administrator actual-process supervision, waitable leader cleanup, immutable snapshot freeze, physical input freshness and later-unavailable UI observations form one installed admission chain. The new suite uses actual harmless subprocess exit/output bounds as well as typed transaction fixtures; deliberately altered readonly fixtures now model privileged tampering explicitly. These boundaries passed the composed 819-contract source with three platform skips. Tests continue to share the real installed qualification namespace rather than forwarding imports or arbitrary metric-driven shards. This is an explicit reconsideration of 52 members, without a hard-limit change or future growth allowance. Also reviewed the qualified fixed mailbox transport total-response deadline and strict integer root VM-marker version: slow byte arrival cannot renew the deadline, and boolean versions cannot satisfy the marker. Their changed focused tests passed in the same 819-contract source; these refusal guards expand no operation or authority.",
-  "reviewed_commit": "c75724715410ba4fb07540627dafe3d22b3351ff",
-  "ceiling": 53,
+  "reason": "Retain exactly 56 suites after reviewing three new boundary suites: compositor-owner/socket KScreen observations, WAL-aware readonly owned-profile SQLite observations, and strict private provider-YAML/fixed-port observations. These are independent authorities exercised alongside fixed Find sequencing, replay refusal and conditional host/guest retention, not duplicate parser mirrors. Actual shipped schema, readonly mutation denial, engine exec races, private-path and parser ambiguity controls supplement typed protocol fixtures. All passed in the exact 849-contract composition with three platform skips. Keep the real installed qualification namespace with direct callers, no forwarding files or metric-driven shards. This explicit bounded retention has no future growth allowance or hard-limit change.",
+  "reviewed_commit": "a99824e02555bfc06aa12a7606b340a7124e9028",
+  "ceiling": 56,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_candidate_inputs_execution.py": "689dc307b48d09002824fd31b7094ccc4988ca287391916c2940a4bcea2252ee",
     "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "b30e9173f76a319a0d43aba9a0d6df73df86ed405553928a4b09af9b9ea7a765",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "73b7a6219e609d36f45583b8aef9be82c8a1b9981f50ad8660a11f54ecac2134",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "a744d0ed6d8eb7499b3d7e5f6910e06d70a1a2964cf0cea20ef36fc155ee208c",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "f30dfc723fb8f7626999a324f0869f0942517618fcee0e70c264f16a06c80f03",
     "scripts/verification_tests/distribution/installed/test_installed_input_diagnostic_execution.py": "6135c0a74353e2f69ac06aba14394cee042c1bfd974e73f7d9abb898ee1d109b",
-    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "2796e2174a801242b6c78dacae37c9ffe755ff6b8bab41cc1436037accdc7c75",
+    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "5d4ceb38930090da54e299d16e5455c5aba00da2494d30eb1441507694a95074",
     "scripts/verification_tests/distribution/installed/test_installed_input_mailbox_execution.py": "a979ef8ac4053ce329a47307dc4ef1aca2414f880be8c4b812f9b84b9e5ca7f1",
-    "scripts/verification_tests/distribution/installed/test_installed_input_protocol_execution.py": "8fa714d809431bfc62fee10cd7c916cdfc07733fd78af961fedf8f4c417b867b",
+    "scripts/verification_tests/distribution/installed/test_installed_input_protocol_execution.py": "beadc034c95e6c63fd36754cfa8a6b318f77b75e067f99ee6176a38c5a14c9e4",
     "scripts/verification_tests/distribution/installed/test_installed_leaf_failures_execution.py": "6dd8afa64d38c3fb82d29a59946efbc767da32cbb6c8a2dd1b63d7bff6c083af",
     "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "0c3b36ee854bbdc267e50fd9ee548d069197feb6dbdaf2ecb243f23d13a99ec4",
+    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb",
     "scripts/verification_tests/distribution/installed/test_installed_onboarding_execution.py": "90167ec957e6994ce75f73efea6e5023fef3a7aceeac22ec5953ae35e80aaad9",
+    "scripts/verification_tests/distribution/installed/test_installed_plasma_execution.py": "909dca831d1749389452eeef4d3c8b73a2142e7bf25e73d03f4ad6c72254561b",
     "scripts/verification_tests/distribution/installed/test_installed_qemu_input_execution.py": "d309136e216d011be2b502307fccc75b8f6f00b1ab0e3e3bf2cea9e7e74ee53f",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
     "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "8ff3a1dd5f5d846011b266b008303fa175ad21eebf3eb92df60b53c89dfc4334",
-    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "f30dfc723fb8f7626999a324f0869f0942517618fcee0e70c264f16a06c80f03"
+    "scripts/verification_tests/distribution/installed/test_profile_observer_execution.py": "4231be32c85b63b9c14b9bc437b90c1719d3d0452960835c2b1121209e5e1c30",
+    "scripts/verification_tests/distribution/installed/test_profile_providers_execution.py": "f3a04f9b3f2eb7e8fec7482ce755026ce1e1af887b3dbdddd5faaef94817d3d8"
   },
-  "reviewed_shape": "ff3c95c53a80dff8158042ae3b0688d65b9d8e224dd1676d3d206f41f012a358"
+  "reviewed_shape": "b841b630433cc88e6583ed77a8c7643019c621438c3d3e08bf93ad2871b2d088"
 }

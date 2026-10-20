@@ -4,19 +4,23 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain exactly 29 immediate qualification owners after reviewing the new administrator supervisor boundary. Hosted bootstrap now captures a fixed graphical-user child and actual exit, holds its leader waitable through owned group cleanup, verifies immutable controller/request before and after, and seals root-only invocation/result facts. Freeze separately consumes that authority and bounded graphical operation evidence; submitted JSON cannot establish execution. Root supervisor and native transaction effects remain separate explicit owners, using one managed admission without nested task dispatch. Splitting by file count would hide this privilege boundary. The composed 819-contract source passed with three platform skips; actual partial physical editor save also succeeded but grants no campaign authority. This reconsideration permits no future growth or hard-limit change. New authority or members require a fresh decision. Also reviewed the qualified fixed mailbox transport total-response deadline and strict integer root VM-marker version: slow byte arrival cannot renew the deadline, and boolean versions cannot satisfy the marker. Their changed focused tests passed in the same 819-contract source; these refusal guards expand no operation or authority.",
-  "reviewed_commit": "c75724715410ba4fb07540627dafe3d22b3351ff",
-  "ceiling": 29,
+  "reason": "Retain exactly 30 qualification controller owners after reviewing the added Plasma observer as a separate compositor protocol authority. Its active local Wayland session, KWin owner/wrapper, socket peer credentials and bounded typed KScreen JSON are independently bound before and after observation; variants selects one desktop observer and unsupported X11 remains unverified. The fixed Find operation adds only source-sealed input and ordered two-transaction evidence, refusing replay or operation switching. Hosted ancestor preparation remains a fixed catalog-footprint allowlist with no recursive chmod or payload-verifier weakening. The exact composition passed 849 managed contracts with three platform skips and two budget packages. A directory split now would separate closely coupled admission facts without removing authority. Ceiling equals current measurement, with no future growth allowance or hard-limit change.",
+  "reviewed_commit": "a99824e02555bfc06aa12a7606b340a7124e9028",
+  "ceiling": 30,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_hosted_diagnostic_execution.py": "507d173431e67f4d434724d4bc3ff30b5ccce00985c93a72970a4b6e46994de7",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "73b7a6219e609d36f45583b8aef9be82c8a1b9981f50ad8660a11f54ecac2134",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "a744d0ed6d8eb7499b3d7e5f6910e06d70a1a2964cf0cea20ef36fc155ee208c",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "f30dfc723fb8f7626999a324f0869f0942517618fcee0e70c264f16a06c80f03",
     "scripts/verification_tests/distribution/installed/test_installed_input_diagnostic_execution.py": "6135c0a74353e2f69ac06aba14394cee042c1bfd974e73f7d9abb898ee1d109b",
-    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "2796e2174a801242b6c78dacae37c9ffe755ff6b8bab41cc1436037accdc7c75",
+    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "5d4ceb38930090da54e299d16e5455c5aba00da2494d30eb1441507694a95074",
+    "scripts/verification_tests/distribution/installed/test_installed_input_protocol_execution.py": "beadc034c95e6c63fd36754cfa8a6b318f77b75e067f99ee6176a38c5a14c9e4",
+    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb",
+    "scripts/verification_tests/distribution/installed/test_installed_plasma_execution.py": "909dca831d1749389452eeef4d3c8b73a2142e7bf25e73d03f4ad6c72254561b",
     "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
-    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "f9f50f40a1b2f5d854269c875261724dd5a3fb8cd7d027ce6103399d1899fa06",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "f30dfc723fb8f7626999a324f0869f0942517618fcee0e70c264f16a06c80f03",
-    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb"
+    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "9010bef6d4095f0d99c2bbff1b897851292b2298f722b7c07ec3224e7a587f45",
+    "scripts/verification_tests/distribution/installed/test_profile_observer_execution.py": "4231be32c85b63b9c14b9bc437b90c1719d3d0452960835c2b1121209e5e1c30",
+    "scripts/verification_tests/distribution/installed/test_profile_providers_execution.py": "f3a04f9b3f2eb7e8fec7482ce755026ce1e1af887b3dbdddd5faaef94817d3d8"
   },
-  "reviewed_shape": "f5346b393895aaaef5de6828ef2030d8628237577ce7376dbdf94e6e1bb4da8d"
+  "reviewed_shape": "98da76fe68781a5b6712f9b2e6e83936711e4855c318743cafa44ae2466f9f74"
 }

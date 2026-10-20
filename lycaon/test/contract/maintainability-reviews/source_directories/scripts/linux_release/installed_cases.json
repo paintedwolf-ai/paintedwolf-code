@@ -4,18 +4,24 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain exactly 38 immediate fixed interaction owners after reviewing native_bootstrap as a distinct prequalification lifecycle. It reuses the existing fresh native installation transaction, records an independent package inventory, rebinds sealed payload and native version immediately before owned removal, and requires positive database, payload, process and both profile-absence controls. It neither initializes GUI state nor claims pristine OS history. Recovery-required refusal preserves changed or unproven package state. Existing InstalledApp and fixed evidence owners remain shared; a folder extraction alone would obscure transaction and recovery dependencies. The 819-contract source passed with three platform skips, including changed owner/version/payload, actual supervisor output/cleanup, and full contract-mutation refusal. Keep this measured ceiling with no growth allowance; future effect families or authority changes require review.",
-  "reviewed_commit": "c75724715410ba4fb07540627dafe3d22b3351ff",
-  "ceiling": 38,
+  "reason": "Retain exactly 40 installed interaction owners after reviewing the shared owned-profile authority and its two distinct readonly consumers. The profile context binds captured Den/engine and sealed image plus private physical profile before and after; SQLite separately owns WAL-aware readonly transactions, shipped schema, row/VM/byte bounds, while provider YAML separately owns nofollow stable-FD reading and bounded duplicate/alias-rejecting parsing. Neither exports credentials or grants private API authority. Fixed GUI fixture binding refuses occupied source-fixed ports rather than redirecting to another service. The 849-contract composition includes actual shipped SQLite schema and readonly mutation refusal, engine identity races, provider identity/endpoint and YAML ambiguity refusals. These remain coherent installed observation dependencies; extracting arbitrary folders would obscure their lifecycle. Retention permits no future growth or hard-limit change.",
+  "reviewed_commit": "a99824e02555bfc06aa12a7606b340a7124e9028",
+  "ceiling": 40,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_app_execution.py": "96edcfcb69b3b92798c52ca76dcba7add790f2f89b4faf90db8fb253908f2ce1",
     "scripts/verification_tests/distribution/installed/test_installed_crash_execution.py": "b60485534a370aa4ab150a36906444d0c7472360089f80bb8f59a2dc2fa2a8aa",
     "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "b30e9173f76a319a0d43aba9a0d6df73df86ed405553928a4b09af9b9ea7a765",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_execution.py": "a744d0ed6d8eb7499b3d7e5f6910e06d70a1a2964cf0cea20ef36fc155ee208c",
+    "scripts/verification_tests/distribution/installed/test_installed_input_guest_execution.py": "5d4ceb38930090da54e299d16e5455c5aba00da2494d30eb1441507694a95074",
+    "scripts/verification_tests/distribution/installed/test_installed_input_protocol_execution.py": "beadc034c95e6c63fd36754cfa8a6b318f77b75e067f99ee6176a38c5a14c9e4",
     "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "0c3b36ee854bbdc267e50fd9ee548d069197feb6dbdaf2ecb243f23d13a99ec4",
+    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb",
     "scripts/verification_tests/distribution/installed/test_installed_onboarding_execution.py": "90167ec957e6994ce75f73efea6e5023fef3a7aceeac22ec5953ae35e80aaad9",
+    "scripts/verification_tests/distribution/installed/test_installed_plasma_execution.py": "909dca831d1749389452eeef4d3c8b73a2142e7bf25e73d03f4ad6c72254561b",
     "scripts/verification_tests/distribution/installed/test_installed_security_execution.py": "5a0fe7eb66f3057721aceccc550ce93d4fe03e34431f276adac7dec69f5ec3e3",
     "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "8ff3a1dd5f5d846011b266b008303fa175ad21eebf3eb92df60b53c89dfc4334",
-    "scripts/verification_tests/distribution/installed/test_installed_native_bootstrap_execution.py": "edc9848dd2eae064f998f5666cba0263ad061e7ae74018387bd041cb350100bb"
+    "scripts/verification_tests/distribution/installed/test_profile_observer_execution.py": "4231be32c85b63b9c14b9bc437b90c1719d3d0452960835c2b1121209e5e1c30",
+    "scripts/verification_tests/distribution/installed/test_profile_providers_execution.py": "f3a04f9b3f2eb7e8fec7482ce755026ce1e1af887b3dbdddd5faaef94817d3d8"
   },
-  "reviewed_shape": "a00d4ad41ab9966578dd020ab968f04eb32f6308b6e8995f22faa6a1168f9db0"
+  "reviewed_shape": "d68ac50e34ffa149dabfd12f2aca0ebd299e01761b697ecc8dd902af0bb76c49"
 }
