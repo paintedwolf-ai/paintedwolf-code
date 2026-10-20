@@ -7,17 +7,17 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1792521441,
-        "narHash": "sha256-e8u7DA4M1R6zm1rLmYjDyVDkiXtHRnKyXDa20g6XRto=",
-        "ref": "refs/qualification/1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8",
-        "rev": "1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8",
-        "revCount": 895,
+        "lastModified": 1792534013,
+        "narHash": "sha256-nGWCh4dlhryCOQqJOlWzntUPiGpv0VWJQjKne9SVGD4=",
+        "ref": "refs/qualification/e3e8a59f830243063eba5f488f8dfa9a6199a728",
+        "rev": "e3e8a59f830243063eba5f488f8dfa9a6199a728",
+        "revCount": 934,
         "type": "git",
         "url": "https://github.com/paintedwolf-ai/paintedwolf-code"
       },
       "original": {
-        "ref": "refs/qualification/1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8",
-        "rev": "1c1ed7fde5f1c800d6e3fa6a28c72b8791a68af8",
+        "ref": "refs/qualification/e3e8a59f830243063eba5f488f8dfa9a6199a728",
+        "rev": "e3e8a59f830243063eba5f488f8dfa9a6199a728",
         "type": "git",
         "url": "https://github.com/paintedwolf-ai/paintedwolf-code"
       }
@@ -86,11 +86,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1792210252,
-        "narHash": "sha256-Mh0PUaIv4nFY+8wAGonaEh8iBzwsmdNlwjVHmFg1Biw=",
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "09063bd1f2b36fd9fd793c36dfade7bd40a93dfc",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
         "type": "github"
       },
       "original": {
