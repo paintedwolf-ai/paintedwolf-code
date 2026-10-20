@@ -80,7 +80,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable) as refusal:
             actor.click('Send')
         self.assertEqual(refusal.exception.observations['desktop_control'],
-                         {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2})
+                         {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2, 'observed_roles': [API.ROLE_PUSH_BUTTON]})
         api, _ = surface([button])
         with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}), \
                 patch.object(ui.time, 'monotonic', side_effect=iter(range(100))), patch.object(ui.time, 'sleep'):
@@ -108,7 +108,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                     actor.click('Send')
         self.assertEqual(refusal.exception.observations['desktop_control'], {
             'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 0,
-            'inventory_complete': False})
+            'inventory_complete': False, 'observed_roles': []})
         button.action.doAction.assert_not_called()
 
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
