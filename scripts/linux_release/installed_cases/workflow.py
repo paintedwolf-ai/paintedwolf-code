@@ -23,6 +23,18 @@ def identity(document: dict) -> str:
     return value
 
 
+def wait_settled(app, session_id: str):
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        session = accepted(app, 'GET', '/v1/sessions/' + session_id, None, {200})
+        if session.get('status') == 'idle':
+            return
+        if session.get('status') == 'error':
+            raise ValueError('installed fixture session failed before settlement')
+        time.sleep(0.05)
+    raise ValueError('installed fixture session did not settle within its bounded interval')
+
+
 class ToolTurn:
     def __init__(self, app, provider, project: Path, *, vision: bool = False):
         if type(vision) is not bool:
