@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -51,6 +53,48 @@ class RehearsalCredentialsTests(unittest.TestCase):
                        {"download_base_url": "https://user:secret@test.example"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 rehearsal.validate({**self.config, **change})
+
+    def test_failed_harness_preserves_private_config_and_cleans_empty_keys(self):
+        root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            scripts = work / "scripts"
+            scripts.mkdir()
+            (work / "packaging").mkdir()
+            (work / "lycaon-den").mkdir()
+            for name in ["release-r2-live-test.sh", "release-r2-rest.sh"]:
+                shutil.copyfile(root / "scripts" / name, scripts / name)
+            shutil.copytree(root / "scripts/release_storage", scripts / "release_storage")
+            shutil.copyfile(root / "packaging/update-keys.json", work / "packaging/update-keys.json")
+            commands = work / "commands"
+            commands.mkdir()
+            bun = commands / "bun"
+            bun.write_text("#!" + sys.executable + "\nimport pathlib,sys\n"
+                           "p=pathlib.Path(sys.argv[sys.argv.index('-w')+1])\n"
+                           "p.write_text('fixture-private')\n"
+                           "pathlib.Path(str(p)+'.pub').write_text('fixture-public')\n")
+            aws = commands / "aws"
+            aws.write_text("#!/bin/sh\nexit 37\n")
+            for command in [bun, aws]:
+                command.chmod(0o700)
+            config = work / "private.json"
+            raw = json.dumps(self.config).encode()
+            config.write_bytes(raw)
+            config.chmod(0o600)
+            before = config.stat()
+            env = {key: value for key, value in os.environ.items()
+                   if not key.startswith(("AWS_", "CLOUDFLARE_", "RELEASE_TEST_", "PW_R2_REHEARSAL_"))}
+            env.update(RELEASE_TEST_CONFIG=str(config), PATH=str(commands) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run(["/bin/bash", str(scripts / "release-r2-live-test.sh")],
+                                    env=env, capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("R2 credential probe failed", result.stderr)
+            self.assertNotIn("unbound variable", result.stderr)
+            self.assertNotIn("cleanup failed", result.stderr)
+            self.assertEqual(config.read_bytes(), raw)
+            after = config.stat()
+            self.assertEqual((after.st_ino, after.st_mode, after.st_mtime_ns),
+                             (before.st_ino, before.st_mode, before.st_mtime_ns))
 
     def test_explicit_config_and_optional_session_token(self):
         with tempfile.TemporaryDirectory() as directory:
