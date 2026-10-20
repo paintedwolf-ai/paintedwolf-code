@@ -12,7 +12,7 @@ class WorkflowTests(unittest.TestCase):
         result = subprocess.run([str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", "--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence"],
                                 cwd=ROOT, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("bundle-rehearse --fixtures /fixtures --evidence /evidence", result.stdout + result.stderr)
+        self.assertIn("bundle-rehearse --fixtures /fixtures --evidence /evidence", " ".join((result.stdout + result.stderr).split()))
         self.assertNotIn("build:lycaon-dev", result.stdout + result.stderr)
 
     def test_bundle_commands_reach_their_argument_parsers(self):

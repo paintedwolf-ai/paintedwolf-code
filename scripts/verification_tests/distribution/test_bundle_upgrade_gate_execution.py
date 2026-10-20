@@ -110,3 +110,16 @@ class GateTests(unittest.TestCase):
         log.write_text("\n".join(json.dumps({"path": route, "status": 404}) for route in routes))
         with self.assertRaises(ValueError):
             gate.verify_requests(log, case, 0)
+
+    def test_native_rejections_fail_staging_without_waiting_for_a_timeout(self):
+        from release_upgrade.case import staged
+        records = self.root / "records"
+        records.mkdir()
+        self.assertIsNone(staged(records))
+        (records / "rejected.json").write_text('{"format_version":1,"release_id":"rejected"}')
+        with self.assertRaisesRegex(ValueError, "rejected"):
+            staged(records)
+        (records / "rejected.json").unlink()
+        (records / "transaction.json").write_text('{"phase":"failed"}')
+        with self.assertRaisesRegex(ValueError, "transaction failed"):
+            staged(records)

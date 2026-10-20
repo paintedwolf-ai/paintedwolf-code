@@ -30,6 +30,15 @@ def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: P
                         "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120)
 
 
+def staged(records: Path):
+    if read_json(records / "rejected.json") is not None:
+        raise ValueError("native updater rejected the signed candidate")
+    transaction = read_json(records / "transaction.json")
+    if transaction and transaction.get("phase") == "failed":
+        raise ValueError("native update transaction failed")
+    return read_json(records / "ready.json")
+
+
 def candidate_matches(candidate: dict, step: dict, channel: str) -> bool:
     artifact = step["platforms"]["darwin-aarch64"]
     expected = {"version": step["version"], "channel": channel, "platform": "darwin-aarch64",
@@ -80,7 +89,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         verify_semantics(config, fixture, before, evidence)
         for step in case["steps"]:
             version = step["version"]
-            ready = wait_for(f"{version} was not automatically staged", lambda: read_json(records / "ready.json"), 2100)
+            ready = wait_for(f"{version} was not automatically staged", lambda: staged(records), 600)
             if not candidate_matches(ready.get("candidate", {}), step, case["channel"]):
                 raise ValueError("automatic staging selected an unexpected release")
             (evidence / f"{version}-ready.json").write_text(json.dumps(ready, indent=2) + "\n")
