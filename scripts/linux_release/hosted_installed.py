@@ -76,7 +76,7 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
         raise ValueError('hosted Debian package differs from the selected candidate bytes')
     marker = Path('/etc/paintedwolf-qualification.json')
     info = marker.lstat()
-    expected_marker = {'format_version': 1, 'desktop': 'gnome', 'package': 'deb'}
+    expected_marker = {'format_version': 1, 'desktop': 'gnome', 'package': str(INSTALL)}
     if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or read(marker) != expected_marker or type(read(marker).get('format_version')) is not int):
         raise ValueError('hosted desktop ownership marker changed before package installation')
     ROOT.mkdir(mode=0o755)
