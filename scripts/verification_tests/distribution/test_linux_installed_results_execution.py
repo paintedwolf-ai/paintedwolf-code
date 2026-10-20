@@ -33,7 +33,9 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                                                    if value["tier"] == tier)
                                         for tier in ("installed-functional", "native-desktop",
                                                      "native-security", "native-performance")]
-        environment["qualification"]["scaling"]["mixed_capabilities"] = [key for key in environment["qualification"]["scaling"]["mixed_capabilities"] if key in {item["id"] for item in self.catalog["capabilities"]}]
+        for name in ("mixed_capabilities", "uniform_capabilities"):
+            environment["qualification"]["scaling"][name] = [key for key in environment["qualification"]["scaling"][name]
+                                                               if key in {item["id"] for item in self.catalog["capabilities"]}]
         artifact = {"id": "candidate", "installation": environment["installations"][0],
                     "architecture": environment["architectures"][0], "source_commit": SOURCE,
                     "identity": {"kind": "file", "sha256": "b" * 64}}
