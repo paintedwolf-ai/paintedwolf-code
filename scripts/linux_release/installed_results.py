@@ -118,6 +118,9 @@ def admit(catalog: dict, campaign: object, final_artifacts: object,
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == '--bootstrap-native-fixture':
+        from .installed_cases.native_bootstrap import main as bootstrap_native
+        return bootstrap_native(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--run-cases":
         from .installed_execution import main as execute
         return execute(sys.argv[2:])
