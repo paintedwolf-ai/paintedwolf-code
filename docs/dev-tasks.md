@@ -1001,11 +1001,47 @@ that has already seen its successor. A stable release that also advances the
 Preview feed is signed for its own version, so Preview clients install it like
 any other offer.
 
+**Linux package signatures.** `packaging/linux/signing/keys.json` selects the
+full OpenPGP fingerprint and generation for native Linux package and repository
+metadata signatures. `python3 -m scripts.linux_release.signing` provides isolated
+RPM signing, detached signatures and clear-signed apt `InRelease` generation.
+Each operation imports only the selected public key into a private keyring,
+checks the private identity when signing, verifies the result with RSA/SHA-512,
+and replaces the destination only after verification. The private key comes
+from the protected `LINUX_PACKAGE_SIGNING_KEY` environment or an explicitly
+selected owner-only file; it is never a command argument. This trust is distinct
+from updater/feed signatures and Nix cache trust.
+
+`./task release:live-test -- --local-linux-signing --receipt /absolute/path/result.json`
+runs a local, non-publishing rehearsal with a disposable key and tiny RPM fixture.
+Add `--candidate-dir /absolute/path/candidates --require-architectures x86_64,aarch64`
+to exercise retained candidate packages without changing their original bytes.
+The candidate CI legs run this mode and retain its public receipt. It checks
+correct/wrong keys, unsigned and damaged RPMs, changed metadata, clear and detached
+signatures, and production rejection of fixture keys. Private fixture material
+and its agent/keyring are removed when the rehearsal finishes. No production
+credential or R2 request is needed. The default credentialed R2 rehearsal remains
+a separate invocation. Repository activation, key rotation and CDN consistency
+are verified by the format-specific publication work.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
+
+### Linux candidate builds
+
+The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+builds the native amd64 and arm64 deb/rpm packages through the production bundle
+and staging path. It runs independently on relevant packaging pull requests
+once ready, weekly, or by manual dispatch on the selected branch. The release
+workflow calls the same job with its exact selected source commit. Candidate
+artifacts include checksums and the source commit and are retained for 90 days.
+The workflow has read-only repository access and no signing environment or
+publication credentials. Package signing rehearsals and installed-system
+qualification remain separate requirements; a candidate build alone does not
+qualify a release. Draft pull requests do not start candidate builds.
 
 ### Release dry run
 
@@ -1075,3 +1111,13 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+The existing `release:live-test -- --local-pacman-construction --receipt /absolute/new-receipt.json`
+mode exercises actual native makepkg construction in the pinned official substrate with
+a tiny sealed nonapplication payload, then admits package metadata and exact extracted
+ELF/data/link/mode identities. It requires matching native Linux CPU, Docker, GnuPG and
+bsdtar. Toolchain preparation uses signed repositories; package construction then runs
+as the invoking unprivileged user without network or container capabilities. It adds
+no repository or trust to the host and does not install the application. This mode
+requires the finished pacman producer dependency; default credentialed rehearsals are
+separate and are not invoked by it.

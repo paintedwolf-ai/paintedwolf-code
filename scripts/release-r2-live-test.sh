@@ -3,19 +3,27 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+rehearsal_module=
+rehearsal_prefix=()
 case "${1:-}" in
   --prepare-linux-qualification)
-    shift
-    cd "${ROOT}"
-    exec python3 -m scripts.linux_release.installed_qualification_producer prepare "$@"
-    ;;
+    rehearsal_module=scripts.linux_release.installed_qualification_producer; rehearsal_prefix=(prepare) ;;
   --retain-linux-qualification)
-    shift
-    cd "${ROOT}"
-    exec python3 -m scripts.linux_release.installed_qualification_producer retain "$@"
-    ;;
+    rehearsal_module=scripts.linux_release.installed_qualification_producer; rehearsal_prefix=(retain) ;;
+  --local-pacman-construction)
+    rehearsal_module=linux_release.arch_substrate_rehearsal ;;
+  --local-linux-signing)
+    rehearsal_module=scripts.linux_release.signing_rehearsal ;;
 esac
-
+if [[ -n "${rehearsal_module}" ]]; then
+  shift
+  cd "${ROOT}"
+  PYTHONPATH="${ROOT}/scripts" exec python3 -m "${rehearsal_module}" "${rehearsal_prefix[@]}" "$@"
+fi
+[[ $# -eq 0 ]] || { echo "error: unknown release rehearsal arguments" >&2; exit 1; }
+for executable in bun curl jq python3 ruby; do
+  command -v "${executable}" >/dev/null || { echo "error: ${executable} is required" >&2; exit 1; }
+done
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)

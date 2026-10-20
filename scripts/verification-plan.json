@@ -350,6 +350,9 @@
     ],
     "test:linux:installed": [
       "test:linux:installed"
+    ],
+    "release:live-test": [
+      "release:live-test"
     ]
   },
   "private": [
@@ -374,7 +377,8 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
-    "test:linux:installed": "passthrough"
+    "test:linux:installed": "passthrough",
+    "release:live-test": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -696,6 +700,12 @@
     },
     "test:linux:installed": {
       "locks": [],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
+      ],
       "workers": 1
     }
   },
@@ -1074,6 +1084,7 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
+      "linux-candidates.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
