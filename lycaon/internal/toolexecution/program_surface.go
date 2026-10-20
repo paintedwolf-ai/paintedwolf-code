@@ -2,7 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -38,15 +37,7 @@ func (e *Metadata) OfferProgramOperations(ctx context.Context, filter platform.T
 		if decision == nil || !decision.Allowed {
 			continue
 		}
-		schema, err := json.Marshal(registered.Meta.ArgsSchema)
-		if err != nil {
-			return commandprogram.Offer(), nil, fmt.Errorf("compile program operation %q schema: %w", identity, err)
-		}
-		definition, err := toolcontract.ToolOperation(identity, schema, registered.Contract)
-		if err != nil {
-			return commandprogram.Offer(), nil, err
-		}
-		definitions = append(definitions, definition)
+		definitions = append(definitions, registered.Operation)
 	}
 	return commandprogram.Offer(definitions...), definitions, nil
 }
