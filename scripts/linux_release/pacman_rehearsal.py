@@ -91,6 +91,8 @@ def rehearse(work: Path, r2_origin: str | None = None):
     retained = None
     remote_active = None
     storage_prefix = "release-system-tests/pacman-repositories-" + uuid.uuid4().hex
+    if r2_origin is not None:
+        print("Pacman repository rehearsal prefix: " + storage_prefix, flush=True)
     for version in ["0.0.1", "0.0.2", "0.0.3"]:
         catalog = rotation if version == "0.0.3" else original_catalog
         operation = "rotate" if version == "0.0.3" else "publish"
@@ -307,8 +309,6 @@ def main():
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--r2", action="store_true")
     args = parser.parse_args()
-    if args.r2 and shutil.which("bunx") is None:
-        parser.error("bunx is required for the isolated R2 rehearsal")
     try:
         r2_origin = rehearsal_environment() if args.r2 else None
         with tempfile.TemporaryDirectory(prefix="paintedwolf-pacman-rehearsal-") as temporary:
