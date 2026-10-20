@@ -208,3 +208,17 @@ class BialyLatencyTests(unittest.TestCase):
             self.assertNotIn('measurements_ms', report)
             self.assertFalse(report['quality_baseline_qualified'])
             self.assertEqual(streams['bialy-turn-stderr'], b'diagnostic')
+
+    def test_missing_turn_fixture_retains_completed_reference_and_its_streams(self):
+        report = {'status': 'observed', 'reference_ms': 3352}
+        with patch.object(bialy_performance, 'reference', return_value=(report, {'bialy-stdout': b'reference'})), \
+                patch.object(bialy_performance, 'turn_latency', side_effect=CaseUnavailable('missing head')):
+            observed, streams = bialy_performance.measure({})
+        self.assertEqual(observed['reference_ms'], 3352)
+        self.assertEqual(observed['turn_latency']['status'], 'unverified')
+        self.assertEqual(streams, {'bialy-stdout': b'reference'})
+        with patch.object(bialy_performance, 'reference', return_value=({'status': 'failed'}, {})), \
+                patch.object(bialy_performance, 'turn_latency') as turn:
+            observed, _ = bialy_performance.measure({})
+            self.assertEqual(observed['status'], 'failed')
+            turn.assert_not_called()

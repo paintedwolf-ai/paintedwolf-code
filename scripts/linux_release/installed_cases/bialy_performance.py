@@ -112,3 +112,21 @@ def turn_latency(binding: dict) -> tuple[dict, dict]:
             'workload': 'fixed-six-states-sixteen-release-options', 'encoding': encoding, 'quality_baseline_qualified': False,
             'selected_application_device_qualified': False}, \
            {'bialy-turn-stdout': result['stdout'], 'bialy-turn-stderr': result['stderr']}
+
+
+def measure(binding: dict) -> tuple[dict, dict]:
+    from .records import CaseUnavailable
+    try:
+        report, streams = reference(binding)
+    except CaseUnavailable as error:
+        return {'status': 'unverified', 'reason': str(error)}, {}
+    if report.get('status') == 'failed':
+        return report, streams
+    try:
+        turns, captured = turn_latency(binding)
+    except CaseUnavailable as error:
+        report['turn_latency'] = {'status': 'unverified', 'reason': str(error)}
+    else:
+        report['turn_latency'] = turns
+        streams.update(captured)
+    return report, streams
