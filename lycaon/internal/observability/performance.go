@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"log/slog"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -218,18 +219,23 @@ func RecordRuntimeSample(gauges map[string]int64) {
 			HeapAllocBytes: mem.HeapAlloc, HeapInUseBytes: mem.HeapInuse,
 			HeapObjects: mem.HeapObjects, StackInUseBytes: mem.StackInuse,
 			Goroutines: runtime.NumGoroutine(), GCCount: mem.NumGC,
-			GCPauseTotalNS: mem.PauseTotalNs, Gauges: cloneGauges(gauges),
+			GCPauseTotalNS: mem.PauseTotalNs, Gauges: captureRuntimeGauges(gauges),
 		},
 	})
 }
 
-func cloneGauges(in map[string]int64) map[string]int64 {
-	if len(in) == 0 {
-		return nil
-	}
+func captureRuntimeGauges(in map[string]int64) map[string]int64 {
 	out := make(map[string]int64, len(in))
 	for key, value := range in {
 		out[key] = value
+	}
+	if runtime.GOOS == "linux" {
+		// A protected, nondumpable engine can inspect its own descriptors;
+		// its external performance observer cannot inspect /proc/<pid>/fd.
+		out["process_fds"] = -1
+		if entries, err := os.ReadDir("/proc/self/fd"); err == nil {
+			out["process_fds"] = int64(len(entries))
+		}
 	}
 	return out
 }
