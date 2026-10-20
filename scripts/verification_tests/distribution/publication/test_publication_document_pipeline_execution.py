@@ -25,6 +25,13 @@ class DocumentPipelineTests(unittest.TestCase):
         (released.root / 'catalog.json').write_text(json.dumps({'schema_version': 2, 'platforms': [{
             'updater_key': 'linux-x86_64', 'publication': 'public' if public else 'candidate',
             'package_extensions': ['deb'], 'updater_extension': None}]}))
+        if not public:
+            catalog = json.loads((released.root / 'catalog.json').read_text())
+            catalog['platforms'].append({'updater_key': 'darwin-aarch64', 'publication': 'public',
+                'package_extensions': ['dmg'], 'updater_extension': 'app.tar.gz'})
+            (released.root / 'catalog.json').write_text(json.dumps(catalog))
+            (released.root / 'artifacts').mkdir()
+            (released.root / 'artifacts/painted-wolf-code_v1.2.3_darwin-aarch64.dmg').write_bytes(b'independent fixture package')
         return selected, released, source
 
     def test_canonical_name_keeps_exact_installed_bytes_and_content_type(self):
@@ -42,8 +49,8 @@ class DocumentPipelineTests(unittest.TestCase):
             root = Path(temporary)
             selected, released, source = self.fixture(root, public=False)
             types, _ = owner.package_files(selected, released, source, root / 'public')
-            self.assertEqual(types, {})
-            self.assertEqual(list((root / 'public').iterdir()), [])
+            self.assertEqual(set(types), {'painted-wolf-code_v1.2.3_darwin-aarch64.dmg'})
+            self.assertFalse(any('linux' in path.name for path in (root / 'public').iterdir()))
 
     def test_installed_package_mutation_refuses_before_document_construction(self):
         with tempfile.TemporaryDirectory() as temporary:

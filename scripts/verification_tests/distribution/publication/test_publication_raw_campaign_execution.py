@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release import publication_raw_campaign as owner
+from linux_release.publication import raw_campaign as owner
 
 
 class RawCampaignCompositionTests(unittest.TestCase):

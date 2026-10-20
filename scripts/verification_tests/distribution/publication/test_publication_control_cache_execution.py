@@ -6,7 +6,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release import publication_control_cache as owner
+from linux_release.publication import control_cache as owner
 
 
 class ControlCacheTests(unittest.TestCase):
