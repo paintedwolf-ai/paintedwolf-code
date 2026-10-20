@@ -70,8 +70,8 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 	starts := 0
 	marker := progressStartFunc(func(_ context.Context, id toolcontract.ProgramProgressIdentity, model string, args toolcontract.ReviewedOperationInputs) error {
 		starts++
-		if id.ExecutionID != "progress-execution" || id.ProgramID != "program" || id.RootSessionID != "session" || model != "actual-model-call" || !strings.Contains(args.CanonicalArguments, "Create fixture") {
-			t.Fatalf("wrong progress attribution: %+v %s %s", id, model, args.CanonicalArguments)
+		if id.ExecutionID != "progress-execution" || id.ProgramID != "program" || id.RootSessionID != "session" || model != "actual-model-call" || !strings.Contains(args.CanonicalArguments(), "Create fixture") {
+			t.Fatalf("wrong progress attribution: %+v %s %s", id, model, args.CanonicalArguments())
 		}
 		if owner.Get(t.Context(), parent.SessionID) != "" {
 			t.Fatal("owner ran before marker")
