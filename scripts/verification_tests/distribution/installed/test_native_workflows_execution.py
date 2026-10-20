@@ -54,7 +54,7 @@ class NativeWorkflowTests(unittest.TestCase):
             guest = stack.enter_context(patch.object(owner, "require_owned_guest", return_value={}))
             stack.enter_context(patch.object(owner, "current_package", return_value=package))
             stack.enter_context(patch.object(owner, "inspect", return_value={"payload": SimpleNamespace(kind="file", name="opt/painted-wolf-code/bin/pw")}))
-            stack.enter_context(patch.object(owner.os.path, "lexists", return_value=False))
+            stack.enter_context(patch.object(owner.os.path, "lexists", side_effect=lambda path: mutation == "existing-webview" and str(path).endswith("/.local/share/dev.paintedwolf.code")))
             stack.enter_context(patch.object(owner, "command", side_effect=command))
             stack.enter_context(patch.object(Path, "lstat", return_value=root_identity))
             rebound = stack.enter_context(patch.object(owner, "bind", return_value={"payload": {"status": "passed"}}))
@@ -70,6 +70,7 @@ class NativeWorkflowTests(unittest.TestCase):
             result, calls, output = self.execute(directory)
             self.assertEqual(result["status"], "passed")
             self.assertTrue(result["observations"]["installed"])
+            self.assertTrue(result["observations"]["webview_profile_absent"])
             install = next(call for call in calls if "apt-get" in call)
             self.assertEqual(install[-1], "/var/tmp/paintedwolf-native-1234567890/package.deb")
             self.assertFalse(any("--purge" in call for call in calls))
@@ -78,7 +79,7 @@ class NativeWorkflowTests(unittest.TestCase):
             self.assertTrue(result["evidence"])
 
     def test_existing_package_or_changed_snapshot_never_calls_installer(self):
-        for mutation, status in (("already-installed", "unverified"), ("database-unavailable", "unverified"), ("snapshot-changed", "failed")):
+        for mutation, status in (("existing-webview", "unverified"), ("already-installed", "unverified"), ("database-unavailable", "unverified"), ("snapshot-changed", "failed")):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 result, calls, _ = self.execute(directory, mutation=mutation)
                 self.assertEqual(result["status"], status)
