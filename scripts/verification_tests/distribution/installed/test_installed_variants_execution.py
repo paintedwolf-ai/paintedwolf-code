@@ -94,3 +94,21 @@ class InstalledPlanVariantTests(unittest.TestCase):
                 mutate(invalid)
                 with self.assertRaises(ValueError):
                     campaign.validate_plan(invalid, {}, {})
+
+
+class CatalogCapacityTests(unittest.TestCase):
+    def test_transport_planning_covers_catalog_and_tightens_selected_artifacts(self):
+        from linux_release import installed_capacity as capacity
+        rows = [{'installation': installation, 'architecture': 'amd64', 'environment': 'desktop',
+                 'capability': 'windowing', 'cases': ['resize', 'move']} for installation in ('deb', 'rpm')]
+        with patch.object(capacity, 'expand', return_value=rows), \
+                patch.object(capacity, 'requirements', return_value=[{'id': 'floor-scale-100'}, {'id': 'newer-scale-100'}]):
+            maximum = capacity.limits({})
+            selected = capacity.limits({}, {'artifacts': [{'id': 'selected', 'installation': 'rpm', 'architecture': 'amd64'}]})
+            self.assertEqual((maximum['targets'], maximum['case_observations']), (4, 8))
+            self.assertEqual((selected['targets'], selected['case_observations']), (2, 4))
+            self.assertGreater(maximum['max_files'], selected['max_files'])
+            self.assertEqual((maximum['max_bytes'], maximum['max_file']), (64 << 30, 16 << 30))
+            self.assertGreaterEqual(selected['max_files'], 4 * (capacity.MAX_STREAMS + 1) * 2)
+            with self.assertRaises(ValueError):
+                capacity.limits({}, {'artifacts': []})

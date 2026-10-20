@@ -74,6 +74,20 @@ def _select(api, repository: str, repository_id: int, run_id: int, artifact_name
             or run.get("conclusion") != "success" or type(attempt) is not int or attempt < 1
             or not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit)):
         raise ValueError("campaign inputs require a successful protected main release controller")
+    artifact = artifact_for_run(api, repository, repository_id, run_id, commit, artifact_name)
+    return {"repository": repository, "repository_id": repository_id, "run_id": run_id,
+            "run_attempt": attempt, "controller_commit": commit, **artifact}
+
+
+def artifact_for_run(api, repository: str, repository_id: int, run_id: int,
+                     commit: str, artifact_name: str) -> dict:
+    """Select digest-bound bytes after a domain owner independently admits the run."""
+    if (not isinstance(repository,str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repository)
+            or type(repository_id) is not int or repository_id<1 or type(run_id) is not int or run_id<1
+            or not isinstance(commit,str) or not re.fullmatch(r"[a-f0-9]{40}",commit)
+            or not isinstance(artifact_name,str) or not re.fullmatch(r"[A-Za-z0-9_.-]+",artifact_name)):
+        raise ValueError("artifact selection requires independently admitted run identities and a fixed role")
+    prefix = f"repos/{repository}/actions"
     # Select by artifact ID. A name-based download can combine stale rerun artifacts.
     matches, page = [], 1
     while True:
@@ -101,9 +115,7 @@ def _select(api, repository: str, repository_id: int, run_id: int, artifact_name
             or type(producer.get("head_repository_id")) is not int or producer["head_repository_id"] != repository_id
             or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
         raise ValueError("final campaign artifact has stale or mismatched server provenance")
-    return {"repository": repository, "repository_id": repository_id, "run_id": run_id,
-            "run_attempt": attempt, "controller_commit": commit, "artifact_id": identity,
-            "artifact_bytes": artifact["size_in_bytes"],
+    return {"artifact_id": identity, "artifact_bytes": artifact["size_in_bytes"],
             "artifact_sha256": digest.removeprefix("sha256:")}
 
 
