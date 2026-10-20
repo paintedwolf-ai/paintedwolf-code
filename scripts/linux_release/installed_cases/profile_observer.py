@@ -82,7 +82,6 @@ def _database(app):
         instructions += 1000
         return int(instructions > 200000 or time.monotonic() > deadline)
     connection.set_progress_handler(progress, 1000)
-    connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1 << 20)
     try:
         connection.execute('PRAGMA query_only = ON')
         connection.execute('PRAGMA trusted_schema = OFF')
@@ -137,9 +136,11 @@ def invocations(app, session_id, tool_names):
             or len(set(tool_names)) != len(tool_names)):
         raise ValueError('profile observer requires fixed declared fixture tools')
     with _database(app) as connection:
-        found = rows(connection.execute("SELECT id,json_extract(tool_result_json,'$.tool_call_id'),json_extract(tool_result_json,'$.tool'),json_extract(tool_result_json,'$.outcome') FROM messages WHERE session_id=? AND role='tool' AND tool_result_json IS NOT NULL AND tool_result_json!='' ORDER BY id LIMIT 257", (session_id,)))
+        found = rows(connection.execute("SELECT id,length(tool_result_json),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool_call_id'),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.tool'),json_extract(CASE WHEN length(tool_result_json)<=1048576 THEN tool_result_json ELSE '{}' END,'$.outcome') FROM messages WHERE session_id=? AND role='tool' AND tool_result_json IS NOT NULL AND tool_result_json!='' ORDER BY id LIMIT 257", (session_id,)))
     result = []
-    for message_id, call_id, tool, outcome in found:
+    for message_id, length, call_id, tool, outcome in found:
+        if type(length) is not int or length > 1 << 20:
+            raise ValueError('profile observer tool result exceeds its fixed byte bound')
         if tool not in tool_names:
             continue
         if (not isinstance(call_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', call_id)
