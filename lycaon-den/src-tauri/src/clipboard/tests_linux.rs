@@ -353,7 +353,10 @@ fn clipboard_owner_child() {
     window.set_default_size(320, 200);
     window.show_all();
     let worker = std::thread::spawn(move || {
-        let outcome = std::panic::catch_unwind(|| exercise_adapter(peer));
+        let outcome = std::panic::catch_unwind(|| {
+            exercise_adapter(peer);
+            super::tests_native_paste::exercise();
+        });
         gtk::glib::MainContext::default().invoke(gtk::main_quit);
         outcome
     });

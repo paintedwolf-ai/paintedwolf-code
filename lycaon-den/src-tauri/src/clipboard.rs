@@ -81,20 +81,11 @@ pub async fn paste_into_focused_view(
     }
     #[cfg(target_os = "linux")]
     {
-        use gtk::prelude::WidgetExt;
-        use webkit2gtk::WebViewExt;
         let _ = app;
         let (reply, receiver) = tokio::sync::oneshot::channel();
         window
             .with_webview(move |view| {
-                let view = view.inner();
-                let result = if view.has_focus() {
-                    view.execute_editing_command("Paste");
-                    Ok(())
-                } else {
-                    Err("paste view is no longer focused".to_string())
-                };
-                let _ = reply.send(result);
+                let _ = reply.send(linux::paste_into_view(&view.inner()));
             })
             .map_err(|error| error.to_string())?;
         receiver.await.map_err(|_| "paste view closed".to_string())?
@@ -108,3 +99,6 @@ pub async fn paste_into_focused_view(
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests_linux;
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests_native_paste;

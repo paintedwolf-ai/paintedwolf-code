@@ -145,3 +145,13 @@ mod tests {
         }
     }
 }
+
+/// Runs the native editing action without transporting clipboard contents to IPC.
+pub(super) fn paste_into_view(view: &webkit2gtk::WebView) -> Result<(), String> {
+    use webkit2gtk::WebViewExt;
+    if !view.has_focus() {
+        return Err("paste view is no longer focused".to_string());
+    }
+    view.execute_editing_command("Paste");
+    Ok(())
+}
