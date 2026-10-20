@@ -35,6 +35,9 @@ type OutcomeLatch struct {
 
 func (l *OutcomeLatch) Record(executionID string, result toolcontract.ProducerResult, requiredInputComplete bool) error {
 	err := result.Validate()
+	if executionID == "" {
+		err = fmt.Errorf("producer result requires execution identity")
+	}
 	var kind HostStopKind
 	switch {
 	case err != nil:

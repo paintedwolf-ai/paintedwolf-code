@@ -39,6 +39,9 @@ func TestRunPipelineEarlyExitDownstreamEndsPromptlyAndSucceeds(t *testing.T) {
 			t.Fatalf("stage %d failed (%+v); SIGPIPE on a non-final stage is not a failure", i, stage)
 		}
 	}
+	if !res.Stages[0].ExpectedConsumerClosure() || res.Stages[1].ExpectedConsumerClosure() {
+		t.Fatal("executor did not retain classified upstream closure separately")
+	}
 	if strings.TrimSpace(string(res.Output)) != "1" {
 		t.Fatalf("output = %q", res.Output)
 	}
