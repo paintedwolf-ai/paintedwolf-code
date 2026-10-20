@@ -63,3 +63,33 @@ class DistributionAuthorityTests(unittest.TestCase):
         del self.binding["catalog"]
         with self.assertRaisesRegex(ValueError, "complete constructor"):
             self.invoke(Mock(return_value=True))
+
+
+class InactiveDeliveryAuthorityTests(unittest.TestCase):
+    def fixture(self):
+        from scripts.linux_release.publication_distribution import InactiveDeliveryReleaseAuthority
+        selected = Mock()
+        selected.authorize.return_value = {"provenance": {}, "metadata": {}, "non_linux_packages": {}}
+        binding = {"document": {"mode": "production", "origin": "https://downloads.paintedwolf.dev",
+                    "controller_commit": "a" * 40, "repositories": [], "aur": {"enabled": False},
+                    "nix": {"cache": {"enabled": False}}}}
+        return selected, binding, InactiveDeliveryReleaseAuthority(selected, "a" * 40)
+
+    def test_every_callback_requires_fresh_scoped_release_facts(self):
+        selected, binding, authority = self.fixture()
+        self.assertTrue(authority(binding, {}, {"accepted": True}))
+        self.assertTrue(authority(binding, {}, {"accepted": True}))
+        self.assertEqual(selected.authorize.call_count, 2)
+        selected.authorize.return_value = True
+        with self.assertRaisesRegex(ValueError, "facts"):
+            authority(binding, {}, {"accepted": True})
+
+    def test_local_control_success_cannot_announce_any_active_delivery(self):
+        mutations = [("repositories", [{"signed_generation": "local"}]), ("aur", {"enabled": True}),
+                     ("nix", {"cache": {"enabled": True}}), ("controller_commit", "b" * 40)]
+        for field, value in mutations:
+            with self.subTest(field=field):
+                _, binding, authority = self.fixture()
+                binding["document"][field] = value
+                with self.assertRaisesRegex(ValueError, "availability"):
+                    authority(binding, {}, {"accepted": True})

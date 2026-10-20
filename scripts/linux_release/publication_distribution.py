@@ -67,3 +67,28 @@ def prepare(selected, destination: Path, request, catalog: Path, updater_manifes
     authority = DistributionAuthority(selected, authorize_release=authorize_release)
     return sign(destination, request, catalog, updater_manifest, publication_files,
                 authorize=authority, registry=registry, signer=signer)
+
+
+class InactiveDeliveryReleaseAuthority:
+    """Fresh independent release inputs can announce packages with delivery inactive."""
+
+    def __init__(self, selected_release, controller_commit):
+        import re
+        if not isinstance(controller_commit, str) or not re.fullmatch("[a-f0-9]{40}", controller_commit):
+            raise ValueError("release admission requires the exact protected controller")
+        self.selected_release = selected_release
+        self.controller_commit = controller_commit
+
+    def __call__(self, binding, inputs, report):
+        facts = self.selected_release.authorize(binding)
+        if (not isinstance(facts, dict) or set(facts) != {"provenance", "metadata", "non_linux_packages"}
+                or report.get("accepted") is not True):
+            raise ValueError("independent protected release facts were not freshly admitted")
+        document = binding["document"]
+        nix = document["nix"]
+        if (document["mode"] != "production" or document["origin"] != "https://downloads.paintedwolf.dev"
+                or document["controller_commit"] != self.controller_commit
+                or document["repositories"] != [] or document["aur"] != {"enabled": False}
+                or nix is not None and nix["cache"] != {"enabled": False}):
+            raise ValueError("inactive delivery admission cannot announce repository, cache or AUR availability")
+        return True
