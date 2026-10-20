@@ -5,9 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FILE=""
 EXPECTED_VERSION=""
-# A published manifest is read to be replaced or to locate a prior release, so
-# its packages need not be installable; a manifest about to publish must be,
-# unless it is withdrawn and offers nothing to install.
+# Published manifests retain their platform set and may describe withdrawn artifacts.
 EXISTING=0
 
 usage() {

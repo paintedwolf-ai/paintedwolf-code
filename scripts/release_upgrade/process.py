@@ -49,14 +49,23 @@ class Installation:
         commands = {str(self.executable): 1, **{str(path): 0 for path in helpers},
                     str(self.app / "Contents/MacOS/pw"): 2,
                     str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
-        rows = subprocess.run(["ps", "-axo", "pid=,comm="], check=True, capture_output=True, text=True, timeout=5)
-        for row in rows.stdout.splitlines():
-            fields = row.strip().split(None, 1)
-            if len(fields) == 2 and fields[1] in commands:
-                pid = int(fields[0])
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True, timeout=5)
+        rows = [row.strip().split(None, 2) for row in result.stdout.splitlines()]
+        rows = [(int(pid), int(parent), executable) for pid, parent, executable in rows if pid.isdigit() and parent.isdigit()]
+        for pid, _, executable in rows:
+            if executable in commands:
                 identity = process_identity(pid)
                 if identity:
-                    self.owned[pid] = (identity, commands[fields[1]])
+                    self.owned[pid] = (identity, commands[executable])
+        changed = True
+        while changed:
+            changed = False
+            for pid, parent, _ in rows:
+                if pid not in self.owned and parent in self.owned and process_identity(parent) == self.owned[parent][0]:
+                    identity = process_identity(pid)
+                    if identity:
+                        self.owned[pid] = (identity, 3)
+                        changed = True
 
     def observe(self, version: str):
         self.capture_owned()

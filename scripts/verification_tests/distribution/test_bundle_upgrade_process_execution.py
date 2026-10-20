@@ -46,11 +46,11 @@ class ProcessTests(unittest.TestCase):
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
         installation.owned = {}
-        table = f"10 {installation.executable}\n11 /other/Product --argument {installation.executable}\n12 {installation.app / 'Contents/MacOS/pw'}\n"
+        table = f"10 1 {installation.executable}\n11 1 /other/Product --argument {installation.executable}\n12 10 {installation.app / 'Contents/MacOS/pw'}\n13 12 /bin/resource\n14 99 /bin/unrelated\n"
         with patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout=table)), \
              patch.object(process, "process_identity", side_effect=lambda pid: f"identity:{pid}"):
             installation.capture_owned()
-        self.assertEqual(installation.owned, {10: ("identity:10", 1), 12: ("identity:12", 2)})
+        self.assertEqual(installation.owned, {10: ("identity:10", 1), 12: ("identity:12", 2), 13: ("identity:13", 3)})
 
     def test_health_requires_owned_app_parentage_and_the_expected_version(self):
         import io
