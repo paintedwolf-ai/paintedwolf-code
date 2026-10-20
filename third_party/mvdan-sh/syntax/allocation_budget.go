@@ -15,7 +15,7 @@ type AllocationBudget struct {
 }
 
 func NewAllocationBudget(maximum int64) (*AllocationBudget, error) {
-	if maximum <= 0 {
+	if maximum <= 0 || maximum > math.MaxInt64-8256 {
 		return nil, fmt.Errorf("allocation budget must be positive")
 	}
 	return &AllocationBudget{maximum: maximum}, nil
@@ -42,7 +42,7 @@ func (b *AllocationBudget) ReserveBytes(bytes int64, pos Pos) error {
 // the selected parser's accounting. It also bounds pre-GC allocation churn.
 func (b *AllocationBudget) ReserveHeap(bytes int64, pos Pos) error {
 	if bytes < 0 || bytes > math.MaxInt64-8256 {
-		return b.ReserveBytes(math.MaxInt64, pos)
+		return &BudgetError{"parser_scratch_bytes", b.maximum, math.MaxInt64, pos}
 	}
 	rounded := int64(16)
 	if bytes <= 32768 {

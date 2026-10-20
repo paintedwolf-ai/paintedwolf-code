@@ -26,7 +26,9 @@ var (
 //
 // It does not return an error; malformed brace expansions are simply skipped.
 // For example, the literal word "a{b" is left unchanged.
-func SplitBraces(word *Word) bool {
+func SplitBraces(word *Word) bool { return splitBraces(word, nil) }
+
+func splitBraces(word *Word, budget *AllocationBudget) bool {
 	if !slices.ContainsFunc(word.Parts, func(part WordPart) bool {
 		lit, ok := part.(*Lit)
 		return ok && strings.Contains(lit.Value, "{")
@@ -34,7 +36,7 @@ func SplitBraces(word *Word) bool {
 		// In the common case where a word has no braces, skip any allocs.
 		return false
 	}
-	top := &Word{}
+	top := braceNode(budget, Word{})
 	acc := top
 	var cur *BraceExp
 	var open []*BraceExp
@@ -52,13 +54,13 @@ func SplitBraces(word *Word) bool {
 		return old
 	}
 	addLit := func(lit *Lit) {
-		acc.Parts = append(acc.Parts, lit)
+		acc.Parts = braceAppend(budget, acc.Parts, lit)
 	}
 
 	for _, wp := range word.Parts {
 		lit, ok := wp.(*Lit)
 		if !ok {
-			acc.Parts = append(acc.Parts, wp)
+			acc.Parts = braceAppend(budget, acc.Parts, wp)
 			continue
 		}
 		last := 0
@@ -69,7 +71,7 @@ func SplitBraces(word *Word) bool {
 				}
 				l2 := *lit
 				l2.Value = l2.Value[last:j]
-				addLit(&l2)
+				addLit(braceNode(budget, l2))
 			}
 			switch lit.Value[j] {
 			case '\\':
@@ -77,9 +79,9 @@ func SplitBraces(word *Word) bool {
 				continue
 			case '{':
 				addlitidx()
-				acc = &Word{}
-				cur = &BraceExp{Elems: []*Word{acc}}
-				open = append(open, cur)
+				acc = braceNode(budget, Word{})
+				cur = braceNode(budget, BraceExp{Elems: braceAppend(budget, []*Word(nil), acc)})
+				open = braceAppend(budget, open, cur)
 			case ',':
 				if cur == nil {
 					continue
@@ -90,15 +92,15 @@ func SplitBraces(word *Word) bool {
 					// a list expansion where the ".." are literal.
 					merged := cur.Elems[0]
 					for _, elem := range cur.Elems[1:] {
-						merged.Parts = append(merged.Parts, litDots)
-						merged.Parts = append(merged.Parts, elem.Parts...)
+						merged.Parts = braceAppend(budget, merged.Parts, litDots)
+						merged.Parts = braceAppend(budget, merged.Parts, elem.Parts...)
 					}
 					cur.Sequence = false
 					cur.Elems = cur.Elems[:1]
 					cur.Elems[0] = merged
 				}
-				acc = &Word{}
-				cur.Elems = append(cur.Elems, acc)
+				acc = braceNode(budget, Word{})
+				cur.Elems = braceAppend(budget, cur.Elems, acc)
 			case '.':
 				if cur == nil {
 					continue
@@ -112,8 +114,8 @@ func SplitBraces(word *Word) bool {
 				}
 				addlitidx()
 				cur.Sequence = true
-				acc = &Word{}
-				cur.Elems = append(cur.Elems, acc)
+				acc = braceNode(budget, Word{})
+				cur.Elems = braceAppend(budget, cur.Elems, acc)
 				j++
 			case '}':
 				if cur == nil {
@@ -124,18 +126,18 @@ func SplitBraces(word *Word) bool {
 				if len(br.Elems) == 1 {
 					// return {x} to a non-brace
 					addLit(litLeftBrace)
-					acc.Parts = append(acc.Parts, br.Elems[0].Parts...)
+					acc.Parts = braceAppend(budget, acc.Parts, br.Elems[0].Parts...)
 					addLit(litRightBrace)
 					break
 				}
 				if !br.Sequence {
-					acc.Parts = append(acc.Parts, br)
+					acc.Parts = braceAppend(budget, acc.Parts, br)
 					break
 				}
 				var chars [2]bool
 				broken := false
 				for i, elem := range br.Elems[:2] {
-					val := elem.Lit()
+					val := braceLiteral(elem, budget)
 					// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
 					if _, err := strconv.ParseInt(val, 10, 64); err == nil {
 					} else if len(val) == 1 && asciiLetter(val[0]) {
@@ -146,7 +148,7 @@ func SplitBraces(word *Word) bool {
 				}
 				if len(br.Elems) == 3 {
 					// increment must be a number
-					val := br.Elems[2].Lit()
+					val := braceLiteral(br.Elems[2], budget)
 					// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
 					if _, err := strconv.ParseInt(val, 10, 64); err != nil {
 						broken = true
@@ -161,7 +163,7 @@ func SplitBraces(word *Word) bool {
 					broken = true
 				}
 				if !broken {
-					acc.Parts = append(acc.Parts, br)
+					acc.Parts = braceAppend(budget, acc.Parts, br)
 					break
 				}
 				// return broken {x..y[..incr]} to a non-brace
@@ -170,7 +172,7 @@ func SplitBraces(word *Word) bool {
 					if i > 0 {
 						addLit(litDots)
 					}
-					acc.Parts = append(acc.Parts, elem.Parts...)
+					acc.Parts = braceAppend(budget, acc.Parts, elem.Parts...)
 				}
 				addLit(litRightBrace)
 			default:
@@ -183,7 +185,7 @@ func SplitBraces(word *Word) bool {
 		} else {
 			left := *lit
 			left.Value = left.Value[last:]
-			addLit(&left)
+			addLit(braceNode(budget, left))
 		}
 	}
 	// open braces that were never closed fall back to non-braces
@@ -198,7 +200,7 @@ func SplitBraces(word *Word) bool {
 					addLit(litComma)
 				}
 			}
-			acc.Parts = append(acc.Parts, elem.Parts...)
+			acc.Parts = braceAppend(budget, acc.Parts, elem.Parts...)
 		}
 	}
 	*word = *top

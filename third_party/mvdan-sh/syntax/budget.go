@@ -14,6 +14,7 @@ import (
 type Budget struct {
 	MaxBytes int64
 	Pool     *AllocationBudget
+	implicit bool
 }
 
 // WithBudget applies a caller-reserved scratch budget to Parse. Other parsing
@@ -47,6 +48,7 @@ func (p *Parser) beginBudget() {
 	p.budgetActive = p.budgetConfigured
 	if p.budgetActive && p.budget.Pool == nil {
 		p.budget.Pool = &AllocationBudget{maximum: p.budget.MaxBytes}
+		p.budget.implicit = true
 	}
 	p.reserveHeap(int64(unsafe.Sizeof(*p)))
 }
@@ -55,6 +57,10 @@ func (p *Parser) unsupportedBudgetEntry() error {
 }
 func (p *Parser) finishBudget(file **File, err *error) {
 	p.budgetActive = false
+	if p.budget.implicit {
+		p.budget.Pool = nil
+		p.budget.implicit = false
+	}
 	if value := recover(); value != nil {
 		if abort, ok := value.(budgetAbort); ok {
 			*file, *err = nil, abort.err
