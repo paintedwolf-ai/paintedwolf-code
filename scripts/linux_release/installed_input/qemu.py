@@ -54,6 +54,15 @@ def ancestors(path, owners):
             raise ValueError('input authority has an unsafe physical ancestor')
 
 
+def process_stat(path):
+    with path.open('rb') as stream:
+        raw = stream.read(8193)
+    fields = raw.rpartition(b') ')[2].split()
+    if len(raw) > 8192 or len(fields) < 20:
+        raise ValueError('leased QEMU stat exceeds its fixed shape or bound')
+    return fields
+
+
 def selected(value, vm_id):
     fields = {'format_version', 'vm_id', 'uid', 'pid', 'start_time_ticks', 'argv_sha256', 'qmp', 'ssh'}
     if not isinstance(value, dict) or set(value) != fields or type(value['format_version']) is not int or value['format_version'] != 1:
@@ -81,7 +90,7 @@ class Actor:
         self.descriptor, self.path, self._identity = descriptor, path, copy.deepcopy(identity)
         self.value, self.nonce = copy.deepcopy(value), execution_nonce
         self.connection, self.buffer, self.command_id = None, b'', 0
-        self.transactions, self.current, self.ordinal = set(), None, 0
+        self.transactions, self.current, self.operation, self.ordinal = set(), None, None, 0
         self.failed, self.closed = False, False
         self.lock = threading.Lock()
 
@@ -98,11 +107,7 @@ class Actor:
             raise ValueError('root input lease bytes changed during the target')
         pid, uid = self.value['pid'], self.value['uid']
         process = Path('/proc') / str(pid)
-        with (process / 'stat').open('rb') as stream:
-            before = stream.read(8193)
-        if len(before) > 8192:
-            raise ValueError('leased QEMU stat exceeds its bound')
-        fields = before.rpartition(b') ')[2].split()
+        fields = process_stat(process / 'stat')
         with (process / 'status').open('r') as stream:
             status = stream.read(65537)
         if len(status) > 65536:
@@ -113,7 +118,7 @@ class Actor:
         if (len(fields) < 20 or int(fields[19]) != self.value['start_time_ticks']
                 or uids != [[str(uid)] * 4] or not argv or len(argv) > 65536
                 or hashlib.sha256(argv).hexdigest() != self.value['argv_sha256']
-                or (process / 'stat').read_bytes().rpartition(b') ')[2].split()[19] != fields[19]):
+                or process_stat(process / 'stat')[19] != fields[19]):
             raise ValueError('leased QEMU process changed identity')
         path = Path(self.value['qmp']['path'])
         if path.resolve(strict=True) != path:
@@ -184,13 +189,13 @@ class Actor:
                         or len(sequence) > 256):
                     raise ValueError('input step is outside the sealed transaction')
                 if transaction_id != self.current:
-                    if (self.current is not None and self.ordinal != len(sequence)
+                    if (self.current is not None and self.ordinal != len(steps(self.operation))
                             or transaction_id in self.transactions or len(self.transactions) >= 128 or ordinal != 0):
                         raise ValueError('input transactions cannot overlap or replay')
                     self.transactions.add(transaction_id)
-                    self.current, self.ordinal = transaction_id, 0
-                if ordinal != self.ordinal:
-                    raise ValueError('input step is not the next fixed ordinal')
+                    self.current, self.operation, self.ordinal = transaction_id, operation, 0
+                if operation != self.operation or ordinal != self.ordinal:
+                    raise ValueError('input operation or ordinal differs from the pinned transaction')
                 self.validate()
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':

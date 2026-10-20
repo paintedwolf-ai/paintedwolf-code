@@ -92,6 +92,14 @@ class QemuInputTests(unittest.TestCase):
             actor.send(OPERATION, 0, transaction_id='c' * 32)
         self.assertEqual(actor.command.call_count, 2)
 
+    def test_operation_is_pinned_even_if_a_later_catalog_adds_another_operation(self):
+        actor = self.actor()
+        actor.send(OPERATION, 0, transaction_id='b' * 32)
+        with patch.object(qemu, 'steps', return_value=steps(OPERATION)):
+            with self.assertRaises(ValueError):
+                actor.send('future-declared-operation', 1, transaction_id='b' * 32)
+        self.assertEqual(actor.command.call_count, 2)
+
     def test_unleased_or_writable_files_never_connect(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory).resolve() / 'lease'
