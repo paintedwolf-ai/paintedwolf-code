@@ -1,4 +1,4 @@
-package commandsurface
+package toolcontract
 
 import (
 	"bytes"
