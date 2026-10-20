@@ -1,0 +1,17 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/release-r2-live-test.sh",
+  "kind": "module",
+  "workstream": "linux-public-distribution-contract",
+  "disposition": "retain",
+  "reason": "Retain the existing isolated release rehearsal lifecycle at 362 code lines, with no growth allowance. This change only tightens its two catalog projections to rows that are both public and application-updated; package-managed Linux artifacts cannot become synthetic updater archives. Object lifecycle, signing, locks and recovery remain in their existing owners. The coherent scenario sequence still owns its scratch prefix from creation through cleanup; extracting that sequence for two predicates would hide its transaction and recovery context. At ccfcf7513a, managed runner verification passed 517 tests with one platform skip, including the public package/updater ownership and malformed-catalog contracts. Distribution construction/signing now has a separate owner and never expands this shell lifecycle. Credentialed cross-controller transport qualification remains separately scoped.",
+  "reviewed_commit": "ccfcf7513a1df082c80daec64f78b24589a98d0c",
+  "ceiling": 362,
+  "boundaries": {
+    "scripts/release-r2-live-test.sh": "b2dd5be9d3e22360324eb1633f607513beb6f8df5be97c40c2692520153b6c37",
+    "scripts/release_distribution_contract/platforms.py": "83fc254566a5a53577c2c3c3111878d71c27b765c7f6e24c7161401f2e511bd5",
+    "scripts/release-assemble-updater-manifest.py": "3fe5e941bc197b492a897e70fe39385a574fba665368aec4d32d25dc36d47a63",
+    "scripts/verification_tests/distribution/test_release_distribution_execution.py": "38706703f5effa00923cf37e6065e239b0454a6da6f8cf4e999196c493efbef5",
+    "scripts/verification_tests/distribution/test_release_platforms_execution.py": "4c21609ab08d5cf35c9d47992fa3d164a6aaa8ca7a662ffbde6f947274e01728"
+  }
+}
