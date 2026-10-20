@@ -9,28 +9,22 @@ import (
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				Uses string
-				With map[string]string
-			}
-		}
-	}
-	contractcheck.FailErr(t, "parse release controller", yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release.yml")), &workflow))
-	for name, job := range workflow.Jobs {
+	for name, job := range hostedJobs(t, "release") {
 		count := 0
 		for _, step := range job.Steps {
 			if !strings.HasPrefix(step.Uses, "actions/checkout@") || step.With["repository"] != "" {
 				continue
 			}
 			if step.With["path"] == ".release-controller" {
-				if step.With["ref"] != "refs/heads/main" {
-					t.Errorf("%s controller is not pinned to refs/heads/main", name)
+				want := "refs/heads/main"
+				if name == "prepare-bundle-upgrade" {
+					want = "${{ github.workflow_sha }}"
+				}
+				if step.With["ref"] != want {
+					t.Errorf("%s controller uses %q, want %q", name, step.With["ref"], want)
 				}
 				continue
 			}
@@ -44,10 +38,36 @@ func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
 			want := "${{ needs.classify.outputs.source_sha }}"
 			if name == "classify" {
 				want = "${{ steps.source.outputs.source_sha }}"
+			} else if name == "bundle-upgrade" {
+				want = "${{ github.workflow_sha }}"
 			}
 			if step.With["ref"] != want {
 				t.Errorf("%s checkout %d uses %q, want admitted source %q", name, count, step.With["ref"], want)
 			}
+		}
+	}
+}
+
+func TestUpgradeRehearsalCheckoutsPreserveSourceAndControllerIdentity(t *testing.T) {
+	jobs := hostedJobs(t, "release")
+	for name, expected := range map[string]map[string]string{
+		"prepare-bundle-upgrade": {"": "${{ needs.classify.outputs.source_sha }}", ".release-controller": "${{ github.workflow_sha }}"},
+		"bundle-upgrade":         {"": "${{ github.workflow_sha }}"},
+	} {
+		seen := map[string]bool{}
+		for _, step := range jobs[name].Steps {
+			if !strings.HasPrefix(step.Uses, "actions/checkout@") {
+				continue
+			}
+			path := step.With["path"]
+			want, known := expected[path]
+			if !known || seen[path] || step.With["ref"] != want || step.With["repository"] != "" || step.With["persist-credentials"] != "false" {
+				t.Errorf("%s has an unexpected or mutable checkout at %q: %v", name, path, step.With)
+			}
+			seen[path] = true
+		}
+		if len(seen) != len(expected) {
+			t.Errorf("%s checks out %v, want source/controller paths %v", name, seen, expected)
 		}
 	}
 }
