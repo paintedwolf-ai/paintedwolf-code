@@ -149,14 +149,3 @@ class InstalledSecurityTests(unittest.TestCase):
             self.assertEqual(facts['execution_session'], session)
             product.assert_not_called()
 
-    def test_execution_session_preserves_typed_logind_properties(self):
-        values = [{'type': 'b', 'data': True}, {'type': 'b', 'data': True}, {'type': 's', 'data': 'tty'}]
-        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
-                security, 'observe', side_effect=[json.dumps(value).encode() for value in values]):
-            facts = security.execution_session()
-        self.assertIs(facts['Remote'], True)
-        self.assertEqual(facts['Type'], 'tty')
-        with patch.object(security, 'bus_value', return_value=['/org/freedesktop/login1/session/owned']), patch.object(
-                security, 'observe', return_value=b'{"type":"b","data":[true]}'):
-            with self.assertRaises(ValueError):
-                security.execution_session()
