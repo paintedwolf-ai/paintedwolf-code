@@ -31,6 +31,8 @@ const (
 	CodeNoParent Code = "no_parent"
 	// CodeProcessChanged: the pid or its parent changed during verification.
 	CodeProcessChanged Code = "process_changed"
+	// CodeProcessTraced: a debugger already controls a verified process.
+	CodeProcessTraced Code = "process_traced"
 )
 
 // Refusal is a structured verification failure.
@@ -83,6 +85,9 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if err != nil {
 		return Chain{}, refuse(CodeProcessGone, RoleEngine, pid, err.Error())
 	}
+	if engine.TracerPID != 0 {
+		return Chain{}, refuse(CodeProcessTraced, RoleEngine, pid, "")
+	}
 	if engine.UID != uid || engine.EUID != uid {
 		return Chain{}, refuse(CodeUIDMismatch, RoleEngine, pid, fmt.Sprintf("uid %d/%d, caller %d", engine.UID, engine.EUID, uid))
 	}
@@ -92,6 +97,9 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	launcher, err := v.snapshot(engine.PPID)
 	if err != nil {
 		return Chain{}, refuse(CodeProcessGone, RoleDesktopApp, engine.PPID, err.Error())
+	}
+	if launcher.TracerPID != 0 {
+		return Chain{}, refuse(CodeProcessTraced, RoleDesktopApp, launcher.PID, "")
 	}
 	if launcher.UID != uid || launcher.EUID != uid {
 		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uid %d/%d, caller %d", launcher.UID, launcher.EUID, uid))
@@ -123,12 +131,18 @@ func (v Verifier) Recheck(chain Chain) error {
 	if err != nil {
 		return refuse(CodeProcessGone, RoleEngine, chain.Engine.PID, err.Error())
 	}
+	if engine.TracerPID != 0 {
+		return refuse(CodeProcessTraced, RoleEngine, engine.PID, "")
+	}
 	if !engine.Same(chain.Engine) {
 		return refuse(CodeProcessChanged, RoleEngine, chain.Engine.PID, "")
 	}
 	launcher, err := v.snapshot(chain.Launcher.PID)
 	if err != nil {
 		return refuse(CodeProcessGone, RoleDesktopApp, chain.Launcher.PID, err.Error())
+	}
+	if launcher.TracerPID != 0 {
+		return refuse(CodeProcessTraced, RoleDesktopApp, launcher.PID, "")
 	}
 	if !launcher.Same(chain.Launcher) {
 		return refuse(CodeProcessChanged, RoleDesktopApp, chain.Launcher.PID, "")
