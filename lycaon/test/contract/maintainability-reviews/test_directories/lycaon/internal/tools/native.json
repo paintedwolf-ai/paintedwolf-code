@@ -4,12 +4,12 @@
   "kind": "test_suite",
   "workstream": "tool-domains",
   "disposition": "retain",
-  "reason": "Native tools already extract command, page, survey and other bounded families. The root retains host-coupled workspace reads and the single source write door, with contract tests beside callers. Further package extraction solely to reduce counts would expose internal effect machinery.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 71,
+  "reason": "The 73 native test files retain operation-adjacent contracts for the host-coupled write door and existing native families. P03 adds a focused shared structured/typed entry fixture rather than duplicate mutation algorithms. Keep these tests beside the operation they exercise at this measured ceiling; real write/refusal fixtures passed and broader native failures were limited to absent bundled Git.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
+  "ceiling": 73,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/read_blobstore_compressed_test.go": "25d3a535342e58cdcd8ee3cff809fa2bcc990059869378b9948131a656dbfe80"
+    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
   },
-  "reviewed_shape": "f7eb5df7aa58c62fad72505434d8654162e2c3c98322289fddbc7748b60c6d65"
+  "reviewed_shape": "376839041673f016de2e3ef3b35f4083ca1f44726101eda9c5ca26ffc6c3e07d"
 }

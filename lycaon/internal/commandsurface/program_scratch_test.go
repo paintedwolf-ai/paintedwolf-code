@@ -58,3 +58,7 @@ func TestProgramParserCancellationAndAdmissionRefusal(t *testing.T) {
 		t.Fatalf("canceled parser admitted plan: %v", err)
 	}
 }
+
+func (f scratchAdmissionFunc) ReserveProgramState(context.Context, int64) (func(), error) {
+	return func() {}, nil
+}

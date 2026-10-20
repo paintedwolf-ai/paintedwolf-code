@@ -11,7 +11,11 @@ import (
 // It does not count final syntax nodes or AST parent-edge depth. Callers must
 // reserve MaxBytes against their aggregate memory budget before constructing
 // the parser, then apply exact selected-tree limits before admitting their plan.
-type Budget struct{ MaxBytes int64 }
+type Budget struct {
+	MaxBytes int64
+	Pool     *AllocationBudget
+	implicit bool
+}
 
 // WithBudget applies a caller-reserved scratch budget to Parse. Other parsing
 // entry points refuse this option rather than silently running without bounds.
@@ -42,6 +46,10 @@ const parserFrameBytes int64 = 4096
 func (p *Parser) beginBudget() {
 	p.scratchUsed, p.scratchFrames = 0, 0
 	p.budgetActive = p.budgetConfigured
+	if p.budgetActive && p.budget.Pool == nil {
+		p.budget.Pool = &AllocationBudget{maximum: p.budget.MaxBytes}
+		p.budget.implicit = true
+	}
 	p.reserveHeap(int64(unsafe.Sizeof(*p)))
 }
 func (p *Parser) unsupportedBudgetEntry() error {
@@ -49,6 +57,10 @@ func (p *Parser) unsupportedBudgetEntry() error {
 }
 func (p *Parser) finishBudget(file **File, err *error) {
 	p.budgetActive = false
+	if p.budget.implicit {
+		p.budget.Pool = nil
+		p.budget.implicit = false
+	}
 	if value := recover(); value != nil {
 		if abort, ok := value.(budgetAbort); ok {
 			*file, *err = nil, abort.err
@@ -62,13 +74,8 @@ func (p *Parser) reserveScratch(bytes int64) {
 	if !p.budgetActive {
 		return
 	}
-	used := p.scratchUsed + p.scratchFrames
-	observed := int64(math.MaxInt64)
-	if bytes >= 0 && used <= math.MaxInt64-bytes {
-		observed = used + bytes
-	}
-	if observed > p.budget.MaxBytes {
-		panic(budgetAbort{&BudgetError{"parser_scratch_bytes", p.budget.MaxBytes, observed, p.pos}})
+	if err := p.budget.Pool.ReserveBytes(bytes, p.pos); err != nil {
+		panic(budgetAbort{err.(*BudgetError)})
 	}
 	p.scratchUsed += bytes
 }
@@ -83,6 +90,7 @@ func (p *Parser) enterFrame() {
 func (p *Parser) leaveFrame() {
 	if p.budgetActive {
 		p.scratchFrames -= parserFrameBytes
+		p.budget.Pool.releaseFrame(parserFrameBytes)
 	}
 }
 
@@ -92,19 +100,11 @@ func (p *Parser) reserveHeap(bytes int64) {
 	if !p.budgetActive {
 		return
 	}
-	if bytes < 0 || bytes > math.MaxInt64-8256 {
-		p.reserveScratch(math.MaxInt64)
-		return
+	before := p.budget.Pool.UsedBytes()
+	if err := p.budget.Pool.ReserveHeap(bytes, p.pos); err != nil {
+		panic(budgetAbort{err.(*BudgetError)})
 	}
-	rounded := int64(16)
-	if bytes <= 32768 {
-		for rounded < bytes {
-			rounded *= 2
-		}
-	} else {
-		rounded = (bytes + 8191) / 8192 * 8192
-	}
-	p.reserveScratch(rounded + 64)
+	p.scratchUsed += p.budget.Pool.UsedBytes() - before
 }
 func budgetNode[T any](p *Parser, value T) *T {
 	p.reserveHeap(int64(unsafe.Sizeof(value)))
@@ -181,3 +181,7 @@ func (p *Parser) budgetFormat(format string, args ...any) string {
 	p.reserveHeap(bytes)
 	return fmt.Sprintf(format, args...)
 }
+
+// ScratchBytes reports this parse's cumulative charged heap allocations. Shared
+// pool usage additionally includes caller allocations and subsequent phases.
+func (p *Parser) ScratchBytes() int64 { return p.scratchUsed }

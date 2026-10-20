@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/toolcontract/contract.go",
+  "kind": "module",
+  "workstream": "portable-command-operations",
+  "disposition": "retain",
+  "reason": "Retain the existing 386-line compiled contract vocabulary and predicates. The only P03 body change returns a detached slice through Contract.Clone; owner/capability/lifecycle meanings are unchanged. Extracting these interrelated enum predicates solely for this warning would scatter the declaration seam. Detached compiled-contract and registry tests passed; no source growth is admitted.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
+  "ceiling": 386,
+  "boundaries": {
+    "lycaon/internal/toolcontract/operation_test.go": "9800bea0ae4a2f271f385ed8022c247ea1fc31e35119679e24496f9f82d78826",
+    "lycaon/internal/tools/registry_contract_test.go": "34865f3ee9d32298398b6c298b9f25f8f087f08394465d07d4e493797e5e44b1"
+  }
+}
