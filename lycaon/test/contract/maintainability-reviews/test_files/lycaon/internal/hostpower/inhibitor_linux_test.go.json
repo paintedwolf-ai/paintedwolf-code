@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/hostpower/inhibitor_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "hostpower-fixture-readiness",
+  "disposition": "retain",
+  "reason": "The suite shares one isolated D-Bus fixture across logind and portal lease lifetime, denial, attribution, and disconnect contracts. Keep that fixture beside its consumers within a 525-line ceiling; readiness requires the same bounded authenticated connection used by each consumer.",
+  "reviewed_commit": "b6120abc30359d6ea98b6f32a3d10deed80066be",
+  "ceiling": 525,
+  "boundaries": {
+    "lycaon/internal/hostpower/inhibitor_linux_test.go": "231182d53287bf2435fb9cb03e8e045dee3c0b8dbe801d6dd287fa8ecd70fa54",
+    "lycaon/internal/linuxbus/connection_linux.go": "e9637bdc91c89c3a151930a080a4f9d70b680acd830e958e044e64843af36ae2"
+  }
+}

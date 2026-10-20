@@ -62,14 +62,20 @@ func startFixtureBus(t *testing.T) *fixtureDaemon {
 	daemon := &fixtureDaemon{path: path, cmd: cmd}
 	t.Cleanup(daemon.stop)
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
+	defer cancel()
+	var lastErr error
+	for ctx.Err() == nil {
+		connection, err := linuxbus.Connect(ctx, path)
+		if err == nil {
+			_ = connection.Close()
 			return daemon
 		}
+		lastErr = err
 		time.Sleep(time.Millisecond)
 	}
 	daemon.stop()
-	t.Fatalf("isolated bus did not start: %s", stderr.String())
+	t.Fatalf("isolated bus did not start: %v; %s", lastErr, stderr.String())
 	return nil
 }
 
@@ -285,9 +291,7 @@ func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
 	return servePortalWith(t, path, deny, nil)
 }
 
-// servePortalWith serves the portal with an introspection document naming the
-// interfaces it implements, as real portals do; a nil registry is an older
-// portal without the host registry.
+// servePortalWith advertises implemented interfaces through introspection.
 func servePortalWith(t *testing.T, path string, deny bool, registry *fixtureRegistry) *fixturePortal {
 	t.Helper()
 	server, err := linuxbus.Connect(t.Context(), path)
