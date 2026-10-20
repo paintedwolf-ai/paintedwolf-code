@@ -174,7 +174,7 @@ describe("AnchoredSurface", () => {
     expect(navigate).toHaveBeenCalledOnce();
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
       fireEvent.keyDown(item, { key: "Escape", ...composition });
-      expect(screen.getByRole("menu")).toBeInTheDocument();
+      expect(screen.getByRole("menu").isConnected).toBe(true);
     }
     fireEvent.keyDown(item, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
@@ -219,7 +219,7 @@ describe("AnchoredSurface", () => {
         fireEvent.keyDown(openItem, { key: "ArrowDown", ...composition });
         fireEvent.keyDown(openItem, { key: "Escape", ...composition });
         expect(document.activeElement).toBe(openItem);
-        expect(screen.getByRole("menu")).toBeInTheDocument();
+        expect(screen.getByRole("menu").isConnected).toBe(true);
       }
       fireEvent.keyDown(openItem, { key: "ArrowDown" });
       expect(document.activeElement).toBe(renameItem);
