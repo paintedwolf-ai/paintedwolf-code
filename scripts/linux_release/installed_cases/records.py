@@ -11,6 +11,10 @@ class CaseUnavailable(ValueError):
     """A required native interaction cannot run in the selected guest state."""
 
 
+class CaseFailed(ValueError):
+    """A captured installed product or interaction failed its required contract."""
+
+
 STATUSES = {"passed", "failed", "unverified"}
 MAX_STREAMS = 16
 MAX_STREAM_BYTES = 8 << 20
