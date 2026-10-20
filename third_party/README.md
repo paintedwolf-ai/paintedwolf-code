@@ -85,3 +85,23 @@ valid 8192-node/depth-64/1-MiB units, dense and malformed deep syntax, parser re
 unsupported entry points and unrelated panics. The exact selected-tree limits
 remain host admission checks before host-plan allocation. These source-level
 controls do not establish installed-platform qualification.
+
+
+## Secret detector enumeration
+
+`gitleaks/` contains the complete selected Go module source for
+`github.com/zricethezav/gitleaks/v8` v8.30.1, commit
+`8d1f98c7967eb1e79cb44ac6241a124e145d2165`.
+The release archive was verified against its Go module checksum before extraction:
+`h1:PmEvCfVI7ti9dV3s5aMZUY7sS2GxRvG3yzih7E+cS3w=`.
+The module metadata checksum is
+`h1:rTDwxRjufMKAkhTI/Mijd07nday1yOhf9qywjwz5Irw=`.
+The upstream license and source notices remain in the module directory.
+
+P07 adds a bounded detection entry around the same catalog, decoding, allowlist,
+keyword and provenance algorithms. Finding/index enumeration must reserve its
+storage before allocation. Existing unbounded entries retain their upstream
+behavior; complete command stream projection uses the bounded entry only.
+The narrow patch and focused controls record the supported accounting envelope.
+
+The gitleaks snapshot omits upstream command generators, tests, fixtures, repository metadata, and unrelated documentation. It retains the transitive runtime packages, embedded default configuration, module metadata, and license. The complete original archive was verified against the module hash before selection; omitted files are not needed for the selected runtime and include upstream credential-shaped test examples.
