@@ -119,7 +119,9 @@ class DesktopUI:
                 if node.getRole() == role and self.visible(node) and node.name == name:
                     matches.append((identity, node))
         if len(matches) != 1:
-            raise CaseUnavailable('normal-native-control-is-missing-or-ambiguous')
+            error = CaseUnavailable('normal-native-control-is-missing-or-ambiguous')
+            error.observations = {'desktop_control': {'role': int(role), 'name': name, 'match_count': len(matches)}}
+            raise error
         identity, node = matches[0]
         if process_identity(identity['pid']) != identity or not owned_process(identity['pid'], self.app):
             raise ValueError('installed control owner changed before its normal action')

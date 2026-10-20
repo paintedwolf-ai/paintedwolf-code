@@ -77,8 +77,10 @@ class DesktopUIOwnershipTests(unittest.TestCase):
     def test_foreign_reused_or_ambiguous_control_is_never_activated(self):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button, button])
-        with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+        with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable) as refusal:
             actor.click('Send')
+        self.assertEqual(refusal.exception.observations['desktop_control'],
+                         {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2})
         api, _ = surface([button])
         with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
             with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):

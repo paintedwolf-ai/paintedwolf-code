@@ -40,3 +40,18 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertEqual(ui.fill.call_args_list[0].args, (1, 'Contents of ' + str(path), workspace.AFTER))
             self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Editor command or search', 'qualification needle'))
             self.assertIn('applied-edit-review-interaction', result['remaining_requirements'])
+
+    def test_missing_editor_retains_bound_process_and_capture_evidence(self):
+        app = MagicMock()
+        app.__enter__.return_value = app
+        app.observations = {'engine_identity': {'pid': 123}, 'capture_complete': True}
+        app.streams.return_value = {'app-stderr': b'owned capture'}
+        error = workspace.CaseUnavailable('missing')
+        error.observations = {'desktop_control': {'role': 1, 'name': 'Contents of fixture', 'match_count': 0}}
+        with patch.object(workspace, 'InstalledApp', return_value=app), patch.object(
+                workspace, 'edit_and_find', side_effect=error):
+            with self.assertRaises(workspace.CaseUnavailable) as refusal:
+                workspace.execute({}, 'files', 'edit-search-review', None)
+        self.assertEqual(refusal.exception.observations['engine_identity'], {'pid': 123})
+        self.assertEqual(refusal.exception.observations['desktop_control']['match_count'], 0)
+        self.assertEqual(refusal.exception.streams, {'app-stderr': b'owned capture'})

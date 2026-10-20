@@ -72,6 +72,11 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
         try:
             with app:
                 observations = edit_and_find(app, path)
+        except (OSError, ValueError, TypeError) as error:
+            app.stop()
+            error.observations = {**app.observations, **getattr(error, 'observations', {})}
+            error.streams = app.streams()
+            raise
         finally:
             app.stop()
     return retain(binding, capability, case, root, 'unverified', observations, app.streams())
