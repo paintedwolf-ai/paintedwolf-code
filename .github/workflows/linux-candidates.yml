@@ -133,6 +133,7 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
       - name: Build the declared Linux package families
+        id: package-build
         env:
           PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
         run: |
@@ -167,5 +168,30 @@ jobs:
         with:
           name: linux-candidate-${{ matrix.updater_key }}
           path: ${{ runner.temp }}/candidate/*
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Select the diagnostic retention controller after a failure
+        if: ${{ failure() && steps.package-build.outcome != 'skipped' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .candidate-diagnostics-controller
+          persist-credentials: false
+      - name: Retain partial native bytes without complete candidate authority
+        id: diagnostic-retention
+        if: ${{ failure() && steps.package-build.outcome != 'skipped' }}
+        env:
+          CONTROLLER_COMMIT: ${{ github.workflow_sha }}
+        run: |
+          python3 .candidate-diagnostics-controller/scripts/linux_release/candidate_diagnostics.py \
+            --source "$GITHUB_WORKSPACE" --controller "$CONTROLLER_COMMIT" \
+            --output "$RUNNER_TEMP/candidate-diagnostics"
+      - name: Upload unqualified partial package diagnostics
+        if: ${{ failure() && steps.diagnostic-retention.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-partial-diagnostics-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/candidate-diagnostics/*
           if-no-files-found: error
           retention-days: 90
