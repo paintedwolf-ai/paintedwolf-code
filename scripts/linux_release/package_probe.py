@@ -31,7 +31,7 @@ def physical(path, *, owner, executable=False, limit=None):
         for chunk in iter(lambda: stream.read(1 << 20), b''):
             digest.update(chunk)
     after = path.lstat()
-    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_size, value.st_mtime_ns, value.st_ctime_ns, value.st_uid, value.st_gid)
     if identity(before) != identity(after):
         raise ValueError('package probe input changed during capture')
     return {'path': str(path), 'sha256': digest.hexdigest(), 'bytes': after.st_size,
@@ -129,8 +129,16 @@ def diagnostic(arguments, env):
                     if sum(map(len, streams)) + len(chunk) > 1 << 20:
                         raise ValueError('fixed package diagnostic output exceeded its bound')
                     streams[key.data].extend(chunk)
-        code = process.wait(timeout=max(0.1, deadline - time.monotonic()))
-        return subprocess.CompletedProcess(arguments, code, bytes(streams[0]), bytes(streams[1]))
+        # Keep the leader waitable until its owned process group has been cleaned.
+        # Reaping it first would allow its numeric PID/group identity to be reused.
+        while True:
+            exited = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            if exited is not None:
+                code = exited.si_status if exited.si_code == os.CLD_EXITED else -exited.si_status
+                return subprocess.CompletedProcess(arguments, code, bytes(streams[0]), bytes(streams[1]))
+            if time.monotonic() >= deadline:
+                raise ValueError('fixed package diagnostic exceeded its deadline')
+            time.sleep(0.01)
     finally:
         try:
             os.killpg(process.pid, signal.SIGKILL)

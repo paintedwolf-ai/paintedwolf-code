@@ -49,6 +49,29 @@ class PackageProbeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertIn(b'--require-baseline-refusal', result.stdout)
 
+    @unittest.skipUnless(hasattr(os, 'waitid') and hasattr(os, 'WNOWAIT'), 'requires Linux waitable-child identity')
+    def test_diagnostic_cleans_group_before_reaping_its_owned_leader(self):
+        original = subprocess.Popen
+        events = []
+        def child(*arguments, **keywords):
+            process = original(*arguments, **keywords)
+            actual_wait = process.wait
+            def wait(*args, **kwargs):
+                events.append('reap')
+                self.assertIn('group-cleanup', events)
+                return actual_wait(*args, **kwargs)
+            process.wait = wait
+            return process
+        actual_kill = os.killpg
+        def cleanup(pid, signal):
+            events.append('group-cleanup')
+            return actual_kill(pid, signal)
+        with patch.object(owner.subprocess, 'Popen', side_effect=child), patch.object(owner.os, 'killpg', side_effect=cleanup):
+            result = owner.diagnostic([sys.executable, '-c', 'print("owned child")'], os.environ.copy())
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b'owned child\n')
+        self.assertLess(events.index('group-cleanup'), events.index('reap'))
+
     def fixture(self):
         binding = {'tree': '/tmp/package', 'pw': {'path': '/tmp/package/opt/painted-wolf-code/bin/pw',
                    'sha256': 'a' * 64, 'bytes': 100},
