@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/files/tree/FilesTreeRows.tsx",
+  "kind": "module",
+  "workstream": "linux-ime-commit-key",
+  "disposition": "retain",
+  "reason": "Retain the existing tree-row rendering and naming lifecycle. The direct composition refusal adds no new state or dependency and prevents premature file/folder creation. The rendered creation fixture proves both IME signals refuse creation before ordinary Enter creates the selected name. The exact five-suite cohort passed56 tests. Ceiling equals current measured size with no growth allowance or hard-limit change.",
+  "reviewed_commit": "3ba48bf34a232826949de87f1e04b38311908004",
+  "ceiling": 764,
+  "boundaries": {
+    "lycaon-den/src/files/tree/FilesTree.test.tsx": "a71b769f21816f2ab6ff525c60aa244495c68c9c121eb63e1c6a90593b0a3dca"
+  }
+}

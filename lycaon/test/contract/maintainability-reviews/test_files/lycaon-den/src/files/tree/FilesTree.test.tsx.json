@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/files/tree/FilesTree.test.tsx",
+  "kind": "test_suite",
+  "workstream": "linux-ime-commit-key",
+  "disposition": "retain",
+  "reason": "Retain the coherent rendered tree suite, including naming, selection and expansion. Extending its actual new-file interaction avoids a duplicated partial fixture and proves no premature creation followed by normal Enter behavior. The exact five-suite cohort passed56 tests. Ceiling equals current measured size with no growth allowance or hard-limit change.",
+  "reviewed_commit": "3ba48bf34a232826949de87f1e04b38311908004",
+  "ceiling": 433,
+  "boundaries": {
+    "lycaon-den/src/files/tree/FilesTreeRows.tsx": "5100da0f9b66465c98a6c7692b352a8eb9c5a1787b57b95cbf21c244973ba5a0"
+  }
+}

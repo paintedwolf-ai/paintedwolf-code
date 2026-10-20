@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/primitives/AnchoredSurface.tsx",
+  "kind": "module",
+  "workstream": "linux-ime-commit-key",
+  "disposition": "retain",
+  "reason": "Retain the anchored surface as one positioning, focus, dismissal and menu lifecycle. The two direct input-method refusals add no dependency or authority. Splitting capture and menu listeners would obscure the same overlay event boundary; rendered tests prove composing and legacy229 Escape/navigation leave the surface intact while ordinary navigation and dismissal work. The exact five-suite cohort passed56 tests. Ceiling equals current measured size with no growth allowance or hard-limit change.",
+  "reviewed_commit": "3ba48bf34a232826949de87f1e04b38311908004",
+  "ceiling": 514,
+  "boundaries": {
+    "lycaon-den/src/components/primitives/AnchoredSurface.mount.test.tsx": "233c706fb988a1a74c72764b086b63501c83eb63225572485c573c007c1557b4",
+    "lycaon-den/src/files/editor/editor-symbol-navigation.test.tsx": "0ac648a93234d8edb4b736b949d53de863ed587ce7f8a71bafe40a245b98536e"
+  }
+}
