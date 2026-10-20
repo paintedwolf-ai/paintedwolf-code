@@ -113,3 +113,9 @@ class ProfileObserverTests(unittest.TestCase):
         with patch.object(observer, 'engine_image', side_effect=[(1, 2, 3), (1, 5, 8)]):
             with self.assertRaises(ValueError):
                 observer.sessions_for_project(self.app, PROJECT)
+
+    def test_oversized_tool_json_is_refused_before_json_projection(self):
+        self.writer.execute('UPDATE messages SET tool_result_json=?', (json.dumps({'content': 's' * (1 << 20)}),))
+        self.writer.commit()
+        with self.assertRaises(ValueError):
+            observer.invocations(self.app, SESSION, ['command'])
