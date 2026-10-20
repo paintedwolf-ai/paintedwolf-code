@@ -42,7 +42,12 @@ def nix_hash(digest):
 
 def validate_cache(cache, closure):
     info = cache / "nix-cache-info"
-    if (cache.is_symlink() or not cache.is_dir() or info.is_symlink() or info.stat().st_size > 4096
+    if cache.is_symlink() or not cache.is_dir():
+        raise ValueError("retained cache must be an owned directory")
+    entries = list(cache.rglob("*"))
+    if any(path.is_symlink() or not (path.is_file() or path.is_dir()) for path in entries):
+        raise ValueError("retained cache must contain only regular files and directories")
+    if (not info.is_file() or info.stat().st_size > 4096
             or info.read_text().splitlines().count("StoreDir: /nix/store") != 1):
         raise ValueError("retained cache must use the standard local Nix store")
     keys = []
@@ -83,8 +88,8 @@ def validate_cache(cache, closure):
         # Nix itself checks the uncompressed NAR hash during substitution. The
         # admission boundary first fixes metadata and disallows unrelated paths.
         expected.update((name, url))
-    actual = {str(path.relative_to(cache)) for path in cache.rglob("*") if not path.is_dir()}
-    if actual != expected or any(path.is_symlink() for path in cache.rglob("*")):
+    actual = {str(path.relative_to(cache)) for path in entries if path.is_file()}
+    if actual != expected:
         raise ValueError("retained cache contains undeclared objects or links")
 
 
