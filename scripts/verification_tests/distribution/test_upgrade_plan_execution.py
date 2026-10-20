@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from release_upgrade_plan import plan
+from release_upgrade.plan import plan
 
 
 def manifest(version, signing=1, embedded=None):
@@ -17,7 +17,7 @@ def snapshot(channel, value, number=1):
 
 class UpgradePlanTests(unittest.TestCase):
     def setUp(self):
-        self.binding = patch("release_upgrade_plan.validate_binding")
+        self.binding = patch("release_upgrade.plan.validate_binding")
         self.binding.start()
         self.addCleanup(self.binding.stop)
         self.registry = {"generations": [{"bridge_version": "1.1.0"}]}
@@ -33,7 +33,7 @@ class UpgradePlanTests(unittest.TestCase):
         self.assertEqual([case["channel"] for case in result["cases"]], ["stable"])
 
     def test_shipped_protocol_boundary_is_explicit(self):
-        from release_upgrade_plan import client_protocol
+        from release_upgrade.plan import client_protocol
         self.assertEqual(client_protocol("1.0.1"), "tauri-plugin-v1")
         self.assertEqual(client_protocol("1.0.2-rc1"), "native-v2")
 
@@ -65,7 +65,7 @@ class UpgradePlanTests(unittest.TestCase):
         feeds = [snapshot("stable", manifest("1.0.2")),
                  snapshot("preview", manifest("1.1.0", 1, 2)),
                  snapshot("stable", manifest("1.2.0", 2), 2)]
-        with patch("release_upgrade_plan.generation", return_value={"bridge_version": "1.1.0"}):
+        with patch("release_upgrade.plan.generation", return_value={"bridge_version": "1.1.0"}):
             result = plan(manifest("1.3.0-rc.1", 2), self.registry, feeds)
         source = next(case for case in result["cases"] if case["source_version"] == "1.0.2")
         self.assertEqual([step["version"] for step in source["steps"]], ["1.1.0", "1.3.0-rc.1"])
@@ -75,7 +75,7 @@ class UpgradePlanTests(unittest.TestCase):
             feeds = [snapshot("stable", manifest("1.0.2"))]
             if bridge:
                 feeds.append(snapshot("preview", bridge))
-            with patch("release_upgrade_plan.generation", return_value={"bridge_version": "1.1.0"}):
+            with patch("release_upgrade.plan.generation", return_value={"bridge_version": "1.1.0"}):
                 with self.assertRaises(ValueError):
                     plan(manifest("1.3.0-rc.1", 2), self.registry, feeds)
 
@@ -91,7 +91,7 @@ class FeedCaptureTests(unittest.TestCase):
         import hashlib
         from pathlib import Path
         import tempfile
-        import release_upgrade_feeds as feeds
+        import release_upgrade.feeds as feeds
         raw = b'{"version":"1.0.1"}'
         with tempfile.TemporaryDirectory() as temporary, \
              patch.object(feeds, "read_bytes", side_effect=[raw, b"signed"]), \
@@ -110,7 +110,7 @@ class FeedCaptureTests(unittest.TestCase):
     def test_missing_signature_and_invalid_signature_fail_closed(self):
         from pathlib import Path
         import tempfile
-        import release_upgrade_feeds as feeds
+        import release_upgrade.feeds as feeds
         for signature in (None, b"invalid"):
             with self.subTest(signature=signature), tempfile.TemporaryDirectory() as temporary, \
                  patch.object(feeds, "read_bytes", side_effect=[b'{"version":"1.0.1"}', signature]), \
@@ -121,7 +121,7 @@ class FeedCaptureTests(unittest.TestCase):
 
     def test_missing_pointer_is_the_only_optional_network_outcome(self):
         from pathlib import Path
-        import release_upgrade_feeds as feeds
+        import release_upgrade.feeds as feeds
         with patch.object(feeds, "read_bytes", return_value=None):
             self.assertIsNone(feeds.capture(feeds.ORIGIN, "stable", 1, {}, Path("unused")))
         with patch.object(feeds, "read_bytes", side_effect=TimeoutError("origin unavailable")):

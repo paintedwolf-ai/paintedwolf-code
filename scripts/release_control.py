@@ -28,8 +28,8 @@ def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
 
 
 def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
-    from release_upgrade_feeds import capture
-    from release_upgrade_plan import plan
+    from release_upgrade.feeds import capture
+    from release_upgrade.plan import plan
     from update_keys import load_registry
     if base != "https://downloads.paintedwolf.dev":
         raise ValueError("upgrade rehearsal requires the production HTTPS origin")
@@ -50,7 +50,7 @@ def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
 
 
 def resolve_prior(base: str, candidate: str, generation: int) -> list[str]:
-    from release_upgrade_feeds import capture
+    from release_upgrade.feeds import capture
     from update_keys import load_registry
     if base != "https://downloads.paintedwolf.dev" or generation < 1:
         raise ValueError("upgrade rehearsal requires the production HTTPS origin and positive key generation")
