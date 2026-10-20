@@ -22,44 +22,45 @@ func (e *Approvals) awaitApproval(
 	confReq confine.Request,
 ) (map[string]any, error) {
 	action := hitl.ProposedAction{
-Mutations: hitl.ActionMutations{
-AgentPolicy: policyWriteTargets(confReq, tc.ActiveRootPath()),
-},
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
-ResolvedFiles: append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-ActionID: tc.EffectActionID(),
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: tc.ChatSessionID(),
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
-SocketScopes: append([]string(nil), tc.Socket.SocketScopes...),
-SocketGrantStates: append([]string(nil), tc.Socket.SocketGrantStates...),
-AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
-},
-Egress: hitl.ActionEgress{
-AuthorizedDirectIP: tc.Direct.DirectIPAuthorized,
-DirectIPRequested: tc.Direct.DirectIPRequested,
-Visibility: directIPVisibility(tc.Direct.DirectIPRequested),
-DeclaredDestinations: append([]string(nil), tc.Direct.DirectIPDeclared...),
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForRequest(confReq),
-PackageExecution: tc.Files.PackageExecution,
-},
-}
+		Mutations: hitl.ActionMutations{
+			AgentPolicy: policyWriteTargets(confReq, tc.ActiveRootPath()),
+		},
+		Invocation: hitl.ActionInvocation{
+			NativeInputs:  tc.Invocation.NativeInputs,
+			Tool:          tool,
+			Args:          args,
+			Files:         append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
+			ResolvedFiles: append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
+			ActionID:      tc.EffectActionID(),
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      tc.ChatSessionID(),
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
+			SocketScopes:            append([]string(nil), tc.Socket.SocketScopes...),
+			SocketGrantStates:       append([]string(nil), tc.Socket.SocketGrantStates...),
+			AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
+		},
+		Egress: hitl.ActionEgress{
+			AuthorizedDirectIP:   tc.Direct.DirectIPAuthorized,
+			DirectIPRequested:    tc.Direct.DirectIPRequested,
+			Visibility:           directIPVisibility(tc.Direct.DirectIPRequested),
+			DeclaredDestinations: append([]string(nil), tc.Direct.DirectIPDeclared...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained:        hitl.ContainedForRequest(confReq),
+			PackageExecution: tc.Files.PackageExecution,
+		},
+	}
 	if meta, ok := e.Metadata.registry.Meta(tool); ok {
 		action.Resources.ApprovalCategory = meta.ApprovalCategory
 		action.Resources.ApprovalSubject = meta.ApprovalSubject

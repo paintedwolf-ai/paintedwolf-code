@@ -204,6 +204,7 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
+			NativeInputs:  eval.NativeInputs,
 			Tool:          eval.ToolName,
 			BoundStages:   toolcontract.CloneExecutionStages(eval.BoundStages),
 			Args:          eval.ToolArgs,

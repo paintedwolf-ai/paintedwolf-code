@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
@@ -61,6 +62,11 @@ type NativeEffect struct {
 // The introducing entry validates the complete syntax/progress envelope first.
 // A held review keeps the same child identity; a fresh invocation uses a new one.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission ProgramStateAdmission, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+	end, err := frame.beginUse()
+	if err != nil {
+		return result, err
+	}
+	defer end()
 	bound := effect.Operation
 	definition, invocation := bound.Definition(), bound.Invocation()
 	facts := definition.Facts()
@@ -107,6 +113,8 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	tc.Invocation.NativeOperation, tc.Invocation.NativeStages = &bound, projection.BoundStages
+	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx,admission)
+	defer tc.Invocation.NativeReview.Close()
 	ctx = invocationContext(ctx, tc)
 	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
 		return result, err
@@ -143,6 +151,13 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	defer reviewedArguments.close()
+	priorReview, reviewErr := tc.Invocation.NativeInputs.Reviewed()
+	if reviewErr != nil {
+		return result, reviewErr
+	}
+	if priorReview != reviewed {
+		return result, fmt.Errorf("native reviewed inputs changed after approval boundary")
+	}
 	canonical = reviewedArguments.values
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)

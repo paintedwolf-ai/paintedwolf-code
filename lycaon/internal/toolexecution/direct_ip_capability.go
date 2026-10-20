@@ -53,6 +53,7 @@ func DirectIPReview(tool string, args map[string]any, tc tools.ToolContext, decl
 	contained := hitl.ContainedForAction(confInputs)
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
+			NativeInputs:  tc.Invocation.NativeInputs,
 			Tool:          tool,
 			Args:          args,
 			Files:         filesFromArgs(tool, args),
