@@ -22,7 +22,7 @@ from .installed_monitors import prepare as prepare_monitors
 
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
-FAMILIES = {"documents": "products", "installation": "packages", "conversation": "desktop",
+FAMILIES = {"documents": "products", "installation": "packages", "conversation": "conversation",
             "git": "desktop", "files": "desktop", "external-files": "desktop", "clipboard": "desktop",
             "input": "desktop", "windowing": "desktop", "accessibility": "desktop",
             "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "performance",
