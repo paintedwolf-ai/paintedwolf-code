@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
 func TestCandidateRejectsExecutableAndDigestOverrides(t *testing.T) {
