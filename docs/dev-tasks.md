@@ -1088,3 +1088,51 @@ Final campaign retention and admission require the protected `LINUX_REPOSITORY_O
 The nonpublishing control producer runs through `./task release:live-test -- --prepare-linux-controls`. It takes an exact native artifact manifest and package directory, immutable source checkout and commit, explicit repository predecessors, signing catalog/private key, HTTPS repository base, and Nix input document. It writes a fresh control bundle containing `control-producer.json`, `final-artifacts.json`, `repositories.json`, `packages/`, `generations/`, `repository-setup/` and `nix-cache/`. RPM signatures change final package bytes, so the retained final artifact hashes are computed after signing. Pacman database aliases are retained as regular copies of their already verified signed bytes. No repository pointer or public object is written by this command. `--rehearsal` uses explicit disposable signing identities and emits a rehearsal proof that protected production selection refuses.
 
 Nix input documents have `{ "format_version": 1, "systems": [...] }`. With public caching disabled, each system contains only `request`, whose exact fields are `schema_version`, `version`, `application_commit`, `flake_lock_sha256`, `system` and a single `outputs` entry. The source verifier independently evaluates the immutable selected Git revision and verifies actual recursive NAR contents and native derivation metadata. Enabled-cache system entries also contain `policy` and `private_key`, and their request follows the signed-cache producer contract. Private signing keys remain outside the retained bundle.
+
+
+### Nonpublishing Linux control preparation
+
+The protected main release workflow's `linux_operation: controls` prepares the
+`linux-installed-control-inputs` and `linux-installed-qualification-plan` artifact
+roles. Select the exact successful native candidate run, its controller commit,
+both architecture artifact IDs, and the immutable application commit/tree. Partial
+diagnostic artifacts cannot enter this path. The producer rechecks server-owned
+attempts and artifact digests after signing and closure verification.
+
+The qualification runner needs the native repository tooling, both actual Nix
+application closures and their derivations in its local daemon store, the selected
+private signing key outside the checkout, and an operator-owned policy file.
+`LINUX_QUALIFICATION_CONTROL_POLICY` identifies that physical file; group/world
+writable files and symlinks are refused. No key contents belong in the policy.
+Its exact JSON fields are:
+
+```json
+{
+  "format_version": 1,
+  "private_key": "/absolute/private/signing-key.asc",
+  "repository_base_url": "https://downloads.example.invalid/linux-repositories",
+  "predecessors": {},
+  "nix_inputs": [],
+  "fleet_template": {"format_version": 1, "targets": []}
+}
+```
+
+The empty objects above describe the shape, not an executable qualification plan.
+Production preparation requires every package family and native CPU, explicit
+independently selected predecessor states, actual source-bound Nix output requests,
+and every required support variant. Source-only Nix delivery uses the protected
+cache-disabled policy and advertises no cache URL or key. Enabling cache delivery
+also requires the protected trust policy and real signing identity.
+
+Each fleet template target uses the fixed installed controller target contract,
+with `artifact_selector: {"installation": "deb", "architecture": "amd64"}` in
+place of `artifact_id`. The producer resolves that selector from freshly signed
+final bytes, binds the actual application source and controller driver tree, and
+asks the installed controller owner to validate the complete version2 plan.
+Guest paths, SSH identities, known hosts and snapshots must describe provisioned
+disposable guests. The producer does not create or reset guest state.
+
+The resulting artifacts can be selected by the separate `qualify` operation;
+`retain` freshly admits the executed observations. Preparing controls grants no
+installed qualification or publication authority, and performs no upload to a
+package repository, cache activation or public release.
