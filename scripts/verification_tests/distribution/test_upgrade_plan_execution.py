@@ -127,3 +127,30 @@ class FeedCaptureTests(unittest.TestCase):
         with patch.object(feeds, "read_bytes", side_effect=TimeoutError("origin unavailable")):
             with self.assertRaises(TimeoutError):
                 feeds.capture(feeds.ORIGIN, "stable", 1, {}, Path("unused"))
+
+    def test_capture_runs_the_real_manifest_validator_from_the_package(self):
+        import json
+        from pathlib import Path
+        import tempfile
+        import release_upgrade.feeds as feeds
+        from update_keys import load_registry, release_binding
+        from updater_signature import rehearsal_signature
+        root = Path(__file__).resolve().parents[3]
+        registry = load_registry()
+        number = len(registry["generations"])
+        registry["signing_generation"] = registry["embedded_generation"] = number
+        version = "1.0.2"
+        catalog = json.loads((root / "packaging/release-platforms.json").read_text())
+        manifest = {"version": version, "notes": "Upgrade source", "pub_date": "2026-01-01T00:00:00Z",
+                    "update_keys": release_binding(registry, version), "platforms": {}}
+        for platform in catalog["platforms"]:
+            if platform["publication"] == "public":
+                key = platform["updater_key"]
+                manifest["platforms"][key] = {"signature": rehearsal_signature(version),
+                    "url": f"{feeds.ORIGIN}/releases/v{version}/painted-wolf-code_v{version}_{key}.{platform['updater_extension']}"}
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(feeds, "read_bytes", side_effect=[json.dumps(manifest).encode(), b"fixture signature"]), \
+             patch.object(feeds.feed_signature, "check"), \
+             patch.object(feeds.feed_signing, "verify"):
+            result = feeds.capture(feeds.ORIGIN, "stable", number, registry, Path(temporary))
+        self.assertEqual(result["manifest"], manifest)

@@ -14,7 +14,7 @@ import feed_signing
 from release_distribution import PUBLIC_READ_HEADERS
 from update_keys import generation, validate_binding
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 ORIGIN = "https://downloads.paintedwolf.dev"
 
 
