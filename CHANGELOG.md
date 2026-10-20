@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc8]
+
+Eighth release candidate for 1.0.2, published on the preview channel for
+in-app update testing from RC7 and incorporating Homebrew update notification,
+local model provider, and coordinator prompt fixes.
+
+### Changed
+
+- Homebrew installations present a notification-only update notice and settings
+  summary when a newer package is available.
+- Coordinator progress and tool-loading guidance describe operations and targets
+  without naming unoffered or deferred tools.
+
+### Fixed
+
+- Local OpenAI-compatible providers preserve reasoning content across multi-step
+  tool loops, omit tool definitions on non-callable turns, fold post-tool system
+  guidance into the trailing tool result, and recover XML `<function=...>` tool
+  calls and `<tool_call>` blocks after prose.
+- Internal step notes mark model working notes as data while keeping host
+  directives authoritative and stripping parroted markers from replies.
+
 ## [1.0.2-rc7]
 
 Seventh release candidate for 1.0.2, published on the preview channel for
