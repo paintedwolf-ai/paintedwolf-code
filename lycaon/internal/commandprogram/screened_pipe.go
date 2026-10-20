@@ -17,6 +17,9 @@ type ScreenedPipe struct {
 	source   io.ReadCloser
 	done     chan struct{}
 	once     sync.Once
+	mu       sync.Mutex
+	settled  bool
+	cancel   context.CancelCauseFunc
 	metadata captureprojection.StreamMetadata
 	err      error
 }
@@ -29,10 +32,11 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 	if err != nil {
 		return nil, err
 	}
-	out := &ScreenedPipe{pipe: pipe, source: source, done: make(chan struct{})}
+	screenCtx, cancel := context.WithCancelCause(ctx)
+	out := &ScreenedPipe{pipe: pipe, source: source, done: make(chan struct{}), cancel: cancel}
 	go func() {
 		select {
-		case <-ctx.Done():
+		case <-screenCtx.Done():
 			_ = source.Close()
 		case <-out.done:
 		}
@@ -40,7 +44,15 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 	go func() {
 		defer close(out.done)
 		defer source.Close()
-		out.metadata, out.err = projector.ScreenStream(ctx, scope, label, source, pipe, options)
+		metadata, err := projector.ScreenStream(screenCtx, scope, label, source, pipe, options)
+		out.mu.Lock()
+		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			err = cause
+			metadata.Complete = false
+		}
+		out.metadata, out.err, out.settled = metadata, err, true
+		out.mu.Unlock()
+		defer cancel(nil)
 		if out.err != nil {
 			pipe.finish(StreamScreeningFailed, out.err)
 		} else {
@@ -56,7 +68,15 @@ func (s *ScreenedPipe) Read(p []byte) (int, error) { return s.pipe.Read(p) }
 // the producing screen separately; downstream closure does not prove its success.
 func (s *ScreenedPipe) Close() error {
 	var err error
-	s.once.Do(func() { _ = s.pipe.CloseConsumer(); err = s.source.Close() })
+	s.once.Do(func() {
+		s.mu.Lock()
+		_ = s.pipe.CloseConsumer()
+		if !s.settled {
+			s.cancel(ErrConsumerClosed)
+		}
+		s.mu.Unlock()
+		err = s.source.Close()
+	})
 	return err
 }
 
