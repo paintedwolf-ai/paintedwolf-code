@@ -53,6 +53,10 @@ class NixCacheAdmissionTests(unittest.TestCase):
                 key.chmod(0o600)
                 with self.assertRaises(ValueError):
                     signing_identity(key, root)
+                alias = root / "cache-alias"
+                alias.symlink_to(root, target_is_directory=True)
+                with self.assertRaises(ValueError):
+                    signing_identity(key, alias)
                 link = root / "link"
                 link.symlink_to(key)
                 with self.assertRaises(ValueError):
