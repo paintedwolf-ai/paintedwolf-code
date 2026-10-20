@@ -63,6 +63,13 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "native ELF"):
             OWNER.profile(self.package)
 
+    def test_manifest_directory_refused(self):
+        manifest = self.root / "manifest.json"
+        manifest.unlink()
+        manifest.mkdir()
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            OWNER.profile(self.package)
+
     def test_literal_path_metacharacters_and_controls(self):
         self.assertEqual(OWNER.literal('/nix/store/x*[a]?{b}^"\\/pw'),
                          '"/nix/store/x\\*\\[a\\]\\?\\{b\\}\\^\\"\\\\/pw"')
