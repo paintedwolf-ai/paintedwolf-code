@@ -12,12 +12,13 @@ import (
 )
 
 var replaceStages = []struct {
-	At        stage
-	Committed bool
+	At          stage
+	Committed   bool
+	Publication PublicationState
 }{
-	{stageCreated, false}, {stageWritten, false}, {stageModeSet, false},
-	{stageFileSynced, false}, {stageFileClosed, false}, {stageValidated, false},
-	{stageRenamed, true}, {stageDirSynced, true}, {stageVerified, true},
+	{stageCreated, false, PublicationNotCommitted}, {stageWritten, false, PublicationNotCommitted}, {stageModeSet, false, PublicationNotCommitted},
+	{stageFileSynced, false, PublicationNotCommitted}, {stageFileClosed, false, PublicationNotCommitted}, {stageValidated, false, PublicationNotCommitted},
+	{stageRenamed, true, PublicationReplaced}, {stageDirSynced, true, PublicationDurable}, {stageVerified, true, PublicationVerified},
 }
 
 func TestReplaceFaultMatrixNeverLeavesPartialDestination(t *testing.T) {
@@ -29,7 +30,7 @@ func TestReplaceFaultMatrixNeverLeavesPartialDestination(t *testing.T) {
 			target := filepath.Join(dir, "document.txt")
 			before, after := []byte("before\n"), []byte("after\r\n世界🐺")
 			testutil.FailErr(t, "seed destination", os.WriteFile(target, before, 0o644))
-			_, err := replace(ReplaceRequest{
+			result, err := replace(ReplaceRequest{
 				Location: PathLocation(target),
 				Source:   bytes.NewReader(after),
 				Mode:     0o644,
@@ -41,6 +42,9 @@ func TestReplaceFaultMatrixNeverLeavesPartialDestination(t *testing.T) {
 			})
 			if err == nil {
 				t.Fatal("injected fault unexpectedly succeeded")
+			}
+			if result.Publication != failure.Publication || result.Publication.Committed() != failure.Committed {
+				t.Fatalf("publication = %v, want %v", result.Publication, failure.Publication)
 			}
 			got, readErr := os.ReadFile(target)
 			testutil.FailErr(t, "read destination after fault", readErr)
@@ -60,7 +64,7 @@ func TestReplaceDetectsPostcommitByteMismatch(t *testing.T) {
 	t.Parallel()
 	target := filepath.Join(t.TempDir(), "document.txt")
 	testutil.FailErr(t, "seed target", os.WriteFile(target, []byte("old\n"), 0o644))
-	_, err := replace(ReplaceRequest{
+	result, err := replace(ReplaceRequest{
 		Location: PathLocation(target),
 		Source:   bytes.NewReader([]byte("new\n")),
 		Mode:     0o644,
@@ -70,6 +74,9 @@ func TestReplaceDetectsPostcommitByteMismatch(t *testing.T) {
 		}
 		return nil
 	})
+	if result.Publication != PublicationDurable {
+		t.Fatalf("publication = %v, want durable without verified bytes", result.Publication)
+	}
 	if !errors.Is(err, ErrPostcondition) {
 		t.Fatalf("error = %v, want ErrPostcondition", err)
 	}

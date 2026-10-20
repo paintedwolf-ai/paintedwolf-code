@@ -19,7 +19,7 @@ func MkdirAll(Location, os.FileMode) error { return ErrUnsupported }
 func UpdateMode(ModeUpdateRequest) (ModeUpdateResult, error) {
 	return ModeUpdateResult{}, ErrUnsupported
 }
-func Chown(Location, int, int) error { return ErrUnsupported }
+func platformChown(Location, int, int) error { return ErrUnsupported }
 
 func RenameNoReplace(string, string, string) error { return ErrUnsupported }
 

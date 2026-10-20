@@ -17,7 +17,7 @@ func TestReviewRejectsReplacedParentDirectory(t *testing.T) {
 	folder, moved := filepath.Join(root, "folder"), filepath.Join(root, "moved")
 	testutil.FailErr(t, "create directory", os.Mkdir(folder, 0o755))
 	testutil.FailErr(t, "seed target", os.WriteFile(filepath.Join(folder, "AGENTS.md"), []byte("original"), 0o644))
-	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+	result, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: root, Rel: "folder/AGENTS.md"}, Source: strings.NewReader("proposal"), Mode: 0o644,
 		ReviewStaged: func(fseffect.Target, fseffect.Result) error {
 			if err := os.Rename(folder, moved); err != nil {
@@ -29,7 +29,7 @@ func TestReviewRejectsReplacedParentDirectory(t *testing.T) {
 			return os.WriteFile(filepath.Join(folder, "AGENTS.md"), []byte("original"), 0o644)
 		},
 	})
-	if err == nil {
+	if err == nil || result.Publication != fseffect.PublicationNotCommitted {
 		t.Fatal("reviewed path moved but replacement committed")
 	}
 	for _, dir := range []string{folder, moved} {

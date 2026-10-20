@@ -273,18 +273,21 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return result, fmt.Errorf("commit replacement: %w", err)
 	}
 	committed = true
+	result.Publication = PublicationReplaced
 	if err := injectAt(inject, stageRenamed); err != nil {
 		return result, err
 	}
 	if err := fsyncFD(int(parent.file.Fd())); err != nil {
 		return result, fmt.Errorf("sync replacement directory: %w", err)
 	}
+	result.Publication = PublicationDurable
 	if err := injectAt(inject, stageDirSynced); err != nil {
 		return result, err
 	}
 	if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
 		return result, err
 	}
+	result.Publication = PublicationVerified
 	return result, injectAt(inject, stageVerified)
 }
 
@@ -560,8 +563,8 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	return result, nil
 }
 
-// Chown applies ownership to a target reached without symlink traversal.
-func Chown(loc Location, uid, gid int) error {
+// platformChown applies ownership to a target reached without symlink traversal.
+func platformChown(loc Location, uid, gid int) error {
 	parent, err := openParent(loc, false, 0)
 	if err != nil {
 		return err
