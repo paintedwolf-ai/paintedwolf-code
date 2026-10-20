@@ -75,11 +75,11 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
         code, stdout, stderr = command(arguments)
         observations[label] = {"arguments": arguments, "exit_code": code}
         for stream, raw in (("stdout", stdout), ("stderr", stderr)):
-            remaining = max(0, (24 << 20) - sum(map(len, streams.values())))
-            if len(raw) > remaining:
-                observations["output_limit"] = True
             name = label + "-" + stream if capture else "transaction-operations-" + stream
             offset = len(streams.get(name, b""))
+            remaining = max(0, min((8 << 20) - offset, (24 << 20) - sum(map(len, streams.values()))))
+            if len(raw) > remaining:
+                observations["output_limit"] = True
             streams[name] = streams.get(name, b"") + raw[:remaining]
             observations[label].setdefault("streams", {})[stream] = {
                 "name": name, "offset": offset, "bytes": min(len(raw), remaining),
@@ -113,8 +113,10 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
             if code or owner != PACKAGE:
                 raise ValueError("fresh installation package is not the selected product")
             profile = Path.home() / ".config/paintedwolf"
+            webview_profile = Path.home() / ".local/share/dev.paintedwolf.code"
+            observations["webview_profile_absent"] = not os.path.lexists(webview_profile)
             observations["profile_absent"] = not os.path.lexists(profile)
-            if not observations["profile_absent"]:
+            if not observations["profile_absent"] or not observations["webview_profile_absent"]:
                 raise CaseUnavailable("fresh installation requires an uninitialized application profile")
             if not absent(entries, "absence-before"):
                 raise CaseUnavailable("fresh installation requires an absent native package and payload")
@@ -165,7 +167,7 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
                     if family == "deb":
                         remove = ["sudo", "-n", "dpkg", "--purge", PACKAGE]
                     code, _ = run("rollback", remove)
-                    observations["restored_absence"] = code == 0 and absent(entries, "absence-after-rollback") and not os.path.lexists(profile)
+                    observations["restored_absence"] = code == 0 and absent(entries, "absence-after-rollback") and not os.path.lexists(profile) and not os.path.lexists(webview_profile)
                     observations["recovery_required"] = not observations["restored_absence"]
                 except (OSError, ValueError) as error:
                     observations["recovery_required"] = True
