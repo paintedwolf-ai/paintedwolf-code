@@ -57,7 +57,15 @@ def verify_repositories(plan, final_artifacts, expected_source, *, version, chan
             raise ValueError("unknown publication repository family")
         if family == "pacman":
             native_versions[family] = pacman_package_version(product) + "-" + str(build)
-        channel_id = (family, manifest.get("architecture"))
+        if family == "pacman":
+            architecture = manifest.get("architecture")
+            if architecture not in {"x86_64", "aarch64"}:
+                raise ValueError("pacman publication requires its native architecture channel")
+        else:
+            if "architecture" in manifest or "architecture" in operation:
+                raise ValueError("native repositories share one combined architecture channel")
+            architecture = None
+        channel_id = (family, architecture)
         if channel_id in channels:
             raise ValueError("duplicate repository channel")
         channels.add(channel_id)
