@@ -13,7 +13,7 @@ from .publication_authority import repository_origin
 from .publication_control_packages import FAMILIES, ARCHITECTURES, stage, assemble
 from .publication_control_cache import build as caches
 from .publication_generations import CATALOG
-from .publication_source import facts
+from .release_source import facts
 from .release_admission import document
 
 

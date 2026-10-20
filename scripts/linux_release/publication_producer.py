@@ -12,7 +12,7 @@ import tempfile
 from .installed_artifact_bundle import Limits, retain_tree
 from .installed_capacity import limits as campaign_limits
 from .publication_controller import SelectedCampaign
-from .publication_source import facts
+from .release_source import facts
 from .installed_provenance import controller_context
 from .publication_authority import PREFIX, repository_origin
 from .release_admission import document

@@ -16,7 +16,7 @@ from .publication_setups import verify as verify_setups
 from .publication_authority import PREFIX, repository_origin
 from .publication_generations import verify as verify_generations
 from .installed_provenance import controller_context, select_final, verify_producer
-from .publication_source import facts
+from .release_source import facts
 from .release_admission import document, verify_release
 from .publication_files import verify_files
 from .support_matrix import CATALOG
