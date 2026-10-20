@@ -26,6 +26,12 @@ class _Ready(Exception):
     """The owned engine became ready while its startup form was being inventoried."""
 
 
+class _InventoryChanged(Exception):
+    def __init__(self, visited, depth):
+        self.counts = {'visited': visited, 'depth': depth, 'child_count': -1}
+        self.identity = None
+
+
 def controls(window, api, deadline=None, ready=None):
     deadline = time.monotonic() + 15 if deadline is None else deadline
     pending, visited, fields, buttons = [(window, 0)], 0, {}, {}
@@ -37,8 +43,11 @@ def controls(window, api, deadline=None, ready=None):
         node, depth = pending.pop()
         visited += 1
         children = node.childCount
-        if type(children) is not int or not 0 <= children <= 1024 or visited > 4096 or depth > 64:
+        if type(children) is not int or not -1 <= children <= 1024 or visited > 4096 or depth > 64:
             raise _InventoryBound(visited, depth, children if type(children) is int else None)
+        if children == -1:
+            # An invalidated accessible cannot establish a complete form inventory.
+            raise _InventoryChanged(visited, depth)
         role = node.getRole()
         if role in {api.ROLE_PASSWORD_TEXT, api.ROLE_PUSH_BUTTON}:
             state = node.getState()
@@ -86,7 +95,11 @@ def form(api, app, deadline=None, ready=None):
                 continue
             if not window.getState().contains(api.STATE_SHOWING):
                 continue
-            selected = controls(window, api, deadline, ready)
+            try:
+                selected = controls(window, api, deadline, ready)
+            except _InventoryChanged as error:
+                error.identity = before
+                raise
             if selected:
                 matches.append((pid, before, selected))
         if process_identity(pid) != before or not owned_process(pid, app):
@@ -178,6 +191,17 @@ def onboard(app):
                         acted = True
                 except _Ready:
                     return
+                except _InventoryChanged as error:
+                    app.require_running()
+                    identity = error.identity
+                    if (not isinstance(identity, dict) or process_identity(identity['pid']) != identity
+                            or not owned_process(identity['pid'], app)):
+                        raise ValueError('installed accessible owner changed during passive inventory retry') from None
+                    app.observations['native_accessibility_last_retry'] = {
+                        'phase': 'vault-form-inventory', 'exception_type': type(error).__name__,
+                        'counts': error.counts, 'ui_identity': identity}
+                    key = 'native_accessibility_inventory_retries'
+                    app.observations[key] = app.observations.get(key, 0) + 1
                 except IndexError as error:
                     app.observations['native_accessibility_last_retry'] = native_error(error)
                     key = 'native_accessibility_inventory_retries'
