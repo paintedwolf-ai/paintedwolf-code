@@ -16,6 +16,9 @@ class NixFinalLayoutTests(unittest.TestCase):
         recipe = source.read_text()
         self.assertIn('cargoBuildFeatures = [ "tauri/custom-protocol" ];', recipe)
         self.assertIn('build.frontendDist = "${frontend}";', recipe)
+        self.assertIn('env.PW_REQUIRE_RELEASE_PROTOCOL = "1";', recipe)
+        build = (source.parents[2] / "lycaon-den/src-tauri/build.rs").read_text()
+        self.assertIn('assert!(!tauri_build::is_dev()', build)
 
 
     def fixture(self, directory, architecture="x86_64"):
