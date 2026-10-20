@@ -38,6 +38,27 @@ class NixVMQualificationTests(unittest.TestCase):
         self.assertEqual(result["factory"]["store_path"], VM)
         self.assertFalse(result["installed_qualified"])
 
+    def test_separate_host_factory_pins_preserve_the_exact_application(self):
+        role = {"schema_version": 1, "application_commit": self.expected["source_commit"],
+                "source_commit": "f" * 40, "source_tree": "1" * 40,
+                "channel": "nixos-26.05", "nixpkgs_revision": "2" * 40,
+                "lock_sha256": "3" * 64}
+        self.vm["factory"] = role
+        self.vm["source_commit"] = "4" * 40
+        result = bind(self.app, self.vm, **self.expected, desktop="gnome", architecture="x86_64",
+                      controller_commit="e" * 40, factory_source={"source_commit": "f" * 40,
+                          "source_tree": "1" * 40, "channel": "nixos-26.05"})
+        self.assertEqual(result["factory"]["source"], role)
+        self.assertEqual(result["application"]["store_path"], APP)
+        for field, value in [("channel", "nixos-unstable"), ("source_commit", "5" * 40),
+                             ("application_commit", "6" * 40), ("nixpkgs_revision", "HEAD")]:
+            vm = deepcopy(self.vm)
+            vm["factory"][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                bind(self.app, vm, **self.expected, desktop="gnome", architecture="x86_64",
+                     controller_commit="e" * 40, factory_source={"source_commit": "f" * 40,
+                         "source_tree": "1" * 40, "channel": "nixos-26.05"})
+
     def test_changed_source_lock_desktop_archive_or_application_bytes_refuses(self):
         for field, value in [("source_commit", "f" * 40), ("source_tree", "f" * 40),
                              ("lock_sha256", "f" * 64), ("component", "nixos-plasma-vm"), ("passed", False),
