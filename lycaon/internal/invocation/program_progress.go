@@ -44,7 +44,7 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	defer func() { _ = tx.Rollback() }()
 	// Current root scope is read from P09's progress owner immediately before
 	// this marker. The model parent and addressed program must still be running.
-	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.ArgumentsDigest, reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, modelCallID)
+	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.ArgumentsDigest, reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, modelCallID)
 	if err != nil {
 		return err
 	}
