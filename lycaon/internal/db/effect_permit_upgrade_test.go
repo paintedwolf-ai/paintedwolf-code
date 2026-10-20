@@ -14,6 +14,7 @@ func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
 	source, err := Open(path)
 	testutil.FailErr(t, "open isolated source fixture", err)
+	removeProgramReceiptSchemaFixture(t, source)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO projects(id,last_opened_at,created_at) VALUES('fixture-project','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed project", err)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('fixture-session','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
