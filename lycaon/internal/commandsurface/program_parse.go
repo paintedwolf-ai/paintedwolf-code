@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -117,7 +118,17 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if err != nil {
 		return nil, err
 	}
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(contextSource{ctx: ctx, reader: bytes.NewReader(source)}, options.SourceName)
+	// A source label is a path operand or an inline label. Reuse the declared
+	// per-argument byte ceiling; never retain a caller's large substring backing.
+	labelMaximum := languageLimit(catalog, "argument_bytes")
+	if int64(len(options.SourceName)) > labelMaximum {
+		return nil, &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: unitStart(), Expected: "a bounded source-unit label", Limit: "argument_bytes", Unit: "bytes", Maximum: labelMaximum, Observed: int64(len(options.SourceName))}
+	}
+	if err := pool.ReserveHeap(int64(len(options.SourceName)), syntax.Pos{}); err != nil {
+		return nil, parserDiagnostic(err, len(source))
+	}
+	sourceName := strings.Clone(options.SourceName)
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(contextSource{ctx: ctx, reader: bytes.NewReader(source)}, sourceName)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -138,7 +149,7 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	// its slice-growth overlap and synthesized declaration words. Source text is
 	// cloned at most eight times across capture/lowering metadata. Host recursion
 	// shares the selected parser's conservative 4 KiB active-frame envelope.
-	hostBytes := c.nodeCount*2048 + int64(len(source))*8 + (c.maximumDepth+1)*4096 + (64 << 10)
+	hostBytes := c.nodeCount*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
 	var releaseState func()
 	retained := false
 	if memory != nil {
@@ -168,7 +179,7 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	sourceHash := sha256.Sum256(source)
 	digest := toolcontract.LanguageCatalogDigest()
 	retained = true
-	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: options.SourceName, Statements: statements}}, nil
+	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
 }
 
 func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {

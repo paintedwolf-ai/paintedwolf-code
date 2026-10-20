@@ -3,7 +3,9 @@ package commandsurface_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -75,5 +77,31 @@ func TestStateRefusalReturnsNoExecutionPlanAndKeepsScratchSeparate(t *testing.T)
 	}
 	if memory.state != 0 || memory.scratch != 32<<20 {
 		t.Fatal("refused plan changed independent memory leases")
+	}
+}
+
+func TestSourceLabelIsBoundedDetachedAndCharged(t *testing.T) {
+	backing := strings.Repeat("x", 2<<20)
+	label := backing[:6]
+	memory := &programMemoryFixture{maximum: 4 << 20}
+	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
+	testutil.FailErr(t, "admit parser", err)
+	defer parser.Close()
+	plain, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{})
+	testutil.FailErr(t, "parse without label", err)
+	plainCharge := memory.state
+	testutil.FailErr(t, "close plain plan", plain.Close())
+	named, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{SourceName: label})
+	testutil.FailErr(t, "parse detached label", err)
+	defer named.Close()
+	snapshot := named.Snapshot()
+	if snapshot.SourceName != label || unsafe.StringData(snapshot.SourceName) == unsafe.StringData(label) {
+		t.Fatal("source label retains caller backing allocation")
+	}
+	if memory.state != plainCharge+int64(len(label)) {
+		t.Fatal("source label bypassed retained-state admission")
+	}
+	if plan, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{SourceName: backing}); plan != nil || err == nil {
+		t.Fatal("unbounded source label admitted")
 	}
 }

@@ -53,7 +53,7 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 			c.unsupported(n, "|, && or ||")
 		}
 		if v.Op == syntax.Pipe {
-			c.limit(n, "pipeline_stages", int64(pipelineWidth(v)))
+			c.limit(n, "pipeline_stages", int64(c.pipelineWidth(v)))
 		}
 	case *syntax.WhileClause:
 		if v.Until {
@@ -114,16 +114,35 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		c.unsupported(n, "a supported version 1 syntax form")
 	}
 }
-func pipelineWidth(n syntax.Node) int {
-	switch v := n.(type) {
-	case *syntax.Stmt:
-		return pipelineWidth(v.Cmd)
-	case *syntax.BinaryCmd:
-		if v.Op == syntax.Pipe {
-			return pipelineWidth(v.X) + pipelineWidth(v.Y)
+
+// pipelineWidth stops as soon as one too many stages is proven. The pending
+// traversal and its precharged slice cannot grow with an unvalidated pipe tree.
+func (c *programCompiler) pipelineWidth(n syntax.Node) int {
+	maximum := int(languageLimit(c.catalog, "pipeline_stages"))
+	if !c.reserveHeap(int64(maximum+1)*16, n) {
+		return maximum + 1
+	}
+	pending := make([]syntax.Node, 1, maximum+1)
+	pending[0] = n
+	width := 1
+	for len(pending) > 0 {
+		last := len(pending) - 1
+		current := pending[last]
+		pending = pending[:last]
+		switch v := current.(type) {
+		case *syntax.Stmt:
+			pending = append(pending, v.Cmd)
+		case *syntax.BinaryCmd:
+			if v.Op == syntax.Pipe {
+				width++
+				if width > maximum {
+					return width
+				}
+				pending = append(pending, v.X, v.Y)
+			}
 		}
 	}
-	return 1
+	return width
 }
 func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 	if len(call.Args) == 0 {
