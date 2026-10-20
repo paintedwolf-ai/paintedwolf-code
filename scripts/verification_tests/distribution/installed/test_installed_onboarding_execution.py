@@ -112,9 +112,22 @@ class InstalledOnboardingTests(unittest.TestCase):
                 onboarding, 'form', side_effect=RuntimeError('private toolkit payload')):
             with self.assertRaises(CaseUnavailable) as refusal:
                 onboarding.onboard(app)
-        self.assertEqual(app.observations['native_accessibility_error'],
-                         {'phase': 'vault-form-inventory', 'exception_type': 'RuntimeError'})
+        facts = app.observations['native_accessibility_error']
+        self.assertEqual((facts['phase'], facts['exception_type']), ('vault-form-inventory', 'RuntimeError'))
+        self.assertTrue(0 < len(facts['stack']) <= 8)
+        self.assertTrue(all(set(frame) == {'file', 'function', 'line'} for frame in facts['stack']))
         self.assertNotIn('private', repr(app.observations) + str(refusal.exception))
+
+    def test_native_error_metadata_excludes_message_locals_and_unbounded_identifiers(self):
+        error = RuntimeError('private input must never be retained')
+        error.domain, error.code = 'g-dbus-error-quark', 19
+        facts = onboarding.native_error(error)
+        self.assertEqual((facts['domain'], facts['code']), ('g-dbus-error-quark', 19))
+        self.assertNotIn('private', repr(facts))
+        error.domain, error.code = 'private input', True
+        facts = onboarding.native_error(error)
+        self.assertNotIn('domain', facts)
+        self.assertNotIn('code', facts)
 
     def test_foreign_or_reused_application_pid_is_never_an_owned_window(self):
         app = SimpleNamespace(observations={'launch_identity': IDENTITY})
