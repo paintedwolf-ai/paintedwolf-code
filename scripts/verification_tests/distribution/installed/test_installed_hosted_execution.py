@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.hosted_desktop import fresh, run, validate_host
+from linux_release.hosted_desktop import fresh, run, selected_controller, validate_host
 
 
 class HostedDesktopTests(unittest.TestCase):
@@ -48,3 +48,12 @@ class HostedDesktopTests(unittest.TestCase):
             self.assertNotIn('sensitive', str(error.exception))
             self.assertNotIn('private', str(error.exception))
             self.assertEqual(command.call_args.kwargs['input'], b'private-input')
+
+    def test_immutable_controller_selection_keeps_workflow_identity_separate(self):
+        environment = self.environment()
+        self.assertEqual(selected_controller(environment, None), 'a' * 40)
+        self.assertEqual(selected_controller(environment, 'b' * 40), 'b' * 40)
+        self.assertEqual(environment['GITHUB_SHA'], 'a' * 40)
+        for selected in ('main', 'refs/qualification/' + 'b' * 40, 'B' * 40, '', 123):
+            with self.subTest(selected=selected), self.assertRaises(ValueError):
+                selected_controller(environment, selected)
