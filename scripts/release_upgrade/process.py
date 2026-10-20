@@ -70,7 +70,7 @@ class Installation:
     def observe(self, version: str):
         self.capture_owned()
         daemon = read_json(self.config / "daemon.json")
-        if not daemon or type(daemon.get("pid")) is not int or type(daemon.get("port")) is not int:
+        if not isinstance(daemon, dict) or type(daemon.get("pid")) is not int or type(daemon.get("port")) is not int:
             return None
         pid, port = daemon["pid"], daemon["port"]
         if pid <= 1 or not 1 <= port <= 65535:
@@ -78,7 +78,9 @@ class Installation:
         engine = process_identity(pid)
         if self.owned.get(pid) != (engine, 2):
             return None
-        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], check=True, capture_output=True, text=True, timeout=5)
+        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True, timeout=5)
+        if parent.returncode or not parent.stdout.strip().isdigit():
+            return None
         app_pid = int(parent.stdout.strip())
         app_identity = process_identity(app_pid)
         if self.owned.get(app_pid) != (app_identity, 1):
@@ -91,7 +93,7 @@ class Installation:
                 health = json.load(response)
         except (OSError, ValueError):
             return None
-        if health.get("version") != version or health.get("status") != "ok":
+        if not isinstance(health, dict) or health.get("version") != version or health.get("status") != "ok":
             return None
         return {"health": health, "engine_pid": pid, "app_pid": app_pid, "port": port}
 
@@ -113,7 +115,10 @@ class Installation:
             while process_identity(pid) == identity and time.monotonic() < deadline:
                 time.sleep(0.1)
             if process_identity(pid) == identity:
-                os.kill(pid, signal.SIGKILL)
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    continue
                 try:
                     wait_for(f"captured process {pid} did not exit", lambda: process_identity(pid) != identity, 5)
                 except TimeoutError as error:

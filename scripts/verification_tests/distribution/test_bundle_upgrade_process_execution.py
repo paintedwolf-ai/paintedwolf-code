@@ -64,10 +64,29 @@ class ProcessTests(unittest.TestCase):
                  patch.object(installation, "capture_owned"), \
                  patch.object(process, "read_json", return_value={"pid": 10, "port": 1234}), \
                  patch.object(process, "process_identity", side_effect=lambda pid: {10: "engine", 11: "app"}.get(pid)), \
-                 patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout="11")), \
+                 patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout="11", returncode=0)), \
                  patch.object(process.urllib.request, "build_opener", return_value=client):
                 observed = installation.observe("1.1.0")
             self.assertEqual(observed is not None, accepted)
+
+    def test_a_retiring_engine_is_retried_when_it_exits_during_parent_inspection(self):
+        installation = self.installation()
+        installation.owned = {10: ("engine", 2)}
+        with patch.object(installation, "capture_owned"), \
+             patch.object(process, "read_json", return_value={"pid": 10, "port": 1234}), \
+             patch.object(process, "process_identity", return_value="engine"), \
+             patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout="", returncode=1)):
+            self.assertIsNone(installation.observe("1.1.0"))
+
+    def test_a_process_that_exits_during_escalation_does_not_fail_cleanup(self):
+        installation = self.installation()
+        installation.owned = {10: ("app", 1)}
+        with patch.object(installation, "capture_owned"), \
+             patch.object(process, "process_identity", return_value="app"), \
+             patch.object(process.time, "monotonic", side_effect=[0, 11]), \
+             patch.object(process.os, "kill", side_effect=[None, ProcessLookupError]):
+            installation.stop()
+        self.assertEqual(installation.owned, {})
 
     def test_startup_recovery_ends_the_staged_app_without_running_its_quit_handler(self):
         installation = self.installation()
