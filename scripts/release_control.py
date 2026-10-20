@@ -28,6 +28,7 @@ def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
 
 
 def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
+    from release_upgrade.baseline import capture as capture_baseline
     from release_upgrade.feeds import capture
     from release_upgrade.plan import plan
     from update_keys import load_registry
@@ -43,7 +44,8 @@ def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
             snapshot = capture(base, channel, row["generation"], registry, destination)
             if snapshot is not None:
                 snapshots.append(snapshot)
-    result = plan(candidate, registry, snapshots)
+    anchors = capture_baseline(base, candidate["version"], registry, snapshots, destination)
+    result = plan(candidate, registry, snapshots, anchors)
     result["origin"] = base
     (destination / "plan.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
@@ -82,4 +84,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import importlib
+    import sys
+    handlers = {"bundle-prepare": "prepare", "bundle-rehearse": "rehearse", "bundle-serve": "server"}
+    selected = handlers.get(sys.argv[1] if len(sys.argv) > 1 else "")
+    if selected:
+        del sys.argv[1]
+        importlib.import_module("release_upgrade." + selected).main()
+    else:
+        main()
