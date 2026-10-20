@@ -66,12 +66,13 @@ class InstalledQualificationProducerTests(unittest.TestCase):
             execution=root/"executed"
             leaf=execution/"guest/leaf"
             leaf.mkdir(parents=True)
-            target={"id":"guest","artifact_id":"app","environment_id":"fixture"}
+            target={"id":"guest","artifact_id":"app","environment_id":"fixture","variant_id":"fixture-variant",
+                    "snapshot":{"kind":"package-inventory","value":"e"*64,"channel":None}}
             plan={"targets":[target]}
             (execution/"plan.json").write_text(json.dumps(plan))
             (execution/"driver-registry.json").write_bytes(b"drivers")
             receipt={"format_version":1,"execution_nonce":"1"*32,"source_commit":"b"*40,
-                     "driver_tree":"a"*40,"artifact_id":"app","environment_id":"fixture","variant_id":None}
+                     "driver_tree":"a"*40,"artifact_id":"app","environment_id":"fixture","variant_id":"fixture-variant"}
             (execution/"guest/execution-request.json").write_text(json.dumps(receipt))
             receipt["execution_nonce"]="2"*32
             (leaf/"execution.json").write_text(json.dumps(receipt))
