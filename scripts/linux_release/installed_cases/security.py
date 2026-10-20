@@ -17,7 +17,7 @@ from .app import InstalledApp
 from .ipc import system_v_isolation
 from .lifecycle import background_cancel
 from .crash import detached_cleanup, host_execution_lifetime
-from .kernel import private_shared_memory, restricted_namespaces
+from .kernel import private_shared_memory, restricted_namespaces, helper_boundary
 from .process import run
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
@@ -182,6 +182,7 @@ PROBES = {('processes', 'host-execution-lifetime'): host_execution_lifetime,
           ('confinement', 'system-v-ipc-isolation'): system_v_isolation,
           ('confinement', 'private-shared-memory'): private_shared_memory,
           ('confinement', 'restricted-user-namespaces'): restricted_namespaces,
+          ('confinement', 'helper-boundary-and-descendants'): helper_boundary,
           ('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
           ('session', 'inhibitor-lifetime'): inhibitor_lifetime,
           ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory}
