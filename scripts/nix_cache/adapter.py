@@ -47,7 +47,7 @@ def signing_identity(key_file: Path, cache: Path) -> str:
     info = key_file.stat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("Nix signing key requires owner-only file permissions")
-    if key_file.is_relative_to(Path("/nix/store")) or key_file.is_relative_to(cache):
+    if key_file.is_relative_to(Path("/nix/store")) or key_file.is_relative_to(cache.resolve()):
         raise ValueError("Nix signing key cannot be placed in the store or cache")
     if info.st_size > 4096:
         raise ValueError("Nix signing key exceeds its size bound")
