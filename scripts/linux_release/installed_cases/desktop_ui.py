@@ -105,10 +105,15 @@ class DesktopUI:
                 raise CaseUnavailable('normal-native-control-observation-deadline')
             node, depth = pending.pop()
             visited += 1
-            if visited > 4096 or depth > 64 or not 0 <= node.childCount <= 1024:
-                raise ValueError('installed accessible window exceeds its traversal bound')
+            count = node.childCount
+            if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
+                error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
+                error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
+                    'child_count': count if type(count) is int else None,
+                    'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
+                raise error
             yield node
-            pending.extend((node[index], depth + 1) for index in range(node.childCount))
+            pending.extend((node[index], depth + 1) for index in range(count))
 
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
