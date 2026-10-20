@@ -4,13 +4,14 @@
   "kind": "data_record",
   "workstream": "portable-command-paths",
   "disposition": "retain",
-  "reason": "Retain the cohesive typed occurrence declaration table at the measured412-line baseline plus8 shared command source/resource facts, with ceiling420. These are declarations only: no runtime state, authority or evaluation logic. A separate forwarding table would obscure the shared fact type contract. Existing mutation recovery tests remain authoritative for unchanged consumers; path producer and production catalog-rendering fixtures cover exact source spans, typed resource ceilings and supported-form guidance. Further growth requires renewed review.",
-  "reviewed_commit": "f44cb1467e71b8ddddb4aceeff9acb99b9e985f0",
-  "ceiling": 420,
+  "reason": "Retain the cohesive typed occurrence declaration table at the measured 412-line baseline plus nine shared command source/resource facts, with ceiling 421. These are declarations only: no runtime state, authority or evaluation logic. A separate forwarding table would obscure the shared fact type contract. Existing mutation recovery tests remain authoritative for unchanged consumers; path producer and production catalog-rendering fixtures cover exact source spans, explicitly typed resource units and ceilings, supported-form guidance, and incomplete bounded output. Further growth requires renewed review.",
+  "reviewed_commit": "74035fbcee0c2799c11e7d95c78592e1e8a70326",
+  "ceiling": 421,
   "boundaries": {
     "lycaon/internal/tools/native/edit_health_test.go": "e897de10b454ca7ea03f73a62289665254f68a331df68ff7a53abbafbaa530af",
     "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138",
-    "lycaon/internal/tools/projectpaths/program_paths_test.go": "42cbcec23696f89ede4a0fa8282ff25dbdcc037dd47aa460a38c3827a05b66b9",
-    "lycaon/test/contract/architecture/program_path_feedback_test.go": "c2a66f84560382d43fbb5bd94976deec7848b6aae70c077813ac1650704b94eb"
+    "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
+    "lycaon/test/contract/architecture/program_path_feedback_test.go": "01d0076d1672204e4f9d76757bed9c8bcb7c110e9eab84972e2b19e6754bcd18",
+    "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483"
   }
 }
