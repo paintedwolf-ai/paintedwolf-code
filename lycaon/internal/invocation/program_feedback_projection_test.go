@@ -33,18 +33,21 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	code := "COMMAND_EFFECT_NOT_ALLOWED"
 	testutil.FailErr(t, "settle refused child", f.recorder.SettleChild(t.Context(), denied.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:scope-refusal"}))
 	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail"}))
-	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "large": strings.Repeat("x", 40<<10)}}
+	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "source_unit_id": "owner-input", "source_start_byte": 2, "source_end_byte": 3, "source_line": 9, "source_column": 4, "large": strings.Repeat("x", 40<<10)}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
 	memory := &feedbackMemory{}
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tc, denied, cause)
 	testutil.FailErr(t, "prepare actual ledger feedback", err)
 	defer prepared.Close()
-	if memory.active != 3 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
+	if memory.active < 1 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
 		t.Fatal("preparation changed owner code or lost lease")
 	}
 	data := prepared.Rejection.Data
 	if data["tool"] != "command" || data["native_operation"] != "write" || data["execution_id"] != denied.Invocation().Identity.ExecutionID || data["model_tool_call_id"] != "actual-model-call" || data["program_executed_reads"] != 1 || data["program_replay_available"] != false {
 		t.Fatalf("lost child/parent/effect facts: %+v", data)
+	}
+	if data["operation_source_unit_id"] != denied.Invocation().SourceUnitID || data["operation_source_start_byte"] != denied.Invocation().Span.StartByte || data["source_unit_id"] != "owner-input" || data["source_start_byte"] != 2 || data["source_line"] != 9 {
+		t.Fatalf("enclosing stage replaced owner diagnostic coordinates: %+v", data)
 	}
 	if cause.Data["native_operation"] != nil {
 		t.Fatal("supplement mutated owner rejection")

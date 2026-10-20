@@ -76,6 +76,16 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
+ - name: paintedwolf.operation_source_unit_id
+   type: string
+ - name: paintedwolf.operation_source_start_byte
+   type: int
+ - name: paintedwolf.operation_source_end_byte
+   type: int
+ - name: paintedwolf.operation_source_line
+   type: int
+ - name: paintedwolf.operation_source_column
+   type: int
  - name: paintedwolf.native_operation
    type: string
  - name: paintedwolf.program_id

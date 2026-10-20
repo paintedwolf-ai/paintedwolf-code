@@ -4,6 +4,11 @@ import "github.com/lycaon/lycaon/internal/oarcore"
 
 // Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
 var occurrenceFactDecls = []factDecl{
+	{"operation_source_unit_id", oarcore.TypeString, FactTierHost, ""},
+	{"operation_source_start_byte", oarcore.TypeInt, FactTierHost, ""},
+	{"operation_source_end_byte", oarcore.TypeInt, FactTierHost, ""},
+	{"operation_source_line", oarcore.TypeInt, FactTierHost, ""},
+	{"operation_source_column", oarcore.TypeInt, FactTierHost, ""},
 	{"program_id", oarcore.TypeString, FactTierHost, ""},
 	{"execution_id", oarcore.TypeString, FactTierHost, ""},
 	{"node_id", oarcore.TypeString, FactTierHost, ""},

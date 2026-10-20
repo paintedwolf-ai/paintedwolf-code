@@ -22,13 +22,29 @@ type ProgramFeedbackLedger interface {
 // has serialized/delivered it and no longer retains the returned rejection data.
 type PreparedProgramFailure struct {
 	Rejection *toolrejection.ToolReject
+	operation toolcontract.BoundOperation
+	identity  tools.InvocationIdentity
+	memory    ProgramStateAdmission
 	release   func()
-	once      sync.Once
+	mu        sync.Mutex
+	closed    bool
 }
 
 func (p *PreparedProgramFailure) Close() {
-	if p != nil && p.release != nil {
-		p.once.Do(p.release)
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.closed {
+		p.closed = true
+		p.Rejection = nil
+		p.operation = toolcontract.BoundOperation{}
+		p.memory = nil
+		if p.release != nil {
+			p.release()
+			p.release = nil
+		}
 	}
 }
 
@@ -96,6 +112,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if clone.Data == nil {
 		clone.Data = map[string]any{}
 	}
+	completeNativeRejection(operation, &clone)
 	for name, value := range facts {
 		clone.Data[name] = value
 	}
@@ -105,10 +122,13 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	clone.Data["native_command"] = operation.Command()
 	clone.Data["execution_id"] = inv.Identity.ExecutionID
 	clone.Data["node_id"] = inv.Identity.NodeID
-	clone.Data["source_unit_id"] = inv.SourceUnitID
-	clone.Data["source_start_byte"], clone.Data["source_end_byte"] = inv.Span.StartByte, inv.Span.EndByte
-	clone.Data["source_line"], clone.Data["source_column"] = inv.Span.Line, inv.Span.Column
-	return &PreparedProgramFailure{Rejection: &clone, release: func() { retained.Close(); release() }}, nil
+	if _, present := clone.Data["source_unit_id"]; !present {
+		clone.Data["source_unit_id"] = inv.SourceUnitID
+	}
+	clone.Data["operation_source_unit_id"] = inv.SourceUnitID
+	clone.Data["operation_source_start_byte"], clone.Data["operation_source_end_byte"] = inv.Span.StartByte, inv.Span.EndByte
+	clone.Data["operation_source_line"], clone.Data["operation_source_column"] = inv.Span.Line, inv.Span.Column
+	return &PreparedProgramFailure{Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); release() }}, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

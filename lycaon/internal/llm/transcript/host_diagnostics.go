@@ -23,6 +23,7 @@ const (
 var diagnosticFields = []string{
 	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
+	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",
 	"source_start_byte", "source_end_byte", "source_line", "source_column",
 	"program_id", "execution_id", "node_id", "source_unit_id", "model_tool_call_id", "program_detail_ref",
 	"program_replay_limitation", "program_static_not_started", "program_static_untaken",
