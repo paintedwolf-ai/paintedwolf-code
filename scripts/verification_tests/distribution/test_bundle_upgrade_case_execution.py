@@ -29,7 +29,7 @@ class CaseTests(unittest.TestCase):
                      "signing_generation": 1, "artifact_url": step["platforms"]["darwin-aarch64"]["url"],
                      "artifact_signature": step["platforms"]["darwin-aarch64"]["signature"], "release_id": "release"}
         case = {"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview", "protocol": "native-v2", "steps": [step]}
-        plan = {"candidate": step, "archives": {"1.0.2": manifest("1.0.2")}, "schema_version": 5}
+        plan = {"candidate": step, "archives": {"1.0.2": manifest("1.0.2")}, "schema_version": 5, "schemas": {"1.0.2": 5}}
         records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
         installation = Mock(executable=executable)
         launches = []

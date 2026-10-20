@@ -86,6 +86,8 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
     try:
         installation.launch()
         before = installation.healthy(case["source_version"])
+        if before["health"].get("schema_version") != plan["schemas"][case["source_version"]]:
+            raise ValueError("prior engine does not match its exact corpus schema")
         verify_semantics(config, fixture, before, evidence)
         for step in case["steps"]:
             version = step["version"]
