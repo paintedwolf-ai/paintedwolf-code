@@ -9,6 +9,6 @@
   "ceiling": 332,
   "boundaries": {
     "lycaon/cmd/codegen-tool-command-equivalence/main_test.go": "05cec6af0ed27fc9dd8c5bae5f82dfdbf3682b89562cdeea4f23d8378ed93f42",
-    "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "1084fdbbc67ceb2eb5c72ec54052493fe076a1e9a2c6dd4103bc727c19a25a4a"
+    "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "fa22c8d600e95558568e0fb4bb4e12c3ac7872e3e093c6faedd5d6ff5f9e0734"
   }
 }

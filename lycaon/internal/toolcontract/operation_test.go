@@ -1,0 +1,49 @@
+package toolcontract
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestOperationDefinitionIsDetachedAndUsesExistingContract(t *testing.T) {
+	contract, _ := Lookup("write")
+	contract.SecretReferenceArgs = []string{"content"}
+	schema := json.RawMessage(`{"type":"object","required":["path","content"]}`)
+	definition, err := ToolOperation("write", schema, contract)
+	if err != nil {
+		t.Fatalf("compile write: %v", err)
+	}
+	contract.SecretReferenceArgs[0] = "changed"
+	schema[2] = 'X'
+	facts := definition.Facts()
+	if facts.Contract.Owner != "filesystem" || facts.Contract.Lifecycle != LifecycleJournaledMutation || facts.Contract.SecretReferenceArgs[0] != "content" || definition.Digest() == "" {
+		t.Fatalf("lost owner contract: %+v", facts.Contract)
+	}
+	facts.Resources[0].Maximum = -1
+	facts.Streams.Statuses[0] = "changed"
+	if again := definition.Facts(); again.Resources[0].Maximum < 0 || again.Streams.Statuses[0] == "changed" {
+		t.Fatal("definition shares mutable data")
+	}
+	for _, invalid := range []OperationFacts{{}, {Identity: "write", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"string"}`), ProgressGate: "progress", RejectionContract: "write"}} {
+		if _, err := NewOperationDefinition(invalid); err == nil {
+			t.Fatal("invalid definition admitted")
+		}
+	}
+}
+
+func TestProducerPublicationRequiresCompleteEligibleOutcome(t *testing.T) {
+	completeNoMatch := ProducerResult{Status: 1, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true}
+	if err := completeNoMatch.Validate(); err != nil {
+		t.Fatalf("status one complete result: %v", err)
+	}
+	for _, result := range []ProducerResult{
+		{Status: 0, Terminal: ProducerCompleted, PublicationEligible: true},
+		{Status: 0, Terminal: ProducerInterrupted, Complete: true, PublicationEligible: true},
+		{Status: 0, Terminal: ProducerCompleted, Complete: true, PublicationEligible: true, StopCode: "COMMAND_LIMIT_EXCEEDED"},
+		{Status: -1, Terminal: ProducerCompleted}, {Terminal: "invented"},
+	} {
+		if result.Validate() == nil {
+			t.Fatalf("invalid producer admitted: %+v", result)
+		}
+	}
+}

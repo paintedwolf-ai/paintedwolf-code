@@ -457,9 +457,10 @@ type Invocation struct {
 
 // Definition is one atomically published registry entry.
 type Definition struct {
-	Meta     ToolMeta
-	Contract toolcontract.Contract
-	Handler  ToolHandler
+	Operation toolcontract.OperationDefinition
+	Meta      ToolMeta
+	Contract  toolcontract.Contract
+	Handler   ToolHandler
 }
 
 // ToolRegistry registers and runs tool definitions.
