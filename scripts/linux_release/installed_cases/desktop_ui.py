@@ -6,7 +6,7 @@ import os
 import time
 
 from .app import process_identity, session_environment
-from .records import CaseUnavailable
+from .records import CaseFailed, CaseUnavailable
 
 
 def owned_process(pid: int, app) -> bool:
@@ -181,5 +181,7 @@ def interactive_window(app, timeout=30) -> dict:
         raise CaseUnavailable('normal-interactive-desktop-observation-unavailable') from None
     code = app.process.poll()
     if code is not None:
-        raise ValueError('selected installed desktop exited before interactive readiness: ' + str(code))
+        failure = CaseFailed('selected installed desktop exited before interactive readiness')
+        failure.observations = {'launcher_exit_code': code, 'interactive_window_ready': False}
+        raise failure
     raise CaseUnavailable('installed-desktop-did-not-become-interactive')

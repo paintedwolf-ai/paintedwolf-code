@@ -33,9 +33,10 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
                 native_targets.update(selected_targets)
     if not targets:
         raise ValueError('campaign capacity selected no catalog targets')
-    # Both transported leaf and normative controller evidence are retained. Each case
-    # owns one observation, up to MAX_STREAMS streams, plus a possible failure record.
-    case_files = cases * (MAX_STREAMS + 2) * 2
+    # Both transported leaf and normative controller evidence are retained. A case
+    # can preserve its bounded partial record and a separate captured-product
+    # failure record (each up to MAX_STREAMS streams), plus a generic failure.
+    case_files = cases * (2 * MAX_STREAMS + 3) * 2
     # Includes per-case directory entries, per-target metadata/logs/ZIP and top-level
     # aggregate documents. Control bytes remain under their separate fixed limits.
     # A native target may also own one pre-bind installation journal, bounded by
