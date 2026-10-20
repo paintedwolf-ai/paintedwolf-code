@@ -52,3 +52,26 @@ class DeliveryAuthorityTests(unittest.TestCase):
         released.authorize.return_value = {"provenance": {}, "metadata": {}, "non_linux_packages": {}}
         with self.assertRaisesRegex(ValueError, "independent release"):
             authority(binding, {}, {"accepted": False})
+
+
+class RepositoryDeliveryFactsTests(unittest.TestCase):
+    def test_pacman_config_is_derived_without_mutating_retained_generation(self):
+        import tempfile
+        from scripts.linux_release.publication.delivery import repository_facts
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            public = root / "trusted.asc"; public.write_bytes(b"selected public key")
+            manifest = {"family": "pacman", "key_fingerprint": "A" * 40}
+            facts = {"family": "pacman", "architecture": "x86_64", "channel": "stable", "generation": "a" * 64,
+                     "inventory_sha256": "b" * 64, "activation_sha256": "c" * 64,
+                     "base_url": "https://downloads.paintedwolf.dev/linux/repositories/channels/pacman/stable/x86_64",
+                     "signing_generation": 1, "key_fingerprint": "A" * 40}
+            backend = Mock(public="https://downloads.paintedwolf.dev/linux/repositories")
+            backend.verify_public.side_effect = lambda name, path, **kw: self.assertTrue(path.is_file())
+            selected = Mock(root=root)
+            with patch(OWNER + ".selection", return_value=({}, public)), patch(OWNER + ".digest", return_value="a" * 64), patch(OWNER + ".observe", return_value={"facts": facts}):
+                result = repository_facts(selected, {"repositories": {"generations": [{"manifest": manifest, "operation": {}}]}}, {"verified_setups": []}, backend)
+            self.assertEqual(result[0]["setup"]["file"], "client.conf")
+            self.assertIn("/generations/" + "a" * 64 + "/client.conf", result[0]["setup"]["url"])
+            self.assertFalse((root / "generations").exists())
+            self.assertEqual(backend.verify_public.call_count, 2)

@@ -3,29 +3,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ "${1:-}" == "--prepare-distribution-document" ]]; then
+rehearsal_module=
+case "${1:-}" in
+  --prepare-distribution-document) rehearsal_module=scripts.linux_release.publication.document_pipeline ;;
+  --local-distribution-document) rehearsal_module=scripts.linux_release.publication.rehearsal ;;
+  --retain-release-inputs) rehearsal_module=scripts.linux_release.publication.release_producer ;;
+  --produce-linux-controls) rehearsal_module=scripts.linux_release.publication.control_pipeline ;;
+  --prepare-linux-controls) rehearsal_module=scripts.linux_release.publication.controls ;;
+  --retain-linux-campaign) rehearsal_module=scripts.linux_release.publication.producer ;;
+  --admit-linux-publication) rehearsal_module=scripts.linux_release.publication.controller ;;
+esac
+if [[ -n "$rehearsal_module" ]]; then
   shift
-  exec python3 -m scripts.linux_release.publication.document_pipeline "$@"
-fi
-if [[ "${1:-}" == "--retain-release-inputs" ]]; then
-  shift
-  exec python3 -m scripts.linux_release.publication.release_producer "$@"
-fi
-if [[ "${1:-}" == "--produce-linux-controls" ]]; then
-  shift
-  exec python3 -m scripts.linux_release.publication.control_pipeline "$@"
-fi
-if [[ "${1:-}" == "--prepare-linux-controls" ]]; then
-  shift
-  exec python3 -m scripts.linux_release.publication.controls "$@"
-fi
-if [[ "${1:-}" == "--retain-linux-campaign" ]]; then
-  shift
-  exec python3 -m scripts.linux_release.publication.producer "$@"
-fi
-if [[ "${1:-}" == "--admit-linux-publication" ]]; then
-  shift
-  exec python3 -m scripts.linux_release.publication.controller "$@"
+  cd "$ROOT"
+  PYTHONPATH="$ROOT/scripts" exec python3 -m "$rehearsal_module" "$@"
 fi
 
 # shellcheck source=release-r2-rest.sh
