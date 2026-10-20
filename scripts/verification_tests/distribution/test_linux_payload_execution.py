@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -76,6 +77,8 @@ class LinuxPayloadTests(unittest.TestCase):
         for foreign in [False, True]:
             with self.subTest(foreign=foreign), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
+                (root / "scripts").mkdir()
+                shutil.copyfile(ROOT / "scripts/linux-package-config.py", root / "scripts/linux-package-config.py")
                 profile = root / "packaging/linux/apparmor/painted-wolf-code"
                 profile.parent.mkdir(parents=True)
                 profile.write_text("packaged profile")
