@@ -61,6 +61,16 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	if children != 0 {
 		t.Fatal("source retention fabricated a child")
 	}
+	// A mistaken/ambiguous cleanup attempt must preserve the very marker
+	// required by boot reconstruction while SQL still names this attachment.
+	if err = body.Close(); err == nil {
+		t.Fatal("durable source allowed premature close")
+	}
+	claimed, err := store.HasRetentionClaim(claim, body.Reference().Blob.ID)
+	testutil.FailErr(t, "keep exact marker after durable close refusal", err)
+	if !claimed || quota.disk != 1 || quota.state != 1 {
+		t.Fatal("durable close stranded recovery claim or accounting")
+	}
 	// Simulate a new process's accounting. Restore uses the SAME durable claim;
 	// it neither renews it nor manufactures producer completion from readable bytes.
 	restoredQuota := &outputQuota{}
