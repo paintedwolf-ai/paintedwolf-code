@@ -55,11 +55,9 @@ def validate_inputs(root, selections, source, tree):
     verify_producer(selections["controls"], read(controls / "control-producer.json"), source["source_commit"], source["source_tree"])
     verify_producer(selections["plan"], read(plan / "plan-producer.json"), source["source_commit"], source["source_tree"])
     document = read(plan / "qualification-plan.json")
-    if (not isinstance(document, dict) or set(document) != {"format_version", "source_commit", "driver_tree", "targets"}
-            or type(document["format_version"]) is not int or document["format_version"] != 1
-            or document["source_commit"] != source["source_commit"] or document["driver_tree"] != tree):
+    selected_source, selected_tree, _ = validate_plan(document, read(controls / "final-artifacts.json"))
+    if selected_source != source["source_commit"] or selected_tree != tree:
         raise ValueError("protected qualification plan differs from selected source or fixed drivers")
-    validate_plan(document, read(controls / "final-artifacts.json"))
     return document
 
 
