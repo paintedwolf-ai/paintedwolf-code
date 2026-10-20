@@ -43,7 +43,7 @@ func attachPinnedLaunch(ctx context.Context, cmd *exec.Cmd, p *ProcessPins, name
 	if err := pinnedPlatformAvailable(); err != nil {
 		return nil, err
 	}
-	if err := p.revalidate(ctx); err != nil {
+	if err := p.revalidate(ctx, name); err != nil {
 		return nil, err
 	}
 	security, err := osprocess.ProcessCredentials(os.Getpid())
@@ -189,7 +189,7 @@ func ConfirmPinnedLaunch(cmd *exec.Cmd) error {
 	if !state.pins.permitsSecurity(state.security, observed.Security, state.confined) {
 		return ErrLaunchIdentityChanged
 	}
-	if err := state.pins.revalidate(ctx); err != nil {
+	if err := state.pins.revalidate(ctx, state.arguments[0]); err != nil {
 		return err
 	}
 	return resumePinnedProcess(cmd.Process)

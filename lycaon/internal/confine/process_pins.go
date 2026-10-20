@@ -148,7 +148,7 @@ func sameImage(info os.FileInfo, change fileChange, current os.FileInfo) bool {
 	return err == nil && os.SameFile(info, current) && info.Mode() == current.Mode() && info.Size() == current.Size() && info.ModTime().Equal(current.ModTime()) && observed == change
 }
 
-func (p *ProcessPins) revalidate(ctx context.Context) error {
+func (p *ProcessPins) revalidate(ctx context.Context, requested ...string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
@@ -172,7 +172,15 @@ func (p *ProcessPins) revalidate(ctx context.Context) error {
 	if !os.SameFile(info, p.cwdInfo) {
 		return ErrLaunchIdentityChanged
 	}
-	for _, image := range p.images {
+	images := p.images
+	// A slash-bearing invocation retains its exact operand spelling. Admit that
+	// spelling too; identity equality alone cannot grant a second pathname.
+	if len(requested) == 1 && strings.ContainsAny(requested[0], "/\\") {
+		image := p.images[0]
+		image.path = requested[0]
+		images = append(append([]pinnedImage(nil), images...), image)
+	}
+	for _, image := range images {
 		current, err := p.paths.OpenExecutable(ctx, image.path)
 		if err != nil {
 			return err

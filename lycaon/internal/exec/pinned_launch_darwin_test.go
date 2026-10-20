@@ -23,6 +23,9 @@ func (p pinnedLaunchFixture) OpenExecutable(ctx context.Context, name string) (*
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if !filepath.IsAbs(name) {
+		name = filepath.Join(p.directory, name)
+	}
 	if !p.allowed[name] {
 		return nil, os.ErrPermission
 	}
@@ -131,5 +134,31 @@ func TestPinnedLaunchRefusesChangedEntryAndRevokedAdmissionBeforePayload(t *test
 				t.Fatalf("payload ran before refusal: %v", err)
 			}
 		})
+	}
+}
+
+func TestPinnedLaunchDoesNotGrantAnUnadmittedHardlinkOperand(t *testing.T) {
+	directory := t.TempDir()
+	entry := filepath.Join(directory, "task")
+	alias := filepath.Join(directory, "unadmitted")
+	if err := os.WriteFile(entry, []byte("#!/bin/sh\nprintf payload\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(entry, alias); err != nil {
+		t.Fatal(err)
+	}
+	paths := pinnedLaunchFixture{directory, map[string]bool{entry: true, "/bin/sh": true}}
+	pins, err := confine.CaptureProcessPins(t.Context(), entry, paths, confine.LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pins.Close()
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic alias admission", &confine.Confinement{HostExecution: true}).WithPinnedIdentity(pins)
+	cmd, cleanup, err := PrepareCommand(t.Context(), alias, nil, ExecOpts{Launch: plan})
+	if cleanup != nil {
+		cleanup()
+	}
+	if cmd != nil || !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("held image granted another operand: %v", err)
 	}
 }
