@@ -46,7 +46,9 @@ class Installation:
 
     def capture_owned(self):
         helpers = self.config.glob("updates/installations/*/staging/*/update-helper")
-        commands = [str(self.executable), *(str(path) for path in helpers)]
+        commands = {str(self.executable): 1, **{str(path): 0 for path in helpers},
+                    str(self.app / "Contents/MacOS/pw"): 2,
+                    str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
         rows = subprocess.run(["ps", "-axo", "pid=,command="], check=True, capture_output=True, text=True, timeout=5)
         for row in rows.stdout.splitlines():
             fields = row.strip().split(None, 1)
@@ -54,7 +56,8 @@ class Installation:
                 pid = int(fields[0])
                 identity = process_identity(pid)
                 if identity:
-                    self.owned[pid] = (identity, 1 if fields[1].startswith(str(self.executable)) else 0)
+                    kind = next(kind for command, kind in commands.items() if fields[1] == command or fields[1].startswith(command + " "))
+                    self.owned[pid] = (identity, kind)
 
     def observe(self, version: str):
         self.capture_owned()
@@ -106,6 +109,6 @@ class Installation:
                     wait_for(f"captured process {pid} did not exit", lambda: process_identity(pid) != identity, 5)
                 except TimeoutError as error:
                     errors.append(str(error))
-        self.owned.clear()
         if errors:
             raise ValueError("; ".join(errors))
+        self.owned.clear()
