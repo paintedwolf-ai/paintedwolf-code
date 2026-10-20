@@ -132,8 +132,9 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
         raise
     except Exception as error:
         refusal = CaseUnavailable('normal-native-editor-interaction-unavailable')
-        refusal.observations = {**observations, 'native_editor_exception_type': type(error).__name__}
-        refusal.streams = streams
+        refusal.observations = {**observations, **getattr(error, 'observations', {}),
+                               'native_editor_exception_type': type(error).__name__}
+        refusal.streams = {**streams, **getattr(error, 'streams', {})}
         raise refusal from None
 
 
