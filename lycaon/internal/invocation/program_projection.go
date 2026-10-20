@@ -13,6 +13,10 @@ import (
 // OAR owns dispositions and copy; workflow owners supply outstanding obligations.
 // Static counts never predict future loop or function invocations.
 type ProgramProjection struct {
+	ParentToolCallID          string
+	ParentTool                string
+	ParentSessionID           string
+	RootSourceUnitID          string
 	Program                   api.CommandProgramReceipt
 	Effects                   []ExecutionProjection
 	Unknown                   []ExecutionProjection
@@ -57,6 +61,9 @@ func (r *SQLRecorder) ProjectProgram(ctx context.Context, sessionID, programID s
 		return out, err
 	}
 	out.DetailReference = out.Program.DetailRef
+	if err = tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
+		return out, err
+	}
 	var reached, unsettled int
 	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled)
 	if err != nil {
