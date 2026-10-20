@@ -5,6 +5,11 @@ from release_semver import compare, parse
 from update_keys import generation, validate_binding
 
 
+def client_protocol(version: str) -> str:
+    # The released 1.0.0 and 1.0.1 clients install through Tauri's updater plugin.
+    return "tauri-plugin-v1" if compare(parse(version), parse("1.0.1")) <= 0 else "native-v2"
+
+
 def route(source: dict, candidate: dict, registry: dict, feeds: dict, channel: str) -> list[dict]:
     current = source
     steps = []
@@ -55,7 +60,7 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
             steps = route(source, candidate, registry, feeds, channel)
             key = (version, channel)
             cases[key] = {"id": f"{version}-{channel}", "source_version": version,
-                          "channel": channel, "source_feed": snapshot["path"],
+                          "channel": channel, "protocol": client_protocol(version), "source_feed": snapshot["path"],
                           "source_generation": number, "steps": steps}
     return {"format_version": 1, "candidate": candidate, "feeds": snapshots,
             "cases": [cases[key] for key in sorted(cases)],

@@ -1075,3 +1075,8 @@ stable and preview preferences distinct, includes stable users opting into previ
 and follows each retained trust bridge before offering the candidate. Withdrawn
 releases remain source installations; a withdrawn bridge cannot advance trust.
 Missing or invalid signatures fail selection rather than silently reducing coverage.
+
+The 1.0.0 and 1.0.1 clients use the Tauri updater plugin and require an explicit
+install action. Their plan entries name `tauri-plugin-v1`; later releases name
+`native-v2` and support automatic preparation and startup activation. These are
+released protocol boundaries, not runtime guesses from logs or file presence.

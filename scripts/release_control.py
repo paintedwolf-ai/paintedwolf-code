@@ -34,6 +34,7 @@ def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
     if base != "https://downloads.paintedwolf.dev":
         raise ValueError("upgrade rehearsal requires the production HTTPS origin")
     registry = load_registry()
+    destination.mkdir(parents=True, exist_ok=True)
     snapshots = []
     for row in registry["generations"]:
         if row["generation"] > candidate["update_keys"]["signing_generation"]:

@@ -22,6 +22,11 @@ class UpgradePlanTests(unittest.TestCase):
         self.addCleanup(self.binding.stop)
         self.registry = {"generations": [{"bridge_version": "1.1.0"}]}
 
+    def test_shipped_protocol_boundary_is_explicit(self):
+        from release_upgrade_plan import client_protocol
+        self.assertEqual(client_protocol("1.0.1"), "tauri-plugin-v1")
+        self.assertEqual(client_protocol("1.0.2-rc1"), "native-v2")
+
     def test_stable_promotes_preview_without_changing_the_preference(self):
         result = plan(manifest("1.2.0"), self.registry,
                       [snapshot("stable", manifest("1.0.0")), snapshot("preview", manifest("1.2.0-rc.1"))])
