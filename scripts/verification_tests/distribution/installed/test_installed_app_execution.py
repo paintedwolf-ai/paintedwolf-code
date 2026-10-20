@@ -133,3 +133,17 @@ class InstalledAppTests(unittest.TestCase):
         private.request.assert_called_once_with('GET', '/v1/providers')
         self.assertIs(app.api, public)
         self.assertFalse(app.observations['private_api_available'])
+
+    def test_captured_engine_exit_or_pid_reuse_is_a_product_failure(self):
+        identity = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
+        for changed in (FileNotFoundError(), ProcessLookupError(), dict(identity, start_time_ticks=789)):
+            app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
+            app.process = SimpleNamespace(poll=lambda: None)
+            app.observations['engine_identity'] = identity
+            options = {'side_effect': changed} if isinstance(changed, Exception) else {'return_value': changed}
+            with self.subTest(changed=type(changed).__name__), patch(
+                    'scripts.linux_release.installed_cases.app.process_identity', **options):
+                with self.assertRaises(CaseFailed) as failure:
+                    app.try_ready()
+                self.assertNotIsInstance(failure.exception, CaseUnavailable)
+                self.assertEqual(failure.exception.observations['engine_identity'], identity)
