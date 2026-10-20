@@ -75,6 +75,8 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 
 func TestExternalDiagnosticTextCannotCreateNativeProgramRejection(t *testing.T) {
 	memory := &feedbackMemory{}
+	var empty toolexecution.PreparedProgramFailure
+	empty.Close()
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), nil, memory, tools.ToolContext{}, toolcontract.BoundOperation{}, errors.New("Code: COMMAND_EFFECT_NOT_ALLOWED; retry the entire program"))
 	if err != nil || prepared != nil || memory.calls != 0 {
 		t.Fatal("external diagnostic text selected native feedback")

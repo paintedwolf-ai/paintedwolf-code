@@ -28,7 +28,7 @@ type PreparedProgramFailure struct {
 }
 
 func (p *PreparedProgramFailure) Close() {
-	if p != nil {
+	if p != nil && p.release != nil {
 		p.once.Do(p.release)
 	}
 }
@@ -53,7 +53,12 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	}
 	// The ledger returns at most two complete and two uncertain details plus one
 	// stopped row. Retained bodies are referenced, never hydrated here.
-	release, err := memory.ReserveProgramState(ctx, 256<<10)
+	for _, identity := range []string{tc.Identity.ToolCallID, inv.Identity.ProgramID, inv.Identity.NodeID, inv.Identity.ExecutionID, inv.Identity.ParentExecutionID, inv.SourceUnitID} {
+		if len(identity) > maxProgramFeedbackReferenceBytes {
+			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
+		}
+	}
+	release, err := memory.ReserveProgramState(ctx, int64(256<<10)+int64(len(rejected.Data))*128)
 	if err != nil {
 		return nil, err
 	}

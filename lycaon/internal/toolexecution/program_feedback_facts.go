@@ -12,7 +12,7 @@ const maxProgramFeedbackReferenceBytes = 512
 // programOutcomeFacts carries ledger observations, never a verdict inferred
 // from utility status or output. Owner-specific diagnostics remain separate.
 func programOutcomeFacts(p invocation.ProgramProjection) (map[string]any, error) {
-	if p.Program.ID == "" || p.CompletedEffects < 0 || p.UncertainEffects < 0 || p.ExecutedChildren < 0 || p.ExecutedReads < 0 || p.ExecutedReads > p.ExecutedChildren || p.StaticNotStarted < 0 || p.StaticUntaken < 0 || p.OmittedEffects < 0 || p.OmittedUnknown < 0 || p.OmittedEffects > p.CompletedEffects || p.OmittedUnknown > p.UncertainEffects {
+	if p.Program.ID == "" || len(p.Program.ID) > maxProgramFeedbackReferenceBytes || p.CompletedEffects < 0 || p.UncertainEffects < 0 || p.ExecutedChildren < 0 || p.ExecutedReads < 0 || p.ExecutedReads > p.ExecutedChildren || p.StaticNotStarted < 0 || p.StaticUntaken < 0 || p.OmittedEffects < 0 || p.OmittedUnknown < 0 || p.OmittedEffects > p.CompletedEffects || p.OmittedUnknown > p.UncertainEffects {
 		return nil, fmt.Errorf("invalid program effect projection")
 	}
 	// References are complete identities. An oversized one is omitted whole,
