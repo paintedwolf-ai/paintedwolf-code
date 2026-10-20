@@ -46,6 +46,10 @@ func processSecurity(pid int) (ProcessSecurity, error) {
 	if err != nil {
 		return ProcessSecurity{}, err
 	}
+	return parseProcessSecurity(data)
+}
+
+func parseProcessSecurity(data []byte) (ProcessSecurity, error) {
 	fields := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
 		if key, value, ok := strings.Cut(line, ":"); ok {
@@ -66,8 +70,8 @@ func processSecurity(pid int) (ProcessSecurity, error) {
 			ids[3*index+i] = uint32(value)
 		}
 	}
-	var capabilities [3]uint64
-	for i, key := range []string{"CapPrm", "CapEff", "CapAmb"} {
+	var capabilities [5]uint64
+	for i, key := range []string{"CapPrm", "CapEff", "CapAmb", "CapInh", "CapBnd"} {
 		value, err := strconv.ParseUint(fields[key], 16, 64)
 		if err != nil {
 			return ProcessSecurity{}, ErrExecutableObservationUnavailable
@@ -77,7 +81,7 @@ func processSecurity(pid int) (ProcessSecurity, error) {
 	if fields["NoNewPrivs"] != "0" && fields["NoNewPrivs"] != "1" {
 		return ProcessSecurity{}, ErrExecutableObservationUnavailable
 	}
-	return ProcessSecurity{RealUID: ids[0], EffectiveUID: ids[1], SavedUID: ids[2], RealGID: ids[3], EffectiveGID: ids[4], SavedGID: ids[5], Linux: &LinuxPrivileges{Permitted: capabilities[0], Effective: capabilities[1], Ambient: capabilities[2], NoNewPrivileges: fields["NoNewPrivs"] == "1"}}, nil
+	return ProcessSecurity{RealUID: ids[0], EffectiveUID: ids[1], SavedUID: ids[2], RealGID: ids[3], EffectiveGID: ids[4], SavedGID: ids[5], Linux: &LinuxPrivileges{Permitted: capabilities[0], Effective: capabilities[1], Ambient: capabilities[2], Inheritable: capabilities[3], Bounding: capabilities[4], NoNewPrivileges: fields["NoNewPrivs"] == "1"}}, nil
 }
 func processArguments(pid int, maximumBytes int) ([]string, []string, bool, error) {
 	args, err := processFile(pid, "cmdline", maximumBytes)

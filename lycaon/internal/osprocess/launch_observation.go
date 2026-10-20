@@ -16,6 +16,7 @@ type ProcessSecurity struct {
 // LinuxPrivileges distinguishes observed capability sets and no-new-privileges.
 type LinuxPrivileges struct {
 	Permitted, Effective, Ambient uint64
+	Inheritable, Bounding         uint64
 	NoNewPrivileges               bool
 }
 
