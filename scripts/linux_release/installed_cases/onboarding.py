@@ -118,7 +118,9 @@ def onboard(app):
                         acted = True
                 except (ValueError, CaseUnavailable):
                     raise
-                except Exception:
+                except Exception as error:
+                    app.observations['native_accessibility_error'] = {
+                        'phase': 'vault-form-inventory', 'exception_type': type(error).__name__}
                     raise CaseUnavailable('normal native vault accessibility is unavailable') from None
             time.sleep(0.1)
     app.require_running()
