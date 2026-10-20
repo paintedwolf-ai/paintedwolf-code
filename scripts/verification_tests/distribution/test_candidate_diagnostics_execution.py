@@ -13,13 +13,13 @@ class PartialCandidateDiagnosticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             source=root/"source"
-            package=source/"lycaon-den/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/app.deb"
+            package=source/"lycaon-den/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/painted-wolf-code.deb"
             package.parent.mkdir(parents=True)
             package.write_bytes(b"actual partial bytes")
             output=root/"diagnostics"
             with patch("linux_release.candidate_diagnostics.subprocess.check_output",side_effect=["a"*40+"\n","b"*40+"\n"]):
                 report=retain(source,output,"c"*40)
-            self.assertEqual((output/"0-app.deb").read_bytes(),package.read_bytes())
+            self.assertEqual((output/"0-painted-wolf-code.deb").read_bytes(),package.read_bytes())
             self.assertEqual(report["packages"][0]["sha256"],hashlib.sha256(package.read_bytes()).hexdigest())
             for field in ("complete_candidate","installed_qualified","publication_authority"):
                 self.assertIs(report[field],False)
@@ -30,7 +30,7 @@ class PartialCandidateDiagnosticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             source=root/"source"
-            package=source/"lycaon-den/src-tauri/target/arm/release/bundle/deb/app.deb"
+            package=source/"lycaon-den/src-tauri/target/arm/release/bundle/deb/painted-wolf-code.deb"
             package.parent.mkdir(parents=True)
             outside=root/"actual.deb"
             outside.write_bytes(b"outside")

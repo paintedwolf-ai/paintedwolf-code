@@ -21,7 +21,7 @@ def retain(source, output, controller):
     commit,tree=git("HEAD"),git("HEAD^{tree}")
     bundle=source/"lycaon-den/src-tauri/target"
     selected=sorted(path for path in bundle.glob("*/release/bundle/*/*")
-                    if path.suffix in {".deb",".rpm"} and path.is_file())
+                    if path.name.startswith("painted-wolf-code") and path.suffix in {".deb",".rpm"} and path.is_file())
     if not selected or len(selected)>16:
         raise ValueError("partial diagnostics require a bounded nonempty native package set")
     output.mkdir(parents=True,mode=0o700)
