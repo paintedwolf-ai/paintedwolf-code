@@ -82,3 +82,36 @@ func TestExternalDiagnosticTextCannotCreateNativeProgramRejection(t *testing.T) 
 		t.Fatal("external diagnostic text selected native feedback")
 	}
 }
+
+// These are actual recorder transitions with stated owner outcomes. Native
+// write/HTTP adapters separately qualify the effects that supply those outcomes.
+func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	write := f.childFor(t, "write")
+	f.start(t, write)
+	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
+	remote := f.childFor(t, "http_request")
+	f.start(t, remote)
+	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
+	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial", ProgressState: "unchanged"}))
+	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
+	memory := &feedbackMemory{}
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}, remote, cause)
+	testutil.FailErr(t, "prepare partial effect projection", err)
+	defer prepared.Close()
+	message := api.Message{ID: "fixture-partial-result", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "actual-model-call", Outcome: api.ToolResultOutcomeError, Feedback: []api.ToolFeedback{{Code: cause.Code, Details: prepared.Rejection.Data}}}}
+	var content string
+	for _, m := range transcript.Project([]api.Message{message}) {
+		if m.ID == message.ID {
+			content = m.Content
+		}
+	}
+	for _, fact := range []string{`"program_completed_effects":1`, `"program_uncertain_effects":1`, `"program_replay_available":false`, `"details_omitted":true`, `"program_detail_ref":"output:program-partial"`} {
+		if !strings.Contains(content, fact) {
+			t.Fatalf("compact projection lost %s: %s", fact, content)
+		}
+	}
+	if strings.Contains(content, "program_replay_source_ref") {
+		t.Fatal("partial/unknown effects received whole-program replay")
+	}
+}
