@@ -142,3 +142,15 @@ class GateTests(unittest.TestCase):
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["cases"][0]["error"], "candidate rejected")
         self.assertEqual(receipt["error"], "host cleanup failed")
+
+    def test_activation_preserves_channel_automatic_updates_and_rollout_bucket(self):
+        from release_upgrade.case import verify_preferences
+        path = self.root / "preferences.json"
+        original = {"format_version": 2, "channel": "preview", "automatic_updates_enabled": True, "rollout_bucket": 0}
+        path.write_text(json.dumps(original))
+        verify_preferences(path, "preview")
+        for change in ({"channel": "stable"}, {"automatic_updates_enabled": False}, {"rollout_bucket": 1}):
+            with self.subTest(change=change):
+                path.write_text(json.dumps({**original, **change}))
+                with self.assertRaisesRegex(ValueError, "preferences changed"):
+                    verify_preferences(path, "preview")

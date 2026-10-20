@@ -32,6 +32,12 @@ def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: P
                        env={**os.environ, "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost"})
 
 
+def verify_preferences(path: Path, channel: str):
+    preferences = read_json(path)
+    if not preferences or preferences.get("channel") != channel or preferences.get("automatic_updates_enabled") is not True or preferences.get("rollout_bucket") != 0:
+        raise ValueError("automatic update preferences changed during activation")
+
+
 def staged(records: Path):
     if read_json(records / "rejected.json") is not None:
         raise ValueError("native updater rejected the signed candidate")
@@ -103,6 +109,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
             installation.stop()
             installation.launch()
             after = installation.healthy(version)
+            verify_preferences(preferences, case["channel"])
             wait_for(f"{version} did not confirm startup and remove the previous bundle",
                      lambda: confirmed(read_json(records / "transaction.json"), version, app), 180)
             if app.stat().st_ino != prepared_inode or app.stat().st_ino == prior_inode:
@@ -121,6 +128,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         installation.stop()
         installation.launch()
         restart = installation.healthy(plan["candidate"]["version"])
+        verify_preferences(preferences, case["channel"])
         verify_semantics(config, fixture, restart, evidence)
         return {"id": case["id"], "result": "passed", "steps": observations, "restart_health": restart["health"]}
     finally:
