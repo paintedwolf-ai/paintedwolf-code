@@ -113,18 +113,21 @@ class DesktopUI:
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
-        matches, deadline = [], time.monotonic() + 15
+        matches, observed_roles, deadline = [], set(), time.monotonic() + 15
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
-                        if node.getRole() == role and self.visible(node) and node.name == name:
-                            matches.append((identity, node))
+                        node_role = node.getRole()
+                        if self.visible(node) and node.name == name:
+                            observed_roles.add(int(node_role))
+                            if node_role == role:
+                                matches.append((identity, node))
             except CaseUnavailable as error:
                 error.observations = {**getattr(error, 'observations', {}), 'desktop_control': {
                     'role': int(role), 'name': name, 'match_count': len(matches),
-                    'inventory_complete': False}}
+                    'inventory_complete': False, 'observed_roles': sorted(observed_roles)}}
                 raise
             if len(matches) > 1:
                 break
@@ -140,7 +143,8 @@ class DesktopUI:
             error.observations = {'launcher_exit_code': code}
             raise error
         error = CaseUnavailable('normal-native-control-is-missing-or-ambiguous')
-        error.observations = {'desktop_control': {'role': int(role), 'name': name, 'match_count': len(matches)}}
+        error.observations = {'desktop_control': {'role': int(role), 'name': name, 'match_count': len(matches),
+            'observed_roles': sorted(observed_roles)}}
         raise error
 
     def click(self, name: str):
