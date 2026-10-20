@@ -1065,3 +1065,13 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+### Upgrade source evidence
+
+The release controller authenticates prior channel pointers with the retained feed
+keys before selecting an upgrade source. `release_control.py snapshot` retains
+those exact pointer and signature bytes alongside `plan.json`. Its matrix keeps
+stable and preview preferences distinct, includes stable users opting into preview,
+and follows each retained trust bridge before offering the candidate. Withdrawn
+releases remain source installations; a withdrawn bridge cannot advance trust.
+Missing or invalid signatures fail selection rather than silently reducing coverage.
