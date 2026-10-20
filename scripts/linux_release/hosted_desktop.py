@@ -16,6 +16,7 @@ from .installed_environment import release
 
 USER = 'paintedwolf-test'
 INSTALL_PARENT = Path('/opt')
+SHARED_PARENT = Path('/usr/share')
 PACKAGES = ['gdm3', 'gnome-session', 'gnome-shell', 'gnome-settings-daemon', 'gnome-keyring',
             'at-spi2-core', 'python3-pyatspi', 'dbus-x11', 'xserver-xorg-core',
             'xserver-xorg-video-dummy', 'xserver-xorg-input-libinput', 'x11-xserver-utils',
@@ -81,9 +82,11 @@ def selected_controller(environment: dict, explicit: str | None) -> str:
     return selected
 
 
-def prepare_install_parent() -> dict:
+def prepare_install_parent(path=None) -> dict:
     validate_host(os.environ, os.getuid(), platform.machine(), release())
-    path = INSTALL_PARENT
+    path = INSTALL_PARENT if path is None else path
+    if path not in {INSTALL_PARENT, SHARED_PARENT}:
+        raise ValueError('hosted package preparation refuses undeclared shared ancestors')
     if path.resolve(strict=True) != path or os.path.lexists(path / 'painted-wolf-code'):
         raise ValueError('hosted package preparation preserves existing or nonphysical installation owners')
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
@@ -102,7 +105,7 @@ def prepare_install_parent() -> dict:
         if (identity(after) != identity(current) or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
                 or (after.st_uid, after.st_gid) != (0, 0) or stat.S_IMODE(after.st_mode) != 0o755):
             raise ValueError('hosted installation parent changed during secure preparation')
-        return {'path': '/opt', 'uid': 0, 'gid': 0, 'before_mode': mode, 'prepared_mode': 0o755,
+        return {'path': str(path), 'uid': 0, 'gid': 0, 'before_mode': mode, 'prepared_mode': 0o755,
                 'device': after.st_dev, 'inode': after.st_ino}
     finally:
         os.close(descriptor)
@@ -136,6 +139,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     else:
         raise ValueError('hosted desktop account already exists; preserving its owner')
     install_parent = prepare_install_parent()
+    shared_parent = prepare_install_parent(SHARED_PARENT)
     run(['apt-get', 'update'])
     run(['apt-get', 'install', '-y', '--no-install-recommends', *PACKAGES])
     run(['useradd', '--create-home', '--shell', '/bin/bash', USER])
@@ -200,6 +204,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': '/opt/painted-wolf-code'}) + '\n')
     result = desktop_record(os.environ, selected, controller, session, account)
     result['install_parent_preparation'] = install_parent
+    result['shared_parent_preparation'] = shared_parent
     fresh(output, json.dumps(result, indent=2, sort_keys=True) + '\n')
     return result
 
