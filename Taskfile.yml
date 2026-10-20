@@ -1753,7 +1753,7 @@ tasks:
       - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
         msg: bun, curl, jq, python3, and ruby required for release:live-test
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
