@@ -84,6 +84,17 @@ func (s *RetainedStreamBody) Close() error {
 	if s.active != 0 {
 		return fmt.Errorf("stream spill still has active readers; accounting remains reserved")
 	}
+	// A durable attachment requires this EXACT claim during recovery. Refusing
+	// collection after deleting its marker would strand that attachment on boot.
+	if s.store.Retained != nil {
+		retained, err := s.store.Retained(s.reference.Blob.ID)
+		if err != nil {
+			return err
+		}
+		if retained {
+			return fmt.Errorf("stream body has a durable reference; claim and accounting remain reserved")
+		}
+	}
 	if err := s.store.Release(s.reference.RetentionClaimID, []string{s.reference.Blob.ID}); err != nil {
 		return err
 	}
