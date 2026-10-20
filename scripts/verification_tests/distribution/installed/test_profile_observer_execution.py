@@ -24,6 +24,7 @@ class ProfileObserverTests(unittest.TestCase):
         self.home = Path(self.stack.enter_context(tempfile.TemporaryDirectory())).resolve()
         self.profile = self.home / '.config/paintedwolf'
         self.profile.mkdir(parents=True, mode=0o700)
+        self.profile.parent.chmod(0o700)
         self.path = self.profile / 'store.db'
         self.writer = sqlite3.connect(self.path)
         self.addCleanup(self.writer.close)
