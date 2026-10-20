@@ -1,15 +1,17 @@
 """Latency observations must include actual engine requests, never replay-cache hits."""
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 import io
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from scripts.bialy import bench_latency
-from linux_release.installed_cases import bialy_data, bialy_performance
+from linux_release.installed_cases import bialy_data, bialy_performance, bialy_stdio, process
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -116,3 +118,64 @@ class BialyLatencyTests(unittest.TestCase):
             result['timed_out'] = True
             with self.assertRaisesRegex(ValueError, 'complete'):
                 bialy_performance.reference({})
+
+    def test_turn_latency_excludes_hello_and_warmup_without_a_quality_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'heads').mkdir()
+            (root / 'heads/release.json').write_text(json.dumps({'preload': {'encoding': 'independent', 'options': {str(i): str(i) for i in range(16)}}}))
+            data = {'root': str(root), 'model': '/sealed/model',
+                    'files': {'heads/release.json': {}, 'heads/turn-load.safetensors': {}}}
+            result = {'responses': [{'engine': {'device': 'cpu'}}] + [{'answers': {'tools': {}}}] * 21,
+                      'roundtrip_ms': [500, 2000] + [25] * 20, 'stdout': b'', 'stderr': b''}
+            policy = {'engine': {'reference_ms': 1000}, 'turn': {'deadline_ms': 10000, 'tools': {'question': 'fixed'}}}
+            with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                    patch.object(bialy_performance, 'policy', return_value=policy), \
+                    patch.object(bialy_performance, 'exchange', return_value=result) as calls:
+                report, _ = bialy_performance.turn_latency({})
+                self.assertEqual(report['measurements_ms']['p95'], 25)
+                self.assertEqual(report['measurements_ms']['samples'], 20)
+                self.assertFalse(report['quality_baseline_qualified'])
+                self.assertFalse(report['selected_application_device_qualified'])
+                requests = calls.call_args.args[2]
+                self.assertEqual(len(requests), 22)
+                self.assertTrue(requests[1]['questions']['tools']['independent'])
+                self.assertEqual(requests[1], requests[7])
+                result['responses'][-1] = {'answers': {}}
+                with self.assertRaisesRegex(ValueError, 'fixed reference'):
+                    bialy_performance.turn_latency({})
+
+    def test_interactive_input_cannot_expand_to_other_native_roles(self):
+        with self.assertRaisesRegex(ValueError, 'restricted'):
+            with process.launch({}, 'pw', [], bialy_input=True):
+                self.fail('foreign role cannot launch')
+
+    @unittest.skipUnless(sys.platform == 'linux', 'actual bounded native pipe fixture requires Linux')
+    def test_stdio_has_one_inflight_request_and_rejects_protocol_mismatch(self):
+        processes = []
+        @contextmanager
+        def fixture_launch(binding, role, arguments, *, bialy_input):
+            self.assertEqual(role, 'bialy')
+            self.assertTrue(bialy_input)
+            child = subprocess.Popen([sys.executable, '-u', '-c', arguments[0]],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            processes.append(child)
+            try:
+                yield child, {'pid': child.pid}
+            finally:
+                process.stop_stack(child)
+        echo = "import sys,json\nfor n,line in enumerate(sys.stdin,1):\n r=json.loads(line);print(json.dumps({'id':r['id'],'count':n}),flush=True)"
+        with patch.object(bialy_stdio, 'launch', fixture_launch):
+            result = bialy_stdio.exchange({}, [echo], [{'method': 'hello'}] + [{'method': 'decide'}] * 21)
+            self.assertEqual([r['count'] for r in result['responses']], list(range(1, 23)))
+            self.assertEqual(len(result['roundtrip_ms']), 22)
+            self.assertTrue(all(value >= 0 for value in result['roundtrip_ms']))
+            for invalid in ["print('{\"id\":2}',flush=True)",
+                            "print('{\"id\":1}\\n{\"id\":2}',flush=True)",
+                            "print('{\"id\":true}',flush=True)"]:
+                with self.subTest(program=invalid), self.assertRaises(ValueError):
+                    bialy_stdio.exchange({}, [invalid], [{'method': 'hello'}])
+            with patch.object(bialy_stdio, 'LIMIT', 16):
+                with self.assertRaisesRegex(ValueError, 'bound'):
+                    bialy_stdio.exchange({}, ["import sys;sys.stderr.write('x'*100);sys.stderr.flush()"], [{'method': 'hello'}])
+        self.assertTrue(all(child.poll() is not None for child in processes))

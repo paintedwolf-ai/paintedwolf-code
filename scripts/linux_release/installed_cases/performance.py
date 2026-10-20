@@ -11,7 +11,7 @@ import tempfile
 import time
 
 from .app import InstalledApp
-from .bialy_performance import reference as bialy_reference
+from .bialy_performance import reference as bialy_reference, turn_latency as bialy_turn_latency
 from .provider import ProviderFixture
 from .performance_resources import TreeSampler, resources, tree_summary
 from .records import CaseUnavailable, retain
@@ -92,6 +92,9 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
     witnesses = []
     try:
         bialy, bialy_streams = bialy_reference(binding)
+        turns, turn_streams = bialy_turn_latency(binding)
+        bialy["turn_latency"] = turns
+        bialy_streams.update(turn_streams)
     except CaseUnavailable as error:
         bialy, bialy_streams = {"status": "unverified", "reason": str(error)}, {}
     with tempfile.TemporaryDirectory(prefix='paintedwolf-installed-perf-') as directory:

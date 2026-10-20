@@ -1,6 +1,7 @@
 """Run only retained final native images with bounded evidence and owned cancellation."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import os
 from pathlib import Path
@@ -42,7 +43,10 @@ def probe_path(binding: dict, role: str) -> Path:
     return path
 
 
-def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
+@contextmanager
+def launch(binding: dict, role: str, arguments: list[str], *, bialy_input=False):
+    if bialy_input and role != "bialy":
+        raise ValueError("interactive probe input is restricted to the shipped Bialy protocol")
     if platform.system() != "Linux":
         raise ValueError("installed native process probes require Linux")
     path = probe_path(binding, role)
@@ -59,9 +63,19 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
             raise ValueError("native probe image changed before descriptor execution")
         environment = {"HOME": str(Path.home()), "PATH": "/run/current-system/sw/bin:/usr/bin:/bin", "LC_ALL": "C"}
         process = subprocess.Popen([str(path), *arguments], executable=f"/proc/self/fd/{descriptor}",
-            pass_fds=(descriptor,), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            pass_fds=(descriptor,), stdin=subprocess.PIPE if bialy_input else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=environment, start_new_session=True)
-        launch_identity = identity(process.pid)
+        yield process, identity(process.pid)
+        probe_path(binding, role)
+    finally:
+        os.close(descriptor)
+        if process is not None:
+            stop_stack(process)
+
+
+def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
+    with launch(binding, role, arguments) as (process, launch_identity):
         overflow = threading.Event()
         streams = {"stdout": bytearray(), "stderr": bytearray()}
 
@@ -99,10 +113,5 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
             for reader in readers:
                 reader.join(timeout=2)
             raise ValueError("native probe left a descendant holding its evidence channels")
-        probe_path(binding, role)
         return {"launch_identity": launch_identity, "exit_code": process.returncode, "timed_out": timed_out, "output_limit": overflow.is_set(),
                 **{name: bytes(data) for name, data in streams.items()}}
-    finally:
-        os.close(descriptor)
-        if process is not None:
-            stop_stack(process)
