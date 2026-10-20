@@ -15,10 +15,16 @@ _password = None
 _password_owner = None
 
 
-def controls(window, api, deadline=None):
+class _Ready(Exception):
+    """The owned engine became ready while its startup form was being inventoried."""
+
+
+def controls(window, api, deadline=None, ready=None):
     deadline = time.monotonic() + 15 if deadline is None else deadline
     pending, visited, fields, buttons = [(window, 0)], 0, {}, {}
     while pending:
+        if ready is not None:
+            ready()
         if time.monotonic() >= deadline:
             raise CaseUnavailable('normal native vault inventory deadline exceeded')
         node, depth = pending.pop()
@@ -46,7 +52,7 @@ def controls(window, api, deadline=None):
     return ('create' if create else 'unlock', {name: rows[0] for name, rows in fields.items()}, buttons[button][0])
 
 
-def form(api, app, deadline=None):
+def form(api, app, deadline=None, ready=None):
     deadline = time.monotonic() + 15 if deadline is None else deadline
     desktop = api.Registry.getDesktop(0)
     if not 0 <= desktop.childCount <= 256:
@@ -55,6 +61,8 @@ def form(api, app, deadline=None):
     for index in range(desktop.childCount):
         if time.monotonic() >= deadline:
             raise CaseUnavailable('normal native vault inventory deadline exceeded')
+        if ready is not None:
+            ready()
         application = desktop[index]
         pid = application.get_process_id()
         if not owned_process(pid, app):
@@ -70,7 +78,7 @@ def form(api, app, deadline=None):
                 continue
             if not window.getState().contains(api.STATE_SHOWING):
                 continue
-            selected = controls(window, api, deadline)
+            selected = controls(window, api, deadline, ready)
             if selected:
                 matches.append((pid, before, selected))
         if process_identity(pid) != before or not owned_process(pid, app):
@@ -134,6 +142,16 @@ def native_error(error):
 def onboard(app):
     deadline, acted, api = time.monotonic() + min(app.timeout, 60), False, None
     owner = (os.getuid(), str(Path.home()))
+    next_readiness = 0.0
+
+    def ready_during_inventory():
+        nonlocal next_readiness
+        now = time.monotonic()
+        if now >= next_readiness:
+            next_readiness = now + 0.1
+            if app.try_ready():
+                raise _Ready()
+
     with accessibility_bus(app.observations['session']):
         while time.monotonic() < deadline:
             if app.try_ready():
@@ -146,10 +164,12 @@ def onboard(app):
                     continue
             if not acted:
                 try:
-                    selected = form(api, app, deadline)
+                    selected = form(api, app, deadline, ready_during_inventory)
                     if selected:
                         app.observations['onboarding'] = complete(selected, owner)
                         acted = True
+                except _Ready:
+                    return
                 except IndexError as error:
                     app.observations['native_accessibility_last_retry'] = native_error(error)
                     key = 'native_accessibility_inventory_retries'
