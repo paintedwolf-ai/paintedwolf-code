@@ -1,5 +1,6 @@
 """Selected campaign ZIPs cannot replace files or escape their retained root."""
 
+from contextlib import nullcontext
 import hashlib
 from pathlib import Path
 import stat
@@ -9,7 +10,7 @@ from unittest.mock import patch
 import warnings
 import zipfile
 
-from linux_release.installed_artifact_bundle import extract
+from linux_release.installed_artifact_bundle import Limits, extract
 
 
 class PublicationBundleTests(unittest.TestCase):
@@ -60,8 +61,8 @@ class PublicationBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive, digest = self.archive(root, [("a", b"content")])
-            with patch("linux_release.installed_artifact_bundle.MAX_BYTES", 1), self.assertRaisesRegex(ValueError, "size bound"):
-                extract(archive, root / "out", digest)
+            with self.assertRaisesRegex(ValueError, "size bound"):
+                extract(archive, root / "out", digest,limits=Limits(max_bytes=1))
             with patch("linux_release.installed_artifact_bundle.shutil.disk_usage") as usage:
                 usage.return_value.free = 1
                 with self.assertRaisesRegex(ValueError, "free disk"):
@@ -97,7 +98,32 @@ class ControllerInputRetentionTests(unittest.TestCase):
                 if mutation=="link":
                     (source/"packages/link").symlink_to("app")
                 target="linux_release.installed_artifact_bundle."
-                manager=patch(target+"MAX_FILES",1) if mutation=="count" else patch(target+"shutil.disk_usage",return_value=type("Disk",(),{"free":0 if mutation=="disk" else 1<<40})())
+                manager=nullcontext() if mutation=="count" else patch(target+"shutil.disk_usage",return_value=type("Disk",(),{"free":0 if mutation=="disk" else 1<<40})())
                 with manager,self.assertRaises((ValueError,OSError)):
-                    retain_tree(source,root/"retained",root_files={"manifest.json"},root_dirs={"packages"})
+                    retain_tree(source,root/"retained",root_files={"manifest.json"},root_dirs={"packages"},
+                                limits=Limits(max_files=1) if mutation=="count" else Limits())
                 self.assertFalse((root/"retained").exists())
+
+
+class ImmutableCampaignLimitsTests(unittest.TestCase):
+    def test_limits_are_explicit_immutable_and_cannot_raise_the_aggregate_byte_cap(self):
+        from dataclasses import FrozenInstanceError
+        selected=Limits(max_files=250000)
+        with self.assertRaises(FrozenInstanceError):
+            selected.max_files=1
+        for arguments in ({"max_files":True},{"max_files":0},{"max_bytes":65<<30},{"max_bytes":0}):
+            with self.subTest(arguments=arguments),self.assertRaises(ValueError):
+                Limits(**arguments)
+
+    def test_selected_entry_capacity_applies_before_any_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            archive=root/"input.zip"
+            with zipfile.ZipFile(archive,"w") as output:
+                output.writestr("first",b"one")
+                output.writestr("second",b"two")
+            digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(ValueError,"entry count"):
+                extract(archive,root/"refused",digest,limits=Limits(max_files=1))
+            extract(archive,root/"retained",digest,limits=Limits(max_files=2))
+            self.assertEqual((root/"retained/second").read_bytes(),b"two")
