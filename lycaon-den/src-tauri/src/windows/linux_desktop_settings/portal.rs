@@ -153,3 +153,49 @@ fn emit(app: &AppHandle, emissions: Vec<Emission>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn owned_observer() -> (Observer, Arc<AtomicBool>) {
+        let stop = Arc::new(AtomicBool::new(false));
+        let requested = stop.clone();
+        let finished = Arc::new(AtomicBool::new(false));
+        let completed = finished.clone();
+        let worker = std::thread::spawn(move || {
+            while !requested.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            completed.store(true, Ordering::Release);
+        });
+        (
+            Observer {
+                stop,
+                worker: Mutex::new(Some(worker)),
+            },
+            finished,
+        )
+    }
+
+    #[test]
+    fn managed_shutdown_joins_the_worker_and_is_idempotent() {
+        let (observer, finished) = owned_observer();
+        observer.shutdown();
+        assert!(finished.load(Ordering::Acquire));
+        assert!(observer.worker.lock().unwrap().is_none());
+        observer.shutdown();
+    }
+
+    #[test]
+    fn dropping_one_observer_does_not_stop_another_owner() {
+        let (observer, finished) = owned_observer();
+        let (other, other_finished) = owned_observer();
+        drop(observer);
+        assert!(finished.load(Ordering::Acquire));
+        assert!(!other.stop.load(Ordering::Acquire));
+        assert!(!other_finished.load(Ordering::Acquire));
+        other.shutdown();
+        assert!(other_finished.load(Ordering::Acquire));
+    }
+}
