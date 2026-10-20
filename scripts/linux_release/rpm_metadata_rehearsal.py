@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -46,6 +47,11 @@ def rehearse(work):
     resource = tree / "opt/painted-wolf-code/metadata-fixture.txt"
     resource.parent.mkdir(parents=True)
     resource.write_text("Explicit nonapplication metadata qualification fixture.\n")
+    binaries = tree / "usr/bin"
+    binaries.mkdir(parents=True)
+    for name in ("pw", "pw-logs"):
+        shutil.copyfile("/usr/bin/true", binaries / name)
+        (binaries / name).chmod(0o755)
     version = linux_package_version(parse((ROOT / "VERSION").read_text().strip()))
     architecture = platform.machine()
     outcomes = {}
@@ -97,7 +103,7 @@ def main():
                    "--mount", f"type=bind,src={args.receipt.parent.resolve()},dst=/receipt",
                    "--env", "PW_RPM_FIXTURE_COMMIT=" + identity("commit"),
                    "--env", "PW_RPM_FIXTURE_TREE=" + identity("tree"),
-                   IMAGE, "bash", "-euc", "apt-get update && apt-get install -y --no-install-recommends rpm rpmlint python3 git aspell-en && git config --global --add safe.directory /source && PYTHONPATH=/source/scripts python3 -m linux_release.rpm_metadata_rehearsal --receipt /receipt/" + args.receipt.name]
+                   IMAGE, "bash", "-euc", "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends rpm rpmlint python3 git aspell-en && git config --global --add safe.directory /source && PYTHONPATH=/source/scripts python3 -m linux_release.rpm_metadata_rehearsal --receipt /receipt/" + args.receipt.name]
         subprocess.run(command, check=True)
         return
     with tempfile.TemporaryDirectory(prefix="paintedwolf-rpm-metadata-") as temporary:
