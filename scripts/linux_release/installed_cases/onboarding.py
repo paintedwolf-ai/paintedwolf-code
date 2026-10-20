@@ -15,6 +15,13 @@ _password = None
 _password_owner = None
 
 
+class _InventoryBound(ValueError):
+    def __init__(self, visited, depth, children):
+        super().__init__("installed accessible window exceeds its traversal bound")
+        self.bound = {"visited": visited, "depth": depth, "child_count": children,
+                      "max_visited": 4096, "max_depth": 64, "max_children": 1024}
+
+
 class _Ready(Exception):
     """The owned engine became ready while its startup form was being inventoried."""
 
@@ -29,8 +36,9 @@ def controls(window, api, deadline=None, ready=None):
             raise CaseUnavailable('normal native vault inventory deadline exceeded')
         node, depth = pending.pop()
         visited += 1
-        if visited > 4096 or depth > 64 or not 0 <= node.childCount <= 1024:
-            raise ValueError('installed accessible window exceeds its traversal bound')
+        children = node.childCount
+        if type(children) is not int or not 0 <= children <= 1024 or visited > 4096 or depth > 64:
+            raise _InventoryBound(visited, depth, children if type(children) is int else None)
         role = node.getRole()
         if role in {api.ROLE_PASSWORD_TEXT, api.ROLE_PUSH_BUTTON}:
             state = node.getState()
@@ -39,7 +47,7 @@ def controls(window, api, deadline=None, ready=None):
                 destination = fields if role == api.ROLE_PASSWORD_TEXT else buttons
                 if name in {'App password', 'Confirm app password', 'Create vault', 'Unlock vault'}:
                     destination.setdefault(name, []).append(node)
-        pending.extend((node[index], depth + 1) for index in range(node.childCount))
+        pending.extend((node[index], depth + 1) for index in range(children))
     if not fields:
         return None
     create = set(fields) == {'App password', 'Confirm app password'} and 'Create vault' in buttons
@@ -174,6 +182,9 @@ def onboard(app):
                     app.observations['native_accessibility_last_retry'] = native_error(error)
                     key = 'native_accessibility_inventory_retries'
                     app.observations[key] = app.observations.get(key, 0) + 1
+                except _InventoryBound as error:
+                    app.observations['native_accessibility_error'] = {**native_error(error), 'bound': error.bound}
+                    raise CaseUnavailable('normal native vault inventory exceeds its fixed traversal bound') from None
                 except (ValueError, CaseUnavailable):
                     raise
                 except Exception as error:
