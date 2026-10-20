@@ -11311,6 +11311,7 @@ export interface components {
             /** @enum {string} */
             state: "running" | "unchanged" | "committed" | "rejected" | "unknown";
             owner_invoked: boolean;
+            arguments_representation?: string;
             arguments_digest: string;
             arguments_ref: string;
             detail_ref: string;
@@ -11327,7 +11328,9 @@ export interface components {
             owner: string;
             lifecycle: string;
             definition_digest: string;
+            arguments_representation?: string;
             arguments_digest: string;
+            reviewed_arguments_representation?: string;
             reviewed_arguments_digest?: string;
             reviewed_arguments_ref?: string;
             native_command?: string;

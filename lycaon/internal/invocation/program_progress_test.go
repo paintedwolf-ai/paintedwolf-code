@@ -33,7 +33,7 @@ type progressFacts struct{ store progress.Store }
 func (f progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: f.store.Get(ctx, id)}, nil
 }
-func (r *retainedInputsFixture) RetainReviewedProgressInputs(_ context.Context, _ toolcontract.ProgramProgressIdentity, _ string) (string, error) {
+func (r *retainedInputsFixture) RetainReviewedProgressInputs(_ context.Context, _ toolcontract.ProgramProgressIdentity, _ toolcontract.ReviewedOperationInputs) (string, error) {
 	r.calls++
 	return "output:screened-progress-review", nil
 }

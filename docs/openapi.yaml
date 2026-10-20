@@ -29108,6 +29108,8 @@ components:
             - unknown
         owner_invoked:
           type: boolean
+        arguments_representation:
+          type: string
         arguments_digest:
           type: string
         arguments_ref:
@@ -29156,7 +29158,11 @@ components:
           type: string
         definition_digest:
           type: string
+        arguments_representation:
+          type: string
         arguments_digest:
+          type: string
+        reviewed_arguments_representation:
           type: string
         reviewed_arguments_digest:
           type: string

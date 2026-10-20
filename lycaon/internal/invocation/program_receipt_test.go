@@ -68,9 +68,10 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 	definition, err := toolcontract.ToolOperation(name, json.RawMessage(`{"type":"object"}`), contract)
 	testutil.FailErr(t, "freeze operation", err)
 	in := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: uuid.NewString(), ParentExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	digest, err := invocation.ArgsDigest(map[string]any{"path": "input"})
-	testutil.FailErr(t, "digest expanded args", err)
-	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ArgumentsDigest: digest, Canonical: "cat input"}))
+	expanded, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	testutil.FailErr(t, "freeze lossless expanded arguments", err)
+	defer release()
+	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ExpandedInputs: expanded, Canonical: "cat input"}))
 	bound, err := toolcontract.BindOperation(definition, in, definition.Facts().Commands[0].Name, definition.Facts().Commands[0].Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind actual native operation", err)
 	return bound
@@ -78,7 +79,7 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 
 type retainedInputsFixture struct{ calls int }
 
-func (r *retainedInputsFixture) RetainReviewedProgramInputs(_ context.Context, _ toolcontract.OperationInvocation, _ string) (string, error) {
+func (r *retainedInputsFixture) RetainReviewedProgramInputs(_ context.Context, _ toolcontract.OperationInvocation, _ toolcontract.ReviewedOperationInputs) (string, error) {
 	r.calls++
 	return "output:screened-review", nil
 }
@@ -86,10 +87,11 @@ func (r *retainedInputsFixture) RetainReviewedProgramInputs(_ context.Context, _
 func (f programReceiptFixture) start(t *testing.T, bound toolcontract.BoundOperation) {
 	t.Helper()
 	inputs := &retainedInputsFixture{}
-	digest, err := invocation.ArgsDigest(map[string]any{"path": "input"})
-	testutil.FailErr(t, "digest actual reviewed args", err)
+	review, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	testutil.FailErr(t, "freeze actual lossless reviewed inputs", err)
+	defer release()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
-	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, "actual-model-call", toolcontract.ReviewedOperationInputs{ArgumentsDigest: digest, CanonicalArguments: `{"path":"input"}`}))
+	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, "actual-model-call", review))
 	if inputs.calls != 1 {
 		t.Fatalf("review retention calls=%d", inputs.calls)
 	}
