@@ -464,3 +464,19 @@ Rejected source mutations remain in these observations even when their handler
 started. The summary distinguishes rejection after invocation from a call that
 never executed; it does not infer whether a file exists, remains unchanged, or
 has partial effects. This distinction applies across supported languages.
+
+## Command operation feedback
+
+Command feedback retains the actual outer model call and distinct host execution
+identities. Ordinary status, complete output, publication eligibility and owner
+effects are independent observations. A successful final stage does not erase an
+earlier failed producer, and an unknown remote outcome does not permit replay.
+
+The invocation recorder supplies bounded program facts for feedback: completed
+and uncertain effects, executed children and reads, known static nodes not started
+or untaken, retained detail and progress references. Static node counts do not
+predict future loop iterations. Omitted details remain explicitly omitted. A
+reference identifies complete retained data; presentation never trims it into a
+different action or evidence identity. Whole-program resubmission requires the
+recorder's exact-source zero-execution proof and fresh admission. A completed
+progress update remains separate from shell-program effects.
