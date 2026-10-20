@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -35,17 +35,17 @@ func TestLanguageCatalogRejectsIncompleteContracts(t *testing.T) {
 	testutil.FailErr(t, "load original", err)
 	for _, test := range []struct {
 		name   string
-		mutate func(*commandsurface.LanguageCatalog)
+		mutate func(*toolcontract.LanguageCatalog)
 	}{
-		{"version", func(c *commandsurface.LanguageCatalog) { c.Language.Version = 2 }},
-		{"missing command", func(c *commandsurface.LanguageCatalog) { c.Commands = c.Commands[1:] }},
-		{"duplicate command", func(c *commandsurface.LanguageCatalog) { c.Commands = append(c.Commands, c.Commands[0]) }},
-		{"unknown owner", func(c *commandsurface.LanguageCatalog) { c.Tools[0].Owner = "catalog_is_not_an_owner" }},
-		{"missing disposition", func(c *commandsurface.LanguageCatalog) { c.Tools = c.Tools[1:] }},
-		{"missing semantic contract", func(c *commandsurface.LanguageCatalog) { delete(c.Contracts, "regex") }},
-		{"missing effect mode", func(c *commandsurface.LanguageCatalog) { c.Commands[0].Effects[0].Mode = "" }},
-		{"unknown limit", func(c *commandsurface.LanguageCatalog) { c.Commands[0].Limits = append(c.Commands[0].Limits, "absent") }},
-		{"duplicate option", func(c *commandsurface.LanguageCatalog) {
+		{"version", func(c *toolcontract.LanguageCatalog) { c.Language.Version = 2 }},
+		{"missing command", func(c *toolcontract.LanguageCatalog) { c.Commands = c.Commands[1:] }},
+		{"duplicate command", func(c *toolcontract.LanguageCatalog) { c.Commands = append(c.Commands, c.Commands[0]) }},
+		{"unknown owner", func(c *toolcontract.LanguageCatalog) { c.Tools[0].Owner = "catalog_is_not_an_owner" }},
+		{"missing disposition", func(c *toolcontract.LanguageCatalog) { c.Tools = c.Tools[1:] }},
+		{"missing semantic contract", func(c *toolcontract.LanguageCatalog) { delete(c.Contracts, "regex") }},
+		{"missing effect mode", func(c *toolcontract.LanguageCatalog) { c.Commands[0].Effects[0].Mode = "" }},
+		{"unknown limit", func(c *toolcontract.LanguageCatalog) { c.Commands[0].Limits = append(c.Commands[0].Limits, "absent") }},
+		{"duplicate option", func(c *toolcontract.LanguageCatalog) {
 			for i := range c.Commands {
 				if len(c.Commands[i].Forms) > 0 {
 					c.Commands[i].Forms = append(c.Commands[i].Forms, c.Commands[i].Forms[0])
@@ -57,7 +57,7 @@ func TestLanguageCatalogRejectsIncompleteContracts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			data, err := json.Marshal(original)
 			testutil.FailErr(t, "copy facts", err)
-			c, err := commandsurface.DecodeLanguageCatalog(data)
+			c, err := toolcontract.DecodeLanguageCatalog(data)
 			testutil.FailErr(t, "decode facts", err)
 			test.mutate(&c)
 			if err := validateLanguageCatalog(root, c); err == nil {
