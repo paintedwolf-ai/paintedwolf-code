@@ -110,12 +110,22 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     if current_tree(root) != evidence.source(driver_tree):
         raise ValueError("installed driver source differs from the independently selected tree")
     guest = require_owned_guest({"install_root": str(install_root), "artifact": artifact})
+    if case_inputs is not None and (not isinstance(case_inputs, dict)
+            or set(case_inputs) - {"native_packages", "nix", "security", "desktop"}
+            or any(not isinstance(value, dict) for value in case_inputs.values())):
+        raise ValueError("installed case inputs require known typed driver-family objects")
+    output.mkdir(parents=True, mode=0o700, exist_ok=False)
+    retained = output / "evidence"
+    retained.mkdir()
+    from .installed_cases.native_workflows import prepare_install
+    transaction = prepare_install(final, source, artifact_id, file_root, install_root, case_inputs, retained)
+    if transaction is not None and transaction["status"] != "passed":
+        raise ValueError("fresh native installation failed; retained transaction requires recovery review")
     binding = bind(final, source, artifact_id, file_root, install_root, nix_program)
     if case_inputs is not None:
-        if (not isinstance(case_inputs, dict) or set(case_inputs) - {"native_packages", "nix", "security", "desktop"}
-                or any(not isinstance(value, dict) for value in case_inputs.values())):
-            raise ValueError("installed case inputs require known typed driver-family objects")
         binding["case_inputs"] = case_inputs
+    if transaction is not None:
+        binding["installation_transaction"] = transaction
     facts, observations = collect(environments[environment_id], binding, guest, variant["display"]["protocol"])
     if facts.keys() != set(catalog["recorded_environment_facts"]):
         raise ValueError("installed environment collector differs from the selected catalog")
@@ -126,9 +136,6 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     except CaseUnavailable as error:
         variant_error = str(error)
         variant_observation = {"format_version": 1, "variant": variant, "snapshot": snapshot, "unverified": variant_error}
-    output.mkdir(parents=True, mode=0o700, exist_ok=False)
-    retained = output / "evidence"
-    retained.mkdir()
     for name, document in (("binding.json", binding), ("environment.json", observations), ("environment-facts.json", facts),
                            ("driver-registry.json", registry(catalog, artifact["installation"])), ("variant.json", variant_observation)):
         (output / name).write_text(json.dumps(document, sort_keys=True, indent=2) + "\n")

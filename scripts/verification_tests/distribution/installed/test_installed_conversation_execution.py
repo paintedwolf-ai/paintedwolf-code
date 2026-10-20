@@ -50,3 +50,26 @@ class InstalledConversationTests(unittest.TestCase):
             with patch.object(conversation, 'accepted', return_value={'providers': rows}):
                 with self.assertRaises(ValueError):
                     conversation.provider_record(None, 'selected', 'endpoint')
+
+    def test_optional_setup_action_never_skips_owned_provider_cleanup(self):
+        app, ui, provider = MagicMock(), MagicMock(), MagicMock()
+        app.__enter__.return_value = app
+        ui.__enter__.return_value = ui
+        provider.__enter__.return_value = provider
+        app.request.return_value = {'status': 204}
+        with patch.object(conversation, 'InstalledApp', return_value=app), \
+                patch.object(conversation, 'ProviderFixture', return_value=provider), \
+                patch.object(conversation, 'DesktopUI', return_value=ui), \
+                patch.object(conversation, 'interactive_window', return_value={}), \
+                patch.object(conversation, 'add_keyless_provider', return_value={'provider_id': 'owned'}), \
+                patch.object(conversation, 'retain', side_effect=lambda *args: args) as retained:
+            ui.click.side_effect = conversation.CaseUnavailable('no optional control')
+            conversation.execute({}, 'conversation', 'provider-onboarding', None)
+            self.assertEqual(retained.call_args.args[4], 'unverified')
+            self.assertFalse(retained.call_args.args[5]['normal_optional_setup_skip'])
+            app.request.assert_called_with('DELETE', '/v1/providers/owned')
+            app.request.reset_mock()
+            ui.click.side_effect = ValueError('owner changed')
+            with self.assertRaises(ValueError):
+                conversation.execute({}, 'conversation', 'provider-onboarding', None)
+            app.request.assert_called_with('DELETE', '/v1/providers/owned')
