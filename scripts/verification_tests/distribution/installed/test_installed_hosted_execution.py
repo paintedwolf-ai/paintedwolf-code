@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.hosted_desktop import fresh, run, selected_controller, validate_host
+from linux_release.hosted_desktop import desktop_record, fresh, run, selected_controller, validate_host
 
 
 class HostedDesktopTests(unittest.TestCase):
@@ -57,3 +57,15 @@ class HostedDesktopTests(unittest.TestCase):
         for selected in ('main', 'refs/qualification/' + 'b' * 40, 'B' * 40, '', 123):
             with self.subTest(selected=selected), self.assertRaises(ValueError):
                 selected_controller(environment, selected)
+
+    def test_measured_session_cannot_replace_the_immutable_controller_identity(self):
+        session = {'Desktop': 'GNOME', 'Name': 'gnome-xorg', 'Type': 'x11', 'Active': 'yes'}
+        result = desktop_record(self.environment(), 'b' * 40, Path('/owned/controller'), session,
+                                SimpleNamespace(pw_uid=1002))
+        self.assertEqual((result['controller_commit'], result['workflow_commit']), ('b' * 40, 'a' * 40))
+        self.assertEqual(result['session'], session)
+        self.assertIs(result['application_qualified'], False)
+        self.assertIs(result['physical_gpu_qualified'], False)
+        with self.assertRaises(ValueError):
+            desktop_record(self.environment(), 'gnome-xorg', Path('/owned/controller'), session,
+                           SimpleNamespace(pw_uid=1002))

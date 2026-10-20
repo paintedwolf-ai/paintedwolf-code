@@ -80,6 +80,15 @@ def selected_controller(environment: dict, explicit: str | None) -> str:
     return selected
 
 
+def desktop_record(environment: dict, controller: str, checkout: Path, session: dict, account) -> dict:
+    return {'format_version': 1, 'controller_commit': selected_controller(environment, controller),
+            'workflow_commit': environment['GITHUB_SHA'], 'github_run_id': environment['GITHUB_RUN_ID'],
+            'architecture': platform.machine(), 'controller_checkout': str(checkout),
+            'session': session, 'user': USER, 'uid': account.pw_uid, 'desktop': 'gnome',
+            'display_protocol': 'x11', 'graphics': 'software',
+            'application_qualified': False, 'physical_gpu_qualified': False}
+
+
 def prepare(checkout: Path, output: Path, controller_commit: str | None = None) -> dict:
     validate_host(os.environ, os.getuid(), platform.machine(), release())
     selected = selected_controller(os.environ, controller_commit)
@@ -117,20 +126,20 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     fresh(Path('/etc/sudoers.d/paintedwolf-qualification'), USER + ' ALL=(ALL) NOPASSWD: ALL\n', 0o440)
     fresh(Path('/etc/X11/xorg.conf.d/20-paintedwolf-qualification.conf'), XORG)
     sessions = Path('/usr/share/xsessions')
-    selected = next((name for name in ('gnome-xorg', 'gnome') if (sessions / (name + '.desktop')).is_file()), None)
-    if selected is None:
+    session_name = next((name for name in ('gnome-xorg', 'gnome') if (sessions / (name + '.desktop')).is_file()), None)
+    if session_name is None:
         raise ValueError('installed GNOME package has no declared X11 session entry')
-    entry = sessions / (selected + '.desktop')
+    entry = sessions / (session_name + '.desktop')
     if entry.is_symlink() or entry.stat().st_uid != 0 or entry.stat().st_mode & 0o022:
         raise ValueError('GNOME session entry is not owned by the package administrator')
     gdm = Path('/etc/gdm3/custom.conf')
     if gdm.is_symlink() or not gdm.is_file() or gdm.stat().st_uid != 0 or gdm.stat().st_mode & 0o022:
         raise ValueError('hosted GDM configuration is not an administrator-owned regular file')
     # This file is confined to the newly allocated ephemeral hosted machine.
-    gdm.write_text('[daemon]\nWaylandEnable=false\nAutomaticLoginEnable=true\nAutomaticLogin=' + USER + '\nDefaultSession=' + selected + '.desktop\n')
+    gdm.write_text('[daemon]\nWaylandEnable=false\nAutomaticLoginEnable=true\nAutomaticLogin=' + USER + '\nDefaultSession=' + session_name + '.desktop\n')
     fresh(Path('/var/lib/AccountsService/users') / USER,
-          '[User]\nSession=' + selected + '\nXSession=' + selected + '\nSystemAccount=false\n')
-    fresh(home / '.dmrc', '[Desktop]\nSession=' + selected + '\n')
+          '[User]\nSession=' + session_name + '\nXSession=' + session_name + '\nSystemAccount=false\n')
+    fresh(home / '.dmrc', '[Desktop]\nSession=' + session_name + '\n')
     os.chown(home / '.dmrc', account.pw_uid, account.pw_gid)
     environment_file = Path('/etc/environment')
     if environment_file.is_symlink() or not environment_file.is_file() or environment_file.stat().st_uid != 0:
@@ -159,13 +168,8 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
         raise ValueError('hosted GDM did not supply a private display authority for its account')
     (home / '.Xauthority').symlink_to(authority)
     os.lchown(home / '.Xauthority', account.pw_uid, account.pw_gid)
-    fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': 'deb'}) + '\n')
-    result = {'format_version': 1, 'controller_commit': selected, 'workflow_commit': os.environ['GITHUB_SHA'],
-              'github_run_id': os.environ['GITHUB_RUN_ID'], 'architecture': platform.machine(),
-              'controller_checkout': str(controller),
-              'session': session, 'user': USER, 'uid': account.pw_uid, 'desktop': 'gnome',
-              'display_protocol': 'x11', 'graphics': 'software',
-              'application_qualified': False, 'physical_gpu_qualified': False}
+    fresh(marker, json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': '/opt/painted-wolf-code'}) + '\n')
+    result = desktop_record(os.environ, selected, controller, session, account)
     fresh(output, json.dumps(result, indent=2, sort_keys=True) + '\n')
     return result
 
