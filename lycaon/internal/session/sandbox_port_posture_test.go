@@ -46,7 +46,7 @@ func newPortBrokers(posture gate.Posture, prov LoopbackProvenanceResolver) portB
 	loopbackRT := approvalstate.NewSandboxPortGrantRuntime()
 	return portBrokers{
 		listenRT: listenRT, loopbackRT: loopbackRT,
-		listen:   &ListenCheckpointBroker{Runtime: listenRT, Loopback: loopbackRT, Provenance: prov, Posture: postureOf(posture)},
+		listen:   &ListenCheckpointBroker{Runtime: listenRT, Posture: postureOf(posture)},
 		loopback: &LoopbackCheckpointBroker{Runtime: loopbackRT, Provenance: prov, Posture: postureOf(posture)},
 		network:  &LocalNetworkCheckpointBroker{Listen: listenRT, Loopback: loopbackRT, Provenance: prov, Posture: postureOf(posture)},
 	}
@@ -85,13 +85,13 @@ func TestPortBrokersPostureNuances(t *testing.T) {
 		}
 	})
 
-	t.Run("BalancedPostureIsSilentForListenAndCoGrantsLoopback", func(t *testing.T) {
+	t.Run("BalancedListenRequestDoesNotAuthorizeUnboundConnect", func(t *testing.T) {
 		t.Parallel()
 
 		b := newPortBrokers(gate.PostureBalanced, fixedProvenance{})
 		b.listenOn(t, "chat-2", 8123)
-		if res := b.connect(t, "chat-2", 8123); !res.Authorized || res.Raised {
-			t.Fatalf("connect to the declared listener port: authorized=%v raised=%v, want silent", res.Authorized, res.Raised)
+		if res := b.connect(t, "chat-2", 8123); res.Authorized {
+			t.Fatal("listen request authorized connect before an owned listener existed")
 		}
 		if res := b.connect(t, "chat-2", 8124); res.Authorized {
 			t.Fatal("a listener grant co-authorized a port it did not declare")
@@ -115,7 +115,7 @@ func TestPortBrokersProvenanceNuances(t *testing.T) {
 		t.Parallel()
 
 		b := newPortBrokers(gate.PostureBalanced, fixedProvenance{owned: map[uint16]bool{3000: true}})
-		if res := b.connect(t, "chat-owned", 3000); !res.Authorized || res.Raised {
+		if res := b.connect(t, "chat-owned", 3000); !res.Authorized || res.Raised || !res.RequiresOwnedListener {
 			t.Fatalf("chat-owned service in balanced posture: authorized=%v raised=%v, want silent", res.Authorized, res.Raised)
 		}
 	})
@@ -142,7 +142,7 @@ func TestPortBrokersProvenanceNuances(t *testing.T) {
 	})
 }
 
-func TestListenCoGrantCoversOnlyDeclaredFreePorts(t *testing.T) {
+func TestListenRequestsNeverSupplyConnectAuthority(t *testing.T) {
 	t.Parallel()
 
 	t.Run("UnnarrowedListenCarriesNoConnectAuthority", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestListenCoGrantCoversOnlyDeclaredFreePorts(t *testing.T) {
 		}
 	})
 
-	t.Run("CombinedAskOnAFreePortIsSilent", func(t *testing.T) {
+	t.Run("CombinedAskOnAFreePortRequiresConnectApproval", func(t *testing.T) {
 		t.Parallel()
 
 		b := newPortBrokers(gate.PostureBalanced, fixedProvenance{})
@@ -193,8 +193,29 @@ func TestListenCoGrantCoversOnlyDeclaredFreePorts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AwaitCombined: %v", err)
 		}
-		if !res.Authorized || res.Raised {
-			t.Fatalf("combined ask on a free port: %+v, want silent", res)
+		if res.Authorized {
+			t.Fatalf("combined free-port request bypassed independent connect approval: %+v", res)
 		}
 	})
+}
+
+func TestAutomaticOwnedLoopbackNeverCreatesAStickyLease(t *testing.T) {
+	owned := map[uint16]bool{8123: true}
+	brokers := newPortBrokers(gate.PostureBalanced, fixedProvenance{owned: owned})
+	first := brokers.connect(t, "fixture-chat", 8123)
+	if !first.Authorized || !first.RequiresOwnedListener {
+		t.Fatalf("owned observation lost mediated condition: %+v", first)
+	}
+	if granted, ports := brokers.loopbackRT.SessionPorts("fixture-chat"); granted {
+		t.Fatalf("ownership observation cached connect ports %v", ports)
+	}
+	delete(owned, 8123)
+	if next := brokers.connect(t, "fixture-chat", 8123); next.Authorized {
+		t.Fatal("closed or foreign-rebound listener retained automatic authority")
+	}
+	brokers.loopbackRT.GrantSessionPorts("fixture-chat", []uint16{8123})
+	explicit := brokers.connect(t, "fixture-chat", 8123)
+	if !explicit.Authorized || explicit.RequiresOwnedListener {
+		t.Fatalf("independent approved connect authority was lost: %+v", explicit)
+	}
 }

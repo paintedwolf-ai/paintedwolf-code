@@ -135,11 +135,9 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions,
 		Runtime:           listenRT,
-		Loopback:          loopbackRT,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
 		ApprovalsDisabled: deps.Execution.Host.Authority.ApprovalsDisabled,
 		Posture:           deps.Execution.Host.Authority.ApprovalPosture,
-		Provenance:        loopbackProv,
 		Authz:             authzRec,
 	})
 	deps.Execution.Host.Authority.SetSandboxLoopbackGate(&session.LoopbackCheckpointBroker{

@@ -143,7 +143,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Local.LocalListenGranted = true
 		tc.Local.LocalListenPorts = append([]uint16(nil), listenPreflight.Ports...)
 	}
-	if connectPreflight != nil && connectPreflight.Authorized {
+	if connectPreflight != nil && connectPreflight.Authorized && !connectPreflight.RequiresOwnedListener {
 		tc.Local.LoopbackConnectGranted = true
 		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}

@@ -197,12 +197,13 @@ func PostureString(p EgressPosture) string {
 
 // egressBrokerT coordinates per-action network decisions.
 type egressBrokerT struct {
-	mu       sync.Mutex
-	verdict  scopedstore.LRU[bool]    // exact action + approval subject key → allow
-	waiters  map[string][]chan bool   // keys currently parked on the resolver
-	tokens   map[string]EgressCommand // action lineage → identity
-	egress   map[string][]EgressHost  // action lineage → bounded endpoint decisions
-	loopback map[string]func(uint16) bool
+	mu            sync.Mutex
+	verdict       scopedstore.LRU[bool]    // exact action + approval subject key → allow
+	waiters       map[string][]chan bool   // keys currently parked on the resolver
+	tokens        map[string]EgressCommand // action lineage → identity
+	egress        map[string][]EgressHost  // action lineage → bounded endpoint decisions
+	loopback      map[string]func(uint16) bool
+	ownedLoopback *ownedLoopbackRegistration
 	// lineages retains an action's identity past its lease so a process it left
 	// running can still be placed against its project.
 	lineages      map[string]EgressCommand

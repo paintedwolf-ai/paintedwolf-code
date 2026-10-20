@@ -26,9 +26,11 @@ type LoopbackConnectResult struct {
 	SecretApproved bool
 	Raised         bool
 	Authorized     bool
-	Denied         bool
-	Ports          []uint16
-	UserGuidance   string
+	// RequiresOwnedListener permits only mediated, live exact-listener checks; it is not a raw port grant.
+	RequiresOwnedListener bool
+	Denied                bool
+	Ports                 []uint16
+	UserGuidance          string
 }
 
 // LoopbackConnectGate raises a local-service checkpoint and exposes its chat lease.
