@@ -20,6 +20,11 @@ const (
 // Executable replacements and examples are deliberately absent: partial calls
 // cannot be presented as equivalent repairs.
 var diagnosticFields = []string{
+	"program_id", "model_tool_call_id", "native_operation", "native_command", "execution_id", "node_id", "source_unit_id",
+	"source_start_byte", "source_end_byte", "source_line", "source_column",
+	"program_completed_effects", "program_uncertain_effects", "program_executed_children", "program_executed_reads",
+	"program_effect_details_omitted", "program_detail_ref", "program_replay_available", "program_replay_limitation",
+	"program_static_not_started", "program_static_untaken", "program_progress_state", "program_progress_ref", "program_progress_ref_omitted",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
 	"field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
 	"json_unexpected_token_at", "json_unterminated_string_at", "json_trailing_text_at",

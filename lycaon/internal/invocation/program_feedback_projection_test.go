@@ -33,7 +33,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	code := "COMMAND_EFFECT_NOT_ALLOWED"
 	testutil.FailErr(t, "settle refused child", f.recorder.SettleChild(t.Context(), denied.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:scope-refusal"}))
 	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail", ProgressState: "unchanged"}))
-	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input"}}
+	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "large": strings.Repeat("x", 40<<10)}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
 	memory := &feedbackMemory{}
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tc, denied, cause)
