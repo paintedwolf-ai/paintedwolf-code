@@ -1,6 +1,9 @@
 """Scanner tools must belong to the selected complete native derivation graph."""
 import copy
 import unittest
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
 from scripts.linux_release import nix_scanner_tools as host
 
 ROOT = '/nix/store/' + '0' * 32 + '-application.drv'
@@ -48,3 +51,15 @@ class NixScannerToolsTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 host.scanner_derivation(schema4(rows), ROOT, 'aarch64-linux')
 
+
+    def test_preparation_queries_only_the_pinned_application_and_builds_its_selected_tool(self):
+        source = 'git+file:///source?rev=' + 'a' * 40
+        with patch.object(host.platform, 'machine', return_value='aarch64'), \
+                patch.object(host.subprocess, 'run', side_effect=[SimpleNamespace(stdout=ROOT),
+                    SimpleNamespace(stdout=json.dumps(schema4(graph())))]) as run:
+            invocation, selected = host.command(['nix'], source, {'PATH': '/fixed'})
+        self.assertEqual(run.call_args_list[0].args[0][-1], source + '#packages.aarch64-linux.default.drvPath')
+        self.assertEqual(run.call_args_list[1].args[0][-1], ROOT)
+        self.assertEqual(invocation[-1], TOOL + '^out')
+        self.assertEqual(selected['executable'], EXE)
+        self.assertIn('sandbox', invocation)
