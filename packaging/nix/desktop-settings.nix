@@ -1,4 +1,4 @@
-{ lib, makeRustPlatform, callPackage, pkg-config, glib, source }:
+{ lib, makeRustPlatform, callPackage, pkg-config, glib, dbus, source }:
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   rust = makeRustPlatform { cargo = tools.rust; rustc = tools.rust; };
@@ -16,6 +16,7 @@ in rust.buildRustPackage {
   cargoBuildFlags = [ "--package" "desktop-settings-observer" "--bin" "pw-desktop-settings" ];
   cargoTestFlags = [ "--package" "desktop-settings-observer" ];
   nativeBuildInputs = [ pkg-config ];
+  nativeCheckInputs = [ dbus ];
   buildInputs = [ glib ];
   meta = {
     description = "Read-only desktop preferences observer for Painted Wolf Code";
