@@ -35,7 +35,11 @@ let
   });
   npmInventory = frontend.overrideAttrs (_: {
     pname = "painted-wolf-code-npm-notices";
-    buildPhase = ''bun scripts/licenses-npm-notices.ts --out npm.md'';
+    buildPhase = ''
+      mkdir -p scripts
+      cp ${source}/scripts/licenses-npm-notices.ts scripts/licenses-npm-notices.ts
+      bun scripts/licenses-npm-notices.ts --out npm.md
+    '';
     installPhase = ''mkdir -p "$out"; cp npm.md "$out/"'';
     dontFixup = true;
   });
