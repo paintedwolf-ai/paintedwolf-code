@@ -415,8 +415,8 @@ func (p *parser) literal(r rune) {
 }
 
 // minFoldRune returns the minimum rune fold-equivalent to r.
-func minFoldRune(r rune, m *budget.Meter) rune {
-	m.Step(1)
+func minFoldRune(r rune, meter *budget.Meter) rune {
+	meter.Step(1)
 
 	if r < minFold || r > maxFold {
 		return r
@@ -424,7 +424,7 @@ func minFoldRune(r rune, m *budget.Meter) rune {
 	m := r
 	r0 := r
 	for r = unicode.SimpleFold(r); r != r0; r = unicode.SimpleFold(r) {
-		m.Step(1)
+		meter.Step(1)
 
 		m = min(m, r)
 	}

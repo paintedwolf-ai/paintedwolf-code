@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -14,13 +15,22 @@ import (
 // use the effective identity and OS ACL policy; they acquire no future operation
 // authority and never open/create/truncate a target for writing.
 func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
+	switch operator {
+	case "-e", "-f", "-d", "-L", "-r", "-w", "-x":
+	default:
+		return false, ErrInvalidPath
+	}
+	requireDirectory := strings.HasSuffix(rel, "/")
 	clean, err := cleanReadLocation(Location{Root: r.root.path, Rel: rel})
 	if err != nil {
 		return false, err
 	}
 	result := false
-	_, err = walkReadContained(r.root, clean.Rel, operator != "-L", func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
+	_, err = walkReadContained(r.root, clean.Rel, operator != "-L" || requireDirectory, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
 		mode := st.Mode & unix.S_IFMT
+		if requireDirectory && mode != unix.S_IFDIR {
+			return nil, nil
+		}
 		switch operator {
 		case "-e":
 			result = true

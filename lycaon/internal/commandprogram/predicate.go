@@ -36,9 +36,12 @@ type PredicatePatterns interface {
 
 // PredicateRuntime supplies only the ports needed by native boolean operations.
 type PredicateRuntime struct {
-	Expansion PredicateExpansion
-	Files     PredicateFiles
-	Patterns  PredicatePatterns
+	Expansion       PredicateExpansion
+	Files           PredicateFiles
+	Patterns        PredicatePatterns
+	Memory          PredicateMemory
+	LocalBoundsOnly bool
+	quota           *predicateQuota
 }
 
 // BooleanBuiltin evaluates the scalar true/false/: builtins. Arbitrary operands

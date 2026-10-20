@@ -11,6 +11,12 @@ import (
 // TestExpression evaluates the detached [[ tree without serializing/reparsing
 // syntax. It validates all node shapes first; unreached words stay deferred.
 func (r PredicateRuntime) TestExpression(ctx context.Context, inv toolcontract.OperationInvocation, e commandsurface.TestExpression) (toolcontract.ProducerResult, error) {
+	var err error
+	r, err = r.withQuota(ctx)
+	if err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
+	defer r.quota.close()
 	var count int64
 	b := predicateBounds()
 	if err := validatePredicate(e.Expression, 1, &count, b); err != nil {
@@ -97,7 +103,11 @@ func (r PredicateRuntime) evalTyped(ctx context.Context, inv toolcontract.Operat
 	switch n := e.(type) {
 	case commandsurface.TestWord:
 		v, err := r.expand(ctx, n)
-		return predicateText(v) != "", err
+		if err != nil {
+			return false, err
+		}
+		text, err := r.text(v)
+		return text != "", err
 	case commandsurface.GroupedPredicate:
 		return r.evalTyped(ctx, inv, n.Expression)
 	case commandsurface.UnaryPredicate:
@@ -109,7 +119,11 @@ func (r PredicateRuntime) evalTyped(ctx context.Context, inv toolcontract.Operat
 		if err != nil {
 			return false, err
 		}
-		return r.unary(ctx, inv, n.Operator, predicateText(v))
+		text, err := r.text(v)
+		if err != nil {
+			return false, err
+		}
+		return r.unary(ctx, inv, n.Operator, text)
 	case commandsurface.BinaryPredicate:
 		if n.Operator == "&&" || n.Operator == "||" {
 			v, err := r.evalTyped(ctx, inv, n.Left)
@@ -129,7 +143,11 @@ func (r PredicateRuntime) evalTyped(ctx context.Context, inv toolcontract.Operat
 		if err != nil {
 			return false, err
 		}
-		return r.compare(ctx, n.Operator, predicateText(lhs), rhs, true)
+		text, err := r.text(lhs)
+		if err != nil {
+			return false, err
+		}
+		return r.compare(ctx, n.Operator, text, rhs, true)
 	}
 	return false, errPredicateUsage
 }

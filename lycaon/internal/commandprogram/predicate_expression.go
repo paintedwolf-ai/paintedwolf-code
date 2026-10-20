@@ -19,7 +19,7 @@ type PredicateLimitError struct {
 
 func (e *PredicateLimitError) Error() string { return "predicate resource limit: " + e.Resource }
 
-type predicateLimits struct{ nodes, depth, argument, argv int64 }
+type predicateLimits struct{ nodes, depth, argument, argv, memory int64 }
 
 var predicateBounds = sync.OnceValue(func() predicateLimits {
 	catalog, err := toolcontract.LanguageV1()
@@ -37,6 +37,8 @@ var predicateBounds = sync.OnceValue(func() predicateLimits {
 			b.argument = l.Maximum
 		case "argv_bytes":
 			b.argv = l.Maximum
+		case "evaluation_memory_bytes":
+			b.memory = l.Maximum
 		}
 	}
 	return b
@@ -52,6 +54,7 @@ type predicateParser struct {
 	pos    int
 	nodes  int64
 	bounds predicateLimits
+	quota  *predicateQuota
 }
 
 func (p *predicateParser) node(op, value string, left, right *predicateExpr) (*predicateExpr, error) {
@@ -67,6 +70,9 @@ func (p *predicateParser) node(op, value string, left, right *predicateExpr) (*p
 	}
 	if depth > p.bounds.depth {
 		return nil, &PredicateLimitError{"ast_depth", p.bounds.depth, depth}
+	}
+	if err := p.quota.alloc(96); err != nil {
+		return nil, err
 	}
 	return &predicateExpr{op: op, value: value, left: left, right: right, depth: depth}, nil
 }
@@ -190,6 +196,12 @@ func (r PredicateRuntime) TestBuiltin(ctx context.Context, invocation toolcontra
 	} else if name != "test" {
 		return predicateResult(2), nil
 	}
+	var err error
+	r, err = r.withQuota(ctx)
+	if err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
+	defer r.quota.close()
 	b := predicateBounds()
 	var total int64
 	for _, arg := range args {
@@ -208,7 +220,7 @@ func (r PredicateRuntime) TestBuiltin(ctx context.Context, invocation toolcontra
 	if len(args) == 0 {
 		return predicateResult(1), nil
 	}
-	p := predicateParser{args: args, bounds: b}
+	p := predicateParser{args: args, bounds: b, quota: r.quota}
 	expression, err := p.expression(0, 1)
 	if err == nil && p.pos != len(args) {
 		err = errPredicateUsage

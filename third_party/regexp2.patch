@@ -40,7 +40,12 @@
 +}
 +
 +func matchSyntaxWithMeter(source *syntax.Regexp, input string, m *budget.Meter) (bool, error) {
-+	tree := enginesyntax.FromValidatedSyntax(source, m)
++	count := 0
++	for range input {
++		m.Step(1)
++		count++
++	}
++	tree := enginesyntax.FromValidatedSyntax(source, m, count+1)
 +	code, err := enginesyntax.WriteMetered(tree, m)
 +	if err != nil {
 +		return false, err
@@ -48,11 +53,6 @@
 +	m.Alloc(1024)
 +	re := &Regexp{code: code, capsize: 1, MatchTimeout: DefaultMatchTimeout, optimizations: OptimizationOptions{MaxBacktrackingStackSize: -1}}
 +	runner := &Runner{re: re, code: code, budget: m}
-+	count := 0
-+	for range input {
-+		m.Step(1)
-+		count++
-+	}
 +	m.Alloc(int64(count) * 4)
 +	text := make([]rune, 0, count)
 +	for _, ch := range input {
@@ -97,7 +97,7 @@
 +}
 --- a/internal/budget/budget.go
 +++ b/internal/budget/budget.go
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,100 @@
 +package budget
 +
 +import (
@@ -133,7 +133,22 @@
 +	if ctx == nil || limits.MaxBytes < 1 || limits.MaxSteps < 1 || limits.Timeout <= 0 {
 +		panic(Abort{fmt.Errorf("bounded regex requires context and positive limits")})
 +	}
-+	return &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout)}
++	if limits.MaxBytes < 512 {
++		panic(Abort{&Error{"bytes", limits.MaxBytes, 512}})
++	}
++	var release func()
++	if limits.Reserve != nil {
++		var err error
++		release, err = limits.Reserve(ctx, 512)
++		if err != nil {
++			panic(Abort{err})
++		}
++	}
++	m := &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout), bytes: 512}
++	if release != nil {
++		m.releases = []func(){release}
++	}
++	return m
 +}
 +func (m *Meter) Check() {
 +	if m == nil {
@@ -570,7 +585,7 @@
  	}
 --- a/syntax/bounded_tree.go
 +++ b/syntax/bounded_tree.go
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,105 @@
 +package syntax
 +
 +import (
@@ -583,13 +598,13 @@
 +
 +// FromValidatedSyntax lowers a host-validated regular tree without accepting a
 +// second textual grammar. Captures are unobservable for this boolean-only API.
-+func FromValidatedSyntax(source *syntax.Regexp, m *budget.Meter) *RegexTree {
++func FromValidatedSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexTree {
 +	m.Alloc(512)
-+	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{lowerValidated(source, m)}}
++	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{lowerValidated(source, m, inputBound)}}
 +	root.Children[0].Parent = root
 +	return &RegexTree{Root: root, Captop: 1}
 +}
-+func lowerValidated(source *syntax.Regexp, m *budget.Meter) *RegexNode {
++func lowerValidated(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexNode {
 +	m.Step(1)
 +	m.Alloc(256 + int64(len(source.Sub))*8 + int64(len(source.Rune))*8)
 +	node := &RegexNode{}
@@ -652,21 +667,26 @@
 +		node.T = NtLoop
 +		node.N = 1
 +	case syntax.OpRepeat:
++		// Boolean matches on L input scalars need at most L+1 repetitions:
++		// any longer successful sequence contains an empty iteration which can
++		// be removed or duplicated without changing text/assertions. Captures and
++		// backreferences are absent in this typed API. This preserves arbitrary
++		// counts without introducing the VM's int32 counter as a grammar ceiling.
 +		node.T = NtLoop
-+		node.M = source.Min
++		node.M = min(source.Min, inputBound)
 +		node.N = source.Max
 +		if node.N < 0 {
 +			node.N = math.MaxInt32
++		} else {
++			node.N = min(node.N, inputBound)
 +		}
-+		if node.M > math.MaxInt32 || node.N > math.MaxInt32 {
-+			panic(budget.Abort{&budget.Error{Resource: "steps", Maximum: math.MaxInt32, Observed: int64(node.M)}})
-+		}
++
 +	default:
 +		panic(budget.Abort{fmt.Errorf("unvalidated regex tree operation %d", source.Op)})
 +	}
 +	node.Children = make([]*RegexNode, len(source.Sub))
 +	for i, sub := range source.Sub {
-+		node.Children[i] = lowerValidated(sub, m)
++		node.Children[i] = lowerValidated(sub, m, inputBound)
 +		node.Children[i].Parent = node
 +	}
 +	return node

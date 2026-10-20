@@ -10,13 +10,13 @@ import (
 
 // FromValidatedSyntax lowers a host-validated regular tree without accepting a
 // second textual grammar. Captures are unobservable for this boolean-only API.
-func FromValidatedSyntax(source *syntax.Regexp, m *budget.Meter) *RegexTree {
+func FromValidatedSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexTree {
 	m.Alloc(512)
-	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{lowerValidated(source, m)}}
+	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{lowerValidated(source, m, inputBound)}}
 	root.Children[0].Parent = root
 	return &RegexTree{Root: root, Captop: 1}
 }
-func lowerValidated(source *syntax.Regexp, m *budget.Meter) *RegexNode {
+func lowerValidated(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexNode {
 	m.Step(1)
 	m.Alloc(256 + int64(len(source.Sub))*8 + int64(len(source.Rune))*8)
 	node := &RegexNode{}
@@ -79,21 +79,26 @@ func lowerValidated(source *syntax.Regexp, m *budget.Meter) *RegexNode {
 		node.T = NtLoop
 		node.N = 1
 	case syntax.OpRepeat:
+		// Boolean matches on L input scalars need at most L+1 repetitions:
+		// any longer successful sequence contains an empty iteration which can
+		// be removed or duplicated without changing text/assertions. Captures and
+		// backreferences are absent in this typed API. This preserves arbitrary
+		// counts without introducing the VM's int32 counter as a grammar ceiling.
 		node.T = NtLoop
-		node.M = source.Min
+		node.M = min(source.Min, inputBound)
 		node.N = source.Max
 		if node.N < 0 {
 			node.N = math.MaxInt32
+		} else {
+			node.N = min(node.N, inputBound)
 		}
-		if node.M > math.MaxInt32 || node.N > math.MaxInt32 {
-			panic(budget.Abort{&budget.Error{Resource: "steps", Maximum: math.MaxInt32, Observed: int64(node.M)}})
-		}
+
 	default:
 		panic(budget.Abort{fmt.Errorf("unvalidated regex tree operation %d", source.Op)})
 	}
 	node.Children = make([]*RegexNode, len(source.Sub))
 	for i, sub := range source.Sub {
-		node.Children[i] = lowerValidated(sub, m)
+		node.Children[i] = lowerValidated(sub, m, inputBound)
 		node.Children[i].Parent = node
 	}
 	return node

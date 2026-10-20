@@ -3,8 +3,9 @@
 package fseffect
 
 import (
-	"golang.org/x/sys/windows"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 func openWindowsRoot(path string, write bool) (windows.Handle, error) {

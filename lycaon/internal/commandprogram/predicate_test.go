@@ -59,7 +59,7 @@ func TestArgvPredicates(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name+" "+strings.Join(c.args, " "), func(t *testing.T) {
-			got, err := (PredicateRuntime{}).TestBuiltin(t.Context(), fixtureInvocation(), c.name, c.args)
+			got, err := (PredicateRuntime{LocalBoundsOnly: true}).TestBuiltin(t.Context(), fixtureInvocation(), c.name, c.args)
 			testutil.FailErr(t, "evaluate predicate", err)
 			if got.Status != c.status || got.Complete != (c.status < 2) {
 				t.Fatalf("got %+v want status %d", got, c.status)
@@ -70,7 +70,7 @@ func TestArgvPredicates(t *testing.T) {
 func TestPredicateValidationAndShortCircuitProtectAuthority(t *testing.T) {
 	cause := errors.New("authority refused")
 	probes := 0
-	r := PredicateRuntime{Files: predicateFileFunc(func(context.Context, toolcontract.OperationInvocation, string, string) (bool, error) {
+	r := PredicateRuntime{LocalBoundsOnly: true, Files: predicateFileFunc(func(context.Context, toolcontract.OperationInvocation, string, string) (bool, error) {
 		probes++
 		return false, cause
 	})}
@@ -94,7 +94,7 @@ func predicateWord(value string) commandsurface.TestWord {
 }
 func TestTypedPredicateDoesNotExpandUnreachedSubtree(t *testing.T) {
 	calls := 0
-	r := PredicateRuntime{Expansion: predicateExpansionFunc(func(_ context.Context, w commandsurface.DeferredWord) (PredicateValue, error) {
+	r := PredicateRuntime{LocalBoundsOnly: true, Expansion: predicateExpansionFunc(func(_ context.Context, w commandsurface.DeferredWord) (PredicateValue, error) {
 		calls++
 		return PredicateValue{{Value: w.Parts[0].(commandsurface.LiteralPart).Value}}, nil
 	})}
@@ -114,11 +114,11 @@ func TestTypedPredicateDoesNotExpandUnreachedSubtree(t *testing.T) {
 func TestPredicateCancellationAndBoundsStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := (PredicateRuntime{}).TestBuiltin(ctx, fixtureInvocation(), "test", []string{"x"})
+	_, err := (PredicateRuntime{LocalBoundsOnly: true}).TestBuiltin(ctx, fixtureInvocation(), "test", []string{"x"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation lost %v", err)
 	}
-	_, err = (PredicateRuntime{}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{strings.Repeat("x", int(predicateBounds().argument)+1)})
+	_, err = (PredicateRuntime{LocalBoundsOnly: true}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{strings.Repeat("x", int(predicateBounds().argument)+1)})
 	var limit *PredicateLimitError
 	if !errors.As(err, &limit) || limit.Resource != "argument_bytes" {
 		t.Fatalf("missing scalar limit %v", err)

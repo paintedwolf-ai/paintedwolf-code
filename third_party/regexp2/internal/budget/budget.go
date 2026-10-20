@@ -33,7 +33,22 @@ func New(ctx context.Context, limits Limits) *Meter {
 	if ctx == nil || limits.MaxBytes < 1 || limits.MaxSteps < 1 || limits.Timeout <= 0 {
 		panic(Abort{fmt.Errorf("bounded regex requires context and positive limits")})
 	}
-	return &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout)}
+	if limits.MaxBytes < 512 {
+		panic(Abort{&Error{"bytes", limits.MaxBytes, 512}})
+	}
+	var release func()
+	if limits.Reserve != nil {
+		var err error
+		release, err = limits.Reserve(ctx, 512)
+		if err != nil {
+			panic(Abort{err})
+		}
+	}
+	m := &Meter{ctx: ctx, limits: limits, deadline: time.Now().Add(limits.Timeout), bytes: 512}
+	if release != nil {
+		m.releases = []func(){release}
+	}
+	return m
 }
 func (m *Meter) Check() {
 	if m == nil {

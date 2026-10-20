@@ -37,7 +37,12 @@ func MatchSyntaxBounded(ctx context.Context, source *syntax.Regexp, input string
 }
 
 func matchSyntaxWithMeter(source *syntax.Regexp, input string, m *budget.Meter) (bool, error) {
-	tree := enginesyntax.FromValidatedSyntax(source, m)
+	count := 0
+	for range input {
+		m.Step(1)
+		count++
+	}
+	tree := enginesyntax.FromValidatedSyntax(source, m, count+1)
 	code, err := enginesyntax.WriteMetered(tree, m)
 	if err != nil {
 		return false, err
@@ -45,11 +50,6 @@ func matchSyntaxWithMeter(source *syntax.Regexp, input string, m *budget.Meter) 
 	m.Alloc(1024)
 	re := &Regexp{code: code, capsize: 1, MatchTimeout: DefaultMatchTimeout, optimizations: OptimizationOptions{MaxBacktrackingStackSize: -1}}
 	runner := &Runner{re: re, code: code, budget: m}
-	count := 0
-	for range input {
-		m.Step(1)
-		count++
-	}
 	m.Alloc(int64(count) * 4)
 	text := make([]rune, 0, count)
 	for _, ch := range input {

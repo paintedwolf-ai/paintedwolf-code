@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
@@ -15,6 +16,7 @@ import (
 // the OS for the effective token's exact capability, then close the handle;
 // acquiring that handle never creates bytes or grants a later operation.
 func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
+	requireDirectory := strings.HasSuffix(rel, "/") || strings.HasSuffix(rel, `\`)
 	clean, err := cleanReadLocation(Location{Root: r.path, Rel: rel})
 	if err != nil {
 		return false, err
@@ -44,7 +46,7 @@ func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 			return false, err
 		}
 		defer parent.close()
-		if operator == "-L" {
+		if operator == "-L" && !requireDirectory {
 			handle, err = ntOpenLeaf(parent.handle, parent.name, access)
 		} else {
 			handle, err = ntOpenRelative(parent.handle, parent.name, access, windows.FILE_OPEN, 0)
@@ -64,6 +66,9 @@ func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return false, err
+	}
+	if requireDirectory && !info.IsDir() {
+		return false, nil
 	}
 	switch operator {
 	case "-f":

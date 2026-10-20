@@ -7,7 +7,6 @@ import (
 )
 
 func (r PredicateRuntime) compare(ctx context.Context, op, lhs string, rhs PredicateValue, patterns bool) (bool, error) {
-	right := predicateText(rhs)
 	switch op {
 	case "=", "==", "!=":
 		var equal bool
@@ -21,6 +20,10 @@ func (r PredicateRuntime) compare(ctx context.Context, op, lhs string, rhs Predi
 				return false, err
 			}
 		} else {
+			right, err := r.text(rhs)
+			if err != nil {
+				return false, err
+			}
 			equal = lhs == right
 		}
 		if op == "!=" {
@@ -32,6 +35,10 @@ func (r PredicateRuntime) compare(ctx context.Context, op, lhs string, rhs Predi
 			return false, errors.New("predicate pattern port unavailable")
 		}
 		return r.Patterns.MatchPredicate(ctx, "ere", lhs, rhs)
+	}
+	right, err := r.text(rhs)
+	if err != nil {
+		return false, err
 	}
 	a, ok := decimalOperand(lhs)
 	if !ok {

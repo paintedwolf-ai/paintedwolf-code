@@ -30,7 +30,7 @@ func (p PredicateFiles) TestPath(ctx context.Context, inv toolcontract.Operation
 	if err != nil {
 		return false, err
 	}
-	result, err := p.Reads.TestPath(resolved, operator)
+	result, err := p.Reads.TestPath(resolved, operator, path)
 	if err != nil {
 		return false, err
 	}
