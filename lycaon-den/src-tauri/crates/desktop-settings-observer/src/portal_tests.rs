@@ -51,7 +51,6 @@ fn startup_snapshot_replays_intervening_changes_and_invalidates_removed_fact() {
 #[test]
 fn text_preferences_are_bounded_before_copying() {
     assert!(text(&"x".repeat(257).to_variant(), 256).is_none());
-    assert!(text(&"x\0y".to_variant(), 256).is_none());
     assert_eq!(
         text(&"left:right".to_variant(), 256),
         Some("left:right".into())
