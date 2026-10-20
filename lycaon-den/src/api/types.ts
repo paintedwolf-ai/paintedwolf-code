@@ -6189,6 +6189,8 @@ export interface components {
             tool: string;
             /** @description Arguments accepted directly by the named tool */
             args: {
+                /** @description Complete portable command program for an inspection action */
+                command?: string;
                 path?: string;
                 paths?: string[];
                 task?: string;
