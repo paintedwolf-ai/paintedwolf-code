@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts/linux_release",
+  "kind": "module",
+  "workstream": "linux-installed-qualification",
+  "disposition": "retain",
+  "reason": "These release rehearsal owners implement one bounded protocol: independently select producer controls and plans, bind selected native payloads, execute fixed installed interactions, and freshly retain and admit observations. Transport, plan validation, guest lifecycle and evidence admission remain explicit owners; installed interaction families live in installed_cases. Retain the measured 27 immediate members rather than exporting package-private protocol seams solely to reduce file count. Any membership change requires renewed cohesion review; this ceiling grants no growth.",
+  "reviewed_commit": "33755f40990b9201cd92de9e9034db8d4358958b",
+  "ceiling": 27,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
+    "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
+    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "898fbd398be6542fb0e81906731ec63205980efe4516f75b05434767851feabf",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "720cf774b698642d48a5f9f915c9aeab8a1d95702946a7eb3e29c269fbefcac0"
+  },
+  "reviewed_shape": "8b8ea088a654e87b4ed4e4c7c1d6d140185f2d3385cdf94dadbd9f1149c9f89e"
+}
