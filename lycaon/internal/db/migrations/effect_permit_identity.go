@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 //go:embed effect_permit_identity.go
@@ -77,14 +78,32 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(encoded, &plan); err != nil || plan == nil {
 		return nil, fmt.Errorf("approval plan must be an object")
 	}
+	for key := range plan {
+		if !knownEffectPlanField(key) {
+			return nil, fmt.Errorf("unknown approval plan field")
+		}
+	}
+	for _, key := range []string{"id", "action_digest", "stage", "recommended_option_id"} {
+		if !retainedIdentity(plan[key]) {
+			return nil, fmt.Errorf("approval plan identity is incomplete")
+		}
+	}
 	var options []map[string]json.RawMessage
-	if err := json.Unmarshal(plan["options"], &options); err != nil || options == nil {
+	if err := json.Unmarshal(plan["options"], &options); err != nil || len(options) == 0 {
 		return nil, fmt.Errorf("approval options must be an array")
 	}
 	changed := false
 	for _, option := range options {
+		for key := range option {
+			if !knownEffectOptionField(key) {
+				return nil, fmt.Errorf("unknown approval option field")
+			}
+		}
+		if !retainedIdentity(option["id"]) {
+			return nil, fmt.Errorf("approval option identity is incomplete")
+		}
 		var authority []map[string]json.RawMessage
-		if err := json.Unmarshal(option["authority"], &authority); err != nil || authority == nil {
+		if err := json.Unmarshal(option["authority"], &authority); err != nil || len(authority) == 0 {
 			return nil, fmt.Errorf("authority must be an array")
 		}
 		for _, delta := range authority {
@@ -107,12 +126,11 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 				continue
 			}
 			for _, key := range []string{"session_id", "tool_call_id", "action_digest"} {
-				var identity string
-				if err := json.Unmarshal(delta[key], &identity); err != nil || identity == "" {
+				if !retainedIdentity(delta[key]) {
 					return nil, fmt.Errorf("retained once authority identity is incomplete")
 				}
 			}
-			if prior, present := delta["execution_id"]; present && string(prior) != `""` {
+			if _, present := delta["execution_id"]; present {
 				return nil, fmt.Errorf("revision4 cannot assert native child authority")
 			}
 			delta["execution_id"] = json.RawMessage(`""`)
@@ -155,4 +173,25 @@ func knownEffectAuthorityField(key string) bool {
 		return true
 	}
 	return false
+}
+
+// These field sets freeze revision4's stored authority envelope. Display-only
+// payload annotations outside approval_plan remain untouched.
+func knownEffectPlanField(key string) bool {
+	switch key {
+	case "id", "action_digest", "stage", "subject", "presentation", "reasons", "options", "directory_scopes", "recommended_option_id", "held":
+		return true
+	}
+	return false
+}
+func knownEffectOptionField(key string) bool {
+	switch key {
+	case "id", "kind", "rung", "scope", "group", "directory_scope", "title", "coverage", "expires_when", "reask_when", "decision_action", "disabled", "note", "authority":
+		return true
+	}
+	return false
+}
+func retainedIdentity(raw json.RawMessage) bool {
+	var value string
+	return json.Unmarshal(raw, &value) == nil && strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\x00\x01")
 }

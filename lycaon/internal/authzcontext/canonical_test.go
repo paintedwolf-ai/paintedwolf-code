@@ -54,3 +54,18 @@ func TestVerifyRejectsUnsupportedStoredHashVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalDigestPreservesExactArgumentIdentity(t *testing.T) {
+	first, err := CanonicalDigest(map[string]any{"b": 9007199254740993, "a": "value"})
+	testutil.FailErr(t, "hash canonical value", err)
+	same, err := CanonicalDigest(json.RawMessage(`{"a":"value","b":9007199254740993}`))
+	testutil.FailErr(t, "hash reordered representation", err)
+	changed, err := CanonicalDigest(map[string]any{"b": 9007199254740992, "a": "value"})
+	testutil.FailErr(t, "hash changed value", err)
+	if first != same || first == changed || len(first) != 64 {
+		t.Fatal("canonical digest lost exact value identity")
+	}
+	if _, err := CanonicalDigest(math.NaN()); err == nil {
+		t.Fatal("invalid canonical digest accepted")
+	}
+}
