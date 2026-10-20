@@ -53,7 +53,11 @@ fn status(error: &glib::Error) -> Status {
     }
 }
 fn value(namespace: &str, key: &str, boxed: &Variant) -> Option<Setting> {
-    let v = boxed.as_variant().unwrap_or_else(|| boxed.clone());
+    let v = if boxed.type_().as_str() == "v" {
+        boxed.as_variant()?
+    } else {
+        boxed.clone()
+    };
     let setting = match (namespace, key) {
         ("org.freedesktop.appearance", "contrast") => Setting::Contrast(v.get()?),
         ("org.freedesktop.appearance", "accent-color") => {
