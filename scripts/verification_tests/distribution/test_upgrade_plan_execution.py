@@ -27,6 +27,11 @@ class UpgradePlanTests(unittest.TestCase):
         self.assertEqual(result["cases"], [])
         self.assertEqual(result["excluded_sources"][0]["reason"], "requires_manual_installation")
 
+    def test_stable_leaves_a_newer_preview_offer_alone(self):
+        result = plan(manifest("1.1.0"), self.registry,
+                      [snapshot("stable", manifest("1.0.2")), snapshot("preview", manifest("1.2.0-rc1"))])
+        self.assertEqual([case["channel"] for case in result["cases"]], ["stable"])
+
     def test_shipped_protocol_boundary_is_explicit(self):
         from release_upgrade_plan import client_protocol
         self.assertEqual(client_protocol("1.0.1"), "tauri-plugin-v1")

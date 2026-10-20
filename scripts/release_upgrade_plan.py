@@ -46,6 +46,8 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
         if channel == "stable" and parse(source["version"]).channel != "stable":
             raise ValueError("stable feed contains a prerelease")
         feeds[channel, number] = snapshot
+    preview = feeds.get(("preview", candidate["update_keys"]["signing_generation"]))
+    promotes_preview = preview is None or compare(parse(preview["manifest"]["version"]), target) <= 0
     cases = {}
     excluded = []
     for (source_channel, number), snapshot in feeds.items():
@@ -57,7 +59,7 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
             excluded.append({"source_version": version, "source_feed": snapshot["path"],
                              "reason": "requires_manual_installation"})
             continue
-        channels = ("stable", "preview") if target.channel == "stable" else ("preview",)
+        channels = (("stable", "preview") if promotes_preview else ("stable",)) if target.channel == "stable" else ("preview",)
         for channel in channels:
             # Preview installations can originate from either published channel.
             if channel == "stable" and source_channel != "stable":
