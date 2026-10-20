@@ -39,6 +39,8 @@ type EgressCommand struct {
 	ProjectID          string
 	ProjectDir         string
 	ToolCallID         string
+	// ActionID is the native child execution, separate from the actual model call.
+	ActionID string
 	// ToolName is the argv-running tool associated with this token (command, verify, …).
 	ToolName    string
 	Image       string // semantic tool image when there is no command line
@@ -49,6 +51,14 @@ type EgressCommand struct {
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.
 	UserRule *EgressUserRule
+}
+
+// EffectActionID preserves retained model actions and separates native children.
+func (c EgressCommand) EffectActionID() string {
+	if c.ActionID != "" {
+		return c.ActionID
+	}
+	return c.ToolCallID
 }
 
 // EgressUserRule is a redaction-safe rule citation.
@@ -536,7 +546,7 @@ func (b *egressBrokerT) decideAttributedEndpoint(ctx context.Context, cmd Egress
 		return allow
 	}
 	cmd.UserRule = rule
-	return b.askOrCache(ctx, cmd, true, cmd.ToolCallID, ep, det)
+	return b.askOrCache(ctx, cmd, true, cmd.EffectActionID(), ep, det)
 }
 
 func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string, ep egressproxy.Endpoint) bool {
@@ -579,7 +589,7 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 	if src, posture := currentEgressDetection(cmd); src != nil {
 		observation := EgressDetectionObservation{
 			Endpoint: ep, Image: cmd.Image, CommandLine: cmd.CommandLine,
-			SessionID: cmd.SessionID, ActionID: cmd.ToolCallID,
+			SessionID: cmd.SessionID, ActionID: cmd.EffectActionID(),
 			Origin: origin, DecisionStage: "pre_dial",
 		}
 		if m, ok := src.Match(observation); ok && src.Escalates(m, posture) {

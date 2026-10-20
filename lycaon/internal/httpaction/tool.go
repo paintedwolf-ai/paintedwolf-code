@@ -160,8 +160,9 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
 			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
+			ActionID: tctx.EffectActionID(),
 		})
-		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
 		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)

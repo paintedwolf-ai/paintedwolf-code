@@ -23,7 +23,7 @@ func (e *Boundary) preInvokePolicyContext(
 		ProjectID:               tc.Identity.ProjectID,
 		ProjectDir:              tc.ActiveRootPath(),
 		SessionID:               tc.Identity.SessionID,
-		ActionID:                tc.Identity.ToolCallID,
+		ActionID:                tc.EffectActionID(),
 		ParentSessionID:         tc.Identity.ParentSessionID,
 		RootSessionID:           tc.ChatSessionID(),
 		ConfineRequest:          confReq,
@@ -40,7 +40,6 @@ func (e *Boundary) preInvokePolicyContext(
 	if tc.Invocation.NativeOperation != nil {
 		policyEval.NativeOperation = tc.Invocation.NativeOperation
 		policyEval.BoundStages = tc.Invocation.NativeStages
-		policyEval.ActionID = tc.Invocation.ID
 	}
 	if e.Metadata.registry != nil {
 		if meta, ok := e.Metadata.registry.Meta(tool); ok {

@@ -111,7 +111,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	if errors.Is(err, context.Canceled) {
 		return out, err
 	}
-	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.Identity.SessionID, tc.Identity.ToolCallID)
+	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.Identity.SessionID, tc.Identity.ToolCallID, tc.EffectActionID())
 
 	if err != nil {
 		if capabilityDenied && toolrejection.AsToolReject(err) == nil {

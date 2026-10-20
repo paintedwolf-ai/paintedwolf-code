@@ -87,6 +87,7 @@ func commandEgressIdentity(tctx tools.ToolContext, toolName, commandLine string)
 		ProjectID:          tctx.Identity.ProjectID,
 		ProjectDir:         tctx.ActiveRootPath(),
 		ToolCallID:         tctx.Identity.ToolCallID,
+		ActionID: tctx.EffectActionID(),
 		ToolName:           toolName,
 		CommandLine:        commandLine,
 	}

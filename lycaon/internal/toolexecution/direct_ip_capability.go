@@ -57,7 +57,7 @@ Tool: tool,
 Args: args,
 Files: filesFromArgs(tool, args),
 ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.Identity.ToolCallID,
+ActionID: tc.EffectActionID(),
 },
 Presentation: hitl.ActionPresentation{
 Command: commandsurface.PrimaryCommandLine(args, nil),

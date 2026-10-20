@@ -42,6 +42,16 @@ func TestProgramFramePreservesModelCallAndClearsChildAuthority(t *testing.T) {
 	if !tc.Execution.HostExecution || tc.Effects.Out == nil {
 		t.Fatal("binding changed parent context")
 	}
+	if tc.EffectActionID() != "actual-model-call" {
+		t.Fatal("retained action identity changed")
+	}
+	definition := nativeDefinition(t, "read")
+	operation, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
+	testutil.FailErr(t, "bind exact native identity", err)
+	bound.Invocation.NativeOperation = &operation
+	if bound.EffectActionID() != "child" || bound.Identity.ToolCallID != "actual-model-call" {
+		t.Fatal("native effect identity conflated with initiating call")
+	}
 }
 
 func TestProgramFrameRejectsChangedAttributionAndTrees(t *testing.T) {

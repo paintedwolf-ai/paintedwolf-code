@@ -46,7 +46,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 		Invocation: hitl.ActionInvocation{
 			Tool:     tool,
 			Args:     args,
-			ActionID: tc.Identity.ToolCallID,
+			ActionID: tc.EffectActionID(),
 		},
 		Presentation: hitl.ActionPresentation{
 			Command: commandsurface.PrimaryCommandLine(args, nil),

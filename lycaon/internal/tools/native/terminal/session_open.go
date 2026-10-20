@@ -99,6 +99,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			ProjectID:          tctx.Identity.ProjectID,
 			ProjectDir:         tctx.ActiveRootPath(),
 			ToolCallID:         tctx.Identity.ToolCallID,
+		ActionID: tctx.EffectActionID(),
 			ToolName:           OpenToolName,
 			CommandLine:        in.Command,
 		}

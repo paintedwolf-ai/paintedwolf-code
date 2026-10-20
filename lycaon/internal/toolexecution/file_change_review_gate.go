@@ -21,7 +21,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 Invocation: hitl.ActionInvocation{
 Tool: tool,
 Args: args,
-ActionID: tc.Identity.ToolCallID,
+ActionID: tc.EffectActionID(),
 },
 Scope: hitl.ActionScope{
 ProjectID: tc.Identity.ProjectID,

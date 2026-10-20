@@ -45,6 +45,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 Invocation: hitl.ActionInvocation{
 Tool: networkEgressTool,
 Args: subject.Args,
+ActionID: cmd.EffectActionID(),
 },
 Presentation: hitl.ActionPresentation{
 PresentationTool: strings.TrimSpace(cmd.ToolName),

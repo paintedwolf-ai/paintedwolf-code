@@ -30,7 +30,7 @@ Tool: tool,
 Args: args,
 Files: append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
 ResolvedFiles: append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-ActionID: tc.Identity.ToolCallID,
+ActionID: tc.EffectActionID(),
 },
 Resources: hitl.ActionResources{
 HostResources: append([]string(nil), tc.Host.HostResources...),
