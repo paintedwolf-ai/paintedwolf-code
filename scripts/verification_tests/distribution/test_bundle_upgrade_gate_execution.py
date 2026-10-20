@@ -61,6 +61,14 @@ class GateTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "failed")
         self.assertEqual(receipt["source_sha"], self.plan["source_sha"])
 
+    def test_unsigned_baseline_metadata_cannot_authorize_execution(self):
+        self.plan["anchors"] = [{"verification": "artifact_signature_required"}]
+        self.inventory()
+        with patch.object(gate, "require_disposable_host") as guard:
+            with self.assertRaisesRegex(ValueError, "authenticated before execution"):
+                gate.rehearse(self.fixtures, self.evidence, self.case_id)
+        guard.assert_not_called()
+
     def test_confirmation_requires_cleanup_and_the_expected_release_and_installation(self):
         app = self.root / "Product.app"
         previous = self.root / ".paintedwolf-update-prior.app"

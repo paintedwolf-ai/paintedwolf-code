@@ -30,6 +30,8 @@ def verify_inventory(root: Path) -> dict:
         raise ValueError("unsupported upgrade fixture format")
     if not isinstance(plan.get("cases"), list):
         raise ValueError("upgrade fixture cases must be a list")
+    if any(anchor.get("verification") != "artifact_signature_verified" for anchor in plan.get("anchors", [])):
+        raise ValueError("automatic baseline archives must be authenticated before execution")
     if plan["cases"] and plan.get("skip_reason") is not None:
         raise ValueError("nonempty upgrade fixtures cannot declare an exclusion")
     if not plan["cases"] and plan.get("skip_reason") != "no_automatic_upgrade_source":
