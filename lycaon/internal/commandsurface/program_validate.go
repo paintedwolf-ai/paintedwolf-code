@@ -19,6 +19,8 @@ func (c *programCompiler) validate(file *syntax.File) {
 			return false
 		}
 		count++
+		c.nodeCount = count
+		c.maximumDepth = max(c.maximumDepth, depth)
 		c.limit(n, "ast_nodes", count)
 		c.limit(n, "ast_depth", depth)
 		depth++
@@ -32,10 +34,13 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit:
 	case *syntax.Word:
 		c.validateTilde(v)
-		copy := *v
-		copy.Parts = append([]syntax.WordPart(nil), v.Parts...)
-		if !c.literalContext[v] && !c.testWords[v] && syntax.SplitBraces(&copy) {
-			c.unsupported(n, "words without brace expansion")
+		if !c.literalContext[v] && !c.testWords[v] && !c.staticProof[v] {
+			expanded, err := syntax.ClassifyBraces(v, c.pool)
+			if err != nil {
+				c.err = parserDiagnostic(err, len(c.source))
+			} else if expanded {
+				c.unsupported(n, "words without brace expansion")
+			}
 		}
 	case *syntax.Stmt:
 		if v.Coprocess || v.Disown {
@@ -154,6 +159,9 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 	switch r.Op {
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.RdrIn:
 	case syntax.Hdoc, syntax.DashHdoc:
+		if !c.reserveHeap(512, r) {
+			return
+		}
 		if c.literalContext == nil {
 			c.literalContext = make(map[*syntax.Word]bool)
 		}
@@ -190,6 +198,9 @@ func (c *programCompiler) validateTilde(w *syntax.Word) {
 // retain ordinary validation for their own command words.
 func (c *programCompiler) markTestWord(expr syntax.TestExpr) {
 	if word, ok := expr.(*syntax.Word); ok {
+		if !c.reserveHeap(256, word) {
+			return
+		}
 		if c.testWords == nil {
 			c.testWords = make(map[*syntax.Word]bool)
 		}

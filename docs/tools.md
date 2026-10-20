@@ -91,17 +91,25 @@ consumers still uses it. Their replacement and obsolete-path cleanup accompany
 the introducing runtime integration.
 
 The syntax adapter reserves parser scratch before parsing and meters the selected
-upstream parser's allocations and recursive frames. The 8,192-node and 64-edge
-limits count the completed selected syntax tree before host-plan allocation;
-temporary parser wrappers are scratch rather than semantic syntax nodes. This
-clarifies the catalog's former generic “before allocation” wording without
-changing either threshold. Source capture receives an explicit byte ceiling and
-representation before materialization. Execution uses `NewProgramParser` with its
-aggregate scratch admission; `ParseProgram` is a pure, locally bounded entry.
-The execution caller must separately charge captured bytes, retained host plans
-and detached snapshots to `program_state_bytes` before allocation, retaining
-leases while values remain reachable. Local parser tests do not qualify that
-aggregate runtime wiring.
+upstream parser's allocations and recursive frames. Brace classification and
+static quote removal share that allocation pool; admission never invokes general
+field expansion or its account/environment/glob callbacks. The 8,192-node and
+64-edge limits count the completed selected syntax tree before host-plan
+allocation; temporary parser wrappers remain scratch. This clarifies the
+catalog's former generic “before allocation” wording without changing either
+threshold. Host lowering reserves a conservative typed-node, slice-growth,
+cloned-text and frame envelope against the same pool before allocating its plan.
+
+Source capture receives an explicit byte ceiling and representation before
+materialization. Execution uses `NewProgramParser` with working and retained
+state admission. Retained source/plan storage is charged to `program_state_bytes`
+before host-plan insertion; closing parser scratch does not release that state.
+Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
+while the original parsed program is released. `ParseProgram`, `Snapshot` and
+`Source` are bounded inspection helpers and do not grant execution authority;
+execution callers must retain the applicable leases while values remain reachable.
+Local parser tests do not qualify the later command dispatch, native utilities,
+publication or installed-platform wiring.
 
 ## Altitude
 

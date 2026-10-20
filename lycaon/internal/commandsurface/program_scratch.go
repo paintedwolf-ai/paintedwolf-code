@@ -7,11 +7,12 @@ import (
 	"sync"
 )
 
-// ScratchAdmission reserves parser working storage against the enclosing
+// ProgramMemoryAdmission reserves working and retained storage against the enclosing
 // program's resource ledger. It supplies accounting, never operation authority.
 // Captured source and retained plans additionally consume program_state_bytes.
-type ScratchAdmission interface {
+type ProgramMemoryAdmission interface {
 	ReserveParserScratch(context.Context, int64) (release func(), err error)
+	ReserveProgramState(context.Context, int64) (release func(), err error)
 }
 
 // ProgramParser holds its reservation through validation and host lowering.
@@ -22,9 +23,10 @@ type ProgramParser struct {
 	release func()
 	once    sync.Once
 	closed  bool
+	memory  ProgramMemoryAdmission
 }
 
-func NewProgramParser(ctx context.Context, admission ScratchAdmission) (*ProgramParser, error) {
+func NewProgramParser(ctx context.Context, admission ProgramMemoryAdmission) (*ProgramParser, error) {
 	if ctx == nil || admission == nil {
 		return nil, fmt.Errorf("program parser requires context and scratch admission")
 	}
@@ -42,7 +44,7 @@ func NewProgramParser(ctx context.Context, admission ScratchAdmission) (*Program
 	if release == nil {
 		return nil, fmt.Errorf("parser scratch admission returned no release")
 	}
-	return &ProgramParser{ctx: ctx, release: release}, nil
+	return &ProgramParser{ctx: ctx, release: release, memory: admission}, nil
 }
 
 func (p *ProgramParser) Close() error {
@@ -54,7 +56,7 @@ func (p *ProgramParser) Parse(source []byte, options ParseOptions) (*ParsedProgr
 	if p.closed {
 		return nil, fmt.Errorf("program parser reservation is closed")
 	}
-	return parseProgram(p.ctx, source, options)
+	return parseProgram(p.ctx, source, options, p.memory)
 }
 
 type contextSource struct {
