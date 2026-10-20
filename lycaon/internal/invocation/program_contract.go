@@ -12,6 +12,7 @@ import (
 type ProgramVersion struct {
 	ProgramID       string
 	ParentReceiptID string
+	RootExecutionID string
 	LanguageVersion int
 	CatalogDigest   string
 	SourceUnitID    string
@@ -20,7 +21,7 @@ type ProgramVersion struct {
 }
 
 func (p ProgramVersion) Validate() error {
-	if p.ProgramID == "" || p.ParentReceiptID == "" || p.SourceUnitID == "" || p.SourceReference == "" {
+	if p.ProgramID == "" || p.ParentReceiptID == "" || p.RootExecutionID == "" || p.SourceUnitID == "" || p.SourceReference == "" {
 		return fmt.Errorf("program receipt requires parent and retained source identities")
 	}
 	if p.LanguageVersion != toolcontract.LanguageVersion || p.CatalogDigest != toolcontract.LanguageCatalogDigest() {
@@ -45,6 +46,7 @@ type ChildStart struct {
 	Definition         toolcontract.OperationDefinition
 	ArgumentsReference string
 	ArgumentsDigest    string
+	Canonical          string
 }
 
 func (c ChildStart) Validate() error {
@@ -72,6 +74,9 @@ func (c ChildStart) Validate() error {
 // effects from exit status, stdout, a checklist or a later aggregate stop.
 type ChildSettlement struct {
 	Result            toolcontract.ProducerResult
+	HostStopCode      string
+	OutputPublishable bool
+	OwnerInvoked      bool
 	DetailReference   string
 	AcceptedRevision  string
 	PublishedRevision string
@@ -80,6 +85,9 @@ type ChildSettlement struct {
 func (c ChildSettlement) Validate() error {
 	if err := c.Result.Validate(); err != nil {
 		return err
+	}
+	if c.OutputPublishable && (!c.Result.PublicationEligible || c.HostStopCode != "") {
+		return fmt.Errorf("stopped or ineligible output is not publishable")
 	}
 	if c.DetailReference == "" {
 		return fmt.Errorf("child settlement requires retained authoritative detail")
