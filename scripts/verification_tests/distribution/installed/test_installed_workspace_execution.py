@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import workspace
+from linux_release.installed_input import focus as focus_owner
 
 
 class InstalledWorkspaceTests(unittest.TestCase):
@@ -14,7 +15,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             path = Path(directory) / 'fixture.txt'
             path.write_text(workspace.BEFORE)
             self.assertFalse(workspace.observed_file(path)['expected_content'])
-            path.write_text(workspace.AFTER)
+            path.write_text(workspace.EDITOR_TEXT)
             self.assertTrue(workspace.observed_file(path)['expected_content'])
             link = Path(directory) / 'link'
             link.symlink_to(path)
@@ -31,7 +32,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             ui = MagicMock()
             ui.__enter__.return_value = ui
             ui.api.ROLE_TEXT, ui.api.ROLE_ENTRY = 1, 2
-            keyboard = Mock(side_effect=lambda *args: (path.write_text(workspace.AFTER), {'focused_entry': True})[1])
+            keyboard = Mock(side_effect=lambda *args: (path.write_text(workspace.EDITOR_TEXT), {'focused_entry': True})[1])
             with patch.object(workspace, 'DesktopUI', return_value=ui), \
                     patch.object(workspace, 'interactive_window', return_value={'visible': True}), \
                     patch.object(workspace, 'fixed_editor_keyboard', keyboard), \
@@ -42,7 +43,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertTrue(result['normal_optional_setup_skip'])
             self.assertEqual(ui.click.call_args_list[0].args, ('Skip',))
             ui.find.assert_called_once_with(ui.api.ROLE_PUSH_BUTTON, 'Open a folder…')
-            self.assertEqual(ui.fill.call_args_list[0].args, (2, 'Contents of ' + path.name, workspace.AFTER))
+            self.assertEqual(ui.fill.call_args_list[0].args, (2, 'Contents of ' + path.name, workspace.EDITOR_TEXT))
             self.assertEqual(ui.fill.call_args_list[1].args, (2, 'Editor command or search', 'qualification needle'))
             self.assertIn('applied-edit-review-interaction', result['remaining_requirements'])
             cli.assert_called_once_with({}, 'pw', ['open', str(path.parent)], timeout=30)
@@ -61,17 +62,17 @@ class InstalledWorkspaceTests(unittest.TestCase):
         node.get_parent.return_value = frame
         frame.getRole.return_value = 23
         frame.get_process_id.return_value = 123
-        app = SimpleNamespace(observations={'launch_identity': identity})
+        app = SimpleNamespace(observations={'launch_identity': identity}, require_running=lambda: None)
         native = SimpleNamespace(ModifierType=SimpleNamespace(CONTROL=2),
             KeySynthType=SimpleNamespace(LOCKMODIFIERS=5, UNLOCKMODIFIERS=6, SYM=3, STRING=4),
             generate_keyboard_event=Mock(return_value=True))
-        with patch.object(workspace, 'process_identity', return_value=identity), \
-                patch.object(workspace, 'owned_process', return_value=True):
+        with patch.object(focus_owner, 'process_identity', return_value=identity), \
+                patch.object(focus_owner, 'owned_process', return_value=True):
             result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertTrue(result['normal_keyboard_replace_and_save'])
             self.assertFalse(result['text_readback'])
             self.assertEqual([call.args for call in native.generate_keyboard_event.call_args_list], [
-                (4, None, 5), (97, None, 3), (4, None, 6), (0, workspace.AFTER, 4),
+                (4, None, 5), (97, None, 3), (4, None, 6), (0, workspace.EDITOR_TEXT, 4),
                 (4, None, 5), (115, None, 3), (4, None, 6)])
             native.generate_keyboard_event.reset_mock()
             native.generate_keyboard_event.side_effect = [True, False, True]
@@ -94,7 +95,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             node.get_process_id.return_value = 456
             child = {'pid': 456, 'parent_pid': 123, 'start_time_ticks': 43}
             native.generate_keyboard_event.side_effect = None
-            with patch.object(workspace, 'process_identity', side_effect=lambda pid: child if pid == 456 else identity):
+            with patch.object(focus_owner, 'process_identity', side_effect=lambda pid: child if pid == 456 else identity):
                 result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertEqual(result['ui_identity'], child)
             self.assertEqual(native.generate_keyboard_event.call_count, 7)
