@@ -23,7 +23,7 @@ from .installed_monitors import prepare as prepare_monitors
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
 FAMILIES = {"documents": "products", "installation": "packages", "conversation": "conversation",
-            "git": "desktop", "files": "desktop", "external-files": "desktop", "clipboard": "desktop",
+            "git": "desktop", "files": "workspace", "external-files": "desktop", "clipboard": "desktop",
             "input": "desktop", "windowing": "desktop", "accessibility": "desktop",
             "notifications": "desktop", "networking": "desktop", "recovery": "desktop", "performance": "performance",
             **{capability: "security" for capability in SECURITY},
@@ -49,7 +49,7 @@ def current_tree(root: Path) -> str:
 
 
 def driver_family(capability: str, installation: str) -> str | None:
-    return "nix" if capability in NIX and installation not in {"deb", "rpm", "pacman"} else FAMILIES.get(capability)
+    return "nix_workflows" if capability in NIX and installation not in {"deb", "rpm", "pacman"} else FAMILIES.get(capability)
 
 
 def case_family(capability: str, case: str, installation: str) -> str | None:
