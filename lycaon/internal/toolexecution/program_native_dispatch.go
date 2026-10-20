@@ -67,6 +67,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
+		completeNativeRejection(bound, err)
 		if !ownerStarted {
 			certainty := toolcontract.NoEffect
 			if boundaryStarted {
