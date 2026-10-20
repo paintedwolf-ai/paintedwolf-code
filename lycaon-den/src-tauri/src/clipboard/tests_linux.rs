@@ -295,7 +295,7 @@ fn start_sway(runtime: &Path) -> (OwnedChild, String) {
 }
 
 #[test]
-fn x11_display_fixture_exercises_the_gtk_adapter() {
+fn private_x11_preserves_text_rich_text_and_image_paste() {
     let (_server, display) = start_xvfb();
     run_fixture(
         owner_child("x11")
@@ -317,7 +317,7 @@ fn x11_display_fixture_exercises_the_gtk_adapter() {
 }
 
 #[test]
-fn wayland_display_fixture_exercises_the_gtk_adapter() {
+fn private_wayland_preserves_text_rich_text_and_image_paste() {
     let runtime = TempDir::new("wayland-clipboard");
     let (_server, socket) = start_sway(&runtime);
     run_fixture(
