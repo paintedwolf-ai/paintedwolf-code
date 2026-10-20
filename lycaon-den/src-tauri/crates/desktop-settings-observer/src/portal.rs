@@ -96,13 +96,21 @@ impl Journal {
         }
         self.dirty = true;
     }
-    fn snapshot(&mut self, reply: &Variant) {
+    fn snapshot(&mut self, reply: &Variant) -> bool {
+        if reply.size() > 64 * 1024 || reply.child_value(0).n_children() > 64 {
+            return false;
+        }
         self.settings.clear();
         for entry in reply.child_value(0).iter() {
             if let Some(namespace) = entry.child_value(0).str() {
+                if entry.child_value(1).n_children() > 128 {
+                    return false;
+                }
                 for row in entry.child_value(1).iter() {
                     if let Some(key) = row.child_value(0).str() {
                         if let Some(setting) = value(namespace, key, &row.child_value(1)) {
+                            self.settings
+                                .retain(|old| old.identity() != setting.identity());
                             self.settings.push(setting);
                         }
                     }
@@ -114,6 +122,7 @@ impl Journal {
             self.change(&namespace, &key, setting);
         }
         self.dirty = true;
+        true
     }
 }
 fn known(namespace: &str, key: &str) -> bool {
@@ -215,7 +224,11 @@ fn watch(context: &glib::MainContext, stop: Arc<AtomicBool>) -> io::Result<()> {
         return Ok(());
     }
     match reply {
-        Ok(Ok(reply)) => journal.borrow_mut().snapshot(&reply),
+        Ok(Ok(reply)) => {
+            if !journal.borrow_mut().snapshot(&reply) {
+                return output.borrow_mut().send(Status::Failed, vec![]);
+            }
+        }
         Ok(Err(error)) => return output.borrow_mut().send(status(&error), vec![]),
         Err(_) => return output.borrow_mut().send(Status::TimedOut, vec![]),
     }

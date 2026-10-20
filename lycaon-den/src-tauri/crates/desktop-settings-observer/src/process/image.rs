@@ -125,7 +125,12 @@ impl Image {
             hasher.update(&chunk[..count]);
         }
         let after = file.metadata()?;
-        if format!("{:x}", hasher.finalize()) != expected.sha256
+        if hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+            != expected.sha256
             || (
                 before.dev(),
                 before.ino(),
