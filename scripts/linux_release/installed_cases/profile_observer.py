@@ -11,6 +11,7 @@ import time
 import uuid
 
 from .products import require_owned_guest
+from .app import engine_image
 
 TOOLS = frozenset({'command', 'read', 'write', 'edit', 'list', 'search', 'view_image', 'page_open',
                    'terminal_open', 'terminal_send', 'terminal_read', 'terminal_close'})
@@ -58,6 +59,10 @@ def _database(app):
     if not isinstance(engine, dict):
         raise ValueError('profile observer requires the captured ready engine')
     engine = dict(engine)
+    expected = app.binding['images'][str(Path(app.binding['install_root']) / 'bin/pw')]
+    image = expected['device'], expected['inode'], expected['bytes']
+    if engine_image(engine['pid']) != image:
+        raise ValueError('profile observer engine image differs from the installed artifact')
     profile = Path.home() / '.config/paintedwolf'
     path = profile / 'store.db'
     for ancestor in (profile.parent, profile.parent.parent):
@@ -86,7 +91,8 @@ def _database(app):
         yield connection
         app.require_running()
         app.require_engine()
-        if app.observations.get('engine_identity') != engine or (physical(profile, True), physical(path)) != before:
+        if (app.observations.get('engine_identity') != engine or engine_image(engine['pid']) != image
+                or (physical(profile, True), physical(path)) != before):
             raise ValueError('captured profile or engine changed during observation')
     finally:
         connection.close()
