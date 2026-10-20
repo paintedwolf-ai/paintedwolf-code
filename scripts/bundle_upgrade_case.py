@@ -1,0 +1,101 @@
+"""Exercise native staging, startup activation, and retained store semantics."""
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+from bundle_upgrade_prepare import archive_path, file_digest
+from bundle_upgrade_process import Installation, read_json, wait_for
+
+SCRIPTS = Path(__file__).resolve().parent
+
+
+def materialize(fixture: Path, config: Path, project: Path):
+    subprocess.run([sys.executable, str(SCRIPTS / "upgrade-fixture-files.py"), "materialize", str(fixture), str(config)], check=True, timeout=120)
+    shutil.copytree(fixture / "project-root", project)
+    (project / "overlay-dir").rename(project / ".paintedwolf")
+    with sqlite3.connect(config / "store.db") as database:
+        database.execute("UPDATE project_roots SET path = ? WHERE path = 'project-root' OR path LIKE 'project-root/%'", (str(project),))
+
+
+def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: Path):
+    with (evidence / "semantics.log").open("wb") as log:
+        subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
+                        "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
+                        "--fixture", str(fixture), "--config-dir", str(config)], stdout=log, stderr=log, check=True, timeout=120)
+
+
+def confirmed(transaction: dict | None, version: str, app: Path) -> bool:
+    if not transaction:
+        return False
+    if transaction.get("phase") == "failed":
+        raise ValueError("native update transaction failed")
+    if transaction.get("phase") != "startup_confirmed":
+        return False
+    if transaction.get("candidate", {}).get("version") != version or transaction.get("target") != str(app):
+        raise ValueError("startup confirmation belongs to another installation or release")
+    previous = Path(transaction["prepared_bundle"])
+    if previous.parent != app.parent or not previous.name.startswith(".paintedwolf-update-"):
+        raise ValueError("startup confirmation has an unexpected previous bundle path")
+    return not previous.exists()
+
+
+def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evidence: Path):
+    if case["protocol"] != "native-v2":
+        raise ValueError("desktop gate covers automatic updater clients only")
+    evidence.mkdir()
+    fixture = root / "fixtures" / case["source_version"]
+    materialize(fixture, config, work / "project")
+    preferences = config / "updates/preferences.json"
+    preferences.parent.mkdir(parents=True, exist_ok=True)
+    preferences.write_text(json.dumps({"format_version": 2, "automatic_updates_enabled": True,
+                                      "channel": case["channel"], "rollout_bucket": 0}))
+    archive = root / archive_path(plan["archives"][case["source_version"]])
+    subprocess.run(["/usr/bin/tar", "-xzf", str(archive), "-C", str(work)], check=True, timeout=120)
+    apps = list(work.glob("*.app"))
+    if len(apps) != 1:
+        raise ValueError("prior archive must contain exactly one app")
+    app = apps[0].resolve()
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True, timeout=120)
+    installation = Installation(app, config)
+    namespace = hashlib.sha256(str(app).encode()).hexdigest()
+    records = config / "updates/installations" / namespace
+    observations = []
+    try:
+        installation.launch()
+        before = installation.healthy(case["source_version"])
+        verify_semantics(config, fixture, before, evidence)
+        for step in case["steps"]:
+            version = step["version"]
+            ready = wait_for(f"{version} was not automatically staged", lambda: read_json(records / "ready.json"), 2100)
+            if ready.get("candidate", {}).get("version") != version:
+                raise ValueError("automatic staging selected an unexpected release")
+            (evidence / f"{version}-ready.json").write_text(json.dumps(ready, indent=2) + "\n")
+            installation.stop()
+            installation.launch()
+            after = installation.healthy(version)
+            wait_for(f"{version} did not confirm startup and remove the previous bundle",
+                     lambda: confirmed(read_json(records / "transaction.json"), version, app), 180)
+            transaction = read_json(records / "transaction.json")
+            if file_digest(installation.executable) != transaction["next_hash"]:
+                raise ValueError("installed executable differs from its activation receipt")
+            expected = plan["schema_version"] if version == plan["candidate"]["version"] else plan["schemas"][version]
+            if after["health"].get("schema_version") != expected:
+                raise ValueError("upgraded engine has an unexpected schema")
+            (evidence / f"{version}-transaction.json").write_text(json.dumps(transaction, indent=2) + "\n")
+            observations.append({"version": version, "health": after["health"], "transaction_id": transaction["id"]})
+        verify_semantics(config, fixture, after, evidence)
+        installation.stop()
+        installation.launch()
+        restart = installation.healthy(plan["candidate"]["version"])
+        verify_semantics(config, fixture, restart, evidence)
+        return {"id": case["id"], "result": "passed", "steps": observations, "restart_health": restart["health"]}
+    finally:
+        installation.stop()
+        if (config / "engine.log").is_file():
+            shutil.copyfile(config / "engine.log", evidence / "engine.log")

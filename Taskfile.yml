@@ -1727,13 +1727,12 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-boot.sh {{.CLI_ARGS}}
 
   upgrade:rehearse:
-    desc: 'Rehearse supported released-store upgrades, semantic history, and full backup restore (prior-release leg skips before v1)'
-    deps:
-      - build:lycaon-dev
+    desc: 'Rehearse released-store upgrades, or signed desktop activation with --bundle --fixtures DIR --evidence DIR'
     preconditions:
       - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
         msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
     cmds:
+      - cmd: '{{if not (hasPrefix "--bundle" .CLI_ARGS)}}./task build:lycaon-dev{{else}}true{{end}}'
       - bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
 
   upgrade:corpus:prepare:

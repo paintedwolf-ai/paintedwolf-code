@@ -664,8 +664,94 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  prepare-bundle-upgrade:
+    needs: [classify, ship-gates, aggregate-release]
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Check out the pinned upgrade controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-controller
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .release-controller/.bun-version
+          no-cache: true
+      - name: Install public signature verification and the pinned feed signer
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          cd .release-controller/lycaon-den
+          bun install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-metadata
+          path: release-metadata
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-public-artifacts
+      - name: Pin upgrade sources and sign isolated channel fixtures
+        env:
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+        run: |
+          python3 .release-controller/scripts/bundle_upgrade_prepare.py \
+            --manifest release-metadata/latest.json --archives release-public-artifacts \
+            --source "${GITHUB_WORKSPACE}" --output "${RUNNER_TEMP}/bundle-upgrade-fixtures"
+      - name: Retain the credential-free upgrade fixtures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-upgrade-fixtures
+          path: ${{ runner.temp }}/bundle-upgrade-fixtures
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  bundle-upgrade:
+    needs: [classify, prepare-bundle-upgrade]
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bundle-upgrade-fixtures
+          path: ${{ runner.temp }}/bundle-upgrade-fixtures
+      - name: Exercise automatic desktop upgrades before publication
+        run: |
+          ./task upgrade:rehearse -- --bundle \
+            --fixtures "${RUNNER_TEMP}/bundle-upgrade-fixtures" \
+            --evidence "${RUNNER_TEMP}/bundle-upgrade-evidence"
+      - name: Retain desktop activation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-upgrade-evidence
+          path: ${{ runner.temp }}/bundle-upgrade-evidence
+          if-no-files-found: error
+          retention-days: 14
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: release-bundle-upgrade-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
   publish-immutable:
-    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release]
+    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication

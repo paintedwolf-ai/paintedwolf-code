@@ -78,3 +78,23 @@ def serving(routes: dict[str, Path], certificate: Path, key: Path, log: Path, po
             thread.join(timeout=10)
     finally:
         server.server_close()
+
+
+def main():
+    import argparse
+    import os
+    import signal
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("root", "certificate", "key", "log", "ready"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    args = parser.parse_args()
+    plan = json.loads((args.root / "plan.json").read_text())
+    stopping = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stopping.set())
+    with serving(routes_for(args.root, plan), args.certificate, args.key, args.log):
+        args.ready.write_text(json.dumps({"pid": os.getpid()}))
+        stopping.wait()
+
+
+if __name__ == "__main__":
+    main()

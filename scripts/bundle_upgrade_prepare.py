@@ -62,7 +62,7 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
         snapshot = next(row for row in result["feeds"] if row["path"] == case["source_feed"])
         for manifest in [snapshot["manifest"], *case["steps"]]:
             version = manifest["version"]
-            if version in manifests and manifests[version] != manifest:
+            if version in manifests and any(manifests[version][field] != manifest[field] for field in ("version", "platforms", "update_keys")):
                 raise ValueError("one release version has conflicting manifests")
             manifests[version] = manifest
     for version, manifest in manifests.items():
@@ -76,6 +76,10 @@ def prepare(candidate_path: Path, archives: Path, source: Path, output: Path) ->
         number = manifest["update_keys"]["signing_generation"]
         verify(target, manifest["platforms"][PLATFORM]["signature"], generation(registry, number)["public_key"])
         manifests[version] = {**manifest, "archive_sha256": file_digest(target)}
+    result["schemas"] = {}
+    for version in manifests:
+        metadata = source / "lycaon/testdata/upgrade-corpus" / version / "MANIFEST.json"
+        result["schemas"][version] = json.loads(metadata.read_text())["schema_version"]
     for case in result["cases"]:
         version = case["source_version"]
         fixture = output / "fixtures" / version
