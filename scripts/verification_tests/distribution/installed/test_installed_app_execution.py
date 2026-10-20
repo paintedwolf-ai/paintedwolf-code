@@ -1,6 +1,7 @@
 """Actual application identity and platform-owner boundaries fail closed."""
 import io
 import os
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -119,6 +120,10 @@ class InstalledAppTests(unittest.TestCase):
         app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
         app.process = SimpleNamespace(pid=123)
         app.binding = {"install_root": "/opt/app", "images": {"/opt/app/bin/pw": {"device": 1, "inode": 2, "bytes": 3}}}
+        token_stream = tempfile.TemporaryFile()
+        self.addCleanup(token_stream.close)
+        token_stream.write(b'stale-token')
+        token_stream.seek(0)
         public, private = Mock(), Mock()
         public.request.return_value = {"status": 200, "body": {}}
         private.request.return_value = {"status": 401, "body": {}}
@@ -126,7 +131,7 @@ class InstalledAppTests(unittest.TestCase):
                 'scripts.linux_release.installed_cases.app.engine_image', return_value=(1, 2, 3)), patch(
                 'scripts.linux_release.installed_cases.app.EngineAPI', side_effect=[public, private]), patch(
                 'scripts.linux_release.installed_cases.app.os.open', return_value=7), patch(
-                'scripts.linux_release.installed_cases.app.os.fdopen', return_value=io.BytesIO(b'stale-token')), patch(
+                'scripts.linux_release.installed_cases.app.os.fdopen', return_value=token_stream), patch(
                 'scripts.linux_release.installed_cases.app.os.fstat', return_value=SimpleNamespace(
                     st_mode=0o100600, st_uid=os.getuid(), st_size=11)):
             self.assertTrue(app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path('/unused')))
