@@ -103,3 +103,16 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
                 with self.assertRaises(CaseUnavailable):
                     list(desktop.descendants(window))
+
+    def test_observed_product_crash_is_failed_instead_of_missing_ui_fixture(self):
+        api, _ = surface([])
+        self.app.process = SimpleNamespace(poll=lambda: -6)
+        with patch.object(ui, 'load_api', return_value=api):
+            with self.assertRaises(ValueError) as failure:
+                ui.interactive_window(self.app)
+            self.assertNotIsInstance(failure.exception, CaseUnavailable)
+        self.app.process = SimpleNamespace(poll=lambda: 0)
+        with patch.object(ui, 'load_api', return_value=api):
+            with self.assertRaises(ValueError) as failure:
+                ui.interactive_window(self.app)
+            self.assertNotIsInstance(failure.exception, CaseUnavailable)
