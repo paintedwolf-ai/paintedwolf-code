@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
@@ -11,11 +12,25 @@ import subprocess
 import tempfile
 import zipfile
 
-MAX_BYTES = 64 << 30
-MAX_FILES = 100_000
+@dataclass(frozen=True)
+class Limits:
+    max_files: int = 100_000
+    max_bytes: int = 64 << 30
+    max_file: int = 16 << 30
+
+    def __post_init__(self):
+        if (type(self.max_files) is not int or self.max_files < 1
+                or type(self.max_bytes) is not int or not 0 < self.max_bytes <= 64 << 30
+                or type(self.max_file) is not int or not 0 < self.max_file <= 16 << 30):
+            raise ValueError("campaign limits require positive entry counts and at most64GiB")
 
 
-def extract(archive: Path, destination: Path, expected_sha256: str) -> None:
+DEFAULT_LIMITS = Limits()
+
+
+def extract(archive: Path, destination: Path, expected_sha256: str, *, limits: Limits = DEFAULT_LIMITS) -> None:
+    if not isinstance(limits, Limits):
+        raise ValueError("campaign limits must come from the protected controller")
     if destination.exists() or destination.is_symlink():
         raise ValueError("campaign extraction requires a fresh destination")
     digest = hashlib.sha256()
@@ -26,7 +41,7 @@ def extract(archive: Path, destination: Path, expected_sha256: str) -> None:
         raise ValueError("downloaded campaign differs from its server artifact digest")
     with zipfile.ZipFile(archive) as source:
         rows = source.infolist()
-        if not rows or len(rows) > MAX_FILES:
+        if not rows or len(rows) > limits.max_files:
             raise ValueError("campaign archive has an invalid entry count")
         names, total = {}, 0
         for row in rows:
@@ -36,11 +51,11 @@ def extract(archive: Path, destination: Path, expected_sha256: str) -> None:
             if (not name or len(name) > 1000 or "\\" in name or path.is_absolute()
                     or str(path) != name or ".." in path.parts or name in names
                     or kind not in ({0, stat.S_IFDIR} if row.is_dir() else {0, stat.S_IFREG})
-                    or row.flag_bits & 1 or row.file_size < 0 or row.file_size > 16 << 30):
+                    or row.flag_bits & 1 or row.file_size < 0 or row.file_size > limits.max_file):
                 raise ValueError("campaign archive contains an unsafe or duplicate entry")
             names[name] = row.is_dir()
             total += row.file_size
-        if total > MAX_BYTES:
+        if total > limits.max_bytes:
             raise ValueError("campaign archive exceeds its size bound")
         for name in names:
             if any(parent.as_posix() in names and not names[parent.as_posix()]
@@ -65,7 +80,9 @@ def extract(archive: Path, destination: Path, expected_sha256: str) -> None:
             raise
 
 
-def download(selected: dict, destination: Path) -> None:
+def download(selected: dict, destination: Path, *, limits: Limits = DEFAULT_LIMITS) -> None:
+    if not isinstance(limits, Limits) or selected["artifact_bytes"] > limits.max_bytes:
+        raise ValueError("selected campaign download exceeds its protected size bound")
     if shutil.disk_usage(destination.parent).free < selected["artifact_bytes"] + (1 << 30):
         raise ValueError("insufficient free disk for the selected campaign download")
     with tempfile.TemporaryDirectory(prefix=".linux-campaign-", dir=destination.parent) as temporary:
@@ -74,11 +91,14 @@ def download(selected: dict, destination: Path) -> None:
                     f"{selected['artifact_id']}/zip")
         with archive.open("xb") as output:
             subprocess.run(["gh", "api", endpoint], stdout=output, check=True, timeout=1800)
-        extract(archive, destination, selected["artifact_sha256"])
+        extract(archive, destination, selected["artifact_sha256"], limits=limits)
 
 
-def retain_tree(source: Path, destination: Path, *, root_files: set[str], root_dirs: set[str]) -> None:
+def retain_tree(source: Path, destination: Path, *, root_files: set[str], root_dirs: set[str],
+                limits: Limits = DEFAULT_LIMITS) -> None:
     """Copy bounded regular files through pinned directory descriptors."""
+    if not isinstance(limits, Limits):
+        raise ValueError("campaign limits must come from the protected controller")
     if (source.is_symlink() or not source.is_dir() or destination.exists() or destination.is_symlink()
             or destination.resolve().is_relative_to(source.resolve())):
         raise ValueError("campaign production requires a fresh independent destination")
@@ -94,21 +114,21 @@ def retain_tree(source: Path, destination: Path, *, root_files: set[str], root_d
             output.mkdir(mode=0o700, exist_ok=True)
             for name in directories:
                 count += 1
-                if count > MAX_FILES:
+                if count > limits.max_files:
                     raise ValueError("campaign exceeds its entry count bound")
                 if not stat.S_ISDIR(os.stat(name, dir_fd=descriptor, follow_symlinks=False).st_mode):
                     raise ValueError("campaign directories must not be links or special files")
             for name in files:
                 count += 1
-                if count > MAX_FILES:
+                if count > limits.max_files:
                     raise ValueError("campaign exceeds its file count bound")
                 fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
                 with os.fdopen(fd, "rb") as incoming:
                     before = os.fstat(incoming.fileno())
-                    if not stat.S_ISREG(before.st_mode) or before.st_size > 16 << 30:
+                    if not stat.S_ISREG(before.st_mode) or before.st_size > limits.max_file:
                         raise ValueError("campaign requires bounded regular files")
                     total += before.st_size
-                    if total > MAX_BYTES or shutil.disk_usage(destination).free < before.st_size + (1 << 30):
+                    if total > limits.max_bytes or shutil.disk_usage(destination).free < before.st_size + (1 << 30):
                         raise ValueError("campaign exceeds its size or available disk bound")
                     target = output / name
                     with target.open("xb") as outgoing:
