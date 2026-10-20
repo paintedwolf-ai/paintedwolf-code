@@ -14,7 +14,7 @@ on:
       component:
         description: Fixed nonpublishing qualification scope
         type: choice
-        options: [default, scanner-finalized, desktop-settings-observer]
+        options: [default, scanner-finalized, desktop-settings-observer, shell]
         default: default
         required: true
 
@@ -212,7 +212,7 @@ jobs:
           COMPONENT: ${{ inputs.component || 'default' }}
         run: |
           set -euo pipefail
-          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized || "$COMPONENT" == desktop-settings-observer ]]
+          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized || "$COMPONENT" == desktop-settings-observer || "$COMPONENT" == shell ]]
           ./task nix:check
           ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure"
 
