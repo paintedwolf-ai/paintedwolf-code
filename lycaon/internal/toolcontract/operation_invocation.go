@@ -14,11 +14,19 @@ type ExecutionIdentity struct {
 
 // OperationScope is the explicitly addressed project tree, not ambient cwd.
 type OperationScope struct {
+	Kind      OperationScopeKind
 	ProjectID string
 	RootID    string
 	BranchID  string
 	Directory string
 }
+
+type OperationScopeKind string
+
+const (
+	ProjectOperationScope OperationScopeKind = "project"
+	SessionOperationScope OperationScopeKind = "session"
+)
 
 // OperationInvocation contains immutable admission inputs, not live capabilities.
 // ActorID identifies the person/agent principal through existing people authority.
@@ -33,8 +41,23 @@ type OperationInvocation struct {
 }
 
 func (in OperationInvocation) Validate() error {
-	if in.Identity.ProgramID == "" || in.Identity.NodeID == "" || in.Identity.ExecutionID == "" || in.ActorID == "" || in.SessionID == "" || in.Scope.ProjectID == "" || in.SourceUnitID == "" || in.CatalogDigest == "" {
+	if in.Identity.ProgramID == "" || in.Identity.NodeID == "" || in.Identity.ExecutionID == "" || in.ActorID == "" || in.SessionID == "" || in.SourceUnitID == "" || in.CatalogDigest == "" {
 		return fmt.Errorf("operation invocation requires explicit identity, actor, session, scope, source and catalog")
+	}
+	switch in.Scope.Kind {
+	case ProjectOperationScope:
+		if in.Scope.ProjectID == "" {
+			return fmt.Errorf("project operation scope requires project identity")
+		}
+	case SessionOperationScope:
+		if in.Scope.ProjectID != "" || in.Scope.RootID != "" || in.Scope.BranchID != "" {
+			return fmt.Errorf("session operation scope cannot carry project tree identity")
+		}
+	default:
+		return fmt.Errorf("explicit project or session operation scope required")
+	}
+	if in.Identity.ExecutionID == in.Identity.ParentExecutionID {
+		return fmt.Errorf("execution cannot parent itself")
 	}
 	if in.Span.StartByte < 0 || in.Span.EndByte < in.Span.StartByte || in.Span.Line < 1 || in.Span.Column < 1 {
 		return fmt.Errorf("invalid operation source span")

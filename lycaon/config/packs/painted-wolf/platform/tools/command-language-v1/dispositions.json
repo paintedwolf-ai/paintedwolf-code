@@ -21,7 +21,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "ask_user",
@@ -44,7 +45,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "capture_page",
@@ -64,7 +66,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "chmod",
@@ -86,7 +89,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_CHMOD_NATIVE"
+      "existing_rejection_code": "USE_CHMOD_NATIVE",
+      "command_forms": [
+        "chmod"
+      ]
     },
     {
       "tool": "chown",
@@ -108,7 +114,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_CHOWN_NATIVE"
+      "existing_rejection_code": "USE_CHOWN_NATIVE",
+      "command_forms": [
+        "chown"
+      ]
     },
     {
       "tool": "code_rewrite",
@@ -129,7 +138,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "code-rewrite"
+      ]
     },
     {
       "tool": "command",
@@ -162,7 +174,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "command_output",
@@ -183,7 +196,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "command_stop",
@@ -204,7 +218,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "complete_leg",
@@ -227,7 +242,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "copy",
@@ -247,7 +263,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_COPY_NATIVE"
+      "existing_rejection_code": "USE_COPY_NATIVE",
+      "command_forms": [
+        "cp"
+      ]
     },
     {
       "tool": "decline_worker_budget",
@@ -270,7 +289,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "delegate_decompose",
@@ -293,7 +313,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "delegate_dispatch",
@@ -316,7 +337,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "delegate_init",
@@ -339,7 +361,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "delegate_status",
@@ -362,7 +385,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "delete",
@@ -382,7 +406,11 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_DELETE_NATIVE"
+      "existing_rejection_code": "USE_DELETE_NATIVE",
+      "command_forms": [
+        "rm",
+        "rmdir"
+      ]
     },
     {
       "tool": "diff",
@@ -403,7 +431,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "diff"
+      ]
     },
     {
       "tool": "edit",
@@ -424,7 +455,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "edit"
+      ]
     },
     {
       "tool": "extend_worker_budget",
@@ -447,7 +481,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "extract_archive",
@@ -467,7 +502,15 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "tar",
+        "unzip",
+        "zip",
+        "gzip",
+        "gunzip",
+        "zcat"
+      ]
     },
     {
       "tool": "fanout_plan",
@@ -490,7 +533,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "fetch_url",
@@ -510,7 +554,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "find",
@@ -531,7 +576,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_FIND_NOT_COMMAND"
+      "existing_rejection_code": "USE_FIND_NOT_COMMAND",
+      "command_forms": [
+        "find"
+      ]
     },
     {
       "tool": "git_blame",
@@ -551,7 +599,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git blame"
+      ]
     },
     {
       "tool": "git_branches",
@@ -571,7 +622,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git branch"
+      ]
     },
     {
       "tool": "git_checkout",
@@ -591,7 +645,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git checkout"
+      ]
     },
     {
       "tool": "git_commit",
@@ -611,7 +668,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git commit"
+      ]
     },
     {
       "tool": "git_compare",
@@ -631,7 +691,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "git_diff",
@@ -651,7 +712,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_GIT_DIFF_NATIVE"
+      "existing_rejection_code": "USE_GIT_DIFF_NATIVE",
+      "command_forms": [
+        "git diff"
+      ]
     },
     {
       "tool": "git_log",
@@ -671,7 +735,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git log"
+      ]
     },
     {
       "tool": "git_merge",
@@ -691,7 +758,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git merge"
+      ]
     },
     {
       "tool": "git_ref",
@@ -711,7 +781,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git rev-parse"
+      ]
     },
     {
       "tool": "git_restore",
@@ -731,7 +804,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git restore"
+      ]
     },
     {
       "tool": "git_show",
@@ -751,7 +827,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git show"
+      ]
     },
     {
       "tool": "git_stash",
@@ -771,7 +850,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git stash"
+      ]
     },
     {
       "tool": "git_stash_list",
@@ -791,7 +873,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": [
+        "git stash list"
+      ]
     },
     {
       "tool": "git_status",
@@ -811,7 +896,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_GIT_STATUS_NATIVE"
+      "existing_rejection_code": "USE_GIT_STATUS_NATIVE",
+      "command_forms": [
+        "git status"
+      ]
     },
     {
       "tool": "grep",
@@ -832,7 +920,11 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_GREP_REGEX"
+      "existing_rejection_code": "USE_GREP_REGEX",
+      "command_forms": [
+        "grep",
+        "rg"
+      ]
     },
     {
       "tool": "handoff_health",
@@ -855,7 +947,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "handoff_init",
@@ -878,7 +971,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "handoff_release",
@@ -901,7 +995,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "handoff_release_all",
@@ -924,7 +1019,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "handoff_reserve",
@@ -947,7 +1043,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "held_result",
@@ -967,7 +1064,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "held_stop",
@@ -987,7 +1085,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "http_request",
@@ -1009,7 +1108,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_HTTP_REQUEST_NATIVE"
+      "existing_rejection_code": "USE_HTTP_REQUEST_NATIVE",
+      "command_forms": [
+        "curl"
+      ]
     },
     {
       "tool": "jq",
@@ -1029,7 +1131,11 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_JQ_NATIVE"
+      "existing_rejection_code": "USE_JQ_NATIVE",
+      "command_forms": [
+        "jq",
+        "yq"
+      ]
     },
     {
       "tool": "jq_edit",
@@ -1051,7 +1157,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "jq-edit"
+      ]
     },
     {
       "tool": "list_dir",
@@ -1072,7 +1181,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_LIST_DIR_NATIVE"
+      "existing_rejection_code": "USE_LIST_DIR_NATIVE",
+      "command_forms": [
+        "ls"
+      ]
     },
     {
       "tool": "measure_page",
@@ -1092,7 +1204,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "mkdir",
@@ -1112,7 +1225,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_MKDIR_NATIVE"
+      "existing_rejection_code": "USE_MKDIR_NATIVE",
+      "command_forms": [
+        "mkdir"
+      ]
     },
     {
       "tool": "move",
@@ -1132,7 +1248,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_MOVE_NATIVE"
+      "existing_rejection_code": "USE_MOVE_NATIVE",
+      "command_forms": [
+        "mv"
+      ]
     },
     {
       "tool": "pack_board",
@@ -1155,7 +1274,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "page_act",
@@ -1175,7 +1295,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "page_close",
@@ -1195,7 +1316,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "page_open",
@@ -1215,7 +1337,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "page_snapshot",
@@ -1235,7 +1358,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "parse_decomposition",
@@ -1258,7 +1382,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "parse_delegation_plan",
@@ -1281,7 +1406,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "parse_evaluation",
@@ -1304,7 +1430,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "parse_extract_json",
@@ -1327,7 +1454,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "parse_validate",
@@ -1350,7 +1478,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "plan_append_review_evidence",
@@ -1373,7 +1502,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "preview_overlay",
@@ -1396,7 +1526,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "process_list",
@@ -1417,7 +1548,11 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "ps",
+        "lsof"
+      ]
     },
     {
       "tool": "process_signal",
@@ -1438,7 +1573,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "kill"
+      ]
     },
     {
       "tool": "promote_overlay",
@@ -1461,13 +1599,14 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "read",
       "owner": "filesystem",
       "disposition": "replace-routine-schema",
-      "command": "cat/head/tail/nl",
+      "command": "cat/head/tail/nl/outline",
       "lifecycle": "read_only",
       "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
       "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/read.yaml",
@@ -1484,7 +1623,14 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_READ_NATIVE"
+      "existing_rejection_code": "USE_READ_NATIVE",
+      "command_forms": [
+        "cat",
+        "head",
+        "tail",
+        "nl",
+        "outline"
+      ]
     },
     {
       "tool": "recall",
@@ -1505,7 +1651,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "record_finding",
@@ -1528,7 +1675,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "reject_overlay",
@@ -1551,7 +1699,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "render_view",
@@ -1571,7 +1720,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "replace_lines",
@@ -1592,7 +1742,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "replace-lines"
+      ]
     },
     {
       "tool": "request_budget",
@@ -1615,7 +1768,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "request_decision",
@@ -1638,7 +1792,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "request_tools",
@@ -1660,7 +1815,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "restore_version",
@@ -1681,7 +1837,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "scan_compare",
@@ -1704,7 +1861,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "scan_list",
@@ -1727,7 +1885,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "scan_pack",
@@ -1750,7 +1909,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "scan_query",
@@ -1773,7 +1933,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "scan_summary",
@@ -1796,7 +1957,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "secret_generate",
@@ -1818,7 +1980,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "secret_list",
@@ -1840,7 +2003,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "secret_revoke",
@@ -1862,7 +2026,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "skills_read",
@@ -1884,7 +2049,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "source_history",
@@ -1905,7 +2071,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "stat",
@@ -1926,7 +2093,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_STAT_NATIVE"
+      "existing_rejection_code": "USE_STAT_NATIVE",
+      "command_forms": [
+        "stat"
+      ]
     },
     {
       "tool": "state_close",
@@ -1949,7 +2119,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "state_query",
@@ -1972,7 +2143,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "state_start",
@@ -1995,7 +2167,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "state_update",
@@ -2018,7 +2191,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "submit_verdict",
@@ -2041,13 +2215,14 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "summarize",
       "owner": "summarization",
       "disposition": "retain-structured-and-command",
-      "command": "summarize/outline",
+      "command": "summarize",
       "lifecycle": "read_only",
       "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
       "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/summarize.yaml",
@@ -2064,7 +2239,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "summarize"
+      ]
     },
     {
       "tool": "surface_note",
@@ -2085,7 +2263,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "survey_repo",
@@ -2108,7 +2287,11 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": [
+        "repo-map",
+        "survey-repo"
+      ]
     },
     {
       "tool": "task",
@@ -2131,7 +2314,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "terminal_close",
@@ -2153,7 +2337,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "terminal_open",
@@ -2175,7 +2360,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "terminal_read",
@@ -2197,7 +2383,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "terminal_send",
@@ -2219,7 +2406,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "terminal_snapshot",
@@ -2241,7 +2429,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "update_progress",
@@ -2265,7 +2454,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "verify",
@@ -2287,7 +2477,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "view_image",
@@ -2307,7 +2498,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "view_video",
@@ -2327,7 +2519,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "wait",
@@ -2347,7 +2540,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_NATIVE_TOOL"
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": []
     },
     {
       "tool": "wc",
@@ -2368,7 +2562,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_WC_NATIVE"
+      "existing_rejection_code": "USE_WC_NATIVE",
+      "command_forms": [
+        "wc"
+      ]
     },
     {
       "tool": "web_search",
@@ -2388,7 +2585,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "worker_cancel",
@@ -2411,7 +2609,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_advance",
@@ -2434,7 +2633,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_catalog_summaries",
@@ -2457,7 +2657,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_compose",
@@ -2480,7 +2681,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_compose_from_template",
@@ -2503,7 +2705,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_persist",
@@ -2526,7 +2729,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_transition",
@@ -2549,7 +2753,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "workflow_user_feedback",
@@ -2572,7 +2777,8 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": ""
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "write",
@@ -2596,7 +2802,10 @@
         "P32",
         "P33"
       ],
-      "existing_rejection_code": "USE_WRITE_NATIVE"
+      "existing_rejection_code": "USE_WRITE_NATIVE",
+      "command_forms": [
+        "tee"
+      ]
     }
   ]
 }

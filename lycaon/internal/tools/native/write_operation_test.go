@@ -42,7 +42,7 @@ func TestWriteInterfacesShareNativeOwnerAndReview(t *testing.T) {
 				binding := commandprogram.Binding[WriteInput, WriteResult]{Definition: definition.Operation, InvokeOwner: func(ctx context.Context, _ toolcontract.OperationInvocation, input WriteInput) (WriteResult, error) {
 					return write.Apply(ctx, input, tctx)
 				}}
-				invocation := toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "child"}, ActorID: "actor", SessionID: "test-session", Scope: toolcontract.OperationScope{ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
+				invocation := toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "child"}, ActorID: "actor", SessionID: "test-session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 				_, err = commandprogram.Invoke(t.Context(), commandprogram.Offer(definition.Operation), binding, invocation, WriteInput{Path: "AGENTS.md", Content: "after\n"})
 			}
 			if !errors.Is(err, refusal) || reviews != 1 {

@@ -159,6 +159,27 @@ func validateLanguageCatalog(root string, c toolcontract.LanguageCatalog) error 
 			}
 		}
 	}
+	for _, row := range c.Tools {
+		if row.CommandForms == nil || (row.Command != "" && len(row.CommandForms) == 0) {
+			return fmt.Errorf("missing typed command references for %s", row.Tool)
+		}
+		seen := map[string]bool{}
+		for _, form := range row.CommandForms {
+			if seen[form] || !names[form] {
+				return fmt.Errorf("invalid/duplicate operation command reference %s: %s", row.Tool, form)
+			}
+			seen[form] = true
+			for _, command := range c.Commands {
+				matches := command.Name == form
+				for _, alias := range command.Aliases {
+					matches = matches || alias == form
+				}
+				if matches && command.Owner != row.Owner {
+					return fmt.Errorf("operation command owner differs for %s", row.Tool)
+				}
+			}
+		}
+	}
 	if len(c.Language.RequiredCommands) != len(c.Commands) {
 		return fmt.Errorf("required command inventory differs")
 	}
