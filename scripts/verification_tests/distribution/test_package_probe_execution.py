@@ -49,7 +49,8 @@ class PackageProbeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode())
         self.assertIn(b'--require-baseline-refusal', result.stdout)
 
-    @unittest.skipUnless(hasattr(os, 'waitid') and hasattr(os, 'WNOWAIT'), 'requires Linux waitable-child identity')
+    @unittest.skipUnless(sys.platform.startswith('linux') and hasattr(os, 'waitid') and hasattr(os, 'WNOWAIT'),
+                         'requires Linux waitable-child identity')
     def test_diagnostic_cleans_group_before_reaping_its_owned_leader(self):
         original = subprocess.Popen
         events = []
