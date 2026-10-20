@@ -157,8 +157,14 @@ def onboard(app):
                 except (ValueError, CaseUnavailable):
                     raise
                 except Exception as error:
-                    app.observations['native_accessibility_error'] = native_error(error)
-                    raise CaseUnavailable('normal native vault accessibility is unavailable') from None
+                    facts = native_error(error)
+                    if facts.get('domain') in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'} and type(facts.get('code')) is int:
+                        app.observations['native_accessibility_last_retry'] = facts
+                        key = 'native_accessibility_inventory_retries'
+                        app.observations[key] = app.observations.get(key, 0) + 1
+                    else:
+                        app.observations['native_accessibility_error'] = facts
+                        raise CaseUnavailable('normal native vault accessibility is unavailable') from None
             time.sleep(0.1)
     app.require_running()
     raise CaseUnavailable('installed application did not finish its normal startup interaction')
