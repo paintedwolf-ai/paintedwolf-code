@@ -68,7 +68,12 @@ def observed(reader, pid: int, uid: int, cgroups: str) -> dict:
         unit = reader.object('GetUnitByPID', pid, user=True)
         if not isinstance(unit, str) or not unit.startswith('/org/freedesktop/systemd1/unit/'):
             raise ValueError('native application unit has an invalid object path')
-        group = reader.property(unit, 'org.freedesktop.systemd1.Unit', 'ControlGroup', 's', user=True)
+        unit_id = reader.property(unit, 'org.freedesktop.systemd1.Unit', 'Id', 's', user=True)
+        unit_type = unit_id.rpartition('.')[2] if isinstance(unit_id, str) else ''
+        if unit_type not in {'service', 'scope'}:
+            raise CaseUnavailable('native graphical execution requires a service or scope unit')
+        interface = 'org.freedesktop.systemd1.' + {'service': 'Service', 'scope': 'Scope'}[unit_type]
+        group = reader.property(unit, interface, 'ControlGroup', 's', user=True)
         if not isinstance(group, str) or not group.startswith('/') or cgroups != '0::' + group + '\n':
             raise ValueError('native application unit differs from the executing process cgroup')
         owner = reader.object('GetUserByPID', pid)
@@ -105,5 +110,7 @@ def execution_session() -> dict:
         if len(cgroups) > 65536:
             raise ValueError('native execution cgroup observation exceeds its bound')
         return observed(Reader(), os.getpid(), os.getuid(), cgroups)
-    except CallFailure:
-        raise CaseUnavailable('typed-native-session-observation-unavailable') from None
+    except CallFailure as error:
+        unavailable = CaseUnavailable('typed-native-session-observation-unavailable')
+        unavailable.observations = {'native_session_error': {'remote_name': error.name}}
+        raise unavailable from None

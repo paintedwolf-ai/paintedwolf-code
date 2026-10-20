@@ -12,7 +12,7 @@ GROUP = '/user.slice/user-1000.slice/user@1000.service/app.slice/owned.service'
 class Reader:
     def __init__(self, direct=True):
         self.direct = direct
-        self.values = {'ControlGroup': GROUP, 'UID': 1000, 'Display': ('1', SESSION),
+        self.values = {'Id': 'owned.service', 'ControlGroup': GROUP, 'UID': 1000, 'Display': ('1', SESSION),
                        'User': (1000, OWNER), 'Remote': False, 'Active': True, 'Type': 'wayland'}
         self.calls = []
 
@@ -25,6 +25,10 @@ class Reader:
         return {'GetUnitByPID': UNIT, 'GetUserByPID': OWNER}[method]
 
     def property(self, path, interface, name, signature, *, user=False):
+        if name == 'ControlGroup':
+            expected = 'org.freedesktop.systemd1.' + ('Scope' if self.values['Id'].endswith('.scope') else 'Service')
+            if interface != expected:
+                raise AssertionError('ControlGroup belongs to the concrete unit interface')
         return self.values[name]
 
 
@@ -62,5 +66,13 @@ class ExecutionContextTests(unittest.TestCase):
             observed(reader, 123, 1000, '0::' + GROUP + '\n')
         reader = Reader(direct=False)
         reader.values['Display'] = ('', '/')
+        with self.assertRaises(CaseUnavailable):
+            observed(reader, 123, 1000, '0::' + GROUP + '\n')
+
+    def test_user_scope_uses_its_concrete_cgroup_interface(self):
+        reader = Reader(direct=False)
+        reader.values['Id'] = 'owned.scope'
+        self.assertEqual(observed(reader, 123, 1000, '0::' + GROUP + '\n')['binding'], 'graphical-user-unit')
+        reader.values['Id'] = 'owned.slice'
         with self.assertRaises(CaseUnavailable):
             observed(reader, 123, 1000, '0::' + GROUP + '\n')
