@@ -1732,8 +1732,10 @@ tasks:
       - sh: |
           {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
           command -v python3 && command -v bun && command -v minisign
+          {{else if hasPrefix "--bundle" .CLI_ARGS}}
+          command -v python3 && command -v openssl
           {{else}}
-          command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
+          command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node && command -v minisign
           {{end}}
         msg: Required upgrade rehearsal tools are unavailable
     cmds:
