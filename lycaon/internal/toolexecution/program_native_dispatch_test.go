@@ -80,7 +80,7 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 	}
 	starts := 0
 	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
-		if review.CanonicalArguments != `{"path":"input"}` || len(review.ArgumentsDigest) != 64 {
+		if review.CanonicalArguments() != `["operation_arguments",1,["object",[[["utf8","path"],["utf8","input"]]]]]` || len(review.ArgumentsDigest()) != 64 {
 			t.Fatalf("unfrozen review: %+v", review)
 		}
 		if !prepared || invoked || actual.Invocation().Identity.ExecutionID != "child" || call != "actual-model-call" {

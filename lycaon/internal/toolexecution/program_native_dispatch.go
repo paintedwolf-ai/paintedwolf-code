@@ -144,7 +144,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	defer reviewedArguments.close()
 	canonical = reviewedArguments.values
-	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest
+	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
 	if err != nil {
 		return result, err

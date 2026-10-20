@@ -52,7 +52,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		bound += int64(len(value)) * 8
 		return true
 	}
-	for _, value := range []string{parent.ActorID, parent.SessionID, parent.SourceUnitID, parent.CatalogDigest, parent.Identity.ProgramID, parent.Identity.NodeID, parent.Identity.ExecutionID, parent.Identity.ParentExecutionID, parent.Scope.ProjectID, parent.Scope.RootID, parent.Scope.BranchID, parent.Scope.Directory, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID, tc.Identity.MessageID, tc.Identity.Agent, tc.Source.WorkerBranchRoot, tc.Turn.TurnSurfaceID} {
+	for _, value := range []string{parent.ActorID, parent.SessionID, parent.SourceUnitID, parent.CatalogDigest, parent.Identity.ProgramID, parent.Identity.NodeID, parent.Identity.ExecutionID, parent.Identity.ParentExecutionID, parent.Scope.ProjectID, parent.Scope.RootID, parent.Scope.BranchID, parent.Scope.Directory, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID, tc.Identity.MessageID, tc.Identity.Agent, tc.Identity.WorkerJobID, tc.Identity.ParentSessionID, tc.Identity.RootSessionID, tc.Identity.HandoffSessionID, tc.Identity.HandoffAgentID, tc.Source.WorkerBranchRoot, tc.Turn.TurnSurfaceID} {
 		if !add(value) {
 			return nil, fmt.Errorf("program frame scalar bound overflow")
 		}
