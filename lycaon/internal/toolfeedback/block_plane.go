@@ -95,6 +95,10 @@ func (bp *BlockPlane) Evaluate(ctx context.Context, anchor, tool, profile string
 
 // RejectFromObservation runs EvaluateBlock for anchor with ToolReject as facts.
 func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, profile string, args map[string]any, tr *toolrejection.ToolReject) error {
+	return bp.rejectFromObservation(ctx, anchor, tool, profile, args, tr, nil)
+}
+
+func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, profile string, args map[string]any, tr *toolrejection.ToolReject, observe func(*oar.GuardContext) error) error {
 	if bp == nil || bp.Pipeline == nil || tr == nil {
 		return nil
 	}
@@ -111,6 +115,11 @@ func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, p
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
 	ApplyToolRejectObservations(gc, tr)
+	if observe != nil {
+		if err := observe(gc); err != nil {
+			return err
+		}
+	}
 	res, err := bp.Pipeline.EvaluateBlock(ctx, anchor, gc)
 	if err != nil {
 		if gc.ObservedRejectCode == "" {
