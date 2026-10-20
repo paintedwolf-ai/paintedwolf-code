@@ -65,6 +65,15 @@ func (e *Executor) applyPreInvokeBoundary(
 			return nil, tc, err
 		}
 	}
+	if tc.Invocation.NativeOperation != nil && tc.Invocation.NativeReview == nil {
+		return nil, tc, fmt.Errorf("native operation requires retained exact review lifetime")
+	}
+	if tc.Invocation.NativeReview != nil {
+		args, tc.Invocation.NativeInputs, err = tc.Invocation.NativeReview.Freeze(ctx, tool, args)
+		if err != nil {
+			return nil, tc, err
+		}
+	}
 	// Capture one immutable version for both review and execution; cards retain references.
 	secrets, resolveErr := e.Secrets.resolveSecretReferences(ctx, tool, args, tc)
 	if resolveErr != nil {

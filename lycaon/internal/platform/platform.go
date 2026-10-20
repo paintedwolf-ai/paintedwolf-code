@@ -14,6 +14,7 @@ import (
 
 // PolicyContext is input for unified pre-tool policy evaluation.
 type PolicyContext struct {
+	NativeInputs    *hitl.NativeActionInputs
 	NativeOperation *toolcontract.BoundOperation
 	BoundStages     []toolcontract.ExecutionStage
 	ProfileID       string

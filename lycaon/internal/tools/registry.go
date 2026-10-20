@@ -446,6 +446,8 @@ func (m ToolMeta) IsMCP() bool {
 
 // Invocation is the immutable action envelope passed to a subsystem owner.
 type Invocation struct {
+	NativeReview    *hitl.NativeActionReview
+	NativeInputs    *hitl.NativeActionInputs
 	NativeOperation *toolcontract.BoundOperation
 	NativeStages    []toolcontract.ExecutionStage
 	ID              string

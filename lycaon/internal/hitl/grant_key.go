@@ -13,9 +13,19 @@ import (
 // GrantKey returns an empty, unusable identity when the action cannot be encoded.
 // Arguments stay out of the ledger because they may contain credentials.
 func GrantKey(action ProposedAction) string {
-	args, err := json.Marshal(grantIdentityArgs(action.Invocation.Tool, action.Invocation.Args))
-	if err != nil {
-		return ""
+	var args []byte
+	var err error
+	if action.Invocation.NativeInputs != nil {
+		exact, ok := action.Invocation.NativeInputs.grantArguments(action.Invocation.Tool)
+		if !ok {
+			return ""
+		}
+		args = []byte("native_review\x00" + exact)
+	} else {
+		args, err = json.Marshal(grantIdentityArgs(action.Invocation.Tool, action.Invocation.Args))
+		if err != nil {
+			return ""
+		}
 	}
 	roots := append([]string(nil), action.Execution.Contained.Roots...)
 	for i := range roots {

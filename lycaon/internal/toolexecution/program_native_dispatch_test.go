@@ -31,9 +31,14 @@ func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.B
 }
 
 func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t *testing.T) {
+	nativeReadAdmissionFixture(t, "input")
+}
+
+func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
+	t.Helper()
 	parent, tc := frameFixture(t)
 	root := tc.ActiveRootPath()
-	testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(root, "input"), []byte("original bytes"), 0600))
+	testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(root, inputPath), []byte("original bytes"), 0600))
 	testutil.FailErr(t, "seed changed", os.WriteFile(filepath.Join(root, "changed"), []byte("wrong bytes"), 0600))
 	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
@@ -51,9 +56,9 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 	testutil.FailErr(t, "bind native read", err)
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
-	args := map[string]any{"path": "input"}
+	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
-	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", "input"}}, Arguments: args}
+	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", inputPath}}, Arguments: args}
 	effect.PrepareReviewed = func(_ context.Context, resolved map[string]any, _ tools.ToolContext) (PreparedNativeEffect, error) {
 		args["path"] = "changed"
 		path := resolved["path"].(string)
@@ -80,7 +85,12 @@ func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t
 	}
 	starts := 0
 	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
-		if review.CanonicalArguments() != `["operation_arguments",1,["object",[[["utf8","path"],["utf8","input"]]]]]` || len(review.ArgumentsDigest()) != 64 {
+		decoded, release, decodeErr := review.Arguments(t.Context(), &stageAdmissionFixture{})
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		defer release()
+		if decoded["path"] != inputPath || len(review.ArgumentsDigest()) != 64 {
 			t.Fatalf("unfrozen review: %+v", review)
 		}
 		if !prepared || invoked || actual.Invocation().Identity.ExecutionID != "child" || call != "actual-model-call" {

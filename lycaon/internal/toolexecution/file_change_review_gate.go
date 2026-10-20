@@ -18,22 +18,23 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 			return unwired.ReviewFileChanges(ctx, changes...)
 		}
 		action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-ActionID: tc.EffectActionID(),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: tc.ChatSessionID(),
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
-},
-}
+			Invocation: hitl.ActionInvocation{
+				NativeInputs: tc.Invocation.NativeInputs,
+				Tool:         tool,
+				Args:         args,
+				ActionID:     tc.EffectActionID(),
+			},
+			Scope: hitl.ActionScope{
+				ProjectID:          tc.Identity.ProjectID,
+				ProjectDir:         tc.ActiveRootPath(),
+				SessionID:          tc.Identity.SessionID,
+				RootSessionID:      tc.ChatSessionID(),
+				SessionScratchRoot: tc.Host.SessionScratchDir,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
+			},
+		}
 		files, policies := map[string]bool{}, map[string]bool{}
 		for _, change := range changes {
 			for _, path := range []string{change.Path, change.FromPath} {

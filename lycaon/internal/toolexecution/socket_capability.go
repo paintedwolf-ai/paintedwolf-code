@@ -208,6 +208,7 @@ func socketCapabilityProposedAction(
 	}
 	return hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
+			NativeInputs:  tc.Invocation.NativeInputs,
 			Tool:          tool,
 			Args:          args,
 			Files:         filesFromArgs(tool, args),

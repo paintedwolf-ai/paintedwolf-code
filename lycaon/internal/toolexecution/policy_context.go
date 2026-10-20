@@ -13,6 +13,7 @@ func (e *Boundary) preInvokePolicyContext(
 	confReq confine.Request,
 ) platform.PolicyContext {
 	policyEval := platform.PolicyContext{
+		NativeInputs:            tc.Invocation.NativeInputs,
 		ProfileID:               profileID,
 		ToolAccess:              tc.Turn.ToolAccess,
 		ToolName:                tool,
