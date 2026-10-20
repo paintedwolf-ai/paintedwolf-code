@@ -30,7 +30,7 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	f := newProgramReceiptFixture(t)
 	_, err := f.database.ExecContext(t.Context(), `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "prepare fresh actual parent", err)
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir()})
+	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	quota := &outputQuota{}
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("${op} arg"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: f.program, MaximumBytes: 64, PreviewBytes: 3, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain screened exact submitted source", err)
