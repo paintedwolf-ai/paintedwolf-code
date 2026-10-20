@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -111,9 +112,15 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions) (*Pa
 	if c.err != nil {
 		return nil, c.err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	statements := c.statements(file.Stmts)
 	if c.err != nil {
 		return nil, c.err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	sourceHash := sha256.Sum256(source)
 	digest := toolcontract.LanguageCatalogDigest()
@@ -206,25 +213,42 @@ func (c *programCompiler) nativeName(name string) bool {
 	return false
 }
 func (c *programCompiler) literal(w *syntax.Word) (string, bool) {
-	var out strings.Builder
-	for _, part := range w.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit:
-			out.WriteString(p.Value)
-		case *syntax.SglQuoted:
-			if p.Dollar {
-				return "", false
-			}
-			out.WriteString(p.Value)
-		case *syntax.DblQuoted:
-			text, ok := c.literal(&syntax.Word{Parts: p.Parts})
-			if !ok || p.Dollar {
-				return "", false
-			}
-			out.WriteString(text)
-		default:
+	if w == nil || !staticWordParts(w.Parts) {
+		return "", false
+	}
+	// An unquoted tilde is deferred, never an account lookup during admission.
+	if len(w.Parts) > 0 {
+		if lit, ok := w.Parts[0].(*syntax.Lit); ok && strings.HasPrefix(lit.Value, "~") {
 			return "", false
 		}
 	}
-	return out.String(), true
+	copy := *w
+	copy.Parts = append([]syntax.WordPart(nil), w.Parts...)
+	if syntax.SplitBraces(&copy) {
+		return "", false
+	}
+	fields, err := expand.Fields(&expand.Config{Env: expand.ListEnviron()}, &copy)
+	if err != nil || len(fields) != 1 {
+		return "", false
+	}
+	return fields[0], true
+}
+
+func staticWordParts(parts []syntax.WordPart) bool {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+		case *syntax.SglQuoted:
+			if p.Dollar {
+				return false
+			}
+		case *syntax.DblQuoted:
+			if p.Dollar || !staticWordParts(p.Parts) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }

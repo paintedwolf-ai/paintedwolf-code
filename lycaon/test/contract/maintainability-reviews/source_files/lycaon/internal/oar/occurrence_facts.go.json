@@ -4,13 +4,13 @@
   "kind": "data_record",
   "workstream": "portable-command-parser",
   "disposition": "retain",
-  "reason": "Retain one cohesive typed occurrence declaration table at its measured412-line baseline plus8 explicit command syntax/resource facts (420 measured lines). The entries declare names and types without runtime state, effect authority or evaluation logic. Splitting a single closed fact catalog into forwarding fragments would hide the shared host contract. Existing mutation/parser recovery tests remain; new program syntax producer and OAR rendering tests verify typed source coordinates, bounds and no guessed executable repairs. No further growth is retained without renewed review.",
-  "reviewed_commit": "a81e09128e7cc8ae9907b42c91adfb5333561aba",
-  "ceiling": 420,
+  "reason": "Retain one cohesive typed occurrence declaration table at its measured412-line baseline plus9 explicit command syntax/resource facts (421 measured lines). The entries declare names and types without runtime state, effect authority or evaluation logic. Splitting a single closed fact catalog into forwarding fragments would hide the shared host contract. Existing mutation/parser recovery tests remain; new program syntax producer and OAR rendering tests verify typed source coordinates, bounds and no guessed executable repairs. No further growth is retained without renewed review.",
+  "reviewed_commit": "27bd73db7f31fda18d503d97ee3150a5ed43a578",
+  "ceiling": 421,
   "boundaries": {
     "lycaon/internal/tools/native/edit_health_test.go": "e897de10b454ca7ea03f73a62289665254f68a331df68ff7a53abbafbaa530af",
     "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138",
     "lycaon/internal/toolcommand/command_argv_test.go": "2e5eb69debd10d0f8d6e7a1b18cda76a6888b6cf085e3552f39b17fbcbd1a161",
-    "lycaon/test/contract/architecture/program_syntax_feedback_test.go": "b8f45c40a8f1f5a1371c6d4bc2c70b92ed78d968d12eb5790e55d8e7f1002fe4"
+    "lycaon/test/contract/architecture/program_syntax_feedback_test.go": "a7f4b0778520e95b8530e06678804dcf60cfdfce2279715c61932cce011c81e6"
   }
 }

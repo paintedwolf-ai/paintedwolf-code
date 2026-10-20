@@ -98,9 +98,10 @@ clarifies the catalog's former generic “before allocation” wording without
 changing either threshold. Source capture receives an explicit byte ceiling and
 representation before materialization. Execution uses `NewProgramParser` with its
 aggregate scratch admission; `ParseProgram` is a pure, locally bounded entry.
-P09 must separately charge captured bytes, retained host plans and detached
-snapshots to `program_state_bytes` before allocation, retaining leases while
-values remain reachable. Local parser tests do not qualify that evaluator wiring.
+The execution caller must separately charge captured bytes, retained host plans
+and detached snapshots to `program_state_bytes` before allocation, retaining
+leases while values remain reachable. Local parser tests do not qualify that
+aggregate runtime wiring.
 
 ## Altitude
 
