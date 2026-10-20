@@ -87,21 +87,6 @@ func (f ProgramFrame) validateScope(scope toolcontract.OperationScope, tc tools.
 // host action identity, never placed in ToolCallID. The binder must next perform
 // effect admission using the frozen typed inputs before invoking an owner.
 func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.OperationDefinition, child toolcontract.OperationInvocation, tc tools.ToolContext) (tools.ToolContext, error) {
-	if err := ctx.Err(); err != nil {
-		return tools.ToolContext{}, err
-	}
-	if err := child.Validate(); err != nil {
-		return tools.ToolContext{}, err
-	}
-	if f.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.parent.Identity.ProgramID || child.ActorID != f.parent.ActorID || child.SessionID != f.parent.SessionID || child.CatalogDigest != f.parent.CatalogDigest || tc.Identity != f.identity || tc.Source.WorkerBranchRoot != f.workerRoot || tc.Turn.TurnSurfaceID != f.surfaceID {
-		return tools.ToolContext{}, fmt.Errorf("program child attribution changed")
-	}
-	if err := f.validateScope(child.Scope, tc); err != nil {
-		return tools.ToolContext{}, err
-	}
-	if err := tools.ValidateWorkerBranch(ctx, tc); err != nil {
-		return tools.ToolContext{}, err
-	}
 	if definition.Digest() == "" {
 		return tools.ToolContext{}, fmt.Errorf("program child requires frozen operation definition")
 	}
@@ -109,6 +94,39 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 	if facts.CatalogDigest != child.CatalogDigest {
 		return tools.ToolContext{}, fmt.Errorf("program child catalog changed")
 	}
+	return f.childContext(ctx, facts.Identity, facts.Contract, child, tc)
+}
+
+func (f ProgramFrame) childContext(ctx context.Context, name string, contract toolcontract.Contract, child toolcontract.OperationInvocation, tc tools.ToolContext) (tools.ToolContext, error) {
+	if err := ctx.Err(); err != nil {
+		return tools.ToolContext{}, err
+	}
+	if err := child.Validate(); err != nil {
+		return tools.ToolContext{}, err
+	}
+	if f.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.parent.Identity.ProgramID || child.ActorID != f.parent.ActorID || child.SessionID != f.parent.SessionID || child.CatalogDigest != f.parent.CatalogDigest {
+		return tools.ToolContext{}, fmt.Errorf("program child attribution changed")
+	}
+	if err := f.validateScope(child.Scope, tc); err != nil {
+		return tools.ToolContext{}, err
+	}
+	if err := f.validateHostContext(ctx, tc); err != nil {
+		return tools.ToolContext{}, err
+	}
+	return freshProgramOwnerContext(name, contract, child.Identity.ExecutionID, child.Scope.ProjectID, child.SessionID, tc), nil
+}
+
+func (f ProgramFrame) validateHostContext(ctx context.Context, tc tools.ToolContext) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if tc.Identity != f.identity || tc.Source.WorkerBranchRoot != f.workerRoot || tc.Turn.TurnSurfaceID != f.surfaceID {
+		return fmt.Errorf("program host attribution changed")
+	}
+	return tools.ValidateWorkerBranch(ctx, tc)
+}
+
+func freshProgramOwnerContext(name string, contract toolcontract.Contract, executionID, projectID, sessionID string, tc tools.ToolContext) tools.ToolContext {
 	tc.BeginInvocation()
 	tc.Local.LocalListenGranted = false
 	tc.Local.LocalListenPorts = nil
@@ -121,6 +139,6 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 	tc.Effects.Out = nil
 	tc.Effects.CanonicalArgs = nil
 	tc.Effects.RequestedArgs = nil
-	tc.Invocation = tools.Invocation{ID: child.Identity.ExecutionID, ProjectID: child.Scope.ProjectID, SessionID: child.SessionID, MessageID: tc.Identity.MessageID, ToolCallID: tc.Identity.ToolCallID, ToolName: facts.Identity, ContractDigest: facts.Contract.Digest(), Contract: facts.Contract}
-	return tc, nil
+	tc.Invocation = tools.Invocation{ID: executionID, ProjectID: projectID, SessionID: sessionID, MessageID: tc.Identity.MessageID, ToolCallID: tc.Identity.ToolCallID, ToolName: name, ContractDigest: contract.Digest(), Contract: contract}
+	return tc
 }
