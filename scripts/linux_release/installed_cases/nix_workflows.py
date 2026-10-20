@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 from ..installed_runtime import file_identity
@@ -60,7 +61,9 @@ if len(result.stdout) > 65536 or len(result.stderr) > 65536:
     raise RuntimeError('Nix workflow exceeded its evidence bound')
 observation.update({'exit_code': result.returncode, 'stdout': result.stdout.decode('utf-8'),
                     'stderr_sha256': __import__('hashlib').sha256(result.stderr).hexdigest()})
-pathlib.Path('nix-observation.json').write_text(json.dumps(observation))
+temporary = pathlib.Path('nix-observation-' + nonce + '.tmp')
+temporary.write_text(json.dumps(observation))
+temporary.replace('nix-observation.json')
 '''
 
 
@@ -106,6 +109,9 @@ def source_target(binding: dict) -> str:
 
 def witness(turn, nonce: str) -> dict:
     path = turn.workspace / 'nix-observation.json'
+    deadline = time.monotonic() + 150
+    while not path.exists() and time.monotonic() < deadline:
+        time.sleep(0.1)
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 131072:
         raise CaseUnavailable('installed Nix command produced no bounded native observation')
     row = json.loads(path.read_bytes())
@@ -164,12 +170,12 @@ def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
                         if approved:
                             approve_host_execution(turn, arguments)
                         results = turn.wait(timeout=240)
-                        wait_settled(app, turn.session_id)
                         rows = [row for row in results if row.get('tool') == 'command']
                         if (len(rows) != 1 or rows[0].get('outcome') != 'completed'
                                 or rows[0].get('invocation', {}).get('invoked') is not True):
                             raise CaseUnavailable('selected installed Nix command did not complete its invocation')
                         observed = witness(turn, nonce)
+                        wait_settled(app, turn.session_id)
                         observations['phases'].append({'approved': approved, 'native': observed,
                                                        'turn': turn.observations, 'provider': provider.observations})
             first, second = [row['native'] for row in observations['phases']]
