@@ -68,6 +68,15 @@ class Contracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "provider request"):
             self.row()
 
+    def test_host_exclusion_reason_and_disabled_tools_are_reported(self):
+        self.record["exclusion_reason"] = "unsupported_response"
+        with self.assertRaisesRegex(ValueError, "excluded: unsupported_response"):
+            self.row()
+        del self.record["exclusion_reason"]
+        self.record["request"]["tool_choice"] = "none"
+        with self.assertRaisesRegex(ValueError, "request control"):
+            self.row()
+
     def test_masks_prompt_and_preserves_tool_arguments(self):
         row = self.row()
         sample = encode(Tokenizer(), row, row["target"], 10000)
