@@ -6,12 +6,32 @@ from pathlib import Path
 import selectors
 import subprocess
 import threading
+import time
 
 from . import protocol
 from .mailbox import decode
 from .qemu import open_lease
 
 MAX_LOG = 8 << 20
+
+
+def run_managed(bridge, command, output):
+    with output.open('xb') as log:
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            while process.poll() is None:
+                if bridge is not None:
+                    bridge.require_healthy()
+                time.sleep(0.1)
+        except BaseException:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            raise
+    return process.returncode
 
 
 def verify_deliveries(directory, execution, selected):
