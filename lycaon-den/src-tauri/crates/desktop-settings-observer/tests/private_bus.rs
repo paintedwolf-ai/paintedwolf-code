@@ -14,11 +14,23 @@ use std::{
 struct Bus {
     child: Child,
     address: String,
+    root: std::path::PathBuf,
 }
 impl Bus {
     fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "pw-settings-bus-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let config = root.join("bus.conf");
+        // No service directories: an absent fixture owner cannot activate ambient desktop services.
+        std::fs::write(&config, format!("<busconfig><type>session</type><listen>unix:tmpdir={}</listen><auth>EXTERNAL</auth><policy context='default'><allow own='*'/><allow send_destination='*'/><allow receive_sender='*'/></policy></busconfig>",root.display())).unwrap();
         let mut child = Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--print-address=1"])
+            .arg(format!("--config-file={}", config.display()))
+            .args(["--nofork", "--print-address=1"])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
@@ -30,6 +42,7 @@ impl Bus {
         Self {
             child,
             address: address.trim().into(),
+            root,
         }
     }
     fn observer(&self) -> Child {
@@ -47,6 +60,7 @@ impl Drop for Bus {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 fn ended(child: &mut Child) {
