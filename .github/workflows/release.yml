@@ -1359,7 +1359,11 @@ jobs:
           if [[ "$OBSERVE_DELIVERY" == true ]]; then extra+=(--observe-enabled-delivery); fi
           if [[ "$PUBLISH_DOCUMENT" == true ]]; then
             extra+=(--publish-immutable)
-            if [[ -n "$LINUX_DELIVERY_POLICY" ]]; then extra+=(--delivery-policy "$LINUX_DELIVERY_POLICY"); fi
+            if [[ -n "$LINUX_DELIVERY_POLICY" ]]; then
+              policy="$RUNNER_TEMP/linux-delivery-policy.json"
+              (umask 077; printf '%s\n' "$LINUX_DELIVERY_POLICY" > "$policy")
+              extra+=(--delivery-policy "$policy")
+            fi
           fi
           [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
           [[ "$CAMPAIGN_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]

@@ -73,7 +73,10 @@ def run(output):
                 types[name] = "application/octet-stream"
             selected = {"mode": "rehearsal", "version": "0.0.900001", "origin": origin,
                 "source_commit": "a" * 40, "source_tree": "b" * 40, "controller_commit": "c" * 40,
-                "signing_generation": 1, "package_content_types": types, "repositories": [], "nix": None,
+                "signing_generation": 1, "package_content_types": types, "repositories": [],
+                "nix": {"source": {"git_url": "github:paintedwolf-ai/paintedwolf-code/" + "a" * 40,
+                                   "commit": "a" * 40, "flake_lock_sha256": "e" * 64},
+                        "cache": {"enabled": False}},
                 "aur": {"enabled": False}}
             calls = []
             def authorize(binding):

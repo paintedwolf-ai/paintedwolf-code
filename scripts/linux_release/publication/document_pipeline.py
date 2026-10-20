@@ -191,7 +191,7 @@ def main(arguments=None):
                 enabled_delivery=args.observe_enabled_delivery, publish_immutable=args.publish_immutable, delivery_expected=expected,
                 current_release=args.current_release_producer, document_artifact_id=args.current_document_artifact_id,
                 consumer=os.environ.get("GITHUB_JOB"))
-        print(f"Nonpublishing distribution document prepared: {args.output}")
+        print(f"Distribution document processing completed: {args.output}")
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
         parser.exit(1, "Distribution document preparation refused: " + str(error) + "\n")
     return 0
