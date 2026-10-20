@@ -1,0 +1,17 @@
+{
+  "category": "test_directories",
+  "artifact": "scripts/verification_tests/distribution/installed",
+  "kind": "test_suite",
+  "workstream": "linux-installed-qualification",
+  "disposition": "retain",
+  "reason": "This namespace keeps the installed qualification protocol and interaction contracts together after their deliberate move out of generic distribution tests. It covers independent source and artifact authority, nonce and variant completeness, captured native lifecycle, fixed interactions and evidence admission. Splitting modules into arbitrary smaller test folders would obscure those joint contracts without changing a product or authority boundary. The current source passed 769 managed contracts with three platform skips. Retain exactly 47 immediate files with no growth allowance; membership or owner-boundary changes require renewed review.",
+  "reviewed_commit": "b397ceeb430779e2ecc25975c34f3047f28be13c",
+  "ceiling": 47,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_leaf_failures_execution.py": "6dd8afa64d38c3fb82d29a59946efbc767da32cbb6c8a2dd1b63d7bff6c083af",
+    "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
+    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "359577a7ec4a12115408b578da37fd3d435f72df9aaf14e80db88040e9cb6f78",
+    "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "7ce7d0b0ae347079b14b3a305afde2879ef748875c54b8a11cd08972994fbae2"
+  },
+  "reviewed_shape": "a66cf8a67c9179cba8f147dec5e2a3d71bc93d1b210c5e6b58896a50a1ed0de3"
+}

@@ -1,0 +1,19 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts/linux_release/installed_cases",
+  "kind": "module",
+  "workstream": "linux-installed-qualification",
+  "disposition": "retain",
+  "reason": "These fixed interaction families share one sealed installed-app lifecycle, owned native session and process observers, typed permission checkpoints and bounded evidence. The logind observer is a separate authority boundary: typed NoSessionForPID can bind an owned user unit to the active local display, while SSH remains rejected. Keep direct owner imports rather than splitting the same captured-process lifecycle into packages with exported internals for a count target. The 769-contract managed checkpoint covers native retry, focus, refusal and cleanup guards. Retain exactly 37 members with no growth allowance; new families or changed lifecycle authority require renewed review.",
+  "reviewed_commit": "b397ceeb430779e2ecc25975c34f3047f28be13c",
+  "ceiling": 37,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_app_execution.py": "96edcfcb69b3b92798c52ca76dcba7add790f2f89b4faf90db8fb253908f2ce1",
+    "scripts/verification_tests/distribution/installed/test_installed_desktop_ui_execution.py": "94bac01ac8c4c0e181e0e1e84903217094fc33720b605c6b62e2b68d601a8ab8",
+    "scripts/verification_tests/distribution/installed/test_installed_workspace_execution.py": "359577a7ec4a12115408b578da37fd3d435f72df9aaf14e80db88040e9cb6f78",
+    "scripts/verification_tests/distribution/installed/test_installed_logind_context_execution.py": "7ce7d0b0ae347079b14b3a305afde2879ef748875c54b8a11cd08972994fbae2",
+    "scripts/verification_tests/distribution/installed/test_installed_security_execution.py": "5a0fe7eb66f3057721aceccc550ce93d4fe03e34431f276adac7dec69f5ec3e3",
+    "scripts/verification_tests/distribution/installed/test_installed_crash_execution.py": "b60485534a370aa4ab150a36906444d0c7472360089f80bb8f59a2dc2fa2a8aa"
+  },
+  "reviewed_shape": "cfdeca2e393042a255c89ae48afa7737da617797d38de03c79f5af1cbd163e89"
+}

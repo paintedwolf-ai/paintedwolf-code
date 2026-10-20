@@ -4,14 +4,14 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "These release rehearsal owners implement one bounded protocol: independently select producer controls and plans, bind selected native payloads, execute fixed installed interactions, and freshly retain and admit observations. Transport, plan validation, guest lifecycle and evidence admission remain explicit owners; installed interaction families live in installed_cases. Retain the measured 27 immediate members rather than exporting package-private protocol seams solely to reduce file count. Any membership change requires renewed cohesion review; this ceiling grants no growth.",
-  "reviewed_commit": "33755f40990b9201cd92de9e9034db8d4358958b",
-  "ceiling": 27,
+  "reason": "This package owns one installed qualification protocol: independent producer selection, bounded byte transport, typed plan variants, native execution freshness and fresh retention. The added hosted diagnostic owner isolates partial custody and authority-false observations from complete campaign admission. Keep these explicit owners and the installed_cases interaction package rather than exporting private lifecycle seams solely to lower directory breadth. The current composed source passed 769 managed contracts and the preceding graphical-context source passed budgets. Retain exactly 28 immediate members with no growth allowance; membership or authority changes require renewed review.",
+  "reviewed_commit": "b397ceeb430779e2ecc25975c34f3047f28be13c",
+  "ceiling": 28,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
     "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "072334ed3eb315358a3f435ca90ddcd8cb0d9d0c29c4730434137aa86a37a581",
-    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "898fbd398be6542fb0e81906731ec63205980efe4516f75b05434767851feabf",
-    "scripts/verification_tests/distribution/installed/test_installed_hosted_runtime_execution.py": "720cf774b698642d48a5f9f915c9aeab8a1d95702946a7eb3e29c269fbefcac0"
+    "scripts/verification_tests/distribution/installed/test_installed_variants_execution.py": "eb40e9553b666fab6bd004923a7665a3856bd2c6461a8d85e7d0105667a57877",
+    "scripts/verification_tests/distribution/installed/test_installed_hosted_diagnostic_execution.py": "507d173431e67f4d434724d4bc3ff30b5ccce00985c93a72970a4b6e46994de7"
   },
-  "reviewed_shape": "8b8ea088a654e87b4ed4e4c7c1d6d140185f2d3385cdf94dadbd9f1149c9f89e"
+  "reviewed_shape": "cc3a54457f664cc0a5358bfe73234feccc80606760f006d2d50b165990f3b21a"
 }
