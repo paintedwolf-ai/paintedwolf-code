@@ -24,7 +24,7 @@ class PackageProbeTests(unittest.TestCase):
 
     def test_physical_identity_refuses_group_write_and_symlinks(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'engine'
+            path = Path(temporary).resolve() / 'engine'
             path.write_bytes(b'fixture'); path.chmod(0o700)
             measured = owner.physical(path, owner=os.geteuid(), executable=True)
             self.assertEqual(measured['sha256'], hashlib.sha256(b'fixture').hexdigest())
