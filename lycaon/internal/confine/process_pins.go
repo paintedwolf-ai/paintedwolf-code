@@ -27,6 +27,7 @@ var ErrLaunchIdentityChanged = errors.New("selected launch identity changed")
 // promise immutable files/plugins an interpreter opens after process release.
 type ProcessPins struct {
 	paths   LaunchPaths
+	limits  LaunchVectorLimits
 	images  []pinnedImage
 	words   [][]string
 	cwd     *os.File
@@ -44,14 +45,17 @@ type pinnedImage struct {
 
 // CaptureProcessPins freezes a previously resolved native launch entry. The
 // supplied path owner must apply current invocation authority on every reopen.
-func CaptureProcessPins(ctx context.Context, nativePath string, paths LaunchPaths) (*ProcessPins, error) {
+func CaptureProcessPins(ctx context.Context, nativePath string, paths LaunchPaths, limits LaunchVectorLimits) (*ProcessPins, error) {
 	if ctx == nil || paths == nil || !filepath.IsAbs(nativePath) {
 		return nil, fmt.Errorf("launch capture requires context, path admission and a resolved native entry")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p := &ProcessPins{paths: paths}
+	if err := limits.validate(); err != nil {
+		return nil, err
+	}
+	p := &ProcessPins{paths: paths, limits: limits}
 	accepted := false
 	defer func() {
 		if !accepted {

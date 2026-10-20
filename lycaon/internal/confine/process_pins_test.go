@@ -42,7 +42,7 @@ func TestLaunchPinsKeepSelectedEntryCwdAndCurrentAdmissionDistinct(t *testing.T)
 		t.Fatal(err)
 	}
 	paths := &pinPathFixture{cwd: root, allowed: map[string]bool{entry: true, "/bin/sh": true}}
-	pins, err := CaptureProcessPins(t.Context(), entry, paths)
+	pins, err := CaptureProcessPins(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestLaunchPinsRejectChangedCwdAndCancelledCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := &pinPathFixture{cwd: cwd, allowed: map[string]bool{entry: true, "/bin/sh": true}}
-	pins, err := CaptureProcessPins(t.Context(), entry, paths)
+	pins, err := CaptureProcessPins(t.Context(), entry, paths, pinFixtureLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,39 @@ func TestLaunchPinsRejectChangedCwdAndCancelledCapture(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if capture, err := CaptureProcessPins(ctx, entry, paths); capture != nil || !errors.Is(err, context.Canceled) {
+	if capture, err := CaptureProcessPins(ctx, entry, paths, pinFixtureLimits()); capture != nil || !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled capture was admitted")
+	}
+}
+
+func pinFixtureLimits() LaunchVectorLimits {
+	return LaunchVectorLimits{ArgumentBytes: 128 << 10, ArgvBytes: 1 << 20, EnvironmentBytes: 1 << 20, ExpandedFields: 16384}
+}
+
+func TestLaunchVectorLimitsRefuseBeforeCopyAndPreserveLiteralData(t *testing.T) {
+	limits := LaunchVectorLimits{ArgumentBytes: 4, ArgvBytes: 6, EnvironmentBytes: 4, ExpandedFields: 2}
+	if err := limits.check([]string{"abcd", "ef"}, []string{"K=xy"}); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		args, environment []string
+		dimension         string
+	}{
+		{[]string{"abcde"}, nil, "argument_bytes"},
+		{[]string{"abcd", "efg"}, nil, "argv_bytes"},
+		{[]string{"a", "b", "c"}, nil, "expanded_fields"},
+		{[]string{"a"}, []string{"K=xyz"}, "environment_bytes"},
+	}
+	for _, c := range cases {
+		var failure *LaunchVectorLimitError
+		if err := limits.check(c.args, c.environment); !errors.As(err, &failure) || failure.Dimension != c.dimension {
+			t.Fatalf("wrong typed vector refusal for %s", c.dimension)
+		}
+	}
+	if err := limits.check([]string{"a\x00b"}, nil); err == nil {
+		t.Fatal("NUL scalar admitted")
+	}
+	if err := (LaunchVectorLimits{}).check(nil, nil); err == nil {
+		t.Fatal("unbounded launch vectors admitted")
 	}
 }
