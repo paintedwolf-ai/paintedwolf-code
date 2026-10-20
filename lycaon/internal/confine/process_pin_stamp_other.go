@@ -7,8 +7,6 @@ import (
 	"os"
 )
 
-type fileChange struct{}
-
 func nativeFileChange(os.FileInfo) (fileChange, error) {
 	return fileChange{}, osprocess.ErrExecutableObservationUnavailable
 }

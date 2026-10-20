@@ -28,6 +28,8 @@ type LaunchPlan struct {
 	Confinement *confine.Confinement
 	Environment EnvironmentMode
 	ExtraEnv    []string
+	Pins        *confine.ProcessPins
+	RequirePins bool
 }
 
 // EnvironmentMode selects the process environment.
@@ -37,6 +39,12 @@ const (
 	EnvironmentInherited EnvironmentMode = ""
 	EnvironmentReduced   EnvironmentMode = "reduced"
 )
+
+// WithPinnedIdentity requires checked entry and directory identity at launch.
+func (p LaunchPlan) WithPinnedIdentity(pins *confine.ProcessPins) LaunchPlan {
+	p.Pins, p.RequirePins = pins, true
+	return p
+}
 
 // WithReducedEnvironment removes ambient credentials.
 func (p LaunchPlan) WithReducedEnvironment() LaunchPlan {
@@ -89,6 +97,12 @@ func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confineme
 }
 
 func (p LaunchPlan) validate() error {
+	if p.RequirePins && (p.Pins == nil || p.Confinement == nil) {
+		return fmt.Errorf("required process identity capture is unavailable")
+	}
+	if p.Pins != nil && p.Confinement == nil {
+		return fmt.Errorf("process identity capture requires the confinement launch door")
+	}
 	if p.Kind == "" {
 		return fmt.Errorf("process launch plan is required")
 	}

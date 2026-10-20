@@ -34,6 +34,7 @@ type ProcessPins struct {
 	cwdInfo os.FileInfo
 	mu      sync.Mutex
 	closed  bool
+	bound   bool
 }
 
 type pinnedImage struct {
@@ -207,4 +208,25 @@ func (p *ProcessPins) Close() error {
 	}
 	p.images, p.words, p.paths, p.cwd, p.cwdInfo = nil, nil, nil, nil, nil
 	return result
+}
+
+func (p *ProcessPins) expectedArguments(original []string) ([]string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrLaunchIdentityChanged
+	}
+	result := cloneVector(original)
+	for i, words := range p.words {
+		path := p.images[i].path
+		if i == 0 && strings.ContainsRune(original[0], '/') {
+			path = original[0]
+		}
+		next := make([]string, 0, len(words)+len(result))
+		next = append(next, words...)
+		next = append(next, path)
+		next = append(next, result[1:]...)
+		result = next
+	}
+	return result, nil
 }

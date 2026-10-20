@@ -56,11 +56,18 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 		if err != nil {
 			return nil, nil, fmt.Errorf("locate self for sandbox: %w", err)
 		}
-		confined, cleanup, err := confine.Command(ctx, self, name, args, *confinement)
+		var pins []*confine.ProcessPins
+		if opts.Launch.Pins != nil {
+			pins = append(pins, opts.Launch.Pins)
+		}
+		confined, cleanup, err := confine.Command(ctx, self, name, args, *confinement, pins...)
 		if err != nil {
 			return nil, nil, fmt.Errorf("build sandboxed command: %w", err)
 		}
 		return confined, cleanup, nil
+	}
+	if opts.Launch.RequirePins || opts.Launch.Pins != nil {
+		return nil, nil, fmt.Errorf("required process identity capture is unavailable")
 	}
 	return exec.CommandContext(ctx, name, args...), func() {}, nil //nolint:gosec // G204 — validated argv stages, no shell
 }
@@ -117,7 +124,7 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 			}
 		}
 	}
-	return nil
+	return confine.FreezePinnedLaunch(cmd)
 }
 
 // PrepareCommand constructs a caller-managed subprocess.

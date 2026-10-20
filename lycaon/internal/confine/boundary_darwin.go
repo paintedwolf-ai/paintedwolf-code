@@ -19,6 +19,9 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 	if err := attestConfined(); err != nil {
 		return err
 	}
+	if helperPinnedReadyFDArg >= 0 {
+		return execPinnedTarget(resolved, target, helperPinnedCwdFDArg, helperPinnedReadyFDArg)
+	}
 	if err := syscall.Exec(resolved, target, os.Environ()); err != nil {
 		return ClassifyExecError(resolved, err)
 	}

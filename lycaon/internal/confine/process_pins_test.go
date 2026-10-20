@@ -113,7 +113,7 @@ func pinFixtureLimits() LaunchVectorLimits {
 
 func TestLaunchVectorLimitsRefuseBeforeCopyAndPreserveLiteralData(t *testing.T) {
 	limits := LaunchVectorLimits{ArgumentBytes: 4, ArgvBytes: 6, EnvironmentBytes: 4, ExpandedFields: 2}
-	if err := limits.check([]string{"abcd", "ef"}, []string{"K=xy"}); err != nil {
+	if err := limits.checkCommand("abcd", []string{"ef"}, []string{"K=xy"}); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {
@@ -127,14 +127,14 @@ func TestLaunchVectorLimitsRefuseBeforeCopyAndPreserveLiteralData(t *testing.T) 
 	}
 	for _, c := range cases {
 		var failure *LaunchVectorLimitError
-		if err := limits.check(c.args, c.environment); !errors.As(err, &failure) || failure.Dimension != c.dimension {
+		if err := limits.checkCommand(c.args[0], c.args[1:], c.environment); !errors.As(err, &failure) || failure.Dimension != c.dimension {
 			t.Fatalf("wrong typed vector refusal for %s", c.dimension)
 		}
 	}
-	if err := limits.check([]string{"a\x00b"}, nil); err == nil {
+	if err := limits.checkCommand("a\x00b", nil, nil); err == nil {
 		t.Fatal("NUL scalar admitted")
 	}
-	if err := (LaunchVectorLimits{}).check(nil, nil); err == nil {
+	if err := (LaunchVectorLimits{}).checkCommand("a", nil, nil); err == nil {
 		t.Fatal("unbounded launch vectors admitted")
 	}
 }

@@ -45,15 +45,22 @@ func exitHelper(code int) {
 
 // helperRefusalFDArg is the refusal pipe this helper was given, or -1.
 var helperRefusalFDArg = -1
+var helperPinnedCwdFDArg = -1
+var helperPinnedReadyFDArg = -1
+var helperPinnedEntryArg string
+var helperPinnedHostExecution bool
 
 // runHelper applies an inherited profile before replacing the process.
 func runHelper(args []string) error {
 	profileFD, lineageFD := -1, -1
 	helperRefusalFDArg = -1
+	helperPinnedCwdFDArg, helperPinnedReadyFDArg = -1, -1
+	helperPinnedEntryArg = ""
+	helperPinnedHostExecution = false
 	var target []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case profileFDFlag, lineageFDFlag, refusalFDFlag:
+		case profileFDFlag, lineageFDFlag, refusalFDFlag, pinCwdFDFlag, pinReadyFDFlag:
 			flag := args[i]
 			if i+1 >= len(args) {
 				return fmt.Errorf("%s requires a file descriptor", flag)
@@ -67,10 +74,22 @@ func runHelper(args []string) error {
 				profileFD = fd
 			case lineageFDFlag:
 				lineageFD = fd
+			case pinCwdFDFlag:
+				helperPinnedCwdFDArg = fd
+			case pinReadyFDFlag:
+				helperPinnedReadyFDArg = fd
 			default:
 				helperRefusalFDArg = fd
 			}
 			i++
+		case pinEntryFlag:
+			if i+1 >= len(args) || args[i+1] == "" {
+				return fmt.Errorf("pinned entry is required")
+			}
+			helperPinnedEntryArg = args[i+1]
+			i++
+		case pinHostExecutionFlag:
+			helperPinnedHostExecution = true
 		case "--":
 			target = args[i+1:]
 			i = len(args)
@@ -90,8 +109,17 @@ func runHelper(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read profile: %w", err)
 	}
-	if len(profile) == 0 {
+	if len(profile) == 0 && !helperPinnedHostExecution {
 		return fmt.Errorf("empty sandbox profile")
+	}
+
+	if helperPinnedReadyFDArg >= 0 {
+		defer syscall.Close(helperPinnedReadyFDArg)
+	}
+	if helperPinnedReadyFDArg >= 0 || helperPinnedCwdFDArg >= 0 || helperPinnedEntryArg != "" || helperPinnedHostExecution {
+		if helperPinnedReadyFDArg < 0 || helperPinnedCwdFDArg < 0 || helperPinnedEntryArg == "" {
+			return fmt.Errorf("pinned helper requires complete descriptor handoff")
+		}
 	}
 
 	// Move the marker to its documented descriptor before exec, clear of the
@@ -105,12 +133,19 @@ func runHelper(args []string) error {
 	// Resolve PATH before applying the boundary.
 	name := target[0]
 	resolved := name
-	if !strings.ContainsRune(name, '/') {
+	if helperPinnedEntryArg != "" && !strings.ContainsRune(name, '/') {
+		resolved = helperPinnedEntryArg
+	} else if !strings.ContainsRune(name, '/') {
 		p, err := exec.LookPath(name)
 		if err != nil {
 			return &CommandNotFoundError{Name: name}
 		}
 		resolved = p
+	}
+	if helperPinnedHostExecution {
+		// The host selected explicit host execution before constructing this helper.
+		// This never removes an inherited confinement boundary.
+		return execPinnedTarget(resolved, target, helperPinnedCwdFDArg, helperPinnedReadyFDArg)
 	}
 	// The platform applies the boundary, confirms it, and runs the target.
 	return applyAndExec(profile, resolved, target)

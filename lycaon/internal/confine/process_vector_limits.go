@@ -31,34 +31,40 @@ func (l LaunchVectorLimits) validate() error {
 	}
 	return nil
 }
-func (l LaunchVectorLimits) check(args, environment []string) error {
+func (l LaunchVectorLimits) checkCommand(name string, args, environment []string) error {
 	if err := l.validate(); err != nil {
 		return err
 	}
-	if int64(len(args)) > l.ExpandedFields {
-		return &LaunchVectorLimitError{"expanded_fields", l.ExpandedFields, int64(len(args))}
+	fields := int64(len(args)) + 1
+	if fields > l.ExpandedFields {
+		return &LaunchVectorLimitError{"expanded_fields", l.ExpandedFields, fields}
 	}
-	for i, vector := range [][]string{args, environment} {
-		var bytes int64
-		for _, value := range vector {
+	var argumentBytes int64
+	for _, group := range [][]string{{name}, args} {
+		for _, value := range group {
 			if strings.IndexByte(value, 0) >= 0 {
 				return fmt.Errorf("launch vector contains a NUL scalar")
 			}
 			n := int64(len(value))
-			if i == 0 && n > l.ArgumentBytes {
+			if n > l.ArgumentBytes {
 				return &LaunchVectorLimitError{"argument_bytes", l.ArgumentBytes, n}
 			}
-			// Payload bytes implement language accounting. The platform separately
-			// admits terminators and pointer tables against its actual OS launch bound.
-			maximum, dimension := l.ArgvBytes, "argv_bytes"
-			if i == 1 {
-				maximum, dimension = l.EnvironmentBytes, "environment_bytes"
+			if n > l.ArgvBytes-argumentBytes {
+				return &LaunchVectorLimitError{"argv_bytes", l.ArgvBytes, argumentBytes + n}
 			}
-			if n > maximum-bytes {
-				return &LaunchVectorLimitError{dimension, maximum, bytes + n}
-			}
-			bytes += n
+			argumentBytes += n
 		}
+	}
+	var environmentBytes int64
+	for _, value := range environment {
+		if strings.IndexByte(value, 0) >= 0 {
+			return fmt.Errorf("launch vector contains a NUL scalar")
+		}
+		n := int64(len(value))
+		if n > l.EnvironmentBytes-environmentBytes {
+			return &LaunchVectorLimitError{"environment_bytes", l.EnvironmentBytes, environmentBytes + n}
+		}
+		environmentBytes += n
 	}
 	return nil
 }
