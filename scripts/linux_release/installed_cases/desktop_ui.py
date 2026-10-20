@@ -176,11 +176,17 @@ class DesktopUI:
         node = self.find(role, name)
         if not isinstance(value, str) or len(value.encode()) > 65536:
             raise ValueError('normal native editable input exceeds its fixture bound')
+        phase = 'editable-interface'
         try:
-            if node.queryEditableText().setTextContents(value) is not True:
+            editable = node.queryEditableText()
+            phase = 'set-fixed-content'
+            if editable.setTextContents(value) is not True:
+                phase = 'set-fixed-content-refused'
                 raise ValueError('normal native editable input refused its content')
-        except Exception:
-            raise CaseUnavailable('normal-native-editable-action-unavailable') from None
+        except Exception as error:
+            refusal = CaseUnavailable('normal-native-editable-action-unavailable')
+            refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+            raise refusal from None
 
     def interactive(self) -> dict | None:
         controls = {self.api.ROLE_PUSH_BUTTON, self.api.ROLE_ENTRY, self.api.ROLE_PASSWORD_TEXT}

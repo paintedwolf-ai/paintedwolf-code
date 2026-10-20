@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import workspace
 
@@ -31,9 +31,10 @@ class InstalledWorkspaceTests(unittest.TestCase):
             ui = MagicMock()
             ui.__enter__.return_value = ui
             ui.api.ROLE_TEXT, ui.api.ROLE_ENTRY = 1, 2
-            ui.click.side_effect = lambda name: path.write_text(workspace.AFTER) if name == 'Save' else None
+            keyboard = Mock(side_effect=lambda *args: (path.write_text(workspace.AFTER), {'focused_entry': True})[1])
             with patch.object(workspace, 'DesktopUI', return_value=ui), \
                     patch.object(workspace, 'interactive_window', return_value={'visible': True}), \
+                    patch.object(workspace, 'fixed_editor_keyboard', keyboard), \
                     patch.object(workspace, 'run', return_value={'exit_code': 0, 'timed_out': False,
                         'output_limit': False, 'stdout': b'opened', 'stderr': b''}) as cli:
                 result, streams = workspace.edit_and_find(SimpleNamespace(binding={}), path)
@@ -47,6 +48,37 @@ class InstalledWorkspaceTests(unittest.TestCase):
             cli.assert_called_once_with({}, 'pw', ['open', str(path.parent)], timeout=30)
             self.assertEqual([call.args[0] for call in ui.click.call_args_list[:3]], ['Skip', 'Files', path.name])
             self.assertEqual(streams['project-open-stdout'], b'opened')
+
+    def test_fixed_keyboard_requires_owned_focus_and_releases_modifiers_on_failure(self):
+        identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
+        ui, node, frame = MagicMock(), MagicMock(), MagicMock()
+        ui.find.return_value = node
+        node.get_process_id.return_value = 123
+        node.queryComponent.return_value.grabFocus.return_value = True
+        node.getState.return_value.contains.return_value = True
+        frame.getState.return_value.contains.return_value = True
+        ui.windows.side_effect = lambda: iter([(identity, frame)])
+        native = SimpleNamespace(ModifierType=SimpleNamespace(CONTROL=2),
+            KeySynthType=SimpleNamespace(LOCKMODIFIERS=5, UNLOCKMODIFIERS=6, SYM=3, STRING=4),
+            generate_keyboard_event=Mock(return_value=True))
+        with patch.object(workspace, 'process_identity', return_value=identity), \
+                patch.object(workspace, 'owned_process', return_value=True):
+            result = workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+            self.assertTrue(result['normal_keyboard_replace_and_save'])
+            self.assertFalse(result['text_readback'])
+            self.assertEqual([call.args for call in native.generate_keyboard_event.call_args_list], [
+                (4, None, 5), (97, None, 3), (4, None, 6), (0, workspace.AFTER, 4),
+                (4, None, 5), (115, None, 3), (4, None, 6)])
+            native.generate_keyboard_event.reset_mock()
+            native.generate_keyboard_event.side_effect = [True, False, True]
+            with self.assertRaises(workspace.CaseUnavailable):
+                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+            self.assertEqual(native.generate_keyboard_event.call_args_list[-1].args, (4, None, 6))
+            native.generate_keyboard_event.reset_mock()
+            node.getState.return_value.contains.return_value = False
+            with self.assertRaises(workspace.CaseUnavailable):
+                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+            native.generate_keyboard_event.assert_not_called()
 
     def test_missing_editor_retains_bound_process_and_capture_evidence(self):
         app = MagicMock()
