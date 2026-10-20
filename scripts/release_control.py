@@ -79,4 +79,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import importlib
+    import sys
+    handlers = {"bundle-prepare": "prepare", "bundle-rehearse": "rehearse", "bundle-serve": "server"}
+    selected = handlers.get(sys.argv[1] if len(sys.argv) > 1 else "")
+    if selected:
+        del sys.argv[1]
+        importlib.import_module("release_upgrade." + selected).main()
+    else:
+        main()
