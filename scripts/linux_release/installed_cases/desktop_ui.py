@@ -129,6 +129,22 @@ class DesktopUI:
                     'role': int(role), 'name': name, 'match_count': len(matches),
                     'inventory_complete': False, 'observed_roles': sorted(observed_roles)}}
                 raise
+            except (ValueError, TypeError):
+                raise
+            except Exception as error:
+                domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
+                native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
+                          and type(code) is int and 0 <= code < 1 << 31)
+                if isinstance(error, IndexError) or native:
+                    self.app.observations['desktop_inventory_retry'] = {
+                        'exception_type': type(error).__name__,
+                        **({'domain': domain, 'code': code} if native else {})}
+                    time.sleep(0.05)
+                    continue
+                refusal = CaseUnavailable('normal-native-control-inventory-unavailable')
+                refusal.observations = {'desktop_control': {'role': int(role), 'name': name},
+                                        'exception_type': type(error).__name__}
+                raise refusal from None
             if len(matches) > 1:
                 break
             if len(matches) == 1:
