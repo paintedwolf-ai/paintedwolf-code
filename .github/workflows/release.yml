@@ -236,6 +236,8 @@ jobs:
       - name: Build candidate sidecar
         timeout-minutes: 60
         run: ./task build:lycaon-dev
+      - name: Install the public feed verifier
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
       - name: Rehearse the prior-release upgrade
         timeout-minutes: 90
         env:
