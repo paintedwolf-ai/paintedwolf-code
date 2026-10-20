@@ -1,5 +1,6 @@
 """Native lifecycle admission and restoration are exercised without host mutations."""
 import hashlib
+from contextlib import nullcontext
 from pathlib import Path
 import tempfile
 import sys
@@ -52,7 +53,7 @@ class InstalledPackagesTests(unittest.TestCase):
             binding = self.binding(path)
             replies = [(0, b"painted-wolf-code: /usr/bin/painted-wolf-code\n", b""),
                        (0, b"painted-wolf-code\n", b""), (1, b"", b"remove failed"), (0, b"", b"")]
-            with patch.object(packages, "require_owned_guest"), patch.object(packages, "command", side_effect=replies) as run, \
+            with patch.object(packages, "native_lock", return_value=nullcontext()), patch.object(packages, "require_owned_guest"), patch.object(packages, "command", side_effect=replies) as run, \
                     patch.object(packages, "inspect", return_value={}), patch.object(packages, "bind", return_value={"payload": {"status": "passed"}}) as rebind:
                 result = packages.execute(binding, "installation", "package-ownership-and-removal", Path(temporary)/"evidence")
             self.assertEqual(result["status"], "failed")

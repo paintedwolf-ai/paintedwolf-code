@@ -59,8 +59,14 @@ def command(arguments: list[str]) -> tuple[int, bytes, bytes]:
 
 def current_package(binding: dict) -> Path:
     inputs = binding.get("case_inputs", {}).get("native_packages")
-    if not isinstance(inputs, dict) or set(inputs) != {"format_version", "current_package"} or type(inputs["format_version"]) is not int or inputs["format_version"] != 1:
+    if (not isinstance(inputs, dict) or not {"format_version", "current_package"} <= set(inputs)
+            or set(inputs) - {"format_version", "current_package", "installation"}
+            or type(inputs["format_version"]) is not int or inputs["format_version"] != 1):
         raise CaseUnavailable("native_packages requires format_version:1 and current_package")
+    if "installation" in inputs:
+        operation = inputs["installation"]
+        if operation != {"operation": "fresh-install", "expected_absent": True} or type(operation.get("expected_absent")) is not bool:
+            raise ValueError("native package installation requires its exact fresh operation")
     value = inputs["current_package"]
     if not isinstance(value, str):
         raise ValueError("native package path must be a string")
