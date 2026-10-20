@@ -63,6 +63,25 @@ The recorded-tool-result path migration repairs search projections from immutabl
 
 Deleting bytes must produce an explainable unavailable state, not make a durable id look as though it never existed.
 
+## Portable command records
+
+P03 introduces internal compiled declarations and consumer ports only. It adds no database columns, wire fields, output stores or public tool names. The existing command model call remains the aggregate receipt; child identities are host operations, never invented model calls. The introducing producer must implement the following classification, migrations and generated consumers in the same PR. P24 audits these contracts rather than supplying deferred upgrades.
+
+| Artifact | Class and retention | Introducing responsibility |
+|---|---|---|
+| Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | P03 definitions; utility producers bind actual typed operations |
+| Program id, static node id, dynamic execution id, parent execution id, explicit actor/session/scope and source span | Live values are ephemeral. Once recorded in invocation history they are `durable-db`; receipt retention follows the session and preserves explainable unavailable states. Same node in a loop has fresh executions; held resumption retains one execution. | P10 receipt schema/migrations and generated consumers |
+| Screened program source and complete output references, output cursor/tombstone and source/delivery mappings | Identity/provenance rows are `durable-db`; screened blobs are retained while referenced by receipts, held effects, review or recovery. Unreferenced output expires after the versioned retention period and obeys its byte ceiling. Preview truncation never truncates complete downstream bytes. Missing bytes produce an unavailable state. Never persist resolved secret values. | P07 output storage and P10 receipt/output producers; retention accompanies each producer |
+| Exact execution input pin (revision, captured representation, hash, ranges) | Live snapshot ephemeral until a receipt, review or held effect references it; retained referenced bytes follow that durable record. An internal read is not model-observation evidence. | P09/P11 source/effect producers |
+| Delivered mapping (response/delivery identity, exact revision, representation and input/output ranges) | `durable-db` when persisted as observation evidence. Only bytes actually delivered may establish a conversational basis. External printed paths and internal captures grant none. | P10/P11 evidence producers |
+| Prepared/held effect and accepted-but-unpublished document version | Existing domain journal/history is `durable-db`; protect exact prepared inputs and recovery references until authoritative settlement. Revalidate before the single approved attempt. Accepted document state and saved publication remain distinct. | Existing mutation/editor domains; P09/P11 adapters |
+| Progress admission, child terminal outcome and aggregate terminal outcome | Separate attributed facts, `durable-db` when recorded. Progress remains its current owner; child recovery stays with the invoked domain; aggregate supervision remains `processes` with `effect_attempt`, not a restartable durable interpreter job. | Existing progress/process boundaries; P10/P22 producers |
+| Session job/listener/resource handles and lifecycle events | Live registry entries ephemeral, PID optional. Retained receipt/resource identity is `durable-db`; UI/event shapes are `bundle`. Session ownership survives wrappers/functions; host loss interrupts rather than resumes instructions. | P22 supervision/resource producers and corresponding wire generation |
+| Variables, functions, expansion state, pipe buffers/spill staging, live capabilities, one-use permits | Ephemeral only. Bound allocations obey the versioned ceilings. No serialized instruction pointer, interpreter checkpoint, whole-program retry or crash replay. Spill retained as history follows the output rules above. | Evaluator/stream/admission producers P04/P07/P08 |
+| Agent-visible command names, syntax version, status/rejection meaning, output-handle vocabulary | `agent-public`. Retire with a named successor; never reuse a meaning. DTO additions are `bundle`, authored through OpenAPI and generated together. | Each introducing producer, not frontend presentation or the later audit |
+
+Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
+
 ## Workflow definitions
 
 A run pins its definition by id and version (`durable-db` state). Released

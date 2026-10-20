@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -92,6 +93,7 @@ func (r *DefaultRegistry) RegisterDefinition(def Definition) error {
 	}
 	name := def.Meta.Name
 	def.Meta = cloneToolMeta(def.Meta)
+	def.Contract = def.Contract.Clone()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.definitions[name] = def
@@ -116,6 +118,19 @@ func validateDefinition(def Definition) (Definition, error) {
 	if def.Contract.Owner != owner {
 		return Definition{}, fmt.Errorf("tool %q subsystem owner is not canonical", name)
 	}
+	schema := def.Meta.ArgsSchema
+	if len(schema) == 0 {
+		schema = map[string]any{"type": "object"}
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		return Definition{}, err
+	}
+	operation, err := toolcontract.ToolOperation(name, encoded, def.Contract)
+	if err != nil {
+		return Definition{}, err
+	}
+	def.Operation = operation
 	return def, nil
 }
 
@@ -133,6 +148,7 @@ func (r *DefaultRegistry) Definition(name string) (Definition, bool) {
 	defer r.mu.RUnlock()
 	def, ok := r.definitions[name]
 	def.Meta = cloneToolMeta(def.Meta)
+	def.Contract = def.Contract.Clone()
 	return def, ok
 }
 
@@ -156,6 +172,7 @@ func (r *DefaultRegistry) ReplacePrefix(prefix string, definitions []Definition,
 			return fmt.Errorf("duplicate tool definition %q", name)
 		}
 		def.Meta = cloneToolMeta(def.Meta)
+		def.Contract = def.Contract.Clone()
 		next[name] = def
 	}
 	r.dynamicMu.Lock()

@@ -145,8 +145,9 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 
 // Retrying can refresh a prepared review while retaining the same agent read.
 // Persistent anchor conflicts return to the agent for another read.
-func retryEditorDocument(ctx context.Context, path string, body func() (string, error)) (string, error) {
-	var out string
+func retryEditorOperation[T any](ctx context.Context, path string, body func() (T, error)) (T, error) {
+	var out T
+	var zero T
 	var err error
 	for attempt := 0; attempt < editorDocumentRetries; attempt++ {
 		out, err = body()
@@ -154,10 +155,10 @@ func retryEditorDocument(ctx context.Context, path string, body func() (string, 
 			return out, err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return "", ctxErr
+			return zero, ctxErr
 		}
 	}
-	return "", &toolrejection.ToolReject{
+	return zero, &toolrejection.ToolReject{
 		Code: "EDITOR_DOCUMENT_CHANGING",
 		Data: map[string]any{"path": path, "attempts": editorDocumentRetries},
 	}

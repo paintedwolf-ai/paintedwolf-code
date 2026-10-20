@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolcontract/toolcontract.ToolDisposition",
+  "kind": "data_record",
+  "workstream": "portable-command-operations",
+  "disposition": "retain",
+  "reason": "Each stock-tool audit row holds its selected surface, subsystem lifecycle, compatibility cleanup and reference-evidence classification. The14-field data record preserves the handoff without adding runtime state. Retain the measured shape at14; stock owner/lifecycle closure and invalid-disposition tests protect the decision. P03 moves the unchanged pure fact shape into toolcontract so guidance and execution consume one declaration without importing the parser.",
+  "reviewed_commit": "fed6c9d80439c90f5dc3bb82da8ec11d0ed44e04",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "fa22c8d600e95558568e0fb4bb4e12c3ac7872e3e093c6faedd5d6ff5f9e0734",
+    "lycaon/internal/toolcontract/language_catalog_test.go": "cff5a59a1cf300ae8b0ba9cb49ab084b476d224b6ffb581af4764753f70f3f2a"
+  },
+  "reviewed_shape": "cf69ca28e059c35e38dd69cef795f7dca511564190b4082abe1d70c2ab86b19f"
+}
