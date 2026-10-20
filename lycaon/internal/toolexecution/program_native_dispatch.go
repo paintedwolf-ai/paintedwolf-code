@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -138,16 +137,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
-	reviewedJSON, err := authzcontext.CanonicalJSON(canonical)
+	reviewed, err := freezeReviewedOperationInputs(canonical)
 	if err != nil {
 		return result, err
 	}
-	reviewedDigest, err := authzcontext.CanonicalDigest(canonical)
-	if err != nil {
-		return result, err
-	}
-	reviewed := toolcontract.ReviewedOperationInputs{ArgumentsDigest: reviewedDigest, CanonicalArguments: string(reviewedJSON)}
-	tc.Invocation.ArgsDigest = reviewedDigest
+	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
 	if err != nil {
 		return result, err
