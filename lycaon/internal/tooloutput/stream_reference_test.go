@@ -108,7 +108,7 @@ func TestDurableReferenceClosePreservesActualClaimUntilReleased(t *testing.T) {
 		t.Run(fmt.Sprint(callbackFailure), func(t *testing.T) {
 			retained := true
 			cause := errors.New("fixture durable reference unavailable")
-			store := blobstore.Store{Root: t.TempDir(), Retained: func(string) (bool, error) {
+			store := blobstore.Store{Root: t.TempDir(), Dir: ToolOutputSpillDir, Retained: func(string) (bool, error) {
 				if callbackFailure {
 					return false, cause
 				}
