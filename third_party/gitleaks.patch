@@ -38,7 +38,7 @@
 +}
 --- /dev/null
 +++ b/detect/bounded_test.go
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,151 @@
 +package detect
 +
 +import (
@@ -178,6 +178,17 @@
 +	if !errors.Is(err, context.Canceled) || len(findings) != 0 {
 +		t.Fatalf("canceled allowlist short circuit completed: %v %+v", err, findings)
 +	}
++}
++
++func TestBoundedUnrelatedPanicPropagates(t *testing.T) {
++	defer func() {
++		if got := recover(); got != "fixture panic" {
++			t.Fatalf("unrelated panic swallowed or replaced: %v", got)
++		}
++	}()
++	limits := boundedLimits()
++	limits.Reserve = func(int64) error { panic("fixture panic") }
++	_, _ = boundedFixture().DetectBounded(context.Background(), Fragment{Raw: "plain"}, limits)
 +}
 --- /dev/null
 +++ b/detect/budget/budget.go
@@ -410,6 +421,15 @@
  			d.decodedMap[encodedValue] = decodedValue
  		}
  
+@@ -63,7 +83,7 @@
+ 
+ 		segment := &EncodedSegment{
+ 			predecessors: predecessors,
+-			original:     toOriginal(predecessors, m.startEnd),
++			original:     toOriginalBudget(predecessors, m.startEnd, d.meter),
+ 			encoded:      m.startEnd,
+ 			decoded: startEnd{
+ 				m.start + decodedShift,
 @@ -83,6 +103,7 @@
  			segment.depth = 1 + segment.predecessors[0].depth
  			// Adjust encodings
@@ -445,6 +465,61 @@
  		// Add the encodingMatch with its proper encoding
  		for i, j := 2, 0; i < len(matchIndex); i, j = i+2, j+1 {
  			if matchIndex[i] > -1 {
+--- a/detect/codec/segment.go
++++ b/detect/codec/segment.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	"fmt"
++	"github.com/zricethezav/gitleaks/v8/detect/budget"
+ )
+ 
+ // EncodedSegment represents a portion of text that is encoded in some way.
+@@ -100,6 +101,9 @@
+ // AdjustMatchIndex maps a match index from the current decode pass back to
+ // its location in the original text
+ func AdjustMatchIndex(segments []*EncodedSegment, matchIndex []int) []int {
++	return AdjustMatchIndexBudget(segments, matchIndex, nil)
++}
++func AdjustMatchIndexBudget(segments []*EncodedSegment, matchIndex []int, meter *budget.Meter) []int {
+ 	// Don't adjust if we're not provided any segments
+ 	if len(segments) == 0 {
+ 		return matchIndex
+@@ -109,7 +113,7 @@
+ 	match := startEnd{matchIndex[0], matchIndex[1]}
+ 
+ 	// Map the match to its orignal location
+-	adjusted := toOriginal(segments, match)
++	adjusted := toOriginalBudget(segments, match, meter)
+ 
+ 	// Return the adjusted match index
+ 	return []int{
+@@ -136,6 +140,10 @@
+ // toOriginal maps a start/end to its start/end in the original text
+ // the provided start/end should be relative to the segment's decoded value
+ func toOriginal(predecessors []*EncodedSegment, decoded startEnd) startEnd {
++	return toOriginalBudget(predecessors, decoded, nil)
++}
++func toOriginalBudget(predecessors []*EncodedSegment, decoded startEnd, meter *budget.Meter) startEnd {
++	meter.Work(1)
+ 	if len(predecessors) == 0 {
+ 		return decoded
+ 	}
+@@ -144,6 +152,7 @@
+ 	encoded := startEnd{}
+ 
+ 	for _, p := range predecessors {
++		meter.Work(1)
+ 		if !p.decoded.overlaps(decoded) {
+ 			continue // Not in scope
+ 		}
+@@ -169,5 +178,5 @@
+ 
+ 	// Climb up another level
+ 	// (NOTE: each segment references all the predecessors)
+-	return toOriginal(predecessors[0].predecessors, encoded)
++	return toOriginalBudget(predecessors[0].predecessors, encoded, meter)
+ }
 --- a/detect/codec/unicode.go
 +++ b/detect/codec/unicode.go
 @@ -2,6 +2,7 @@
@@ -645,7 +720,7 @@
 +
 +func (d *Detector) detectContext(ctx context.Context, fragment Fragment, meter *budget.Meter) []report.Finding {
 +	meter.Check()
-+	meter.Allocate(int64(len(fragment.Raw))*4 + 1024)
++	meter.Allocate(int64(len(fragment.Raw))*4 + 1024 + int64(len(d.Config.Allowlists))*256)
  	if fragment.Bytes == nil {
  		d.TotalBytes.Add(uint64(len(fragment.Raw)))
  	}
@@ -701,7 +776,7 @@
  							break
  						}
  					}
-@@ -364,11 +383,18 @@
+@@ -364,11 +383,19 @@
  		}
  	}
  
@@ -718,10 +793,11 @@
 +func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, meter *budget.Meter) []report.Finding {
 +	meter.Check()
 +	meter.Work(int64(len(currentRaw)))
++	meter.Allocate(int64(len(r.Allowlists)) * 256)
  	var (
  		findings []report.Finding
  		logger   = func() zerolog.Logger {
-@@ -410,6 +436,7 @@
+@@ -410,6 +437,7 @@
  					finding.Link = createScmLink(fragment.CommitInfo.Remote, finding)
  					finding.Message = fragment.CommitInfo.Message
  				}
@@ -729,7 +805,7 @@
  				return append(findings, finding)
  			}
  		} else {
-@@ -439,17 +466,24 @@
+@@ -439,17 +467,24 @@
  		}
  	}
  
@@ -757,7 +833,16 @@
  		// Extract secret from match
  		secret := strings.Trim(currentRaw[matchIndex[0]:matchIndex[1]], "\n")
  
-@@ -479,7 +513,12 @@
+@@ -466,7 +501,7 @@
+ 				continue
+ 			}
+ 
+-			matchIndex = codec.AdjustMatchIndex(segments, matchIndex)
++			matchIndex = codec.AdjustMatchIndexBudget(segments, matchIndex, meter)
+ 			metaTags = append(metaTags, codec.Tags(segments)...)
+ 			currentLine = codec.CurrentLine(segments, currentRaw)
+ 		} else {
+@@ -479,7 +514,12 @@
  		// in the finding will be the line/column numbers of the _match_
  		// not the _secret_, which will be different if the secretGroup
  		// value is set for this rule
@@ -771,7 +856,7 @@
  
  		if matchIndex[1] > loc.endLineIndex {
  			loc.endLineIndex = matchIndex[1]
-@@ -520,6 +559,7 @@
+@@ -520,6 +560,7 @@
  
  		// Set the value of |secret|, if the pattern contains at least one capture group.
  		// (The first element is the full match, hence we check >= 2.)
@@ -779,7 +864,7 @@
  		groups := r.Regex.FindStringSubmatch(finding.Secret)
  		if len(groups) >= 2 {
  			if r.SecretGroup > 0 {
-@@ -540,6 +580,7 @@
+@@ -540,6 +581,7 @@
  		}
  
  		// check entropy
@@ -787,7 +872,16 @@
  		entropy := shannonEntropy(finding.Secret)
  		finding.Entropy = float32(entropy)
  		if r.Entropy != 0.0 {
-@@ -573,17 +614,18 @@
+@@ -553,6 +595,8 @@
+ 			}
+ 		}
+ 
++		// Admit stopword normalization and allowlist result bookkeeping before checks.
++		meter.Allocate(int64(len(d.Config.Allowlists)+len(r.Allowlists)) * (int64(len(finding.Secret))*4 + 256))
+ 		// check if the result matches any of the global allowlists.
+ 		if isAllowed, event := checkFindingAllowed(logger, finding, fragment, currentLine, d.Config.Allowlists); isAllowed {
+ 			event.Msg("skipping finding: global allowlist")
+@@ -573,17 +617,18 @@
  	}
  
  	// Process required rules and create findings with auxiliary findings
@@ -808,7 +902,7 @@
  	allRequiredFindings := make(map[string][]report.Finding)
  
  	for _, requiredRule := range r.RequiredRules {
-@@ -598,7 +640,7 @@
+@@ -598,7 +643,7 @@
  		inheritedFragment.InheritedFromFinding = true
  
  		// Call detectRule once for each required rule
@@ -817,7 +911,7 @@
  		allRequiredFindings[requiredRule.RuleID] = requiredFindings
  
  		logger.Debug().
-@@ -621,6 +663,8 @@
+@@ -621,6 +666,8 @@
  
  			// Filter findings that are within proximity of the primary finding
  			for _, requiredFinding := range foundRequiredFindings {
@@ -826,7 +920,7 @@
  				if d.withinProximity(primaryFinding, requiredFinding, requiredRule) {
  					req := &report.RequiredFinding{
  						RuleID:      requiredFinding.RuleID,
-@@ -641,6 +685,7 @@
+@@ -641,6 +688,7 @@
  		if len(requiredFindings) > 0 && d.hasAllRequiredRules(requiredFindings, r.RequiredRules) {
  			// Create a finding with auxiliary findings
  			newFinding := primaryFinding // Copy the primary finding

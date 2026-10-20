@@ -83,7 +83,7 @@ func (d *Decoder) findEncodedSegments(data string, predecessors []*EncodedSegmen
 
 		segment := &EncodedSegment{
 			predecessors: predecessors,
-			original:     toOriginal(predecessors, m.startEnd),
+			original:     toOriginalBudget(predecessors, m.startEnd, d.meter),
 			encoded:      m.startEnd,
 			decoded: startEnd{
 				m.start + decodedShift,

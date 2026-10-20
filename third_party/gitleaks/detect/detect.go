@@ -280,7 +280,7 @@ func (d *Detector) DetectContext(ctx context.Context, fragment Fragment) []repor
 
 func (d *Detector) detectContext(ctx context.Context, fragment Fragment, meter *budget.Meter) []report.Finding {
 	meter.Check()
-	meter.Allocate(int64(len(fragment.Raw))*4 + 1024)
+	meter.Allocate(int64(len(fragment.Raw))*4 + 1024 + int64(len(d.Config.Allowlists))*256)
 	if fragment.Bytes == nil {
 		d.TotalBytes.Add(uint64(len(fragment.Raw)))
 	}
@@ -395,6 +395,7 @@ func (d *Detector) detectRule(fragment Fragment, currentRaw string, r config.Rul
 func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r config.Rule, encodedSegments []*codec.EncodedSegment, meter *budget.Meter) []report.Finding {
 	meter.Check()
 	meter.Work(int64(len(currentRaw)))
+	meter.Allocate(int64(len(r.Allowlists)) * 256)
 	var (
 		findings []report.Finding
 		logger   = func() zerolog.Logger {
@@ -500,7 +501,7 @@ func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r conf
 				continue
 			}
 
-			matchIndex = codec.AdjustMatchIndex(segments, matchIndex)
+			matchIndex = codec.AdjustMatchIndexBudget(segments, matchIndex, meter)
 			metaTags = append(metaTags, codec.Tags(segments)...)
 			currentLine = codec.CurrentLine(segments, currentRaw)
 		} else {
@@ -594,6 +595,8 @@ func (d *Detector) detectRuleBudget(fragment Fragment, currentRaw string, r conf
 			}
 		}
 
+		// Admit stopword normalization and allowlist result bookkeeping before checks.
+		meter.Allocate(int64(len(d.Config.Allowlists)+len(r.Allowlists)) * (int64(len(finding.Secret))*4 + 256))
 		// check if the result matches any of the global allowlists.
 		if isAllowed, event := checkFindingAllowed(logger, finding, fragment, currentLine, d.Config.Allowlists); isAllowed {
 			event.Msg("skipping finding: global allowlist")

@@ -138,3 +138,14 @@ func TestBoundedCancellationCannotCompleteThroughAllowlist(t *testing.T) {
 		t.Fatalf("canceled allowlist short circuit completed: %v %+v", err, findings)
 	}
 }
+
+func TestBoundedUnrelatedPanicPropagates(t *testing.T) {
+	defer func() {
+		if got := recover(); got != "fixture panic" {
+			t.Fatalf("unrelated panic swallowed or replaced: %v", got)
+		}
+	}()
+	limits := boundedLimits()
+	limits.Reserve = func(int64) error { panic("fixture panic") }
+	_, _ = boundedFixture().DetectBounded(context.Background(), Fragment{Raw: "plain"}, limits)
+}

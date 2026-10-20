@@ -2,6 +2,7 @@ package codec
 
 import (
 	"fmt"
+	"github.com/zricethezav/gitleaks/v8/detect/budget"
 )
 
 // EncodedSegment represents a portion of text that is encoded in some way.
@@ -100,6 +101,9 @@ func CurrentLine(segments []*EncodedSegment, currentRaw string) string {
 // AdjustMatchIndex maps a match index from the current decode pass back to
 // its location in the original text
 func AdjustMatchIndex(segments []*EncodedSegment, matchIndex []int) []int {
+	return AdjustMatchIndexBudget(segments, matchIndex, nil)
+}
+func AdjustMatchIndexBudget(segments []*EncodedSegment, matchIndex []int, meter *budget.Meter) []int {
 	// Don't adjust if we're not provided any segments
 	if len(segments) == 0 {
 		return matchIndex
@@ -109,7 +113,7 @@ func AdjustMatchIndex(segments []*EncodedSegment, matchIndex []int) []int {
 	match := startEnd{matchIndex[0], matchIndex[1]}
 
 	// Map the match to its orignal location
-	adjusted := toOriginal(segments, match)
+	adjusted := toOriginalBudget(segments, match, meter)
 
 	// Return the adjusted match index
 	return []int{
@@ -136,6 +140,10 @@ func SegmentsWithDecodedOverlap(segments []*EncodedSegment, start, end int) []*E
 // toOriginal maps a start/end to its start/end in the original text
 // the provided start/end should be relative to the segment's decoded value
 func toOriginal(predecessors []*EncodedSegment, decoded startEnd) startEnd {
+	return toOriginalBudget(predecessors, decoded, nil)
+}
+func toOriginalBudget(predecessors []*EncodedSegment, decoded startEnd, meter *budget.Meter) startEnd {
+	meter.Work(1)
 	if len(predecessors) == 0 {
 		return decoded
 	}
@@ -144,6 +152,7 @@ func toOriginal(predecessors []*EncodedSegment, decoded startEnd) startEnd {
 	encoded := startEnd{}
 
 	for _, p := range predecessors {
+		meter.Work(1)
 		if !p.decoded.overlaps(decoded) {
 			continue // Not in scope
 		}
@@ -169,5 +178,5 @@ func toOriginal(predecessors []*EncodedSegment, decoded startEnd) startEnd {
 
 	// Climb up another level
 	// (NOTE: each segment references all the predecessors)
-	return toOriginal(predecessors[0].predecessors, encoded)
+	return toOriginalBudget(predecessors[0].predecessors, encoded, meter)
 }
