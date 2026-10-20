@@ -1,5 +1,4 @@
 """The first stable automatic updater remains reachable across skipped releases."""
-import json
 from pathlib import Path
 import tempfile
 import unittest

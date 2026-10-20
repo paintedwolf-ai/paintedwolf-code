@@ -50,6 +50,7 @@ class GateTests(unittest.TestCase):
 
     def test_failed_host_admission_retains_a_failed_source_bound_receipt(self):
         self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["skip_reason"] = None
         self.inventory()
         with patch.object(gate, "require_disposable_host", side_effect=ValueError("not disposable")):
             with self.assertRaisesRegex(ValueError, "not disposable"):
@@ -127,6 +128,7 @@ class GateTests(unittest.TestCase):
     def test_case_diagnostics_survive_a_separate_host_cleanup_failure(self):
         from contextlib import contextmanager
         self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["skip_reason"] = None
         self.inventory()
         @contextmanager
         def origin(*_):
@@ -159,6 +161,7 @@ class GateTests(unittest.TestCase):
     def test_interruption_retains_cancelled_evidence_and_exits_the_host_context(self):
         from contextlib import contextmanager
         self.plan["cases"] = [{"id": "prior-preview"}]
+        self.plan["skip_reason"] = None
         self.inventory()
         cleaned = []
         @contextmanager
@@ -178,7 +181,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(cleaned, [True])
 
     def test_unknown_fixture_formats_and_unexplained_empty_matrices_are_refused(self):
-        for change in ({"format_version": 99}, {"format_version": True}, {"cases": {}}, {"skip_reason": None}):
+        for change in ({"format_version": 99}, {"format_version": True}, {"cases": {}}, {"cases": [{}]}, {"skip_reason": None}):
             with self.subTest(change=change):
                 original = dict(self.plan)
                 self.plan.update(change)
