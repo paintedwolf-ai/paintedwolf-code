@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import time
 import uuid
 
@@ -83,8 +84,13 @@ class ToolTurn:
             raise
 
     def submit(self):
+        names = [call.get('name') for call in self.provider.calls]
+        if not 1 <= len(names) <= 16 or any(not isinstance(name, str) or
+                re.fullmatch(r'[a-z][a-z0-9_]{0,63}', name) is None for name in names):
+            raise ValueError('installed fixture task requires bounded exact tool identifiers')
+        task = 'Run the installed qualification fixture using these tools: ' + ', '.join(names) + '.'
         accepted(self.app, 'POST', f'/v1/sessions/{self.session_id}/prompts', {
-            'operation_id': str(uuid.uuid4()), 'text': 'Run the installed qualification fixture.'}, {202})
+            'operation_id': str(uuid.uuid4()), 'text': task}, {202})
 
     def results(self) -> list[dict]:
         document = accepted(self.app, 'GET', f'/v1/sessions/{self.session_id}/messages?limit=500', None, {200})

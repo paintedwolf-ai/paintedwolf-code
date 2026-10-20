@@ -21,7 +21,7 @@ class InstalledWorkflowTests(unittest.TestCase):
         self.assertEqual(identity({'id': resource}), resource)
 
     def test_prepared_workspace_tool_result_and_owned_abort_are_required(self):
-        provider = SimpleNamespace(base_url='http://127.0.0.1:12345/v1')
+        provider = SimpleNamespace(base_url='http://127.0.0.1:12345/v1', calls=[{'name': 'command'}])
         project_id, session_id = str(uuid.uuid4()), str(uuid.uuid4())
         calls = []
         with tempfile.TemporaryDirectory() as directory:
@@ -44,6 +44,7 @@ class InstalledWorkflowTests(unittest.TestCase):
             with ToolTurn(SimpleNamespace(request=request), provider, Path(directory)) as turn:
                 self.assertEqual(turn.workspace, Path(directory))
                 turn.submit()
+                self.assertTrue(calls[-1][2]['text'].endswith('tools: command.'))
                 self.assertEqual(turn.wait()[0]['tool'], 'command')
                 self.assertNotIn('private', str(turn.observations))
             self.assertEqual(calls[-1][:2], ('POST', '/v1/sessions/' + session_id + '/abort'))
@@ -63,3 +64,10 @@ class InstalledWorkflowTests(unittest.TestCase):
         self.assertFalse(successful_invocation([row, row]))
         row['invocation']['invoked'] = False
         self.assertFalse(successful_invocation([row]))
+
+    def test_fixture_task_requires_exact_tool_ids_before_submitting(self):
+        app = SimpleNamespace(request=lambda *args: self.fail('invalid task reached API'))
+        for names in ([], ['command; unsafe'], ['x'] * 17):
+            turn = ToolTurn(app, SimpleNamespace(calls=[{'name': name} for name in names]), Path('/tmp'))
+            with self.assertRaises(ValueError):
+                turn.submit()

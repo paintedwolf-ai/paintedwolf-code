@@ -43,7 +43,7 @@ class InstalledHelperTests(unittest.TestCase):
 
     def test_registry_selects_nix_only_for_nix_installations(self):
         self.assertEqual(driver_family("updates", "deb"), "packages")
-        self.assertEqual(driver_family("updates", "nix"), "nix")
+        self.assertEqual(driver_family("updates", "nix"), "nix_workflows")
         self.assertEqual(driver_family("session", "rpm"), "security")
         self.assertEqual(driver_family("performance", "deb"), "performance")
         for case in ("redacted-send", "ocr-and-documents"):
