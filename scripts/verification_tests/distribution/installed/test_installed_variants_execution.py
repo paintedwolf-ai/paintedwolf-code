@@ -66,3 +66,31 @@ class InstalledVariantAggregationTests(unittest.TestCase):
             self.assertEqual(owner.aggregate({}, {'row': [('floor', row), ('newer', failed)]}, {'row': selected})[0]['status'], 'failed')
             with self.assertRaises(ValueError):
                 owner.aggregate({}, {'row': [('floor', row), ('floor', row)]}, {'row': selected})
+
+
+class InstalledPlanVariantTests(unittest.TestCase):
+    def test_plan_rejects_legacy_ambiguous_or_repeated_variant_authority(self):
+        import copy
+        from linux_release import installed_campaign as campaign
+        target = {'id': 'guest', 'host': '127.0.0.1', 'port': 1234, 'user': 'tester',
+                  'identity_file': '/private/key', 'known_hosts': '/private/known', 'checkout': '/controller',
+                  'runtime_bin_dirs': [], 'artifact_id': 'selected', 'environment_id': 'fedora',
+                  'final_artifacts': '/final.json', 'file_root': '/packages', 'install_root': '/opt/product',
+                  'output': '/fresh/output', 'nix_program': None, 'case_inputs': None,
+                  'variant_id': 'floor-scale-100', 'snapshot': {'kind': 'package-inventory', 'value': 'f' * 64, 'channel': None}}
+        plan = {'format_version': 2, 'source_commit': 'a' * 40, 'driver_tree': 'b' * 40, 'targets': [target]}
+        row = {'environment': 'fedora', 'installation': 'rpm', 'architecture': 'amd64', 'capability': 'windowing'}
+        variant = {'id': target['variant_id'], 'release': {'snapshot_kind': 'package-inventory', 'channel': None}}
+        with patch.object(campaign.evidence, 'artifacts', return_value={'selected': {'installation': 'rpm', 'architecture': 'amd64'}}), \
+                patch.object(campaign, 'limits', return_value={'targets': 2}), \
+                patch.object(campaign, 'expand', return_value=[row]), \
+                patch.object(campaign, 'requirements', return_value=[variant]):
+            self.assertEqual(campaign.validate_plan(plan, {}, {})[:2], ('a' * 40, 'b' * 40))
+            for mutate in (lambda value: value.update(format_version=1),
+                           lambda value: value['targets'][0].update(variant_id='invented'),
+                           lambda value: value['targets'][0]['snapshot'].update(channel='nixos-unstable'),
+                           lambda value: value['targets'].append({**value['targets'][0], 'id': 'repeated'})):
+                invalid = copy.deepcopy(plan)
+                mutate(invalid)
+                with self.assertRaises(ValueError):
+                    campaign.validate_plan(invalid, {}, {})
