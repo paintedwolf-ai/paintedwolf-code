@@ -17,6 +17,7 @@ from .installed_cases.records import CaseUnavailable, retain
 from .installed_environment import collect
 from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
+from .installed_variants import requirements, observe
 
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
@@ -29,7 +30,8 @@ FAMILIES = {"documents": "products", "installation": "packages", "conversation":
 
 
 def read(path: Path):
-    if not path.is_file() or path.stat().st_size > 16 << 20:
+    maximum = (128 if path.name == "campaign.json" else 16) << 20
+    if not path.is_file() or path.stat().st_size > maximum:
         raise ValueError("installed execution input is not a bounded regular file")
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -80,7 +82,7 @@ def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
 
 def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root: Path,
             install_root: Path, environment_id: str, output: Path, driver_tree: str,
-            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None) -> dict:
+            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None, variant_id: str | None = None, snapshot: dict | None = None) -> dict:
     if not isinstance(execution_nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", execution_nonce):
         raise ValueError("installed execution requires its fresh controller nonce")
     expected = evidence.artifacts(final, source)
@@ -92,6 +94,11 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     environments = {item["id"]: item for item in catalog["environments"]}
     if not rows or environment_id not in environments:
         raise ValueError("installed execution selected no support rows for its artifact/environment")
+    variants = {item["id"]: item for row in rows for item in requirements(catalog, environment_id, row["capability"])}
+    if variant_id not in variants:
+        raise ValueError("installed execution requires a declared qualification variant")
+    variant = variants[variant_id]
+    rows = [row for row in rows if variant_id in {item["id"] for item in requirements(catalog, environment_id, row["capability"])}]
     root = Path(__file__).resolve().parents[2]
     if current_tree(root) != evidence.source(driver_tree):
         raise ValueError("installed driver source differs from the independently selected tree")
@@ -102,21 +109,28 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
                 or any(not isinstance(value, dict) for value in case_inputs.values())):
             raise ValueError("installed case inputs require known typed driver-family objects")
         binding["case_inputs"] = case_inputs
-    facts, observations = collect(environments[environment_id], binding, guest)
+    facts, observations = collect(environments[environment_id], binding, guest, variant["display"]["protocol"])
     if facts.keys() != set(catalog["recorded_environment_facts"]):
         raise ValueError("installed environment collector differs from the selected catalog")
+    variant_error = None
+    try:
+        variant_observation = observe(variant, snapshot, observations, binding)
+    except CaseUnavailable as error:
+        variant_error = str(error)
+        variant_observation = {"format_version": 1, "variant": variant, "snapshot": snapshot, "unverified": variant_error}
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     retained = output / "evidence"
     retained.mkdir()
-    for name, document in (("binding.json", binding), ("environment.json", observations),
-                           ("driver-registry.json", registry(catalog, artifact["installation"]))):
+    for name, document in (("binding.json", binding), ("environment.json", observations), ("environment-facts.json", facts),
+                           ("driver-registry.json", registry(catalog, artifact["installation"])), ("variant.json", variant_observation)):
         (output / name).write_text(json.dumps(document, sort_keys=True, indent=2) + "\n")
     results = []
     for row in rows:
         cases = []
         for case in row["cases"]:
             try:
-                result = execute_case(binding, row["capability"], case, retained)
+                result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
+                          if variant_error else execute_case(binding, row["capability"], case, retained))
             except CaseUnavailable as error:
                 result = retain(binding, row["capability"], case, retained, "unverified",
                                 {"reason": str(error), **getattr(error, "observations", {})}, getattr(error, "streams", None))
@@ -140,7 +154,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": results}
     (output / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True) + "\n")
     execution = {"format_version": 1, "execution_nonce": execution_nonce, "source_commit": source,
-                 "driver_tree": driver_tree, "artifact_id": artifact_id, "environment_id": environment_id, "variant_id": None}
+                 "driver_tree": driver_tree, "artifact_id": artifact_id, "environment_id": environment_id, "variant_id": variant_id}
     with (output / "execution.json").open("x") as stream:
         json.dump(execution, stream, sort_keys=True)
         stream.write("\n")
@@ -159,13 +173,15 @@ def main(arguments: list[str]) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--driver-tree", required=True)
     parser.add_argument("--execution-nonce", required=True)
+    parser.add_argument("--variant-id", required=True)
+    parser.add_argument("--snapshot", type=json.loads, required=True)
     parser.add_argument("--nix-program", type=Path)
     parser.add_argument("--case-inputs", type=Path)
     args = parser.parse_args(arguments)
     try:
         campaign = execute(read(args.catalog), read(args.final_artifacts), args.source_commit,
                            args.artifact_id, args.file_root, args.install_root, args.environment_id,
-                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce)
+                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
         print("Installed case execution refused: " + str(error), file=sys.stderr)
         return 2

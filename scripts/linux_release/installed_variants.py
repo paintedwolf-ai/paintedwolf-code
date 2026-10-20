@@ -29,7 +29,7 @@ def snapshot(value: object, variant: dict) -> dict:
     return value
 
 
-def observe(variant: dict, selected_snapshot: dict, observations: dict) -> dict:
+def observe(variant: dict, selected_snapshot: dict, observations: dict, binding: dict) -> dict:
     snapshot(selected_snapshot, variant)
     release, actual = variant['release'], observations['os_release']
     if actual['ID'] not in release['os_ids']:
@@ -42,17 +42,19 @@ def observe(variant: dict, selected_snapshot: dict, observations: dict) -> dict:
     if observations['session']['Type'] != variant['display']['protocol']:
         raise ValueError('actual session protocol differs from the selected qualification variant')
     if selected_snapshot['kind'] == 'nixos-revision':
-        # A raw nixos-version string cannot establish the independently pinned factory channel.
-        raise CaseUnavailable('independent-nixos-factory-channel-observer-required')
-    inventory = json.dumps(observations['packages'], sort_keys=True).encode()
-    if hashlib.sha256(inventory).hexdigest() != selected_snapshot['value']:
-        raise ValueError('actual installed package snapshot differs from the independently selected plan')
+        from .installed_cases.nix_factory import observe as observe_factory
+        factory = observe_factory(binding, selected_snapshot)
+    else:
+        factory = None
+        inventory = json.dumps(observations['packages'], sort_keys=True).encode()
+        if hashlib.sha256(inventory).hexdigest() != selected_snapshot['value']:
+            raise ValueError('actual installed package snapshot differs from the independently selected plan')
     if variant['display']['xwayland'] == 'disabled' or variant['display']['clipboard_manager'] == 'absent':
         raise CaseUnavailable('actual-xwayland-and-clipboard-absence-observer-required')
     monitors = gnome_monitors(observations['session'])
     if monitors['scales_percent'] != sorted(variant['scales_percent']):
         raise ValueError('actual logical monitor scales differ from the selected qualification variant')
-    return {'format_version': 1, 'variant': variant, 'snapshot': selected_snapshot, 'monitors': monitors}
+    return {'format_version': 1, 'variant': variant, 'snapshot': selected_snapshot, 'monitors': monitors, 'factory': factory}
 
 
 def gnome_monitors(session: dict) -> dict:
@@ -80,4 +82,29 @@ def gnome_monitors(session: dict) -> dict:
         if percent != int(percent):
             raise ValueError('Mutter monitor scale is not an exact declared percentage')
         scales.append(int(percent))
-    return {'scales_percent': sorted(scales), 'state': state}
+    return {'scales_percent': sorted(set(scales)), 'state': state}
+
+
+def aggregate(catalog: dict, observations: dict[str, list[tuple[str, dict]]], known: dict) -> list[dict]:
+    results = []
+    for row_id, variants in sorted(observations.items()):
+        selected = known[row_id]
+        required = {item['id'] for item in requirements(catalog, selected['environment'], selected['capability'])}
+        actual = {identifier: row for identifier, row in variants}
+        if len(actual) != len(variants) or set(actual) - required:
+            raise ValueError('campaign repeats or invents a required support variant')
+        first = next(iter(actual.values()))
+        cases = []
+        for case_id in selected['cases']:
+            samples = [next(case for case in row['cases'] if case['id'] == case_id) for row in actual.values()]
+            status = ('failed' if any(case['status'] == 'failed' for case in samples) else
+                      'unverified' if set(actual) != required or any(case['status'] != 'passed' for case in samples) else 'passed')
+            cases.append({'id': case_id, 'status': status, 'evidence': [record for case in samples for record in case['evidence']]})
+        status = ('failed' if any(case['status'] == 'failed' for case in cases) else
+                  'unverified' if any(case['status'] != 'passed' for case in cases) else 'passed')
+        facts = {name: json.dumps({identifier: {'sha256': hashlib.sha256(row['environment_facts'][name].encode()).hexdigest(),
+                                               'bytes': len(row['environment_facts'][name].encode())}
+                                  for identifier, row in sorted(actual.items())}, sort_keys=True)
+                 for name in first['environment_facts']}
+        results.append({**first, 'status': status, 'cases': cases, 'environment_facts': facts})
+    return results

@@ -46,7 +46,7 @@ class InstalledHelperTests(unittest.TestCase):
             root = Path(directory)
             leaf = root / "leaf"
             leaf.mkdir()
-            for name in ("campaign.json", "binding.json", "driver-registry.json", "execution.json"):
+            for name in ("campaign.json", "binding.json", "driver-registry.json", "execution.json", "variant.json"):
                 (leaf / name).write_text("{}")
             archive = root / "leaf.zip"
             with archive.open("wb") as stream:
@@ -68,7 +68,8 @@ class InstalledHelperTests(unittest.TestCase):
                   "artifact_id": "deb-amd64", "environment_id": "ubuntu-24-gnome",
                   "final_artifacts": "/control/final.json", "file_root": "/packages",
                   "install_root": "/opt/painted-wolf-code", "output": "/fresh/output",
-                  "nix_program": None, "case_inputs": None}
+                  "nix_program": None, "case_inputs": None, "variant_id": "noble-scale-100",
+                  "snapshot": {"kind": "package-inventory", "value": "a" * 64, "channel": None}}
         result = command(target, ["./task", "test:linux:installed", "--", "--run-cases"])
         self.assertIn("StrictHostKeyChecking=yes", result)
         self.assertIn("IdentitiesOnly=yes", result)
@@ -83,14 +84,19 @@ class InstalledHelperTests(unittest.TestCase):
             command({**target, "command": "untrusted"}, ["./task"])
 
     def test_stale_leaf_output_cannot_replace_a_fresh_execution(self):
-        target = {"artifact_id": "selected", "environment_id": "guest"}
+        target = {"artifact_id": "selected", "environment_id": "guest", "variant_id": "floor-scale-100",
+                  "snapshot": {"kind": "package-inventory", "value": "f" * 64, "channel": None}}
         request = {"format_version": 1, "execution_nonce": "a" * 32, "source_commit": "b" * 40,
-                   "driver_tree": "c" * 40, **target, "variant_id": None}
+                   "driver_tree": "c" * 40, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": target["variant_id"]}
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "leaf").mkdir()
             (root / "execution-request.json").write_text(json.dumps(request))
             (root / "leaf/execution.json").write_text(json.dumps(request))
+            variant = {"format_version": 1, "variant": {"id": target["variant_id"],
+                       "release": {"snapshot_kind": "package-inventory", "channel": None}},
+                       "snapshot": target["snapshot"], "monitors": {}, "factory": None}
+            (root / "leaf/variant.json").write_text(json.dumps(variant))
             self.assertEqual(verify_execution_receipt(root, target, "b" * 40, "c" * 40), request)
             for name, value in (("execution_nonce", "d" * 32), ("driver_tree", "e" * 40), ("format_version", True)):
                 (root / "leaf/execution.json").write_text(json.dumps({**request, name: value}))

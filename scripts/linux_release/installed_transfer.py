@@ -22,7 +22,7 @@ def relative(value: str) -> str:
 
 def export(root: Path, output):
     root = root.resolve(strict=True)
-    if not all((root / name).is_file() for name in ("campaign.json", "binding.json", "driver-registry.json", "execution.json")):
+    if not all((root / name).is_file() for name in ("campaign.json", "binding.json", "driver-registry.json", "execution.json", "variant.json")):
         raise ValueError("campaign transfer requires an executed leaf output")
     total, count = 0, 0
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
