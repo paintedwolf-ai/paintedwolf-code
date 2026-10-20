@@ -17,6 +17,7 @@ from .app import InstalledApp
 from .process import run
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
+from .security_boundary import filesystem_egress
 
 SOCKET = Path('/run/painted-wolf-code/vault-identity.sock')
 UNIT = 'paintedwolf-vault-identity.service'
@@ -171,7 +172,8 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
              'memory_read_denied': denied, 'service_identity_stable': stable}, app.streams())
 
 
-PROBES = {('session', 'inhibitor-lifetime'): inhibitor_lifetime,
+PROBES = {('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
+          ('session', 'inhibitor-lifetime'): inhibitor_lifetime,
           ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory}
 
 
