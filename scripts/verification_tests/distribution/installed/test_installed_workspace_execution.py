@@ -57,13 +57,17 @@ class InstalledWorkspaceTests(unittest.TestCase):
         node.queryComponent.return_value.grabFocus.return_value = True
         node.getState.return_value.contains.return_value = True
         frame.getState.return_value.contains.return_value = True
-        ui.windows.side_effect = lambda: iter([(identity, frame)])
+        ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG = 23, 16
+        node.get_parent.return_value = frame
+        frame.getRole.return_value = 23
+        frame.get_process_id.return_value = 123
+        app = SimpleNamespace(observations={'launch_identity': identity})
         native = SimpleNamespace(ModifierType=SimpleNamespace(CONTROL=2),
             KeySynthType=SimpleNamespace(LOCKMODIFIERS=5, UNLOCKMODIFIERS=6, SYM=3, STRING=4),
             generate_keyboard_event=Mock(return_value=True))
         with patch.object(workspace, 'process_identity', return_value=identity), \
                 patch.object(workspace, 'owned_process', return_value=True):
-            result = workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+            result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertTrue(result['normal_keyboard_replace_and_save'])
             self.assertFalse(result['text_readback'])
             self.assertEqual([call.args for call in native.generate_keyboard_event.call_args_list], [
@@ -72,20 +76,28 @@ class InstalledWorkspaceTests(unittest.TestCase):
             native.generate_keyboard_event.reset_mock()
             native.generate_keyboard_event.side_effect = [True, False, True]
             with self.assertRaises(workspace.CaseUnavailable):
-                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+                workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertEqual(native.generate_keyboard_event.call_args_list[-1].args, (4, None, 6))
             native.generate_keyboard_event.reset_mock()
             node.getState.return_value.contains.return_value = False
             with self.assertRaises(workspace.CaseUnavailable):
-                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
+                workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             native.generate_keyboard_event.assert_not_called()
             node.getState.return_value.contains.return_value = True
             frame.getState.return_value.contains.return_value = False
             with self.assertRaises(workspace.CaseUnavailable) as refusal:
-                workspace.fixed_editor_keyboard(SimpleNamespace(), ui, Path('/owned/fixture'), native)
-            self.assertEqual(refusal.exception.observations['editor_focus']['owned_frames'], [
-                {'identity': identity, 'active': False}])
+                workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
+            self.assertEqual(refusal.exception.observations['editor_focus']['container_identity'], identity)
+            self.assertFalse(refusal.exception.observations['editor_focus']['container_active'])
             native.generate_keyboard_event.assert_not_called()
+            frame.getState.return_value.contains.return_value = True
+            node.get_process_id.return_value = 456
+            child = {'pid': 456, 'parent_pid': 123, 'start_time_ticks': 43}
+            native.generate_keyboard_event.side_effect = None
+            with patch.object(workspace, 'process_identity', side_effect=lambda pid: child if pid == 456 else identity):
+                result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
+            self.assertEqual(result['ui_identity'], child)
+            self.assertEqual(native.generate_keyboard_event.call_count, 7)
 
     def test_missing_editor_retains_bound_process_and_capture_evidence(self):
         app = MagicMock()

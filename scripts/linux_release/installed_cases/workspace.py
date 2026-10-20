@@ -48,12 +48,28 @@ def fixed_editor_keyboard(app, ui, path: Path, native=None) -> dict:
         if (process_identity(pid) != identity or not owned_process(pid, app)
                 or not ui.visible(node) or not node.getState().contains(ui.api.STATE_FOCUSED)):
             raise CaseUnavailable('normal-owned-editor-focus-unavailable')
-        frames = [(owner, window.getState().contains(ui.api.STATE_ACTIVE)) for owner, window in ui.windows()]
-        if sum(owner == identity and active for owner, active in frames) != 1:
+        parent, seen, frame = node, set(), None
+        for _ in range(64):
+            parent = parent.get_parent()
+            if parent is None:
+                break
+            marker = hash(parent)
+            if marker in seen:
+                raise ValueError('native editor accessible parent chain cycles')
+            seen.add(marker)
+            if parent.getRole() in {ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG}:
+                frame = parent
+                break
+        if frame is None:
+            raise CaseUnavailable('normal-owned-editor-container-unavailable')
+        frame_pid = frame.get_process_id()
+        frame_identity = process_identity(frame_pid)
+        active = frame.getState().contains(ui.api.STATE_ACTIVE)
+        if (frame_identity != app.observations['launch_identity'] or not owned_process(frame_pid, app)
+                or not ui.visible(frame) or not active or process_identity(frame_pid) != frame_identity):
             refusal = CaseUnavailable('normal-owned-editor-active-frame-unavailable')
             refusal.observations = {'editor_focus': {'entry_identity': identity,
-                'entry_focused': True, 'owned_frames': [
-                    {'identity': owner, 'active': bool(active)} for owner, active in frames]}}
+                'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
             raise refusal
 
     if node.queryComponent().grabFocus() is not True:
