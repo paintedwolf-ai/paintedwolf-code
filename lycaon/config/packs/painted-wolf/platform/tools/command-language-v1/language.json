@@ -1,0 +1,606 @@
+{
+  "version": 1,
+  "parser": {
+    "module": "mvdan.cc/sh/v3",
+    "version": "v3.14.1",
+    "dialect": "bash",
+    "allowed_packages": [
+      "syntax",
+      "expand",
+      "pattern"
+    ],
+    "forbidden_packages": [
+      "interp"
+    ],
+    "effect_boundary": "host dispatch only"
+  },
+  "encoding": {
+    "program": "UTF-8; reject invalid UTF-8 and NUL before effects",
+    "streams": "bytes; preserve NUL and CRLF",
+    "document": "captured accepted text encoded with recorded newline/encoding policy",
+    "ordering": "unsigned byte lexical order; no ambient locale"
+  },
+  "syntax": {
+    "supported": [
+      "simple commands",
+      "single quotes",
+      "double quotes",
+      "escapes",
+      "pipes",
+      ";",
+      "&&",
+      "||",
+      "grouped statements",
+      "multiline programs",
+      "stdin",
+      "here-documents",
+      ">",
+      ">>",
+      "2>",
+      "2>>",
+      "&>",
+      "&>>",
+      "<",
+      "2>&1",
+      "1>&2",
+      "assignments",
+      "export",
+      "unset",
+      "env",
+      "printenv",
+      "variables",
+      "globs",
+      "$()",
+      "backticks",
+      "if",
+      "for",
+      "while",
+      "functions",
+      "return",
+      "exit",
+      "break",
+      "continue",
+      "test",
+      "[",
+      "[[",
+      "source --",
+      "trailing &",
+      "$!",
+      "jobs",
+      "wait",
+      "kill"
+    ],
+    "excluded": [
+      "eval",
+      "executable reparsing",
+      "process substitution",
+      "traps",
+      "arrays",
+      "shell options",
+      "persistent interpreter state",
+      "dynamic loading via environment",
+      "tilde-user lookup"
+    ]
+  },
+  "rules": {
+    "splitting": "Unquoted expansions split on space/tab/LF then glob; quoted expansions retain one argument; fixed IFS cannot be changed.",
+    "globs": "Sort byte order; exclude hidden names unless requested; unmatched patterns stay literal; never traverse symlinks.",
+    "substitution": "Reached units only; strip trailing LF bytes; refuse NUL scalar; failure prevents containing dispatch; never reparse output.",
+    "admission": "Validate complete submitted unit before effects; bind computed arguments when reached. Source captures and validates its own unit, retaining earlier parent effects.",
+    "dispatch": "Native names bind first, including unsupported flags. Bare other programs dispatch confined. external -- explicitly selects installed binaries. No shell fallback.",
+    "paths": "Relative cwd, @label, @scratch and native absolute operands preserve physical identity; native_path converts explicitly and grants no access. TMPDIR and mktemp use real session paths. Null redirects use typed device sinks.",
+    "statuses": "Last executed ordinary status; pipelines use rightmost nonzero after expected early closure. Grep/diff comparison 1 remains complete. Host terminal reasons latch and prevent later admission.",
+    "publication": "Every producer must be typed eligible and complete; native grep/diff comparison 1 qualifies, unclassified external nonzero does not. Capture revisions before producer, stage bytes, review, validate and publish per target. Never pre-truncate or replay producer.",
+    "evidence": "Execution pins differ from conversational delivery. Only delivered exact mapped cat/head/tail/nl ranges qualify an edit base; unseen output and arbitrary transforms do not.",
+    "jobs": "Session job handles, not global PIDs; capture cwd/environment, bounded lifetime/output, owned cancellation; no interpreter checkpoints.",
+    "secrets": "References remain opaque except declared authorized sinks; inserted bytes never become grammar.",
+    "progress_update": "Optional existing update_progress payload; validate envelope/program before either effect; progress owner settles independently before gated effects. Zero-program-effect fresh resubmission references never imply zero progress effects."
+  },
+  "limits": [
+    {
+      "id": "program_bytes",
+      "maximum": 65536,
+      "unit": "bytes",
+      "scope": "submitted syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "program_bytes-at",
+        "program_bytes-over"
+      ]
+    },
+    {
+      "id": "ast_nodes",
+      "maximum": 8192,
+      "unit": "nodes",
+      "scope": "syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "ast_nodes-at",
+        "ast_nodes-over"
+      ]
+    },
+    {
+      "id": "ast_depth",
+      "maximum": 64,
+      "unit": "levels",
+      "scope": "syntax unit",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "ast_depth-at",
+        "ast_depth-over"
+      ]
+    },
+    {
+      "id": "argument_bytes",
+      "maximum": 131072,
+      "unit": "bytes",
+      "scope": "one expanded argument",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "argument_bytes-at",
+        "argument_bytes-over"
+      ]
+    },
+    {
+      "id": "argv_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "one dispatch",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "argv_bytes-at",
+        "argv_bytes-over"
+      ]
+    },
+    {
+      "id": "expanded_fields",
+      "maximum": 16384,
+      "unit": "fields",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "expanded_fields-at",
+        "expanded_fields-over"
+      ]
+    },
+    {
+      "id": "glob_matches",
+      "maximum": 10000,
+      "unit": "entries",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "glob_matches-at",
+        "glob_matches-over"
+      ]
+    },
+    {
+      "id": "traversal_visits",
+      "maximum": 100000,
+      "unit": "entries",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "traversal_visits-at",
+        "traversal_visits-over"
+      ]
+    },
+    {
+      "id": "substitution_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "substitution",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "substitution_bytes-at",
+        "substitution_bytes-over"
+      ]
+    },
+    {
+      "id": "substitution_depth",
+      "maximum": 8,
+      "unit": "levels",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "substitution_depth-at",
+        "substitution_depth-over"
+      ]
+    },
+    {
+      "id": "loop_iterations",
+      "maximum": 10000,
+      "unit": "iterations",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "loop_iterations-at",
+        "loop_iterations-over"
+      ]
+    },
+    {
+      "id": "statement_visits",
+      "maximum": 100000,
+      "unit": "visits",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "statement_visits-at",
+        "statement_visits-over"
+      ]
+    },
+    {
+      "id": "function_depth",
+      "maximum": 32,
+      "unit": "frames",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "function_depth-at",
+        "function_depth-over"
+      ]
+    },
+    {
+      "id": "source_depth",
+      "maximum": 8,
+      "unit": "units",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "source_depth-at",
+        "source_depth-over"
+      ]
+    },
+    {
+      "id": "source_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "source_bytes-at",
+        "source_bytes-over"
+      ]
+    },
+    {
+      "id": "pipeline_stages",
+      "maximum": 32,
+      "unit": "stages",
+      "scope": "pipeline",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "pipeline_stages-at",
+        "pipeline_stages-over"
+      ]
+    },
+    {
+      "id": "child_executions",
+      "maximum": 10000,
+      "unit": "executions",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "child_executions-at",
+        "child_executions-over"
+      ]
+    },
+    {
+      "id": "concurrent_processes",
+      "maximum": 16,
+      "unit": "processes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "concurrent_processes-at",
+        "concurrent_processes-over"
+      ]
+    },
+    {
+      "id": "background_jobs",
+      "maximum": 4,
+      "unit": "jobs",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "background_jobs-at",
+        "background_jobs-over"
+      ]
+    },
+    {
+      "id": "job_lifetime_ms",
+      "maximum": 3600000,
+      "unit": "milliseconds",
+      "scope": "job",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "job_lifetime_ms-at",
+        "job_lifetime_ms-over"
+      ]
+    },
+    {
+      "id": "program_lifetime_ms",
+      "maximum": 3600000,
+      "unit": "milliseconds",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "program_lifetime_ms-at",
+        "program_lifetime_ms-over"
+      ]
+    },
+    {
+      "id": "stream_buffer_bytes",
+      "maximum": 65536,
+      "unit": "bytes",
+      "scope": "endpoint",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "stream_buffer_bytes-at",
+        "stream_buffer_bytes-over"
+      ]
+    },
+    {
+      "id": "stream_bytes",
+      "maximum": 67108864,
+      "unit": "bytes",
+      "scope": "endpoint",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "stream_bytes-at",
+        "stream_bytes-over"
+      ]
+    },
+    {
+      "id": "spill_bytes",
+      "maximum": 268435456,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "spill_bytes-at",
+        "spill_bytes-over"
+      ]
+    },
+    {
+      "id": "session_spill_bytes",
+      "maximum": 1073741824,
+      "unit": "bytes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "session_spill_bytes-at",
+        "session_spill_bytes-over"
+      ]
+    },
+    {
+      "id": "sort_memory_bytes",
+      "maximum": 8388608,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "sort_memory_bytes-at",
+        "sort_memory_bytes-over"
+      ]
+    },
+    {
+      "id": "record_bytes",
+      "maximum": 1048576,
+      "unit": "bytes",
+      "scope": "record",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "record_bytes-at",
+        "record_bytes-over"
+      ]
+    },
+    {
+      "id": "sort_merge_fan_in",
+      "maximum": 16,
+      "unit": "readers",
+      "scope": "merge",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "sort_merge_fan_in-at",
+        "sort_merge_fan_in-over"
+      ]
+    },
+    {
+      "id": "trace_bytes",
+      "maximum": 8388608,
+      "unit": "bytes",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "trace_bytes-at",
+        "trace_bytes-over"
+      ]
+    },
+    {
+      "id": "trace_events",
+      "maximum": 100000,
+      "unit": "events",
+      "scope": "program",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "trace_events-at",
+        "trace_events-over"
+      ]
+    },
+    {
+      "id": "preview_bytes",
+      "maximum": 16384,
+      "unit": "bytes",
+      "scope": "result",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "preview_bytes-at",
+        "preview_bytes-over"
+      ]
+    },
+    {
+      "id": "retained_output_days",
+      "maximum": 7,
+      "unit": "days",
+      "scope": "unreferenced output",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "retained_output_days-at",
+        "retained_output_days-over"
+      ]
+    },
+    {
+      "id": "retained_output_bytes",
+      "maximum": 1073741824,
+      "unit": "bytes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "retained_output_bytes-at",
+        "retained_output_bytes-over"
+      ]
+    },
+    {
+      "id": "recursive_mutation_files",
+      "maximum": 10000,
+      "unit": "files",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "recursive_mutation_files-at",
+        "recursive_mutation_files-over"
+      ]
+    },
+    {
+      "id": "recursive_mutation_bytes",
+      "maximum": 104857600,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "recursive_mutation_bytes-at",
+        "recursive_mutation_bytes-over"
+      ]
+    },
+    {
+      "id": "editable_file_bytes",
+      "maximum": 4194304,
+      "unit": "bytes",
+      "scope": "replacement",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "editable_file_bytes-at",
+        "editable_file_bytes-over"
+      ]
+    },
+    {
+      "id": "archive_entries",
+      "maximum": 10000,
+      "unit": "entries",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_entries-at",
+        "archive_entries-over"
+      ]
+    },
+    {
+      "id": "archive_expanded_bytes",
+      "maximum": 104857600,
+      "unit": "bytes",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_expanded_bytes-at",
+        "archive_expanded_bytes-over"
+      ]
+    },
+    {
+      "id": "archive_expansion_ratio",
+      "maximum": 1000,
+      "unit": "ratio",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "archive_expansion_ratio-at",
+        "archive_expansion_ratio-over"
+      ]
+    },
+    {
+      "id": "query_value_bytes",
+      "maximum": 20971520,
+      "unit": "bytes",
+      "scope": "value",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "query_value_bytes-at",
+        "query_value_bytes-over"
+      ]
+    },
+    {
+      "id": "query_work_steps",
+      "maximum": 1000000,
+      "unit": "steps",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "query_work_steps-at",
+        "query_work_steps-over"
+      ]
+    },
+    {
+      "id": "regex_pattern_bytes",
+      "maximum": 512,
+      "unit": "bytes",
+      "scope": "pattern",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "regex_pattern_bytes-at",
+        "regex_pattern_bytes-over"
+      ]
+    },
+    {
+      "id": "regex_work_steps",
+      "maximum": 1000000,
+      "unit": "steps",
+      "scope": "operation",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "regex_work_steps-at",
+        "regex_work_steps-over"
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "id": "COMMAND_SYNTAX_INVALID",
+      "location": "UTF-8 source byte start/end, line and column",
+      "help": "expected syntax form; no invented quote/content correction"
+    },
+    {
+      "id": "COMMAND_SYNTAX_UNSUPPORTED",
+      "location": "excluded AST node span",
+      "help": "supported language construct"
+    },
+    {
+      "id": "COMMAND_OPTION_UNSUPPORTED",
+      "location": "option word span",
+      "help": "generated supported command forms; no external fallback"
+    },
+    {
+      "id": "COMMAND_OPERAND_INVALID",
+      "location": "argument span",
+      "help": "operand role and expected encoding"
+    },
+    {
+      "id": "COMMAND_LIMIT_EXCEEDED",
+      "location": "budget-consuming node span",
+      "help": "limit id, maximum, observed and unit"
+    },
+    {
+      "id": "COMMAND_PLATFORM_UNAVAILABLE",
+      "location": "operation span",
+      "help": "missing platform capability"
+    }
+  ]
+}
