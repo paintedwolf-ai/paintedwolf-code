@@ -3,8 +3,10 @@ package lineage_test
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"testing"
@@ -93,6 +95,12 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 	if !seen {
 		t.Fatal("actual inherited listener was not observed")
 	}
+	identity, paired, err := lineage.ObserveSessionListener(t.Context(), "synthetic-session", endpoint)
+	if errors.Is(err, lineage.ErrObservationIncomplete) {
+		t.Log("native all-holder proof unavailable; partial holder facts do not authorize paired access")
+	} else if err != nil || !paired || identity == "" {
+		t.Fatalf("complete native all-holder observation did not identify owned listener: paired=%v, err=%v", paired, err)
+	}
 	if _, err := fmt.Fprintln(input, "close"); err != nil {
 		t.Fatal(err)
 	}
@@ -112,5 +120,18 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 		if socket.Listening && socket.Local == endpoint {
 			t.Fatal("closed owned port attributed a foreign replacement")
 		}
+	}
+}
+
+func TestUnknownSessionCannotUseARequestedListenerAsOwnership(t *testing.T) {
+	identity, owned, err := lineage.ObserveSessionListener(t.Context(), "unrelated-fixture-session", netip.MustParseAddrPort("127.0.0.1:49151"))
+	if !lineage.Supported() {
+		if !errors.Is(err, lineage.ErrUnsupported) {
+			t.Fatal("missing unsupported capability")
+		}
+		return
+	}
+	if err != nil || owned || identity != "" {
+		t.Fatalf("requested port became ownership: owned=%v err=%v", owned, err)
 	}
 }

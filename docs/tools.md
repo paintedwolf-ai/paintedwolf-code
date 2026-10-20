@@ -63,6 +63,34 @@ are distinct from executing native owners, live model qualification and installe
 platform evidence. macOS/Linux execution and installed qualification remain
 required; Windows-shaped paths and compile results never qualify native Windows.
 
+### Platform adapter evidence
+
+`fseffect.Replace` reports whether replacement, directory durability and byte
+verification actually occurred, even when a later step fails. Staged byte counts
+alone do not prove publication. Source mutation settlement preserves the same
+journal and reports committed publication separately from a later completion
+error. Ownership changes return an explicit capability and applied result;
+unsupported platforms never claim that metadata changed.
+
+Native TCP observations carry exact endpoints, an opaque socket resource identity
+and the holder's process incarnation. Fresh inherited-descriptor checks establish
+lineage membership. Session pairing additionally requires complete observation
+of every relevant holder: inaccessible process/socket tables produce
+`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
+ordinary connection admission. These are observations for mediated admission,
+not grants; the broker rechecks current identities at each required boundary.
+
+Windows qualification requires actual filesystem replacement while handles are
+open, reparse-point and exact-name identity checks, journal/error settlement,
+metadata capability results, typed null operands, executable alias resolution
+and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
+cancellation that preserves unrelated processes, and observed confinement and
+network enforcement. Packaging must deliver and verify the required executable,
+helper and security prerequisites on the installed target. Cross-compilation,
+Unix fixtures and unsupported results do not qualify those capabilities. The
+same native macOS/Linux runtime and installed-platform qualification obligations
+remain; individual adapter tests do not qualify the complete command evaluator.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
