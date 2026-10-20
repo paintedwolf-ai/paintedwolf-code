@@ -23,10 +23,10 @@ type OperationFacts struct {
 	RejectionContract string
 }
 
-// ProgressExistingAdmission preserves the invoked interface's existing progress
-// owner gate. Admission is separately attributed and is never an effect grant.
+// ProgressPolicy selects the existing progress owner admission contract.
 type ProgressPolicy string
 
+// ProgressExistingAdmission preserves existing admission with separate attribution.
 const ProgressExistingAdmission ProgressPolicy = "existing_owner_admission"
 
 // StreamContract distinguishes complete byte streams from display projections.
