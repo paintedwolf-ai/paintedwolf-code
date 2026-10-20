@@ -4,4 +4,9 @@ package fseffect
 
 import "golang.org/x/sys/unix"
 
-func metadataOpenFlags() int { return unix.O_EVTONLY }
+func metadataOpenFlags(directory bool) int {
+	if directory {
+		return unix.O_SEARCH
+	}
+	return unix.O_EXEC
+}

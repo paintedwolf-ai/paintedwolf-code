@@ -50,6 +50,9 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	}
 	paths := opts.Launch.PathAuthority
 	if paths == nil {
+		if opts.Launch.Kind == LaunchAgentCommand && opts.Launch.CurrentAuthority == nil {
+			return nil, nil, fmt.Errorf("agent launch requires current execution authority or an explicit path authority")
+		}
 		paths = confine.NativeLaunchPaths(cwd)
 	} else if opts.Dir == "" {
 		held, err := paths.OpenCwd(ctx)
@@ -75,23 +78,31 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 			return nil, nil, err
 		}
 	}
-	inputs, err := confine.CaptureProcessInputs(ctx, selected, paths, limits)
+	metadataPath := selected
+	if !filepath.IsAbs(metadataPath) {
+		metadataPath = cwd + string(filepath.Separator) + metadataPath
+	}
+	inputs, err := confine.CaptureProcessInputs(ctx, metadataPath, paths, limits)
 	if err != nil {
 		return nil, nil, err
 	}
+	ownedCtx, cancel := context.WithCancel(ctx)
+	ctx = ownedCtx
 	self, err := os.Executable()
 	if err != nil {
+		cancel()
 		_ = inputs.Close()
 		return nil, nil, err
 	}
 	// Choose actual enforcement before constructing the native helper. An
 	// explicitly unconfined host disposition never removes an inherited boundary.
 	boundary := confine.Confinement{HostExecution: true}
-	if opts.Launch.Confinement != nil && !opts.Launch.Confinement.HostExecution && confine.Available() {
+	if opts.Launch.Confinement != nil {
 		boundary = *opts.Launch.Confinement
 	}
 	cmd, baseCleanup, err := confine.Command(ctx, self, name, args, boundary)
 	if err != nil {
+		cancel()
 		_ = inputs.Close()
 		return nil, nil, err
 	}
@@ -107,14 +118,15 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 		}
 		return nil
 	}
-	release, err := confine.BindProcessInputs(ctx, cmd, inputs, name, args, final.Env, check)
+	release, err := confine.BindProcessInputs(ctx, cmd, inputs, selected, name, args, final.Env, check)
 	if err != nil {
+		cancel()
 		baseCleanup()
 		_ = inputs.Close()
 		return nil, nil, err
 	}
 	state := &preparedLifecycle{}
-	state.cleanup = func() { release(); baseCleanup(); _ = inputs.Close() }
+	state.cleanup = func() { cancel(); release(); baseCleanup(); _ = inputs.Close() }
 	preparedLifecycles.Store(cmd, state)
 	cleanup := func() {
 		state.once.Do(func() {
@@ -142,7 +154,7 @@ func resolveLaunchEntry(name, cwd string, environment []string) (string, error) 
 		if _, err := exec.LookPath(path); err != nil {
 			return "", err
 		}
-		return path, nil
+		return name, nil
 	}
 	var path string
 	for _, entry := range environment {
@@ -150,7 +162,7 @@ func resolveLaunchEntry(name, cwd string, environment []string) (string, error) 
 			path = value
 		}
 	}
-	selected, err := LookPathIn(name, path)
+	selected, err := LookPathAt(name, path, cwd)
 	if err != nil {
 		return "", &confine.CommandNotFoundError{Name: name}
 	}
@@ -190,7 +202,12 @@ func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) fun
 		}
 		return fmt.Errorf("native start returned no process")
 	}
-	untrack := register(cmd.Process.Pid)
+	releaseOwner := register(cmd.Process.Pid)
+	var untrack func()
+	if releaseOwner != nil {
+		var once sync.Once
+		untrack = func() { once.Do(releaseOwner) }
+	}
 	state.mu.Lock()
 	closed := state.closed
 	if !closed {

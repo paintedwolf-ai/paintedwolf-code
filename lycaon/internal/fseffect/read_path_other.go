@@ -12,7 +12,7 @@ func (*ReadRoot) OpenExact(string) (*os.File, error) { return nil, ErrUnsupporte
 // Native metadata-only execution handles need the corresponding platform adapter.
 type MetadataRoot struct{}
 
-func OpenMetadataRoot(string) (*MetadataRoot, error)     { return nil, ErrUnsupported }
-func (*MetadataRoot) Path() string                       { return "" }
-func (*MetadataRoot) OpenExact(string) (*os.File, error) { return nil, ErrUnsupported }
-func (*MetadataRoot) Close() error                       { return ErrUnsupported }
+func OpenMetadataRoot(string) (*MetadataRoot, error)           { return nil, ErrUnsupported }
+func (*MetadataRoot) Path() string                             { return "" }
+func (*MetadataRoot) OpenExact(string, bool) (*os.File, error) { return nil, ErrUnsupported }
+func (*MetadataRoot) Close() error                             { return ErrUnsupported }

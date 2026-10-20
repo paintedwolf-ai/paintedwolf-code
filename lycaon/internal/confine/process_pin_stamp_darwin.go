@@ -17,9 +17,9 @@ func nativeFileChange(info os.FileInfo) (fileChange, error) {
 }
 
 func openNativeLaunchMetadata(path string, directory bool) (*os.File, error) {
-	flags := unix.O_EVTONLY | unix.O_CLOEXEC
+	flags := unix.O_EXEC | unix.O_CLOEXEC
 	if directory {
-		flags |= unix.O_DIRECTORY
+		flags = unix.O_SEARCH | unix.O_CLOEXEC
 	}
 	fd, err := unix.Open(path, flags, 0)
 	if err != nil {

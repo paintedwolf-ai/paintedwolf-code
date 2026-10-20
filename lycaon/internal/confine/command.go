@@ -2,7 +2,6 @@ package confine
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"

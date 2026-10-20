@@ -31,6 +31,8 @@ type processHandoff struct {
 	inputs                                           *ProcessInputs
 	readyRead, readyWrite, releaseRead, releaseWrite *os.File
 	environment, helperArguments                     []string
+	helperPath                                       string
+	files                                            []*os.File
 	check                                            func(context.Context) error
 }
 
@@ -38,7 +40,7 @@ var processHandoffs sync.Map
 
 // BindProcessInputs installs the same native-path handoff for every prepared
 // LaunchPlan. The authority callback is the initiating owner's current check.
-func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs, name string, args, environment []string, check func(context.Context) error) (func(), error) {
+func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs, nativePath, name string, args, environment []string, check func(context.Context) error) (func(), error) {
 	if inputs == nil || check == nil {
 		return nil, fmt.Errorf("launch requires captured inputs and current authority")
 	}
@@ -78,7 +80,7 @@ func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs
 	inputs.bound = true
 	first := 3 + len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, inputs.cwd, readyWrite, releaseRead, inputs.entry.file)
-	entry := inputs.entry.path
+	entry := strings.Clone(nativePath)
 	inputs.mu.Unlock()
 	split := slices.Index(cmd.Args, "--")
 	if split < 0 {
@@ -90,6 +92,8 @@ func BindProcessInputs(ctx context.Context, cmd *exec.Cmd, inputs *ProcessInputs
 	cmd.Env = cloneVector(environment)
 	state.environment = cloneVector(environment)
 	state.helperArguments = cloneVector(cmd.Args)
+	state.helperPath = cmd.Path
+	state.files = append([]*os.File(nil), cmd.ExtraFiles...)
 	cmd.Dir = ""
 	// The helper envelope and the eventual native invocation each obey the actual
 	// combined native argv/environment allowance; neither ceiling is an OS promise.
@@ -128,7 +132,7 @@ func ValidateProcessInputs(cmd *exec.Cmd) error {
 	}
 	state := value.(*processHandoff)
 	count := len(state.helperArguments)
-	if len(cmd.Args) < count || !slices.Equal(cmd.Args[len(cmd.Args)-count:], state.helperArguments) || !slices.Equal(cmd.Env, state.environment) || cmd.Dir != "" {
+	if cmd.Path != state.helperPath || len(cmd.ExtraFiles) < len(state.files) || !slices.Equal(cmd.ExtraFiles[:len(state.files)], state.files) || len(cmd.Args) < count || !slices.Equal(cmd.Args[len(cmd.Args)-count:], state.helperArguments) || !slices.Equal(cmd.Env, state.environment) || cmd.Dir != "" {
 		return ErrLaunchIdentityChanged
 	}
 	if err := state.check(state.ctx); err != nil {

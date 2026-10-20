@@ -204,7 +204,7 @@ func walkReadContained(root *openedRoot, relPath string, follow bool, visit func
 			return visit(dir, name, &st)
 		}
 		fd, openErr := unix.Openat(int(dir.Fd()), name,
-			metadataOpenFlags()|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			metadataOpenFlags(true)|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if openErr != nil {
 			return nil, &fs.PathError{Op: "open effect directory", Path: name, Err: openErr}
 		}

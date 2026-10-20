@@ -4,4 +4,4 @@ package fseffect
 
 import "golang.org/x/sys/unix"
 
-func metadataOpenFlags() int { return unix.O_PATH }
+func metadataOpenFlags(bool) int { return unix.O_PATH }

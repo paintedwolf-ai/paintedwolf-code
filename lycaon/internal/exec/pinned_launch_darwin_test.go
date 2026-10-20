@@ -28,7 +28,7 @@ func (p pinnedLaunchFixture) OpenExecutable(ctx context.Context, name string) (*
 	if !filepath.IsAbs(name) {
 		name = filepath.Join(p.directory, name)
 	}
-	if !p.allowed[name] {
+	if !p.allowed[filepath.Clean(name)] {
 		return nil, os.ErrPermission
 	}
 	return os.Open(name)

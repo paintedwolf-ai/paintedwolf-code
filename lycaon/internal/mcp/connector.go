@@ -170,8 +170,8 @@ type stdioSpawn struct {
 	cmd *osexec.Cmd
 	// releaseEgress unregisters the process proxy token.
 	releaseEgress func()
-	// cleanup releases spawn-time resources (the sandbox profile pipe) once the
-	// command has been started.
+	// cleanup releases captured launch inputs and process registration after
+	// the retained session has settled its existing native process owner.
 	cleanup func()
 }
 

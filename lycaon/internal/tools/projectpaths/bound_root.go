@@ -57,8 +57,8 @@ func pathOperationError(operand string, err error) error {
 	return err
 }
 
-// OpenMetadata retains reached identity without requesting source content.
-func (p BoundPath) OpenMetadata() (*os.File, error) {
+// OpenLaunchMetadata retains executable or cwd identity without source reads.
+func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	if p.Null {
 		return nil, invalidOperand(p.Resolved.DisplayPath, "null is not a metadata file")
 	}
@@ -70,7 +70,7 @@ func (p BoundPath) OpenMetadata() (*os.File, error) {
 		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
-	held, err := root.OpenExact(".")
+	held, err := root.OpenExact(".", true)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (p BoundPath) OpenMetadata() (*os.File, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	file, err := root.OpenExact(p.exactRelative)
+	file, err := root.OpenExact(p.exactRelative, directory)
 	if err != nil {
 		return nil, pathOperationError(p.Resolved.DisplayPath, err)
 	}

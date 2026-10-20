@@ -17,7 +17,7 @@ func (p *ProgramPaths) OpenExecutable(ctx context.Context, operand string) (*os.
 	if bound.Null {
 		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: operand, Cause: errors.New("null device is not an executable input")}
 	}
-	file, err := bound.OpenMetadata()
+	file, err := bound.OpenLaunchMetadata(false)
 	if err != nil {
 		return nil, err
 	}

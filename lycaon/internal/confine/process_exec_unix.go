@@ -40,8 +40,9 @@ func execNativeTarget(path string, argv []string) (err error) {
 	}
 	_ = unix.Close(helperPinnedCwdFDArg)
 	helperPinnedCwdFDArg = -1
-	if !strings.ContainsRune(argv[0], '/') {
-		path = helperPinnedEntryArg
+	path = helperPinnedEntryArg
+	if strings.ContainsRune(argv[0], '/') {
+		path = argv[0]
 	}
 	if err := validateNativeEntry(path, helperPinnedExecutableFDArg); err != nil {
 		return err
