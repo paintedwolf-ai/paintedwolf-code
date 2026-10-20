@@ -1,5 +1,6 @@
 """Actual application identity and platform-owner boundaries fail closed."""
 import io
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -86,3 +87,49 @@ class InstalledAppTests(unittest.TestCase):
                 with self.assertRaises(expected):
                     app.wait_ready()
             app.stop.assert_called_once_with()
+
+    def test_gui_public_health_does_not_require_or_invent_private_token(self):
+        identity = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
+        app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
+        app.process = SimpleNamespace(pid=123)
+        app.binding = {"install_root": "/opt/app", "images": {"/opt/app/bin/pw": {"device": 1, "inode": 2, "bytes": 3}}}
+        api = Mock()
+        api.request.return_value = {"status": 200, "body": {"ready": True}}
+        with patch('scripts.linux_release.installed_cases.app.process_identity', return_value=identity), patch(
+                'scripts.linux_release.installed_cases.app.engine_image', return_value=(1, 2, 3)), patch(
+                'scripts.linux_release.installed_cases.app.EngineAPI', return_value=api) as constructor, patch(
+                'scripts.linux_release.installed_cases.app.os.open', side_effect=FileNotFoundError):
+            self.assertTrue(app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path('/unused')))
+        constructor.assert_called_once_with(12345)
+        api.request.assert_called_once_with('GET', '/health')
+        self.assertFalse(app.observations['private_api_available'])
+
+    def test_public_client_refuses_all_private_calls_before_transport(self):
+        from scripts.linux_release.installed_cases.app_api import EngineAPI
+        api = EngineAPI(12345)
+        with patch.object(api._opener, 'open') as transport:
+            for method, path, payload in [('GET', '/v1/providers', None), ('POST', '/health', None),
+                                           ('GET', '/health?probe=1', None), ('GET', '/health', {})]:
+                with self.subTest(method=method, path=path), self.assertRaises(CaseUnavailable):
+                    api.request(method, path, payload)
+            transport.assert_not_called()
+
+    def test_stale_private_token_cannot_claim_gui_authentication(self):
+        identity = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
+        app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40})
+        app.process = SimpleNamespace(pid=123)
+        app.binding = {"install_root": "/opt/app", "images": {"/opt/app/bin/pw": {"device": 1, "inode": 2, "bytes": 3}}}
+        public, private = Mock(), Mock()
+        public.request.return_value = {"status": 200, "body": {}}
+        private.request.return_value = {"status": 401, "body": {}}
+        with patch('scripts.linux_release.installed_cases.app.process_identity', return_value=identity), patch(
+                'scripts.linux_release.installed_cases.app.engine_image', return_value=(1, 2, 3)), patch(
+                'scripts.linux_release.installed_cases.app.EngineAPI', side_effect=[public, private]), patch(
+                'scripts.linux_release.installed_cases.app.os.open', return_value=7), patch(
+                'scripts.linux_release.installed_cases.app.os.fdopen', return_value=io.BytesIO(b'stale-token')), patch(
+                'scripts.linux_release.installed_cases.app.os.fstat', return_value=SimpleNamespace(
+                    st_mode=0o100600, st_uid=os.getuid(), st_size=11)):
+            self.assertTrue(app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path('/unused')))
+        private.request.assert_called_once_with('GET', '/v1/providers')
+        self.assertIs(app.api, public)
+        self.assertFalse(app.observations['private_api_available'])

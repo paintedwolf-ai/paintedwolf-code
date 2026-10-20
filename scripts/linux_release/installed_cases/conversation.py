@@ -65,6 +65,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
         try:
             with app:
                 interactive = interactive_window(app)
+                accepted(app, 'GET', '/v1/providers', None, {200})
                 witness = add_keyless_provider(app, provider)
                 try:
                     skipped = False
