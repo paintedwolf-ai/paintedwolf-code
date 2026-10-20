@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --local-rpm-metadata ]]; then
+  shift
+  cd "$ROOT"
+  exec env PYTHONPATH="$ROOT/scripts" python3 -m linux_release.rpm_metadata_rehearsal "$@"
+fi
 if [[ "${1:-}" == --local-pacman-construction ]]; then
   shift
   exec python3 - "$ROOT" "$@" <<'PACMAN_PY'
