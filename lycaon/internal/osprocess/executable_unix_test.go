@@ -36,7 +36,10 @@ func TestStoppedKernelImageMatchesHeldFileAndRejectsAnotherExecutable(t *testing
 		t.Fatal(err)
 	}
 	var status syscall.WaitStatus
-	if _, err := syscall.Wait4(child.Process.Pid, &status, syscall.WUNTRACED, nil); err != nil || !status.Stopped() {
+	// WUNTRACED without WCONTINUED admits only a stop or exit. Go
+	// classifies the BSD SIGSTOP encoding as Continued; the kernel image
+	// adapter independently confirms SSTOP rather than trusting that projection.
+	if waited, err := syscall.Wait4(child.Process.Pid, &status, syscall.WUNTRACED, nil); err != nil || waited != child.Process.Pid || status.Exited() || status.Signaled() {
 		t.Fatalf("fixture did not stop: status=%v err=%v", status, err)
 	}
 	matched, err := osprocess.MatchStoppedExecutable(child.Process.Pid, held)
