@@ -28,6 +28,19 @@ class InstalledHelperTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 retain(binding, "../escape", "case", root, "passed", {})
 
+    def test_binary_streams_cannot_replace_structured_case_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
+            streams = {"stdout": b"\x00binary output", "stderr": b"\xffdiagnostic"}
+            result = retain(binding, "session", "actual-case", root, "passed", {"observed": True}, streams)
+            for name, raw in streams.items():
+                self.assertEqual((root / "session/actual-case" / (name + ".bin")).read_bytes(), raw)
+            document = json.loads((root / result["evidence"][-1]["path"]).read_text())
+            self.assertEqual(document["observations"], {"observed": True})
+            self.assertEqual(document["artifact"], binding["artifact"])
+            self.assertEqual(document["status"], "passed")
+
     def test_registry_selects_nix_only_for_nix_installations(self):
         self.assertEqual(driver_family("updates", "deb"), "packages")
         self.assertEqual(driver_family("updates", "nix"), "nix")
