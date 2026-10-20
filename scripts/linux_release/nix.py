@@ -14,14 +14,14 @@ import time
 import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source
+from . import nix_archive, factory_source, nix_scanner_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
               "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "notices", "notice-tools",
-              "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
+              "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
 
 
 def command(operation: str, root: Path, component: str = "default", source: str | None = None) -> list[str]:
@@ -74,6 +74,11 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         report["factory"] = role
     if prepare_factory_lock:
         return prepare_lock(root, factory_root, factory_commit, role, environment, report)
+    if component == "scanner-host-tools":
+        if operation != "build":
+            raise ValueError("Scanner host tools require a native build")
+        invocation, report["scanner_tools"] = nix_scanner_tools.command(
+            NIX, "git+file://" + str(root), environment)
     result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
