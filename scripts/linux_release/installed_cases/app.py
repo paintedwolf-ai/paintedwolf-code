@@ -65,6 +65,29 @@ def private_json(path: Path) -> dict:
         return json.loads(raw)
 
 
+def desktop_display(session: dict) -> str:
+    value = session.get("Display")
+    if not value:
+        owner = session.get("DesktopOwner", {})
+        pid = owner.get("pid")
+        if type(pid) is not int or pid <= 1:
+            raise CaseUnavailable("native X11 session has no captured desktop owner")
+        before = process_identity(pid)
+        if before["start_time_ticks"] != owner.get("start_time_ticks"):
+            raise ValueError("native X11 desktop owner changed before display observation")
+        with Path(f"/proc/{pid}/environ").open("rb") as stream:
+            raw = stream.read((256 << 10) + 1)
+        if len(raw) > 256 << 10 or process_identity(pid) != before:
+            raise ValueError("native X11 desktop environment changed or exceeded its bound")
+        displays = [field[len(b"DISPLAY="):] for field in raw.split(b"\0") if field.startswith(b"DISPLAY=")]
+        if len(displays) != 1:
+            raise CaseUnavailable("native X11 desktop owner has no unique display")
+        value = displays[0].decode("ascii")
+    if not isinstance(value, str) or re.fullmatch(r":[0-9]{1,5}(?:\.[0-9]{1,2})?", value) is None:
+        raise ValueError("native X11 display is not a local session display")
+    return value
+
+
 def session_environment(session: dict) -> dict:
     home, runtime = Path.home(), Path(f"/run/user/{os.getuid()}")
     info = runtime.stat()
@@ -83,9 +106,7 @@ def session_environment(session: dict) -> dict:
             raise CaseUnavailable("native Wayland display socket is not uniquely selected")
         result["WAYLAND_DISPLAY"] = sockets[0].name
     else:
-        if not session.get("Display"):
-            raise CaseUnavailable("native X11 display is not reported by its session owner")
-        result["DISPLAY"] = session["Display"]
+        result["DISPLAY"] = desktop_display(session)
         authority = home / ".Xauthority"
         if authority.is_file():
             result["XAUTHORITY"] = str(authority)
@@ -118,8 +139,16 @@ class InstalledApp:
         self.stop()
 
     def start(self):
+        from .onboarding import onboard
         self.launch()
-        return self.wait_ready()
+        try:
+            onboard(self)
+            return self.wait_ready()
+        except BaseException as error:
+            self.stop()
+            if isinstance(error, CaseUnavailable):
+                error.observations, error.streams = self.observations, self.streams()
+            raise
 
     def launch(self):
         if self.process is not None:
@@ -162,15 +191,11 @@ class InstalledApp:
     def wait_ready(self):
         if self.process is None:
             raise ValueError("installed application must be launched before readiness capture")
-        config = Path.home() / ".config/paintedwolf"
-        daemon = config / "daemon.json"
         deadline = time.monotonic() + self.timeout
         try:
             while time.monotonic() < deadline and self.process.poll() is None and not self._overflow.is_set():
-                if daemon.exists():
-                    record = private_json(daemon)
-                    if self._bind_engine(record, config):
-                        return self
+                if self.try_ready():
+                    return self
                 time.sleep(0.1)
             self.observations["exit_code"] = self.process.poll()
             raise CaseUnavailable("installed application did not reach an owned engine API; onboarding or a native interaction driver may be required")
@@ -179,6 +204,15 @@ class InstalledApp:
             if isinstance(error, CaseUnavailable):
                 error.observations, error.streams = self.observations, self.streams()
             raise
+
+    def try_ready(self) -> bool:
+        if self.process is None or self.process.poll() is not None or self._overflow.is_set():
+            return False
+        config = Path.home() / ".config/paintedwolf"
+        try:
+            return self._bind_engine(private_json(config / "daemon.json"), config)
+        except (FileNotFoundError, ProcessLookupError):
+            return False
 
     def _bind_engine(self, record: dict, config: Path) -> bool:
         pid, port = record.get("pid"), record.get("port")
