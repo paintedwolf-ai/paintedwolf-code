@@ -12,7 +12,7 @@ import stat
 from ..installed_evidence import artifacts
 from ..installed_runtime import bind
 from .package_native import command, current_package, operations, owner_commands
-from .package_payload import inspect
+from .package_payload import MetadataMismatch, inspect
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
 
@@ -159,6 +159,8 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
             status = "passed" if not observations["output_limit"] else "failed"
         except (OSError, ValueError) as error:
             observations["error"] = str(error)
+            if isinstance(error, MetadataMismatch):
+                observations["payload_metadata_mismatch"] = error.facts
             status = "unverified" if isinstance(error, CaseUnavailable) else "failed"
         finally:
             if status != "passed" and observations.get("installation_attempted"):
