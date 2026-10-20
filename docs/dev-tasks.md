@@ -1068,8 +1068,8 @@ Target selection, repair, grading, and sampling: [Coordinator benchmark](coordin
 
 ### Desktop self-upgrade release gate
 
-The release workflow rehearses the automatic updater shipped in the 1.0.2 line
-and later. The existing sidecar/store rehearsal continues to cover earlier manual
+The release workflow rehearses automatic updates for direct-download macOS
+installations shipped in the 1.0.2 line and later. The existing sidecar/store rehearsal continues to cover earlier manual
 clients. A protected preparation job authenticates and freezes prior feeds,
 verifies prior archives and the exact candidate archive, and signs channel-bound
 fixture pointers. Only public keys, signed pointers, archives, and corpus data

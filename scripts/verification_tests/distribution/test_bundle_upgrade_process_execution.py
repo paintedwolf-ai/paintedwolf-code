@@ -46,7 +46,7 @@ class ProcessTests(unittest.TestCase):
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
         installation.owned = {}
-        table = "10 /test/Product.app/Contents/MacOS/Product\n11 /other/Product --argument /test/Product.app/Contents/MacOS/Product\n12 /test/Product.app/Contents/MacOS/pw\n"
+        table = f"10 {installation.executable}\n11 /other/Product --argument {installation.executable}\n12 {installation.app / 'Contents/MacOS/pw'}\n"
         with patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(stdout=table)), \
              patch.object(process, "process_identity", side_effect=lambda pid: f"identity:{pid}"):
             installation.capture_owned()
