@@ -238,7 +238,7 @@ func (t *RestoreVersionTool) restoreContent(
 	targetVersionID string,
 ) (string, error) {
 	path := resolved.DisplayPath
-	return retryEditorDocument(ctx, path, func() (string, error) {
+	return retryEditorOperation(ctx, path, func() (string, error) {
 		var before *string
 		st, err := loadAgentSourceText(ctx, "restore_version", tctx, resolved)
 		if err == nil {

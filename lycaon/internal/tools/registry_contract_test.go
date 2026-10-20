@@ -195,3 +195,21 @@ func TestToolMetaIsMCP(t *testing.T) {
 		t.Fatal("native tools are not MCP")
 	}
 }
+
+func TestRegistryDetachesContractSecretSlots(t *testing.T) {
+	registry := NewDefaultRegistry()
+	contract, _ := toolcontract.Lookup("write")
+	contract.SecretReferenceArgs = []string{"content"}
+	err := registry.RegisterDefinition(Definition{Meta: ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: contract, Handler: func(context.Context, map[string]any, ToolContext) (string, error) { return "ok", nil }})
+	testutil.FailErr(t, "register immutable contract", err)
+	contract.SecretReferenceArgs[0] = "caller-mutated"
+	first, _ := registry.Definition("write")
+	if first.Contract.SecretReferenceArgs[0] != "content" {
+		t.Fatal("publication aliased contract")
+	}
+	first.Contract.SecretReferenceArgs[0] = "lookup-mutated"
+	second, _ := registry.Definition("write")
+	if second.Contract.SecretReferenceArgs[0] != "content" || second.Operation.Facts().Contract.SecretReferenceArgs[0] != "content" {
+		t.Fatal("lookup aliased contract")
+	}
+}

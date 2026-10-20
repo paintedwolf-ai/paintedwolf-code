@@ -34,81 +34,18 @@ type ContentApplyGate interface {
 func (t *WriteTool) Name() string { return "write" }
 
 func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	var overrideErr error
-	ctx, overrideErr = tools.WithSyntaxOverride(ctx, args)
-	if overrideErr != nil {
-		return "", overrideErr
+	ctx, err := tools.WithSyntaxOverride(ctx, args)
+	if err != nil {
+		return "", err
 	}
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
 	appendMode, _ := args["append"].(bool)
-	if path == "" {
-		return "", toolkit.MissingArg("path")
-	}
-	if err := assertProfileWriteScope(ctx, t.Boundary, tctx, path, "write"); err != nil {
-		return "", writeScopeReject(ctx, t.Boundary, path, tctx.ProfileID(), "write", err)
-	}
-	if err := beforeWorkerMutation(ctx, tctx, path); err != nil {
-		return "", err
-	}
-	resolved, err := projectpaths.ResolveWrite(ctx, t.Boundary, tctx, path)
+	result, err := t.Apply(ctx, WriteInput{Path: path, Content: content, Append: appendMode, Admission: WriteConversational}, tctx)
 	if err != nil {
 		return "", err
 	}
-	fullPath := resolved.Abs
-	path = resolved.DisplayPath
-	return retryEditorDocument(ctx, path, func() (string, error) {
-		// A missing file is a create; otherwise the base is the served source text.
-		var before *string
-		st, err := loadAgentSourceText(ctx, "write", tctx, resolved)
-		if err == nil {
-			beforeText := st.Content
-			before = &beforeText
-		} else if !os.IsNotExist(err) {
-			return "", fmt.Errorf("read failed: %w", err)
-		}
-		proposed := content
-		if appendMode {
-			if before == nil {
-				return "", sourceview.PathNotFound("write", path, fullPath)
-			}
-			proposed = *before + content
-		}
-		if err := guardMutationContent("write", path, proposed); err != nil {
-			return "", err
-		}
-		finalContent := proposed
-		reportTextIntent(tctx, resolved, st, before != nil, proposed)
-		if t.ContentApply != nil {
-			var err error
-			finalContent, err = t.ContentApply.GateApply(ctx, "write", path, before, proposed, tctx)
-			if err != nil {
-				return "", err
-			}
-			if finalContent != proposed {
-				reportTextIntent(tctx, resolved, st, before != nil, finalContent)
-			}
-		}
-		if err := rejectIfSyntaxUnhealthy(ctx, "write", path, before, finalContent, mutationSeam{}); err != nil {
-			return "", err
-		}
-		landed, err := landEditedText(ctx, tctx, "write", resolved, st, finalContent)
-		if err != nil {
-			return "", err
-		}
-		captureFileEdit(tctx, path, finalContent, before)
-		afterSuccessfulMutation(ctx, tctx, path)
-		var receipt string
-		if appendMode {
-			receipt = fmt.Sprintf("Appended %d bytes to %s (file now %d bytes)", len(content), path, len(finalContent))
-		} else {
-			receipt = fmt.Sprintf("Wrote %d bytes to %s", len(finalContent), path)
-		}
-		if note := landed.note(); note != "" {
-			receipt += "\n" + note
-		}
-		return receipt, nil
-	})
+	return result.Receipt(), nil
 }
 
 // EditTool replaces one occurrence of old_string with new_string.
@@ -153,7 +90,7 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	fullPath := resolved.Abs
 	path = resolved.DisplayPath
 	replaceAll := toolkit.BoolArg(args, "replace_all", false)
-	return retryEditorDocument(ctx, path, func() (string, error) {
+	return retryEditorOperation(ctx, path, func() (string, error) {
 		st, err := loadAgentSourceText(ctx, "edit", tctx, resolved)
 		if err != nil {
 			if os.IsNotExist(err) {
