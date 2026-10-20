@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.linux_release.installed_cases.package_payload import (
-    BoundedReader, Entry, cpio_entries, inspect, name, tar_entries, verify,
+    BoundedReader, Entry, MetadataMismatch, cpio_entries, inspect, name, tar_entries, verify,
 )
 
 
@@ -120,3 +120,18 @@ class InstalledPayloadTests(unittest.TestCase):
             (root / "symbolic").symlink_to("other")
             with self.assertRaisesRegex(ValueError, "symbolic link"):
                 verify(entries, root)
+
+    def test_metadata_refusal_identifies_only_the_selected_payload_path_and_numeric_facts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "program"
+            path.write_bytes(b"private fixture contents")
+            path.chmod(0o644)
+            actual = path.stat()
+            expected = Entry("program", 0o755, actual.st_uid, actual.st_gid, "file")
+            with self.assertRaises(MetadataMismatch) as error:
+                verify({"program": expected}, root)
+            self.assertEqual(error.exception.facts, {"path": "program", "kind": "file",
+                "expected": {"mode": 0o755, "uid": actual.st_uid, "gid": actual.st_gid},
+                "observed": {"mode": 0o644, "uid": actual.st_uid, "gid": actual.st_gid}})
+            self.assertNotIn("private", repr(error.exception.facts))

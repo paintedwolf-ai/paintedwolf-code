@@ -28,6 +28,14 @@ class Entry:
     target: str = ""
 
 
+class MetadataMismatch(ValueError):
+    def __init__(self, entry: Entry, observed):
+        super().__init__("installed package mode or owner differs from final payload")
+        self.facts = {"path": entry.name, "kind": entry.kind,
+                      "expected": {"mode": entry.mode, "uid": entry.uid, "gid": entry.gid},
+                      "observed": {"mode": stat.S_IMODE(observed.st_mode), "uid": observed.st_uid, "gid": observed.st_gid}}
+
+
 def name(value: str) -> str:
     value = value.removeprefix("./")
     path = PurePosixPath(value)
@@ -221,7 +229,7 @@ def verify(entries: dict[str, Entry], installed: Path = Path("/")) -> dict:
             raise ValueError("installed package parent escapes its selected filesystem")
         before = path.lstat()
         if (stat.S_IMODE(before.st_mode), before.st_uid, before.st_gid) != (entry.mode, entry.uid, entry.gid):
-            raise ValueError("installed package mode or owner differs from final payload")
+            raise MetadataMismatch(entry, before)
         if entry.kind == "directory":
             if not stat.S_ISDIR(before.st_mode):
                 raise ValueError("installed package directory changed type")

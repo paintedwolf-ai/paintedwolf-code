@@ -60,6 +60,10 @@ class NativeWorkflowTests(unittest.TestCase):
             rebound = stack.enter_context(patch.object(owner, "bind", return_value={"payload": {"status": "passed"}}))
             if mutation in {"post-install-changed", "rollback-failed"}:
                 rebound.side_effect = ValueError("selected installed payload changed")
+            if mutation == "metadata-mismatch":
+                from scripts.linux_release.installed_cases.package_payload import Entry
+                rebound.side_effect = owner.MetadataMismatch(Entry("usr/local", 0o755, 0, 0, "directory"),
+                    SimpleNamespace(st_mode=stat.S_IFDIR | 0o2775, st_uid=0, st_gid=50))
             result = owner.prepare_install(final, "a" * 40, "app.deb", packages,
                                            Path("/opt/painted-wolf-code"), inputs, output)
             guest.assert_called_once()
@@ -140,3 +144,14 @@ class NativeWorkflowTests(unittest.TestCase):
             self.assertTrue(result["observations"]["output_limit"])
             self.assertTrue(result["observations"]["restored_absence"])
             self.assertLessEqual((output / "installation/preinstallation-transaction/transaction-operations-stderr.bin").stat().st_size, 8 << 20)
+
+    def test_metadata_mismatch_is_retained_before_owned_rollback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, _, output = self.execute(directory, mutation="metadata-mismatch")
+            self.assertEqual(result["status"], "failed")
+            self.assertTrue(result["observations"]["restored_absence"])
+            facts = result["observations"]["payload_metadata_mismatch"]
+            self.assertEqual(facts["path"], "usr/local")
+            self.assertEqual(facts["observed"], {"mode": 0o2775, "uid": 0, "gid": 50})
+            retained = json.loads((output / "installation/preinstallation-transaction/execution.json").read_text())
+            self.assertEqual(retained["observations"]["payload_metadata_mismatch"], facts)
