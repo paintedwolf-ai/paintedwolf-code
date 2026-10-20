@@ -122,5 +122,5 @@ class CatalogCapacityTests(unittest.TestCase):
             native = capacity.limits({})
             row['installation'] = 'nix'
             immutable = capacity.limits({})
-        self.assertEqual(native['max_files'] - immutable['max_files'], (capacity.MAX_STREAMS + 3) * 2)
+        self.assertEqual(native['max_files'] - immutable['max_files'], 2 * (capacity.MAX_STREAMS + 3) * 2)
         self.assertEqual(native['max_bytes'], immutable['max_bytes'])

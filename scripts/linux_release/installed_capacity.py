@@ -39,9 +39,9 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
     case_files = cases * (2 * MAX_STREAMS + 3) * 2
     # Includes per-case directory entries, per-target metadata/logs/ZIP and top-level
     # aggregate documents. Control bytes remain under their separate fixed limits.
-    # A native target may also own one pre-bind installation journal, bounded by
+    # A native target may also own pre-bind installation and immediate first-launch journals, bounded by
     # the same stream contract, with both leaf and controller copies/directories.
-    transaction_files = len(native_targets) * (MAX_STREAMS + 3) * 2
+    transaction_files = len(native_targets) * 2 * (MAX_STREAMS + 3) * 2
     maximum_files = case_files + cases * 4 + len(targets) * 32 + transaction_files + 128
     return {'max_files': maximum_files, 'max_bytes': MAX_BYTES, 'max_file': MAX_FILE,
             'targets': len(targets), 'case_observations': cases}
