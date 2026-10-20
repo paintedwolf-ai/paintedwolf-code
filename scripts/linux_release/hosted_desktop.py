@@ -78,6 +78,9 @@ def prepare(checkout: Path, output: Path) -> dict:
     checkout = checkout.resolve(strict=True)
     if not (checkout / 'scripts/linux_release/installed_environment.py').is_file() or output.exists() or output.is_symlink():
         raise ValueError('desktop preparation requires the checked-out controller and a fresh result path')
+    revision = run(['git', '-c', 'safe.directory=' + str(checkout), '-C', str(checkout), 'rev-parse', 'HEAD'], timeout=10).decode().strip()
+    if revision != os.environ['GITHUB_SHA']:
+        raise ValueError('desktop checkout differs from its selected controller commit')
     marker = Path('/etc/paintedwolf-qualification.json')
     if marker.exists() or marker.is_symlink():
         raise ValueError('hosted runner already belongs to a qualification campaign')

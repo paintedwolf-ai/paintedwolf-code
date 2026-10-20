@@ -1,5 +1,10 @@
 name: Linux desktop environment rehearsal
 on:
+  push:
+    branches: [test/linux-installed-campaign-execution]
+    paths:
+      - .github/workflows/linux-desktop-environment-rehearsal.yml
+      - scripts/linux_release/hosted_desktop.py
   workflow_dispatch:
     inputs:
       architecture:
@@ -11,12 +16,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: linux-desktop-environment-${{ inputs.architecture }}
+  group: linux-desktop-environment-${{ inputs.architecture || 'arm64' }}
   cancel-in-progress: false
 jobs:
   prepare:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'paintedwolf-ai/paintedwolf-code'
-    runs-on: ${{ inputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    if: github.repository == 'paintedwolf-ai/paintedwolf-code' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/test/linux-installed-campaign-execution'))
+    runs-on: ${{ inputs.architecture == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,6 +46,6 @@ jobs:
       - name: Retain measured environment facts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: desktop-environment-${{ inputs.architecture }}-${{ github.run_id }}
+          name: desktop-environment-${{ inputs.architecture || 'arm64' }}-${{ github.run_id }}
           path: ${{ runner.temp }}/paintedwolf-desktop/facts.json
           if-no-files-found: error
