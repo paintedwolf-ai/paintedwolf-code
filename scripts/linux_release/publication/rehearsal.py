@@ -39,6 +39,11 @@ def objects(prefix):
 def run(output):
     origin = rehearsal_environment()
     prefix = "release-system-tests/distribution-document-" + uuid.uuid4().hex
+    with output.open("x") as stream:
+        json.dump({"schema_version": 1, "status": "started", "prefix": prefix,
+                   "rehearsal": True, "application_qualified": False, "production_published": False}, stream)
+        stream.write("\n")
+    output.chmod(0o600)
     backend = ImmutableOrigin(rehearsal=True, storage_prefix=prefix, origin=origin)
     if objects(prefix):
         raise ValueError("fresh document rehearsal prefix already contains objects")
@@ -132,7 +137,7 @@ def run(output):
     result = {"schema_version": 1, "status": "passed", "rehearsal": True, "application_qualified": False,
               "production_published": False, "prefix": prefix, "controls": controls,
               "objects_deleted": len(deleted), "remaining_objects": 0}
-    with output.open("x") as stream:
+    with output.open("w") as stream:
         json.dump(result, stream, indent=2); stream.write("\n")
     return result
 
