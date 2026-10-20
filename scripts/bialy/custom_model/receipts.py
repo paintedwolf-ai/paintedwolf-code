@@ -20,7 +20,12 @@ def response(value):
 
 
 def accepted_row(record, db, identity, catalog_sha256):
-    if record.get("schema") != "pw-training-turn/1" or record.get("exclusion_reason") or record.get("dispatches") != 1 or not record.get("settled"):
+    if record.get("schema") != "pw-training-turn/1":
+        raise ValueError("unsupported capture schema")
+    if record.get("exclusion_reason"):
+        # The host's reason (unsupported_response, ambiguous_dispatch, ...) is the count key.
+        raise ValueError("host capture excluded: " + str(record["exclusion_reason"]))
+    if record.get("dispatches") != 1 or not record.get("settled"):
         raise ValueError("excluded host capture")
     if record["epoch"] != identity["epoch"]:
         raise ValueError("foreign collection epoch")
@@ -30,6 +35,8 @@ def accepted_row(record, db, identity, catalog_sha256):
         raise ValueError("unsupported provider request shape")
     # Tool-disabled requests need their control retained by the tokenizer path.
     controls = {k: v for k, v in wire.items() if k not in {"model", "messages", "tools", "stream", "stream_options"}}
+    if controls.get("tool_choice") not in (None, "auto") or controls.get("parallel_tool_calls") is False or controls.get("reasoning_effort") not in (None, "none", "minimal"):
+        raise ValueError("request control needs a model-specific renderer")
     output = db.execute("SELECT * FROM model_outputs WHERE id=? AND session_id=? AND message_id=?",
                         (record["output_id"], record["session_id"], record["message_id"])).fetchone()
     if output is None or output["scripted"] or not output["settled_at"]:

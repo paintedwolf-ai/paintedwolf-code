@@ -59,6 +59,7 @@ class Smoke(unittest.TestCase):
                         "--validation",str(root/"validation.jsonl"),"--holdout",str(root/"holdout.jsonl"),"--out",str(root/mode),"--targets","q_proj,v_proj","--rank","2","--max-length","256","--epochs","2","--checkpoint-every","1"]
                 if mode == "dpo":
                     argv += ["--reference",str(base)]
+                    argv[argv.index("--targets") + 1] = r"re:.*\.(q_proj|v_proj)"
                 paused = train(parser().parse_args(argv + ["--max-updates","1"]))
                 self.assertEqual(paused["status"], "paused")
                 self.assertFalse((root/mode/"result.json").exists())

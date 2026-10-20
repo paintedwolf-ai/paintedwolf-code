@@ -117,8 +117,13 @@ def train_owned(args):
         if args.device.startswith("cuda"):
             torch.cuda.empty_cache()
     model = AutoModelForCausalLM.from_pretrained(args.model, local_files_only=True, trust_remote_code=False, dtype=dtype).to(args.device)
+    # A regex (re:...) matches full module paths and confines LoRA to the language
+    # model of a multimodal checkpoint; a list matches module names anywhere.
+    targets = args.targets[3:] if args.targets.startswith("re:") else [t for t in args.targets.split(",") if t]
+    if not targets:
+        raise ValueError("no LoRA target modules")
     model = get_peft_model(model, LoraConfig(r=args.rank, lora_alpha=2*args.rank, lora_dropout=0.0,
-                                           target_modules=args.targets.split(","), task_type="CAUSAL_LM"))
+                                           target_modules=targets, task_type="CAUSAL_LM"))
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant":False})
     model.enable_input_require_grads()
@@ -162,7 +167,7 @@ def parser():
     p.add_argument("--reference", type=Path)
     p.add_argument("--mode", choices=("sft", "dpo"), required=True)
     p.add_argument("--device", default="cpu")
-    p.add_argument("--targets", required=True, help="Explicit architecture-reviewed LoRA module names")
+    p.add_argument("--targets", required=True, help="Comma-separated LoRA module names, or re:<regex> over full module paths")
     p.add_argument("--rank", type=int, default=16)
     p.add_argument("--max-length", type=int, default=4096)
     p.add_argument("--epochs", type=int, default=1)

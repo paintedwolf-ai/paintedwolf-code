@@ -24,6 +24,16 @@ Every positive call must match a completed, invoked receipt by session, message,
 call ID, tool name and canonical arguments. Floating-point arguments, prose
 closeouts without publication validation, multimodal inputs, and unsupported
 provider controls fail closed. A missing capture or receipt produces no positive.
+Tool-disabled turns and non-default reasoning controls are excluded at export.
+Every exclusion is counted by its reason, including the host's own capture
+reasons (`unsupported_response` for a reasoning-bearing teacher reply,
+`ambiguous_dispatch` for a retried call, `secret_screen_changed_payload`), so a
+calibration report shows why rows were lost.
+
+Teacher servers must run with thinking disabled (llama-server
+`--reasoning-budget 0`) and without context shift: a reply that carries
+reasoning is excluded, and a shifted context would record a prompt the model
+never saw.
 
 The exported `pw-model-request-capture/2` retains generation controls as well as
 messages and schemas. Its state digest binds the observed request and settled
@@ -59,8 +69,13 @@ uv run --project scripts/bialy/custom_model --locked python scripts/bialy/custom
   --max-updates 20 --max-seconds 3600 --checkpoint-every 10
 ```
 
-The module list must match the selected architecture; the example is not a
-Gemma architecture qualification. Do not shorten an accepted request to fit.
+`--targets` takes module names or `re:<regex>` over full module paths. Gemma 4
+checkpoints load as the multimodal `Gemma4ForConditionalGeneration`, so anchor
+the pattern to the language model, for example
+`re:.*language_model.*\.(q_proj|k_proj|v_proj|o_proj)`. Logits are computed
+only at positions that predict a completion token (`logits_to_keep`); a
+full-vocabulary log-softmax over 8,192 positions of a 262,144-token vocabulary
+would need about 21 GB by itself. Do not shorten an accepted request to fit.
 The tokenizer must preserve the full generation prefix and every target;
 oversize or unsupported rows stop preparation with an error. Prompt tokens are
 masked. DPO uses summed completion log likelihoods with a frozen reference;
