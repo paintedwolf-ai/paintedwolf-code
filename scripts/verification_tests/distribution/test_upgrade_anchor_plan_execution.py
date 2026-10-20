@@ -45,6 +45,11 @@ class AnchorPlanTests(unittest.TestCase):
         self.assertEqual(cases["stable"]["source_kind"], "automatic_baseline")
         self.assertEqual(cases["preview"]["source_kind"], "feed")
 
+    def test_the_baseline_preserves_a_preview_offer_newer_than_the_stable_candidate(self):
+        result = plan(manifest("1.1.0"), {}, [snapshot("preview", manifest("1.2.0-rc1"))],
+                      [anchor(manifest("1.0.2"))])
+        self.assertEqual([case["channel"] for case in result["cases"]], ["stable"])
+
     def test_baseline_crosses_every_retained_trust_generation(self):
         feeds = [snapshot("preview", manifest("1.1.0", 1, 2)),
                  snapshot("preview", manifest("1.2.0", 2, 3), 2),
