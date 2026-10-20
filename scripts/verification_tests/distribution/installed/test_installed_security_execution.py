@@ -148,4 +148,3 @@ class InstalledSecurityTests(unittest.TestCase):
             self.assertEqual(status, 'unverified')
             self.assertEqual(facts['execution_session'], session)
             product.assert_not_called()
-
