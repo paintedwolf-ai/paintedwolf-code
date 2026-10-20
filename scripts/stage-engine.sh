@@ -11,6 +11,7 @@ LOGS_NAME="pw-logs"
 VAULT_IDENTITY_NAME="pw-vault-identity"
 DECIDE_NAME="bialy"
 DOCUMENT_CORE_NAME="pw-document-core"
+DESKTOP_SETTINGS_NAME="pw-desktop-settings"
 
 # OCR staging can qualify pinned resources without rebuilding unrelated engines.
 if [[ "${1:-}" == --minimal && "${2:-}" == --ocr-only ]]; then
@@ -148,6 +149,17 @@ assert_static "${LOGS_BIN}"
 if [[ "${HOST_KIND}" == "linux" ]]; then
   chmod +x "${VAULT_IDENTITY_BIN}"
   assert_static "${VAULT_IDENTITY_BIN}"
+fi
+
+if [[ "${HOST_KIND}" == "linux" ]]; then
+  echo "stage-engine — building the desktop settings observer for ${TARGET}" >&2
+  (
+    cd "${TAURI_DIR}"
+    cargo build --locked --release --target "${TARGET}" \
+      -p desktop-settings-observer --bin pw-desktop-settings
+  )
+  install -m 0755 "${TAURI_DIR}/target/${TARGET}/release/${DESKTOP_SETTINGS_NAME}" \
+    "${BINARIES_DIR}/${DESKTOP_SETTINGS_NAME}-${TARGET}"
 fi
 
 echo "stage-engine — building the document core for ${TARGET}" >&2
