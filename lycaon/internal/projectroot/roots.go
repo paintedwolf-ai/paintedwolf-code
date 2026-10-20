@@ -84,7 +84,7 @@ func ActiveRoot(roots []RootRef, activeRootID string) (RootRef, error) {
 
 // IsUnionDiscoveryPath reports whether find/grep/list_dir should walk every root.
 func IsUnionDiscoveryPath(path string) bool {
-	p := strings.TrimSpace(path)
+	p := path
 	return p == "" || p == "." || p == "./"
 }
 

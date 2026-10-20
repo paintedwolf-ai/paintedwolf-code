@@ -155,6 +155,9 @@ func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
 		dir := w.top()
 		var st unix.Stat_t
 		if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			if err == unix.ENOENT && len(pending) == 0 {
+				return nil, &fs.PathError{Op: "open effect target", Path: name, Err: &missingReadLeaf{path: filepath.Join(dir.Name(), name)}}
+			}
 			// PathError so os.IsNotExist recognizes a missing component.
 			return nil, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 		}

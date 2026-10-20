@@ -82,7 +82,8 @@ const ScratchDirEnv = "SCRATCH_DIR"
 func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confinement) LaunchPlan {
 	plan := LaunchPlan{Kind: kind, Subject: strings.TrimSpace(subject), Confinement: confinement}
 	if confinement != nil && strings.TrimSpace(confinement.SessionScratchRoot) != "" {
-		plan.ExtraEnv = []string{ScratchDirEnv + "=" + strings.TrimSpace(confinement.SessionScratchRoot)}
+		scratch := confinement.SessionScratchRoot
+		plan.ExtraEnv = []string{ScratchDirEnv + "=" + scratch, "TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch}
 	}
 	return plan
 }

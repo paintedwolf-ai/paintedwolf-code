@@ -1,0 +1,33 @@
+oar: '1.0'
+id: COMMAND_OPERAND_INVALID
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "COMMAND_OPERAND_INVALID"
+effect: block
+copy:
+  what: One command operand cannot be used as supplied.
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: The host validates operand identity, representation and role before admitting its effect. Unsupported operands never fall through to an external implementation.
+  fix: Check the typed operand details and command help. Preserve exact path bytes and source revisions; conversion alone does not grant access. Earlier effects remain recorded.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+x-paintedwolf-message: command operand was not admitted
+x-paintedwolf-scenarios:
+- id: representation
+  vars:
+    tool: command
+    reason: Source scripts require UTF-8 without BOM.
+  expect_contains:
+  - 'Code: COMMAND_OPERAND_INVALID'
+  - UTF-8 without BOM
+  - Earlier effects remain

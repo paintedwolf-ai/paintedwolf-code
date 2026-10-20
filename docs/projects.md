@@ -127,6 +127,27 @@ The check runs in both path directions, so a candidate that merely *contains* a 
 
 Outside-root access is handled by explicit granted paths and write-root authority. It does not mutate the attached-root list.
 
+The portable command path binding (`tools/projectpaths.ProgramPaths`) keeps a
+separate cwd for each invocation; it never changes the host process cwd. Logical
+`@label` and `@scratch` addresses use the existing root-coordinate rules. Native
+absolute operands retain their OS component order, including symlinks followed
+by `..`; the confined descriptor walk checks the actual reached identity before
+exposing file bytes or metadata. Root replacement invalidates a prior binding.
+Path conversion returns an absolute native spelling without granting access or
+recording a mutation. External argv remains literal.
+
+`native_path -0 -- PATH ...` emits exact NUL-delimited path bytes, including
+newlines and non-Unicode Unix names. Scalar conversion requires UTF-8; scalar
+substitution's separate NUL refusal belongs to the evaluator. Windows-shaped
+validation refuses ambiguous drive-relative and reserved-device spellings;
+actual Windows adapter qualification is tracked separately. `/dev/null` (and
+exact `NUL` on Windows) is a typed null operand, never an argv rewrite. Literal
+`/tmp` keeps its OS identity. Agent process launches receive `TMPDIR`, `TMP`,
+`TEMP` and `SCRATCH_DIR` pointing at the same real session scratch directory.
+Individual temporary file creation and mutation publication retain their
+existing operation authority and write-door responsibilities.
+
+
 ---
 
 ## Project naming
