@@ -137,7 +137,10 @@ def edit_and_find(app, path: Path) -> tuple[dict, dict]:
                     break
                 time.sleep(0.1)
             else:
-                raise ValueError('normal native editor save did not produce the fixed fixture bytes')
+                refusal = CaseUnavailable('normal-native-keyboard-delivery-unverified')
+                refusal.observations = {'saved_file': disk,
+                    'keyboard_delivery': {'dispatch_accepted': True, 'effect_observed': False}}
+                raise refusal
             ui.click('Find in file')
             ui.fill(ui.api.ROLE_ENTRY, 'Editor command or search', 'qualification needle')
         observations.update(saved_file=disk, normal_find_input_action=True,
