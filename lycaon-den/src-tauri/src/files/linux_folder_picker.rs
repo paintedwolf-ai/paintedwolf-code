@@ -1,111 +1,111 @@
-//! Folder selection stays parented to the requesting desktop window.
-use gtk::{gio, glib, prelude::*};
+//! The primary native chooser stays inside the protected desktop process.
+use gtk::{prelude::*, ResponseType};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::mpsc;
 
-use super::linux_desktop_open::{request, ParentWindow, ServiceError};
-
-mod fallback;
-
-const SERVICE: &str = "org.freedesktop.portal.FileChooser";
-const OBJECT: &str = "/org/freedesktop/portal/desktop";
-
+/// This worker waits for GTK response signals without nesting the shell's loop.
 pub(super) fn pick(window: &tauri::WebviewWindow, title: &str) -> Result<Option<PathBuf>, String> {
-    let parent = ParentWindow::of(window);
-    let context = glib::MainContext::new();
-    let result = context
-        .with_thread_default(|| {
-            let bus =
-                crate::linux_desktop::bus::connect_session(&context, Duration::from_millis(500))
-                    .map_err(|_| ServiceError::Unavailable)?;
-            portal(&bus, parent.identity(), title)
+    let (send, receive) = mpsc::channel();
+    let target = window.clone();
+    let title = title.to_owned();
+    window
+        .run_on_main_thread(move || {
+            let parent = match target.gtk_window() {
+                Ok(parent) => parent,
+                Err(error) => {
+                    let _ = send.send(Err(error.to_string()));
+                    return;
+                }
+            };
+            show(&parent, &title, send);
         })
         .map_err(|error| error.to_string())?;
-    match result {
-        Ok(path) => Ok(Some(path)),
-        Err(ServiceError::Cancelled) => Ok(None),
-        Err(ServiceError::Unavailable) => fallback::pick(window, title),
-        Err(ServiceError::Failed(reason)) => {
-            Err(format!("The desktop folder picker failed: {reason}"))
+    receive
+        .recv()
+        .map_err(|_| "The folder picker window closed".to_owned())?
+}
+
+fn dimensions(width: i32, height: i32) -> (i32, i32) {
+    (760.min((width - 48).max(1)), 560.min((height - 48).max(1)))
+}
+
+fn show(
+    parent: &gtk::ApplicationWindow,
+    title: &str,
+    send: mpsc::Sender<Result<Option<PathBuf>, String>>,
+) {
+    // Keep actions in the bottom action area. A header containing both actions
+    // and a long title can itself exceed a small monitor's logical width.
+    let dialog = gtk::Dialog::builder()
+        .title(title)
+        .transient_for(parent)
+        .modal(true)
+        .destroy_with_parent(true)
+        .use_header_bar(0)
+        .build();
+    dialog.add_buttons(&[
+        ("Cancel", ResponseType::Cancel),
+        ("Open", ResponseType::Accept),
+    ]);
+    dialog.set_default_response(ResponseType::Accept);
+    let chooser = gtk::FileChooserWidget::new(gtk::FileChooserAction::SelectFolder);
+    chooser.set_local_only(true);
+    chooser.set_select_multiple(false);
+    let viewport = gtk::ScrolledWindow::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
+    viewport.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
+    viewport.set_min_content_width(0);
+    viewport.set_min_content_height(0);
+    viewport.set_propagate_natural_width(false);
+    viewport.set_propagate_natural_height(false);
+    viewport.add(&chooser);
+    dialog.content_area().pack_start(&viewport, true, true, 0);
+    let display = gtk::prelude::WidgetExt::display(parent);
+    let monitor = parent
+        .window()
+        .and_then(|surface| display.monitor_at_window(&surface))
+        .or_else(|| display.primary_monitor());
+    let (width, height) = monitor
+        .map(|monitor| {
+            let area = monitor.workarea();
+            dimensions(area.width(), area.height())
+        })
+        .unwrap_or((464, 336));
+    dialog.set_default_size(width, height);
+    let selected = chooser.clone();
+    let reply = send.clone();
+    dialog.connect_response(move |dialog, response| {
+        if response == ResponseType::Accept {
+            let Some(path) = selected.filename().filter(|path| path.is_absolute() && path.is_dir()) else {
+                return;
+            };
+            let _ = reply.send(Ok(Some(path)));
+        } else {
+            let _ = reply.send(Ok(None));
         }
-    }
-}
-
-fn portal(bus: &gio::DBusConnection, parent: &str, title: &str) -> Result<PathBuf, ServiceError> {
-    let results =
-        request::run_with_timeout(bus, Duration::from_secs(30 * 60), |owner, options| {
-            let options = glib::VariantDict::new(Some(&options));
-            options.insert("directory", true);
-            options.insert("multiple", false);
-            options.insert("modal", true);
-            bus.call_sync(
-                Some(owner),
-                OBJECT,
-                SERVICE,
-                "OpenFile",
-                Some(&(parent, title, options.end()).to_variant()),
-                Some(glib::VariantTy::new("(o)").expect("static portal handle type")),
-                gio::DBusCallFlags::NONE,
-                5000,
-                gio::Cancellable::NONE,
-            )
-            .map_err(|error| ServiceError::from_call(&error))
-        })?;
-    selected_path(&results)
-}
-
-fn selected_path(results: &glib::Variant) -> Result<PathBuf, ServiceError> {
-    let dictionary = glib::VariantDict::new(Some(results));
-    let uris = dictionary
-        .lookup::<Vec<String>>("uris")
-        .map_err(|_| ServiceError::Failed("Invalid folder picker result".into()))?
-        .ok_or_else(|| ServiceError::Failed("The folder picker returned no location".into()))?;
-    if uris.len() != 1 || uris[0].len() > 64 * 1024 {
-        return Err(ServiceError::Failed(
-            "The folder picker returned an invalid location".into(),
-        ));
-    }
-    let file = gio::File::for_uri(&uris[0]);
-    let path = file
-        .path()
-        .filter(|path| path.is_absolute() && path.is_dir())
-        .ok_or_else(|| ServiceError::Failed("Select an accessible local folder".into()))?;
-    if file.uri_scheme().as_deref() != Some("file") {
-        return Err(ServiceError::Failed(
-            "Select an accessible local folder".into(),
-        ));
-    }
-    Ok(path)
+        // All results were read above; no callback queries this widget after destruction.
+        unsafe {
+            dialog.destroy();
+        }
+    });
+    dialog.connect_destroy(move |_| {
+        let _ = send.send(Ok(None));
+    });
+    let weak_dialog = dialog.downgrade();
+    chooser.connect_file_activated(move |_| {
+        if let Some(dialog) = weak_dialog.upgrade() {
+            dialog.response(ResponseType::Accept);
+        }
+    });
+    dialog.show_all();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn selection(uris: Vec<String>) -> glib::Variant {
-        let dictionary = glib::VariantDict::new(None);
-        dictionary.insert("uris", uris);
-        dictionary.end()
-    }
-
     #[test]
-    fn folder_results_preserve_unicode_and_refuse_remote_missing_or_multiple_locations() {
-        let root = crate::test_support::TempDir::new("folder-picker-uri");
-        let folder = root.join("a é folder");
-        std::fs::create_dir(&folder).unwrap();
-        let uri = gio::File::for_path(&folder).uri().to_string();
-        assert_eq!(
-            selected_path(&selection(vec![uri.clone()])).unwrap(),
-            folder
-        );
-        for uris in [
-            vec![],
-            vec![uri.clone(), uri],
-            vec!["smb://host/share".into()],
-            vec!["file:///nonexistent-paintedwolf-picker".into()],
-        ] {
-            assert!(selected_path(&selection(uris)).is_err());
-        }
-        assert!(selected_path(&glib::VariantDict::new(None).end()).is_err());
+    fn default_size_fits_logical_workarea_including_two_hundred_percent_scale() {
+        assert_eq!(dimensions(1024, 768), (760, 560));
+        assert_eq!(dimensions(512, 384), (464, 336));
+        assert_eq!(dimensions(1920, 1080), (760, 560));
     }
 }
