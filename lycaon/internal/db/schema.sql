@@ -1476,6 +1476,7 @@ CREATE TABLE IF NOT EXISTS invocation_programs (
     source_ref TEXT NOT NULL,
     source_exact INTEGER NOT NULL CHECK (source_exact IN (0,1)),
     plan_ref TEXT NOT NULL,
+    syntax_validated INTEGER NOT NULL CHECK (syntax_validated IN (0,1)),
     state TEXT NOT NULL CHECK (state IN ('running','waiting','completed','rejected','failed','interrupted')),
     status_code INTEGER CHECK (status_code BETWEEN 0 AND 255),
     stop_code TEXT NOT NULL DEFAULT '',
@@ -1517,6 +1518,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     id TEXT PRIMARY KEY,
     program_id TEXT NOT NULL,
     node_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal > 0),
     parent_execution_id TEXT NOT NULL,
     actor_id TEXT NOT NULL,
     scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
@@ -1553,6 +1555,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     settled_at TEXT,
     CHECK (id != parent_execution_id),
     UNIQUE (program_id, id),
+    UNIQUE (program_id, ordinal),
     FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_program_started

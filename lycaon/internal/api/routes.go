@@ -31,6 +31,7 @@ func (s *Server) setupRoutes() {
 		s.registerV1Operation(r, operationSearchChatContent, s.Admin.Prompt.Content.HandleSearchChatContent)
 		s.registerV1Operation(r, operationResolveMessageNavigation, s.Admin.SessionAdmin.Navigation.HandleResolveMessageNavigation)
 		s.registerV1Operation(r, operationListSessionInvocations, s.Admin.SessionAdmin.Transcript.HandleListSessionInvocations)
+		s.registerV1Operation(r, operationGetCommandProgramReceipt, s.Admin.SessionAdmin.Transcript.HandleGetCommandProgramReceipt)
 		s.registerV1Operation(r, operationExportSessionTranscript, s.Admin.SessionAdmin.Transcript.HandleExportSessionTranscript)
 		s.registerV1Operation(r, operationSendPrompt, s.Admin.SessionAdmin.Recovery.WithSessionPanicRecovery(s.Admin.Prompt.Submission.HandlePrompt))
 		s.registerV1Operation(r, operationCreateComposerSecret, s.Admin.Prompt.Submission.HandleCreateComposerSecret)

@@ -1274,6 +1274,43 @@ type CodeScanPage struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
+type CommandExecutionReceipt struct {
+	ID                      string `json:"id"`
+	ProgramID               string `json:"program_id"`
+	NodeID                  string `json:"node_id"`
+	ParentExecutionID       string `json:"parent_execution_id"`
+	Owner                   string `json:"owner"`
+	Lifecycle               string `json:"lifecycle"`
+	DefinitionDigest        string `json:"definition_digest"`
+	ArgumentsDigest         string `json:"arguments_digest"`
+	ReviewedArgumentsDigest string `json:"reviewed_arguments_digest,omitempty"`
+	ArgumentsRef            string `json:"arguments_ref"`
+	// Compact display only. Not authority or replay input.
+	Command string `json:"command"`
+	State   string `json:"state"`
+	// Durable before-owner marker; host loss can precede actual invocation.
+	OwnerStarted bool `json:"owner_started"`
+	// Actual invocation observed by the admission caller. Absence after a start marker is unknown.
+	OwnerInvoked        bool   `json:"owner_invoked"`
+	StatusCode          *int   `json:"status_code,omitempty"`
+	StopCode            string `json:"stop_code,omitempty"`
+	HostStopCode        string `json:"host_stop_code,omitempty"`
+	Complete            bool   `json:"complete"`
+	PublicationEligible bool   `json:"publication_eligible"`
+	OutputPublishable   bool   `json:"output_publishable"`
+	EffectCertainty     string `json:"effect_certainty"`
+	EvidenceKind        string `json:"evidence_kind,omitempty"`
+	EvidenceRef         string `json:"evidence_ref,omitempty"`
+	OwnerRef            string `json:"owner_ref,omitempty"`
+	RecoveryRef         string `json:"recovery_ref,omitempty"`
+	HeldVersionID       string `json:"held_version_id,omitempty"`
+	AcceptedRevision    string `json:"accepted_revision,omitempty"`
+	PublishedRevision   string `json:"published_revision,omitempty"`
+	DetailRef           string `json:"detail_ref"`
+	ApprovalRef         string `json:"approval_ref,omitempty"`
+}
+
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.
 type CommandInvokeContext struct {
 	RootID           string `json:"root_id,omitempty"`
@@ -1317,6 +1354,46 @@ type CommandInvokeResponse struct {
 	// Tool result text for completed MCP tool calls.
 	Output string              `json:"output,omitempty"`
 	Error  *CommandInvokeError `json:"error,omitempty"`
+}
+
+// CommandProgramNode
+type CommandProgramNode struct {
+	ID           string `json:"id"`
+	SourceUnitID string `json:"source_unit_id"`
+	StartByte    int64  `json:"start_byte"`
+	EndByte      int64  `json:"end_byte"`
+	Line         int    `json:"line"`
+	Column       int    `json:"column"`
+	State        string `json:"state"`
+}
+
+// CommandProgramReceipt
+type CommandProgramReceipt struct {
+	ID              string     `json:"id"`
+	ParentReceiptID string     `json:"parent_receipt_id"`
+	LanguageVersion int        `json:"language_version"`
+	CatalogDigest   string     `json:"catalog_digest"`
+	SourceDigest    string     `json:"source_digest"`
+	SourceRef       string     `json:"source_ref"`
+	State           string     `json:"state"`
+	StatusCode      *int       `json:"status_code,omitempty"`
+	StopCode        string     `json:"stop_code,omitempty"`
+	DetailRef       string     `json:"detail_ref"`
+	ProgressState   string     `json:"progress_state"`
+	ProgressRef     string     `json:"progress_ref,omitempty"`
+	StartedAt       time.Time  `json:"started_at"`
+	SettledAt       *time.Time `json:"settled_at,omitempty"`
+}
+
+// CommandProgramReceiptPage
+type CommandProgramReceiptPage struct {
+	Program    CommandProgramReceipt     `json:"program"`
+	Executions []CommandExecutionReceipt `json:"executions"`
+	// Known static nodes only; never speculative future loop iterations.
+	Nodes             []CommandProgramNode `json:"nodes"`
+	ExecutionsOmitted int                  `json:"executions_omitted"`
+	NodesOmitted      int                  `json:"nodes_omitted"`
+	NextCursor        string               `json:"next_cursor,omitempty"`
 }
 
 // CommandUIEffect Closed typed UI effect returned by host-validated presentation actions.

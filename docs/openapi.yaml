@@ -566,6 +566,48 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipts/{program_id}:
+    get:
+      tags:
+        - sessions
+      operationId: getCommandProgramReceipt
+      summary: Inspect bounded program and host child receipts
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: program_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Durable program facts and one bounded child page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandProgramReceiptPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/sessions/{id}/invocations:
     get:
       tags:
@@ -28961,6 +29003,238 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next search page; absent when the search reached the end of the content.
+    CommandProgramReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - parent_receipt_id
+        - language_version
+        - catalog_digest
+        - source_digest
+        - source_ref
+        - state
+        - progress_state
+        - detail_ref
+        - started_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_receipt_id:
+          type: string
+          format: uuid
+        language_version:
+          type: integer
+        catalog_digest:
+          type: string
+        source_digest:
+          type: string
+        source_ref:
+          type: string
+        state:
+          type: string
+          enum:
+            - running
+            - waiting
+            - completed
+            - rejected
+            - failed
+            - interrupted
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        detail_ref:
+          type: string
+        progress_state:
+          type: string
+          enum:
+            - unchanged
+            - committed
+            - rejected
+            - unknown
+        progress_ref:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        settled_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+    CommandExecutionReceipt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Host dynamic execution. It has no assistant message or model tool-call identity.
+      required:
+        - id
+        - program_id
+        - node_id
+        - parent_execution_id
+        - owner
+        - lifecycle
+        - definition_digest
+        - arguments_digest
+        - arguments_ref
+        - command
+        - state
+        - owner_started
+        - owner_invoked
+        - effect_certainty
+        - complete
+        - publication_eligible
+        - output_publishable
+        - detail_ref
+      properties:
+        id:
+          type: string
+          format: uuid
+        program_id:
+          type: string
+          format: uuid
+        node_id:
+          type: string
+        parent_execution_id:
+          type: string
+          format: uuid
+        owner:
+          type: string
+        lifecycle:
+          type: string
+        definition_digest:
+          type: string
+        arguments_digest:
+          type: string
+        reviewed_arguments_digest:
+          type: string
+        arguments_ref:
+          type: string
+        command:
+          type: string
+          description: Compact display only. Not authority or replay input.
+        state:
+          type: string
+          enum:
+            - prepared
+            - waiting
+            - running
+            - completed
+            - refused
+            - failed
+            - interrupted
+        owner_started:
+          type: boolean
+          description: Durable before-owner marker; host loss can precede actual invocation.
+        owner_invoked:
+          type: boolean
+          description: Actual invocation observed by the admission caller. Absence after a start marker is unknown.
+        status_code:
+          type: integer
+          minimum: 0
+          maximum: 255
+          x-go-pointer: true
+        stop_code:
+          type: string
+        host_stop_code:
+          type: string
+        complete:
+          type: boolean
+        publication_eligible:
+          type: boolean
+        output_publishable:
+          type: boolean
+        effect_certainty:
+          type: string
+          enum:
+            - none
+            - completed
+            - attempted
+            - unknown
+        evidence_kind:
+          type: string
+        evidence_ref:
+          type: string
+        owner_ref:
+          type: string
+        recovery_ref:
+          type: string
+        held_version_id:
+          type: string
+        accepted_revision:
+          type: string
+        published_revision:
+          type: string
+        detail_ref:
+          type: string
+        approval_ref:
+          type: string
+    CommandProgramNode:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source_unit_id
+        - start_byte
+        - end_byte
+        - line
+        - column
+        - state
+      properties:
+        id:
+          type: string
+        source_unit_id:
+          type: string
+        start_byte:
+          type: integer
+          format: int64
+        end_byte:
+          type: integer
+          format: int64
+        line:
+          type: integer
+        column:
+          type: integer
+        state:
+          type: string
+          enum:
+            - not_started
+            - reached
+            - untaken
+    CommandProgramReceiptPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - program
+        - executions
+        - nodes
+        - executions_omitted
+        - nodes_omitted
+      properties:
+        program:
+          $ref: '#/components/schemas/CommandProgramReceipt'
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandExecutionReceipt'
+        nodes:
+          type: array
+          description: Known static nodes only; never speculative future loop iterations.
+          items:
+            $ref: '#/components/schemas/CommandProgramNode'
+        executions_omitted:
+          type: integer
+        nodes_omitted:
+          type: integer
+        next_cursor:
+          type: string
     InvocationReceiptList:
       x-go-generate: true
       type: object

@@ -27,18 +27,19 @@ type ProgramNode struct {
 // ProgramStart retains a validated plan and exact source before child admission.
 // PlanReference and SourceReference name screened durable bodies, not inline text.
 type ProgramStart struct {
-	Version       ProgramVersion
-	PlanReference string
-	SourceExact   bool
-	Sources       []ProgramSource
-	Nodes         []ProgramNode
+	Version         ProgramVersion
+	PlanReference   string
+	SourceExact     bool
+	SyntaxValidated bool
+	Sources         []ProgramSource
+	Nodes           []ProgramNode
 }
 
 func (s ProgramStart) validate() error {
 	if err := s.Version.Validate(); err != nil {
 		return err
 	}
-	if s.PlanReference == "" || len(s.Sources) == 0 || len(s.Nodes) == 0 {
+	if len(s.Sources) == 0 || (s.SyntaxValidated && s.PlanReference == "") || (!s.SyntaxValidated && (s.PlanReference != "" || len(s.Nodes) != 0)) {
 		return fmt.Errorf("program requires retained plan, source and static nodes")
 	}
 	sources := make(map[string]toolcontract.SourcePin, len(s.Sources))
@@ -92,7 +93,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
 		return fmt.Errorf("program parent is not running")
 	}
 	v := in.Version
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,state,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,'running',?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("begin program: %w", err)
 	}
@@ -135,7 +136,7 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ArgumentsDigest, in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ArgumentsDigest, in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("prepare program child: %w", err)
 	}
@@ -151,7 +152,7 @@ func validateChildParent(ctx context.Context, tx *sql.Tx, in ChildStart) error {
 	var start, end int64
 	var line, column int
 	id := in.Invocation.Identity
-	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=?`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column)
+	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column)
 	if err != nil {
 		return fmt.Errorf("child program identity: %w", err)
 	}

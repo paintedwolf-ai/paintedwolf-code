@@ -114,6 +114,7 @@ var (
 	operationGetChatContent                     = generatedOperation{ID: "getChatContent", Method: "GET", Path: "/v1/sessions/{id}/messages/{message_id}/content", Params: []string{"id", "message_id"}}
 	operationGetChatVault                       = generatedOperation{ID: "getChatVault", Method: "GET", Path: "/v1/sessions/{id}/vault", Params: []string{"id"}}
 	operationGetCodeScan                        = generatedOperation{ID: "getCodeScan", Method: "GET", Path: "/v1/projects/{id}/scans/{scan_id}", Params: []string{"id", "scan_id"}}
+	operationGetCommandProgramReceipt           = generatedOperation{ID: "getCommandProgramReceipt", Method: "GET", Path: "/v1/sessions/{id}/program-receipts/{program_id}", Params: []string{"id", "program_id"}}
 	operationGetContributions                   = generatedOperation{ID: "getContributions", Method: "GET", Path: "/v1/contributions"}
 	operationGetCoordinatorContext              = generatedOperation{ID: "getCoordinatorContext", Method: "GET", Path: "/v1/sessions/{id}/coordinator-context", Params: []string{"id"}}
 	operationGetCostSummary                     = generatedOperation{ID: "getCostSummary", Method: "GET", Path: "/v1/cost/summary"}
@@ -449,6 +450,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetChatContent,
 	operationGetChatVault,
 	operationGetCodeScan,
+	operationGetCommandProgramReceipt,
 	operationGetContributions,
 	operationGetCoordinatorContext,
 	operationGetCostSummary,
