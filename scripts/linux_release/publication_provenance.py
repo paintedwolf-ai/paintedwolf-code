@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 ARTIFACT = "linux-final-admission-inputs"
+RAW_ARTIFACT = "linux-installed-raw-campaign"
 WORKFLOW = ".github/workflows/release.yml"
 
 
@@ -28,6 +29,16 @@ def controller_context(environment) -> dict:
 
 
 def select(api, repository: str, repository_id: int, run_id: int) -> dict:
+    """Select the retained final campaign from its independently completed controller."""
+    return _select(api, repository, repository_id, run_id, ARTIFACT)
+
+
+def select_qualification(api, repository: str, repository_id: int, run_id: int) -> dict:
+    """Select actual guest observations separately from the retained final campaign."""
+    return _select(api, repository, repository_id, run_id, RAW_ARTIFACT)
+
+
+def _select(api, repository: str, repository_id: int, run_id: int, artifact_name: str) -> dict:
     """Read server-owned provenance before downloading or interpreting campaign data."""
     if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
             or type(repository_id) is not int or repository_id < 1
@@ -53,7 +64,7 @@ def select(api, repository: str, repository_id: int, run_id: int) -> dict:
         rows = response.get("artifacts")
         if not isinstance(rows, list) or len(rows) > 100:
             raise ValueError("invalid controller artifact inventory")
-        matches.extend(row for row in rows if row.get("name") == ARTIFACT)
+        matches.extend(row for row in rows if row.get("name") == artifact_name)
         if len(rows) < 100:
             break
         if page >= 100:

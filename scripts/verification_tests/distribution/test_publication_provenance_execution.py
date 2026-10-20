@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from linux_release.publication_provenance import select, verify_producer
+from linux_release.publication_provenance import select, select_qualification, verify_producer
 
 
 class PublicationProvenanceTests(unittest.TestCase):
@@ -68,3 +68,15 @@ class PublicationProvenanceTests(unittest.TestCase):
             return {"artifacts": first if path.endswith("page=1") else [copy.deepcopy(artifact)]}
         with self.assertRaisesRegex(ValueError, "exactly one"):
             select(api, "owner/repo", 42, 123)
+
+    def test_raw_qualification_and_retained_campaign_are_independent_artifact_roles(self):
+        run, final = self.fixture()
+        raw = {**final, "id": 789, "name": "linux-installed-raw-campaign"}
+        def api(path):
+            return run if path.endswith("/runs/123") else {"artifacts": [final, raw]}
+        self.assertEqual(select(api, "owner/repo", 42, 123)["artifact_id"], 456)
+        self.assertEqual(select_qualification(api, "owner/repo", 42, 123)["artifact_id"], 789)
+        def missing(path):
+            return run if path.endswith("/runs/123") else {"artifacts": [final]}
+        with self.assertRaises(ValueError):
+            select_qualification(missing, "owner/repo", 42, 123)
