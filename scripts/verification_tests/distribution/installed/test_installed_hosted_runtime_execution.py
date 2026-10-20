@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release import hosted_installed as runtime
+from linux_release import hosted_bootstrap as supervisor
 from linux_release import hosted_installed_plan as plan
 
 
@@ -44,6 +45,56 @@ class HostedSelectionTests(unittest.TestCase):
 
 
 class HostedRuntimeCustodyTests(unittest.TestCase):
+    def test_complete_preparation_freeze_and_retention_refuse_partial_before_effects(self):
+        partial = {**selected(), 'partial': True}
+        with patch.object(runtime, 'context') as context:
+            for operation, arguments in ((runtime.prepare, (partial, Path('/controller'), Path('/candidate'), {})),
+                    (runtime.freeze, (partial, Path('/controller'), {})),
+                    (runtime.retain, (partial, Path('/controller'), {}, Path('/output')))):
+                with self.subTest(operation=operation.__name__), self.assertRaises(ValueError):
+                    operation(*arguments)
+            context.assert_not_called()
+
+    def test_snapshot_freeze_is_independent_preleaf_preparation_and_cannot_be_reused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / 'home'
+            original = home / 'native-bootstrap'
+            original.mkdir(parents=True, mode=0o700)
+            custody = root / 'custody'
+            custody.mkdir()
+            request = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': '1' * 40,
+                'driver_tree': 'b' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline'}
+            contract = {**request, 'controller_commit': 'a' * 40, 'bootstrap_frozen': False,
+                'snapshot': None, 'bootstrap_output': str(original)}
+            import json, os
+            (custody / 'contract.json').write_text(json.dumps(contract))
+            (custody / 'execution-request.json').write_text(json.dumps(request))
+            (custody / 'final-artifacts.json').write_text('{}')
+            snapshot = {'kind': 'package-inventory', 'value': 'd' * 64, 'channel': None}
+            from linux_release.installed_cases import native_bootstrap
+            with patch.object(runtime, 'ROOT', custody), \
+                    patch.object(runtime, 'context', return_value=SimpleNamespace(pw_dir=str(home), pw_uid=os.getuid())), \
+                    patch.object(runtime, 'artifacts', return_value={'app': {'id': 'app'}}), \
+                    patch.object(runtime, 'retain_tree') as retain, \
+                    patch.object(supervisor, 'verify', return_value={}), \
+                    patch.object(native_bootstrap, 'verify', return_value={'snapshot': snapshot}) as verify:
+                result = runtime.freeze(selected(), Path('/controller'), {})
+                self.assertEqual(result['snapshot'], snapshot)
+                self.assertTrue(result['bootstrap_frozen'])
+                verify.assert_called_once_with(custody / 'bootstrap', request, {'id': 'app'})
+                self.assertEqual(retain.call_args.args[:2], (original, custody / 'bootstrap'))
+                with self.assertRaises(ValueError):
+                    runtime.freeze(selected(), Path('/controller'), {})
+                (custody / 'contract.json').write_text(json.dumps(contract))
+                def mutate(*_):
+                    (custody / 'contract.json').write_text(json.dumps({**contract, 'source_commit': 'f' * 40}))
+                    return {'snapshot': snapshot}
+                verify.side_effect = mutate
+                with self.assertRaises(ValueError):
+                    runtime.freeze(selected(), Path('/controller'), {})
+                self.assertEqual(json.loads((custody / 'contract.json').read_text())['source_commit'], 'f' * 40)
+
     def test_existing_runtime_refuses_before_package_or_system_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'existing'

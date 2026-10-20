@@ -111,7 +111,7 @@ def gnome_owner() -> dict:
             "device": image.st_dev, "inode": image.st_ino}
 
 
-def package_inventory(installation: str) -> dict:
+def package_inventory_arguments(installation: str) -> list[str]:
     if installation == "deb":
         command = ["dpkg-query", "-W", "-f=${binary:Package}\t${Version}\n"]
     elif installation == "rpm":
@@ -120,7 +120,11 @@ def package_inventory(installation: str) -> dict:
         command = ["pacman", "-Q"]
     else:
         command = ["nix-store", "--query", "--requisites", "/run/current-system"]
-    return query(command)
+    return command
+
+
+def package_inventory(installation: str) -> dict:
+    return query(package_inventory_arguments(installation))
 
 
 def collect(environment: dict, binding: dict, guest: dict, display_protocol: str) -> tuple[dict, dict]:

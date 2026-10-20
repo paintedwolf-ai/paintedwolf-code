@@ -101,7 +101,7 @@ jobs:
             --output "$RUNNER_TEMP/installed-desktop/facts.json"
       - id: prepare
         if: needs.select.outputs.partial == 'false'
-        name: Install the selected package and bind the fresh execution
+        name: Stage the selected package and bind the fresh execution
         working-directory: controller
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
@@ -109,6 +109,22 @@ jobs:
             --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
             --candidate "$RUNNER_TEMP/installed-candidate"
+      - name: Observe package-only bootstrap and restore product absence
+        working-directory: controller
+        if: needs.select.outputs.partial == 'false'
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime bootstrap \
+            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
+      - name: Freeze the independent postinstall snapshot before qualification
+        if: needs.select.outputs.partial == 'false'
+        working-directory: controller
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime freeze \
+            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
       - id: diagnostic-prepare
         if: needs.select.outputs.partial == 'true'
         name: Stage partial bytes without pre-installing the application
