@@ -15,8 +15,7 @@ import (
 // ProgramFeedbackLedger supplies immutable receipt provenance and actual effect
 // observations. This projection grants no operation or source-read authority.
 type ProgramFeedbackLedger interface {
-	ProjectProgram(context.Context, string, string, int) (invocation.ProgramProjection, error)
-	ReadProgramExecutionBinding(context.Context, string, string) (invocation.ProgramExecutionBinding, error)
+	ReadProgramFeedback(context.Context, string, string, string, int, invocation.ProgramFeedbackAdmission) (*invocation.ProgramFeedbackLease, error)
 }
 
 // PreparedProgramFailure keeps supplemental feedback charged until the caller
@@ -58,7 +57,9 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
 		}
 	}
-	release, err := memory.ReserveProgramState(ctx, int64(256<<10)+int64(len(rejected.Data))*128)
+	// This reservation covers our bounded supplemental facts and shallow owner
+	// detail map. SQL metadata has its own measured reservation below.
+	release, err := memory.ReserveProgramState(ctx, int64(128<<10)+int64(len(rejected.Data))*128)
 	if err != nil {
 		return nil, err
 	}
@@ -70,15 +71,20 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			release()
 		}
 	}()
-	binding, err := ledger.ReadProgramExecutionBinding(ctx, inv.SessionID, inv.Identity.ExecutionID)
+	retained, err := ledger.ReadProgramFeedback(ctx, inv.SessionID, inv.Identity.ProgramID, inv.Identity.ExecutionID, 2, memory)
 	if err != nil {
 		return nil, err
 	}
-	projection, err := ledger.ProjectProgram(ctx, inv.SessionID, inv.Identity.ProgramID, 2)
-	if err != nil {
-		return nil, err
+	if retained == nil {
+		return nil, fmt.Errorf("program feedback ledger returned no retained snapshot")
 	}
-	if err = validateProgramFeedbackBinding(tc, operation, binding, projection); err != nil {
+	defer func() {
+		if prepared == nil {
+			retained.Close()
+		}
+	}()
+	projection := retained.Projection
+	if err = validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
 		return nil, err
 	}
 	facts, err := programOutcomeFacts(projection)
@@ -102,7 +108,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	clone.Data["source_unit_id"] = inv.SourceUnitID
 	clone.Data["source_start_byte"], clone.Data["source_end_byte"] = inv.Span.StartByte, inv.Span.EndByte
 	clone.Data["source_line"], clone.Data["source_column"] = inv.Span.Line, inv.Span.Column
-	return &PreparedProgramFailure{Rejection: &clone, release: release}, nil
+	return &PreparedProgramFailure{Rejection: &clone, release: func() { retained.Close(); release() }}, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

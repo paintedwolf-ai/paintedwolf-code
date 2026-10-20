@@ -39,7 +39,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tc, denied, cause)
 	testutil.FailErr(t, "prepare actual ledger feedback", err)
 	defer prepared.Close()
-	if memory.active != 1 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
+	if memory.active != 3 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
 		t.Fatal("preparation changed owner code or lost lease")
 	}
 	data := prepared.Rejection.Data
