@@ -181,4 +181,3 @@ func (m *Manifest) Lookup(path string) (Executable, bool) {
 	}
 	return Executable{}, false
 }
-
