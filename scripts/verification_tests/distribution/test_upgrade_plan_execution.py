@@ -1,5 +1,4 @@
 """Upgrade paths preserve channel and advance through authenticated bridges."""
-import copy
 import unittest
 from unittest.mock import patch
 
@@ -70,3 +69,46 @@ class UpgradePlanTests(unittest.TestCase):
         for feeds in ([bad], [snapshot("stable", manifest("1.0.0"))] * 2):
             with self.assertRaises(ValueError):
                 plan(manifest("1.1.0"), self.registry, feeds)
+
+
+class FeedCaptureTests(unittest.TestCase):
+    def test_capture_authenticates_original_bytes_and_channel_binding(self):
+        import hashlib
+        from pathlib import Path
+        import tempfile
+        import release_upgrade_feeds as feeds
+        raw = b'{"version":"1.0.1"}'
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(feeds, "read_bytes", side_effect=[raw, b"signed"]), \
+             patch.object(feeds, "validate_binding"), \
+             patch.object(feeds, "generation", return_value={"feed_public_key": "public"}), \
+             patch.object(feeds.feed_signature, "check") as binding, \
+             patch.object(feeds.feed_signing, "verify") as verify, \
+             patch.object(feeds.subprocess, "run"):
+            result = feeds.capture(feeds.ORIGIN, "preview", 1, {}, Path(temporary))
+            binding.assert_called_once_with("signed", file="latest-preview-key-1.json", version="1.0.1", number=1, registry={})
+            pointer = verify.call_args.args[0]
+            self.assertEqual(pointer.read_bytes(), raw)
+            self.assertEqual(result["manifest_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertEqual((Path(temporary) / (result["path"] + ".sig")).read_bytes(), b"signed")
+
+    def test_missing_signature_and_invalid_signature_fail_closed(self):
+        from pathlib import Path
+        import tempfile
+        import release_upgrade_feeds as feeds
+        for signature in (None, b"invalid"):
+            with self.subTest(signature=signature), tempfile.TemporaryDirectory() as temporary, \
+                 patch.object(feeds, "read_bytes", side_effect=[b'{"version":"1.0.1"}', signature]), \
+                 patch.object(feeds, "validate_binding"), \
+                 patch.object(feeds.feed_signature, "check", side_effect=ValueError("signature rejected")):
+                with self.assertRaises(ValueError):
+                    feeds.capture(feeds.ORIGIN, "stable", 1, {}, Path(temporary))
+
+    def test_missing_pointer_is_the_only_optional_network_outcome(self):
+        from pathlib import Path
+        import release_upgrade_feeds as feeds
+        with patch.object(feeds, "read_bytes", return_value=None):
+            self.assertIsNone(feeds.capture(feeds.ORIGIN, "stable", 1, {}, Path("unused")))
+        with patch.object(feeds, "read_bytes", side_effect=TimeoutError("origin unavailable")):
+            with self.assertRaises(TimeoutError):
+                feeds.capture(feeds.ORIGIN, "stable", 1, {}, Path("unused"))

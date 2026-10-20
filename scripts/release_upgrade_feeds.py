@@ -54,7 +54,7 @@ def capture(base: str, channel: str, number: int, registry: dict, destination: P
     path.write_bytes(raw)
     path.with_suffix(".json.sig").write_bytes(signature)
     document = signature.decode("utf-8")
-    feed_signature.check(document, file="latest.json", version=manifest["version"], number=number, registry=registry)
+    feed_signature.check(document, file=f"latest-{channel}-key-{number}.json", version=manifest["version"], number=number, registry=registry)
     feed_signing.verify(path, document, generation(registry, number)["feed_public_key"])
     subprocess.run(["bash", str(ROOT / "scripts/release-validate-updater-manifest.sh"),
                     "--file", str(path), "--existing"],
