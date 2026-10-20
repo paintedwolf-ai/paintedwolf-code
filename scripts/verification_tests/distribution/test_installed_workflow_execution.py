@@ -49,6 +49,11 @@ class InstalledWorkflowTests(unittest.TestCase):
             self.assertEqual(calls[-1][:2], ('POST', '/v1/sessions/' + session_id + '/abort'))
             self.assertEqual(calls[0][2]['kind'], 'openai-compatible')
             self.assertFalse(calls[0][2]['requires_api_key'])
+            capabilities = calls[0][2]['models'][0]['capabilities']
+            self.assertEqual(set(capabilities), {'chat', 'streaming', 'tools', 'vision',
+                                                'reasoning', 'structured_output', 'prompt_caching'})
+            self.assertEqual(capabilities['chat']['state'], 'supported')
+            self.assertEqual(capabilities['tools']['state'], 'supported')
 
     def test_completed_prose_or_uninvoked_receipt_cannot_establish_execution(self):
         self.assertFalse(successful_invocation([{'tool': 'command', 'content': 'completed'}]))

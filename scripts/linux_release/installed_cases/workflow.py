@@ -34,7 +34,12 @@ class ToolTurn:
         accepted(self.app, 'POST', '/v1/providers', {
             'id': provider_id, 'kind': 'openai-compatible',
             'base_url': self.provider.base_url, 'requires_api_key': False,
-            'models': [{'id': MODEL, 'context_length': 131072}]}, {201})
+            'models': [{'id': MODEL, 'context_length': 131072,
+                        'capabilities': {name: {'state': 'supported' if name in
+                            {'chat', 'streaming', 'tools'} else 'unsupported',
+                            'sources': ['installed-fixture']} for name in
+                            ('chat', 'streaming', 'tools', 'vision', 'reasoning',
+                             'structured_output', 'prompt_caching')}}]}, {201})
         project = accepted(self.app, 'POST', '/v1/projects', {
             'name': 'Installed qualification', 'roots': [{'path': str(self.project), 'is_primary': True}]}, {201})
         project_id = identity(project)
