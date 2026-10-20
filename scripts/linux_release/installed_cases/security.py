@@ -14,6 +14,7 @@ import time
 
 from ..installed_runtime import unchanged
 from .app import InstalledApp
+from .logind_context import execution_session
 from .ipc import system_v_isolation
 from .lifecycle import background_cancel
 from .crash import detached_cleanup, host_execution_lifetime
@@ -56,23 +57,6 @@ def inhibitors() -> list:
            or any(type(value) is not int or value < 0 for value in row[4:]) for row in rows):
         raise ValueError('logind inhibitor row has an invalid typed shape')
     return rows
-
-
-def execution_session() -> dict:
-    pid = os.getpid()
-    paths = bus_value(['call', 'org.freedesktop.login1', '/org/freedesktop/login1',
-                       'org.freedesktop.login1.Manager', 'GetSessionByPID', 'u', str(pid)], 'o')
-    if len(paths) != 1 or not isinstance(paths[0], str) or not paths[0].startswith('/org/freedesktop/login1/session/'):
-        raise ValueError('native execution has an invalid logind session path')
-    result = {'pid': pid, 'session_object': paths[0]}
-    for name, kind in [('Remote', 'b'), ('Active', 'b'), ('Type', 's')]:
-        row = json.loads(observe(['busctl', '--system', '--json=short', 'get-property',
-                                 'org.freedesktop.login1', paths[0], 'org.freedesktop.login1.Session', name]))
-        expected = bool if kind == 'b' else str
-        if not isinstance(row, dict) or row.get('type') != kind or type(row.get('data')) is not expected:
-            raise ValueError('native execution has an invalid typed logind property')
-        result[name] = row['data']
-    return result
 
 
 def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
