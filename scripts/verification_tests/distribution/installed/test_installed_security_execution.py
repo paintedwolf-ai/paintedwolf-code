@@ -95,7 +95,7 @@ class InstalledSecurityTests(unittest.TestCase):
 
     def test_unsupported_cases_remain_unverified_and_boolean_schema_is_refused(self):
         with patch.object(security, 'require_owned_guest'), patch.object(security, 'retain', side_effect=lambda *args: args):
-            result = security.execute({'case_inputs': {}}, 'confinement', 'helper-boundary-and-descendants', Path('/unused'))
+            result = security.execute({'case_inputs': {}}, 'confinement', 'unsupported-fixture-case', Path('/unused'))
             self.assertEqual(result[4], 'unverified')
             with self.assertRaises(ValueError):
                 security.execute({'case_inputs': {'security': {'format_version': True}}},
