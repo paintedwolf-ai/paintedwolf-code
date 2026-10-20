@@ -1,0 +1,63 @@
+"""Bind native input to the selected focused entry and its actual owned active frame."""
+from __future__ import annotations
+
+from ..installed_cases.app import process_identity
+from ..installed_cases.desktop_ui import owned_process
+from ..installed_cases.records import CaseFailed, CaseUnavailable
+from .protocol import focus
+
+
+class EntryFocus:
+    def __init__(self, app, ui, label: str):
+        self.app, self.ui = app, ui
+        self.node = ui.find(ui.api.ROLE_ENTRY, label)
+        self.entry = process_identity(self.node.get_process_id())
+        self.launch = dict(app.observations['launch_identity'])
+        if self.node.queryComponent().grabFocus() is not True:
+            raise CaseUnavailable('normal-owned-editor-focus-refused')
+        self.observe()
+
+    def _stable(self, expected: dict):
+        try:
+            actual = process_identity(expected['pid'])
+        except (FileNotFoundError, ProcessLookupError):
+            error = CaseFailed('selected native input process disappeared before its required interaction')
+            error.observations = {'native_input_process': expected, 'process_present': False}
+            raise error from None
+        if actual != expected:
+            raise CaseFailed('selected native input process identity changed before its required interaction')
+
+    def observe(self) -> dict:
+        self.app.require_running()
+        self._stable(self.launch)
+        self._stable(self.entry)
+        node, ui = self.node, self.ui
+        if (not owned_process(self.entry['pid'], self.app) or not ui.visible(node)
+                or not node.getState().contains(ui.api.STATE_FOCUSED)):
+            raise CaseUnavailable('normal-owned-editor-focus-unavailable')
+        parent, seen, frame = node, set(), None
+        for _ in range(64):
+            parent = parent.get_parent()
+            if parent is None:
+                break
+            marker = hash(parent)
+            if marker in seen:
+                raise ValueError('native input accessible parent chain cycles')
+            seen.add(marker)
+            if parent.getRole() in {ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG}:
+                frame = parent
+                break
+        if frame is None:
+            raise CaseUnavailable('normal-owned-editor-container-unavailable')
+        frame_identity = process_identity(frame.get_process_id())
+        active, visible = frame.getState().contains(ui.api.STATE_ACTIVE), bool(ui.visible(frame))
+        if (frame_identity != self.launch or not owned_process(frame_identity['pid'], self.app)
+                or not active or not visible):
+            refusal = CaseUnavailable('normal-owned-editor-active-frame-unavailable')
+            refusal.observations = {'editor_focus': {'entry_identity': self.entry,
+                'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
+            raise refusal
+        self._stable(self.launch)
+        self._stable(self.entry)
+        return focus({'launch': self.launch, 'entry': self.entry, 'frame': frame_identity,
+                      'entry_focused': True, 'frame_active': True, 'frame_visible': True})
