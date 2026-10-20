@@ -1016,7 +1016,7 @@ tasks:
   nix:check:
     desc: Evaluate pinned Linux Nix package and development-shell contracts
     cmds:
-      - python3 -m scripts.linux_release.nix check
+      - python3 -m scripts.linux_release.nix check {{.CLI_ARGS}}
 
   nix:build:
     desc: Build the native Linux Nix closure from pinned inputs
