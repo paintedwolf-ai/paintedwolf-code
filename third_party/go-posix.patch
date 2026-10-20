@@ -1,598 +1,245 @@
 --- a/syntax/posix/parse.go
 +++ b/syntax/posix/parse.go
-@@ -5,6 +5,8 @@
- package syntax
- 
- import (
+@@ -7,0 +8,2 @@
 +	"github.com/dlclark/regexp2/v2/internal/budget"
 +	standard "regexp/syntax"
- 	"sort"
- 	"strings"
- 	"sync"
-@@ -53,7 +55,7 @@
- }
- 
- // Flags control the behavior of the parser and record information about regexp context.
+@@ -56 +58 @@
 -type Flags uint16
 +type Flags = standard.Flags
- 
- const (
- 	FoldCase      Flags = 1 << iota // case-insensitive match
-@@ -125,6 +127,7 @@
- )
- 
- type parser struct {
+@@ -127,0 +130 @@
 +	budget      *budget.Meter
- 	flags       Flags     // parse mode flags
- 	stack       []*Regexp // stack of parsed expressions
- 	free        *Regexp
-@@ -139,11 +142,14 @@
- }
- 
- func (p *parser) newRegexp(op Op) *Regexp {
+@@ -141,0 +145,2 @@
 +	p.budget.Step(1)
 +
- 	re := p.free
- 	if re != nil {
- 		p.free = re.Sub0[0]
- 		*re = Regexp{}
- 	} else {
+@@ -146,0 +152 @@
 +		p.budget.Alloc(256)
- 		re = new(Regexp)
- 		p.numRegexp++
- 	}
-@@ -152,6 +158,8 @@
- }
- 
- func (p *parser) reuse(re *Regexp) {
+@@ -154,0 +161,2 @@
 +	p.budget.Step(1)
 +
- 	if p.height != nil {
- 		delete(p.height, re)
- 	}
-@@ -160,6 +168,8 @@
- }
- 
- func (p *parser) checkLimits(re *Regexp) {
+@@ -162,0 +171,2 @@
 +	p.budget.Step(1)
 +
- 	if p.numRunes > maxRunes {
- 		panic(ErrLarge)
- 	}
-@@ -168,6 +178,8 @@
- }
- 
- func (p *parser) checkSize(re *Regexp) {
+@@ -170,0 +181,2 @@
 +	p.budget.Step(1)
 +
- 	if p.size == nil {
- 		// We haven't started tracking size yet.
- 		// Do a relatively cheap check to see if we need to start.
-@@ -198,8 +210,11 @@
- 		// We need to start tracking size.
- 		// Make the map and belatedly populate it
- 		// with info about everything we've constructed so far.
+@@ -200,0 +213 @@
 +		p.budget.Alloc(256)
- 		p.size = make(map[*Regexp]int64)
- 		for _, re := range p.stack {
+@@ -202,0 +216,2 @@
 +			p.budget.Step(1)
 +
- 			p.checkSize(re)
- 		}
- 	}
-@@ -210,6 +225,8 @@
- }
- 
- func (p *parser) calcSize(re *Regexp, force bool) int64 {
+@@ -212,0 +228,2 @@
 +	p.budget.Step(1)
 +
- 	if !force {
- 		if size, ok := p.size[re]; ok {
- 			return size
-@@ -227,10 +244,14 @@
- 		size = 1 + p.calcSize(re.Sub[0], false)
- 	case OpConcat:
- 		for _, sub := range re.Sub {
+@@ -229,0 +247,2 @@
 +			p.budget.Step(1)
 +
- 			size += p.calcSize(sub, false)
- 		}
- 	case OpAlternate:
- 		for _, sub := range re.Sub {
+@@ -233,0 +253,2 @@
 +			p.budget.Step(1)
 +
- 			size += p.calcSize(sub, false)
- 		}
- 		if len(re.Sub) > 1 {
-@@ -251,17 +272,23 @@
- 	}
- 
- 	size = max(1, size)
+@@ -253,0 +275 @@
 +	p.budget.Alloc(128)
- 	p.size[re] = size
- 	return size
- }
- 
- func (p *parser) checkHeight(re *Regexp) {
+@@ -258,0 +281,2 @@
 +	p.budget.Step(1)
 +
- 	if p.numRegexp < maxHeight {
- 		return
- 	}
- 	if p.height == nil {
+@@ -262,0 +287 @@
 +		p.budget.Alloc(256)
- 		p.height = make(map[*Regexp]int)
- 		for _, re := range p.stack {
+@@ -264,0 +290,2 @@
 +			p.budget.Step(1)
 +
- 			p.checkHeight(re)
- 		}
- 	}
-@@ -271,6 +298,8 @@
- }
- 
- func (p *parser) calcHeight(re *Regexp, force bool) int {
+@@ -273,0 +301,2 @@
 +	p.budget.Step(1)
 +
- 	if !force {
- 		if h, ok := p.height[re]; ok {
- 			return h
-@@ -278,11 +307,14 @@
- 	}
- 	h := 1
- 	for _, sub := range re.Sub {
+@@ -280,0 +310,2 @@
 +		p.budget.Step(1)
 +
- 		hsub := p.calcHeight(sub, false)
- 		if h < 1+hsub {
- 			h = 1 + hsub
- 		}
- 	}
+@@ -285,0 +317 @@
 +	p.budget.Alloc(128)
- 	p.height[re] = h
- 	return h
- }
-@@ -291,6 +323,8 @@
- 
- // push pushes the regexp re onto the parse stack and returns the regexp.
- func (p *parser) push(re *Regexp) *Regexp {
+@@ -293,0 +326,2 @@
 +	p.budget.Step(1)
 +
- 	p.numRunes += len(re.Rune)
- 	if re.Op == OpCharClass && len(re.Rune) == 2 && re.Rune[0] == re.Rune[1] {
- 		// Single rune.
-@@ -322,7 +356,7 @@
- 		p.maybeConcat(-1, 0)
- 	}
- 
+@@ -325 +359 @@
 -	p.stack = append(p.stack, re)
 +	p.stack = appendMetered(p.budget, p.stack, re)
- 	p.checkLimits(re)
- 	return re
- }
-@@ -337,6 +371,8 @@
- // to push r with the given flags.
- // maybeConcat reports whether r was pushed.
- func (p *parser) maybeConcat(r rune, flags Flags) bool {
+@@ -339,0 +374,2 @@
 +	p.budget.Step(1)
 +
- 	n := len(p.stack)
- 	if n < 2 {
- 		return false
-@@ -349,7 +385,7 @@
- 	}
- 
- 	// Push re1 into re2.
+@@ -352 +388 @@
 -	re2.Rune = append(re2.Rune, re1.Rune...)
 +	re2.Rune = appendMetered(p.budget, re2.Rune, re1.Rune...)
- 
- 	// Reuse re1 if possible.
- 	if r >= 0 {
-@@ -366,10 +402,12 @@
- 
- // literal pushes a literal regexp for the rune r on the stack.
- func (p *parser) literal(r rune) {
+@@ -368,0 +405,2 @@
 +	p.budget.Step(1)
 +
- 	re := p.newRegexp(OpLiteral)
- 	re.Flags = p.flags
- 	if p.flags&FoldCase != 0 {
+@@ -372 +410 @@
 -		r = minFoldRune(r)
 +		r = minFoldRune(r, p.budget)
- 	}
- 	re.Rune0[0] = r
- 	re.Rune = re.Rune0[:1]
-@@ -377,13 +415,17 @@
- }
- 
- // minFoldRune returns the minimum rune fold-equivalent to r.
+@@ -380 +418,3 @@
 -func minFoldRune(r rune) rune {
 +func minFoldRune(r rune, meter *budget.Meter) rune {
 +	meter.Step(1)
 +
- 	if r < minFold || r > maxFold {
- 		return r
- 	}
- 	m := r
- 	r0 := r
- 	for r = unicode.SimpleFold(r); r != r0; r = unicode.SimpleFold(r) {
+@@ -386,0 +427,2 @@
 +		meter.Step(1)
 +
- 		m = min(m, r)
- 	}
- 	return m
-@@ -392,6 +434,8 @@
- // op pushes a regexp with the given op onto the stack
- // and returns that regexp.
- func (p *parser) op(op Op) *Regexp {
+@@ -394,0 +437,2 @@
 +	p.budget.Step(1)
 +
- 	re := p.newRegexp(op)
- 	re.Flags = p.flags
- 	return p.push(re)
-@@ -402,6 +446,8 @@
- // after is the regexp suffix following after the repetition operator.
- // repeat returns an updated 'after' and an error, if any.
- func (p *parser) repeat(op Op, min, max int, before, after, lastRepeat string) (string, error) {
+@@ -404,0 +449,2 @@
 +	p.budget.Step(1)
 +
- 	flags := p.flags
- 	if p.flags&PerlX != 0 {
- 		if len(after) > 0 && after[0] == '?' {
-@@ -433,7 +479,7 @@
- 	p.stack[n-1] = re
- 	p.checkLimits(re)
- 
+@@ -436 +482 @@
 -	if op == OpRepeat && (min >= 2 || max >= 2) && !repeatIsValid(re, 1000) {
 +	if op == OpRepeat && (min >= 2 || max >= 2) && !repeatIsValid(re, 1000, p.budget) {
- 		return "", &Error{ErrInvalidRepeatSize, before[:len(before)-len(after)]}
- 	}
- 
-@@ -449,7 +495,9 @@
- // We avoid this by only calling repeatIsValid when min or max >= 2.
- // In that case the depth of any >= 2 nesting can only get to 9 without
- // triggering a parse error, so each subtree can only be rewalked 9 times.
+@@ -452 +498,3 @@
 -func repeatIsValid(re *Regexp, n int) bool {
 +func repeatIsValid(re *Regexp, n int, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	if re.Op == OpRepeat {
- 		m := re.Max
- 		if m == 0 {
-@@ -466,7 +514,9 @@
- 		}
- 	}
- 	for _, sub := range re.Sub {
+@@ -469 +517,3 @@
 -		if !repeatIsValid(sub, n) {
 +		m.Step(1)
 +
 +		if !repeatIsValid(sub, n, m) {
- 			return false
- 		}
- 	}
-@@ -475,11 +525,15 @@
- 
- // concat replaces the top of the stack (above the topmost '|' or '(') with its concatenation.
- func (p *parser) concat() *Regexp {
+@@ -477,0 +528,2 @@
 +	p.budget.Step(1)
 +
- 	p.maybeConcat(-1, 0)
- 
- 	// Scan down to find pseudo-operator | or (.
- 	i := len(p.stack)
- 	for i > 0 && p.stack[i-1].Op < opPseudo {
+@@ -482,0 +535,2 @@
 +		p.budget.Step(1)
 +
- 		i--
- 	}
- 	subs := p.stack[i:]
-@@ -495,10 +549,14 @@
- 
- // alternate replaces the top of the stack (above the topmost '(') with its alternation.
- func (p *parser) alternate() *Regexp {
+@@ -497,0 +552,2 @@
 +	p.budget.Step(1)
 +
- 	// Scan down to find pseudo-operator (.
- 	// There are no | above (.
- 	i := len(p.stack)
- 	for i > 0 && p.stack[i-1].Op < opPseudo {
+@@ -501,0 +558,2 @@
 +		p.budget.Step(1)
 +
- 		i--
- 	}
- 	subs := p.stack[i:]
-@@ -507,7 +565,7 @@
- 	// Make sure top class is clean.
- 	// All the others already are (see swapVerticalBar).
- 	if len(subs) > 0 {
+@@ -510 +568 @@
 -		cleanAlt(subs[len(subs)-1])
 +		cleanAlt(subs[len(subs)-1], p.budget)
- 	}
- 
- 	// Empty alternate is special case
-@@ -520,10 +578,12 @@
- }
- 
- // cleanAlt cleans re for eventual inclusion in an alternation.
+@@ -523 +581,3 @@
 -func cleanAlt(re *Regexp) {
 +func cleanAlt(re *Regexp, m *budget.Meter) {
 +	m.Step(1)
 +
- 	switch re.Op {
- 	case OpCharClass:
+@@ -526 +586 @@
 -		re.Rune = cleanClass(&re.Rune)
 +		re.Rune = cleanClass(&re.Rune, m)
- 		if len(re.Rune) == 2 && re.Rune[0] == 0 && re.Rune[1] == unicode.MaxRune {
- 			re.Rune = nil
- 			re.Op = OpAnyChar
-@@ -537,7 +597,7 @@
- 		if cap(re.Rune)-len(re.Rune) > 100 {
- 			// re.Rune will not grow any more.
- 			// Make a copy or inline to reclaim storage.
+@@ -540 +600 @@
 -			re.Rune = append(re.Rune0[:0], re.Rune...)
 +			re.Rune = appendMetered(m, re.Rune0[:0], re.Rune...)
- 		}
- 	}
- }
-@@ -547,17 +607,21 @@
- // so that there is never a concat of a concat or an
- // alternate of an alternate.
- func (p *parser) collapse(subs []*Regexp, op Op) *Regexp {
+@@ -549,0 +610,2 @@
 +	p.budget.Step(1)
 +
- 	if len(subs) == 1 {
- 		return subs[0]
- 	}
- 	re := p.newRegexp(op)
- 	re.Sub = re.Sub0[:0]
- 	for _, sub := range subs {
+@@ -555,0 +618,2 @@
 +		p.budget.Step(1)
 +
- 		if sub.Op == op {
+@@ -557 +621 @@
 -			re.Sub = append(re.Sub, sub.Sub...)
 +			re.Sub = appendMetered(p.budget, re.Sub, sub.Sub...)
- 			p.reuse(sub)
- 		} else {
+@@ -560 +624 @@
 -			re.Sub = append(re.Sub, sub)
 +			re.Sub = appendMetered(p.budget, re.Sub, sub)
- 		}
- 	}
- 	if op == OpAlternate {
-@@ -587,6 +651,8 @@
- //
- //	A(B[CD]|EF)|BC[XY]
- func (p *parser) factor(sub []*Regexp) []*Regexp {
+@@ -589,0 +654,2 @@
 +	p.budget.Step(1)
 +
- 	if len(sub) < 2 {
- 		return sub
- 	}
-@@ -597,6 +663,8 @@
- 	start := 0
- 	out := sub[:0]
- 	for i := 0; i <= len(sub); i++ {
+@@ -599,0 +666,2 @@
 +		p.budget.Step(1)
 +
- 		// Invariant: the Regexps that were in sub[0:start] have been
- 		// used or marked for reuse, and the slice space has been reused
- 		// for out (len(out) <= start).
-@@ -610,6 +678,8 @@
- 			if iflags == strflags {
- 				same := 0
- 				for same < len(str) && same < len(istr) && str[same] == istr[same] {
+@@ -612,0 +681,2 @@
 +					p.budget.Step(1)
 +
- 					same++
- 				}
- 				if same > 0 {
-@@ -630,22 +700,24 @@
- 			// Nothing to do - run of length 0.
- 		} else if i == start+1 {
- 			// Just one: don't bother factoring.
+@@ -633 +703 @@
 -			out = append(out, sub[start])
 +			out = appendMetered(p.budget, out, sub[start])
- 		} else {
- 			// Construct factored form: prefix(suffix1|suffix2|...)
- 			prefix := p.newRegexp(OpLiteral)
- 			prefix.Flags = strflags
+@@ -638 +708 @@
 -			prefix.Rune = append(prefix.Rune[:0], str...)
 +			prefix.Rune = appendMetered(p.budget, prefix.Rune[:0], str...)
- 
- 			for j := start; j < i; j++ {
+@@ -640,0 +711,2 @@
 +				p.budget.Step(1)
 +
- 				sub[j] = p.removeLeadingString(sub[j], len(str))
- 				p.checkLimits(sub[j])
- 			}
- 			suffix := p.collapse(sub[start:i], OpAlternate) // recurse
- 
- 			re := p.newRegexp(OpConcat)
+@@ -647,2 +719,2 @@
 -			re.Sub = append(re.Sub[:0], prefix, suffix)
 -			out = append(out, re)
 +			re.Sub = appendMetered(p.budget, re.Sub[:0], prefix, suffix)
 +			out = appendMetered(p.budget, out, re)
- 		}
- 
- 		// Prepare for next iteration.
-@@ -667,6 +739,8 @@
- 	out = sub[:0]
- 	var first *Regexp
- 	for i := 0; i <= len(sub); i++ {
+@@ -669,0 +742,2 @@
 +		p.budget.Step(1)
 +
- 		// Invariant: the Regexps that were in sub[0:start] have been
- 		// used or marked for reuse, and the slice space has been reused
- 		// for out (len(out) <= start).
-@@ -677,7 +751,7 @@
- 			ifirst = p.leadingRegexp(sub[i])
- 			if first != nil && first.Equal(ifirst) &&
- 				// first must be a character class OR a fixed repeat of a character class.
+@@ -678 +752 @@
+-			if first != nil && first.Equal(ifirst) &&
++			if first != nil && equalMetered(first, ifirst, p.budget) &&
+@@ -680 +754 @@
 -				(isCharClass(first) || (first.Op == OpRepeat && first.Min == first.Max && isCharClass(first.Sub[0]))) {
 +				(isCharClass(first, p.budget) || (first.Op == OpRepeat && first.Min == first.Max && isCharClass(first.Sub[0], p.budget))) {
- 				continue
- 			}
- 		}
-@@ -690,11 +764,13 @@
- 			// Nothing to do - run of length 0.
- 		} else if i == start+1 {
- 			// Just one: don't bother factoring.
+@@ -693 +767 @@
 -			out = append(out, sub[start])
 +			out = appendMetered(p.budget, out, sub[start])
- 		} else {
- 			// Construct factored form: prefix(suffix1|suffix2|...)
- 			prefix := first
- 			for j := start; j < i; j++ {
+@@ -697,0 +772,2 @@
 +				p.budget.Step(1)
 +
- 				reuse := j != start // prefix came from sub[start]
- 				sub[j] = p.removeLeadingRegexp(sub[j], reuse)
- 				p.checkLimits(sub[j])
-@@ -702,8 +778,8 @@
- 			suffix := p.collapse(sub[start:i], OpAlternate) // recurse
- 
- 			re := p.newRegexp(OpConcat)
+@@ -705,2 +781,2 @@
 -			re.Sub = append(re.Sub[:0], prefix, suffix)
 -			out = append(out, re)
 +			re.Sub = appendMetered(p.budget, re.Sub[:0], prefix, suffix)
 +			out = appendMetered(p.budget, out, re)
- 		}
- 
- 		// Prepare for next iteration.
-@@ -716,13 +792,15 @@
- 	start = 0
- 	out = sub[:0]
- 	for i := 0; i <= len(sub); i++ {
+@@ -718,0 +795,2 @@
 +		p.budget.Step(1)
 +
- 		// Invariant: the Regexps that were in sub[0:start] have been
- 		// used or marked for reuse, and the slice space has been reused
- 		// for out (len(out) <= start).
- 		//
- 		// Invariant: sub[start:i] consists of regexps that are either
- 		// literal runes or character classes.
+@@ -725 +803 @@
 -		if i < len(sub) && isCharClass(sub[i]) {
 +		if i < len(sub) && isCharClass(sub[i], p.budget) {
- 			continue
- 		}
- 
-@@ -731,12 +809,14 @@
- 		if i == start {
- 			// Nothing to do - run of length 0.
- 		} else if i == start+1 {
+@@ -734 +812 @@
 -			out = append(out, sub[start])
 +			out = appendMetered(p.budget, out, sub[start])
- 		} else {
- 			// Make new char class.
- 			// Start with most complex regexp in sub[start].
- 			max := start
- 			for j := start + 1; j < i; j++ {
+@@ -739,0 +818,2 @@
 +				p.budget.Step(1)
 +
- 				if sub[max].Op < sub[j].Op || sub[max].Op == sub[j].Op && len(sub[max].Rune) < len(sub[j].Rune) {
- 					max = j
- 				}
-@@ -744,16 +824,18 @@
- 			sub[start], sub[max] = sub[max], sub[start]
- 
- 			for j := start + 1; j < i; j++ {
+@@ -747 +827,3 @@
 -				mergeCharClass(sub[start], sub[j])
 +				p.budget.Step(1)
 +
 +				mergeCharClass(sub[start], sub[j], p.budget)
- 				p.reuse(sub[j])
- 			}
+@@ -750,2 +832,2 @@
 -			cleanAlt(sub[start])
 -			out = append(out, sub[start])
 +			cleanAlt(sub[start], p.budget)
 +			out = appendMetered(p.budget, out, sub[start])
- 		}
- 
- 		// ... and then emit sub[i].
- 		if i < len(sub) {
+@@ -756 +838 @@
 -			out = append(out, sub[i])
 +			out = appendMetered(p.budget, out, sub[i])
- 		}
- 		start = i + 1
- 	}
-@@ -763,10 +845,12 @@
- 	start = 0
- 	out = sub[:0]
- 	for i := range sub {
+@@ -765,0 +848,2 @@
 +		p.budget.Step(1)
 +
- 		if i+1 < len(sub) && sub[i].Op == OpEmptyMatch && sub[i+1].Op == OpEmptyMatch {
- 			continue
- 		}
+@@ -769 +853 @@
 -		out = append(out, sub[i])
 +		out = appendMetered(p.budget, out, sub[i])
- 	}
- 	sub = out
- 
-@@ -776,6 +860,8 @@
- // leadingString returns the leading literal string that re begins with.
- // The string refers to storage in re or its children.
- func (p *parser) leadingString(re *Regexp) ([]rune, Flags) {
+@@ -778,0 +863,2 @@
 +	p.budget.Step(1)
 +
- 	if re.Op == OpConcat && len(re.Sub) > 0 {
- 		re = re.Sub[0]
- 	}
-@@ -788,6 +874,8 @@
- // removeLeadingString removes the first n leading runes
- // from the beginning of re. It returns the replacement for re.
- func (p *parser) removeLeadingString(re *Regexp, n int) *Regexp {
+@@ -790,0 +877,2 @@
 +	p.budget.Step(1)
 +
- 	if re.Op == OpConcat && len(re.Sub) > 0 {
- 		// Removing a leading string in a concatenation
- 		// might simplify the concatenation.
-@@ -825,6 +913,8 @@
- // leadingRegexp returns the leading regexp that re begins with.
- // The regexp refers to storage in re or its children.
- func (p *parser) leadingRegexp(re *Regexp) *Regexp {
+@@ -827,0 +916,2 @@
 +	p.budget.Step(1)
 +
- 	if re.Op == OpEmptyMatch {
- 		return nil
- 	}
-@@ -842,6 +932,8 @@
- // It returns the replacement for re.
- // If reuse is true, it passes the removed regexp (if no longer needed) to p.reuse.
- func (p *parser) removeLeadingRegexp(re *Regexp, reuse bool) *Regexp {
+@@ -844,0 +935,2 @@
 +	p.budget.Step(1)
 +
- 	if re.Op == OpConcat && len(re.Sub) > 0 {
- 		if reuse {
- 			p.reuse(re.Sub[0])
-@@ -864,17 +956,22 @@
- 	return p.newRegexp(OpEmptyMatch)
- }
- 
+@@ -867 +959,4 @@
 -func literalRegexp(s string, flags Flags) *Regexp {
 +func literalRegexp(s string, flags Flags, m *budget.Meter) *Regexp {
 +	m.Step(1)
 +
 +	m.Alloc(256)
- 	re := &Regexp{Op: OpLiteral}
- 	re.Flags = flags
- 	re.Rune = re.Rune0[:0] // use local storage for small strings
- 	for _, c := range s {
+@@ -872,6 +967,3 @@
+-		if len(re.Rune) >= cap(re.Rune) {
+-			// string is too long to fit in Rune0.  let Go handle it
+-			re.Rune = []rune(s)
+-			break
+-		}
+-		re.Rune = append(re.Rune, c)
 +		m.Step(1)
 +
- 		if len(re.Rune) >= cap(re.Rune) {
- 			// string is too long to fit in Rune0.  let Go handle it
- 			re.Rune = []rune(s)
- 			break
- 		}
--		re.Rune = append(re.Rune, c)
 +		re.Rune = appendMetered(m, re.Rune, c)
- 	}
- 	return re
- }
-@@ -885,10 +982,12 @@
- // Flags, and returns a regular expression parse tree. The syntax is
- // described in the top-level comment.
- func Parse(s string, flags Flags) (*Regexp, error) {
+@@ -888,4 +980,6 @@
 -	return parse(s, flags)
 -}
 -
@@ -603,962 +250,480 @@
 +func parse(s string, flags Flags, m *budget.Meter) (_ *Regexp, err error) {
 +	m.Step(1)
 +
- 	defer func() {
- 		switch r := recover(); r {
- 		default:
-@@ -904,10 +1003,10 @@
- 
- 	if flags&Literal != 0 {
- 		// Trivial parser for literal string.
+@@ -907 +1001 @@
 -		if err := checkUTF8(s); err != nil {
 +		if err := checkUTF8(s, m); err != nil {
- 			return nil, err
- 		}
+@@ -910 +1004 @@
 -		return literalRegexp(s, flags), nil
 +		return literalRegexp(s, flags, m), nil
- 	}
- 
- 	// Otherwise, must do real work.
-@@ -917,15 +1016,19 @@
- 		op         Op
- 		lastRepeat string
- 	)
+@@ -919,0 +1014,2 @@
 +	p.budget = m
 +	m.Alloc(int64(len(s)+1) * 2048)
- 	p.flags = flags
- 	p.wholeRegexp = s
- 	t := s
- 	for t != "" {
+@@ -923,0 +1020,2 @@
 +		m.Step(1)
 +
- 		repeat := ""
- 	BigSwitch:
- 		switch t[0] {
- 		default:
+@@ -928 +1026 @@
 -			if c, t, err = nextRune(t); err != nil {
 +			if c, t, err = nextRune(t, m); err != nil {
- 				return nil, err
- 			}
- 			p.literal(c)
-@@ -1032,7 +1135,9 @@
- 					var lit string
- 					lit, t, _ = strings.Cut(t[2:], `\E`)
- 					for lit != "" {
+@@ -1035 +1133,3 @@
 -						c, rest, err := nextRune(lit)
 +						m.Step(1)
 +
 +						c, rest, err := nextRune(lit, m)
- 						if err != nil {
- 							return nil, err
- 						}
-@@ -1100,6 +1205,8 @@
- // If s is not of that form, it returns ok == false.
- // If s has the right form but the values are too big, it returns min == -1, ok == true.
- func (p *parser) parseRepeat(s string) (min, max int, rest string, ok bool) {
+@@ -1102,0 +1203,2 @@
 +	p.budget.Step(1)
 +
- 	if s == "" || s[0] != '{' {
- 		return
- 	}
-@@ -1139,6 +1246,8 @@
- // like (?i) or (?: or (?i:.  It removes the prefix from s and updates the parse state.
- // The caller must have ensured that s begins with "(?".
- func (p *parser) parsePerlFlags(s string) (rest string, err error) {
+@@ -1141,0 +1244,2 @@
 +	p.budget.Step(1)
 +
- 	t := s
- 
- 	// Check for named captures, first introduced in Python's regexp library.
-@@ -1169,7 +1278,7 @@
- 		// Pull out name.
- 		end := strings.IndexRune(t, '>')
- 		if end < 0 {
+@@ -1172 +1276 @@
 -			if err = checkUTF8(t); err != nil {
 +			if err = checkUTF8(t, p.budget); err != nil {
- 				return "", err
- 			}
- 			return "", &Error{ErrInvalidNamedCapture, s}
-@@ -1177,10 +1286,10 @@
- 
- 		capture := t[:end+1]        // "(?P<name>" or "(?<name>"
- 		name := t[exprStartPos:end] // "name"
+@@ -1180 +1284 @@
 -		if err = checkUTF8(name); err != nil {
 +		if err = checkUTF8(name, p.budget); err != nil {
- 			return "", err
- 		}
+@@ -1183 +1287 @@
 -		if !isValidCaptureName(name) {
 +		if !isValidCaptureName(name, p.budget) {
- 			return "", &Error{ErrInvalidNamedCapture, capture}
- 		}
- 
-@@ -1200,7 +1309,9 @@
- 	sawFlag := false
- Loop:
- 	for t != "" {
+@@ -1203 +1307,3 @@
 -		if c, t, err = nextRune(t); err != nil {
 +		p.budget.Step(1)
 +
 +		if c, t, err = nextRune(t, p.budget); err != nil {
- 			return "", err
- 		}
- 		switch c {
-@@ -1257,12 +1368,16 @@
- // PCRE limits names to 32 bytes.
- // Python rejects names starting with digits.
- // We don't enforce either of those.
+@@ -1260 +1366,3 @@
 -func isValidCaptureName(name string) bool {
 +func isValidCaptureName(name string, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	if name == "" {
- 		return false
- 	}
- 	for _, c := range name {
+@@ -1265 +1373,3 @@
 -		if c != '_' && !isalnum(c) {
 +		m.Step(1)
 +
 +		if c != '_' && !isalnum(c, m) {
- 			return false
- 		}
- 	}
-@@ -1271,6 +1386,8 @@
- 
- // parseInt parses a decimal integer.
- func (p *parser) parseInt(s string) (n int, rest string, ok bool) {
+@@ -1273,0 +1384,2 @@
 +	p.budget.Step(1)
 +
- 	if s == "" || s[0] < '0' || '9' < s[0] {
- 		return
- 	}
-@@ -1280,6 +1397,8 @@
- 	}
- 	t := s
- 	for s != "" && '0' <= s[0] && s[0] <= '9' {
+@@ -1282,0 +1395,2 @@
 +		p.budget.Step(1)
 +
- 		s = s[1:]
- 	}
- 	rest = s
-@@ -1287,6 +1406,8 @@
- 	// Have digits, compute value.
- 	t = t[:len(t)-len(s)]
- 	for i := 0; i < len(t); i++ {
+@@ -1289,0 +1404,2 @@
 +		p.budget.Step(1)
 +
- 		// Avoid overflow.
- 		if n >= 1e8 {
- 			n = -1
-@@ -1299,7 +1420,9 @@
- 
- // can this be represented as a character class?
- // single-rune literal string, char class, ., and .|\n.
+@@ -1302 +1418,3 @@
 -func isCharClass(re *Regexp) bool {
 +func isCharClass(re *Regexp, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	return re.Op == OpLiteral && len(re.Rune) == 1 ||
- 		re.Op == OpCharClass ||
- 		re.Op == OpAnyCharNotNL ||
-@@ -1307,12 +1430,16 @@
- }
- 
- // does re match r?
+@@ -1310 +1428,3 @@
 -func matchRune(re *Regexp, r rune) bool {
 +func matchRune(re *Regexp, r rune, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	switch re.Op {
- 	case OpLiteral:
- 		return len(re.Rune) == 1 && re.Rune[0] == r
- 	case OpCharClass:
- 		for i := 0; i < len(re.Rune); i += 2 {
+@@ -1315,0 +1436,2 @@
 +			m.Step(1)
 +
- 			if re.Rune[i] <= r && r <= re.Rune[i+1] {
- 				return true
- 			}
-@@ -1328,6 +1455,8 @@
- 
- // parseVerticalBar handles a | in the input.
- func (p *parser) parseVerticalBar() {
+@@ -1330,0 +1453,2 @@
 +	p.budget.Step(1)
 +
- 	p.concat()
- 
- 	// The concatenation we just parsed is on top of the stack.
-@@ -1342,21 +1471,23 @@
- // mergeCharClass makes dst = dst|src.
- // The caller must ensure that dst.Op >= src.Op,
- // to reduce the amount of copying.
+@@ -1345 +1469,3 @@
 -func mergeCharClass(dst, src *Regexp) {
 +func mergeCharClass(dst, src *Regexp, m *budget.Meter) {
 +	m.Step(1)
 +
- 	switch dst.Op {
- 	case OpAnyChar:
- 		// src doesn't add anything.
- 	case OpAnyCharNotNL:
- 		// src might add \n
+@@ -1351 +1477 @@
 -		if matchRune(src, '\n') {
 +		if matchRune(src, '\n', m) {
- 			dst.Op = OpAnyChar
- 		}
- 	case OpCharClass:
- 		// src is simpler, so either literal or char class
- 		if src.Op == OpLiteral {
+@@ -1357 +1483 @@
 -			dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags)
 +			dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags, m)
- 		} else {
+@@ -1359 +1485 @@
 -			dst.Rune = appendClass(dst.Rune, src.Rune)
 +			dst.Rune = appendClass(dst.Rune, src.Rune, m)
- 		}
- 	case OpLiteral:
- 		// both literal
-@@ -1364,8 +1495,8 @@
- 			break
- 		}
- 		dst.Op = OpCharClass
+@@ -1367,2 +1493,2 @@
 -		dst.Rune = appendLiteral(dst.Rune[:0], dst.Rune[0], dst.Flags)
 -		dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags)
 +		dst.Rune = appendLiteral(dst.Rune[:0], dst.Rune[0], dst.Flags, m)
 +		dst.Rune = appendLiteral(dst.Rune, src.Rune[0], src.Flags, m)
- 	}
- }
- 
-@@ -1373,10 +1504,12 @@
- // swapVerticalBar swaps the two and returns true.
- // Otherwise it returns false.
- func (p *parser) swapVerticalBar() bool {
+@@ -1375,0 +1502,2 @@
 +	p.budget.Step(1)
 +
- 	// If above and below vertical bar are literal or char class,
- 	// can merge into a single char class.
- 	n := len(p.stack)
+@@ -1379 +1507 @@
 -	if n >= 3 && p.stack[n-2].Op == opVerticalBar && isCharClass(p.stack[n-1]) && isCharClass(p.stack[n-3]) {
 +	if n >= 3 && p.stack[n-2].Op == opVerticalBar && isCharClass(p.stack[n-1], p.budget) && isCharClass(p.stack[n-3], p.budget) {
- 		re1 := p.stack[n-1]
- 		re3 := p.stack[n-3]
- 		// Make re3 the more complex of the two.
-@@ -1384,7 +1517,7 @@
- 			re1, re3 = re3, re1
- 			p.stack[n-3] = re3
- 		}
+@@ -1387 +1515 @@
 -		mergeCharClass(re3, re1)
 +		mergeCharClass(re3, re1, p.budget)
- 		p.reuse(re1)
- 		p.stack = p.stack[:n-1]
- 		return true
-@@ -1397,7 +1530,7 @@
- 			if n >= 3 {
- 				// Now out of reach.
- 				// Clean opportunistically.
+@@ -1400 +1528 @@
 -				cleanAlt(p.stack[n-3])
 +				cleanAlt(p.stack[n-3], p.budget)
- 			}
- 			p.stack[n-2] = re1
- 			p.stack[n-1] = re2
-@@ -1409,6 +1542,8 @@
- 
- // parseRightParen handles a ) in the input.
- func (p *parser) parseRightParen() error {
+@@ -1411,0 +1540,2 @@
 +	p.budget.Step(1)
 +
- 	p.concat()
- 	if p.swapVerticalBar() {
- 		// pop vertical bar
-@@ -1443,11 +1578,13 @@
- // parseEscape parses an escape sequence at the beginning of s
- // and returns the rune.
- func (p *parser) parseEscape(s string) (r rune, rest string, err error) {
+@@ -1445,0 +1576,2 @@
 +	p.budget.Step(1)
 +
- 	t := s[1:]
- 	if t == "" {
- 		return 0, "", &Error{ErrTrailingBackslash, ""}
- 	}
+@@ -1450 +1582 @@
 -	c, t, err := nextRune(t)
 +	c, t, err := nextRune(t, p.budget)
- 	if err != nil {
- 		return 0, "", err
- 	}
-@@ -1455,7 +1592,7 @@
- Switch:
- 	switch c {
- 	default:
+@@ -1458 +1590 @@
 -		if c < utf8.RuneSelf && !isalnum(c) {
 +		if c < utf8.RuneSelf && !isalnum(c, p.budget) {
- 			// Escaped non-word characters are always themselves.
- 			// PCRE is not quite so rigorous: it accepts things like
- 			// \q, but we don't. We once rejected \_, but too many
-@@ -1474,6 +1611,8 @@
- 		// Consume up to three octal digits; already have one.
- 		r = c - '0'
- 		for i := 1; i < 3; i++ {
+@@ -1476,0 +1609,2 @@
 +			p.budget.Step(1)
 +
- 			if t == "" || t[0] < '0' || t[0] > '7' {
- 				break
- 			}
-@@ -1487,7 +1626,7 @@
- 		if t == "" {
- 			break
- 		}
+@@ -1490 +1624 @@
 -		if c, t, err = nextRune(t); err != nil {
 +		if c, t, err = nextRune(t, p.budget); err != nil {
- 			return 0, "", err
- 		}
- 		if c == '{' {
-@@ -1498,16 +1637,18 @@
- 			nhex := 0
- 			r = 0
- 			for {
+@@ -1500,0 +1635,2 @@
 +				p.budget.Step(1)
 +
- 				if t == "" {
- 					break Switch
- 				}
+@@ -1504 +1640 @@
 -				if c, t, err = nextRune(t); err != nil {
 +				if c, t, err = nextRune(t, p.budget); err != nil {
- 					return 0, "", err
- 				}
- 				if c == '}' {
- 					break
- 				}
+@@ -1510 +1646 @@
 -				v := unhex(c)
 +				v := unhex(c, p.budget)
- 				if v < 0 {
- 					break Switch
- 				}
-@@ -1524,11 +1665,11 @@
- 		}
- 
- 		// Easy case: two hex digits.
+@@ -1527,2 +1663,2 @@
 -		x := unhex(c)
 -		if c, t, err = nextRune(t); err != nil {
 +		x := unhex(c, p.budget)
 +		if c, t, err = nextRune(t, p.budget); err != nil {
- 			return 0, "", err
- 		}
+@@ -1531 +1667 @@
 -		y := unhex(c)
 +		y := unhex(c, p.budget)
- 		if x < 0 || y < 0 {
- 			break
- 		}
-@@ -1559,6 +1700,8 @@
- // parseClassChar parses a character class character at the beginning of s
- // and returns it.
- func (p *parser) parseClassChar(s, wholeClass string) (r rune, rest string, err error) {
+@@ -1561,0 +1698,2 @@
 +	p.budget.Step(1)
 +
- 	if s == "" {
- 		return 0, "", &Error{Code: ErrMissingBracket, Expr: wholeClass}
- 	}
-@@ -1569,7 +1712,7 @@
- 		return p.parseEscape(s)
- 	}
- 
+@@ -1565,0 +1704,12 @@
++	if p.flags&ScalarCollation != 0 && len(s) >= 2 && s[0] == '[' && (s[1] == '.' || s[1] == '=') {
++		end := strings.Index(s[2:], string(s[1])+"]")
++		if end < 0 {
++			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s}
++		}
++		name := s[2 : 2+end]
++		ch, width := utf8.DecodeRuneInString(name)
++		if !utf8.ValidString(name) || width != len(name) || len(name) == 0 {
++			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s[:end+4]}
++		}
++		return ch, s[end+4:], nil
++	}
+@@ -1572 +1722 @@
 -	return nextRune(s)
 +	return nextRune(s, p.budget)
- }
- 
- type charGroup struct {
-@@ -1583,6 +1726,8 @@
- // from the beginning of s. If one is present, it appends the characters to r
- // and returns the new slice r and the remainder of the string.
- func (p *parser) parsePerlClassEscape(s string, r []rune) (out []rune, rest string) {
+@@ -1585,0 +1736,2 @@
 +	p.budget.Step(1)
 +
- 	if p.flags&PerlX == 0 || len(s) < 2 || s[0] != '\\' {
- 		return
- 	}
-@@ -1597,6 +1742,8 @@
- // from the beginning of s. If one is present, it appends the characters to r
- // and returns the new slice r and the remainder of the string.
- func (p *parser) parseNamedClass(s string, r []rune) (out []rune, rest string, err error) {
+@@ -1599,0 +1752,2 @@
 +	p.budget.Step(1)
 +
- 	if len(s) < 2 || s[0] != '[' || s[1] != ':' {
- 		return
- 	}
-@@ -1615,21 +1762,23 @@
- }
- 
- func (p *parser) appendGroup(r []rune, g charGroup) []rune {
+@@ -1617,0 +1772,2 @@
 +	p.budget.Step(1)
 +
- 	if p.flags&FoldCase == 0 {
- 		if g.sign < 0 {
+@@ -1620 +1776 @@
 -			r = appendNegatedClass(r, g.class)
 +			r = appendNegatedClass(r, g.class, p.budget)
- 		} else {
+@@ -1622 +1778 @@
 -			r = appendClass(r, g.class)
 +			r = appendClass(r, g.class, p.budget)
- 		}
- 	} else {
- 		tmp := p.tmpClass[:0]
+@@ -1626 +1782 @@
 -		tmp = appendFoldedClass(tmp, g.class)
 +		tmp = appendFoldedClass(tmp, g.class, p.budget)
- 		p.tmpClass = tmp
+@@ -1628 +1784 @@
 -		tmp = cleanClass(&p.tmpClass)
 +		tmp = cleanClass(&p.tmpClass, p.budget)
- 		if g.sign < 0 {
+@@ -1630 +1786 @@
 -			r = appendNegatedClass(r, tmp)
 +			r = appendNegatedClass(r, tmp, p.budget)
- 		} else {
+@@ -1632 +1788 @@
 -			r = appendClass(r, tmp)
 +			r = appendClass(r, tmp, p.budget)
- 		}
- 	}
- 	return r
-@@ -1660,10 +1809,15 @@
- }
- 
- // initCategoryAliases initializes categoryAliases by canonicalizing unicode.CategoryAliases.
+@@ -1663 +1819,4 @@
 -func initCategoryAliases() {
 +func initCategoryAliases(m *budget.Meter) {
 +	m.Step(1)
 +
 +	m.Alloc(int64(len(unicode.Categories)+len(unicode.Scripts)+len(unicode.Properties)) * 256)
- 	categoryAliases.m = make(map[string]string)
- 	for name, actual := range unicode.CategoryAliases {
+@@ -1666 +1825,3 @@
 -		categoryAliases.m[canonicalName(name)] = actual
 +		m.Step(1)
 +
 +		categoryAliases.m[canonicalName(name, m)] = actual
- 	}
- }
- 
-@@ -1672,10 +1826,14 @@
- // and it omits all underscores, spaces, and hyphens.
- // (We could have used all lowercase, but this way most package unicode
- // map keys are already canonical.)
+@@ -1675 +1836,3 @@
 -func canonicalName(name string) string {
 +func canonicalName(name string, m *budget.Meter) string {
 +	m.Step(1)
 +
- 	var b []byte
- 	first := true
- 	for i := range len(name) {
+@@ -1678,0 +1842,2 @@
 +		m.Step(1)
 +
- 		c := name[i]
- 		switch {
- 		case c == '_' || c == '-' || c == ' ':
-@@ -1695,13 +1853,14 @@
- 				// No changes so far, avoid allocating b.
- 				continue
- 			}
+@@ -1697,0 +1863 @@
 +			m.Alloc(int64(len(name)))
- 			b = make([]byte, i, len(name))
- 			copy(b, name[:i])
- 		}
- 		if c == ' ' {
- 			continue
- 		}
+@@ -1704 +1870 @@
 -		b = append(b, c)
 +		b = appendMetered(m, b, c)
- 	}
- 	if b == nil {
- 		return name
-@@ -1712,8 +1871,10 @@
- // unicodeTable returns the unicode.RangeTable identified by name
- // and the table of additional fold-equivalent code points.
- // If sign < 0, the result should be inverted.
+@@ -1715,2 +1881,4 @@
 -func unicodeTable(name string) (tab, fold *unicode.RangeTable, sign int) {
 -	name = canonicalName(name)
 +func unicodeTable(name string, m *budget.Meter) (tab, fold *unicode.RangeTable, sign int) {
 +	m.Step(1)
 +
 +	name = canonicalName(name, m)
- 
- 	// Special cases: Any, Assigned, and ASCII.
- 	// Also LC is the only non-canonical Categories key, so handle it here.
-@@ -1737,7 +1898,7 @@
- 	// unicode.CategoryAliases makes liberal use of underscores in its names
- 	// (they are defined that way by Unicode), but we want to match ignoring
- 	// the underscores, so make our own map with canonical names.
+@@ -1740 +1908 @@
 -	categoryAliases.once.Do(initCategoryAliases)
 +	categoryAliases.once.Do(func() { initCategoryAliases(m) })
- 	if actual := categoryAliases.m[name]; actual != "" {
- 		t := unicode.Categories[actual]
- 		return t, unicode.FoldCategory[actual], +1
-@@ -1749,6 +1910,8 @@
- // from the beginning of s. If one is present, it appends the characters to r
- // and returns the new slice r and the remainder of the string.
- func (p *parser) parseUnicodeClass(s string, r []rune) (out []rune, rest string, err error) {
+@@ -1751,0 +1920,2 @@
 +	p.budget.Step(1)
 +
- 	if p.flags&UnicodeGroups == 0 || len(s) < 2 || s[0] != '\\' || s[1] != 'p' && s[1] != 'P' {
- 		return
- 	}
-@@ -1759,7 +1922,7 @@
- 		sign = -1
- 	}
- 	t := s[2:]
+@@ -1762 +1932 @@
 -	c, t, err := nextRune(t)
 +	c, t, err := nextRune(t, p.budget)
- 	if err != nil {
- 		return
- 	}
-@@ -1772,14 +1935,14 @@
- 		// Name is in braces.
- 		end := strings.IndexRune(s, '}')
- 		if end < 0 {
+@@ -1775 +1945 @@
 -			if err = checkUTF8(s); err != nil {
 +			if err = checkUTF8(s, p.budget); err != nil {
- 				return
- 			}
- 			return nil, "", &Error{ErrInvalidCharRange, s}
- 		}
- 		seq, t = s[:end+1], s[end+1:]
- 		name = s[3:end]
+@@ -1782 +1952 @@
 -		if err = checkUTF8(name); err != nil {
 +		if err = checkUTF8(name, p.budget); err != nil {
- 			return
- 		}
- 	}
-@@ -1790,7 +1953,7 @@
- 		name = name[1:]
- 	}
- 
+@@ -1793 +1963 @@
 -	tab, fold, tsign := unicodeTable(name)
 +	tab, fold, tsign := unicodeTable(name, p.budget)
- 	if tab == nil {
- 		return nil, "", &Error{ErrInvalidCharRange, seq}
- 	}
-@@ -1800,23 +1963,23 @@
- 
- 	if p.flags&FoldCase == 0 || fold == nil {
- 		if sign > 0 {
+@@ -1803 +1973 @@
 -			r = appendTable(r, tab)
 +			r = appendTable(r, tab, p.budget)
- 		} else {
+@@ -1805 +1975 @@
 -			r = appendNegatedTable(r, tab)
 +			r = appendNegatedTable(r, tab, p.budget)
- 		}
- 	} else {
- 		// Merge and clean tab and fold in a temporary buffer.
- 		// This is necessary for the negative case and just tidy
- 		// for the positive case.
- 		tmp := p.tmpClass[:0]
+@@ -1812,2 +1982,2 @@
 -		tmp = appendTable(tmp, tab)
 -		tmp = appendTable(tmp, fold)
 +		tmp = appendTable(tmp, tab, p.budget)
 +		tmp = appendTable(tmp, fold, p.budget)
- 		p.tmpClass = tmp
+@@ -1815 +1985 @@
 -		tmp = cleanClass(&p.tmpClass)
 +		tmp = cleanClass(&p.tmpClass, p.budget)
- 		if sign > 0 {
+@@ -1817 +1987 @@
 -			r = appendClass(r, tmp)
 +			r = appendClass(r, tmp, p.budget)
- 		} else {
+@@ -1819 +1989 @@
 -			r = appendNegatedClass(r, tmp)
 +			r = appendNegatedClass(r, tmp, p.budget)
- 		}
- 	}
- 	return r, t, nil
-@@ -1825,6 +1988,8 @@
- // parseClass parses a character class at the beginning of s
- // and pushes it onto the parse stack.
- func (p *parser) parseClass(s string) (rest string, err error) {
+@@ -1827,0 +1998,2 @@
 +	p.budget.Step(1)
 +
- 	t := s[1:] // chop [
- 	re := p.newRegexp(OpCharClass)
- 	re.Flags = p.flags
-@@ -1838,13 +2003,15 @@
- 		// If character class does not match \n, add it here,
- 		// so that negation later will do the right thing.
- 		if p.flags&ClassNL == 0 {
+@@ -1841 +2013 @@
 -			re.Rune = append(re.Rune, '\n', '\n')
 +			re.Rune = appendMetered(p.budget, re.Rune, '\n', '\n')
- 		}
- 	}
- 
- 	class := re.Rune
- 	first := true // ] and - are okay as first char in class
- 	for t == "" || t[0] != ']' || first {
+@@ -1847,0 +2020,2 @@
 +		p.budget.Step(1)
 +
- 		// POSIX: - is only okay unescaped as first or last in class.
- 		// Perl: - is okay anywhere.
- 		if t != "" && t[0] == '-' && p.flags&PerlX == 0 && !first && (len(t) == 1 || t[1] != ']') {
-@@ -1900,18 +2067,18 @@
- 			}
- 		}
- 		if p.flags&FoldCase == 0 {
+@@ -1903 +2077 @@
 -			class = appendRange(class, lo, hi)
 +			class = appendRange(class, lo, hi, p.budget)
- 		} else {
+@@ -1905 +2079 @@
 -			class = appendFoldedRange(class, lo, hi)
 +			class = appendFoldedRange(class, lo, hi, p.budget)
- 		}
- 	}
- 	t = t[1:] // chop ]
- 
- 	// Use &re.Rune instead of &class to avoid allocation.
- 	re.Rune = class
+@@ -1912 +2086 @@
 -	class = cleanClass(&re.Rune)
 +	class = cleanClass(&re.Rune, p.budget)
- 	if sign < 0 {
+@@ -1914 +2088 @@
 -		class = negateClass(class)
 +		class = negateClass(class, p.budget)
- 	}
- 	re.Rune = class
- 	p.push(re)
-@@ -1920,10 +2087,11 @@
- 
- // cleanClass sorts the ranges (pairs of elements of r),
- // merges them, and eliminates duplicates.
+@@ -1923 +2097,2 @@
 -func cleanClass(rp *[]rune) []rune {
 +func cleanClass(rp *[]rune, m *budget.Meter) []rune {
 +	m.Step(1)
- 
- 	// Sort by lo increasing, hi decreasing to break ties.
+@@ -1926 +2101 @@
 -	sort.Sort(ranges{rp})
 +	sort.Sort(ranges{p: rp, budget: m})
- 
- 	r := *rp
- 	if len(r) < 2 {
-@@ -1933,6 +2101,8 @@
- 	// Merge abutting, overlapping.
- 	w := 2 // write index
- 	for i := 2; i < len(r); i += 2 {
+@@ -1935,0 +2111,2 @@
 +		m.Step(1)
 +
- 		lo, hi := r[i], r[i+1]
- 		if lo <= r[w-1]+1 {
- 			// merge with previous range
-@@ -1952,7 +2122,9 @@
- 
- // inCharClass reports whether r is in the class.
- // It assumes the class has been cleaned by cleanClass.
+@@ -1955 +2132,3 @@
 -func inCharClass(r rune, class []rune) bool {
 +func inCharClass(r rune, class []rune, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	_, ok := sort.Find(len(class)/2, func(i int) int {
- 		lo, hi := class[2*i], class[2*i+1]
- 		if r > hi {
-@@ -1967,21 +2139,27 @@
- }
- 
- // appendLiteral returns the result of appending the literal x to the class r.
+@@ -1970 +2149,3 @@
 -func appendLiteral(r []rune, x rune, flags Flags) []rune {
 +func appendLiteral(r []rune, x rune, flags Flags, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	if flags&FoldCase != 0 {
+@@ -1972,3 +2153,3 @@
 -		return appendFoldedRange(r, x, x)
 -	}
 -	return appendRange(r, x, x)
 +		return appendFoldedRange(r, x, x, m)
 +	}
 +	return appendRange(r, x, x, m)
- }
- 
- // appendRange returns the result of appending the range lo-hi to the class r.
+@@ -1978 +2159,3 @@
 -func appendRange(r []rune, lo, hi rune) []rune {
 +func appendRange(r []rune, lo, hi rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	// Expand last range or next to last range if it overlaps or abuts.
- 	// Checking two ranges helps when appending case-folded
- 	// alphabets, so that one range can be expanding A-Z and the
- 	// other expanding a-z.
- 	n := len(r)
+@@ -1984 +2167,3 @@
 -	for i := 2; i <= 4; i += 2 { // twice, using i=2, i=4
 +	for i := 2; i <= 4; i += 2 {
 +		m.Step(1)
 +		// twice, using i=2, i=4
- 		if n >= i {
- 			rlo, rhi := r[n-i], r[n-i+1]
- 			if lo <= rhi+1 && rlo <= hi+1 {
-@@ -1996,7 +2174,7 @@
- 		}
- 	}
- 
+@@ -1999 +2184 @@
 -	return append(r, lo, hi)
 +	return appendMetered(m, r, lo, hi)
- }
- 
- const (
-@@ -2008,33 +2186,39 @@
- 
- // appendFoldedRange returns the result of appending the range lo-hi
- // and its case folding-equivalent runes to the class r.
+@@ -2011 +2196,3 @@
 -func appendFoldedRange(r []rune, lo, hi rune) []rune {
 +func appendFoldedRange(r []rune, lo, hi rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	// Optimizations.
- 	if lo <= minFold && hi >= maxFold {
- 		// Range is full: folding can't add more.
+@@ -2015 +2202 @@
 -		return appendRange(r, lo, hi)
 +		return appendRange(r, lo, hi, m)
- 	}
- 	if hi < minFold || lo > maxFold {
- 		// Range is outside folding possibilities.
+@@ -2019 +2206 @@
 -		return appendRange(r, lo, hi)
 +		return appendRange(r, lo, hi, m)
- 	}
- 	if lo < minFold {
- 		// [lo, minFold-1] needs no folding.
+@@ -2023 +2210 @@
 -		r = appendRange(r, lo, minFold-1)
 +		r = appendRange(r, lo, minFold-1, m)
- 		lo = minFold
- 	}
- 	if hi > maxFold {
- 		// [maxFold+1, hi] needs no folding.
+@@ -2028 +2215 @@
 -		r = appendRange(r, maxFold+1, hi)
 +		r = appendRange(r, maxFold+1, hi, m)
- 		hi = maxFold
- 	}
- 
- 	// Brute force. Depend on appendRange to coalesce ranges on the fly.
- 	for c := lo; c <= hi; c++ {
+@@ -2034 +2221,3 @@
 -		r = appendRange(r, c, c)
 +		m.Step(1)
 +
 +		r = appendRange(r, c, c, m)
- 		f := unicode.SimpleFold(c)
- 		for f != c {
+@@ -2037 +2226,3 @@
 -			r = appendRange(r, f, f)
 +			m.Step(1)
 +
 +			r = appendRange(r, f, f, m)
- 			f = unicode.SimpleFold(f)
- 		}
- 	}
-@@ -2043,110 +2227,146 @@
- 
- // appendClass returns the result of appending the class x to the class r.
- // It assume x is clean.
+@@ -2046 +2237,3 @@
 -func appendClass(r []rune, x []rune) []rune {
 +func appendClass(r []rune, x []rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	for i := 0; i < len(x); i += 2 {
+@@ -2048 +2241,3 @@
 -		r = appendRange(r, x[i], x[i+1])
 +		m.Step(1)
 +
 +		r = appendRange(r, x[i], x[i+1], m)
- 	}
- 	return r
- }
- 
- // appendFoldedClass returns the result of appending the case folding of the class x to the class r.
+@@ -2054 +2249,3 @@
 -func appendFoldedClass(r []rune, x []rune) []rune {
 +func appendFoldedClass(r []rune, x []rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	for i := 0; i < len(x); i += 2 {
+@@ -2056 +2253,3 @@
 -		r = appendFoldedRange(r, x[i], x[i+1])
 +		m.Step(1)
 +
 +		r = appendFoldedRange(r, x[i], x[i+1], m)
- 	}
- 	return r
- }
- 
- // appendNegatedClass returns the result of appending the negation of the class x to the class r.
- // It assumes x is clean.
+@@ -2063 +2262,3 @@
 -func appendNegatedClass(r []rune, x []rune) []rune {
 +func appendNegatedClass(r []rune, x []rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	nextLo := '\u0000'
- 	for i := 0; i < len(x); i += 2 {
+@@ -2065,0 +2267,2 @@
 +		m.Step(1)
 +
- 		lo, hi := x[i], x[i+1]
- 		if nextLo <= lo-1 {
+@@ -2068 +2271 @@
 -			r = appendRange(r, nextLo, lo-1)
 +			r = appendRange(r, nextLo, lo-1, m)
- 		}
- 		nextLo = hi + 1
- 	}
- 	if nextLo <= unicode.MaxRune {
+@@ -2073 +2276 @@
 -		r = appendRange(r, nextLo, unicode.MaxRune)
 +		r = appendRange(r, nextLo, unicode.MaxRune, m)
- 	}
- 	return r
- }
- 
- // appendTable returns the result of appending x to the class r.
+@@ -2079 +2282,3 @@
 -func appendTable(r []rune, x *unicode.RangeTable) []rune {
 +func appendTable(r []rune, x *unicode.RangeTable, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	for _, xr := range x.R16 {
+@@ -2080,0 +2286,2 @@
 +		m.Step(1)
 +
- 		lo, hi, stride := rune(xr.Lo), rune(xr.Hi), rune(xr.Stride)
- 		if stride == 1 {
+@@ -2083 +2290 @@
 -			r = appendRange(r, lo, hi)
 +			r = appendRange(r, lo, hi, m)
- 			continue
- 		}
- 		for c := lo; c <= hi; c += stride {
+@@ -2087 +2294,3 @@
 -			r = appendRange(r, c, c)
 +			m.Step(1)
 +
 +			r = appendRange(r, c, c, m)
- 		}
- 	}
- 	for _, xr := range x.R32 {
+@@ -2090,0 +2300,2 @@
 +		m.Step(1)
 +
- 		lo, hi, stride := rune(xr.Lo), rune(xr.Hi), rune(xr.Stride)
- 		if stride == 1 {
+@@ -2093 +2304 @@
 -			r = appendRange(r, lo, hi)
 +			r = appendRange(r, lo, hi, m)
- 			continue
- 		}
- 		for c := lo; c <= hi; c += stride {
+@@ -2097 +2308,3 @@
 -			r = appendRange(r, c, c)
 +			m.Step(1)
 +
 +			r = appendRange(r, c, c, m)
- 		}
- 	}
- 	return r
- }
- 
- // appendNegatedTable returns the result of appending the negation of x to the class r.
+@@ -2104 +2317,3 @@
 -func appendNegatedTable(r []rune, x *unicode.RangeTable) []rune {
 +func appendNegatedTable(r []rune, x *unicode.RangeTable, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	nextLo := '\u0000' // lo end of next class to add
- 	for _, xr := range x.R16 {
+@@ -2106,0 +2322,2 @@
 +		m.Step(1)
 +
- 		lo, hi, stride := rune(xr.Lo), rune(xr.Hi), rune(xr.Stride)
- 		if stride == 1 {
- 			if nextLo <= lo-1 {
+@@ -2110 +2327 @@
 -				r = appendRange(r, nextLo, lo-1)
 +				r = appendRange(r, nextLo, lo-1, m)
- 			}
- 			nextLo = hi + 1
- 			continue
- 		}
- 		for c := lo; c <= hi; c += stride {
+@@ -2115,0 +2333,2 @@
 +			m.Step(1)
 +
- 			if nextLo <= c-1 {
+@@ -2117 +2336 @@
 -				r = appendRange(r, nextLo, c-1)
 +				r = appendRange(r, nextLo, c-1, m)
- 			}
- 			nextLo = c + 1
- 		}
- 	}
- 	for _, xr := range x.R32 {
+@@ -2122,0 +2342,2 @@
 +		m.Step(1)
 +
- 		lo, hi, stride := rune(xr.Lo), rune(xr.Hi), rune(xr.Stride)
- 		if stride == 1 {
- 			if nextLo <= lo-1 {
+@@ -2126 +2347 @@
 -				r = appendRange(r, nextLo, lo-1)
 +				r = appendRange(r, nextLo, lo-1, m)
- 			}
- 			nextLo = hi + 1
- 			continue
- 		}
- 		for c := lo; c <= hi; c += stride {
+@@ -2131,0 +2353,2 @@
 +			m.Step(1)
 +
- 			if nextLo <= c-1 {
+@@ -2133 +2356 @@
 -				r = appendRange(r, nextLo, c-1)
 +				r = appendRange(r, nextLo, c-1, m)
- 			}
- 			nextLo = c + 1
- 		}
- 	}
- 	if nextLo <= unicode.MaxRune {
+@@ -2139 +2362 @@
 -		r = appendRange(r, nextLo, unicode.MaxRune)
 +		r = appendRange(r, nextLo, unicode.MaxRune, m)
- 	}
- 	return r
- }
- 
- // negateClass overwrites r and returns r's negation.
- // It assumes the class r is already clean.
+@@ -2146 +2369,3 @@
 -func negateClass(r []rune) []rune {
 +func negateClass(r []rune, m *budget.Meter) []rune {
 +	m.Step(1)
 +
- 	nextLo := '\u0000' // lo end of next class to add
- 	w := 0             // write index
- 	for i := 0; i < len(r); i += 2 {
+@@ -2149,0 +2375,2 @@
 +		m.Step(1)
 +
- 		lo, hi := r[i], r[i+1]
- 		if nextLo <= lo-1 {
- 			r[w] = nextLo
-@@ -2159,7 +2379,7 @@
- 	if nextLo <= unicode.MaxRune {
- 		// It's possible for the negation to have one more
- 		// range - this one - than the original class, so use append.
+@@ -2162 +2389 @@
 -		r = append(r, nextLo, unicode.MaxRune)
 +		r = appendMetered(m, r, nextLo, unicode.MaxRune)
- 	}
- 	return r
- }
-@@ -2169,10 +2389,12 @@
- // but avoids an allocation since we already have
- // a *[]rune.
- type ranges struct {
+@@ -2172 +2399,2 @@
 -	p *[]rune
 +	p      *[]rune
 +	budget *budget.Meter
- }
- 
- func (ra ranges) Less(i, j int) bool {
+@@ -2175,0 +2404 @@
 +	ra.budget.Step(1)
- 	p := *ra.p
- 	i *= 2
- 	j *= 2
-@@ -2190,8 +2412,12 @@
- 	p[i], p[i+1], p[j], p[j+1] = p[j], p[j+1], p[i], p[i+1]
- }
- 
+@@ -2193 +2422,3 @@
 -func checkUTF8(s string) error {
 +func checkUTF8(s string, m *budget.Meter) error {
 +	m.Step(1)
 +
- 	for s != "" {
+@@ -2194,0 +2426,2 @@
 +		m.Step(1)
 +
- 		rune, size := utf8.DecodeRuneInString(s)
- 		if rune == utf8.RuneError && size == 1 {
- 			return &Error{Code: ErrInvalidUTF8, Expr: s}
-@@ -2201,7 +2427,9 @@
- 	return nil
- }
- 
+@@ -2204 +2437,3 @@
 -func nextRune(s string) (c rune, t string, err error) {
 +func nextRune(s string, m *budget.Meter) (c rune, t string, err error) {
 +	m.Step(1)
 +
- 	c, size := utf8.DecodeRuneInString(s)
- 	if c == utf8.RuneError && size == 1 {
- 		return 0, "", &Error{Code: ErrInvalidUTF8, Expr: s}
-@@ -2209,11 +2437,15 @@
- 	return c, s[size:], nil
- }
- 
+@@ -2212 +2447,3 @@
 -func isalnum(c rune) bool {
 +func isalnum(c rune, m *budget.Meter) bool {
 +	m.Step(1)
 +
- 	return '0' <= c && c <= '9' || 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z'
- }
- 
+@@ -2216 +2453,3 @@
 -func unhex(c rune) rune {
 +func unhex(c rune, m *budget.Meter) rune {
 +	m.Step(1)
 +
- 	if '0' <= c && c <= '9' {
- 		return c - '0'
- 	}

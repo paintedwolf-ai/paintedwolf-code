@@ -15,6 +15,8 @@ func TestPredicatePatternsPreserveQuotedFragments(t *testing.T) {
 		want        bool
 	}{
 		{"glob", "abc", PredicateValue{{Value: "a*"}}, true},
+		{"glob", "b", PredicateValue{{Value: "[[.a.]-[.c.]]"}}, true},
+		{"glob", "a", PredicateValue{{Value: "[[=a=]]"}}, true},
 		{"glob", "a*", PredicateValue{{Value: "a*", Quoted: true}}, true},
 		{"glob", "abc", PredicateValue{{Value: "a*", Quoted: true}}, false},
 		{"glob", "a*bZZ", PredicateValue{{Value: "a*", Quoted: true}, {Value: "b*"}}, true},
@@ -29,6 +31,12 @@ func TestPredicatePatternsPreserveQuotedFragments(t *testing.T) {
 		{"ere", "a\n", PredicateValue{{Value: "a$"}}, false},
 		{"ere", "\n", PredicateValue{{Value: "^[^x]$"}}, true},
 		{"ere", "abc", PredicateValue{{Value: "^[[:alpha:]]+$"}}, true},
+		{"ere", "é", PredicateValue{{Value: "^[[:alpha:]]$"}}, false},
+		{"glob", "é", PredicateValue{{Value: "[[:alpha:]]"}}, false},
+		{"ere", "a", PredicateValue{{Value: "[[.a.]]"}}, true},
+		{"ere", "a", PredicateValue{{Value: "[[=a=]]"}}, true},
+		{"ere", "b", PredicateValue{{Value: "[[.a.]-[.c.]]"}}, true},
+		{"ere", "é", PredicateValue{{Value: "[[.é.]]"}}, true},
 		{"ere", "aaaa", PredicateValue{{Value: "(a{2}){2}"}}, true},
 		{"ere", "aaa", PredicateValue{{Value: "a{2}|a{3}"}}, true},
 		{"ere", "aaaaa", PredicateValue{{Value: "a{2}{3}"}}, false},
@@ -55,7 +63,7 @@ func TestPredicatePatternsPreserveQuotedFragments(t *testing.T) {
 	}
 }
 func TestPredicatePatternsRejectSyntaxAndStopOnResources(t *testing.T) {
-	for _, pattern := range []string{"[", "(", "(?=a)", `(a)\1`} {
+	for _, pattern := range []string{"[", "(", "(?=a)", `(a)\1`, "[[.name.]]", "[[..]]", "[[==]]"} {
 		_, err := (NativePredicatePatterns{LocalBoundsOnly: true}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: pattern}})
 		if !errors.Is(err, errPredicateUsage) {
 			t.Fatalf("ERE %q accepted/incorrect refusal: %v", pattern, err)
@@ -73,4 +81,21 @@ func TestPredicatePatternsRejectSyntaxAndStopOnResources(t *testing.T) {
 	if !errors.As(err, &limit) || limit.Resource != "regex_pattern_bytes" {
 		t.Fatalf("pattern limit: %v", err)
 	}
+}
+
+func TestPredicateGlobRejectsNonScalarCollation(t *testing.T) {
+	for _, source := range []string{"[[.name.]]", "[[..]]", "[[==]]"} {
+		_, err := (NativePredicatePatterns{LocalBoundsOnly: true}).MatchPredicate(t.Context(), "glob", "a", PredicateValue{{Value: source}})
+		if !errors.Is(err, errPredicateUsage) {
+			t.Fatalf("invalid scalar glob%q got%v", source, err)
+		}
+	}
+}
+
+func predicateText(value PredicateValue) string {
+	var out strings.Builder
+	for _, f := range value {
+		out.WriteString(f.Value)
+	}
+	return out.String()
 }

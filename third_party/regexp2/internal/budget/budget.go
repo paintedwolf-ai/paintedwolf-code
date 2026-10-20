@@ -40,6 +40,9 @@ func New(ctx context.Context, limits Limits) *Meter {
 	if limits.Reserve != nil {
 		var err error
 		release, err = limits.Reserve(ctx, 512)
+		if err == nil && release == nil {
+			err = fmt.Errorf("bounded regex admission returned no lease")
+		}
 		if err != nil {
 			panic(Abort{err})
 		}
@@ -85,6 +88,9 @@ func (m *Meter) Alloc(n int64) {
 	}
 	if m.limits.Reserve != nil {
 		release, err := m.limits.Reserve(m.ctx, n)
+		if err == nil && release == nil {
+			err = fmt.Errorf("bounded regex admission returned no lease")
+		}
 		if err != nil {
 			panic(Abort{err})
 		}

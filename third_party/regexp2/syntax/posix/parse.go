@@ -749,7 +749,7 @@ func (p *parser) factor(sub []*Regexp) []*Regexp {
 		var ifirst *Regexp
 		if i < len(sub) {
 			ifirst = p.leadingRegexp(sub[i])
-			if first != nil && first.Equal(ifirst) &&
+			if first != nil && equalMetered(first, ifirst, p.budget) &&
 				// first must be a character class OR a fixed repeat of a character class.
 				(isCharClass(first, p.budget) || (first.Op == OpRepeat && first.Min == first.Max && isCharClass(first.Sub[0], p.budget))) {
 				continue
@@ -966,11 +966,6 @@ func literalRegexp(s string, flags Flags, m *budget.Meter) *Regexp {
 	for _, c := range s {
 		m.Step(1)
 
-		if len(re.Rune) >= cap(re.Rune) {
-			// string is too long to fit in Rune0.  let Go handle it
-			re.Rune = []rune(s)
-			break
-		}
 		re.Rune = appendMetered(m, re.Rune, c)
 	}
 	return re
@@ -1706,6 +1701,18 @@ func (p *parser) parseClassChar(s, wholeClass string) (r rune, rest string, err 
 		return 0, "", &Error{Code: ErrMissingBracket, Expr: wholeClass}
 	}
 
+	if p.flags&ScalarCollation != 0 && len(s) >= 2 && s[0] == '[' && (s[1] == '.' || s[1] == '=') {
+		end := strings.Index(s[2:], string(s[1])+"]")
+		if end < 0 {
+			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s}
+		}
+		name := s[2 : 2+end]
+		ch, width := utf8.DecodeRuneInString(name)
+		if !utf8.ValidString(name) || width != len(name) || len(name) == 0 {
+			return 0, "", &Error{Code: ErrInvalidCharClass, Expr: s[:end+4]}
+		}
+		return ch, s[end+4:], nil
+	}
 	// Allow regular escape sequences even though
 	// many need not be escaped in this context.
 	if s[0] == '\\' {

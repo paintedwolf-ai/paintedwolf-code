@@ -1,4 +1,4 @@
-package survey
+package projectpaths
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestPredicateFilesUsesAdmittedReadAuthority(t *testing.T) {
@@ -22,7 +21,7 @@ func TestPredicateFilesUsesAdmittedReadAuthority(t *testing.T) {
 	testutil.FailErr(t, "fixture file", os.WriteFile(filepath.Join(root, "allowed", "file"), []byte("unchanged"), 0600))
 	tctx := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Label: "fixture", Path: root, IsPrimary: true}}, ActiveRootID: "root"}, Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID}}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"allowed/**"}}})
-	reads := projectpaths.NewReadSession(boundary, tctx)
+	reads := NewReadSession(boundary, tctx)
 	defer reads.Close()
 	invocation := toolcontract.OperationInvocation{Kind: toolcontract.StructuredToolInvocation, ModelToolCallID: "fixture-call", ActorID: "fixture-actor", SessionID: "fixture-session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "fixture-project"}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 	port := PredicateFiles{Reads: reads, Invocation: invocation}

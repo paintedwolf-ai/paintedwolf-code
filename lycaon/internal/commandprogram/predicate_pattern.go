@@ -80,6 +80,9 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	lexicalBytes := 1024 + (raw+1)*(raw+1)*8
 	if p.Memory != nil {
 		release, err := p.Memory.Reserve(ctx, lexicalBytes)
+		if err == nil && release == nil {
+			err = errors.New("predicate pattern admission returned no lease")
+		}
 		if err != nil {
 			return false, err
 		}
@@ -102,19 +105,19 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	var transform func(*syntax.Regexp) error
 	switch kind {
 	case "glob":
-		translated, err := pattern.Regexp(source.String(), pattern.EntireString)
+		translated, err := pattern.Regexp(source.String(), pattern.EntireString|pattern.ScalarCollation)
 		if err != nil {
 			return false, errPredicateUsage
 		}
 		expression = translated
-		flags = syntax.Perl
+		flags = syntax.Perl | regexp2.ScalarCollation
 	case "ere":
 		skeleton, tags, err := normalizePredicateRepeats(ctx, source.String())
 		if err != nil {
 			return false, err
 		}
 		expression = skeleton
-		flags = syntax.POSIX | syntax.DotNL | syntax.ClassNL | syntax.OneLine
+		flags = syntax.POSIX | syntax.DotNL | syntax.ClassNL | syntax.OneLine | regexp2.ScalarCollation
 		transform = func(ast *syntax.Regexp) error { return restorePredicateRepeats(ctx, ast, tags) }
 	default:
 		return false, errPredicateUsage
@@ -134,6 +137,10 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 			resource = "regex_cpu_ms"
 		}
 		maximum, observed := stopped.Maximum, stopped.Observed
+		if stopped.Resource == "bytes" {
+			maximum += lexicalBytes
+			observed += lexicalBytes
+		}
 		if stopped.Resource == "time" {
 			maximum /= int64(time.Millisecond)
 			observed = (observed + int64(time.Millisecond) - 1) / int64(time.Millisecond)

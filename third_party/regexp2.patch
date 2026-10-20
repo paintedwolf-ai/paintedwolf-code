@@ -1,6 +1,6 @@
 --- a/bounded.go
 +++ b/bounded.go
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,96 @@
 +package regexp2
 +
 +import (
@@ -12,12 +12,14 @@
 +	posixsyntax "github.com/dlclark/regexp2/v2/syntax/posix"
 +)
 +
-+// SyntaxBudget bounds only MatchSyntaxBounded, including its typed compilation.
++// SyntaxBudget bounds the selected typed/pattern APIs and their compilation.
 +// Reserve joins the host aggregate working-memory admission before allocation.
 +// A nil Reserve selects pure local accounting and provides no aggregate claim.
 +type SyntaxBudget = budget.Limits
 +type SyntaxBudgetError = budget.Error
 +type SyntaxParseError = posixsyntax.Error
++
++const ScalarCollation = posixsyntax.ScalarCollation
 +
 +// MatchSyntaxBounded executes only a host-validated regular tree. It exposes no
 +// text parser, captures, generated engine, pool retention, or PCRE qualification.
@@ -97,7 +99,7 @@
 +}
 --- a/internal/budget/budget.go
 +++ b/internal/budget/budget.go
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,106 @@
 +package budget
 +
 +import (
@@ -140,6 +142,9 @@
 +	if limits.Reserve != nil {
 +		var err error
 +		release, err = limits.Reserve(ctx, 512)
++		if err == nil && release == nil {
++			err = fmt.Errorf("bounded regex admission returned no lease")
++		}
 +		if err != nil {
 +			panic(Abort{err})
 +		}
@@ -185,6 +190,9 @@
 +	}
 +	if m.limits.Reserve != nil {
 +		release, err := m.limits.Reserve(m.ctx, n)
++		if err == nil && release == nil {
++			err = fmt.Errorf("bounded regex admission returned no lease")
++		}
 +		if err != nil {
 +			panic(Abort{err})
 +		}
@@ -200,18 +208,9 @@
 +}
 --- a/runner.go
 +++ b/runner.go
-@@ -3,6 +3,7 @@
- import (
- 	"bytes"
- 	"fmt"
+@@ -5,0 +6 @@
 +	"github.com/dlclark/regexp2/v2/internal/budget"
- 	"math"
- 	"slices"
- 	"strconv"
-@@ -15,9 +16,10 @@
- )
- 
- type Runner struct {
+@@ -18,3 +19,4 @@
 -	re    *Regexp
 -	code  *syntax.Code
 -	debug bool
@@ -219,370 +218,108 @@
 +	re     *Regexp
 +	code   *syntax.Code
 +	debug  bool
- 
- 	Runtextstart int // starting point for search
- 
-@@ -155,6 +157,7 @@
- 
- 	r.startTimeoutWatch()
- 	for {
+@@ -157,0 +160 @@
 +		r.budget.Step(1)
- 		if minRequiredLength > 0 {
- 			if r.code.RightToLeft {
- 				if r.Runtextpos < minRequiredLength {
-@@ -222,6 +225,7 @@
- 	}
- 
- 	for {
+@@ -224,0 +228 @@
 +		r.budget.Step(1)
- 
- 		if r.debug {
- 			r.dumpState()
-@@ -535,6 +539,7 @@
- 			r.trackto(r.stackPeek())
- 
- 			for r.Crawlpos() != r.stackPeekN(1) {
+@@ -537,0 +542 @@
 +				r.budget.Step(1)
- 				r.uncapture()
- 			}
- 
-@@ -554,6 +559,7 @@
- 			r.trackPop()
- 
- 			for r.Crawlpos() != r.trackPeek() {
+@@ -556,0 +562 @@
 +				r.budget.Step(1)
- 				r.uncapture()
- 			}
- 
-@@ -701,6 +707,7 @@
- 			ch := rune(r.operand(0))
- 
- 			for c > 0 {
+@@ -703,0 +710 @@
 +				r.budget.Step(1)
- 				if r.forwardcharnext() != ch {
- 					goto BreakBackward
- 				}
-@@ -720,6 +727,7 @@
- 			ch := rune(r.operand(0))
- 
- 			for c > 0 {
+@@ -722,0 +730 @@
 +				r.budget.Step(1)
- 				if r.forwardcharnext() == ch {
- 					goto BreakBackward
- 				}
-@@ -740,6 +748,7 @@
- 			set := r.code.Sets[r.operand(0)]
- 
- 			for c > 0 {
+@@ -742,0 +751 @@
 +				r.budget.Step(1)
- 				if !set.CharIn(r.forwardcharnext()) {
- 					goto BreakBackward
- 				}
-@@ -761,6 +770,7 @@
- 			i := c
- 
- 			for ; i > 0; i-- {
+@@ -763,0 +773 @@
 +				r.budget.Step(1)
- 				if r.forwardcharnext() != ch {
- 					r.backwardnext()
- 					break
-@@ -786,6 +796,7 @@
- 			i := c
- 
- 			for ; i > 0; i-- {
+@@ -788,0 +799 @@
 +				r.budget.Step(1)
- 				if r.forwardcharnext() == ch {
- 					r.backwardnext()
- 					break
-@@ -811,6 +822,7 @@
- 			i := c
- 
- 			for ; i > 0; i-- {
+@@ -813,0 +825 @@
 +				r.budget.Step(1)
- 				if !set.CharIn(r.forwardcharnext()) {
- 					r.backwardnext()
- 					break
-@@ -969,6 +981,8 @@
- // increase the size of stack and track storage
- func (r *Runner) ensureStorage() error {
- 	if r.Runstackpos < r.runtrackcount*4 {
+@@ -971,0 +984,2 @@
 +		r.budget.Step(int64(len(r.runstack)))
 +		r.budget.Alloc(int64(len(r.runstack)) * 16)
- 		doubleIntSlice(&r.runstack, &r.Runstackpos)
- 	}
- 	if r.Runtrackpos < r.runtrackcount*4 && !r.growTrack() {
-@@ -979,6 +993,8 @@
- 
- func (r *Runner) ensureStack(plus int) {
- 	if r.Runstackpos-plus < r.runtrackcount*4 {
+@@ -981,0 +996,2 @@
 +		r.budget.Step(int64(len(r.runstack)))
 +		r.budget.Alloc(int64(len(r.runstack)) * 16)
- 		doubleIntSlice(&r.runstack, &r.Runstackpos)
- 	}
- }
-@@ -995,6 +1011,8 @@
- // Save a number on the longjump unrolling stack
- func (r *Runner) crawl(i int) {
- 	if r.runcrawlpos == 0 {
+@@ -997,0 +1014,2 @@
 +		r.budget.Step(int64(len(r.runcrawl)))
 +		r.budget.Alloc(int64(len(r.runcrawl)) * 16)
- 		doubleIntSlice(&r.runcrawl, &r.runcrawlpos)
- 	}
- 	r.runcrawlpos--
-@@ -1065,6 +1083,8 @@
- 		return false
- 	}
- 
+@@ -1067,0 +1086,2 @@
 +	r.budget.Step(int64(oldLen))
 +	r.budget.Alloc(int64(newLen) * 8)
- 	newTrack := make([]int, newLen)
- 	copy(newTrack[newLen-oldLen:], r.runtrack)
- 	r.Runtrackpos += newLen - oldLen
-@@ -1276,6 +1296,7 @@
- 
- 	if !r.caseInsensitive {
- 		for c != 0 {
+@@ -1278,0 +1299 @@
 +			r.budget.Step(1)
- 			c--
- 			pos--
- 			if str[c] != r.Runtext[pos] {
-@@ -1284,6 +1305,7 @@
- 		}
- 	} else {
- 		for c != 0 {
+@@ -1286,0 +1308 @@
 +			r.budget.Step(1)
- 			c--
- 			pos--
- 			if str[c] != unicode.ToLower(r.Runtext[pos]) {
-@@ -1323,6 +1345,7 @@
- 
- 	if !r.caseInsensitive {
- 		for c != 0 {
+@@ -1325,0 +1348 @@
 +			r.budget.Step(1)
- 			c--
- 			cmpos--
- 			pos--
-@@ -1333,6 +1356,7 @@
- 		}
- 	} else {
- 		for c != 0 {
+@@ -1335,0 +1359 @@
 +			r.budget.Step(1)
- 			c--
- 			cmpos--
- 			pos--
-@@ -1427,6 +1451,7 @@
- 	if set.IsSingleton() {
- 		ch := set.SingletonChar()
- 		for i := r.forwardchars(); i > 0; i-- {
+@@ -1429,0 +1454 @@
 +			r.budget.Step(1)
- 			if ch == r.forwardcharnext() {
- 				r.backwardnext()
- 				return true
-@@ -1434,6 +1459,7 @@
- 		}
- 	} else {
- 		for i := r.forwardchars(); i > 0; i-- {
+@@ -1436,0 +1462 @@
 +			r.budget.Step(1)
- 			n := r.forwardcharnext()
- 			//fmt.Printf("%v in %v: %v\n", string(n), set.String(), set.CharIn(n))
- 			if set.CharIn(n) {
-@@ -1560,7 +1586,9 @@
- 	// between possible first runes.
- 	if ignoreCase || len(firstRunes) == 0 {
- 		for start := r.Runtextpos; start <= latestPossibleStart(r); start++ {
+@@ -1562,0 +1589 @@
 +			r.budget.Step(1)
- 			for _, prefix := range prefixes {
+@@ -1563,0 +1591 @@
 +				r.budget.Step(1)
- 				if ignoreCase {
- 					if helpers.StartsWithIgnoreCase(r.Runtext[start:], prefix) {
- 						r.Runtextpos = start
-@@ -1578,6 +1606,7 @@
- 
- 	latest := min(latestPossibleStart(r), r.Runtextend-1)
- 	for searchAt := r.Runtextpos; searchAt <= latest; {
+@@ -1580,0 +1609 @@
 +		r.budget.Step(1)
- 		offset := indexOfAnyRunes(r.Runtext[searchAt:latest+1], firstRunes)
- 		if offset < 0 {
- 			break
-@@ -1585,6 +1614,7 @@
- 		start := searchAt + offset
- 		first := r.Runtext[start]
- 		for _, prefix := range prefixes {
+@@ -1587,0 +1617 @@
 +			r.budget.Step(1)
- 			if len(prefix) > 0 && prefix[0] == first && helpers.StartsWith(r.Runtext[start:], prefix) {
- 				r.Runtextpos = start
- 				return true
-@@ -1615,6 +1645,7 @@
- func findFixedDistanceCharLeftToRight(r *Runner, ch rune, distance int) bool {
- 	searchStart := r.Runtextpos + distance
- 	for searchStart < r.Runtextend {
+@@ -1617,0 +1648 @@
 +		r.budget.Step(1)
- 		offset := helpers.IndexOfAny1(r.Runtext[searchStart:], ch)
- 		if offset < 0 {
- 			r.Runtextpos = r.Runtextend
-@@ -1643,6 +1674,7 @@
- 
- 	searchStart := r.Runtextpos + distance
- 	for searchStart <= r.Runtextend-len(literal) {
+@@ -1645,0 +1677 @@
 +		r.budget.Step(1)
- 		offset := helpers.IndexOf(r.Runtext[searchStart:], literal)
- 		if offset < 0 {
- 			r.Runtextpos = r.Runtextend
-@@ -1672,6 +1704,7 @@
- 	primary := sets[0]
- 	searchStart := r.Runtextpos + primary.Distance
- 	for searchStart < r.Runtextend {
+@@ -1674,0 +1707 @@
 +		r.budget.Step(1)
- 		offset := indexOfSet(r.Runtext[searchStart:], primary)
- 		if offset < 0 {
- 			r.Runtextpos = r.Runtextend
-@@ -1701,6 +1734,7 @@
- 
- 	searchStart := r.Runtextpos
- 	for searchStart < r.Runtextend {
+@@ -1703,0 +1737 @@
 +		r.budget.Step(1)
- 		literalIndex := indexOfLiteralAfterLoop(r, literal, searchStart)
- 		if literalIndex < 0 {
- 			r.Runtextpos = r.Runtextend
-@@ -1709,6 +1743,7 @@
- 
- 		start := literalIndex
- 		for start > r.Runtextpos && literal.LoopNode.Set.CharIn(r.Runtext[start-1]) {
+@@ -1711,0 +1746 @@
 +			r.budget.Step(1)
- 			start--
- 		}
- 		if hasRequiredLengthAt(r, start) {
-@@ -1728,6 +1763,7 @@
- 	}
- 
- 	for searchStart := r.Runtextpos; searchStart <= latestPossibleStart(r); {
+@@ -1730,0 +1766 @@
 +		r.budget.Step(1)
- 		first, ok := findNextRequiredLandmarkRunes(r.Runtext, searchStart, r.Runtextend, chain.Landmarks[0])
- 		if !ok {
- 			r.Runtextpos = r.Runtextend
-@@ -1736,6 +1772,7 @@
- 
- 		nextStart := first.End
- 		for i := 1; i < len(chain.Landmarks); i++ {
+@@ -1738,0 +1775 @@
 +			r.budget.Step(1)
- 			landmark, ok := findNextRequiredLandmarkRunes(r.Runtext, nextStart, r.Runtextend, chain.Landmarks[i])
- 			if !ok {
- 				r.Runtextpos = r.Runtextend
-@@ -1749,6 +1786,7 @@
- 			candidate = r.Runtextpos
- 		}
- 		for candidate > r.Runtextpos && chain.LeadingLoopSet.CharIn(r.Runtext[candidate-1]) {
+@@ -1751,0 +1789 @@
 +			r.budget.Step(1)
- 			candidate--
- 		}
- 		if hasRequiredLengthAt(r, candidate) {
-@@ -1878,6 +1916,7 @@
- 
- func fixedDistanceSetsMatchAt(r *Runner, sets []syntax.FixedDistanceSet, start int) bool {
- 	for _, set := range sets {
+@@ -1880,0 +1919 @@
 +		r.budget.Step(1)
- 		index := start + set.Distance
- 		if index < 0 || index >= r.Runtextend || !charInFixedDistanceSet(set, r.Runtext[index]) {
- 			return false
-@@ -1924,8 +1963,10 @@
- 
- 	if r.runmatch == nil {
- 		if r.re.caps != nil {
+@@ -1926,0 +1966 @@
 +			r.budget.Alloc(512 + int64(r.re.capsize)*32)
- 			r.runmatch = newMatchSparse(r.re, r.re.caps, r.re.capsize, textInfo, r.Runtextstart)
- 		} else {
+@@ -1928,0 +1969 @@
 +			r.budget.Alloc(512 + int64(r.re.capsize)*32)
- 			r.runmatch = newMatch(r.re, r.re.capsize, textInfo, r.Runtextstart)
- 		}
- 	} else {
-@@ -1959,6 +2000,7 @@
- 		stacksize = 32
- 	}
- 
+@@ -1961,0 +2003 @@
 +	r.budget.Alloc(int64(tracksize+stacksize+32) * 8)
- 	r.runtrack = make([]int, tracksize)
- 	r.Runtrackpos = tracksize
- 
-@@ -2006,6 +2048,11 @@
- 	}
- 
- 	r.crawl(capnum)
+@@ -2008,0 +2051,5 @@
 +	if r.runmatch.matches[capnum] == nil {
 +		r.budget.Alloc(16)
 +	} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
 +		r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
 +	}
- 	r.runmatch.addMatch(capnum, start, end-start)
- }
- 
-@@ -2047,6 +2094,11 @@
- 
- 	if capnum != -1 {
- 		r.crawl(capnum)
+@@ -2049,0 +2097,5 @@
 +		if r.runmatch.matches[capnum] == nil {
 +			r.budget.Alloc(16)
 +		} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
 +			r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
 +		}
- 		r.runmatch.addMatch(capnum, start, end-start)
- 	}
- }
-@@ -2085,6 +2137,7 @@
- 
- 	buf.WriteRune('(')
- 	for i := index; i < len(a); i++ {
+@@ -2087,0 +2140 @@
 +		r.budget.Step(1)
- 		if i > index {
- 			buf.WriteRune(' ')
- 		}
-@@ -2115,6 +2168,7 @@
- 	buf.WriteRune('>')
- 
- 	for i := r.Runtextpos; i < r.Runtextend; i++ {
+@@ -2117,0 +2171 @@
 +		r.budget.Step(1)
- 		buf.WriteString(syntax.CharDescription(r.Runtext[i]))
- 	}
- 	if buf.Len() >= 64 {
-@@ -2168,6 +2222,7 @@
- 	buf, pooled := pooledRuneBuffers.get(len(s), r.re.optimizations.MaxCachedRuneBufferLength)
- 	n := 0
- 	for _, ch := range s {
+@@ -2170,0 +2225 @@
 +		r.budget.Step(1)
- 		buf[n] = ch
- 		n++
- 	}
-@@ -2179,6 +2234,7 @@
- 	n := 0
- 	runeStart = -1
- 	for strIdx, ch := range s {
+@@ -2181,0 +2237 @@
 +		r.budget.Step(1)
- 		if startAt >= 0 && strIdx == startAt {
- 			runeStart = n
- 		}
-@@ -2211,6 +2267,7 @@
- 
- func (r *Runner) LastIndexOfRune(startIndex int, endIndex int, find rune) int {
- 	for i := endIndex - 1; i >= startIndex; i-- {
+@@ -2213,0 +2270 @@
 +		r.budget.Step(1)
- 		if r.Runtext[i] == find {
- 			return i
- 		}
-@@ -2221,6 +2278,7 @@
- // Undo captures until it reaches the specified capture position
- func (r *Runner) UncaptureUntil(capturePos int) {
- 	for r.Crawlpos() > capturePos {
+@@ -2223,0 +2281 @@
 +		r.budget.Step(1)
- 		r.uncapture()
- 	}
- }
-@@ -2294,6 +2352,7 @@
- 	// check if we need to size up stack
- 	r.ensureStack(len(vals))
- 	for _, val := range vals {
+@@ -2296,0 +2355 @@
 +		r.budget.Step(1)
- 		r.Runstackpos--
- 		r.runstack[r.Runstackpos] = val
- 	}
 --- a/syntax/bounded_tree.go
 +++ b/syntax/bounded_tree.go
 @@ -0,0 +1,105 @@
@@ -693,7 +430,7 @@
 +}
 --- a/syntax/posix/bounded.go
 +++ b/syntax/posix/bounded.go
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,32 @@
 +package syntax
 +
 +import (
@@ -721,9 +458,89 @@
 +	}
 +	return append(dst, values...)
 +}
++
++// Unicode category aliases are immutable package data. Initialize them before
++// any operation can cancel halfway through sync.Once and retain a partial map.
++// Their storage remains module-static, outside per-operation scratch admission.
++func init() { categoryAliases.once.Do(func() { initCategoryAliases(nil) }) }
+--- a/syntax/posix/equal.go
++++ b/syntax/posix/equal.go
+@@ -0,0 +1,72 @@
++// Copyright 2011 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package syntax
++
++import "github.com/dlclark/regexp2/v2/internal/budget"
++
++// Equal reports whether x and y have identical structure.
++func equalMetered(x, y *Regexp, m *budget.Meter) bool {
++	m.Step(1)
++	if x == nil || y == nil {
++		return x == y
++	}
++	if x.Op != y.Op {
++		return false
++	}
++	switch x.Op {
++	case OpEndText:
++		// The parse flags remember whether this is \z or \Z.
++		if x.Flags&WasDollar != y.Flags&WasDollar {
++			return false
++		}
++
++	case OpLiteral, OpCharClass:
++		return x.Flags&FoldCase == y.Flags&FoldCase && equalRunes(x.Rune, y.Rune, m)
++
++	case OpAlternate, OpConcat:
++		return equalSubs(x.Sub, y.Sub, m)
++
++	case OpStar, OpPlus, OpQuest:
++		if x.Flags&NonGreedy != y.Flags&NonGreedy || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++
++	case OpRepeat:
++		if x.Flags&NonGreedy != y.Flags&NonGreedy || x.Min != y.Min || x.Max != y.Max || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++
++	case OpCapture:
++		if x.Cap != y.Cap || x.Name != y.Name || !equalMetered(x.Sub[0], y.Sub[0], m) {
++			return false
++		}
++	}
++	return true
++}
++
++func equalRunes(x, y []rune, m *budget.Meter) bool {
++	if len(x) != len(y) {
++		return false
++	}
++	for i := range x {
++		m.Step(1)
++		if x[i] != y[i] {
++			return false
++		}
++	}
++	return true
++}
++func equalSubs(x, y []*Regexp, m *budget.Meter) bool {
++	if len(x) != len(y) {
++		return false
++	}
++	for i := range x {
++		m.Step(1)
++		if !equalMetered(x[i], y[i], m) {
++			return false
++		}
++	}
++	return true
++}
 --- a/syntax/posix/types.go
 +++ b/syntax/posix/types.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,32 @@
 +package syntax
 +
 +import standard "regexp/syntax"
@@ -753,17 +570,14 @@
 +	OpAlternate      = standard.OpAlternate
 +	opPseudo         = 128
 +)
++
++// ScalarCollation selects locale-independent single-scalar collating atoms.
++const ScalarCollation standard.Flags = 1 << 15
 --- a/syntax/writer.go
 +++ b/syntax/writer.go
-@@ -3,19 +3,28 @@
- import (
- 	"bytes"
- 	"fmt"
+@@ -5,0 +6 @@
 +	"github.com/dlclark/regexp2/v2/internal/budget"
- 	"math"
- 	"slices"
- )
- 
+@@ -10 +11,6 @@
 -func Write(tree *RegexTree) (*Code, error) {
 +func Write(tree *RegexTree) (*Code, error) { return write(tree, nil) }
 +
@@ -771,101 +585,42 @@
 +
 +func write(tree *RegexTree, m *budget.Meter) (*Code, error) {
 +	m.Alloc(2048)
- 	w := newWriter(nil)
+@@ -11,0 +18 @@
 +	w.budget = m
- 	code, err := w.codeFromTree(tree)
- 	if err != nil {
- 		return nil, err
- 	}
- 
- 	if slices.Contains(code.CaptureSlotInUse, false) {
+@@ -17,0 +25 @@
 +		m.Alloc(2048)
- 		quickWriter := newWriter(code.CaptureSlotInUse)
+@@ -18,0 +27 @@
 +		quickWriter.budget = m
- 		quickCode, err := quickWriter.codeFromTree(tree)
- 		if err != nil {
- 			return nil, err
-@@ -36,6 +45,7 @@
- }
- 
- type writer struct {
+@@ -38,0 +48 @@
 +	budget  *budget.Meter
- 	emitted []int
- 
- 	intStack          []int
-@@ -89,7 +99,9 @@
- 	w.counting = true
- 
- 	for {
+@@ -91,0 +102 @@
 +		w.budget.Step(1)
- 		if !w.counting {
+@@ -92,0 +104 @@
 +			w.budget.Alloc(int64(w.count) * 8)
- 			w.emitted = make([]int, w.count)
- 		}
- 
-@@ -99,6 +111,7 @@
- 		w.emit1(Lazybranch, 0)
- 
- 		for {
+@@ -101,0 +114 @@
 +			w.budget.Step(1)
- 			if len(curNode.Children) == 0 {
- 				if err := w.emitFragment(curNode.T, curNode, 0); err != nil {
- 					return nil, err
-@@ -141,6 +154,10 @@
- 		return &Code{Codes: w.emitted, TrackCount: w.trackcount}, nil
- 	}
- 
+@@ -143,0 +157,4 @@
 +	if w.budget != nil {
 +		w.budget.Alloc(512 + int64(capsize))
 +		return &Code{Codes: w.emitted, Strings: w.stringtable, Sets: w.settable, TrackCount: w.trackcount, Caps: w.caps, Capsize: capsize, CaptureSlotInUse: captureSlotsInUse(w.emitted, capsize)}, nil
 +	}
- 	fcPrefix := getFirstCharsPrefix(tree)
- 	prefix := getPrefix(tree)
- 	rtl := (tree.Options & RightToLeft) != 0
-@@ -405,6 +422,9 @@
- // To avoid recursion, we use a simple integer stack.
- // This is the push.
- func (w *writer) pushInt(i int) {
+@@ -407,0 +425,3 @@
 +	if len(w.intStack) == cap(w.intStack) {
 +		w.budget.Alloc(int64(cap(w.intStack)*2+1) * 8)
 +	}
- 	w.intStack = append(w.intStack, i)
- }
- 
-@@ -441,6 +461,7 @@
- 		return 0
- 	}
- 
+@@ -443,0 +464 @@
 +	w.budget.Alloc(256 + int64(len(set.ranges))*64)
- 	buf := &bytes.Buffer{}
- 
- 	set.mapHashFill(buf)
-@@ -448,7 +469,11 @@
- 	i, ok := w.sethash[hash]
- 	if !ok {
- 		i = len(w.sethash)
+@@ -450,0 +472 @@
 +		w.budget.Alloc(128)
- 		w.sethash[hash] = i
+@@ -451,0 +474,3 @@
 +		if len(w.settable) == cap(w.settable) {
 +			w.budget.Alloc(int64(cap(w.settable)*2+1) * 8)
 +		}
- 		w.settable = append(w.settable, set)
- 	}
- 	return i
-@@ -461,11 +486,16 @@
- 		return 0
- 	}
- 
+@@ -463,0 +489 @@
 +	w.budget.Alloc(int64(len(str)) * 4)
- 	hash := string(str)
- 	i, ok := w.stringhash[hash]
- 	if !ok {
- 		i = len(w.stringhash)
+@@ -467,0 +494 @@
 +		w.budget.Alloc(128)
- 		w.stringhash[hash] = i
+@@ -468,0 +496,3 @@
 +		if len(w.stringtable) == cap(w.stringtable) {
 +			w.budget.Alloc(int64(cap(w.stringtable)*2+1) * 24)
 +		}
- 		w.stringtable = append(w.stringtable, str)
- 	}
- 

@@ -47,7 +47,7 @@ func TestArgvPredicates(t *testing.T) {
 		status int
 	}{
 		{"test", nil, 1}, {"test", []string{""}, 1}, {"test", []string{"!"}, 0}, {"test", []string{"-n"}, 0},
-		{"test", []string{"-n", ""}, 1}, {"test", []string{"-z", ""}, 0}, {"test", []string{"-n", "=", "-n"}, 0},
+		{"test", []string{"-n", ""}, 1}, {"test", []string{"-n", "-a", "x"}, 0}, {"test", []string{"!", "-a", "x"}, 0}, {"test", []string{"x", "-a", "!"}, 0}, {"test", []string{"-z", ""}, 0}, {"test", []string{"-n", "=", "-n"}, 0},
 		{"test", []string{"x", "!=", "x"}, 1}, {"test", []string{"x", "=", "y"}, 1},
 		{"test", []string{"0000009", "-eq", "+9"}, 0}, {"test", []string{"-0", "-eq", "0"}, 0},
 		{"test", []string{strings.Repeat("9", 100), "-gt", "9223372036854775807"}, 0},
@@ -122,5 +122,30 @@ func TestPredicateCancellationAndBoundsStop(t *testing.T) {
 	var limit *PredicateLimitError
 	if !errors.As(err, &limit) || limit.Resource != "argument_bytes" {
 		t.Fatalf("missing scalar limit %v", err)
+	}
+}
+
+func TestArgvPredicateDoesNotBorrowSyntaxUnitDepthLimit(t *testing.T) {
+	args := []string{"x"}
+	for range 100 {
+		args = append(args, "-a", "x")
+	}
+	got, err := (PredicateRuntime{LocalBoundsOnly: true}).TestBuiltin(t.Context(), fixtureInvocation(), "test", args)
+	testutil.FailErr(t, "long shallow argv predicate", err)
+	if got.Status != 0 {
+		t.Fatalf("long predicate %+v", got)
+	}
+	grouped := []string{}
+	for range 100 {
+		grouped = append(grouped, "(")
+	}
+	grouped = append(grouped, "x")
+	for range 100 {
+		grouped = append(grouped, ")")
+	}
+	got, err = (PredicateRuntime{LocalBoundsOnly: true}).TestBuiltin(t.Context(), fixtureInvocation(), "test", grouped)
+	testutil.FailErr(t, "nested argv predicate", err)
+	if got.Status != 0 {
+		t.Fatalf("nested predicate %+v", got)
 	}
 }

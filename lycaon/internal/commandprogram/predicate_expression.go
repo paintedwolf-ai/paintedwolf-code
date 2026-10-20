@@ -19,7 +19,7 @@ type PredicateLimitError struct {
 
 func (e *PredicateLimitError) Error() string { return "predicate resource limit: " + e.Resource }
 
-type predicateLimits struct{ nodes, depth, argument, argv, memory int64 }
+type predicateLimits struct{ nodes, depth, argument, argv, memory, fields int64 }
 
 var predicateBounds = sync.OnceValue(func() predicateLimits {
 	catalog, err := toolcontract.LanguageV1()
@@ -37,6 +37,8 @@ var predicateBounds = sync.OnceValue(func() predicateLimits {
 			b.argument = l.Maximum
 		case "argv_bytes":
 			b.argv = l.Maximum
+		case "expanded_fields":
+			b.fields = l.Maximum
 		case "evaluation_memory_bytes":
 			b.memory = l.Maximum
 		}
@@ -47,41 +49,25 @@ var predicateBounds = sync.OnceValue(func() predicateLimits {
 type predicateExpr struct {
 	op, value   string
 	left, right *predicateExpr
-	depth       int64
 }
 type predicateParser struct {
-	args   []string
-	pos    int
-	nodes  int64
-	bounds predicateLimits
-	quota  *predicateQuota
+	args  []string
+	pos   int
+	quota *predicateQuota
 }
 
 func (p *predicateParser) node(op, value string, left, right *predicateExpr) (*predicateExpr, error) {
-	p.nodes++
-	if p.nodes > p.bounds.nodes {
-		return nil, &PredicateLimitError{"ast_nodes", p.bounds.nodes, p.nodes}
-	}
-	depth := int64(1)
-	for _, child := range []*predicateExpr{left, right} {
-		if child != nil && child.depth >= depth {
-			depth = child.depth + 1
-		}
-	}
-	if depth > p.bounds.depth {
-		return nil, &PredicateLimitError{"ast_depth", p.bounds.depth, depth}
-	}
 	if err := p.quota.alloc(96); err != nil {
 		return nil, err
 	}
-	return &predicateExpr{op: op, value: value, left: left, right: right, depth: depth}, nil
+	return &predicateExpr{op: op, value: value, left: left, right: right}, nil
 }
-func (p *predicateParser) expression(level int, depth int64) (*predicateExpr, error) {
-	if depth > p.bounds.depth {
-		return nil, &PredicateLimitError{"ast_depth", p.bounds.depth, depth}
+func (p *predicateParser) expression(level int) (*predicateExpr, error) {
+	if err := p.quota.ctx.Err(); err != nil {
+		return nil, err
 	}
 	if level < 2 {
-		lhs, err := p.expression(level+1, depth)
+		lhs, err := p.expression(level + 1)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +77,7 @@ func (p *predicateParser) expression(level int, depth int64) (*predicateExpr, er
 		}
 		for p.pos < len(p.args) && p.args[p.pos] == op {
 			p.pos++
-			rhs, err := p.expression(level+1, depth+1)
+			rhs, err := p.expression(level + 1)
 			if err != nil {
 				return nil, err
 			}
@@ -128,6 +114,13 @@ func (p *predicateParser) expression(level int, depth int64) (*predicateExpr, er
 		p.pos += 3
 		return p.node(op, "", lhs, rhs)
 	}
+	// In a boolean binary form the left operand is a one-string primary,
+	// including operator-shaped data such as -n, ! or a parenthesis.
+	if remaining >= 3 && (p.args[p.pos+1] == "-a" || p.args[p.pos+1] == "-o") {
+		value := p.args[p.pos]
+		p.pos++
+		return p.node("word", value, nil, nil)
+	}
 	word := p.args[p.pos]
 	p.pos++
 	if remaining == 1 {
@@ -135,13 +128,13 @@ func (p *predicateParser) expression(level int, depth int64) (*predicateExpr, er
 	}
 	switch word {
 	case "!":
-		child, err := p.expression(2, depth+1)
+		child, err := p.expression(2)
 		if err != nil {
 			return nil, err
 		}
 		return p.node("!", "", child, nil)
 	case "(":
-		child, err := p.expression(0, depth+1)
+		child, err := p.expression(0)
 		if err != nil {
 			return nil, err
 		}
@@ -203,6 +196,9 @@ func (r PredicateRuntime) TestBuiltin(ctx context.Context, invocation toolcontra
 	}
 	defer r.quota.close()
 	b := predicateBounds()
+	if int64(len(args)+1) > b.fields {
+		return toolcontract.ProducerResult{}, &PredicateLimitError{"expanded_fields", b.fields, int64(len(args) + 1)}
+	}
 	var total int64
 	for _, arg := range args {
 		if strings.IndexByte(arg, 0) >= 0 {
@@ -220,8 +216,14 @@ func (r PredicateRuntime) TestBuiltin(ctx context.Context, invocation toolcontra
 	if len(args) == 0 {
 		return predicateResult(1), nil
 	}
-	p := predicateParser{args: args, bounds: b, quota: r.quota}
-	expression, err := p.expression(0, 1)
+	// Unlike [[, these operator nodes are utility argv data, not the selected
+	// syntax unit. Reserve parser/evaluator frames from the admitted operand
+	// count instead of imposing syntax-unit AST node/depth limits on them.
+	if err := r.quota.alloc(int64(len(args)+1) * 2048); err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
+	p := predicateParser{args: args, quota: r.quota}
+	expression, err := p.expression(0)
 	if err == nil && p.pos != len(args) {
 		err = errPredicateUsage
 	}

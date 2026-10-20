@@ -13,6 +13,11 @@
     {
       "path": "LICENSE",
       "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "path": "src/regexp/syntax/regexp.go",
+      "sha256": "72fad4645d96cf8b0ef0ea4a9dae21f09e7bea090d1bdd500732d811982b2192",
+      "selected_excerpt": "Regexp.Equal only; preserves existing algorithm with operation-meter hooks"
     }
   ],
   "tag_object": {

@@ -27,3 +27,6 @@ const (
 	OpAlternate      = standard.OpAlternate
 	opPseudo         = 128
 )
+
+// ScalarCollation selects locale-independent single-scalar collating atoms.
+const ScalarCollation standard.Flags = 1 << 15

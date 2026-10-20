@@ -25,3 +25,8 @@ func appendMetered[T any](m *budget.Meter, dst []T, values ...T) []T {
 	}
 	return append(dst, values...)
 }
+
+// Unicode category aliases are immutable package data. Initialize them before
+// any operation can cancel halfway through sync.Once and retain a partial map.
+// Their storage remains module-static, outside per-operation scratch admission.
+func init() { categoryAliases.once.Do(func() { initCategoryAliases(nil) }) }

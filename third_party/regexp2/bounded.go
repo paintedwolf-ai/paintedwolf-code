@@ -9,12 +9,14 @@ import (
 	posixsyntax "github.com/dlclark/regexp2/v2/syntax/posix"
 )
 
-// SyntaxBudget bounds only MatchSyntaxBounded, including its typed compilation.
+// SyntaxBudget bounds the selected typed/pattern APIs and their compilation.
 // Reserve joins the host aggregate working-memory admission before allocation.
 // A nil Reserve selects pure local accounting and provides no aggregate claim.
 type SyntaxBudget = budget.Limits
 type SyntaxBudgetError = budget.Error
 type SyntaxParseError = posixsyntax.Error
+
+const ScalarCollation = posixsyntax.ScalarCollation
 
 // MatchSyntaxBounded executes only a host-validated regular tree. It exposes no
 // text parser, captures, generated engine, pool retention, or PCRE qualification.

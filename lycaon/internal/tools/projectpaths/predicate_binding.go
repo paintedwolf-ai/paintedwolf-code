@@ -1,18 +1,17 @@
-package survey
+package projectpaths
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // PredicateFiles binds native predicates to an already admitted operation's read
 // session. The host constructs that session from the invocation's actual scope;
 // the predicate cannot substitute a scope or promote -w into write authority.
 type PredicateFiles struct {
-	Reads      *projectpaths.ReadSession
+	Reads      *ReadSession
 	Invocation toolcontract.OperationInvocation
 }
 

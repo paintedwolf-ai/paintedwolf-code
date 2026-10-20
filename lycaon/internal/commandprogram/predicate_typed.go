@@ -3,9 +3,10 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"strings"
 )
 
 // TestExpression evaluates the detached [[ tree without serializing/reparsing
@@ -19,6 +20,9 @@ func (r PredicateRuntime) TestExpression(ctx context.Context, inv toolcontract.O
 	defer r.quota.close()
 	var count int64
 	b := predicateBounds()
+	if err := r.quota.alloc(b.depth * 2048); err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
 	if err := validatePredicate(e.Expression, 1, &count, b); err != nil {
 		return predicateFailure(err)
 	}
@@ -88,13 +92,6 @@ func (r PredicateRuntime) expand(ctx context.Context, n commandsurface.TestNode)
 		}
 	}
 	return value, nil
-}
-func predicateText(value PredicateValue) string {
-	var out strings.Builder
-	for _, f := range value {
-		out.WriteString(f.Value)
-	}
-	return out.String()
 }
 func (r PredicateRuntime) evalTyped(ctx context.Context, inv toolcontract.OperationInvocation, e commandsurface.TestNode) (bool, error) {
 	if err := ctx.Err(); err != nil {

@@ -13,7 +13,10 @@ admission. Arbitrary operands, including dash-prefixed words, remain data.
 `PredicateRuntime.TestBuiltin` implements `test` and `[`. It validates the whole
 argv expression before probing paths: empty input is false, a single operand is
 its nonemptiness, binary comparison operands remain data, and compound forms use
-`!` before `-a` before `-o`, with parentheses. `[` requires its final `]`.
+`!` before `-a` before `-o`, with parentheses. Unlike legacy argument-count
+dispatch, this explicitly frozen precedence also applies to four-operand forms.
+A one-string primary before a boolean connector may contain operator-shaped
+data, as in `test -n -a x`. `[` requires its final `]`.
 Decimal comparisons accept signed decimal digits and leading zeroes without
 machine-integer overflow or arithmetic evaluation. The retained grammar defines
 no locale or numeric-expression evaluation.
@@ -58,14 +61,22 @@ results, text-parser fallback or additional PCRE grammar. P13 engine/adapter
 qualification remains independent.
 
 ERE matching searches within the scalar. Dot and negated classes include LF;
-`^` and `$` anchor the whole scalar. There is no locale-dependent collation.
+`^` and `$` anchor the whole scalar. There is no locale-dependent collation. Collating/equivalence bracket atoms
+`[[.x.]]` and `[[=x=]]` name one Unicode scalar with identity equivalence;
+ranges use scalar ordering. Unknown or multiscalar collating names are invalid.
+The same opt-in scalar profile feeds glob and ERE matching.
 Quoted ERE fragments remain literal substrings rather than implied equality.
 
 Production runtimes and pattern adapters require `PredicateMemory.Reserve` to
-join the invoking program's aggregate memory admission before allocating. Pure
+join the invoking program's aggregate memory admission before allocating.
+Admission must observe cancellation and refuse exhausted same-program capacity
+without waiting for reservations already held by that operation. Pure
 fixtures must explicitly select `LocalBoundsOnly`; that option establishes no
 aggregate qualification. Predicate AST nodes and fragment concatenation retain
-reservations through the operation. Lexical normalization reserves its bounded
+reservations through the operation. Argv predicate operator nodes are utility
+data, not selected shell syntax nodes; they use the admitted field count,
+argv bytes and parser/evaluator memory reservations rather than borrowing the
+syntax-unit AST depth ceiling. Lexical normalization reserves its bounded
 old/new string and tag capacities before construction: for B submitted bytes,
 `1024 + 8*(B+1)^2` covers the fixed maps plus at most B/3 tagged counts,
 their old/new metadata and bounded string copies. This is a source-derived
