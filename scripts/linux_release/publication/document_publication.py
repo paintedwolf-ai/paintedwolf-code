@@ -57,7 +57,7 @@ def publish(directory, request, catalog, updater, artifacts, *, authorize, backe
 
 
 def notification(directory, request, catalog, updater, artifacts, *, authorize, manifest_sha256,
-                 registry=None, bad_distribution_sha256=None):
+                 registry=None, bad_distribution_sha256=None, bad_version=None):
     """Construct a payload only; the protected workflow separately owns any dispatch."""
     if not isinstance(manifest_sha256, str) or not re.fullmatch("[a-f0-9]{64}", manifest_sha256):
         raise ValueError("notification requires an independently selected updater digest")
@@ -71,5 +71,16 @@ def notification(directory, request, catalog, updater, artifacts, *, authorize, 
     if bad_distribution_sha256 is not None:
         if not isinstance(bad_distribution_sha256, str) or not re.fullmatch("[a-f0-9]{64}", bad_distribution_sha256):
             raise ValueError("halt notification requires an explicitly selected bad distribution digest")
-        payload["bad_distribution_sha256"] = bad_distribution_sha256
+        from scripts.release_semver import parse
+        if not isinstance(bad_version, str):
+            raise ValueError("halt notification requires the explicitly selected bad version")
+        parse(bad_version)
+        if bad_version == document["version"]:
+            raise ValueError("halt replacement must differ from the explicitly selected bad version")
+        payload = {"channel": document["channel"], "bad_version": bad_version,
+                   "last_good_version": document["version"], "manifest_sha256": manifest_sha256,
+                   "distribution_sha256": admitted["distribution_sha256"],
+                   "bad_distribution_sha256": bad_distribution_sha256}
+    elif bad_version is not None:
+        raise ValueError("halt notification requires the independent bad distribution digest")
     return payload

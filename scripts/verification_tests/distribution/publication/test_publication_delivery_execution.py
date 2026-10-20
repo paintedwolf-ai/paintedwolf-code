@@ -61,7 +61,7 @@ class RepositoryDeliveryFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             public = root / "trusted.asc"; public.write_bytes(b"selected public key")
-            manifest = {"family": "pacman", "key_fingerprint": "A" * 40}
+            manifest = {"family": "pacman", "repository": "painted-wolf-code", "key_fingerprint": "A" * 40}
             facts = {"family": "pacman", "architecture": "x86_64", "channel": "stable", "generation": "a" * 64,
                      "inventory_sha256": "b" * 64, "activation_sha256": "c" * 64,
                      "base_url": "https://downloads.paintedwolf.dev/linux/repositories/channels/pacman/stable/x86_64",

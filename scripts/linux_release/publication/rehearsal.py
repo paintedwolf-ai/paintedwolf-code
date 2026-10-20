@@ -122,7 +122,7 @@ def run(output):
             else:
                 raise ValueError("document rehearsal accepted stale authority")
             payload = notification(*arguments, authorize=authorize, registry=registry,
-                manifest_sha256=hashlib.sha256(updater.read_bytes()).hexdigest(), bad_distribution_sha256="d" * 64)
+                manifest_sha256=hashlib.sha256(updater.read_bytes()).hexdigest(), bad_distribution_sha256="d" * 64, bad_version="0.0.900002")
             if payload["distribution_sha256"] != identity["distribution_sha256"] or payload["bad_distribution_sha256"] != "d" * 64:
                 raise ValueError("document notification lost independent selected digests")
             controls.append("release-and-halt-independent-digest-payloads")

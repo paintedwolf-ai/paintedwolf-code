@@ -49,7 +49,7 @@ class DocumentTransportTests(unittest.TestCase):
             root = Path(temporary)
             _, construct, _, arguments = self.fixture(root)
             payload = owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={},
-                                         bad_distribution_sha256="b" * 64)
+                                         bad_distribution_sha256="b" * 64, bad_version="1.2.4")
             self.assertEqual(payload["distribution_sha256"], hashlib.sha256((root / "distribution.v1.json").read_bytes()).hexdigest())
             self.assertEqual(payload["bad_distribution_sha256"], "b" * 64)
             self.assertEqual(payload["manifest_sha256"], "a" * 64)
