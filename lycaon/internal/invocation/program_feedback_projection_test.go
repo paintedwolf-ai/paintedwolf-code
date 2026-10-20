@@ -6,11 +6,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -52,6 +57,25 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	if cause.Data["native_operation"] != nil {
 		t.Fatal("supplement mutated owner rejection")
 	}
+	// Exercise the actual OAR boundary with the captured outer arguments. The
+	// native path operand must never replace the submitted command object.
+	parent := denied.Invocation()
+	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
+	testutil.FailErr(t, "freeze actual model envelope", err)
+	defer frame.Close()
+	testutil.FailErr(t, "install actual OAR anchors", anchorcatalog.InstallBundled())
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	policy := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolRejected, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "write" && tool_arg_string("command") == "${op} arg" && tool_arg_string("path") == ""`, Copy: oar.Copy{What: "Actual command envelope selected", Fix: "Inspect the permitted source before preparing the remaining action."}}
+	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{policy}), nil, oar.NewCounterStore())
+	pipeline.EnableAnchor(oar.AnchorToolRejected)
+	executor := toolexecution.NewExecutor(nil, nil, "fixture")
+	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)})
+	rendered := executor.RenderProgramFailure(t.Context(), frame, tc, prepared)
+	refusal, ok := guidance.RefusalFromError(rendered)
+	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Actual command envelope selected") || toolrejection.AsToolReject(rendered) == nil {
+		t.Fatalf("OAR lost actual model identity or typed owner cause: %v", rendered)
+	}
 	message := api.Message{ID: "fixture-result", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "actual-model-call", Outcome: api.ToolResultOutcomeRejected, Feedback: []api.ToolFeedback{{Code: code, Details: data}}}}
 	projected := transcript.Project([]api.Message{message})
 	var content string
@@ -71,6 +95,10 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	}
 	prepared.Close()
 	prepared.Close()
+	frame.Close()
+	if err := executor.RenderProgramFailure(t.Context(), frame, tc, prepared); err == nil {
+		t.Fatal("closed feedback/frame rendered an uncharged observation")
+	}
 	if memory.active != 0 {
 		t.Fatalf("feedback lease leaked: %d", memory.active)
 	}
