@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -35,7 +36,7 @@ func TestCommandCompositionPreservesPublicationAfterAggregateFailure(t *testing.
 		Identity: tools.InvocationIdentity{ProjectID: project.ID, SessionID: "composition-session"},
 		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: rootID, Path: project.Roots[0].Path, IsPrimary: true}}, ActiveRootID: rootID, ProjectSourceBranch: project.SourceBranch, SourceWorkspaceKind: api.SourceWorkspaceKindProject, EditorDocuments: adapter},
 	}
-	resolved, err := projectpaths.ResolveRead(ctx, sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, nil), tctx, "a.txt")
+	resolved, err := projectpaths.ResolveRead(ctx, sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}}}), tctx, "a.txt")
 	if err != nil {
 		t.Fatalf("resolve input: %v", err)
 	}
