@@ -14,9 +14,12 @@ _password = None
 _password_owner = None
 
 
-def controls(window, api):
+def controls(window, api, deadline=None):
+    deadline = time.monotonic() + 15 if deadline is None else deadline
     pending, visited, fields, buttons = [(window, 0)], 0, {}, {}
     while pending:
+        if time.monotonic() >= deadline:
+            raise CaseUnavailable('normal native vault inventory deadline exceeded')
         node, depth = pending.pop()
         visited += 1
         if visited > 4096 or depth > 64 or not 0 <= node.childCount <= 1024:
@@ -42,12 +45,15 @@ def controls(window, api):
     return ('create' if create else 'unlock', {name: rows[0] for name, rows in fields.items()}, buttons[button][0])
 
 
-def form(api, app):
+def form(api, app, deadline=None):
+    deadline = time.monotonic() + 15 if deadline is None else deadline
     desktop = api.Registry.getDesktop(0)
     if not 0 <= desktop.childCount <= 256:
         raise ValueError('native accessibility application inventory exceeds its bound')
     matches = []
     for index in range(desktop.childCount):
+        if time.monotonic() >= deadline:
+            raise CaseUnavailable('normal native vault inventory deadline exceeded')
         application = desktop[index]
         pid = application.get_process_id()
         if not owned_process(pid, app):
@@ -56,12 +62,14 @@ def form(api, app):
         if not 0 <= application.childCount <= 64:
             raise ValueError('installed accessibility window inventory exceeds its bound')
         for offset in range(application.childCount):
+            if time.monotonic() >= deadline:
+                raise CaseUnavailable('normal native vault inventory deadline exceeded')
             window = application[offset]
             if window.getRole() not in {api.ROLE_FRAME, api.ROLE_DIALOG}:
                 continue
             if not window.getState().contains(api.STATE_SHOWING):
                 continue
-            selected = controls(window, api)
+            selected = controls(window, api, deadline)
             if selected:
                 matches.append((pid, before, selected))
         if process_identity(pid) != before or not owned_process(pid, app):
@@ -112,10 +120,13 @@ def onboard(app):
                     continue
             if not acted:
                 try:
-                    selected = form(api, app)
+                    selected = form(api, app, deadline)
                     if selected:
                         app.observations['onboarding'] = complete(selected, owner)
                         acted = True
+                except IndexError:
+                    key = 'native_accessibility_inventory_retries'
+                    app.observations[key] = app.observations.get(key, 0) + 1
                 except (ValueError, CaseUnavailable):
                     raise
                 except Exception as error:
