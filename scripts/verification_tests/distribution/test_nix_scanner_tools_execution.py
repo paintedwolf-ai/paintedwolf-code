@@ -64,3 +64,13 @@ class NixScannerToolsTests(unittest.TestCase):
         self.assertEqual(invocation[-1], TOOL + '^out')
         self.assertEqual(selected['executable'], EXE)
         self.assertIn('sandbox', invocation)
+
+    def test_real_nix_store_query_suffix_names_are_valid_graph_dependencies(self):
+        rows = graph()
+        patch_path = '/nix/store/' + '4' * 32 + '-libselinux.patch?id=' + 'a' * 40 + '.drv'
+        rows[ROOT]['inputDrvs'][patch_path] = ['out']
+        rows[patch_path] = {'system': 'aarch64-linux', 'env': {}, 'inputDrvs': {}}
+        self.assertEqual(host.scanner_derivation(schema4(rows), ROOT, 'aarch64-linux')['executable'], EXE)
+        rows[ROOT]['inputDrvs'][patch_path + '/escape'] = ['out']
+        with self.assertRaises(ValueError):
+            host.scanner_derivation(schema4(rows), ROOT, 'aarch64-linux')
