@@ -36,7 +36,7 @@ class PartialCandidateDiagnosticsTests(unittest.TestCase):
             outside.write_bytes(b"outside")
             package.symlink_to(outside)
             with patch("linux_release.candidate_diagnostics.subprocess.check_output",side_effect=["a"*40,"b"*40]):
-                with self.assertRaises(OSError):
+                with self.assertRaises((OSError,ValueError)):
                     retain(source,root/"refused","c"*40)
             self.assertFalse((root/"refused").exists())
             with self.assertRaisesRegex(ValueError,"fresh"):

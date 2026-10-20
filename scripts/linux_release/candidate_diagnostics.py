@@ -15,6 +15,7 @@ def retain(source, output, controller):
         raise ValueError("diagnostics require an immutable controller commit")
     if output.exists() or output.is_symlink() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("diagnostics require a fresh output outside source")
+    source=source.resolve(strict=True)
     def git(value):
         return subprocess.check_output(["git","--no-replace-objects","-C",str(source),"rev-parse",value],text=True).strip()
     commit,tree=git("HEAD"),git("HEAD^{tree}")
@@ -27,6 +28,9 @@ def retain(source, output, controller):
     try:
         rows=[]
         for index,path in enumerate(selected):
+            if (not path.resolve(strict=True).is_relative_to(source.resolve(strict=True))
+                    or any(parent.is_symlink() for parent in [path,*path.parents] if parent!=source.parent)):
+                raise ValueError("partial package escaped its physical source output tree")
             fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
             target=output/(str(index)+"-"+path.name)
             digest=hashlib.sha256()
