@@ -4,15 +4,18 @@
   "kind": "module",
   "workstream": "linux-nix-cache-admission",
   "disposition": "retain",
-  "reason": "Retain the existing isolated R2 rehearsal owner at 374 code lines. Its twelve Nix dispatch lines select either the local cache rehearsal or the bucket-scoped S3 rehearsal before legacy credential setup; lifecycle, private configuration and signing remain in their adapter owners. The shared fixture owns disposable closure construction, while separate local and S3 drivers own their transport scenarios. At 6b8ce1db5c, the managed runner passed 531 tests with one platform skip; native Nix 2.35.3 passed sixteen local controls and nine actual S3/HTTPS controls including cold substitution, interruption, exact recovery, rotation, withdrawal and independently audited empty-prefix cleanup. Retain this explicit dispatcher boundary with no further growth allowance.",
-  "reviewed_commit": "6b8ce1db5c07087aeed321babd8905d9636d63be",
-  "ceiling": 374,
+  "reason": "Retain the isolated R2 rehearsal dispatcher at 378 code lines. Its sixteen Nix dispatch lines select the local cache, bucket-scoped S3 cache, or readonly source-identity rehearsal before legacy credential setup; private configuration, signing, source evaluation and transport lifecycles remain in their distinct adapter owners. The source verifier freshly binds immutable Git version/lock and native derivation evaluation to recursively verified actual NAR content, without any signing/cache/installed authority. At 09d79e5b72, the managed runner passed 534 tests with one platform skip; a native Nix 2.35.3 actual-store rehearsal passed seven source-identity controls including dirty-worktree isolation and wrong version/lock/output refusal. Prior sixteen local cache and nine actual S3/HTTPS controls remain qualified at their recorded source. These four dispatch lines introduce no additional lifecycle owner; retain this explicit bounded dispatch with no further growth allowance.",
+  "reviewed_commit": "09d79e5b7236ac4eaa0fbdfcecb0e463b207eea5",
+  "ceiling": 378,
   "boundaries": {
-    "scripts/release-r2-live-test.sh": "2e2aa389b6a6b34176452c79dae10c0edf1ea2807018349c73557106febc7f6c",
+    "scripts/release-r2-live-test.sh": "e7406d0012aae69b1818c79050bf5ba7a0df4329feedc96953eaef101f12107b",
     "scripts/nix_cache/rehearsal.py": "3295017ea274a30b695428377756db859ea4e60f4669672f7d289b359f3214a1",
     "scripts/nix_cache/rehearsal_fixture.py": "b2ba6e30fe33f89722a945c4b768174d8b8e049f8dffda10bb4568426e3507a9",
     "scripts/nix_cache/rehearsal_r2.py": "6cf3886672c6f25691a92a4a5e7996653301b27defd53c50efa8581aaf64d87a",
     "scripts/verification_tests/distribution/test_nix_cache_live_execution.py": "14d5580b3df90e288d265ac6c8401153c91b212089dbd9331263834f56622c1c",
-    "scripts/verification_tests/distribution/test_nix_cache_publication_execution.py": "2c25a2bcb225b712f9eab42f038faeaaee5601b03bf1f34081fb48cb4ed8a9ae"
+    "scripts/verification_tests/distribution/test_nix_cache_publication_execution.py": "2c25a2bcb225b712f9eab42f038faeaaee5601b03bf1f34081fb48cb4ed8a9ae",
+    "scripts/nix_cache/source.py": "ff004440ad25bee09f9a551ee9d8c997018c0bd5bc9b788200e19621c0c5d3a5",
+    "scripts/nix_cache/source_rehearsal.py": "e0b5abefda69d5d776c565615186f8a217cf6fe8710b0fb5b2e1b3cbfedb7c3c",
+    "scripts/verification_tests/distribution/test_nix_source_execution.py": "d9790c61ed58377b68e35aada329cceba7b859d4afdab1fce38afc8a27cfbefe"
   }
 }
