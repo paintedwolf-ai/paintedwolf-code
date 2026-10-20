@@ -69,7 +69,7 @@ class ReleaseInputBytesTests(unittest.TestCase):
         self.package = "painted-wolf-code_v1.2.3_darwin-aarch64.dmg"
         self.updater_name = "painted-wolf-code_v1.2.3_darwin-aarch64.app.tar.gz"
         self.put(self.package, b"actual fixture package")
-        self.put(self.package + ".sha256", (self.digest(b"actual fixture package") + "  " + self.package + "\n").encode())
+        self.put(self.package + ".sha256", (self.digest(b"actual fixture package") + "\n").encode())
         self.put(self.updater_name, b"actual fixture updater")
         self.put(self.updater_name + ".sig", b"protected-producer-signature\n")
         self.updater = {"version": "1.2.3", "notes": "Release notes", "pub_date": "2026-10-20T00:00:00Z",

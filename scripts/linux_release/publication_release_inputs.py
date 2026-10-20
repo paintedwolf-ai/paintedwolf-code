@@ -64,7 +64,7 @@ def inventory(root: Path, catalog: dict, updater: dict, source: dict) -> dict:
             expected.update((name, name + ".sha256"))
             identity, _ = snapshot(root / "artifacts" / name)
             _, raw = snapshot(root / "artifacts" / (name + ".sha256"), retain=True, limit=4096)
-            if raw.decode().strip() != f"{identity['sha256']}  {name}":
+            if raw.decode().strip() != identity["sha256"]:
                 raise ValueError("retained package checksum does not describe the selected bytes")
             packages[platform][extension] = {"file": name, **identity}
         extension = row["updater_extension"]
