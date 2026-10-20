@@ -53,6 +53,34 @@ class PacmanCandidateTests(unittest.TestCase):
             self.assertEqual(runner.call_count, 1)
             self.assertEqual(runner.call_args.args[:2], ("docker", "version"))
 
+    def test_preparation_preserves_pacman_sandbox_and_sets_landlock_prerequisite(self):
+        calls=[]
+        def command(*arguments):
+            calls.append(arguments)
+            if arguments[:2] == ("docker","version"):
+                return "linux/amd64"
+            if arguments[:3] == ("docker","image","inspect"):
+                return "amd64"
+            if arguments[:2] == ("docker","create"):
+                return "owned-container"
+            if arguments[:2] == ("docker","inspect"):
+                return "0"
+            return "fixture"
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch("linux_release.arch_substrate.platform.system",return_value="Linux"), \
+                patch("linux_release.arch_substrate.platform.machine",return_value="x86_64"), \
+                patch("linux_release.arch_substrate.os.getuid",return_value=1000), \
+                patch("linux_release.arch_substrate.os.getgid",return_value=1000), \
+                patch("linux_release.arch_substrate.command",side_effect=command), \
+                patch("linux_release.arch_substrate.subprocess.run"):
+            result=build(ROOT,Path(temporary),"x86_64",123)
+        preparation=next(call for call in calls if call[:2]==("docker","create"))
+        self.assertIn("--security-opt=no-new-privileges",preparation)
+        self.assertNotIn("--privileged",preparation)
+        self.assertNotIn("--security-opt=seccomp=unconfined",preparation)
+        self.assertNotIn("--disable-sandbox"," ".join(preparation))
+        self.assertFalse(result["network_during_packaging"])
+
     def test_corrupt_cached_rootfs_never_reaches_signature_or_docker(self):
         with tempfile.TemporaryDirectory() as temporary:
             row = json.loads((ROOT / "packaging/linux/arch/substrates.json").read_text())["aarch64"]
