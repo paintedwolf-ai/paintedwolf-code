@@ -104,3 +104,27 @@ class HostedDesktopTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 hosted.prepare_install_parent()
             opened.assert_not_called()
+
+    def test_shared_parent_preparation_is_limited_to_the_second_fixed_hosted_ancestor(self):
+        import os
+        import stat
+        from types import SimpleNamespace
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            path = Path(directory).resolve()
+            actual_fstat, actual_lstat = os.fstat, Path.lstat
+            def root_owned(info):
+                return SimpleNamespace(st_dev=info.st_dev, st_ino=info.st_ino, st_mode=info.st_mode,
+                                       st_uid=0, st_gid=0)
+            with patch.object(hosted, 'SHARED_PARENT', path), patch.object(hosted, 'validate_host'), \
+                    patch.object(hosted.os, 'fstat', side_effect=lambda fd: root_owned(actual_fstat(fd))), \
+                    patch.object(Path, 'lstat', lambda item: root_owned(actual_lstat(item))):
+                path.chmod(0o777)
+                result = hosted.prepare_install_parent(path)
+                self.assertEqual(result['path'], str(path))
+                self.assertEqual((result['before_mode'], result['prepared_mode']), (0o777, 0o755))
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755)
+                with patch.object(hosted.os, 'open') as opened:
+                    with self.assertRaises(ValueError):
+                        hosted.prepare_install_parent(path / 'undeclared')
+                    opened.assert_not_called()
