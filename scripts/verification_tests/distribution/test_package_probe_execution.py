@@ -42,7 +42,7 @@ class PackageProbeTests(unittest.TestCase):
             tools = Path(temporary)
             (tools / 'python3').symlink_to(sys.executable)
             (tools / 'dirname').symlink_to('/usr/bin/dirname')
-            result = subprocess.run(['/bin/bash', str(root / 'release-r2-live-test.sh'),
+            result = subprocess.run(['/bin/bash', str(root / 'scripts/release-r2-live-test.sh'),
                                      '--local-package-probe', '--help'],
                                     env={**os.environ, 'PATH': str(tools)}, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr.decode())
