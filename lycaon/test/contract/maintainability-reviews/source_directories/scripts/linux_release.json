@@ -4,8 +4,8 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "This package owns one installed qualification protocol: independent producer selection, bounded byte transport, typed plan variants, native execution freshness and fresh retention. The added hosted diagnostic owner isolates partial custody and authority-false observations from complete campaign admission. Keep these explicit owners and the installed_cases interaction package rather than exporting private lifecycle seams solely to lower directory breadth. The current composed source passed 769 managed contracts and the preceding graphical-context source passed budgets. Retain exactly 28 immediate members with no growth allowance; membership or authority changes require renewed review.",
-  "reviewed_commit": "b397ceeb430779e2ecc25975c34f3047f28be13c",
+  "reason": "This package owns one installed qualification protocol: independent producer selection, bounded byte transport, typed plan variants, native execution freshness and fresh retention. The added hosted diagnostic owner isolates partial custody and authority-false observations from complete campaign admission. Keep these explicit owners and the installed_cases interaction package rather than exporting private lifecycle seams solely to lower directory breadth. The current composed source passed 776 managed contracts and the preceding graphical-context source passed budgets. Retain exactly 28 immediate members with no growth allowance; membership or authority changes require renewed review.",
+  "reviewed_commit": "0094b038d353b04da47c0d1db370ac6953a75c5e",
   "ceiling": 28,
   "boundaries": {
     "scripts/verification_tests/distribution/installed/test_installed_provenance_execution.py": "e02467736ba7735f4f78acd4f16ceb989b2bb52cecc2c3fc04d9223bfec90676",
