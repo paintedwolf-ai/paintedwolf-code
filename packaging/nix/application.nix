@@ -1,6 +1,7 @@
 { lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
+, desktopSettings ? callPackage ./desktop-settings.nix { inherit source; }
 , scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
 }:
 let
@@ -27,6 +28,7 @@ stdenvNoCC.mkDerivation {
     cp ${resources}/THIRD-PARTY-NOTICES.md "$root/"
     cp ${source}/VERSION "$root/release-version"
     install -m755 ${shell}/bin/painted-wolf-code "$root/bin/painted-wolf-code"
+    install -m755 ${desktopSettings}/bin/pw-desktop-settings "$root/bin/pw-desktop-settings"
     for executable in pw pw-logs pw-vault-identity; do
       install -m755 ${engine}/bin/$executable "$root/bin/$executable"
     done
