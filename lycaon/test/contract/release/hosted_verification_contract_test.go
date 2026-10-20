@@ -16,6 +16,7 @@ type hostedStep struct {
 	Timeout  string `yaml:"timeout-minutes"`
 	Continue bool   `yaml:"continue-on-error"`
 	Env      map[string]string
+	With     map[string]string
 }
 
 const mergeGroupFailFast = "${{ github.event_name == 'merge_group' }}"
