@@ -146,7 +146,7 @@ if [[ "${HOST_KIND}" == "linux" ]]; then
   echo "stage-engine — building the desktop settings observer for ${TARGET}" >&2
   (
     cd "${TAURI_DIR}"
-    cargo build --locked --release --target "${TARGET}" \
+    cargo build --locked --release --target "${TARGET}" --target-dir "${TAURI_DIR}/target" \
       -p desktop-settings-observer --bin pw-desktop-settings
   )
   install -m 0755 "${TAURI_DIR}/target/${TARGET}/release/${DESKTOP_SETTINGS_NAME}" \
