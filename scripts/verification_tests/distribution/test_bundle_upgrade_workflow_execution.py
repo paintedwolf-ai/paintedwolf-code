@@ -27,6 +27,7 @@ class WorkflowTests(unittest.TestCase):
         prepare = workflow.split("  prepare-bundle-upgrade:\n", 1)[1].split("  bundle-upgrade:\n", 1)[0]
         execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-immutable:\n", 1)[0]
         publication = workflow.split("  publish-immutable:\n", 1)[1].split("    steps:", 1)[0]
+        self.assertIn("needs: [classify, ship-gates, aggregate-release, publication-credentials]", prepare)
         self.assertIn("environment: release-publication", prepare)
         self.assertIn("FEED_SIGNING_KEYS_JSON:", prepare)
         self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)

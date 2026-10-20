@@ -665,7 +665,8 @@ jobs:
           retention-days: 14
 
   prepare-bundle-upgrade:
-    needs: [classify, ship-gates, aggregate-release]
+    needs: [classify, ship-gates, aggregate-release, publication-credentials]
+    if: ${{ !cancelled() && needs.aggregate-release.result == 'success' && (needs.publication-credentials.result == 'success' || needs.classify.outputs.publish == 'false') }}
     runs-on: ubuntu-latest
     environment: release-publication
     timeout-minutes: 45
