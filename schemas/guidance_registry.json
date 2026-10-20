@@ -506,6 +506,12 @@
       "emit": "guard:command_job",
       "summary": "This exact command execution is already live ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_EFFECT_NOT_ALLOWED": {
+      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_effect_admission",
+      "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
+    },
     "COMMAND_EXEC_DENIED": {
       "branch_instruction": "Resolve executable permissions or explicitly declare the required host_execution capability; do not poll a failed launch",
       "category": "recoverable",
