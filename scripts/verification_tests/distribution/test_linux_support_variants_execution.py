@@ -18,7 +18,7 @@ class LinuxSupportVariantTests(unittest.TestCase):
         self.assertEqual(len(required), 8)
         self.assertEqual({item["release"]["version_id"] for item in required}, {"43", "44"})
         self.assertEqual({tuple(item["scales_percent"]) for item in required}, {(100,), (150,), (200,), (100, 150)})
-        self.assertEqual(len(variants(self.fedora, "documents", self.capabilities)), 6)
+        self.assertEqual(len(variants(self.fedora, "documents", self.capabilities)), 2)
         self.assertEqual(len(expand(self.catalog)), len({item["id"] for item in expand(self.catalog)}))
 
     def test_unknown_missing_or_ambiguous_metadata_refuses_expansion(self):
@@ -26,7 +26,9 @@ class LinuxSupportVariantTests(unittest.TestCase):
                        lambda value: value["qualification"]["releases"].append(copy.deepcopy(value["qualification"]["releases"][0])),
                        lambda value: value["qualification"]["display"].update(protocol="maybe-wayland"),
                        lambda value: value["qualification"]["scaling"].update(uniform_percent=[True]),
-                       lambda value: value["qualification"]["scaling"].update(mixed_capabilities=["undeclared"])):
+                       lambda value: value["qualification"]["scaling"].update(mixed_capabilities=["undeclared"]),
+                       lambda value: value["qualification"]["scaling"].update(uniform_capabilities=["undeclared"]),
+                       lambda value: value["qualification"]["scaling"].update(uniform_percent=[150, 200])):
             value = copy.deepcopy(self.fedora)
             mutate(value)
             with self.assertRaises(ValueError):

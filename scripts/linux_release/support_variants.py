@@ -47,7 +47,7 @@ def qualification(environment: dict, capabilities: set[str]) -> dict:
             or display["clipboard_manager"] not in {"absent", "permitted"}
             or display["protocol"] == "x11" and display["xwayland"] == "disabled"):
         raise ValueError("qualification display policy is invalid")
-    scaling = fields(document["scaling"], {"uniform_percent", "mixed_percent", "mixed_capabilities"})
+    scaling = fields(document["scaling"], {"uniform_percent", "uniform_capabilities", "mixed_percent", "mixed_capabilities"})
     for name in ("uniform_percent", "mixed_percent"):
         values = scaling[name]
         if (not isinstance(values, list) or not values or any(type(item) is not int or item < 100 or item > 400 for item in values)
@@ -55,8 +55,12 @@ def qualification(environment: dict, capabilities: set[str]) -> dict:
             raise ValueError("qualification requires explicit distinct scale percentages")
     if len(scaling["mixed_percent"]) < 2 or not set(scaling["mixed_percent"]) <= set(scaling["uniform_percent"]):
         raise ValueError("mixed monitor scales must name at least two declared uniform scales")
+    uniform = scaling["uniform_capabilities"]
+    if (not isinstance(uniform, list) or any(item not in capabilities for item in uniform)
+            or len(set(uniform)) != len(uniform) or 100 not in scaling["uniform_percent"]):
+        raise ValueError("uniform scaling references unknown capabilities or omits the baseline scale")
     mixed = scaling["mixed_capabilities"]
-    if not isinstance(mixed, list) or any(item not in capabilities for item in mixed) or len(set(mixed)) != len(mixed):
+    if not isinstance(mixed, list) or any(item not in uniform for item in mixed) or len(set(mixed)) != len(mixed):
         raise ValueError("mixed scaling references unknown or duplicate capabilities")
     return document
 
@@ -65,7 +69,9 @@ def variants(environment: dict, capability: str, capabilities: set[str]) -> list
     document = qualification(environment, capabilities)
     if capability not in capabilities:
         raise ValueError("qualification variant requested an unknown capability")
-    scales = [("scale-" + str(value), [value]) for value in document["scaling"]["uniform_percent"]]
+    scaling = document["scaling"]
+    required = scaling["uniform_percent"] if capability in scaling["uniform_capabilities"] else [100]
+    scales = [("scale-" + str(value), [value]) for value in required]
     if capability in document["scaling"]["mixed_capabilities"]:
         scales.append(("mixed", document["scaling"]["mixed_percent"]))
     return [{"id": release["id"] + "-" + name, "release": release, "display": document["display"], "scales_percent": values}
