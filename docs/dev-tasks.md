@@ -1078,8 +1078,10 @@ releases remain source installations; a withdrawn bridge cannot advance trust.
 Missing or invalid signatures fail selection rather than silently reducing coverage.
 
 The 1.0.0 and 1.0.1 clients use the Tauri updater plugin and require an explicit
-install action. Their plan entries name `tauri-plugin-v1`; later releases name
-`native-v2` and support automatic preparation and startup activation. These are
+install action. Their exclusions identify `tauri-plugin-v1`; automatic cases name
+`native-v2` and support automatic preparation and startup activation. Each case
+records the source archive's signing generation separately from the installed
+app's embedded trust generation. These are
 released protocol boundaries, not runtime guesses from logs or file presence.
 
 Desktop rehearsal covers the automatic updater in the 1.0.2 line onward. Manual
@@ -1090,12 +1092,12 @@ with no automatic source records `no_automatic_upgrade_source`, never a pass.
 ### Desktop self-upgrade release gate
 
 The release workflow rehearses automatic updates for direct-download macOS
-installations shipped in the 1.0.2 line and later. The existing sidecar/store rehearsal continues to cover earlier manual
-clients. A protected preparation job authenticates and freezes prior feeds,
+installations shipped in the 1.0.2 line and later. The existing sidecar/store
+rehearsal continues to cover earlier manual clients. A protected preparation job authenticates and freezes prior feeds,
 verifies prior archives and the exact candidate archive, and signs channel-bound
 candidate pointers. Retained bridge pointers and their signatures are served
-byte for byte from the authenticated source snapshot. Only public keys, signed pointers, archives, and corpus data
-reach the desktop runner; artifact-signing credentials stay in the build job and
+byte for byte from the authenticated source snapshot. Only public keys, signed
+pointers, archives, and corpus data reach the desktop runner; artifact-signing credentials stay in the build job and
 feed-signing credentials stay in preparation.
 
 After 1.0.2 ships, its immutable release manifest remains a permanent automatic
@@ -1109,11 +1111,13 @@ registered channel bridge before reaching the candidate.
 
 Each source/channel case uses a fresh GitHub-hosted arm64 macOS runner with an
 absent product store and its actual account home. Cases run serially, isolating
-Keychain state as well as files while keeping the declared runner footprint. It refuses local and self-hosted execution.
+Keychain state as well as files while keeping the declared runner footprint.
+It refuses local and self-hosted execution.
 This makes the updater's normal LaunchServices relaunch use the same installation
 and data root without changing the shipped binary or adding runtime overrides.
 The runner launch environment sets `LYCAON_LLM_MOCK=1` across helper relaunches
-and restores its previous value during cleanup. A temporary CA, trusted only on that runner, and an owned `/etc/hosts` entry direct
+and restores its previous value during cleanup. A temporary CA, trusted only on
+that runner, and an owned `/etc/hosts` entry direct
 `downloads.paintedwolf.dev` to a local HTTPS fixture. The fixture serves exact
 allowlisted paths and retains request evidence. Cleanup removes its certificate
 and hosts entry and stops its captured server process; cleanup failures fail the
@@ -1136,8 +1140,8 @@ the preview preference; retained generations advance through their bridge feeds.
 
 Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
 artifact names. A retried desktop job consumes the successful preparation job's
-original artifact; retries preserve earlier diagnostics. Failed or cancelled preparation retains
-its public source pointers and candidate manifest separately.
+original artifact; retries preserve earlier diagnostics. Failed or cancelled
+preparation retains its public source pointers and candidate manifest separately.
 The receipt binds the selected source SHA, candidate version, fixture inventory,
 per-case transitions, and exclusions. Failed cases retain native records and
 engine diagnostics without API tokens. An empty automatic-source matrix records

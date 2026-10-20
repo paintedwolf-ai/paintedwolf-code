@@ -60,6 +60,16 @@ class AnchorPlanTests(unittest.TestCase):
         case = next(case for case in result["cases"] if case["source_version"] == "1.0.2")
         self.assertEqual([step["version"] for step in case["steps"]], ["1.1.0", "1.2.0", "1.4.0-rc1"])
         self.assertEqual([step["update_keys"]["signing_generation"] for step in case["steps"]], [1, 2, 3])
+        installed_bridge = next(case for case in result["cases"] if case["source_version"] == "1.1.0")
+        self.assertEqual(installed_bridge["source_signing_generation"], 1)
+        self.assertEqual(installed_bridge["initial_generation"], 2)
+        self.assertEqual(installed_bridge["steps"][0]["version"], "1.2.0")
+
+    def test_deduplication_cannot_hide_conflicting_artifacts_for_one_release(self):
+        original = {**manifest("1.0.2"), "platforms": {"darwin-aarch64": {"url": "first"}}}
+        changed = {**manifest("1.0.2"), "platforms": {"darwin-aarch64": {"url": "second"}}}
+        with self.assertRaisesRegex(ValueError, "conflicting artifact or trust"):
+            plan(manifest("1.1.0-rc1"), {}, [snapshot("preview", changed)], [anchor(original)])
 
     def test_public_source_capture_includes_the_retained_baseline_in_its_saved_plan(self):
         import json

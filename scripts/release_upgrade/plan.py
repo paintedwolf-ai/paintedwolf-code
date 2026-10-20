@@ -33,8 +33,9 @@ def route(source: dict, candidate: dict, registry: dict, feeds: dict, channel: s
     return [*steps, candidate]
 
 
-def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
+def plan(candidate: dict, registry: dict, snapshots: list[dict], anchors: list[dict] | None = None) -> dict:
     validate_binding(registry, candidate)
+    anchors = anchors or []
     target = parse(candidate["version"])
     feeds = {}
     for snapshot in snapshots:
@@ -50,25 +51,36 @@ def plan(candidate: dict, registry: dict, snapshots: list[dict]) -> dict:
     promotes_preview = preview is None or compare(parse(preview["manifest"]["version"]), target) <= 0
     cases = {}
     excluded = []
-    for (source_channel, number), snapshot in feeds.items():
+    sources = [("automatic_baseline", None, snapshot) for snapshot in anchors]
+    sources.extend(("feed", channel, snapshot) for (channel, _), snapshot in feeds.items())
+    identities = {}
+    for kind, source_channel, snapshot in sources:
         source = snapshot["manifest"]
+        validate_binding(registry, source)
         version = source["version"]
+        identity = (source["update_keys"], source.get("platforms"))
+        if version in identities and identities[version] != identity:
+            raise ValueError("one source release has conflicting artifact or trust identities")
+        identities[version] = identity
         if compare(parse(version), parse("1.0.0")) < 0 or compare(parse(version), target) >= 0:
             continue
         if client_protocol(version) != "native-v2":
-            excluded.append({"source_version": version, "source_feed": snapshot["path"],
+            excluded.append({"source_version": version, "source_kind": kind, "source_path": snapshot["path"],
+                             "protocol": client_protocol(version),
                              "reason": "requires_manual_installation"})
             continue
         channels = (("stable", "preview") if promotes_preview else ("stable",)) if target.channel == "stable" else ("preview",)
         for channel in channels:
             # Preview installations can originate from either published channel.
-            if channel == "stable" and source_channel != "stable":
+            if channel == "stable" and source_channel == "preview":
                 continue
             steps = route(source, candidate, registry, feeds, channel)
             key = (version, channel)
             cases[key] = {"id": f"{version}-{channel}", "source_version": version,
-                          "channel": channel, "protocol": client_protocol(version), "source_feed": snapshot["path"],
-                          "source_generation": number, "steps": steps}
-    return {"format_version": 1, "candidate": candidate, "feeds": snapshots,
+                          "channel": channel, "protocol": client_protocol(version),
+                          "source_kind": kind, "source_path": snapshot["path"], "source_manifest": source,
+                          "source_signing_generation": source["update_keys"]["signing_generation"],
+                          "initial_generation": source["update_keys"]["embedded_generation"], "steps": steps}
+    return {"format_version": 1, "candidate": candidate, "feeds": snapshots, "anchors": anchors,
             "cases": [cases[key] for key in sorted(cases)], "excluded_sources": excluded,
             "skip_reason": None if cases else "no_automatic_upgrade_source"}
