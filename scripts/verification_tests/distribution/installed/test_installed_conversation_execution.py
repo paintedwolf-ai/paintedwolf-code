@@ -61,6 +61,7 @@ class InstalledConversationTests(unittest.TestCase):
                 patch.object(conversation, 'ProviderFixture', return_value=provider), \
                 patch.object(conversation, 'DesktopUI', return_value=ui), \
                 patch.object(conversation, 'interactive_window', return_value={}), \
+                patch.object(conversation, 'accepted', return_value={'providers': []}), \
                 patch.object(conversation, 'add_keyless_provider', return_value={'provider_id': 'owned'}), \
                 patch.object(conversation, 'retain', side_effect=lambda *args: args) as retained:
             ui.click.side_effect = conversation.CaseUnavailable('no optional control')
@@ -73,3 +74,16 @@ class InstalledConversationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 conversation.execute({}, 'conversation', 'provider-onboarding', None)
             app.request.assert_called_with('DELETE', '/v1/providers/owned')
+
+    def test_missing_private_api_refuses_before_provider_mutation(self):
+        app, provider = MagicMock(), MagicMock()
+        app.__enter__.return_value, provider.__enter__.return_value = app, provider
+        with patch.object(conversation, 'InstalledApp', return_value=app), patch.object(
+                conversation, 'ProviderFixture', return_value=provider), patch.object(
+                conversation, 'interactive_window', return_value={}), patch.object(
+                conversation, 'accepted', side_effect=conversation.CaseUnavailable('private API unavailable')), patch.object(
+                conversation, 'add_keyless_provider') as add:
+            with self.assertRaises(conversation.CaseUnavailable):
+                conversation.execute({}, 'conversation', 'provider-onboarding', None)
+        add.assert_not_called()
+        app.stop.assert_called_once()
