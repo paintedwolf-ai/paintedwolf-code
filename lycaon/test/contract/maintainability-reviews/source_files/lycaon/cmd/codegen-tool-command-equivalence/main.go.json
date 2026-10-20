@@ -5,7 +5,7 @@
   "workstream": "portable-command-language",
   "disposition": "retain",
   "reason": "The existing generator keeps equivalence/schema projection in its composition module. P01 adds one call into a separate versioned-language compiler instead of expanding that module with language parsing or execution. Retain at332 measured lines; language generation/closure/drift and existing equivalence rendering tests protect the seam. No runtime operation or authority moves into code generation.",
-  "reviewed_commit": "da6f861696",
+  "reviewed_commit": "423ad2d202b635ed40dcbf7f4786d2748a8c1372",
   "ceiling": 332,
   "boundaries": {
     "lycaon/cmd/codegen-tool-command-equivalence/main_test.go": "05cec6af0ed27fc9dd8c5bae5f82dfdbf3682b89562cdeea4f23d8378ed93f42",

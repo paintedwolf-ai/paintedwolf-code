@@ -29,12 +29,12 @@ func (c *programCompiler) validate(file *syntax.File) {
 
 func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
-	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit, *syntax.TestClause, *syntax.ParenTest:
+	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit:
 	case *syntax.Word:
 		c.validateTilde(v)
 		copy := *v
 		copy.Parts = append([]syntax.WordPart(nil), v.Parts...)
-		if !c.literalContext[v] && syntax.SplitBraces(&copy) {
+		if !c.literalContext[v] && !c.testWords[v] && syntax.SplitBraces(&copy) {
 			c.unsupported(n, "words without brace expansion")
 		}
 	case *syntax.Stmt:
@@ -90,11 +90,18 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Variant.Value != "export" {
 			c.unsupported(n, "export")
 		}
+	case *syntax.TestClause:
+		c.markTestWord(v.X)
+	case *syntax.ParenTest:
+		c.markTestWord(v.X)
 	case *syntax.UnaryTest:
+		c.markTestWord(v.X)
 		if !strings.Contains(" ! -n -z -e -f -d -L -r -w -x ", " "+v.Op.String()+" ") {
 			c.unsupported(n, "a version 1 unary test predicate")
 		}
 	case *syntax.BinaryTest:
+		c.markTestWord(v.X)
+		c.markTestWord(v.Y)
 		if !strings.Contains(" = == != -eq -ne -lt -le -gt -ge && || =~ ", " "+v.Op.String()+" ") {
 			c.unsupported(n, "a version 1 binary test predicate")
 		}
@@ -176,5 +183,16 @@ func (c *programCompiler) validateTilde(w *syntax.Word) {
 	name, _, _ := strings.Cut(literal.Value[1:], "/")
 	if name != "" {
 		c.unsupported(w, "quoted literal paths or invocation-local variables; no named-user lookup")
+	}
+}
+
+// Test words do not undergo shell brace expansion. Substitutions within a test
+// retain ordinary validation for their own command words.
+func (c *programCompiler) markTestWord(expr syntax.TestExpr) {
+	if word, ok := expr.(*syntax.Word); ok {
+		if c.testWords == nil {
+			c.testWords = make(map[*syntax.Word]bool)
+		}
+		c.testWords[word] = true
 	}
 }

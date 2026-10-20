@@ -43,7 +43,7 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 		return nil, CapturedSource{}, err
 	}
 	if int64(len(source.Bytes)) > maximum {
-		return nil, CapturedSource{Pin: source.Pin}, &commandsurface.SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, Expected: "bounded captured source bytes", Limit: "source_bytes", Maximum: maximum, Observed: int64(len(source.Bytes))}
+		return nil, CapturedSource{Pin: source.Pin}, &commandsurface.SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, Expected: "bounded captured source bytes", Limit: "source_bytes", Unit: "bytes", Maximum: maximum, Observed: int64(len(source.Bytes))}
 	}
 	source.Bytes = bytes.Clone(source.Bytes)
 	pin := source.Pin

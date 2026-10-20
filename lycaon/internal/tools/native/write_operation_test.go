@@ -23,6 +23,7 @@ func TestWriteInterfacesShareNativeOwnerAndReview(t *testing.T) {
 				t.Fatalf("seed: %v", err)
 			}
 			tctx := nativefixture.Context(dir)
+			tctx.Identity.ProjectID = "project"
 			refusal := errors.New("fixture review declined")
 			reviews := 0
 			tctx.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { reviews++; return refusal }

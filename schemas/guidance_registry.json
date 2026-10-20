@@ -531,9 +531,16 @@
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
     "COMMAND_LIMIT_EXCEEDED": {
+      "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }}."
+      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
+    },
+    "COMMAND_NATIVE_FORM_UNSUPPORTED": {
+      "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",
+      "category": "recoverable",
+      "emit": "guard:command_native_admission",
+      "summary": "The requested native form was refused before its effect attempt."
     },
     "COMMAND_NOT_ARGV": {
       "branch_instruction": "{% if paintedwolf.directory_change %}Set `cwd` and remove `cd` from `command`{% else %}{% if paintedwolf.terminal_capture %}One program per captured call; read `exit_code` from its result{% else %}{% if not paintedwolf.reissue_via_command %}`\u0026\u0026`/`||`/`;`/`|` sequence/pipe commands, `background:true` detaches; `$()` and backticks stay blocked{% else %}One argv line here; run the composed form under `command`{% endif %}{% endif %}{% endif %}",
@@ -548,6 +555,7 @@
       "summary": "{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}"
     },
     "COMMAND_OPERAND_INVALID": {
+      "branch_instruction": "Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "One command operand cannot be used as supplied."

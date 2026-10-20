@@ -9,12 +9,12 @@ import (
 
 var operationLanguage = sync.OnceValues(LanguageV1)
 
-// LanguageCatalogDigest identifies exact frozen compiled language facts.
 var languageDigest = sync.OnceValue(func() string {
 	sum := sha256.Sum256([]byte(languageV1JSON))
 	return hex.EncodeToString(sum[:])
 })
 
+// LanguageCatalogDigest identifies exact frozen compiled language facts.
 func LanguageCatalogDigest() string { return languageDigest() }
 
 // ToolOperation compiles a retained interface from its existing schema and
