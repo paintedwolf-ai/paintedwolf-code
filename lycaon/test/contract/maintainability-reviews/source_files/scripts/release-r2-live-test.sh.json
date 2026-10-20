@@ -4,11 +4,11 @@
   "kind": "module",
   "workstream": "linux-installed-qualification",
   "disposition": "retain",
-  "reason": "Retain the single managed release rehearsal entrypoint with fixed mode dispatch. Qualification preparation and retention exec their dedicated Python owner before any R2 credential path; signing, server selection, guest execution and admission remain outside the shell dispatcher. The existing generic release rehearsal keeps its own transaction lifecycle. Additional modes or changed workflow and guard contracts require renewed review.",
-  "reviewed_commit": "22ae22ec15d3dcc7e64587d3d48b8caaaee85e10",
+  "reason": "Retain the single managed release rehearsal entrypoint with fixed mode dispatch. Qualification preparation and retention exec their dedicated Python owner before any R2 credential path; signing, server selection, guest execution and admission remain outside the shell dispatcher. The existing generic release rehearsal keeps its own transaction lifecycle. Additional modes or changed workflow and guard contracts require renewed review. The unchanged qualification guard contract now resides with the installed qualification test namespace; its ownership and effect boundary remain the same.",
+  "reviewed_commit": "f880b6060e8940f93ed7f37329747dd849cb4b69",
   "ceiling": 374,
   "boundaries": {
-    "scripts/verification_tests/distribution/test_installed_qualification_producer_execution.py": "ffdcb15cd25b1f819196070534d3da2a2ac3611508cfe01df2aa6a193f2a5f43",
-    ".github/workflows/linux-installed-qualification.yml": "91b64af5f2b97ff9b8f40d8b178e450d01f8316c73838bf572efef2df2b1acb7"
+    ".github/workflows/linux-installed-qualification.yml": "91b64af5f2b97ff9b8f40d8b178e450d01f8316c73838bf572efef2df2b1acb7",
+    "scripts/verification_tests/distribution/installed/test_installed_qualification_producer_execution.py": "ffdcb15cd25b1f819196070534d3da2a2ac3611508cfe01df2aa6a193f2a5f43"
   }
 }
