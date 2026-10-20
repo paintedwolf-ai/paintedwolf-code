@@ -133,6 +133,7 @@ def local_origin(root: Path, work: Path, evidence: Path):
                     except subprocess.TimeoutExpired as failure:
                         errors.append(str(failure))
         for needed, action in ((mapped, lambda: change_hosts(line, True)),
+                               (trusted, lambda: run(["sudo", "-n", "security", "remove-trusted-cert", "-d", str(ca)])),
                                (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-Z", fingerprint, KEYCHAIN]))):
             if needed:
                 try:
@@ -142,7 +143,7 @@ def local_origin(root: Path, work: Path, evidence: Path):
         if mocked:
             try:
                 if previous_mock.returncode == 0:
-                    run(["launchctl", "setenv", "LYCAON_LLM_MOCK", previous_mock.stdout.decode().strip()])
+                    run(["launchctl", "setenv", "LYCAON_LLM_MOCK", previous_mock.stdout.decode().removesuffix("\n")])
                 else:
                     run(["launchctl", "unsetenv", "LYCAON_LLM_MOCK"])
             except (OSError, subprocess.SubprocessError) as error:
