@@ -262,3 +262,97 @@ The benchmark aims to distinguish coarse capability gaps, roughly 15–20 percen
 The larger tasks in [`coordinator-calibration.json`](../lycaon/test/fixtures/eval/coordinator-calibration.json) challenge whether the operation scores predict sustained coordinator performance; their scores are separate measurements and are never relabeled as the operation bank or added to the public numerator after inspecting a model's outcome.
 
 The public status remains **calibrating**. A readiness recommendation needs agreement with larger held-out tasks across more configurations and repeated runs: freeze a proposed decision rule before testing it on new held-out tasks, and do not choose a cutoff to make a favored model pass.
+
+## Portable command acceptance contracts
+
+[P02](https://github.com/paintedwolf-ai/paintedwolf-code/issues/1053) freezes the
+portable command corpus in
+[`portable-command/suite.json`](../lycaon/test/fixtures/eval/portable-command/suite.json).
+It covers Q01–Q22 by case ID, with synthetic setup files and active drafts,
+revision aliases, exact program text, profiles, stdout/stderr/status, allowed
+partial outcomes, complete terminal operation sets, effects, delivered bytes,
+and closeout obligations. The fixtures are acceptance definitions. Loading or
+materializing them does not execute commands or establish native qualification.
+Setup host facts, approved revisions, drafts, Git state, HTTP interruption and
+process helpers must be installed through their existing authorities by P28.
+Revision aliases such as `baseline:input.txt` bind to the actual captured source
+revision before dispatch; an alias alone is never evidence of a matching revision.
+Fixture HTTP uses a hermetic loopback server supplied as `FIXTURE_HTTP`; credentials
+and projects are synthetic. Historical commands are never replayed.
+
+`portable_command_contracts.py` validates the closed case inventory, evidence
+requirements, bounded dataset generators and linked OAR controls. Its disk-only
+materializer refuses an existing destination and preserves binary fixture bytes.
+The OAR matrix in `oar-matrix.json` separates syntax and options, missing progress,
+scope refusal, stale sources, unavailable remedies, partial writes and unknown
+HTTP outcomes. Progress uses the existing `update_progress` content schema.
+P32 binds typed causes without a declared code to its registered codes; the
+matrix does not invent a new rejection owner or parse diagnostic prose.
+
+`portable_command_grading.py` consumes a trusted harness export, never a file
+written by the candidate or a success claim in final prose. Export version 1 is
+an internal evaluation format, not a new product wire or persisted schema.
+The real harness must normalize recorded program outcomes, immutable source
+identity, authoritative operation/effect receipts, source/delivery events,
+verification records, browser obligations and OAR admission facts from their
+existing owners. Each receipt gets its actual unique execution identity. Expected
+semantic operation labels are matched to the recorded operations by the explicit
+adapter; that adapter may not synthesize successful receipts. Required `facts`
+are booleans computed from those records and exact source revisions, not
+model-authored assertions. Raw records remain retained beside the export for
+auditing. Synthetic control exports are always labeled `grader-control`.
+
+Artifact correctness reads the retained tree with the existing artifact walker,
+rejects extra files and links, and reuses the existing exact-byte fixture grader.
+Archive grading independently decodes bounded bzip2/tar bytes without extraction.
+Fractional logstat values and explicit Wordle duplicate/history behavior use the
+existing isolated function oracle; only probe inputs enter candidate execution.
+Delivered tests run separately through the existing candidate-test driver, and
+passing host verification must match the delivered source through the existing
+verification evidence matcher. A correct artifact with broken own tests fails
+the delivered-test dimension. Missing browser follow-through remains a blocked
+closeout even after a successful build. Exact receipt/effect multisets reject
+extra forbidden attempts as well as missing terminal settlement. First-action
+success, recovery success and forbidden replay are separate outputs; recovery
+requires the exact invocation sequence and recorded remedy/effect facts.
+
+The numeric resource ceilings in `suite.json` name short-program, large-tree and
+spill-sort datasets and a hardware class before measurement. Freeze actual
+hardware and dataset digests, source and cache state in restricted run evidence;
+unknown or mismatching bindings are unqualified. Measure wall time, peak RSS,
+spool bytes and cancellation latency independently. Per-profile bounds are
+acceptance ceilings, not claimed benchmark results.
+
+[`live.json`](../lycaon/test/fixtures/eval/portable-command/live.json) separately
+preregisters ten tasks, small/medium/large selections, equal response/token/time
+budgets, and five alternating-order paired attempts against a real-shell
+reference and production native architecture. `portable_command_live.py` refuses
+to freeze a plan without exact application/configuration/Bialy/catalog/fixture/
+grader/hardware digests, resolved supported backend/model artifacts and runtime
+identity, request settings, and explicit isolated-host/model/cost authorization.
+Ministral 3:3B's installed artifact is deliberately not guessed. Alias limitations
+must be explicit; GLM Flash Latest development trials do not replace the full
+release roster. Freeze the actual supported provider/runtime bindings with the
+existing preflight and immutable source exporter before any P31 run. These
+functions do not invoke a provider or introduce a parallel runner.
+
+Every planned slot remains in the denominator, including pending, interrupted,
+infrastructure and unqualified attempts. Unknown or duplicate slots, altered
+plans and outcome-selected replacement attempts are rejected. Finished records
+retain raw capture digests, source/model identity before and after execution,
+separate artifact/test/authority/recovery/closeout grades, stream and auxiliary
+request/token counts, latency, interventions and cost. Missing pricing is
+`unpriced`, never zero. P31 must enforce the authorized total cost while running;
+this contract validates captured per-attempt limits and does not grant execution.
+Reuse the existing immutable snapshots, attempt retention and completion reports.
+Freeze these grader modules and all four fixture JSON files together in the
+P31 grader/fixture identities. Historical, retrospectively regraded, new reference,
+synthetic controls, native runtime and installed-platform results remain distinct.
+
+The deterministic controls run through the existing `eval:tool-usage` test target
+with no model calls. They mutate actual artifact bytes, programs, receipts,
+effects, identity and browser closeout, and exercise incorrect fractional,
+duplicate/history and delivered-test implementations. A passing control suite
+validates these graders; P28 executes native fixtures, P31 executes the authorized
+live suite, and P30 qualifies native Windows. A separately authorized one-off
+live sanity run is useful evidence for the connected path, not completed Q22.

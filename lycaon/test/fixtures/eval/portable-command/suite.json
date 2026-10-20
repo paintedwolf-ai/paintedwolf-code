@@ -1,38 +1,3289 @@
 {
   "version": 1,
   "acceptance_revision": 1,
-  "qualification": "Normative evaluator fixtures; no native-runtime or live-model result is asserted.",
+  "qualification": "Normative deterministic acceptance inputs and grader controls; P26/P28 execute production native owners; P31 executes authorized live models. No historical program is executed.",
   "language_source": "lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json",
+  "required_cases": [
+    "first-mutation",
+    "same-file-transform",
+    "search-empty-publication",
+    "diff-status-publication",
+    "failed-producer",
+    "masked-upstream-failure",
+    "read-only-static-refusal",
+    "read-only-dynamic-refusal",
+    "embedded-sed-write-refusal",
+    "embedded-awk-exec-refusal",
+    "source-later-syntax",
+    "draft-read-transform",
+    "stale-approval",
+    "publication-barrier",
+    "partial-write-unknown-http",
+    "binary-complete-stream",
+    "early-consumer",
+    "literal-delivery-edit",
+    "unseen-output-no-edit-base",
+    "temp-native-process-handoff",
+    "literal-null-sink",
+    "owned-background-state",
+    "listener-rebind",
+    "git-concurrent-index",
+    "archive-create-extract",
+    "hostile-archive",
+    "external-argv",
+    "native-option-no-fallback",
+    "long-composition",
+    "large-tree-discovery",
+    "cancellation",
+    "first-mutation-missing-progress",
+    "syntax-with-progress",
+    "progress-then-denial",
+    "browser-obligation",
+    "fractional-logstat",
+    "wordle-explicit-history",
+    "paired-manifest-contract",
+    "oar-option-correction",
+    "oar-unavailable-remedy"
+  ],
+  "resource_profiles": [
+    {
+      "id": "short-program",
+      "dataset": "p01-64k-syntax",
+      "hardware_class": "minimum-2cpu-8gib-ssd",
+      "wall_ms": 1000,
+      "peak_rss_bytes": 134217728,
+      "spool_bytes": 1048576,
+      "cancel_ms": 2000
+    },
+    {
+      "id": "large-tree",
+      "dataset": "numbered-files-10000-x-lf",
+      "hardware_class": "minimum-2cpu-8gib-ssd",
+      "wall_ms": 30000,
+      "peak_rss_bytes": 268435456,
+      "spool_bytes": 67108864,
+      "cancel_ms": 2000
+    },
+    {
+      "id": "spill-sort",
+      "dataset": "records-64mib-64bytes",
+      "hardware_class": "minimum-2cpu-8gib-ssd",
+      "wall_ms": 30000,
+      "peak_rss_bytes": 268435456,
+      "spool_bytes": 268435456,
+      "cancel_ms": 2000
+    }
+  ],
   "cases": [
     {
       "id": "first-mutation",
-      "qualification_cases": ["Q20"],
+      "qualification_cases": [
+        "Q20"
+      ],
       "profile": "implement",
-      "setup": {"files": {}, "drafts": {}, "progress": "missing"},
-      "turns": [{"program": "printf 'created\\n' > ./result.txt", "progress_update": {"deliverables": [{"text": "Create result.txt", "state": "in_progress"}]}}],
-      "expected": {"stdout": "", "stderr": "", "status": 0, "host_stop": null, "complete": true, "files": {"result.txt": "created\n"}, "absent": [], "receipts": [{"operation": "progress", "outcome": "completed"}, {"operation": "publish", "path": "result.txt", "outcome": "completed", "accepted": true, "published": true}]},
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "missing",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "printf 'created\\n' > ./result.txt",
+          "progress_update": {
+            "content": "- [ ] Create result.txt"
+          },
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "result.txt": "created\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "result.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "result.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
       "allowed_partial": [],
-      "required_evidence": ["progress_and_program_separate", "execution_revision", "child_identities"]
-    },
-    {
-      "id": "search-empty-publication",
-      "qualification_cases": ["Q02"],
-      "profile": "implement",
-      "setup": {"files": {"input.txt": "alpha\n", "result.txt": "old\n"}, "drafts": {}, "progress": "valid"},
-      "turns": [{"program": "grep missing ./input.txt > ./result.txt"}],
-      "expected": {"stdout": "", "stderr": "", "status": 1, "host_stop": null, "complete": true, "files": {"input.txt": "alpha\n", "result.txt": ""}, "absent": [], "receipts": [{"operation": "grep", "outcome": "completed", "status": 1, "publication_eligible": true}, {"operation": "publish", "path": "result.txt", "outcome": "completed", "accepted": true, "published": true}]},
-      "allowed_partial": [],
-      "required_evidence": ["typed_complete_result", "child_identities"]
+      "required_evidence": [
+        "progress_and_program_separate",
+        "absence_pin",
+        "child_identities"
+      ]
     },
     {
       "id": "same-file-transform",
-      "qualification_cases": ["Q13", "Q14"],
+      "qualification_cases": [
+        "Q13",
+        "Q14"
+      ],
       "profile": "implement",
-      "setup": {"files": {"settings.json": "{\"enabled\":false}\n"}, "drafts": {}, "progress": "valid"},
-      "turns": [{"program": "cat ./settings.json | jq -c '.enabled = true' > ./settings.json"}],
-      "expected": {"stdout": "", "stderr": "", "status": 0, "host_stop": null, "complete": true, "files": {"settings.json": "{\"enabled\":true}\n"}, "absent": [], "receipts": [{"operation": "publish", "path": "settings.json", "outcome": "completed", "accepted": true, "published": true}]},
+      "setup": {
+        "files": {
+          "settings.json": "{\"enabled\":false}\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "settings.json": "baseline:settings.json"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat ./settings.json | jq -c '.enabled = true' > ./settings.json",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "settings.json": "{\"enabled\":true}\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          },
+          {
+            "operation": "jq",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "settings.json",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "settings.json",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
       "allowed_partial": [],
-      "required_evidence": ["execution_revision", "no_conversational_read_base", "child_identities"]
+      "required_evidence": [
+        "execution_revision",
+        "no_conversational_read_base",
+        "child_identities"
+      ]
+    },
+    {
+      "id": "search-empty-publication",
+      "qualification_cases": [
+        "Q02"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\n",
+          "result.txt": "old\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt",
+          "result.txt": "baseline:result.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "grep missing ./input.txt > ./result.txt",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 1,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "input.txt": "alpha\n",
+          "result.txt": ""
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "grep",
+            "outcome": "completed",
+            "status": 1,
+            "publication_eligible": true
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "result.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "result.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "child_identities",
+        "exact_source_binding"
+      ]
+    },
+    {
+      "id": "diff-status-publication",
+      "qualification_cases": [
+        "Q03"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "a.txt": "a\n",
+          "b.txt": "b\n",
+          "diff.txt": "old\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "a.txt": "baseline:a.txt",
+          "b.txt": "baseline:b.txt",
+          "diff.txt": "baseline:diff.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "diff -u ./a.txt ./b.txt > ./diff.txt",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 1,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "a.txt": "a\n",
+          "b.txt": "b\n",
+          "diff.txt": "--- ./a.txt\n+++ ./b.txt\n@@ -1 +1 @@\n-a\n+b\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "diff",
+            "outcome": "completed",
+            "status": 1,
+            "publication_eligible": true
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "diff.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "diff.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "child_identities",
+        "exact_source_binding"
+      ]
+    },
+    {
+      "id": "failed-producer",
+      "qualification_cases": [
+        "Q04"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "result.txt": "old\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "result.txt": "baseline:result.txt"
+        },
+        "host_facts": {},
+        "helpers": {
+          "fixture-producer": {
+            "stdout": "alpha",
+            "stderr": "",
+            "status": 1
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "fixture-producer --prefix alpha --exit 1 > ./result.txt",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 1,
+        "host_stop": null,
+        "complete": false,
+        "files": {
+          "result.txt": "old\n"
+        },
+        "absent": [
+          "partial.txt"
+        ],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "screened_retained_failure_output",
+        "destination_unchanged",
+        "child_identities"
+      ]
+    },
+    {
+      "id": "masked-upstream-failure",
+      "qualification_cases": [
+        "Q04"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "result.txt": "old\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "result.txt": "baseline:result.txt"
+        },
+        "host_facts": {},
+        "helpers": {
+          "fixture-producer": {
+            "stdout": "alpha",
+            "stderr": "",
+            "status": 1
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "fixture-producer --prefix alpha --exit 1 | cat > ./result.txt",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 1,
+        "host_stop": null,
+        "complete": false,
+        "files": {
+          "result.txt": "old\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "failed",
+            "status": 1
+          },
+          {
+            "operation": "read",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "every_producer_eligible",
+        "destination_unchanged",
+        "child_identities"
+      ]
+    },
+    {
+      "id": "read-only-static-refusal",
+      "qualification_cases": [
+        "Q07"
+      ],
+      "profile": "worker_readonly",
+      "setup": {
+        "files": {
+          "input.txt": "keep\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat ./input.txt && rm ./input.txt",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "input.txt": "keep\n"
+        },
+        "absent": [],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "zero_program_effects",
+        "offending_source_span",
+        "readonly_profile",
+        "reachable_readonly_remedy"
+      ]
+    },
+    {
+      "id": "read-only-dynamic-refusal",
+      "qualification_cases": [
+        "Q08"
+      ],
+      "profile": "explore_readonly",
+      "setup": {
+        "files": {
+          "selector": "rm\n",
+          "input.txt": "keep\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "selector": "baseline:selector",
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cmd=$(cat ./selector); \"$cmd\" ./input.txt",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "selector": "rm\n",
+          "input.txt": "keep\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          },
+          {
+            "operation": "delete",
+            "outcome": "rejected"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "read-only-dynamic-refusal",
+          "cause": "readonly_profile",
+          "zero_program_effects": false,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "readonly_or_closeout",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "prior_read_retained",
+        "offending_source_span",
+        "readonly_profile",
+        "no_whole_program_retry"
+      ]
+    },
+    {
+      "id": "embedded-sed-write-refusal",
+      "qualification_cases": [
+        "Q09"
+      ],
+      "profile": "worker_readonly",
+      "setup": {
+        "files": {
+          "input.txt": "keep\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "sed 'w ./forbidden' ./input.txt",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "input.txt": "keep\n"
+        },
+        "absent": [
+          "forbidden"
+        ],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "embedded_program_validated",
+        "offending_source_span",
+        "no_mutating_remedy"
+      ]
+    },
+    {
+      "id": "embedded-awk-exec-refusal",
+      "qualification_cases": [
+        "Q09"
+      ],
+      "profile": "worker_readonly",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "awk 'BEGIN { system(\"fixture-tool\") }'",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {},
+        "absent": [],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "secondary_io_disabled",
+        "offending_source_span",
+        "no_child_launch"
+      ]
+    },
+    {
+      "id": "source-later-syntax",
+      "qualification_cases": [
+        "Q10"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "bad.sh": "echo ok; eval data"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "bad.sh": "baseline:bad.sh"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "printf 'parent\\n'; source -- ./bad.sh",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "parent\n",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "bad.sh": "echo ok; eval data"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "source",
+            "outcome": "rejected"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "captured_source_identity",
+        "prior_parent_receipt",
+        "no_source_statement_started",
+        "no_whole_program_retry"
+      ]
+    },
+    {
+      "id": "draft-read-transform",
+      "qualification_cases": [
+        "Q05",
+        "Q13"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "settings.json": "{\"n\":1}\n"
+        },
+        "drafts": {
+          "settings.json": {
+            "revision": "draft-r2",
+            "bytes": "{\"n\":2}\n"
+          }
+        },
+        "progress": "valid",
+        "revisions": {
+          "settings.json": "baseline:settings.json"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat ./settings.json | jq -c '.n += 1' > ./settings.json",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "settings.json": "{\"n\":3}\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed",
+            "input_revision": "draft-r2"
+          },
+          {
+            "operation": "jq",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "settings.json",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "settings.json",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "execution_revision",
+        "no_conversational_read_base",
+        "accepted_then_published"
+      ]
+    },
+    {
+      "id": "stale-approval",
+      "qualification_cases": [
+        "Q13"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {
+          "during_review": {
+            "input.txt": {
+              "revision": "human-r2",
+              "bytes": "human\n"
+            }
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "sed -i 's/alpha/beta/' ./input.txt",
+          "expected_outcome": "conflict"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "conflict",
+        "complete": false,
+        "files": {
+          "input.txt": "human\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "sed",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "rejected",
+            "path": "input.txt"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "stale-approval",
+          "cause": "stale_revision",
+          "zero_program_effects": false,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "fresh_read_and_preparation",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "held_prepared_digest",
+        "stale_revision",
+        "producer_attempts_one",
+        "human_edit_preserved",
+        "no_recompute"
+      ]
+    },
+    {
+      "id": "publication-barrier",
+      "qualification_cases": [
+        "Q14"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "old\n",
+          "unrelated.txt": "disk\n"
+        },
+        "drafts": {
+          "unrelated.txt": {
+            "revision": "unrelated-r2",
+            "bytes": "human draft\n"
+          }
+        },
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt",
+          "unrelated.txt": "baseline:unrelated.txt"
+        },
+        "host_facts": {
+          "publication": "disk_full"
+        }
+      },
+      "turns": [
+        {
+          "program": "printf 'next\\n' > ./input.txt && fixture-verifier",
+          "expected_outcome": "incomplete"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "incomplete",
+        "complete": false,
+        "files": {
+          "input.txt": "old\n",
+          "unrelated.txt": "disk\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": false
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": false
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "accepted_document_recoverable",
+        "dependent_process_not_launched",
+        "unrelated_draft_unchanged"
+      ]
+    },
+    {
+      "id": "partial-write-unknown-http",
+      "qualification_cases": [
+        "Q15"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {
+          "http": "unknown_after_send",
+          "supervisor": "loss_after_http"
+        }
+      },
+      "turns": [
+        {
+          "program": "printf 'first\\n' > ./first.txt; curl -d payload \"$FIXTURE_HTTP\"; touch ./never",
+          "expected_outcome": "interrupted"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "interrupted",
+        "complete": false,
+        "files": {
+          "first.txt": "first\n"
+        },
+        "absent": [
+          "never"
+        ],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "first.txt",
+            "accepted": true,
+            "published": true
+          },
+          {
+            "operation": "http_request",
+            "outcome": "interrupted",
+            "effect_certainty": "unknown"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "first.txt",
+            "accepted": true,
+            "published": true
+          },
+          {
+            "operation": "http_request",
+            "outcome": "interrupted",
+            "effect_certainty": "unknown",
+            "recipient": "fixture-http"
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "partial-write-unknown-http",
+          "cause": "partial_unknown",
+          "zero_program_effects": false,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "specific_remaining_status_action",
+          "effect_certainty_required": true,
+          "source_span_required": false,
+          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [
+        "first.txt"
+      ],
+      "required_evidence": [
+        "completed_unknown_not_started",
+        "owner_journal_reconciliation",
+        "http_attempts_one",
+        "no_whole_program_retry"
+      ]
+    },
+    {
+      "id": "binary-complete-stream",
+      "qualification_cases": [
+        "Q04"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "printf 'A\\0B\\r\\n' | base64 -w 0",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "QQBCDQo=",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "base64",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "full_stream_digest",
+        "preview_independent",
+        "child_identities"
+      ]
+    },
+    {
+      "id": "early-consumer",
+      "qualification_cases": [
+        "Q04"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "printf 'a\\nb\\n' | head -n 1",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "a\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed",
+            "closure": "expected-consumer"
+          },
+          {
+            "operation": "read",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "child_identities",
+        "exact_source_binding"
+      ]
+    },
+    {
+      "id": "literal-delivery-edit",
+      "qualification_cases": [
+        "Q05"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\nbeta\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat -n ./input.txt",
+          "expected_outcome": "completed"
+        },
+        {
+          "structured_tool": "edit",
+          "arguments": {
+            "path": "input.txt",
+            "old_string": "beta",
+            "new_string": "gamma"
+          },
+          "program": "edit --path ./input.txt --old-string beta --new-string gamma",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "input.txt": "alpha\ngamma\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [
+          {
+            "path": "input.txt",
+            "revision": "baseline:input.txt",
+            "lines": [
+              1,
+              2
+            ],
+            "representation": "numbered-reversible",
+            "delivered": true
+          }
+        ],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "delivery_owner_identity",
+        "exact_mapped_ranges",
+        "anchored_edit"
+      ]
+    },
+    {
+      "id": "unseen-output-no-edit-base",
+      "qualification_cases": [
+        "Q06"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\nbeta\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat ./input.txt",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "alpha\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "input.txt": "alpha\nbeta\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [
+          {
+            "path": "input.txt",
+            "revision": "baseline:input.txt",
+            "lines": [
+              1,
+              1
+            ],
+            "representation": "literal",
+            "delivered": true
+          }
+        ],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "retained_full_output",
+        "preview_only_first_line",
+        "unseen_ranges_not_read_bases"
+      ]
+    },
+    {
+      "id": "temp-native-process-handoff",
+      "qualification_cases": [
+        "Q11"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "p=$(mktemp); printf 'same\\n' > \"$p\"; fixture-reader \"$p\"",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "same\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "mktemp",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "namespace": "session-temp",
+            "accepted": true,
+            "published": true
+          },
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "mktemp",
+            "outcome": "completed",
+            "namespace": "session-temp"
+          },
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "namespace": "session-temp",
+            "accepted": true,
+            "published": true
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "same_physical_identity",
+        "temp_path_owned",
+        "external_disk_provenance"
+      ]
+    },
+    {
+      "id": "literal-null-sink",
+      "qualification_cases": [
+        "Q12"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "printf 'discard\\n' >/dev/null; printf kept",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "kept",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "typed_null_sink",
+        "no_device_file_mutation"
+      ]
+    },
+    {
+      "id": "owned-background-state",
+      "qualification_cases": [
+        "Q16"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "export FIXTURE=before; fixture-job & job=$!; export FIXTURE=after; wait \"$job\"",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "before\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "export",
+            "outcome": "completed"
+          },
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          },
+          {
+            "operation": "export",
+            "outcome": "completed"
+          },
+          {
+            "operation": "wait",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "session_job_handle",
+        "captured_environment_cwd",
+        "actual_exit",
+        "owned_descendants_only"
+      ]
+    },
+    {
+      "id": "listener-rebind",
+      "qualification_cases": [
+        "Q17"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {
+          "listener": "closed_and_rebound_by_unrelated_process"
+        }
+      },
+      "turns": [
+        {
+          "program": "curl \"$FIXTURE_HTTP\"",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "http_request",
+            "outcome": "rejected"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "observed_listener_identity",
+        "revoked_on_rebind",
+        "no_request_sent"
+      ]
+    },
+    {
+      "id": "git-concurrent-index",
+      "qualification_cases": [
+        "Q18"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "authored.txt": "session\n",
+          "foreign.txt": "human\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "authored.txt": "baseline:authored.txt",
+          "foreign.txt": "baseline:foreign.txt"
+        },
+        "host_facts": {},
+        "git": {
+          "initial_commit_files": {
+            "authored.txt": "old\n",
+            "foreign.txt": "old\n"
+          },
+          "staged": [
+            "foreign.txt"
+          ],
+          "session_authored": [
+            "authored.txt"
+          ],
+          "author": {
+            "name": "Fixture author",
+            "email": "fixture@example.test"
+          },
+          "fsmonitor": "fixture-unmediated-helper",
+          "external_diff": "fixture-unmediated-helper"
+        }
+      },
+      "turns": [
+        {
+          "program": "git add -- ./authored.txt; git commit -m 'Fixture change'",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "authored.txt": "session\n",
+          "foreign.txt": "human\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "git_add",
+            "outcome": "completed"
+          },
+          {
+            "operation": "git_commit",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "git_add",
+            "outcome": "completed",
+            "paths": [
+              "authored.txt"
+            ]
+          },
+          {
+            "operation": "git_commit",
+            "outcome": "completed",
+            "paths": [
+              "authored.txt"
+            ]
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "foreign_index_preserved",
+        "session_authored_paths",
+        "invocation_fsmonitor_policy",
+        "immutable_ref_evidence"
+      ]
+    },
+    {
+      "id": "archive-create-extract",
+      "qualification_cases": [
+        "Q19"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "tar -cjf ./bundle.tar.bz2 ./input.txt; mkdir -p ./out; tar -xjf ./bundle.tar.bz2 -C ./out",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "input.txt": "alpha\n",
+          "out/input.txt": "alpha\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "tar_create",
+            "outcome": "completed"
+          },
+          {
+            "operation": "mkdir",
+            "outcome": "completed"
+          },
+          {
+            "operation": "tar_extract",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "tar_create",
+            "outcome": "completed",
+            "path": "bundle.tar.bz2"
+          },
+          {
+            "operation": "mkdir",
+            "outcome": "completed",
+            "path": "out"
+          },
+          {
+            "operation": "tar_extract",
+            "outcome": "completed",
+            "path": "out/input.txt"
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "artifact_formats": {
+          "bundle.tar.bz2": {
+            "codec": "bzip2",
+            "tar_entries": {
+              "input.txt": "alpha\n"
+            }
+          }
+        },
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "real_bzip2_cross_decoder",
+        "confined_archive_entries",
+        "recoverable_publication"
+      ]
+    },
+    {
+      "id": "hostile-archive",
+      "qualification_cases": [
+        "Q19"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "hostile.zip": {
+            "base64": "UEsDBBQAAAAAAAAAIQDt9EgjCQAAAAkAAAANAAAALi4vZXNjYXBlLnR4dGZvcmJpZGRlblBLAQIUAxQAAAAAAAAAIQDt9EgjCQAAAAkAAAANAAAAAAAAAAAAAACAAQAAAAAuLi9lc2NhcGUudHh0UEsFBgAAAAABAAEAOwAAADQAAAAAAA=="
+          }
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {
+          "archive_fixture": {
+            "kind": "zip",
+            "entries": [
+              {
+                "path": "../escape.txt",
+                "bytes": "forbidden"
+              }
+            ]
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "unzip ./hostile.zip -d ./out",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "hostile.zip": {
+            "base64": "UEsDBBQAAAAAAAAAIQDt9EgjCQAAAAkAAAANAAAALi4vZXNjYXBlLnR4dGZvcmJpZGRlblBLAQIUAxQAAAAAAAAAIQDt9EgjCQAAAAkAAAANAAAAAAAAAAAAAACAAQAAAAAuLi9lc2NhcGUudHh0UEsFBgAAAAABAAEAOwAAADQAAAAAAA=="
+          }
+        },
+        "absent": [
+          "escape.txt"
+        ],
+        "receipts": [
+          {
+            "operation": "unzip",
+            "outcome": "rejected"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "zip_slip_refused",
+        "no_outside_effect",
+        "owner_refusal"
+      ]
+    },
+    {
+      "id": "external-argv",
+      "qualification_cases": [
+        "Q21"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {},
+        "helpers": {
+          "fixture-argv": {
+            "kind": "argv-json"
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "fixture-argv 'a b' 'x;touch never' 'https://example.test/a?b=c'",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "[\"a b\",\"x;touch never\",\"https://example.test/a?b=c\"]\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [
+          "never"
+        ],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "exact_argv",
+        "confined_launch",
+        "disk_provenance"
+      ]
+    },
+    {
+      "id": "native-option-no-fallback",
+      "qualification_cases": [
+        "Q21"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat --not-a-version-1-option ./input.txt",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "absent": [],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "native-option-no-fallback",
+          "cause": "option",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": true,
+          "automatic_execution": false,
+          "remedy": "focused_command_help",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "owner_code": "COMMAND_OPTION_UNSUPPORTED"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "no_external_launch",
+        "option_source_span",
+        "focused_help"
+      ]
+    },
+    {
+      "id": "long-composition",
+      "qualification_cases": [
+        "Q16",
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "for x in a b c; do printf '%s\\n' \"$x\"; done | sort | uniq | wc -l",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "3\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "sort",
+            "outcome": "completed"
+          },
+          {
+            "operation": "uniq",
+            "outcome": "completed"
+          },
+          {
+            "operation": "wc",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "unique_dynamic_ids",
+        "shared_static_node",
+        "bounded_control_flow"
+      ]
+    },
+    {
+      "id": "large-tree-discovery",
+      "qualification_cases": [
+        "Q01",
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {},
+        "generators": [
+          {
+            "kind": "numbered-files",
+            "directory": "large",
+            "count": 10000,
+            "body": "x\n"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "program": "find ./large -type f -name '*.txt' -print0 | xargs -0 -n 100 printf '%s\\n' | wc -l",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "10000\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "find",
+            "outcome": "completed"
+          },
+          {
+            "operation": "xargs",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "printf",
+            "outcome": "completed"
+          },
+          {
+            "operation": "wc",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "catalog_generation_matches_live",
+        "complete_tree",
+        "bounded_visits"
+      ]
+    },
+    {
+      "id": "cancellation",
+      "qualification_cases": [
+        "Q15",
+        "Q16"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {
+          "cancel_after_statement_visits": 8
+        }
+      },
+      "turns": [
+        {
+          "program": "while true; do :; done",
+          "expected_outcome": "cancelled"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "cancelled",
+        "complete": false,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": ":",
+            "outcome": "completed"
+          },
+          {
+            "operation": ":",
+            "outcome": "completed"
+          },
+          {
+            "operation": ":",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "admission_closed",
+        "no_later_child",
+        "owned_resources_reclaimed"
+      ]
+    },
+    {
+      "id": "first-mutation-missing-progress",
+      "qualification_cases": [
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "missing",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "touch ./never",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {},
+        "absent": [
+          "never"
+        ],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "first-mutation-missing-progress",
+          "cause": "missing_progress",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": true,
+          "automatic_execution": false,
+          "remedy": "update_progress",
+          "effect_certainty_required": true,
+          "source_span_required": false,
+          "owner_code": "PROGRESS_MISSING"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "missing_progress_owner_code",
+        "zero_program_effects",
+        "validated_resubmission_reference"
+      ]
+    },
+    {
+      "id": "syntax-with-progress",
+      "qualification_cases": [
+        "Q07",
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "missing",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "touch ./never; if",
+          "progress_update": {
+            "content": "- [ ] Create never"
+          },
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {},
+        "absent": [
+          "never"
+        ],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "syntax-with-progress",
+          "cause": "syntax",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "focused_syntax_help",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "owner_code": "COMMAND_SYNTAX_INVALID"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "zero_progress_effects",
+        "zero_program_effects",
+        "syntax_span"
+      ]
+    },
+    {
+      "id": "progress-then-denial",
+      "qualification_cases": [
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "missing",
+        "revisions": {},
+        "host_facts": {
+          "denied_path": "denied.txt"
+        }
+      },
+      "turns": [
+        {
+          "program": "touch ./denied.txt",
+          "progress_update": {
+            "content": "- [ ] Create denied.txt"
+          },
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {},
+        "absent": [
+          "denied.txt"
+        ],
+        "receipts": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "touch",
+            "outcome": "rejected"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "progress-then-denial",
+          "cause": "scope_denial",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "named_capability_limitation",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "owner_code": "WRITE_SCOPE_DENIED"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "progress_committed_separately",
+        "no_gated_effect",
+        "fresh_resubmission_only"
+      ]
+    },
+    {
+      "id": "browser-obligation",
+      "qualification_cases": [
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "fixture-build",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [
+          {
+            "kind": "browser",
+            "state": "pending",
+            "available_operation": "capture_page"
+          }
+        ],
+        "deliveries": [],
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "build_receipt_not_closeout",
+        "browser_obligation_open",
+        "honest_blocked_closeout"
+      ]
+    },
+    {
+      "id": "fractional-logstat",
+      "qualification_cases": [
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {},
+        "task": {
+          "id": "logstat",
+          "records": [
+            {
+              "latency_ms": 0.5,
+              "level": ""
+            },
+            {
+              "latency_ms": 1.25,
+              "level": "info"
+            },
+            {
+              "latency_ms": 2.75,
+              "level": "info"
+            }
+          ],
+          "requirements": "Preserve fractional numeric inputs and empty level as its own key.",
+          "required_files": [
+            "logstat.py",
+            "test_logstat.py"
+          ],
+          "callable": {
+            "module": "logstat",
+            "function": "summarize"
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "fixture-task logstat",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "result.json": "{\"count\":3,\"mean_ms\":1.5,\"levels\":{\"\":1,\"info\":2}}\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "result.json",
+            "accepted": true,
+            "published": true,
+            "provenance": "external-reconciled"
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "behavior_files": [
+          "logstat.py",
+          "test_logstat.py"
+        ],
+        "behavior_contract": {
+          "preserve": [],
+          "artifacts": {},
+          "probes": [
+            {
+              "id": "fractional-logstat-behavior",
+              "module": "logstat",
+              "function": "summarize",
+              "calls": [
+                [
+                  [
+                    []
+                  ],
+                  {}
+                ],
+                [
+                  [
+                    [
+                      {
+                        "latency_ms": 0.5,
+                        "level": ""
+                      },
+                      {
+                        "latency_ms": 1.25,
+                        "level": "info"
+                      },
+                      {
+                        "latency_ms": 2.75,
+                        "level": "info"
+                      }
+                    ]
+                  ],
+                  {}
+                ],
+                [
+                  [
+                    [
+                      {
+                        "latency_ms": 1.75,
+                        "level": ""
+                      }
+                    ]
+                  ],
+                  {}
+                ]
+              ],
+              "expected": [
+                {
+                  "value": {
+                    "count": 0,
+                    "mean_ms": 0,
+                    "levels": {}
+                  },
+                  "args": [
+                    []
+                  ],
+                  "kwargs": {}
+                },
+                {
+                  "value": {
+                    "count": 3,
+                    "mean_ms": 1.5,
+                    "levels": {
+                      "": 1,
+                      "info": 2
+                    }
+                  },
+                  "args": [
+                    [
+                      {
+                        "latency_ms": 0.5,
+                        "level": ""
+                      },
+                      {
+                        "latency_ms": 1.25,
+                        "level": "info"
+                      },
+                      {
+                        "latency_ms": 2.75,
+                        "level": "info"
+                      }
+                    ]
+                  ],
+                  "kwargs": {}
+                },
+                {
+                  "value": {
+                    "count": 1,
+                    "mean_ms": 1.75,
+                    "levels": {
+                      "": 1
+                    }
+                  },
+                  "args": [
+                    [
+                      {
+                        "latency_ms": 1.75,
+                        "level": ""
+                      }
+                    ]
+                  ],
+                  "kwargs": {}
+                }
+              ]
+            }
+          ]
+        },
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "independent_artifact_oracle",
+        "delivered_tests_separate",
+        "verification_source_match"
+      ]
+    },
+    {
+      "id": "wordle-explicit-history",
+      "qualification_cases": [
+        "Q20"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {},
+        "task": {
+          "id": "wordle",
+          "secret": "apple",
+          "guesses": [
+            "allee",
+            "apple"
+          ],
+          "requirements": "One history entry per accepted five-letter guess, including the winning guess; attempts includes winning guess; preserve order; G green,Y yellow,X absent; consume duplicate letter counts after greens. Accept lowercase five-letter words only, ValueError on invalid input; stop after first win or six guesses, with playing/won/lost status.",
+          "required_files": [
+            "wordle.py",
+            "test_wordle.py"
+          ],
+          "callable": {
+            "module": "wordle",
+            "function": "play"
+          }
+        }
+      },
+      "turns": [
+        {
+          "program": "fixture-task wordle",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "history.json": "{\"secret\":\"apple\",\"guesses\":[{\"word\":\"allee\",\"marks\":\"GYXXG\"},{\"word\":\"apple\",\"marks\":\"GGGGG\"}],\"attempts\":2,\"status\":\"won\"}\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [
+          {
+            "operation": "write",
+            "outcome": "completed",
+            "path": "history.json",
+            "accepted": true,
+            "published": true,
+            "provenance": "external-reconciled"
+          }
+        ],
+        "obligations": [],
+        "deliveries": [],
+        "behavior_files": [
+          "wordle.py",
+          "test_wordle.py"
+        ],
+        "behavior_contract": {
+          "preserve": [],
+          "artifacts": {},
+          "probes": [
+            {
+              "id": "wordle-explicit-history-behavior",
+              "module": "wordle",
+              "function": "play",
+              "calls": [
+                [
+                  [
+                    "apple",
+                    [
+                      "allee",
+                      "apple"
+                    ]
+                  ],
+                  {}
+                ],
+                [
+                  [
+                    "apple",
+                    [
+                      "apple",
+                      "allee"
+                    ]
+                  ],
+                  {}
+                ],
+                [
+                  [
+                    "apple",
+                    []
+                  ],
+                  {}
+                ],
+                [
+                  [
+                    "cigar",
+                    [
+                      "cigar"
+                    ]
+                  ],
+                  {}
+                ]
+              ],
+              "expected": [
+                {
+                  "value": {
+                    "secret": "apple",
+                    "guesses": [
+                      {
+                        "word": "allee",
+                        "marks": "GYXXG"
+                      },
+                      {
+                        "word": "apple",
+                        "marks": "GGGGG"
+                      }
+                    ],
+                    "attempts": 2,
+                    "status": "won"
+                  },
+                  "args": [
+                    "apple",
+                    [
+                      "allee",
+                      "apple"
+                    ]
+                  ],
+                  "kwargs": {}
+                },
+                {
+                  "value": {
+                    "secret": "apple",
+                    "guesses": [
+                      {
+                        "word": "apple",
+                        "marks": "GGGGG"
+                      }
+                    ],
+                    "attempts": 1,
+                    "status": "won"
+                  },
+                  "args": [
+                    "apple",
+                    [
+                      "apple",
+                      "allee"
+                    ]
+                  ],
+                  "kwargs": {}
+                },
+                {
+                  "value": {
+                    "secret": "apple",
+                    "guesses": [],
+                    "attempts": 0,
+                    "status": "playing"
+                  },
+                  "args": [
+                    "apple",
+                    []
+                  ],
+                  "kwargs": {}
+                },
+                {
+                  "value": {
+                    "secret": "cigar",
+                    "guesses": [
+                      {
+                        "word": "cigar",
+                        "marks": "GGGGG"
+                      }
+                    ],
+                    "attempts": 1,
+                    "status": "won"
+                  },
+                  "args": [
+                    "cigar",
+                    [
+                      "cigar"
+                    ]
+                  ],
+                  "kwargs": {}
+                }
+              ]
+            }
+          ]
+        },
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "duplicate_aware_scoring",
+        "explicit_history_schema",
+        "delivered_tests_separate",
+        "verification_source_match"
+      ]
+    },
+    {
+      "id": "paired-manifest-contract",
+      "qualification_cases": [
+        "Q22"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {},
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {},
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "true",
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {},
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "true",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "five_attempts_preregistered",
+        "alternating_arm_order",
+        "all_attempts_retained",
+        "immutable_identity"
+      ]
+    },
+    {
+      "id": "oar-option-correction",
+      "qualification_cases": [
+        "Q01",
+        "Q21"
+      ],
+      "profile": "implement",
+      "setup": {
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "cat --not-a-version-1-option ./input.txt",
+          "expected_rejection": "COMMAND_OPTION_UNSUPPORTED",
+          "expected_outcome": "rejected"
+        },
+        {
+          "program": "cat ./input.txt",
+          "requires_fresh_invocation": true,
+          "expected_outcome": "completed"
+        }
+      ],
+      "expected": {
+        "stdout": "alpha\n",
+        "stderr": "",
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "input.txt": "alpha\n"
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          }
+        ],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "oar-option-correction",
+          "cause": "option",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": true,
+          "automatic_execution": false,
+          "remedy": "explicit_fresh_command",
+          "effect_certainty_required": true,
+          "source_span_required": true,
+          "owner_code": "COMMAND_OPTION_UNSUPPORTED"
+        },
+        "closeout": "complete"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "first_action_rejected",
+        "explicit_correction",
+        "fresh_identity",
+        "reachable_frozen_remedy"
+      ]
+    },
+    {
+      "id": "oar-unavailable-remedy",
+      "qualification_cases": [
+        "Q08",
+        "Q20"
+      ],
+      "profile": "plan_review_readonly",
+      "setup": {
+        "files": {
+          "input.txt": "a\n"
+        },
+        "drafts": {},
+        "progress": "valid",
+        "revisions": {
+          "input.txt": "baseline:input.txt"
+        },
+        "host_facts": {}
+      },
+      "turns": [
+        {
+          "program": "sed -i 's/a/b/' ./input.txt",
+          "expected_outcome": "rejected"
+        }
+      ],
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "host_stop": "rejected",
+        "complete": false,
+        "files": {
+          "input.txt": "a\n"
+        },
+        "absent": [],
+        "receipts": [],
+        "effects": [],
+        "obligations": [],
+        "deliveries": [],
+        "recovery": {
+          "case_id": "oar-unavailable-remedy",
+          "cause": "unavailable_remedy",
+          "zero_program_effects": true,
+          "whole_program_resubmit_allowed": false,
+          "automatic_execution": false,
+          "remedy": "honest_blocked_closeout",
+          "effect_certainty_required": true,
+          "source_span_required": false,
+          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+        },
+        "closeout": "blocked"
+      },
+      "allowed_partial": [],
+      "required_evidence": [
+        "readonly_owner_code",
+        "no_mutating_remedy",
+        "capability_limitation",
+        "honest_blocked_closeout"
+      ]
     }
   ]
 }
