@@ -119,6 +119,7 @@ if [[ -z "${FROM_VERSION}" ]]; then
   [[ "${ADVANCE_IF_NEWER}" -eq 0 ]] || advance_args+=(--optional)
   advance="$(python3 "$(dirname "$0")/release_distribution.py" advance --file "${FILE}" \
     --key "${OBJECT_KEY}" ${advance_args[@]+"${advance_args[@]}"})"
+  echo "release-pointer: ${CHANNEL} advance decision ${advance} for ${EXPECTED_VERSION}" >&2
   if [[ "${advance}" == false ]]; then
     echo "release-pointer: ${CHANNEL} already advertises a newer release; no advance needed" >&2
     exit 0

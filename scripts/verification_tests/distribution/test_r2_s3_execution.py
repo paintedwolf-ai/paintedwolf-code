@@ -116,6 +116,36 @@ class BucketTransportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 s3.object_stat("key")
 
+    def test_signature_neighbor_cannot_hide_newer_pointer(self):
+        from release_distribution import read_storage, validate_advance
+        raw = b'{"version":"0.0.900002"}'
+        key = "prefix/latest.json"
+        def response(operation, *arguments):
+            if operation == "list-objects-v2":
+                return {"Contents": [{"Key": key + ".sig", "Size": 100, "ETag": '"signature"'},
+                                     {"Key": key, "Size": len(raw), "ETag": '"pointer"'}],
+                        "IsTruncated": False}
+            self.assertEqual(operation, "get-object")
+            Path(arguments[-1]).write_bytes(raw)
+            return {"ETag": '"pointer"'}
+        with patch.dict(os.environ, {"RELEASE_R2_TRANSPORT": "s3"}), \
+                patch.object(s3, "request", side_effect=response):
+            current = read_storage(key)
+            self.assertFalse(validate_advance({"version": "0.0.900001"}, current, optional=True))
+
+    def test_exact_key_lookup_follows_pages_and_refuses_incomplete_absence(self):
+        key = "prefix/latest.json"
+        first = {"Contents": [{"Key": key + ".sig"}], "IsTruncated": True,
+                 "NextContinuationToken": "page-two"}
+        last = {"Contents": [{"Key": key, "Size": 10, "ETag": '"identity"'}], "IsTruncated": False}
+        with patch.object(s3, "request", side_effect=[first, last]) as request:
+            self.assertEqual(s3.object_stat(key)["etag"], "identity")
+            self.assertEqual(request.call_args.args[-2:], ("--continuation-token", "page-two"))
+        for pages in [[{**first, "NextContinuationToken": ""}], [first, first]]:
+            with self.subTest(pages=pages), patch.object(s3, "request", side_effect=pages):
+                with self.assertRaisesRegex(ValueError, "continuation token"):
+                    s3.object_stat(key)
+
     def test_authenticated_read_refuses_listing_get_race(self):
         def response(operation, *args):
             Path(args[-1]).write_bytes(b"payload")

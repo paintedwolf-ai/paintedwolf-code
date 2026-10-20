@@ -30,20 +30,35 @@ def request(operation, *arguments):
 
 
 def object_stat(key):
-    result = request("list-objects-v2", "--prefix", key, "--max-keys", "1", "--no-paginate")
-    if not isinstance(result, dict):
-        raise ValueError("S3 listing has an invalid shape")
-    rows = result.get("Contents", [])
-    if not isinstance(rows, list) or len(rows) > 1:
-        raise ValueError("S3 listing has an invalid shape")
-    for row in rows:
-        if not isinstance(row, dict):
+    continuation = None
+    seen = set()
+    while True:
+        arguments = ["--prefix", key, "--max-keys", "1000", "--no-paginate"]
+        if continuation is not None:
+            arguments.extend(["--continuation-token", continuation])
+        result = request("list-objects-v2", *arguments)
+        if not isinstance(result, dict):
             raise ValueError("S3 listing has an invalid shape")
-        if row.get("Key") == key:
-            if type(row.get("Size")) is not int or row["Size"] < 0 or not isinstance(row.get("ETag"), str):
-                raise ValueError("S3 object identity is incomplete")
-            return {"key": key, "size": row["Size"], "etag": row["ETag"].strip('"')}
-    return None
+        rows = result.get("Contents", [])
+        if not isinstance(rows, list) or len(rows) > 1000:
+            raise ValueError("S3 listing has an invalid shape")
+        # A signature can precede its pointer in an R2 prefix listing.
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("S3 listing has an invalid shape")
+            if row.get("Key") == key:
+                if type(row.get("Size")) is not int or row["Size"] < 0 or not isinstance(row.get("ETag"), str):
+                    raise ValueError("S3 object identity is incomplete")
+                return {"key": key, "size": row["Size"], "etag": row["ETag"].strip('"')}
+        truncated = result.get("IsTruncated", False)
+        if type(truncated) is not bool:
+            raise ValueError("S3 listing has an invalid pagination state")
+        if not truncated:
+            return None
+        continuation = result.get("NextContinuationToken")
+        if not isinstance(continuation, str) or not continuation or continuation in seen:
+            raise ValueError("S3 listing has an invalid continuation token")
+        seen.add(continuation)
 
 
 def get(key, output):
