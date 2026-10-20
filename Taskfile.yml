@@ -632,9 +632,23 @@ tasks:
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
+    env:
+      PW_RUST_TEST_COMPONENT: '{{.CLI_ARGS}}'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-      - cargo test --workspace --all-targets --quiet
+      - |
+        case "$PW_RUST_TEST_COMPONENT" in
+          "")
+            bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
+            cargo test --workspace --all-targets --quiet
+            ;;
+          desktop-settings-observer)
+            cargo test --package desktop-settings-observer --all-targets --quiet
+            retained="$(mktemp -d '{{.ARTIFACT_DIR}}/desktop-settings-component.XXXXXX')"
+            cp Cargo.lock "$retained/Cargo.lock"
+            echo "Desktop settings component lock retained at $retained/Cargo.lock"
+            ;;
+          *) echo "unsupported Rust test component" >&2; exit 2 ;;
+        esac
 
   decide:test:
     desc: Decision engine (bialy) Rust tests

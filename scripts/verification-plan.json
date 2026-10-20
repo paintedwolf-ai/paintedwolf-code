@@ -385,7 +385,8 @@
     "test:confine:linux": "passthrough",
     "nix:build": "passthrough",
     "release:live-test": "passthrough",
-    "test:linux:installed": "passthrough"
+    "test:linux:installed": "passthrough",
+    "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
     "den:harness:test": {

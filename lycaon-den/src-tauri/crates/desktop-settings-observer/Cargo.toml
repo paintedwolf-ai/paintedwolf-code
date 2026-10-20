@@ -16,3 +16,4 @@ libc.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 gio = "0.18"
 glib = "0.18"
+sha2 = "0.11"

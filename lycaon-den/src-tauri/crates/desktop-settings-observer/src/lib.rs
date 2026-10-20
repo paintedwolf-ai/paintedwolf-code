@@ -1,6 +1,6 @@
 //! Bounded, observation-only protocol for the separate Linux Settings process.
 use serde::{Deserialize, Serialize};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 
 pub const MAX_FRAME: usize = 16 * 1024;
 pub const MAX_SETTINGS: usize = 6;
@@ -22,7 +22,7 @@ impl Setting {
     }
     pub fn valid(&self) -> bool {
         match self {
-            Self::TextScale(v) => v.is_finite() && *v > 0.0 && *v <= 16.0,
+            Self::TextScale(v) => v.is_finite() && *v > 0.0,
             Self::Accent(v) => v.iter().all(|c| c.is_finite() && (0.0..=1.0).contains(c)),
             Self::KdeAccent(v) => v.len() <= 32 && !v.contains('\0'),
             Self::ButtonLayout(v) => v.len() <= 256 && !v.contains('\0'), _ => true,
@@ -50,7 +50,7 @@ impl Frame {
     pub fn write(&self, output: &mut impl Write) -> io::Result<()> {
         self.validate()?;
         let raw = serde_json::to_vec(self)?;
-        if raw.len() > MAX_FRAME { return Err(io::Error::new(io::ErrorKind::InvalidData, "oversized desktop settings frame")); }
+        if raw.len() + 1 > MAX_FRAME { return Err(io::Error::new(io::ErrorKind::InvalidData, "oversized desktop settings frame")); }
         output.write_all(&raw)?; output.write_all(b"\n")?; output.flush()
     }
 }
@@ -69,3 +69,5 @@ pub fn read(input: &mut impl BufRead, previous: u64) -> io::Result<Option<Frame>
     Ok(Some(frame))
 }
 #[cfg(test)] mod tests;
+#[cfg(target_os = "linux")]
+pub mod process;
