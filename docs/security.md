@@ -251,6 +251,18 @@ The intended policy is platform-independent; enforcement adapters differ. macOS 
 
 The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user namespaces. The engine probes once per process by running the helper against a plan that only attests, so availability is a fact from a real application. When a fact is missing, confinement is unavailable with a typed reason (`confine.LinuxCapabilities`): the Landlock ABI, seccomp, pidfd, or user namespaces, and for the last whether AppArmor restricted them, or Yama's `ptrace_scope=3`, which forbids the supervisor's reads of a confined caller. Ubuntu 24.04 and later restrict unprivileged user namespaces to programs with an AppArmor profile granting them; the Linux package installs [`packaging/linux/apparmor/painted-wolf-code`](../packaging/linux/apparmor/painted-wolf-code), which grants `userns` to the installed executables and nothing else. An engine run from elsewhere on such a host reports the profile by name, and the remedy is to install the package, not to lower the kernel's restriction. Fedora and RHEL need no host setup: the targeted SELinux policy leaves user programs unconfined, so the package ships no SELinux module ([Linux packages](dev-tasks.md#linux-packages)), and installed qualification runs with SELinux enforcing. The Linux confinement tests fail rather than skip when confinement is unavailable, so verification hosts with that restriction load [`apparmor-go-test-userns`](../.github/actions/setup-verification/apparmor-go-test-userns), which grants `userns` only to Go test binaries under the verification scratch root; CI loads it on Linux runners.
 
+On NixOS, the [declarative module](../packaging/nix/nixos.nix) adds an exact
+engine attachment only when AppArmor is already enabled. The selected `package`
+and explicitly retained `additionalTrustedPackages` each receive a literal
+immutable engine path verified against that generation's final manifest. A
+system switch updates those attachments; retain a running previous generation
+explicitly during a transition, or restart the desktop into the selected one.
+Removing a retained generation or disabling the module removes its attachment
+on the next system switch. Re-select the required generation and rebuild the
+system to recover a missing attachment. The module does not enable AppArmor,
+relax namespace sysctls, admit arbitrary store executables or grant vault trust
+through an AppArmor profile. Missing kernel capabilities still fail closed.
+
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
 - A datagram the gateway does not carry is dropped there rather than refused at the call: an unconnected `sendto`, `sendmsg`, or `sendmmsg` to a destination no `udp` permit covers succeeds and reaches nothing, and the drop is reported as a refusal. A connect to such a destination is refused with `EACCES`, as macOS refuses it. The filter can read neither address `sendmsg` and `sendmmsg` carry, and refusing the unconnected sends it can read would make one call answer differently from the other two.
