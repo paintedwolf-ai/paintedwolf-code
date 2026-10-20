@@ -150,6 +150,22 @@ describe("inWindowAppMenuItems", () => {
     expect(execCommand).toHaveBeenCalledTimes(3);
   });
 
+  it("refuses mutations after the opening field becomes readonly", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "draft";
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.setSelectionRange(0, 5);
+    const edit = section(inWindowAppMenuItems(), "Edit");
+    textarea.readOnly = true;
+    copyTextToClipboard.mockClear();
+    edit.submenu.find((item) => item.label === "Cut")?.onSelect?.();
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    expect(textarea.value).toBe("draft");
+    expect(copyTextToClipboard).not.toHaveBeenCalled();
+    textarea.remove();
+  });
+
   it("steps a focused code editor through its own history", () => {
     const parent = document.createElement("div");
     document.body.append(parent);
