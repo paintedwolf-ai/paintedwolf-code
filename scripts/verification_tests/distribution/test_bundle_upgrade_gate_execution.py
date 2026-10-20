@@ -123,3 +123,22 @@ class GateTests(unittest.TestCase):
         (records / "transaction.json").write_text('{"phase":"failed"}')
         with self.assertRaisesRegex(ValueError, "transaction failed"):
             staged(records)
+
+    def test_case_diagnostics_survive_a_separate_host_cleanup_failure(self):
+        from contextlib import contextmanager
+        self.plan["cases"] = [{"id": "prior-preview"}]
+        self.inventory()
+        @contextmanager
+        def origin(*_):
+            try:
+                yield
+            finally:
+                raise ValueError("host cleanup failed")
+        with patch.object(gate, "require_disposable_host", return_value=self.root / "config"), \
+             patch.object(gate, "local_origin", origin), \
+             patch.object(gate, "run_case", side_effect=ValueError("candidate rejected")):
+            with self.assertRaisesRegex(ValueError, "host cleanup failed"):
+                gate.rehearse(self.fixtures, self.evidence)
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["cases"][0]["error"], "candidate rejected")
+        self.assertEqual(receipt["error"], "host cleanup failed")

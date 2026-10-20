@@ -61,8 +61,12 @@ def rehearse(root: Path, evidence: Path):
                     receipt["cases"].append({"id": case["id"], "result": "failed"})
                     request_log = evidence / "requests.jsonl"
                     start = len(request_log.read_text().splitlines()) if request_log.exists() else 0
-                    result = run_case(case, plan, root, case_work, config, evidence / case["id"])
-                    verify_requests(request_log, case, start)
+                    try:
+                        result = run_case(case, plan, root, case_work, config, evidence / case["id"])
+                        verify_requests(request_log, case, start)
+                    except Exception as error:
+                        receipt["cases"][-1]["error"] = str(error)
+                        raise
                     receipt["cases"][-1] = result
                     shutil.rmtree(config)
                     shutil.rmtree(case_work)
