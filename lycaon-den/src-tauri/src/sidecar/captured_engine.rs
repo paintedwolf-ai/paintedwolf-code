@@ -1,5 +1,5 @@
 //! Auxiliary children execute a retained engine from the running desktop generation.
-use serde::Deserialize;
+use super::manifest::{Executable, Manifest, VerifyError};
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
@@ -28,25 +28,6 @@ impl AdmissionError {
             _ => "Restart Painted Wolf Code to use the installed update transport",
         }
     }
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Manifest {
-    format_version: u32,
-    package: String,
-    version: String,
-    architecture: String,
-    install_root: String,
-    executables: Vec<Executable>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Executable {
-    path: String,
-    sha256: String,
-    size: u64,
 }
 
 struct CapturedEngine {
@@ -119,15 +100,13 @@ fn capture(
         .map_err(|_| AdmissionError::ManifestUnavailable)?;
     let manifest: Manifest =
         serde_json::from_slice(&raw).map_err(|_| AdmissionError::ManifestUnavailable)?;
-    if raw.len() as u64 > MANIFEST_LIMIT
-        || manifest.format_version != 1
-        || manifest.package != "painted-wolf-code"
-        || manifest.version.is_empty()
-        || manifest.architecture != std::env::consts::ARCH
-        || Path::new(&manifest.install_root) != root
-    {
+    if raw.len() as u64 > MANIFEST_LIMIT || manifest.architecture != std::env::consts::ARCH {
         return Err(AdmissionError::ManifestUnavailable);
     }
+    manifest.validate_for_root(root).map_err(|err| match err {
+        VerifyError::Mismatch => AdmissionError::GenerationMismatch,
+        VerifyError::Invalid | VerifyError::Io => AdmissionError::ManifestUnavailable,
+    })?;
     let desktop = entry(&manifest, &root.join("bin/painted-wolf-code"))?;
     verify(
         &File::open(running).map_err(|_| AdmissionError::GenerationMismatch)?,
@@ -158,21 +137,9 @@ fn owned(metadata: &std::fs::Metadata) -> bool {
 }
 
 fn entry<'a>(manifest: &'a Manifest, path: &Path) -> Result<&'a Executable, AdmissionError> {
-    let mut entries = manifest
-        .executables
-        .iter()
-        .filter(|entry| Path::new(&entry.path) == path);
-    let entry = entries.next().ok_or(AdmissionError::ManifestUnavailable)?;
-    if entries.next().is_some()
-        || entry.sha256.len() != 64
-        || !entry
-            .sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(AdmissionError::ManifestUnavailable);
-    }
-    Ok(entry)
+    manifest
+        .executable(path)
+        .map_err(|_| AdmissionError::ManifestUnavailable)
 }
 
 fn verify(file: &File, expected: &Executable) -> Result<(), AdmissionError> {

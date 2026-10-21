@@ -4,27 +4,44 @@ use std::os::unix::fs::PermissionsExt;
 fn fixture() -> (crate::test_support::TempDir, std::path::PathBuf) {
     let root = crate::test_support::TempDir::new("captured-proxy-engine");
     std::fs::create_dir(root.join("bin")).unwrap();
-    let desktop = root.join("running-desktop");
+    let desktop = root.join("bin/painted-wolf-code");
     std::fs::write(&desktop, b"running desktop image").unwrap();
-    std::fs::copy("/bin/echo", root.join("bin/pw")).unwrap();
-    std::fs::set_permissions(root.join("bin/pw"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    let row = |path: std::path::PathBuf, contents: Vec<u8>| {
-        serde_json::json!({
-            "path": path, "size": contents.len(), "sha256": hex::encode(Sha256::digest(contents))
-        })
-    };
-    let manifest = serde_json::json!({
-        "format_version": 1, "package": "painted-wolf-code", "version": "1.0.2",
-        "architecture": std::env::consts::ARCH, "install_root": root.path(),
-        "executables": [row(root.join("bin/painted-wolf-code"), std::fs::read(&desktop).unwrap()),
-            row(root.join("bin/pw"), std::fs::read(root.join("bin/pw")).unwrap())]
-    });
+    std::fs::set_permissions(&desktop, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let pw = root.join("bin/pw");
+    std::fs::copy("/bin/echo", &pw).unwrap();
+    std::fs::set_permissions(&pw, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let desktop_bytes = std::fs::read(&desktop).unwrap();
+    let pw_bytes = std::fs::read(&pw).unwrap();
+    let manifest = crate::sidecar::manifest::fixture_json(
+        root.path(),
+        "1.0.2",
+        &[(&desktop, &desktop_bytes), (&pw, &pw_bytes)],
+    );
     std::fs::write(
         root.join("manifest.json"),
         serde_json::to_vec(&manifest).unwrap(),
     )
     .unwrap();
     (root, desktop)
+}
+
+#[test]
+fn legacy_v1_and_unknown_future_manifest_versions_are_refused() {
+    let (root, desktop) = fixture();
+    let manifest_path = root.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    for bad_version in [0, 1, 3, 99] {
+        manifest["format_version"] = serde_json::json!(bad_version);
+        std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(
+            matches!(
+                capture(&root, &desktop, false),
+                Err(AdmissionError::ManifestUnavailable)
+            ),
+            "format_version {bad_version} must be refused"
+        );
+    }
 }
 
 #[tokio::test]
