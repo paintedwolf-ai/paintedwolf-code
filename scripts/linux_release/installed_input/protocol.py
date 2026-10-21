@@ -47,6 +47,49 @@ def endpoint_operation(port: int) -> str:
 
 
 
+# A file tab drag: press on the tab, move in fixed increments to a point that
+# no tab strip accepts, then release or press Escape before releasing.
+# Coordinates are framebuffer pixels of the whole display, which the controller
+# checks against the display it actually drives.
+_TEAR_OFF = re.compile(r'file-tab-tear-off-v1-(drop|escape)-([0-9]{1,5})-([0-9]{1,5})-([0-9]{1,5})-([0-9]{1,5})'
+                       r'-([0-9]{3,5})x([0-9]{3,5})')
+POINTER_INCREMENTS = 24
+
+
+def tear_off_operation(ending: str, start: tuple[int, int], end: tuple[int, int], display: tuple[int, int]) -> str:
+    """The fixed drag for one file tab; every parameter is a validated integer."""
+    operation = 'file-tab-tear-off-v1-{}-{}-{}-{}-{}-{}x{}'.format(ending, *start, *end, *display)
+    if not _TEAR_OFF.fullmatch(operation) or pointer_display(operation) != tuple(display):
+        raise ValueError('file tab drag requires a fixed ending and in-display coordinates')
+    return operation
+
+
+def pointer_display(operation: str) -> tuple[int, int] | None:
+    """The display size a pointer operation was planned for, or None for keyboard operations."""
+    match = _TEAR_OFF.fullmatch(operation) if isinstance(operation, str) else None
+    if match is None:
+        return None
+    x1, y1, x2, y2, width, height = map(int, match.groups()[1:])
+    if not (320 <= width <= 16384 and 240 <= height <= 16384 and 0 <= x1 < width and 0 <= x2 < width
+            and 0 <= y1 < height and 0 <= y2 < height):
+        raise ValueError('file tab drag coordinates are outside the planned display')
+    return width, height
+
+
+def _tear_off_steps(operation: str) -> tuple[tuple, ...]:
+    match = _TEAR_OFF.fullmatch(operation)
+    pointer_display(operation)
+    ending = match.group(1)
+    x1, y1, x2, y2 = map(int, match.groups()[1:5])
+    rows = [('@move', x1, y1), ('@button', 'down')]
+    rows.extend(('@move', x1 + (x2 - x1) * index // POINTER_INCREMENTS,
+                 y1 + (y2 - y1) * index // POINTER_INCREMENTS) for index in range(1, POINTER_INCREMENTS + 1))
+    if ending == 'escape':
+        rows.append(('esc',))
+    rows.append(('@button', 'up'))
+    return tuple(rows)
+
+
 _EDITOR_STEPS = _editor_steps()
 _SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
                   for char in 'qualification needle'), ('ret',))
@@ -64,6 +107,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':
         return _SEARCH_STEPS
+    if pointer_display(operation) is not None:
+        return _tear_off_steps(operation)
     raise ValueError('native input requires a fixed declared operation')
 
 
@@ -121,6 +166,19 @@ def focus(value: dict) -> dict:
     return value
 
 
+def pointer_focus(value: dict) -> dict:
+    """A pointer step needs the launched app's visible fullscreen frame, not a focused entry:
+    the drag itself moves focus between windows."""
+    fields = {'launch', 'frame', 'frame_visible', 'frame_fullscreen'}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError('native pointer proof has an unknown shape')
+    for name in ('launch', 'frame'):
+        process_identity(value[name])
+    if value['frame'] != value['launch'] or value['frame_visible'] is not True or value['frame_fullscreen'] is not True:
+        raise ValueError('native pointer input requires the launched fullscreen frame')
+    return value
+
+
 def request(document: dict, execution: dict) -> dict:
     binding(execution)
     fields = {'format_version', 'binding', 'transaction_id', 'operation', 'ordinal', 'focus'}
@@ -131,7 +189,7 @@ def request(document: dict, execution: dict) -> dict:
     binding(document['binding'])
     nonce(document['transaction_id'])
     event_sha256(document['operation'], document['ordinal'])
-    focus(document['focus'])
+    (pointer_focus if pointer_display(document['operation']) else focus)(document['focus'])
     canonical(document)
     return document
 
