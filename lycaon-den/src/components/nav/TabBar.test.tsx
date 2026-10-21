@@ -552,4 +552,17 @@ describe("TabBar", () => {
     vi.runAllTimers();
     expect(dock.style.transform).toBe("");
   });
+
+  it("manages vertical overflow so the clip scrolls when open and clips while closed", () => {
+    vi.useFakeTimers();
+    stubResizeObserver();
+    render(() => <TabBar tabs={tabs} />);
+    const clip = screen.getByTestId("tabs-clip") as HTMLElement;
+    expect(clip.style.overflowY).toBe("hidden");
+    fireEvent.click(screen.getByTestId("tab-git"));
+    vi.runAllTimers();
+    expect(clip.style.overflowY).toBe("");
+    fireEvent.click(screen.getByTestId("tab-git"));
+    expect(clip.style.overflowY).toBe("hidden");
+  });
 });

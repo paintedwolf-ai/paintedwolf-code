@@ -163,7 +163,14 @@ export function TabBar(props: TabBarProps) {
       (Number.parseFloat(cs.borderBottomWidth) || 0) +
       (Number.parseFloat(cs.paddingTop) || 0) +
       (Number.parseFloat(cs.paddingBottom) || 0);
-    return Math.round(panelHeight + extra);
+    const unconstrained = Math.round(panelHeight + extra);
+    if (cs.maxHeight && cs.maxHeight !== "none" && cs.maxHeight.endsWith("px")) {
+      const maxH = Number.parseFloat(cs.maxHeight);
+      if (Number.isFinite(maxH) && maxH > 0) {
+        return Math.min(unconstrained, Math.round(maxH));
+      }
+    }
+    return unconstrained;
   };
 
   const panelExpandedHeight = (): number => {
@@ -260,6 +267,7 @@ export function TabBar(props: TabBarProps) {
     props.onPanelHeightChange?.(to);
     const finish = () => {
       clip.style.height = settleTo;
+      clip.style.overflowY = settleTo === "auto" ? "" : "hidden";
       settleOverlayExtent(to);
       onDone?.();
     };
@@ -271,6 +279,7 @@ export function TabBar(props: TabBarProps) {
       finish();
       return;
     }
+    clip.style.overflowY = "hidden";
     clip.style.height = `${from}px`;
     settleOverlayExtent(from);
     animateOverlayExtent(from, to);
@@ -509,6 +518,7 @@ export function TabBar(props: TabBarProps) {
                     ref={(el) => {
                       clipEl = el;
                       el.style.height = "0px";
+                      el.style.overflowY = "hidden";
                     }}
                   >
                     <Show when={showContent() ? mounted() : null} keyed>

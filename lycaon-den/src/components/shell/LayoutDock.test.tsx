@@ -330,6 +330,14 @@ describe("tab panel cap CSS", () => {
     // A percentage max-height would resolve against the clip, not the host.
     expect(text).not.toMatch(/\.tabs__panel-clip\s*\{[^}]*max-height:\s*\d+%/);
   });
+
+  it("allows internal vertical scrolling on the panel clip", () => {
+    const text = readSourceText(join(denSrc, "global-components.css"), "utf8");
+    const clipRule = text.match(/\.tabs__panel-clip\s*\{([^}]*)\}/)?.[1];
+    expect(clipRule).toBeTruthy();
+    expect(clipRule).toMatch(/overflow-y:\s*auto/);
+    expect(clipRule).toMatch(/overscroll-behavior:\s*contain/);
+  });
 });
 
 describe("chips collapse by container", () => {
