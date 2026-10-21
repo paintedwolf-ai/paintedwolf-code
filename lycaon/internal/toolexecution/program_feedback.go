@@ -44,6 +44,7 @@ func (p *PreparedProgramFailure) Close() {
 		p.closed = true
 		p.Rejection = nil
 		p.operation = toolcontract.BoundOperation{}
+		p.identity = tools.InvocationIdentity{}
 		p.memory = nil
 		p.policy = nil
 		p.renderedError = nil

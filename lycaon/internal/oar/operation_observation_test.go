@@ -61,18 +61,18 @@ func testNativeMetadataPolicies(t *testing.T, operationName string, codes []stri
 	rs := loadStockRules(t)
 	contract, ok := toolcontract.Lookup(operationName)
 	if !ok {
-		t.Fatal("chmod contract absent")
+		t.Fatalf("%s contract absent", operationName)
 	}
 	definition, err := toolcontract.ToolOperation(operationName, json.RawMessage(`{"type":"object"}`), contract)
-	testutil.FailErr(t, "freeze chmod definition", err)
+	testutil.FailErr(t, "freeze "+operationName+" definition", err)
 	inv := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, ActorID: "fixture-person", SessionID: "fixture-session", Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "chmod-child"}, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", Span: toolcontract.SourceSpan{EndByte: 16, Line: 1, Column: 1}}
 	operation, err := toolcontract.BindOperation(definition, inv, operationName, definition.Facts().Commands[0].Effects[0].Mode, nil)
-	testutil.FailErr(t, "bind chmod", err)
+	testutil.FailErr(t, "bind "+operationName, err)
 	for _, code := range codes {
 		t.Run(code, func(t *testing.T) {
 			rule, ok := rs.Get(code)
 			if !ok {
-				t.Fatal("bundled chmod policy absent")
+				t.Fatal("bundled metadata policy absent")
 			}
 			pipeline := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, NewCounterStore())
 			pipeline.EnableAnchor(AnchorToolRejected)
@@ -80,14 +80,14 @@ func testNativeMetadataPolicies(t *testing.T, operationName string, codes []stri
 				gc := NewGuardContext()
 				if native {
 					gc.ObserveToolCall("command", map[string]any{"command": operationName + " 1001 input"})
-					testutil.FailErr(t, "observe bound chmod", gc.ObserveNativeOperation(operation))
+					testutil.FailErr(t, "observe bound "+operationName, gc.ObserveNativeOperation(operation))
 				} else {
 					gc.ObserveToolCall(operationName, map[string]any{"paths": []string{"input"}, "mode": "0644"})
 				}
 				gc.ObservedRejectCode = code
 				gc.PutRejectData(code, map[string]any{"path": "input", "mode": "0644", "requested": 9, "max_paths": 8, "bulk_denied": true, "mode_denied": true, "chmod_allowed_modes": []string{"0600", "0644"}, "ownership_uid": 1001, "ownership_gid": 1001, "ownership_target": "1002"})
 				result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
-				testutil.FailErr(t, "evaluate bundled chmod policy", err)
+				testutil.FailErr(t, "evaluate bundled metadata policy", err)
 				if native && !nativeEligible {
 					if result.Decision != nil {
 						t.Fatal("native numeric-only grammar selected legacy account lookup or recursive request policy")
@@ -112,7 +112,7 @@ func testNativeMetadataPolicies(t *testing.T, operationName string, codes []stri
 			if result.Decision != nil {
 				t.Fatal("command text or diagnostic data selected chmod policy")
 			}
-			testutil.FailErr(t, "observe actual chmod", gc.ObserveNativeOperation(operation))
+			testutil.FailErr(t, "observe actual "+operationName, gc.ObserveNativeOperation(operation))
 			gc.ObservedRejectCode = "OTHER_OWNER_FAILURE"
 			gc.PutRejectData("OTHER_OWNER_FAILURE", nil)
 			result, err = pipeline.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
