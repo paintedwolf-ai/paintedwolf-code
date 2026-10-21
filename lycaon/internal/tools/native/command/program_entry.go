@@ -44,9 +44,10 @@ type ProgramRuntime struct {
 	Builtins func(tools.ToolContext) map[string]commandprogram.OperationDispatcher
 	Natives  map[string]NativeOperation
 
-	mu        sync.Mutex
-	outputs   map[string]*invocation.ProgramOutputRetention
-	resources *sessionOutputResources
+	mu            sync.Mutex
+	outputs       map[string]*invocation.ProgramOutputRetention
+	resources     *sessionOutputResources
+	resourcesOnce sync.Once
 }
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
@@ -161,7 +162,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if r.Builtins != nil {
 		builtins = r.Builtins(tc)
 	}
-	jobs := &SessionJobs{Registry: r.Background, SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID}
+	jobs := &SessionJobs{Registry: r.Background, Supervisor: r.Supervisor, SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID}
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, external: ExternalStages{ToolContext: tc}, binder: commandprogram.CatalogBinder{}}
 	for name, builtin := range jobBuiltins(jobs, run.commands) {
 		if _, taken := dispatcher.builtins[name]; !taken {
@@ -177,7 +178,14 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
 		return r.Evaluate(ctx, evaluation)
 	})
-	settleErr := r.settleProgram(ctx, run, result)
+	settled := make(chan error, 1)
+	r.Supervisor.AfterJobs(root.Identity.ProgramID, func() { settled <- r.settleProgram(ctx, run, result) })
+	var settleErr error
+	select {
+	case settleErr = <-settled:
+	default:
+		// & jobs still run under supervision; the program settles when they end.
+	}
 	if feedback := r.feedback(ctx, run, dispatcher, evalErr); feedback != nil {
 		return "", errors.Join(feedback, settleErr)
 	}
@@ -225,13 +233,9 @@ func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, sourc
 func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, plan commandsurface.ProgramSnapshot, scope captureprojection.Scope, screening captureprojection.StreamOptions) error {
 	sourceRef := "output:program-source:" + run.root.Identity.ProgramID
 	var nodes []toolcontract.ProgramNode
-	var collect func([]commandsurface.Statement)
-	collect = func(statements []commandsurface.Statement) {
-		for _, statement := range statements {
-			nodes = append(nodes, toolcontract.ProgramNode{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span})
-		}
+	for _, statement := range programStatements(plan.Statements) {
+		nodes = append(nodes, toolcontract.ProgramNode{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span})
 	}
-	collect(plan.Statements)
 	start := toolcontract.ProgramStart{
 		Version:       toolcontract.ProgramVersion{ProgramID: run.root.Identity.ProgramID, ParentReceiptID: run.parentReceipt, RootExecutionID: run.root.Identity.ExecutionID, LanguageVersion: plan.Version, CatalogDigest: plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: plan.SourceDigest, SourceReference: sourceRef},
 		PlanReference: sourceRef, SourceExact: true, SyntaxValidated: true,
@@ -360,4 +364,66 @@ func (b *boundedBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]byte(nil), b.data...)
+}
+
+// programStatements lists every static statement, nested ones and those in
+// substitutions included, so each reachable child has a recorded node.
+func programStatements(statements []commandsurface.Statement) []commandsurface.Statement {
+	var out []commandsurface.Statement
+	var statement func(commandsurface.Statement)
+	var words func([]commandsurface.DeferredWord)
+	var parts func([]commandsurface.WordNode)
+	list := func(items []commandsurface.Statement) {
+		for _, item := range items {
+			statement(item)
+		}
+	}
+	parts = func(nodes []commandsurface.WordNode) {
+		for _, node := range nodes {
+			switch node := node.(type) {
+			case commandsurface.DoubleQuotedPart:
+				parts(node.Parts)
+			case commandsurface.SubstitutionPart:
+				list(node.Statements)
+			}
+		}
+	}
+	words = func(items []commandsurface.DeferredWord) {
+		for _, item := range items {
+			parts(item.Parts)
+		}
+	}
+	statement = func(s commandsurface.Statement) {
+		out = append(out, s)
+		for _, redirect := range s.Redirects {
+			words([]commandsurface.DeferredWord{redirect.Target})
+		}
+		switch node := s.Command.(type) {
+		case commandsurface.SimpleCommand:
+			words(node.Words)
+			for _, assignment := range node.Assignments {
+				words([]commandsurface.DeferredWord{assignment.Value})
+			}
+		case commandsurface.BinaryCommand:
+			statement(node.Left)
+			statement(node.Right)
+		case commandsurface.StatementGroup:
+			list(node.Statements)
+		case commandsurface.Conditional:
+			for branch := &node; branch != nil; branch = branch.Else {
+				list(branch.Condition)
+				list(branch.Then)
+			}
+		case commandsurface.WhileLoop:
+			list(node.Condition)
+			list(node.Body)
+		case commandsurface.ForLoop:
+			words(node.Items)
+			list(node.Body)
+		case commandsurface.FunctionDeclaration:
+			statement(node.Body)
+		}
+	}
+	list(statements)
+	return out
 }

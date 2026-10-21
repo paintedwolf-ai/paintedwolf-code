@@ -33,9 +33,13 @@ type ProgramSupervisor struct {
 }
 
 type supervisedProgram struct {
-	sessionID string
-	closed    bool
-	cancel    context.CancelCauseFunc
+	sessionID  string
+	closed     bool
+	cancel     context.CancelCauseFunc
+	jobs       map[int]context.CancelCauseFunc
+	nextJob    int
+	foreground bool
+	settle     func()
 }
 
 type supervisedKey struct{}
@@ -62,11 +66,7 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	}
 	s.programs[root.Identity.ProgramID] = program
 	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		delete(s.programs, root.Identity.ProgramID)
-		s.mu.Unlock()
-	}()
+	defer s.foregroundDone(root.Identity.ProgramID)
 	result, err := run(context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID))
 	switch cause := context.Cause(ctx); {
 	case errors.Is(cause, ErrProgramStopped), errors.Is(cause, errSupervisorLost):
@@ -128,10 +128,85 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 		program.closed = true
 		ids = append(ids, id)
 		cancels = append(cancels, program.cancel)
+		for _, job := range program.jobs {
+			cancels = append(cancels, job)
+		}
 	}
 	s.mu.Unlock()
 	for _, cancel := range cancels {
 		cancel(cause)
 	}
 	return ids
+}
+
+// Hold keeps a program supervised for one & job beyond its foreground. The
+// job context keeps the program's identity, survives the launching call and
+// is canceled by Stop or loss; release ends the hold exactly once.
+func (s *ProgramSupervisor) Hold(ctx context.Context) (context.Context, func(), error) {
+	id, _ := ctx.Value(supervisedKey{}).(string)
+	if s == nil || id == "" {
+		return nil, nil, fmt.Errorf("program job is outside supervision")
+	}
+	jobCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+	s.mu.Lock()
+	program, ok := s.programs[id]
+	if !ok || program.closed {
+		s.mu.Unlock()
+		cancel(ErrProgramStopped)
+		return nil, nil, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": id, "reason": "program admission closed"})
+	}
+	if program.jobs == nil {
+		program.jobs = map[int]context.CancelCauseFunc{}
+	}
+	program.nextJob++
+	job := program.nextJob
+	program.jobs[job] = cancel
+	s.mu.Unlock()
+	var once sync.Once
+	return jobCtx, func() {
+		once.Do(func() {
+			cancel(nil)
+			s.mu.Lock()
+			delete(program.jobs, job)
+			s.mu.Unlock()
+			s.finishIfIdle(id)
+		})
+	}, nil
+}
+
+// AfterJobs runs settle once the program's foreground and every held job end.
+func (s *ProgramSupervisor) AfterJobs(programID string, settle func()) {
+	s.mu.Lock()
+	program, ok := s.programs[programID]
+	if ok {
+		program.settle = settle
+	}
+	s.mu.Unlock()
+	if !ok {
+		settle()
+		return
+	}
+	s.finishIfIdle(programID)
+}
+
+func (s *ProgramSupervisor) foregroundDone(programID string) {
+	s.mu.Lock()
+	if program, ok := s.programs[programID]; ok {
+		program.foreground = true
+	}
+	s.mu.Unlock()
+	s.finishIfIdle(programID)
+}
+
+func (s *ProgramSupervisor) finishIfIdle(programID string) {
+	s.mu.Lock()
+	program, ok := s.programs[programID]
+	if !ok || !program.foreground || len(program.jobs) > 0 || program.settle == nil {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.programs, programID)
+	settle := program.settle
+	s.mu.Unlock()
+	settle()
 }

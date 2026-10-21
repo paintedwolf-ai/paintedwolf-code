@@ -18,6 +18,7 @@ import (
 // A native job has no fabricated OS PID; its stop cancels its own context.
 type SessionJobs struct {
 	Registry      *bgprocess.Registry
+	Supervisor    *ProgramSupervisor
 	SessionID     string
 	RootSessionID string
 	ProjectID     string
@@ -39,13 +40,22 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 	if j == nil || j.Registry == nil || launch.Run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
 	}
+	jobCtx, release, err := j.Supervisor.Hold(ctx)
+	if err != nil {
+		return "", err
+	}
 	var handle string
 	ready := make(chan struct{})
-	handle, err := j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
+	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
 		CommandLine: launch.CommandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
-		Run: func(ctx context.Context, stdout, stderr io.Writer) (int, error) {
+		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
+			defer release()
 			<-ready
+			ctx, cancel := context.WithCancel(jobCtx)
+			defer cancel()
+			stopAfter := context.AfterFunc(stopCtx, cancel)
+			defer stopAfter()
 			result, err := launch.Run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
 			if ctx.Err() != nil && result.Terminal == "" {
 				result = toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
@@ -55,6 +65,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 		},
 	})
 	if err != nil {
+		release()
 		close(ready)
 		return "", err
 	}

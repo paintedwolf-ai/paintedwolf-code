@@ -83,6 +83,11 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	defer child.release()
+	if err := d.start(ctx, child); err != nil {
+		result := refusedResult("TOOL_OWNER_FAILED")
+		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	}
 	result, runErr := builtin.Invoke(ctx, request, streams)
 	if result.Terminal == "" {
 		result = ownerFailure(runErr)
@@ -96,11 +101,16 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	defer child.release()
+	if err := d.start(ctx, child); err != nil {
+		result := refusedResult("TOOL_OWNER_FAILED")
+		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	}
 	result, runErr := d.external.Launch(ctx, request, streams)
 	if result.Terminal == "" {
 		result = ownerFailure(runErr)
 	}
-	return result, errors.Join(runErr, d.settle(ctx, child, result, result.Terminal != toolcontract.ProducerRefused, ""))
+	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
 }
 
 // refuseUnimplemented settles a catalogued name with no host owner here. It
@@ -111,6 +121,7 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), errors.Join(cause, err)
 	}
+	defer child.release()
 	result := refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED")
 	return result, errors.Join(cause, d.settle(ctx, child, result, false, ""))
 }
@@ -144,6 +155,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
+	defer child.release()
 	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if toolrejection.AsToolReject(runErr) != nil {
@@ -163,12 +175,16 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 	if err != nil {
 		return result, errors.Join(rejection, err)
 	}
+	defer child.release()
 	return result, errors.Join(rejection, d.settle(ctx, child, result, false, ""))
 }
 
 type programChild struct {
 	id        string
 	reference string
+	bound     toolcontract.BoundOperation
+	review    toolcontract.ReviewedOperationInputs
+	release   func()
 }
 
 // prepare records a child of a catalog command that has no registered tool.
@@ -180,20 +196,39 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	if inputs == nil {
 		inputs = map[string]any{"operation_id": spec.Name, "argv": request.Argv.Values()}
 	}
-	return d.prepareDefinition(ctx, definition, request, inputs)
+	child, err := d.prepareDefinition(ctx, definition, request, inputs)
+	if err != nil {
+		return programChild{}, err
+	}
+	if len(spec.Effects) > 0 {
+		child.bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, nil)
+	}
+	if err != nil {
+		child.release()
+		return programChild{}, err
+	}
+	return child, nil
 }
 
+// prepareDefinition retains the expanded inputs and the dynamic child row
+// together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
 	review, release, err := toolcontract.NewReviewedOperationInputs(ctx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	defer release()
 	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: request.Invocation, Definition: definition, ExpandedInputs: review, Canonical: d.run.source})
 	if err != nil {
+		release()
 		return programChild{}, err
 	}
-	return programChild{id: request.Invocation.Identity.ExecutionID, reference: reference}, nil
+	return programChild{id: request.Invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
+}
+
+// start commits the durable owner-start marker for a host-run child.
+func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
+	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
+	return marker.BeforeNativeOwner(ctx, child.bound, d.run.tc.Identity.ToolCallID, child.review)
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {

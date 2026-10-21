@@ -41,11 +41,11 @@ func (s *sessionOutputResources) ReserveSpill(ctx context.Context, n int64) (fun
 }
 
 func (r *ProgramRuntime) sessionResources() *sessionOutputResources {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.resources != nil {
-		return r.resources
-	}
+	r.resourcesOnce.Do(func() { r.resources = newSessionOutputResources() })
+	return r.resources
+}
+
+func newSessionOutputResources() *sessionOutputResources {
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {
 		limits = toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 64 << 20}
@@ -59,8 +59,7 @@ func (r *ProgramRuntime) sessionResources() *sessionOutputResources {
 			}
 		}
 	}
-	r.resources = &sessionOutputResources{ProgramMemory: memory, limit: spill}
-	return r.resources
+	return &sessionOutputResources{ProgramMemory: memory, limit: spill}
 }
 
 // jobBuiltin is a host builtin over the session's job registry.
