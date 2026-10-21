@@ -5,18 +5,20 @@ import base64
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
+import posixpath
 import stat
 import struct
 import subprocess
 import tempfile
 
 from . import installed_evidence as evidence
-from .installed_cases.package_payload import inspect, stable, verify
+from .installed_cases.package_payload import SETUID_LAUNCHER as RELATIVE_SETUID_LAUNCHER, inspect, stable, verify
 
 ARCHES = {"x86_64": ("amd64", 62), "aarch64": ("arm64", 183)}
 ROLES = {"painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy"}
+SETUID_LAUNCHER = Path("/") / RELATIVE_SETUID_LAUNCHER
 
 
 def file_identity(path: Path) -> dict:
@@ -36,27 +38,78 @@ def file_identity(path: Path) -> dict:
             "device": before.st_dev, "inode": before.st_ino, "header": header}
 
 
-def elf(path: Path, architecture: str) -> dict:
+def elf(path: Path, architecture: str, *, setuid: bool = False) -> dict:
     observed = file_identity(path)
     machine = {"amd64": 62, "arm64": 183}[architecture]
     header = observed.pop("header")
+    if setuid:
+        info = path.lstat()
+        valid_mode = (path == SETUID_LAUNCHER and observed["mode"] == 0o4755
+                      and (info.st_dev, info.st_ino, stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid)
+                      == (observed["device"], observed["inode"], 0o4755, 0, 0))
+    else:
+        valid_mode = observed["mode"] & 0o111 != 0 and observed["mode"] & 0o7000 == 0
     if (len(header) < 64 or header[:6] != b"\x7fELF\x02\x01"
             or struct.unpack_from("<H", header, 16)[0] not in (2, 3)
             or struct.unpack_from("<H", header, 18)[0] != machine
-            or observed["mode"] & 0o111 == 0 or observed["mode"] & 0o7000):
+            or not valid_mode):
         raise ValueError("installed runtime image is not an ordinary executable for this native CPU")
     return observed
+
+
+def manifest_payload(payload: object, root: Path, observed: dict[Path, dict]) -> None:
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("installed manifest differs from the selected native layout")
+    entries = {}
+    for raw in payload:
+        entry = evidence.object_fields(raw, {"path", "kind", "mode", "sha256", "size", "target"})
+        name = entry["path"]
+        rel = PurePosixPath(name) if isinstance(name, str) else None
+        if (rel is None or not name or name in {".", "manifest.json"} or rel.is_absolute()
+                or str(rel) != name or ".." in rel.parts or name in entries):
+            raise ValueError("installed manifest payload has a duplicate, foreign or invalid path")
+        mode, kind = entry["mode"], entry["kind"]
+        if type(mode) is not int or not 0 <= mode <= 0o777 or (kind != "symlink" and mode & 0o022):
+            raise ValueError("installed manifest payload has an unsafe mode")
+        if kind == "file":
+            if (not isinstance(entry["sha256"], str) or not evidence.SHA256.fullmatch(entry["sha256"])
+                    or type(entry["size"]) is not int or entry["size"] < 0 or entry["target"] is not None):
+                raise ValueError("installed manifest payload file is malformed")
+        elif kind == "directory":
+            if entry["sha256"] is not None or entry["size"] is not None or entry["target"] is not None or mode & 0o500 != 0o500:
+                raise ValueError("installed manifest payload directory is malformed")
+        elif kind == "symlink":
+            target = entry["target"]
+            resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target)) if isinstance(target, str) and target else ".."
+            if (mode != 0o777 or entry["sha256"] is not None or entry["size"] is not None
+                    or target.startswith("/") or resolved == ".." or resolved.startswith("../")):
+                raise ValueError("installed manifest payload link is malformed")
+        else:
+            raise ValueError("installed manifest payload has an unknown kind")
+        entries[name] = entry
+    for image, identity in observed.items():
+        if not image.is_relative_to(root):
+            continue
+        entry = entries.get(image.relative_to(root).as_posix())
+        if (entry is None or entry["kind"] != "file" or entry["mode"] & 0o111 == 0
+                or (entry["sha256"], entry["size"]) != (identity["sha256"], identity["bytes"])):
+            raise ValueError("installed manifest executable differs from its payload inventory")
 
 
 def manifest(root: Path, architecture: str) -> dict:
     path = root / "manifest.json"
     if path.is_symlink() or path.stat().st_size > 4 << 20:
         raise ValueError("installed manifest is not a bounded physical file")
-    record = evidence.object_fields(json.loads(path.read_text()), {
-        "format_version", "package", "version", "architecture", "install_root", "executables"})
-    if (type(record["format_version"]) is not int or record["format_version"] != 1
-            or record["package"] != "painted-wolf-code"
-            or record["install_root"] != str(root) or not record["version"]
+    raw_manifest = json.loads(path.read_text())
+    version = raw_manifest.get("format_version") if isinstance(raw_manifest, dict) else None
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("installed manifest differs from the selected native layout")
+    fields = {"format_version", "package", "version", "architecture", "install_root", "executables"}
+    if version == 2:
+        fields.add("payload")
+    record = evidence.object_fields(raw_manifest, fields)
+    if (record["package"] != "painted-wolf-code"
+            or record["install_root"] != str(root) or not isinstance(record["version"], str) or not record["version"]
             or record["architecture"] != {"amd64": "x86_64", "arm64": "aarch64"}[architecture]
             or not isinstance(record["executables"], list) or not record["executables"]):
         raise ValueError("installed manifest differs from the selected native layout")
@@ -66,12 +119,13 @@ def manifest(root: Path, architecture: str) -> dict:
     for raw in record["executables"]:
         item = evidence.object_fields(raw, {"path", "sha256", "size"})
         image = Path(item["path"])
-        allowed = image.is_relative_to(root) or root == Path("/opt/painted-wolf-code") and image in entry_points
+        allowed = (image.is_relative_to(root)
+                   or root == Path("/opt/painted-wolf-code") and (image in entry_points or image == SETUID_LAUNCHER))
         if (not image.is_absolute() or str(image) != item["path"] or not allowed or image in observed
                 or ".." in image.parts or type(item["size"]) is not int or item["size"] < 0):
             raise ValueError("installed manifest has a duplicate, foreign or invalid image")
-        if image in roles:
-            identity = elf(image, architecture)
+        if image in roles or image == SETUID_LAUNCHER:
+            identity = elf(image, architecture, setuid=image == SETUID_LAUNCHER)
         else:
             identity = file_identity(image)
             header = identity.pop("header")
@@ -84,6 +138,8 @@ def manifest(root: Path, architecture: str) -> dict:
         observed[image] = identity
     if not roles <= observed.keys():
         raise ValueError("installed manifest omits a required native helper")
+    if version == 2:
+        manifest_payload(record["payload"], root, observed)
     return {"version": record["version"], "images": {str(path): value for path, value in observed.items()}}
 
 

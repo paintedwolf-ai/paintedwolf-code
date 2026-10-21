@@ -11,13 +11,13 @@ import unittest
 from unittest.mock import patch
 
 from scripts.linux_release.installed_cases.package_payload import (
-    BoundedReader, Entry, MetadataMismatch, cpio_entries, inspect, name, tar_entries, verify,
+    SETUID_LAUNCHER, BoundedReader, Entry, MetadataMismatch, cpio_entries, inspect, name, tar_entries, verify,
 )
 
 
-def cpio_member(path, data=b"", mode=stat.S_IFREG | 0o644, inode=1, links=1, crc=False):
+def cpio_member(path, data=b"", mode=stat.S_IFREG | 0o644, inode=1, links=1, crc=False, uid=0, gid=0):
     raw = path.encode() + b"\0"
-    fields = [inode, mode, 0, 0, links, 0, len(data), 0, 0, 0, 0, len(raw), sum(data) if crc else 0]
+    fields = [inode, mode, uid, gid, links, 0, len(data), 0, 0, 0, 0, len(raw), sum(data) if crc else 0]
     header = (b"070702" if crc else b"070701") + "".join(f"{field:08x}" for field in fields).encode()
     return header + raw + bytes(-(len(header) + len(raw)) % 4) + data + bytes(-len(data) % 4)
 
@@ -84,6 +84,29 @@ class InstalledPayloadTests(unittest.TestCase):
                     cpio_member("first", b"one", inode=10, links=2) + cpio_member("second", b"two", inode=10, links=2)]:
             with self.subTest(raw=raw[:16]), self.assertRaises(ValueError):
                 cpio_entries(BoundedReader(io.BytesIO(raw + cpio_member("TRAILER!!!"))))
+
+    def test_setuid_launcher_is_accepted_only_at_its_fixed_path_with_mode_4755_root_root(self):
+        entries = cpio_entries(BoundedReader(cpio_archive(
+            cpio_member(SETUID_LAUNCHER, b"launcher", mode=stat.S_IFREG | 0o4755),
+        )))
+        self.assertEqual(entries[SETUID_LAUNCHER].mode, 0o4755)
+        raw = io.BytesIO()
+        with tarfile.open(fileobj=raw, mode="w") as archive:
+            member = tarfile.TarInfo(SETUID_LAUNCHER)
+            member.size, member.mode, member.uid, member.gid = 8, 0o4755, 0, 0
+            archive.addfile(member, io.BytesIO(b"launcher"))
+        raw.seek(0)
+        self.assertEqual(tar_entries(BoundedReader(raw))[SETUID_LAUNCHER].mode, 0o4755)
+        for bad_cpio in (cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o755),
+                         cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o6755),
+                         cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o4750),
+                         cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o4755, uid=1000),
+                         cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o4755, gid=1000),
+                         cpio_member(SETUID_LAUNCHER, b"target", mode=stat.S_IFLNK | 0o4755),
+                         cpio_member(SETUID_LAUNCHER, b"x", mode=stat.S_IFREG | 0o4755, inode=9, links=2),
+                         cpio_member("opt/painted-wolf-code/bin/pw-launch", b"x", mode=stat.S_IFREG | 0o4755)):
+            with self.subTest(bad_cpio=bad_cpio[:24]), self.assertRaises(ValueError):
+                cpio_entries(BoundedReader(cpio_archive(bad_cpio)))
 
     def test_selected_package_hash_is_checked_before_any_decoder_executes(self):
         with tempfile.TemporaryDirectory() as directory:
