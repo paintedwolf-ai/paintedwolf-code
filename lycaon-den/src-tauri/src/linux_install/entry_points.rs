@@ -1,7 +1,8 @@
 //! Read-only launcher status: exact package wrapper bytes and executable targets.
 //! This is installation status, not credential or child-process admission.
 
-use crate::sidecar::manifest::Manifest;
+use crate::sidecar::manifest::{Manifest, MANIFEST_LIMIT};
+use std::fs::File;
 use std::path::Path;
 
 const WRAPPER_LIMIT: u64 = 64 * 1024;
@@ -34,11 +35,16 @@ fn verify(root: &Path, entry_point: &Path) -> Option<()> {
     {
         return None;
     }
-    let manifest = Manifest::load(root).ok()?;
-    let expected = manifest.executable(entry_point).ok()?;
+    let manifest_file = File::open(root.join("manifest.json")).ok()?;
+    let manifest = Manifest::from_reader(manifest_file, MANIFEST_LIMIT, root).ok()?;
+    let expected = manifest.executable(entry_point)?;
     if expected.size > WRAPPER_LIMIT {
         return None;
     }
-    expected.verify_file(entry_point).ok()?;
+    let file = File::open(entry_point).ok()?;
+    if file.metadata().ok()?.len() != expected.size {
+        return None;
+    }
+    expected.verify_reader(file).ok()?;
     Some(())
 }

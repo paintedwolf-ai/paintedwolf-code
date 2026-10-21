@@ -25,7 +25,8 @@ fn stage() -> (TempDir, InstallLocation) {
         .iter()
         .map(|(path, bytes)| (path.as_path(), bytes.as_slice()))
         .collect();
-    let manifest = crate::sidecar::manifest::fixture_json(&root, "1.0.2", &refs);
+    let manifest =
+        crate::sidecar::manifest::fixture_json(&root, std::env::consts::ARCH, &refs, &[]);
     fs::write(root.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     (directory, InstallLocation { bin_dir, managed_by_package: true, mode: InstallationMode::Package { root } })
 }
