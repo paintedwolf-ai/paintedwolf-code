@@ -38,7 +38,6 @@ jobs:
     timeout-minutes: 360
     env:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
-      PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +49,7 @@ jobs:
           EXPECTED_MACHINE: ${{ matrix.machine }}
         run: |
           set -euo pipefail
+          printf 'PW_ARTIFACT_ROOT=%s\n' "$RUNNER_TEMP/qualification-evidence" >> "$GITHUB_ENV"
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
           git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
