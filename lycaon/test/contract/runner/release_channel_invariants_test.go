@@ -574,13 +574,30 @@ func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 	}
 	if !strings.Contains(pointer, `feed_signing.py" --file "${SIGNED_COPY}"`) ||
 		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --pointer "${SIGNED_COPY}" --file "${FEED_NAME}"`) ||
-		strings.Index(pointer, "publish_signature()") > strings.Index(pointer, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`) {
+		!pointerPublishesFollowSignature(pointer) {
 		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")
 	}
 	stage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	if !strings.Contains(stage, `verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"`) {
 		t.Fatal("artifact staging must verify the signature's bound version")
 	}
+}
+
+// pointerPublishesFollowSignature reports whether every pointer write is
+// immediately preceded by publishing its signature, on either transport.
+func pointerPublishesFollowSignature(script string) bool {
+	lines := strings.Split(script, "\n")
+	writes := 0
+	for i, line := range lines {
+		if strings.TrimSpace(line) != `publish_object "${OBJECT_KEY}" "${FILE}" application/json` {
+			continue
+		}
+		writes++
+		if i == 0 || strings.TrimSpace(lines[i-1]) != "publish_signature" {
+			return false
+		}
+	}
+	return writes > 0 && !strings.Contains(script, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`)
 }
 
 // testUpdaterSignature encodes an unverifiable minisign document whose trusted
