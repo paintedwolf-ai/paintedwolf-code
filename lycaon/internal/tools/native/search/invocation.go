@@ -158,18 +158,27 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 
 // capture pins one file operand's exact bytes before any are searched.
 func (inv *invocation) capture(bound projectpaths.BoundPath) ([]byte, error) {
+	content, _, err := inv.capturePinned(bound)
+	return content, err
+}
+
+// capturePinned also returns the stream-mapping identity of the capture.
+func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *toolcontract.SourcePin, error) {
 	captured, err := inv.owners.Revisions.CaptureBytes(inv.ctx, inv.tc, bound.Resolved.Abs, inv.owners.readBytes())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
-		return nil, fmt.Errorf("record credential file read: %w", err)
+		return nil, nil, fmt.Errorf("record credential file read: %w", err)
 	}
 	if err := inv.recordPin(captured.Revision); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return captured.Bytes, nil
+	if pin, ok := captured.Revision.SourcePin(); ok {
+		return captured.Bytes, &pin, nil
+	}
+	return captured.Bytes, nil, nil
 }
 
 // readAll gathers stdin whole, refusing rather than truncating input above
@@ -214,10 +223,14 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 const outputChunkBytes = 32 * 1024
 
-// output meters stdout against stream_bytes before each write.
+// output meters stdout against stream_bytes before each write and, when the
+// endpoint retains them, records exact source mappings for bytes copied from
+// a pinned capture. Prefixes, separators and replacements carry none.
 type output struct {
 	ctx              context.Context
 	w                io.Writer
+	mappings         commandprogram.SourceMappingRecorder
+	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
 }
 
@@ -225,7 +238,44 @@ func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	if w == nil {
 		w = io.Discard
 	}
-	return &output{ctx: ctx, w: w, maximum: maximum}
+	o := &output{ctx: ctx, w: w, maximum: maximum}
+	o.mappings, _ = w.(commandprogram.SourceMappingRecorder)
+	return o
+}
+
+// literal writes bytes taken verbatim from a capture at offset and maps them.
+// Adjacent ranges of one capture coalesce into one mapping.
+func (o *output) literal(pin *toolcontract.SourcePin, p []byte, offset int64) error {
+	if len(p) == 0 {
+		return nil
+	}
+	outStart := o.written
+	if _, err := o.Write(p); err != nil {
+		return err
+	}
+	if o.mappings == nil || pin == nil {
+		return nil
+	}
+	next := toolcontract.StreamSourceMapping{Source: *pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written}
+	if last := o.pending; last != nil && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
+		last.SourceEndByte, last.OutputEndByte = next.SourceEndByte, next.OutputEndByte
+		return nil
+	}
+	if err := o.flush(); err != nil {
+		return err
+	}
+	o.pending = &next
+	return nil
+}
+
+// flush records the mapping still being extended.
+func (o *output) flush() error {
+	if o.pending == nil {
+		return nil
+	}
+	pending := *o.pending
+	o.pending = nil
+	return o.mappings.RecordSourceMapping(pending)
 }
 
 func (o *output) Write(p []byte) (int, error) {

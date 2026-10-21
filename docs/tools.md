@@ -202,9 +202,9 @@ through execution revisions before it is searched. grep recursion visits
 hidden entries and applies no ignore file. rg skips hidden entries and applies
 the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
 every entry and never follows a link. All of them skip entries the read
-boundary protects. A file holding NUL bytes prints `Binary file PATH matches`
-once. A complete search without matches is status 1 and stays
-publication-eligible. An unreadable input, refusal or limit is status 2 or a
+boundary protects. A file holding NUL bytes prints GNU's
+`grep: PATH: binary file matches` once on stderr. A complete search without
+matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
 typed stop, never a no-match. `find -exec` dispatches each child through the
 evaluator frame as an ordinary program child. `find -delete` removes entries
 only through the recoverable removal owner.

@@ -158,7 +158,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"grep", "-q", "alpha", "a.txt"}, kinds: []string{"bsd", "gnu"}},
 	{argv: []string{"grep", "zzz", "a.txt"}, kinds: []string{"bsd", "gnu"}},
 	{argv: []string{"grep", "-s", "alpha", "missing"}, kinds: []string{"bsd", "gnu"}},
-	{argv: []string{"grep", "alpha", "bin.dat"}, kinds: []string{"bsd"}},
+	{argv: []string{"grep", "alpha", "bin.dat"}, kinds: []string{"gnu"}},
 	{argv: []string{"grep", "-c", "alpha", "bin.dat"}, kinds: []string{"bsd", "gnu"}},
 	{argv: []string{"grep", "-l", "alpha", "bin.dat"}, kinds: []string{"bsd", "gnu"}},
 	{argv: []string{"rg", "-n", "alpha", "input"}, kinds: []string{"rg"}},

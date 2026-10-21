@@ -8,7 +8,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 type grepMode int
@@ -40,9 +43,14 @@ type grepRun struct {
 	selection    selection
 	searchBinary bool
 	walker       *walker
-	selected     bool
-	stopped      bool
-	operands     []string
+	// prune holds the index requirement when acceleration applies; drafts
+	// are the unsaved documents the index cannot speak for.
+	prune    litprefilter.Requirement
+	drafts   sourceview.DraftOverlay
+	pruned   int
+	selected bool
+	stopped  bool
+	operands []string
 }
 
 func runGrep(inv *invocation) error {
@@ -301,6 +309,7 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if r.matcher, err = textsearch.Compile(inv.ctx, spec, inv.owners.regex); err != nil {
 		return err
 	}
+	r.indexAcceleration()
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
 			return inv.usage(*r.replace, err.Error())
@@ -397,7 +406,7 @@ func (r *grepRun) searchStdin() error {
 	if err != nil {
 		return err
 	}
-	err = r.searchContent("(standard input)", data, r.forcedNames(false))
+	err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -501,7 +510,11 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
-	content, err := r.inv.capture(e.bound)
+	if r.indexProvesNoMatch(e) {
+		r.pruned++
+		return r.searchContent(e.display, nil, nil, names)
+	}
+	content, pin, err := r.inv.capturePinned(e.bound)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)
@@ -512,5 +525,34 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 	if r.rg && e.depth > 0 && !r.searchBinary && bytes.IndexByte(content, 0) >= 0 {
 		return nil
 	}
-	return r.searchContent(e.display, content, names)
+	return r.searchContent(e.display, content, pin, names)
+}
+
+// indexAcceleration enables Bloom pruning when a missing record can only
+// mean no output: never under -v (unmatched files print), nor for rg's
+// --files-without-match, whose walk skips binary files a pruned file would
+// not reveal.
+func (r *grepRun) indexAcceleration() {
+	if r.inv.owners.Catalog == nil || r.scan.Invert || r.rg && r.mode == modeFilesWithout {
+		return
+	}
+	r.prune = r.matcher.Requirement()
+	if !r.prune.Empty() {
+		r.drafts = sourceview.DraftsFor(r.inv.ctx, r.inv.tc)
+	}
+}
+
+// indexProvesNoMatch asks the source catalog about one walked file. The
+// cached filter speaks only for the exact size, mode and mtime it was built
+// under, and never for an unsaved draft.
+func (r *grepRun) indexProvesNoMatch(e entry) bool {
+	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
+		return false
+	}
+	if _, draft := r.drafts.Lookup(e.bound.Resolved.Abs); draft {
+		return false
+	}
+	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{
+		Path: e.bound.Resolved.ScopeRel, Name: e.name, Size: e.stat.Size, Mode: uint32(e.stat.Mode), Modified: e.stat.ModTime.UTC(),
+	})
 }

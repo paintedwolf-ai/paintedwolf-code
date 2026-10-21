@@ -18,10 +18,10 @@ var errBinaryStop = errors.New("binary file matched")
 // searchContent selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
-// output line becomes one "Binary file PATH matches" notice. A selected line
-// with invalid UTF-8 is binary from that line on, as GNU grep does in a
-// UTF-8 locale.
-func (r *grepRun) searchContent(label string, content []byte, names bool) error {
+// output line becomes one "grep: PATH: binary file matches" notice on stderr
+// (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
+// line on, as GNU grep does in a UTF-8 locale.
+func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
 	binary := bytes.IndexByte(content, 0) >= 0
 	listing := r.mode != modeLines
@@ -66,7 +66,7 @@ func (r *grepRun) searchContent(label string, content []byte, names bool) error 
 			}
 		}
 		separator = false
-		written, err := r.printLine(label, names, line, record)
+		written, err := r.printLine(label, names, line, record, pin)
 		emitted = emitted || written
 		return err
 	})
@@ -99,7 +99,8 @@ func (r *grepRun) searchContent(label string, content []byte, names bool) error 
 
 func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, content []byte) error {
 	if !r.rg {
-		return r.inv.out.text("Binary file ", label, " matches\n")
+		r.inv.warn(false, "%s: binary file matches", label)
+		return nil
 	}
 	offset := bytes.IndexByte(content, 0)
 	if offset < 0 {
@@ -114,7 +115,7 @@ func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, c
 
 // printLine writes one selected or context record; with -o it writes each
 // match of a selected record on its own line.
-func (r *grepRun) printLine(label string, names bool, line textsearch.Line, record []byte) (bool, error) {
+func (r *grepRun) printLine(label string, names bool, line textsearch.Line, record []byte, pin *toolcontract.SourcePin) (bool, error) {
 	sep := ":"
 	if line.Kind == textsearch.ContextLine {
 		sep = "-"
@@ -127,36 +128,36 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 		prefix.WriteString(strconv.Itoa(line.Number) + sep)
 	}
 	if !r.only {
-		text := record
 		if r.replace != nil && line.Kind == textsearch.SelectedLine && !r.scan.Invert {
 			replaced, err := r.replaceAll(record)
 			if err != nil {
 				return false, err
 			}
-			text = replaced
+			return true, r.writeRecord(prefix.String(), replaced, nil, 0)
 		}
-		return true, r.writeRecord(prefix.String(), text)
+		return true, r.writeRecord(prefix.String(), record, pin, line.Start)
 	}
 	if r.scan.Invert {
 		return false, nil
 	}
 	wrote := false
 	err := r.matcher.Groups(r.inv.ctx, record, func(groups []int) error {
-		text := record[groups[0]:groups[1]]
-		if r.replace != nil {
-			text = expandReplacement(*r.replace, record, groups)
-		}
 		wrote = true
-		return r.writeRecord(prefix.String(), text)
+		if r.replace != nil {
+			return r.writeRecord(prefix.String(), expandReplacement(*r.replace, record, groups), nil, 0)
+		}
+		return r.writeRecord(prefix.String(), record[groups[0]:groups[1]], pin, line.Start+groups[0])
 	})
 	return wrote, err
 }
 
-func (r *grepRun) writeRecord(prefix string, text []byte) error {
+// writeRecord prints one output record; text copied from a pinned capture
+// at offset is mapped back to it.
+func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}
-	if _, err := r.inv.out.Write(text); err != nil {
+	if err := r.inv.out.literal(pin, text, int64(offset)); err != nil {
 		return err
 	}
 	return r.inv.out.text("\n")
