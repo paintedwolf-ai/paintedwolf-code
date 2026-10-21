@@ -180,9 +180,16 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	var active []toolcontract.OperationDefinition
+	seen := map[string]bool{}
 	for _, operation := range owners.Natives {
-		if definition, ok := r.Registry.Definition(operation.Tool); ok {
-			active = append(active, definition.Operation)
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, definition.Operation)
+			}
 		}
 	}
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
