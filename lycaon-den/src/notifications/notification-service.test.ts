@@ -144,7 +144,7 @@ describe("device-wide chat notifications", () => {
   });
 
   it("resets on connection replacement and handles adapter failures without unhandled work", async () => {
-    const { svc, sends } = setup({ ensurePermission: async () => { throw new Error("unavailable"); } });
+    const { svc, sends } = setup({ ensurePermission: () => Promise.reject(new Error("unavailable")) });
     svc.observe([]); svc.observe([row("s1", "ask")]);
     svc.observe([], false);
     svc.observe([row("existing", "checkpoint")]);

@@ -4,6 +4,7 @@ import type { LycaonClient } from "../api/client.ts";
 import type { AttentionRow } from "../api/types.ts";
 import type { AttentionStore } from "../store/attention-store.ts";
 import type { NotificationServiceDeps } from "./notification-service.ts";
+import { stubClient } from "../test/client-fixture.ts";
 
 const mocks = vi.hoisted(() => ({
   tauri: { value: true },
@@ -89,7 +90,7 @@ describe("mountNotificationService", () => {
   it("reads a finished run from the connection that is still current", async () => {
     const snapshot = { session: {} };
     const getSessionBootstrap = vi.fn(async () => snapshot);
-    let client: LycaonClient | null = { getSessionBootstrap } as unknown as LycaonClient;
+    let client: LycaonClient | null = stubClient({ getSessionBootstrap });
     const dispose = mountNotificationService({ attention: attention([]).store, getClient: () => client });
     const finished = row("a", "finished");
 
@@ -102,7 +103,7 @@ describe("mountNotificationService", () => {
     getSessionBootstrap.mockImplementationOnce(async () => { aborted.abort(); return snapshot; });
     await expect(deps().finishedRun(finished, aborted.signal)).resolves.toBeUndefined();
 
-    const replaced = { getSessionBootstrap: vi.fn() } as unknown as LycaonClient;
+    const replaced = stubClient({ getSessionBootstrap: vi.fn() });
     getSessionBootstrap.mockImplementationOnce(async () => { client = replaced; return snapshot; });
     await expect(deps().finishedRun(finished, new AbortController().signal)).resolves.toBeUndefined();
 
