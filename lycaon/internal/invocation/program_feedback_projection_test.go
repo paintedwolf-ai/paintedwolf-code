@@ -233,6 +233,10 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
+	baseline := memory.calls
+	if repeated := executor.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
+		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
+	}
 	prepared.Close()
 	frame.Close()
 	if memory.active != 0 {

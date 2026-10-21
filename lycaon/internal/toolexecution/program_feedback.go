@@ -23,14 +23,16 @@ type ProgramFeedbackLedger interface {
 // PreparedProgramFailure keeps supplemental feedback charged until the caller
 // has serialized/delivered it and no longer retains the returned rejection data.
 type PreparedProgramFailure struct {
-	Rejection *toolrejection.ToolReject
-	operation toolcontract.BoundOperation
-	identity  tools.InvocationIdentity
-	memory    ProgramStateAdmission
-	policy    *toolfeedback.ProgramPolicyBlock
-	release   func()
-	mu        sync.Mutex
-	closed    bool
+	Rejection     *toolrejection.ToolReject
+	operation     toolcontract.BoundOperation
+	identity      tools.InvocationIdentity
+	memory        ProgramStateAdmission
+	policy        *toolfeedback.ProgramPolicyBlock
+	release       func()
+	mu            sync.Mutex
+	closed        bool
+	rendered      bool
+	renderedError error
 }
 
 func (p *PreparedProgramFailure) Close() {
@@ -45,6 +47,7 @@ func (p *PreparedProgramFailure) Close() {
 		p.operation = toolcontract.BoundOperation{}
 		p.memory = nil
 		p.policy = nil
+		p.renderedError = nil
 		if p.release != nil {
 			p.release()
 			p.release = nil
