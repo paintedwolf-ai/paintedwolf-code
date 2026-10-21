@@ -1,0 +1,36 @@
+{
+  "fractional-logstat": {
+    "positive": {
+      "logstat.py": "def summarize(records):\n    levels = {}\n    total = 0.0\n    for row in records:\n        total += row['latency_ms']\n        levels[row['level']] = levels.get(row['level'], 0) + 1\n    return {'count': len(records), 'mean_ms': total / len(records) if records else 0, 'levels': levels}\n",
+      "test_logstat.py": "import unittest\nfrom logstat import summarize\nclass Tests(unittest.TestCase):\n    def test_fraction(self):\n        self.assertEqual(summarize([{'latency_ms':1.5,'level':''}]), {'count':1,'mean_ms':1.5,'levels':{'':1}})\n"
+    },
+    "negative": {
+      "truncate_fraction": {
+        "logstat.py": "def summarize(records):\n    levels = {}\n    total = 0.0\n    for row in records:\n        total += int(row['latency_ms'])\n        levels[row['level']] = levels.get(row['level'], 0) + 1\n    return {'count': len(records), 'mean_ms': total / len(records) if records else 0, 'levels': levels}\n"
+      },
+      "drop_empty_level": {
+        "logstat.py": "def summarize(records):\n    levels = {}\n    total = 0.0\n    for row in records:\n        total += row['latency_ms']\n        \n        if row['level']: levels[row['level']] = levels.get(row['level'], 0) + 1\n    return {'count': len(records), 'mean_ms': total / len(records) if records else 0, 'levels': levels}\n"
+      },
+      "broken_delivered_test": {
+        "test_logstat.py": "import unittest\nfrom logstat import summarize\nclass Tests(unittest.TestCase):\n    def test_fraction(self):\n        self.assertEqual(summarize([{'latency_ms':1.5,'level':''}]), {'count':1,'mean_ms':2.0,'levels':{'':1}})\n"
+      }
+    }
+  },
+  "wordle-explicit-history": {
+    "positive": {
+      "wordle.py": "from collections import Counter\n\ndef play(secret, guesses):\n    if len(secret) != 5 or not secret.isalpha() or not secret.islower():\n        raise ValueError('invalid secret')\n    history = []\n    for guess in guesses[:6]:\n        if len(guess) != 5 or not guess.isalpha() or not guess.islower():\n            raise ValueError('invalid guess')\n        marks = ['G' if a == b else 'X' for a, b in zip(secret, guess)]\n        remaining = Counter(a for a, mark in zip(secret, marks) if mark != 'G')\n        for index, letter in enumerate(guess):\n            if marks[index] != 'G' and remaining[letter]:\n                marks[index] = 'Y'\n                remaining[letter] -= 1\n        history.append({'word': guess, 'marks': ''.join(marks)})\n        if guess == secret:\n            break\n    status = 'won' if history and history[-1]['marks'] == 'GGGGG' else 'lost' if len(history) == 6 else 'playing'\n    return {'secret': secret, 'guesses': history, 'attempts': len(history), 'status': status}\n",
+      "test_wordle.py": "import unittest\nfrom wordle import play\nclass Tests(unittest.TestCase):\n    def test_duplicates(self):\n        self.assertEqual(play('apple',['allee'])['guesses'][0]['marks'], 'GYXXG')\n    def test_win_history(self):\n        self.assertEqual(play('apple',['apple'])['attempts'],1)\n"
+    },
+    "negative": {
+      "overcount_duplicates": {
+        "wordle.py": "from collections import Counter\n\ndef play(secret, guesses):\n    if len(secret) != 5 or not secret.isalpha() or not secret.islower():\n        raise ValueError('invalid secret')\n    history = []\n    for guess in guesses[:6]:\n        if len(guess) != 5 or not guess.isalpha() or not guess.islower():\n            raise ValueError('invalid guess')\n        marks = ['G' if a == b else 'X' for a, b in zip(secret, guess)]\n        remaining = Counter(a for a, mark in zip(secret, marks) if mark != 'G')\n        for index, letter in enumerate(guess):\n            if marks[index] != 'G' and letter in secret:\n                marks[index] = 'Y'\n                remaining[letter] -= 1\n        history.append({'word': guess, 'marks': ''.join(marks)})\n        if guess == secret:\n            break\n    status = 'won' if history and history[-1]['marks'] == 'GGGGG' else 'lost' if len(history) == 6 else 'playing'\n    return {'secret': secret, 'guesses': history, 'attempts': len(history), 'status': status}\n"
+      },
+      "omit_winning_history": {
+        "wordle.py": "from collections import Counter\n\ndef play(secret, guesses):\n    if len(secret) != 5 or not secret.isalpha() or not secret.islower():\n        raise ValueError('invalid secret')\n    history = []\n    for guess in guesses[:6]:\n        if len(guess) != 5 or not guess.isalpha() or not guess.islower():\n            raise ValueError('invalid guess')\n        marks = ['G' if a == b else 'X' for a, b in zip(secret, guess)]\n        remaining = Counter(a for a, mark in zip(secret, marks) if mark != 'G')\n        for index, letter in enumerate(guess):\n            if marks[index] != 'G' and remaining[letter]:\n                marks[index] = 'Y'\n                remaining[letter] -= 1\n        \n        if guess != secret: history.append({'word': guess, 'marks': ''.join(marks)})\n        if guess == secret:\n            break\n    status = 'won' if history and history[-1]['marks'] == 'GGGGG' else 'lost' if len(history) == 6 else 'playing'\n    return {'secret': secret, 'guesses': history, 'attempts': len(history), 'status': status}\n"
+      },
+      "broken_delivered_test": {
+        "test_wordle.py": "import unittest\nfrom wordle import play\nclass Tests(unittest.TestCase):\n    def test_duplicates(self):\n        self.assertEqual(play('apple',['allee'])['guesses'][0]['marks'], 'GYYYG')\n    def test_win_history(self):\n        self.assertEqual(play('apple',['apple'])['attempts'],1)\n"
+      }
+    }
+  }
+}

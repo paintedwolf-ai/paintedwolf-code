@@ -13,6 +13,7 @@ class GradingIdentityTests(unittest.TestCase):
             frozen, current = root / 'frozen', root / 'current'
             frozen.mkdir()
             for name in GRADING_FILES | {'run.py'}:
+                (frozen / name).parent.mkdir(parents=True, exist_ok=True)
                 (frozen / name).write_text(name)
             shutil.copytree(frozen, current)
             expected = identity(implementation_files(frozen))
@@ -31,6 +32,7 @@ class GradingIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);source=root/'source';source.mkdir()
             for name in GRADING_FILES | {'run.py','benchmark.json'}:
+                (source/name).parent.mkdir(parents=True, exist_ok=True)
                 (source/name).write_text(name)
             digest=grading_hash(source)
             retained=retain_grader(root,source,digest)
@@ -44,6 +46,7 @@ class GradingIdentityTests(unittest.TestCase):
             frozen, current = pathlib.Path(tmp) / 'frozen', pathlib.Path(tmp) / 'current'
             frozen.mkdir()
             for name in GRADING_FILES | {'run.py', 'capture.py', 'snapshot.py'}:
+                (frozen / name).parent.mkdir(parents=True, exist_ok=True)
                 (frozen / name).write_text(name)
             shutil.copytree(frozen, current)
             expected = identity(implementation_files(frozen))
