@@ -85,6 +85,7 @@ import {
 } from "../../chat/composer/prompt-recall.ts";
 import { externalContentSearchQuery } from "../../chat/untrusted/untrusted-content-copy.ts";
 import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { revealTextareaCaret } from "../../platform/scrolling/textarea-caret-reveal.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { appBootPreparation } from "../../platform/connection/app-boot-readiness.ts";
@@ -342,6 +343,7 @@ export function Composer(props: Props) {
   let footerRef: HTMLElement | undefined;
   let bodyRef: HTMLDivElement | undefined;
   let scrollRef: HTMLDivElement | undefined;
+  let viewportRef: HTMLDivElement | undefined;
   let composerHeight: HeightFollow | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   // Plain prompts overlap; decision sends serialize.
@@ -447,6 +449,9 @@ export function Composer(props: Props) {
   const clearDraft = () => sizeDraft(clearDraftHeight, "snap");
   /** Conversation switches resize the draft without animation. */
   const snapDraft = () => sizeDraft(fitDraftHeight, "snap");
+  const revealCaret = () => {
+    if (inputRef && viewportRef) revealTextareaCaret(inputRef, viewportRef);
+  };
 
   const resizeChrome = (mutate: () => void) => {
     if (composerHeight) composerHeight.change(HEIGHT_TOGGLE_TIMING, mutate);
@@ -517,6 +522,7 @@ export function Composer(props: Props) {
       if (!inputRef) return;
       growDraft();
       inputRef.setSelectionRange(inputRef.value.length, inputRef.value.length);
+      revealCaret();
     });
     return true;
   };
@@ -557,6 +563,7 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       growDraft();
       focusComposerInput(inputRef);
+      revealCaret();
     });
   };
 
@@ -695,6 +702,7 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       el.selectionStart = el.selectionEnd = start + 1;
       growDraft();
+      revealCaret();
     });
   };
 
@@ -1114,7 +1122,15 @@ export function Composer(props: Props) {
           </AnchoredSurface>
         </Show>
         <div class="den-composer-row">
-          <Scrollport ref={(el) => { scrollRef = el; }} class="den-composer-scroll">
+          <Scrollport
+            ref={(el) => {
+              scrollRef = el;
+            }}
+            viewportRef={(el) => {
+              viewportRef = el;
+            }}
+            class="den-composer-scroll"
+          >
             <textarea
               ref={(el) => {
                 inputRef = el;
@@ -1140,6 +1156,22 @@ export function Composer(props: Props) {
                   updateComposerDocumentDraft(destination(), value);
                 });
                 growDraft();
+                revealCaret();
+              }}
+              onClick={() => revealCaret()}
+              onKeyUp={(event) => {
+                if (
+                  event.key === "ArrowUp" ||
+                  event.key === "ArrowDown" ||
+                  event.key === "ArrowLeft" ||
+                  event.key === "ArrowRight" ||
+                  event.key === "Home" ||
+                  event.key === "End" ||
+                  event.key === "PageUp" ||
+                  event.key === "PageDown"
+                ) {
+                  revealCaret();
+                }
               }}
               onFocus={() => {
                 setInputFocused(true);
