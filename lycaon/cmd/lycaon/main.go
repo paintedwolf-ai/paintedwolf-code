@@ -59,6 +59,7 @@ func run(ctx context.Context, args []string) error {
 		return runOpen(ctx, rest)
 	case dispatchVersion:
 		return printVersion(os.Stdout, rest)
+	case dispatchVerb:
 	}
 	switch verb {
 	case "serve":
