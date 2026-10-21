@@ -28,6 +28,7 @@ fi
 
 export CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/decide"
 # Hold publication until the compiled binary has been staged.
+# shellcheck source=digest-run-lock.sh
 source "${ROOT}/scripts/digest-run-lock.sh"
 mkdir -p "${PW_COMPILER_CACHE_DIR}"
 digest_acquire_lock "${PW_COMPILER_CACHE_DIR}/decide-build.lockdir" 900

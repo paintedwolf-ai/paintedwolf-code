@@ -11,6 +11,7 @@ if ! bash "${ROOT}/scripts/test-source-snapshot.sh" holding; then
   exec bash "${ROOT}/scripts/test-source-snapshot.sh" run -- bash scripts/warm-workspace-build.sh
 fi
 # Warm the same source slot and target directories that verification uses.
+# shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/decide" cargo test --locked --all-targets --no-run \
   --manifest-path "${ROOT}/lycaon/internal/decide/native/Cargo.toml" \
