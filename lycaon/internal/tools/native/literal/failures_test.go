@@ -147,7 +147,7 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 		{"xxd -s x input", "COMMAND_OPERAND_INVALID"},
 		{"hexdump input", "COMMAND_OPERAND_INVALID"},
 		{"hexdump -C -s -1 input", "COMMAND_OPERAND_INVALID"},
-		{"stat input", "COMMAND_OPERAND_INVALID"},
+		{"stat -c %-5q input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %s -f %z input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %q input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %s", "COMMAND_OPERAND_INVALID"},
