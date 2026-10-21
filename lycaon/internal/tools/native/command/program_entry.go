@@ -345,7 +345,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		// A host stop without a typed rejection is a host failure, never success.
 		return evalErr
 	}
-	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.tc, rejection.operation, rejection.cause)
+	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
 	if err != nil || prepared == nil {
 		return errors.Join(rejection.cause, err)
 	}

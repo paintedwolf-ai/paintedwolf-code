@@ -3,13 +3,14 @@ id: STRUCTURAL_PATTERN_INVALID
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - grep
   - code_rewrite
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
   - paintedwolf.rejection_reason

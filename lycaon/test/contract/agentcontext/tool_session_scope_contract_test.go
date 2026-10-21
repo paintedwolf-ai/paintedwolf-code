@@ -53,7 +53,7 @@ func rejectCodeNamesTool(hints *guidance.HintConfig, tool string) bool {
 		return false
 	}
 	for _, entry := range hints.HintCodes {
-		for _, selected := range entry.Tools {
+		for _, selected := range append(append([]string(nil), entry.Tools...), entry.Operations()...) {
 			if selected == tool {
 				return true
 			}

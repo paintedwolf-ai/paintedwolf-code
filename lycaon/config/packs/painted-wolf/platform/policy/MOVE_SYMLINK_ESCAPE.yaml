@@ -3,12 +3,13 @@ id: MOVE_SYMLINK_ESCAPE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - move
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path_escape
   - paintedwolf.path
