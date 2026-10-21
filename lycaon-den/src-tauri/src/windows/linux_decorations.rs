@@ -5,7 +5,7 @@
 //! the desktop lists, where it lists them, and falls back to the full set on
 //! the right when no desktop answers.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// One control the desktop places in a title bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -37,12 +37,56 @@ pub enum DecorationLayoutSource {
     Default,
 }
 
-/// Controls on each side of the title bar, in display order.
+/// What a click on the title bar does, as GTK's own client-side title bars
+/// apply `action-*-click-titlebar`: an unrecognized action maximizes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TitlebarAction {
+    ToggleMaximize,
+    Minimize,
+    Lower,
+    Menu,
+    None,
+}
+
+impl TitlebarAction {
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim() {
+            "none" => Self::None,
+            "lower" => Self::Lower,
+            "minimize" => Self::Minimize,
+            "menu" => Self::Menu,
+            _ => Self::ToggleMaximize,
+        }
+    }
+}
+
+/// The title bar's double, middle, and right click actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TitlebarActions {
+    pub double_click: TitlebarAction,
+    pub middle_click: TitlebarAction,
+    pub right_click: TitlebarAction,
+}
+
+impl Default for TitlebarActions {
+    /// GTK's defaults when the desktop states none.
+    fn default() -> Self {
+        Self {
+            double_click: TitlebarAction::ToggleMaximize,
+            middle_click: TitlebarAction::None,
+            right_click: TitlebarAction::Menu,
+        }
+    }
+}
+
+/// Controls on each side of the title bar, in display order, and what clicks on it do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DecorationLayout {
     pub left: Vec<DecorationControl>,
     pub right: Vec<DecorationControl>,
     pub source: DecorationLayoutSource,
+    pub actions: TitlebarActions,
 }
 
 impl DecorationLayout {
@@ -56,6 +100,7 @@ impl DecorationLayout {
                 DecorationControl::Close,
             ],
             source: DecorationLayoutSource::Default,
+            actions: TitlebarActions::default(),
         }
     }
 }
@@ -92,6 +137,7 @@ pub fn parse_button_layout(raw: &str) -> Option<DecorationLayout> {
         left,
         right,
         source: DecorationLayoutSource::Portal,
+        actions: TitlebarActions::default(),
     })
 }
 
@@ -137,6 +183,7 @@ mod tests {
                 "core:window:allow-close",
                 "core:window:allow-set-fullscreen",
                 "allow-linux-decoration-layout",
+                "allow-linux-titlebar-action",
                 "allow-linux-window-frame",
             ] {
                 assert!(
@@ -152,7 +199,21 @@ mod tests {
             left: left.to_vec(),
             right: right.to_vec(),
             source: DecorationLayoutSource::Portal,
+            actions: TitlebarActions::default(),
         }
+    }
+
+    #[test]
+    fn titlebar_actions_follow_gtk_including_its_maximize_fallback() {
+        assert_eq!(TitlebarAction::parse("none"), TitlebarAction::None);
+        assert_eq!(TitlebarAction::parse("lower"), TitlebarAction::Lower);
+        assert_eq!(TitlebarAction::parse("minimize"), TitlebarAction::Minimize);
+        assert_eq!(TitlebarAction::parse("menu"), TitlebarAction::Menu);
+        for raw in ["toggle-maximize", "toggle-maximize-horizontally", "toggle-shade", ""] {
+            assert_eq!(TitlebarAction::parse(raw), TitlebarAction::ToggleMaximize, "{raw}");
+        }
+        let actions = serde_json::to_value(TitlebarActions::default()).unwrap();
+        assert_eq!(actions, serde_json::json!({"double_click": "toggle-maximize", "middle_click": "none", "right_click": "menu"}));
     }
 
     #[test]

@@ -231,3 +231,39 @@ fn oversized_live_preference_fails_without_emitting_an_unbounded_snapshot() {
     assert!(refused.settings.is_empty());
     ended(&mut observer);
 }
+
+#[test]
+fn live_titlebar_click_action_reaches_the_shell() {
+    let bus = Bus::new();
+    let service = Service::new(&bus, false);
+    let mut observer = bus.observer();
+    let mut output = BufReader::new(observer.stdout.take().unwrap());
+    let initial = read(&mut output, 0).unwrap().unwrap();
+    service
+        .connection
+        .emit_signal(
+            None,
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings",
+            "SettingChanged",
+            Some(
+                &(
+                    "org.gnome.desktop.wm.preferences",
+                    "action-double-click-titlebar",
+                    "minimize".to_variant(),
+                )
+                    .to_variant(),
+            ),
+        )
+        .unwrap();
+    service
+        .connection
+        .flush_sync(None::<&gio::Cancellable>)
+        .unwrap();
+    let changed = read(&mut output, initial.sequence).unwrap().unwrap();
+    assert_eq!(changed.status, Status::Ready);
+    assert!(changed
+        .settings
+        .contains(&desktop_settings_observer::Setting::TitlebarDoubleClick("minimize".into())));
+    ended(&mut observer);
+}

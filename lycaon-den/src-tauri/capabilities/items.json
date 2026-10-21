@@ -46,6 +46,7 @@
     "allow-set-app-menu",
     "allow-request-quit",
     "allow-linux-decoration-layout",
+    "allow-linux-titlebar-action",
     "allow-linux-window-frame",
     "allow-accessibility-preferred-text-size",
     "allow-den-web-engine",
