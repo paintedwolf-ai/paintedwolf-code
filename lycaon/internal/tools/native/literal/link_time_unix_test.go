@@ -28,3 +28,11 @@ func ownerIDs(t *testing.T, path string) (uint32, uint32) {
 	st := info.Sys().(*syscall.Stat_t)
 	return st.Uid, st.Gid
 }
+
+// rawStat is the platform's own lstat record for an expectation.
+func rawStat(t *testing.T, path string) *unix.Stat_t {
+	t.Helper()
+	var st unix.Stat_t
+	testutil.FailErr(t, "lstat "+path, unix.Lstat(path, &st))
+	return &st
+}
