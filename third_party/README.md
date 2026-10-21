@@ -177,3 +177,51 @@ selection and exact upstream omissions/checksums are recorded in
 [gitleaks.upstream.json](gitleaks.upstream.json).
 
 The gitleaks patch uses zero-context hunks to record exact selected-source changes without treating upstream patch context indentation as repository whitespace.
+## Native predicate ERE execution
+
+`regexp2/` is the runtime source subset of the already selected
+`github.com/dlclark/regexp2/v2` v2.5.1, commit
+`0ec61737c1e8483bb16083a916fa9a3bd21f91bb`.
+The complete release archive was verified before extraction against
+`h1:E5Ug7Dh264W1ymdySmiHNcDG7fmsR307APCE5R07a20=`; its module metadata is
+`h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=`.
+The upstream license remains included. `UPSTREAM-MANIFEST.json` records every
+verified archive member, its SHA-256 and whether it is included. The subset keeps
+root runtime Go sources, `syntax/`, `helpers/`, module metadata and license;
+upstream tests, test data, code generation, benchmarks, CI and documentation are
+omitted. Synthetic host fixtures exercise the selected bounded entry point.
+
+The P08 patch adds bounded boolean execution of a host-validated POSIX ERE tree.
+It does not select the P13 PCRE grammar or expose additional regex syntax.
+Existing upstream text parser/matcher entry points retain their behavior.
+The patch and exact metering contract are recorded alongside the selected source.
+
+The predicate grammar adapter also retains the selected Go1.26.4
+`regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
+under `regexp2/syntax/posix/`. Their exact upstream hashes and tag are recorded
+there. Parser nodes use the standard exported AST types; the grammar algorithm
+is unchanged. The narrow patch threads the operation meter through the existing
+parser/helper loops, class sort comparisons and growth sites, and reserves
+source-bounded recursive scratch before parser entry. This closes the otherwise
+uncancelable/unmetered validation step. It does not change standard-library
+consumers elsewhere in the host.
+
+The selected POSIX parser eagerly initializes its immutable Unicode alias map
+before operation admission. A canceled operation therefore cannot consume the
+original `sync.Once` while retaining a partially initialized static map. This
+module-static storage is separate from per-operation scratch reservations.
+
+The POSIX source subset also retains the selected `Regexp.Equal` routine from
+that same Go release. The parser's existing alternation factoring invokes its
+metered form, including scalar and recursive comparisons; it does not escape to
+an uncancelable standard-library tree walk. The source manifest identifies the
+original file and selected excerpt. The equality algorithm is unchanged.
+
+P08 also adds opt-in `ScalarCollation` to the existing shell glob translator and
+selected POSIX parser. A collating/equivalence atom names exactly one Unicode
+scalar, with identity equivalence and scalar range ordering. Unknown or
+multiscalar names are invalid; no ambient locale is consulted. Existing glob
+consumers retain their prior behavior unless they select this mode. The
+translator's range checks use the actual normalized endpoints. The opt-in change
+is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
+are recorded in `go-posix.patch`.
