@@ -14,8 +14,9 @@ fn fixture() -> (crate::test_support::TempDir, std::path::PathBuf) {
     let pw_bytes = std::fs::read(&pw).unwrap();
     let manifest = crate::sidecar::manifest::fixture_json(
         root.path(),
-        "1.0.2",
+        std::env::consts::ARCH,
         &[(&desktop, &desktop_bytes), (&pw, &pw_bytes)],
+        &[],
     );
     std::fs::write(
         root.join("manifest.json"),

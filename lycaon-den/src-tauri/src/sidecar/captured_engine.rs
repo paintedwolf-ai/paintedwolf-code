@@ -1,5 +1,5 @@
 //! Auxiliary children execute a retained engine from the running desktop generation.
-use super::manifest::{Executable, Manifest, VerifyError};
+use super::manifest::{Executable, Manifest};
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
@@ -98,15 +98,14 @@ fn capture(
     file.take(MANIFEST_LIMIT + 1)
         .read_to_end(&mut raw)
         .map_err(|_| AdmissionError::ManifestUnavailable)?;
-    let manifest: Manifest =
-        serde_json::from_slice(&raw).map_err(|_| AdmissionError::ManifestUnavailable)?;
-    if raw.len() as u64 > MANIFEST_LIMIT || manifest.architecture != std::env::consts::ARCH {
+    if raw.len() as u64 > MANIFEST_LIMIT {
         return Err(AdmissionError::ManifestUnavailable);
     }
-    manifest.validate_for_root(root).map_err(|err| match err {
-        VerifyError::Mismatch => AdmissionError::GenerationMismatch,
-        VerifyError::Invalid | VerifyError::Io => AdmissionError::ManifestUnavailable,
-    })?;
+    let manifest =
+        Manifest::from_slice(&raw, root).map_err(|_| AdmissionError::ManifestUnavailable)?;
+    if manifest.architecture != std::env::consts::ARCH {
+        return Err(AdmissionError::ManifestUnavailable);
+    }
     let desktop = entry(&manifest, &root.join("bin/painted-wolf-code"))?;
     verify(
         &File::open(running).map_err(|_| AdmissionError::GenerationMismatch)?,
@@ -124,11 +123,7 @@ fn capture(
     verify(&file, expected)?;
     Ok(CapturedEngine {
         file,
-        expected: Executable {
-            path: expected.path.clone(),
-            sha256: expected.sha256.clone(),
-            size: expected.size,
-        },
+        expected: expected.clone(),
     })
 }
 
@@ -139,7 +134,7 @@ fn owned(metadata: &std::fs::Metadata) -> bool {
 fn entry<'a>(manifest: &'a Manifest, path: &Path) -> Result<&'a Executable, AdmissionError> {
     manifest
         .executable(path)
-        .map_err(|_| AdmissionError::ManifestUnavailable)
+        .ok_or(AdmissionError::ManifestUnavailable)
 }
 
 fn verify(file: &File, expected: &Executable) -> Result<(), AdmissionError> {
