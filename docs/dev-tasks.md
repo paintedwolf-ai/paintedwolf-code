@@ -905,6 +905,11 @@ namespaces to that generation's exact `pw` executable only: install it under
 `/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
 a new path and needs its own grant; remove the previous one once nothing runs it.
 
+Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
+Vulkan driver unless those variables are already set: host-installed drivers
+are not part of the generation, so they would be foreign modules. NixOS uses
+the system's configured driver environment.
+
 Consumers without flakes use [default.nix](../default.nix): `nix-build` or
 `pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
 inputs pinned in `flake.lock`; the caller's package set selects only the

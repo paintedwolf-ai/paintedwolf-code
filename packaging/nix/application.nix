@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles
+{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles, mesa
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
 , scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
@@ -32,8 +32,22 @@ stdenvNoCC.mkDerivation {
     done
     install -m755 ${bialy}/bin/bialy "$root/bin/bialy"
     install -m755 ${document-core}/bin/pw-document-core "$root/bin/pw-document-core"
+    # Outside NixOS no driver environment is selected by the system configuration, and
+    # host-installed drivers are foreign to the generation, so the closure's Mesa is the
+    # explicit EGL, GBM and Vulkan driver. An explicitly set variable is kept.
+    for driver in ${mesa}/share/glvnd/egl_vendor.d/50_mesa.json ${mesa}/lib/gbm ${mesa}/lib/dri; do
+      test -e "$driver"
+    done
+    vulkan_drivers=$(printf '%s:' ${mesa}/share/vulkan/icd.d/*.json)
+    test -e "''${vulkan_drivers%%:*}"
+    graphics='[ -e /run/opengl-driver ] || {
+      export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-${mesa}/share/glvnd/egl_vendor.d}"
+      export GBM_BACKENDS_PATH="''${GBM_BACKENDS_PATH:-${mesa}/lib/gbm}"
+      export LIBGL_DRIVERS_PATH="''${LIBGL_DRIVERS_PATH:-${mesa}/lib/dri}"
+      export VK_DRIVER_FILES="''${VK_DRIVER_FILES:-'"''${vulkan_drivers%:}"'}"
+    }'
     for executable in painted-wolf-code pw pw-logs; do
-      makeWrapper "$root/bin/$executable" "$out/bin/$executable"
+      makeWrapper "$root/bin/$executable" "$out/bin/$executable" --run "$graphics"
     done
     install -m644 ${source}/lycaon-den/src-tauri/icons/128x128.png "$out/share/icons/hicolor/128x128/apps/painted-wolf-code.png"
     substitute ${source}/packaging/linux/dev.paintedwolf.code.desktop \
