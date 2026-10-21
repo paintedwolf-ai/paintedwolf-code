@@ -12,8 +12,13 @@ use super::{lock_in_background, LockReason};
 use crate::linux_desktop::{bus, session};
 
 mod idle;
+mod signals;
 mod state;
 use idle::{DisplayTargets, IdleFacts, IdleUnavailable, Observer};
+use signals::{
+    preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
+    watch_connection, watch_owner,
+};
 pub(crate) use state::LockSources;
 
 #[cfg(test)]
