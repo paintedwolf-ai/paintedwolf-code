@@ -107,6 +107,23 @@ projection does not publish these private authority descriptors, so this field
 adds no OpenAPI DTO. P10's introducing receipt producer separately owns its next
 schema step and persisted inspected reviewed-input/progress records.
 
+Native checkpoint inspection adds a `native_arguments_representation` marker
+and an explicit argument-view wrapper containing representation, canonical
+inspection bytes, their digest, and the distinct original reviewed-input
+digest. Schema 4 cannot assert this native format; its conversion refuses that
+marker. Absence preserves the existing structured inspection shape. This data
+is private `durable-db` presentation metadata under checkpoint retention and
+never restored owner input or an executable argument map. The plan's original
+semantic action digest remains the authority identity.
+
+Screening traverses original scalar bytes and field names before the lossless
+view is encoded. Introducing publication/export consumers must use the same
+admitted lossless decoder and existing raw-value capture screening boundary;
+screening Base64 text as ordinary JSON cannot prove the protected bytes were
+screened. Versioned restore refuses unknown representation, digest mismatch,
+noncanonical keys/tags and malformed scalar values under the host resource
+ledger. A screened view's digest never replaces the original reviewed digest.
+
 ## Workflow definitions
 
 A run pins its definition by id and version (`durable-db` state). Released
