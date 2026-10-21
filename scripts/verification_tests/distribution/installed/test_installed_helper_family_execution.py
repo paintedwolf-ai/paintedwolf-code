@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases import helper_families, helper_suite, process_tree
+from linux_release.installed_cases import helper_families, helper_probe, helper_suite, process_tree
 from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
 ROOT = {'pid': 10, 'parent_pid': 5, 'start_time_ticks': 30}
@@ -82,17 +82,17 @@ class HelperFamilyTests(unittest.TestCase):
     OUTER_INODES = {'user': 100, 'mnt': 101, 'pid': 102, 'net': 103}
 
     def test_in_domain_report_requires_every_denial_and_the_permitted_sibling(self):
-        self.assertEqual(helper_families.domain_failures(observation(), self.OUTER_INODES, project=True), [])
+        self.assertEqual(helper_probe.domain_failures(observation(), self.OUTER_INODES, project=True), [])
         reported = observation(namespaces={'user': 100, 'mnt': 201, 'pid': 202, 'net': 203}, seccomp=0,
                                outside_write=None, control_read=None, future_protected_create=None, sibling_write='EACCES')
-        self.assertEqual(helper_families.domain_failures(reported, self.OUTER_INODES, project=True),
+        self.assertEqual(helper_probe.domain_failures(reported, self.OUTER_INODES, project=True),
                          ['namespace-shared-user', 'seccomp-filter-absent', 'outside-write-admitted',
                           'control-plane-read-admitted', 'future-protected-name-created', 'permitted-sibling-write-refused'])
         mcp = {key: value for key, value in observation().items() if key not in {'future_protected_create', 'sibling_write'}}
-        self.assertEqual(helper_families.domain_failures(mcp, self.OUTER_INODES, project=False), [])
+        self.assertEqual(helper_probe.domain_failures(mcp, self.OUTER_INODES, project=False), [])
         for malformed in (None, mcp, observation(namespaces={'user': '200'}), observation(capabilities={'CapEff': 0})):
             with self.subTest(malformed=malformed):
-                self.assertEqual(helper_families.domain_failures(malformed, self.OUTER_INODES, project=True), ['observation-malformed'])
+                self.assertEqual(helper_probe.domain_failures(malformed, self.OUTER_INODES, project=True), ['observation-malformed'])
 
     def test_tree_outcome_never_passes_an_unobserved_helper(self):
         self.assertEqual(helper_families.tree_outcome(None, [IMAGE], 10, 1000),
@@ -150,15 +150,15 @@ class HelperFamilyTests(unittest.TestCase):
             control.write_bytes(b'{"pid": 1}')
             project = root / 'project'
             project.mkdir()
-            subprocess.run([sys.executable, '-I', '-c', helper_families.PROBE, 'file', str(outside), str(control)],
+            subprocess.run([sys.executable, '-I', '-c', helper_probe.PROBE, 'file', str(outside), str(control)],
                            cwd=project, check=True, timeout=30)
-            reported = json.loads((project / helper_families.WITNESS).read_text())
+            reported = json.loads((project / helper_probe.WITNESS).read_text())
         self.assertEqual(set(reported), {'namespaces', 'seccomp', 'no_new_privs', 'capabilities', 'outside_write',
                                          'control_read', 'future_protected_create', 'sibling_write'})
         # Unconfined, every write is admitted: the report says so rather than inventing a denial.
         self.assertIsNone(reported['outside_write'])
         self.assertIsNone(reported['future_protected_create'])
-        self.assertIn('outside-write-admitted', helper_families.domain_failures(
+        self.assertIn('outside-write-admitted', helper_probe.domain_failures(
             reported, {name: -1 for name in process_tree.NAMESPACES}, project=True))
 
 
