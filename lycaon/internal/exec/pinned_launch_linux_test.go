@@ -113,30 +113,41 @@ func linuxPayloadExecfn() (string, error) {
 func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *testing.T) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate native fixture", err)
-	bytes, err := os.ReadFile(self)
+	image, err := os.ReadFile(self)
 	testutil.FailErr(t, "read source fixture", err)
 	root := t.TempDir()
-	entry := filepath.Join(root, "synthetic-argv-zero")
-	testutil.FailErr(t, "create execution-only native fixture", os.WriteFile(entry, bytes, 0100))
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	args := []string{"-test.run=^TestPinnedLinuxPayload$", "--", "literal space", "--launch-ready-fd", "user data"}
-	plan := HostLaunch("synthetic native binary fixture")
-	cmd, cleanup, err := PrepareCommand(ctx, "synthetic-argv-zero", args, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=" + root + ":/usr/bin:/bin", "PW_PINNED_PAYLOAD=1"}})
-	testutil.FailErr(t, "prepare native fixture", err)
-	defer cleanup()
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := RunInOwnGroup(cmd); err != nil {
-		t.Fatalf("native launch: %v; diagnostic %s", err, stderr.String())
+	testutil.FailErr(t, "create relative binary directory", os.Mkdir(filepath.Join(root, "bin"), 0700))
+	for _, dir := range []string{root, filepath.Join(root, "bin")} {
+		testutil.FailErr(t, "write execute-only native fixture", os.WriteFile(filepath.Join(dir, "synthetic-argv-zero"), image, 0100))
 	}
-	var payload linuxPinnedPayload
-	testutil.FailErr(t, "decode actual native facts", json.Unmarshal(stdout.Bytes(), &payload))
-	if !slices.Equal(payload.Args, append([]string{"synthetic-argv-zero"}, args...)) || payload.Cwd != root || len(payload.ProtocolFDs) != 0 {
-		t.Fatalf("native vector/cwd/private descriptors changed: %+v", payload)
-	}
-	if payload.AuxExecutable != entry {
-		t.Fatalf("native pathname AT_EXECFN changed: %q", payload.AuxExecutable)
+	for _, fixture := range []struct{ label, name, path, execfn string }{
+		{"absolute PATH", "synthetic-argv-zero", root + ":/usr/bin:/bin", filepath.Join(root, "synthetic-argv-zero")},
+		{"dot slash", "./synthetic-argv-zero", "/usr/bin:/bin", "./synthetic-argv-zero"},
+		{"subpath", "bin/synthetic-argv-zero", "/usr/bin:/bin", "bin/synthetic-argv-zero"},
+		{"relative PATH", "synthetic-argv-zero", "bin:/usr/bin:/bin", "bin/synthetic-argv-zero"},
+		{"empty PATH", "synthetic-argv-zero", ":/usr/bin:/bin", "synthetic-argv-zero"},
+	} {
+		t.Run(fixture.label, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			args := []string{"-test.run=^TestPinnedLinuxPayload$", "--", "literal space", "--launch-ready-fd", "user data"}
+			cmd, cleanup, err := PrepareCommand(ctx, fixture.name, args, ExecOpts{Launch: HostLaunch("synthetic native binary fixture"), Dir: root, Env: []string{"PATH=" + fixture.path, "PW_PINNED_PAYLOAD=1"}})
+			testutil.FailErr(t, "prepare native filename fixture", err)
+			defer cleanup()
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			if err := RunInOwnGroup(cmd); err != nil {
+				t.Fatalf("native launch: %v; diagnostic %s", err, stderr.String())
+			}
+			var payload linuxPinnedPayload
+			testutil.FailErr(t, "decode actual native facts", json.Unmarshal(stdout.Bytes(), &payload))
+			if !slices.Equal(payload.Args, append([]string{fixture.name}, args...)) || payload.Cwd != root || len(payload.ProtocolFDs) != 0 {
+				t.Fatalf("native facts changed: %+v", payload)
+			}
+			if payload.AuxExecutable != fixture.execfn {
+				t.Fatalf("native AT_EXECFN spelling changed: %q", payload.AuxExecutable)
+			}
+		})
 	}
 }
 
@@ -146,7 +157,7 @@ func TestPreparedLinuxScriptPreservesOrdinaryPathAndNativeArgv(t *testing.T) {
 	testutil.FailErr(t, "write script", os.WriteFile(entry, []byte("#!/bin/sh -e\nprintf '%s\\n' \"$0\" \"$1\"\nprintf exact > effect\n"), 0700))
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	plan := AgentLaunch(LaunchAgentCommand, "synthetic native script fixture", &confine.Confinement{HostExecution: true})
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic native script fixture", &confine.Confinement{HostExecution: true}).WithPathAuthority(confine.NativeLaunchPaths(root))
 	cmd, cleanup, err := PrepareCommand(ctx, "./fixture-script", []string{"literal space"}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin"}})
 	testutil.FailErr(t, "prepare ordinary script", err)
 	defer cleanup()

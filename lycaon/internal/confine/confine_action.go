@@ -33,16 +33,13 @@ type ActionLease struct {
 // launch gets a lineage; a proxy-only one also registers the broker lease that
 // makes its dials attributable.
 func BindAction(c *Confinement, cmd EgressCommand) (result *ActionLease, failure error) {
-	lease := &ActionLease{cmd: cmd}
+	lease := &ActionLease{cmd: cloneEgressCommand(cmd)}
 	defer func() {
 		if failure == nil {
-			failure = lease.captureLaunch(c)
-			if failure != nil {
-				lease.Close(context.Background())
-				result = nil
-			}
+			lease.captureLaunch(c)
 		}
 	}()
+
 	if c == nil {
 		return lease, nil
 	}

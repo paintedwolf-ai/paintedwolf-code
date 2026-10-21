@@ -175,13 +175,19 @@ func TestAgentPreparedLaunchRequiresCurrentExecutionAuthority(t *testing.T) {
 }
 
 func TestAgentPreparedLaunchCurrentActionRefusalNeverReleasesPayload(t *testing.T) {
-	for _, change := range []string{"closed", "boundary", "actor", "root"} {
+	for _, change := range []string{"closed", "boundary", "actor", "root", "raw command", "raw boundary"} {
 		t.Run(change, func(t *testing.T) {
 			root := t.TempDir()
 			entry := filepath.Join(root, "fixture")
 			testutil.FailErr(t, "write action fixture", os.WriteFile(entry, []byte("#!/bin/sh\nprintf forbidden > effect\n"), 0700))
 			boundary := &confine.Confinement{HostExecution: true, Roots: []string{root}}
 			identity := confine.EgressCommand{SessionID: "synthetic-session", ToolCallID: "synthetic-action", ProjectDir: root}
+			if change == "raw command" {
+				identity.CommandLine = "\xff"
+			}
+			if change == "raw boundary" {
+				boundary.ProjectID = "\xff"
+			}
 			lease, err := confine.BindAction(boundary, identity)
 			testutil.FailErr(t, "admit actual action", err)
 			defer lease.Close(context.Background())
@@ -192,6 +198,10 @@ func TestAgentPreparedLaunchCurrentActionRefusalNeverReleasesPayload(t *testing.
 			defer cleanup()
 			err = StartPreparedWith(cmd, cmd.Start, func(pid int) func() {
 				switch change {
+				case "raw command":
+					identity.CommandLine = "\xfe"
+				case "raw boundary":
+					boundary.ProjectID = "\xfe"
 				case "closed":
 					lease.Close(context.Background())
 				case "boundary":
