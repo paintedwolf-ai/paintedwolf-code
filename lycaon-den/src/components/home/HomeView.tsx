@@ -44,6 +44,7 @@ import {
   filesFromClipboard,
 } from "../../chat/composer/composer-attachments.ts";
 import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 const IDEA_HINT = "Describe your idea…";
 import {
@@ -380,7 +381,7 @@ export function HomeView(props: Props) {
                   );
                 }}
                 onKeyDown={(e) => {
-                  if (e.isComposing || e.keyCode === 229) return;
+                  if (isImeComposition(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     void submit();

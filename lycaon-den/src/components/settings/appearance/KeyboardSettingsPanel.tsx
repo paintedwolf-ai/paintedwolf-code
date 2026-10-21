@@ -48,6 +48,7 @@ import { DenInput } from "../../primitives/DenInput.tsx";
 import { Keycaps } from "../../shortcuts/Keycaps.tsx";
 import { UnderlineTabs } from "../UnderlineTabs.tsx";
 import { chromeProps } from "../../../styling/ui-chrome.ts";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 
 const SCOPE_HINT: Record<CommandScope, string> = {
   global: "Available throughout the app",
@@ -256,7 +257,7 @@ export function KeyboardSettingsPanel() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       swallow(event);
-      if (event.repeat || event.isComposing || event.keyCode === 229) return;
+      if (event.repeat || isImeComposition(event)) return;
 
       if (event.key === "Escape") {
         setRefuseReason(null);

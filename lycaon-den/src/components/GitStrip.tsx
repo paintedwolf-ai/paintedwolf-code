@@ -39,6 +39,7 @@ import {
   isLoaded,
   valueOf,
 } from "../store/load-state.ts";
+import { isImeComposition } from "../platform/interaction/ime-composition.ts";
 
 type Props = GitCheckoutActions & {
   status: LoadState<GitWorkspaceStatus>;
@@ -638,7 +639,7 @@ export function GitStrip(props: Props) {
                   disabled={busy()}
                   onInput={(e) => setMessage(e.currentTarget.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+                    if (e.key === "Enter" && !e.shiftKey && !isImeComposition(e)) {
                       e.preventDefault();
                       void commit();
                     }

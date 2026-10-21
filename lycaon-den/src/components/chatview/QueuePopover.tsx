@@ -5,6 +5,7 @@ import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { QueueItem } from "../../api/types.ts";
 import type { PendingSend } from "../../chat/send/pending-sends.ts";
 import { focusWithoutScroll } from "../../platform/interaction/focus.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 type Props = {
   items: QueueItem[];
@@ -330,7 +331,7 @@ export function QueuePopover(props: Props) {
                             rows={3}
                             value={item.text}
                             onKeyDown={(e) => {
-                              if (e.isComposing || e.keyCode === 229) return;
+                              if (isImeComposition(e)) return;
                               if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
                                 saveEdit(item);

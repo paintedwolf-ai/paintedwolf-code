@@ -105,6 +105,7 @@ import {
   type HeightFollow,
   type HeightMotionTiming,
 } from "../../ui/height-toggle-motion.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 let nextSlashListboxId = 0;
 
@@ -562,7 +563,7 @@ export function Composer(props: Props) {
   const onSlashSuggestionKeyDown = (event: KeyboardEvent) => {
     if (
       !showSlashSuggestions() ||
-      event.isComposing || event.keyCode === 229 ||
+      isImeComposition(event) ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||

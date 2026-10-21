@@ -9,6 +9,7 @@ import { treeLayoutRange } from "./files-tree-sticky.ts";
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import type { PagedTreeModel } from "./files-tree-paged-model.ts";
 import type { FilesTreeSession } from "./files-tree-paged-session.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 type KeyboardPorts = {
   navElement(): HTMLElement | undefined;
   roots(): readonly ProjectRoot[];
@@ -131,7 +132,7 @@ export function createFilesTreeKeyboard(ports: KeyboardPorts) {
     const path = target.dataset.path ?? ".";
     const model = ports.displayModel();
     typeaheadRequest?.abort();
-    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && e.keyCode !== 229) {
+    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && !isImeComposition(e)) {
       e.preventDefault();
       const now = performance.now();
       typeahead = now - typedAt < 750 ? typeahead + e.key : e.key;

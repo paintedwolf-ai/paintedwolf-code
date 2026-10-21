@@ -100,6 +100,7 @@ import {
   globIndicatorTitle,
   renderMatchUnderline,
 } from "./CrossbarResults.tsx";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 export type CrossbarProps = {
   open: boolean;
@@ -897,7 +898,7 @@ export function Crossbar(props: CrossbarProps) {
   };
 
   const onPanelKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing || e.keyCode === 229) return;
+    if (isImeComposition(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

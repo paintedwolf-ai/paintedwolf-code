@@ -8,6 +8,7 @@ import type { FilesEditorScope } from "../components/files-scope.ts";
 import { AnchoredSurface } from "../../components/primitives/AnchoredSurface.tsx";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 type SymbolNavigationDependencies = Pick<FilesEditorScope, "projectId" | "sessionId" | "client" | "buffer" | "live" |
   "chromeReady" | "currentView"> & {
@@ -135,7 +136,7 @@ export function FilesSymbolMenu(props: { symbols: ReturnType<typeof createEditor
         onDismiss={() => props.symbols.closeSymbolMenu("keep")}
         testId="files-crumb-symbol-menu"
         onKeyDown={(e) => {
-          if (e.isComposing || e.keyCode === 229) return;
+          if (isImeComposition(e)) return;
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();

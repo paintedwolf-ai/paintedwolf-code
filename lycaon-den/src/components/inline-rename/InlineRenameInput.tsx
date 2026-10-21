@@ -1,4 +1,5 @@
 import { createSignal, onMount } from "solid-js";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 export type InlineRenameInputProps = {
   initialValue: string;
@@ -73,7 +74,7 @@ export function InlineRenameInput(props: InlineRenameInputProps) {
         finish(props.shouldCommitOnBlur?.(draft()) === false ? "cancel" : "commit")
       }
       onKeyDown={(e) => {
-        if (e.isComposing || e.keyCode === 229) return;
+        if (isImeComposition(e)) return;
         if (e.key === "Enter") {
           e.preventDefault();
           finish("commit");

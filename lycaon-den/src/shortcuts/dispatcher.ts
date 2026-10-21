@@ -25,6 +25,7 @@ import {
 import { shortcutPlatform } from "./platform.ts";
 import type { TauriPlatform } from "../platform/runtime.ts";
 import { createClaimable } from "../platform/interaction/claimable.ts";
+import { isImeComposition } from "../platform/interaction/ime-composition.ts";
 
 /** Signals that a handler left its key unconsumed. */
 export const COMMAND_DECLINED = "command-declined" as const;
@@ -267,9 +268,6 @@ function resolved(): ResolvedKeymap {
   return liveResolvedKeymap(activePlatform(), overrides);
 }
 
-/** `keyCode` an input method reports while composing. */
-const IME_COMPOSITION_KEY_CODE = 229;
-
 /** A control whose bare Enter/Space keydown becomes a native click. */
 function isNativeActivationTarget(target: EventTarget | null): boolean {
   if (target == null || typeof target !== "object") return false;
@@ -443,7 +441,7 @@ export function shortcutCommandMatchesEvent(
     keyCode?: number;
   },
 ): boolean {
-  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE || shortcutCommandsSuspended() || pendingLeader) {
+  if (isImeComposition(event) || shortcutCommandsSuspended() || pendingLeader) {
     return false;
   }
   const chord = eventToChord(event, activePlatform());
@@ -490,9 +488,8 @@ export function dispatchKeyboardEvent(
   if (captureActive) {
     return { commandId: null, chord: null, handled: false };
   }
-  // Composition keys never become commands; some input methods report the
-  // commit key with the legacy composition key code instead of `isComposing`.
-  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE) {
+  // Composition keys never become commands.
+  if (isImeComposition(event)) {
     return { commandId: null, chord: null, handled: false };
   }
   if (shortcutBoundaryClaims.size > 0) {

@@ -9,6 +9,7 @@ import { chromeProps } from "../../../styling/ui-chrome.ts";
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { markFailureMessage } from "./mark-secret-failure.ts";
 import { SECRET_SPAN_COPY } from "./secret-span-copy.ts";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 
 export type MarkSecretTarget = {
   path: string;
@@ -194,7 +195,7 @@ export function MarkSecretDialog(props: Props) {
                     value={name()}
                     onInput={(e) => setName(e.currentTarget.value)}
                     onKeyDown={(e) => {
-                      if (e.isComposing || e.keyCode === 229) return;
+                      if (isImeComposition(e)) return;
                       if (e.key === "Enter" && canSubmit()) void submit();
                     }}
                   />

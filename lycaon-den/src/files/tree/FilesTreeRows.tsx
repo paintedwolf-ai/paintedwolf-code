@@ -13,6 +13,7 @@ import { type FlatTreeRow } from "./project-files-tree-flat.ts";
 import type { DisplayRow } from "./files-tree-display-model.ts";
 import { foldedTreeDepth, type StickyAncestor, type StickyFold, type StickySlot } from "./files-tree-sticky.ts";
 import { useTree } from "./files-tree-context.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 type RowTrailing =
   | { kind: "none" }
@@ -770,7 +771,7 @@ function NamingRow(props: {
           ctx.setNamingDraft(d().rootId, d().dir, e.currentTarget.value)
         }
         onKeyDown={(e) => {
-          if (e.isComposing || e.keyCode === 229) return;
+          if (isImeComposition(e)) return;
           if (e.key === "Enter") {
             e.preventDefault();
             void ctx.submitName(

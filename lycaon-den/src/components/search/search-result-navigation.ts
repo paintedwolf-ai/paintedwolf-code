@@ -5,6 +5,7 @@ import { appendPivotFilter, queryFilterActive, searchQueryFreeText, groupHitsByP
 import { openSearchHit } from "../../search/search-hit-open.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
 import { searchHitKey } from "./SearchResultGroup.tsx";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 type Options = {
  groups: () => ReturnType<typeof groupHitsByProject>;
  selectedHitKey: () => string | null; setSelectedHitKey: (value: string | null) => void;
@@ -63,7 +64,7 @@ export function createSearchResultNavigation(options: Options) {
 
   // Stage shortcuts skip controls and suggestions.
   const onStageKeyDown = (e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
+    if (e.defaultPrevented || isImeComposition(e)) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest("button, a, select, textarea")) return;
     if (
