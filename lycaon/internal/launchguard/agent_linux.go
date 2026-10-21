@@ -55,20 +55,20 @@ func RunBrokerAgent() error {
 }
 
 // initialUserNamespace requires this process to be in the initial user
-// namespace, which alone has no parent.
+// namespace.
 func initialUserNamespace() error {
 	own, err := os.Open("/proc/self/ns/user")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = own.Close() }()
-	parent, err := unix.IoctlRetInt(int(own.Fd()), unix.NS_GET_PARENT)
-	if err == nil {
-		_ = unix.Close(parent)
-		return errors.New("broker agent is not in the initial user namespace")
-	}
-	if !errors.Is(err, unix.EPERM) {
+	var stat unix.Stat_t
+	if err := unix.Fstat(int(own.Fd()), &stat); err != nil {
 		return err
+	}
+	// The kernel numbers the initial user namespace PROC_USER_INIT_INO.
+	if stat.Ino != 0xEFFFFFFD {
+		return errors.New("broker agent is not in the initial user namespace")
 	}
 	return nil
 }

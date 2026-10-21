@@ -21,6 +21,9 @@ import (
 // user namespace shows the protected launch.
 const LaunchBrokerFDEnv = "LYCAON_LAUNCH_BROKER_FD"
 
+// initialUserNamespaceInode is the kernel's PROC_USER_INIT_INO.
+const initialUserNamespaceInode = 0xEFFFFFFD
+
 // relayCommand is the engine image's broker relay mode.
 const relayCommand = "__broker-relay"
 
@@ -60,15 +63,14 @@ func namespaceFacts() (userNamespaceFacts, error) {
 	if err != nil {
 		return userNamespaceFacts{}, err
 	}
-	facts := userNamespaceFacts{owner: owner}
-	parent, err := unix.IoctlRetInt(int(own.Fd()), unix.NS_GET_PARENT)
-	switch {
-	case err == nil:
-		facts.nested = true
-		_ = unix.Close(parent)
-	case !errors.Is(err, unix.EPERM):
+	var stat unix.Stat_t
+	if err := unix.Fstat(int(own.Fd()), &stat); err != nil {
 		return userNamespaceFacts{}, err
 	}
+	// The kernel numbers the initial user namespace with a fixed inode; a
+	// child's NS_GET_PARENT answers EPERM too when its parent lies outside the
+	// caller's view, so the parent query cannot tell them apart.
+	facts := userNamespaceFacts{owner: owner, nested: stat.Ino != initialUserNamespaceInode}
 	raw, err := os.ReadFile("/proc/self/uid_map")
 	if err != nil {
 		return userNamespaceFacts{}, err
