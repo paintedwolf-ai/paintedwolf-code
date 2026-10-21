@@ -10,6 +10,8 @@ export const CREDENTIAL_VAULT_COPY = {
     keychain:
       "The macOS Keychain holds the key to your saved credentials, and only the signed app can read it.",
     development: "This development build keeps the vault key in a local file.",
+    unavailable:
+      "The vault custodian is unavailable. Your encrypted credentials are preserved. Restore the identity service and open the installed desktop app. An app password requires a previously exported key.",
     refused:
       "The vault identity service refused this copy of the app, so your saved credentials cannot be opened. Start Painted Wolf Code from the installed app.",
   } satisfies Record<VaultCustodyMode, string>,

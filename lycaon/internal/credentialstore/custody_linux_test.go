@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -184,10 +183,10 @@ func TestServiceHostReportsUnreadableCustody(t *testing.T) {
 	}
 }
 
-func TestMissingWrappedIdentityNamesTheIdentityService(t *testing.T) {
+func TestMissingWrappedIdentityIsNotCorruption(t *testing.T) {
 	path := filepath.Join(t.TempDir(), VaultBasename)
 	_, err := custody{mode: custodyPassword}.provider(path).LoadOrCreate(true)
-	if !errors.Is(err, ErrVaultCorrupt) || !strings.Contains(err.Error(), "paintedwolf-vault-identity socket unit") {
+	if !errors.Is(err, ErrIdentityMissing) || errors.Is(err, ErrVaultCorrupt) {
 		t.Fatalf("missing wrapped identity: %v", err)
 	}
 }

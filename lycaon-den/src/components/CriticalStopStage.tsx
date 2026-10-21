@@ -449,6 +449,12 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
                     disabled: attemptInFlight() || vaultResetInFlight(),
                     onClick: () => resetVault(stop),
                   }
+                : stop.resettable
+                ? {
+                    label: vaultResetInFlight() ? "Resetting…" : "Reset vault…",
+                    disabled: attemptInFlight() || vaultResetInFlight(),
+                    onClick: () => resetVault(stop),
+                  }
                 : (stop.recovery === "restore_snapshot" ||
                 stop.recovery === "restore_backup")
                 ? {

@@ -45,10 +45,12 @@ func (p *itemsIdentityProvider) LoadOrCreate(vaultExists bool) (identityDocument
 		return decodeIdentityDocument(raw)
 	}
 	if !errors.Is(err, errIdentityMissing) {
-		return identityDocument{}, fmt.Errorf("read credential vault identity: %w", err)
+		// A locked, unreachable or refusing custodian is not an answer about
+		// the key; only its definite "not found" is.
+		return identityDocument{}, fmt.Errorf("%w: read credential vault identity: %w", ErrCustodianUnavailable, err)
 	}
 	if vaultExists {
-		return identityDocument{}, fmt.Errorf("%w: the %s is missing", ErrVaultCorrupt, p.description)
+		return identityDocument{}, fmt.Errorf("%w: the %s is missing", ErrIdentityMissing, p.description)
 	}
 	doc, err := generateIdentityDocument()
 	if err != nil {
@@ -73,7 +75,7 @@ func (p *itemsIdentityProvider) LoadOrCreate(vaultExists bool) (identityDocument
 func (p *itemsIdentityProvider) Purge() error {
 	err := p.items.remove(p.account)
 	if err != nil && !errors.Is(err, errIdentityMissing) {
-		return fmt.Errorf("delete credential vault identity: %w", err)
+		return fmt.Errorf("%w: delete credential vault identity: %w", ErrCustodianUnavailable, err)
 	}
 	return nil
 }

@@ -14,7 +14,7 @@ func VerifyIdentityProtection() (err error) {
 	}
 	custody := linuxCustody()
 	switch custody.mode {
-	case custodyRefused:
+	case custodyRefused, custodyUnavailable:
 		return custody.refusal
 	case custodyPassword:
 		return fmt.Errorf("credential protection verification requires the vault identity service; this host is on the app-password path")

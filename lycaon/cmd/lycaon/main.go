@@ -179,20 +179,7 @@ func runServe(signals context.Context, dbPath string) error {
 	}
 	if err != nil {
 		if startup != nil {
-			code := "build_failed"
-			switch {
-			case errors.Is(err, hostlock.ErrStoreInstanceLocked):
-				code = "store_locked"
-			case errors.Is(err, credentialstore.ErrVaultLocked):
-				code = "credential_vault_locked"
-			case errors.Is(err, credentialstore.ErrVaultUninitialized):
-				code = "credential_vault_uninitialized"
-			case errors.Is(err, credentialstore.ErrVaultUnlockFailed):
-				code = "credential_vault_unlock_failed"
-			case errors.Is(err, credentialstore.ErrVaultCorrupt):
-				code = "credential_vault_corrupt"
-			}
-			_ = startup.Failed(code)
+			_ = startup.Failed(startupFailureCode(err))
 		}
 		return err
 	}
