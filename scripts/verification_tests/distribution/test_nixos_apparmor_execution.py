@@ -23,14 +23,32 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
         data = b"\x7fELF\x02\x01\x01" + b"\0" * 11 + b"\x3e\0"
         self.engine.write_bytes(data)
         self.engine.chmod(0o755)
-        self.manifest = {"format_version": 1, "package": "painted-wolf-code",
+        digest = hashlib.sha256(data).hexdigest()
+        self.manifest = {"format_version": 2, "package": "painted-wolf-code",
+                         "version": "1.0.2",
                          "architecture": "x86_64", "install_root": str(self.root),
                          "executables": [{"path": str(self.engine), "size": len(data),
-                                          "sha256": hashlib.sha256(data).hexdigest()}]}
+                                          "sha256": digest}],
+                         "payload": [{"path": "bin", "kind": "directory", "mode": 0o755},
+                                     {"path": "bin/pw", "kind": "file", "mode": 0o755,
+                                      "size": len(data), "sha256": digest}]}
         self.save()
 
     def save(self):
         (self.root / "manifest.json").write_text(json.dumps(self.manifest))
+
+    def test_legacy_v1_unknown_versions_and_missing_payload_refused(self):
+        for bad_version in (0, 1, 3, 99, True, "2"):
+            with self.subTest(format_version=bad_version):
+                self.manifest["format_version"] = bad_version
+                self.save()
+                with self.assertRaisesRegex(ValueError, "manifest does not identify"):
+                    OWNER.profile(self.package)
+        self.manifest["format_version"] = 2
+        self.manifest["payload"] = []
+        self.save()
+        with self.assertRaisesRegex(ValueError, "manifest does not identify"):
+            OWNER.profile(self.package)
 
     def test_only_exact_engine_receives_userns(self):
         result = OWNER.profile(self.package)

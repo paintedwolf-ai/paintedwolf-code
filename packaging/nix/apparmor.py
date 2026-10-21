@@ -32,8 +32,12 @@ def profile(package):
     if manifest.stat().st_size > 4 * 1024 * 1024:
         raise ValueError("manifest exceeds bound")
     facts = json.loads(manifest.read_text())
-    if (facts.get("format_version") != 1 or facts.get("package") != "painted-wolf-code"
-            or facts.get("install_root") != str(root)):
+    version = facts.get("format_version")
+    payload = facts.get("payload")
+    if (type(version) is not int or version != 2
+            or facts.get("package") != "painted-wolf-code"
+            or facts.get("install_root") != str(root)
+            or not isinstance(payload, list) or not payload):
         raise ValueError("manifest does not identify the selected package")
     machine = {"x86_64": 62, "aarch64": 183}.get(facts.get("architecture"))
     with engine.open("rb") as source:
@@ -47,9 +51,14 @@ def profile(package):
             or machine is None or struct.unpack_from("<H", header, 18)[0] != machine):
         raise ValueError("selected engine must be the manifest's native ELF")
     entries = [entry for entry in facts.get("executables", [])
-               if entry.get("path") == str(engine)]
+               if isinstance(entry, dict) and entry.get("path") == str(engine)]
+    payload_entries = [entry for entry in payload
+                       if isinstance(entry, dict) and entry.get("path") == "bin/pw"]
     if (len(entries) != 1 or entries[0].get("sha256") != digest
-            or entries[0].get("size") != engine.stat().st_size):
+            or entries[0].get("size") != engine.stat().st_size
+            or len(payload_entries) != 1 or payload_entries[0].get("kind") != "file"
+            or payload_entries[0].get("sha256") != digest
+            or payload_entries[0].get("size") != engine.stat().st_size):
         raise ValueError("selected engine bytes differ from final manifest")
     name = "paintedwolf-engine-" + hashlib.sha256(str(engine).encode()).hexdigest()
     return (f"profile {name} {literal(str(engine))} flags=(unconfined) {{\n"
