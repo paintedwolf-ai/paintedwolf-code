@@ -296,7 +296,8 @@ Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
 `base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
 representations itself: wc separates values with one space, `file` answers from
 the versioned signature corpus, and `ls -l` prints numeric owners and UTC
-long-ISO times without a block total. Ordinary operand failures (missing,
+long-ISO times after GNU's block total, and bare `stat` prints the catalog's
+GNU multi-line default. Ordinary operand failures (missing,
 directory, permission) go to stderr with the utility's status and later operands
 still run; authority, budget and platform refusals stop with their typed code.
 Only diff's complete status 1 is a publishable comparison. Literal windows and
