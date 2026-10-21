@@ -64,9 +64,9 @@ stdenvNoCC.mkDerivation {
       -consumer-identity-file ${resources}/scanner-identity.base64 \
       -evidence-root ${source}/lycaon/config/runtime/scanners \
       -audit-output "$out/lib/painted-wolf-code/scanner-audit.json" > /dev/null
-    python3 ${source}/scripts/linux_release/nix_layout.py \
+    (cd ${source} && python3 -m scripts.linux_release.nix_layout \
       --output "$out" --architecture ${lib.escapeShellArg architecture} \
-      --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store
+      --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store)
     # The shipped engine grant must parse; administrators load it unchanged.
     for profile in "$out"/share/painted-wolf-code/apparmor/*; do
       ${apparmor-parser}/bin/apparmor_parser --skip-kernel-load --skip-cache --skip-read-cache \

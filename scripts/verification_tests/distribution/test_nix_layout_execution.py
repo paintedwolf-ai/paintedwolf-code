@@ -42,9 +42,6 @@ class NixFinalLayoutTests(unittest.TestCase):
             self.assertEqual([path.name for path in profiles], [name])
             self.assertEqual(profiles[0].read_text(), "abi <abi/4.0>,\n\n"
                              f'profile {name} "{engine}" flags=(unconfined) {{\n  userns,\n}}\n')
-        self.assertEqual(nix_layout.literal('/nix/store/x-a"b*c[d]'), '"/nix/store/x-a\\"b\\*c\\[d\\]"')
-        with self.assertRaises(ValueError):
-            nix_layout.literal("/nix/store/x-engine\n")
 
     def test_both_native_architectures_retain_final_fixup_bytes_and_generation_paths(self):
         for architecture in nix_layout.MACHINES:

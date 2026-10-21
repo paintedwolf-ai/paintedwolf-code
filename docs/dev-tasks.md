@@ -904,6 +904,10 @@ before confinement is available. Each generation ships
 namespaces to that generation's exact `pw` executable only: install it under
 `/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
 a new path and needs its own grant; remove the previous one once nothing runs it.
+A source build on such a host also needs the scanner builder's grant: build the
+scanner tools first (`./task nix:build -- --component scanner-host-tools`), load
+the `paintedwolf-scanner-builder-<hash>` profile its output ships the same way,
+then build the application. Substituting the qualified closure needs neither.
 
 Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
 Vulkan driver unless those variables are already set: host-installed drivers
