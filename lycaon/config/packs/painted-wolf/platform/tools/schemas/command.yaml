@@ -39,12 +39,11 @@ schema:
     cwd:
       type: string
       description: >-
-        Repo-relative working directory for this call. Use `@label` or
-        `@label/sub/path` for a non-primary project root, or `@scratch` (and
-        `@scratch/sub/path`) for session scratch. On a write worker,
-        workspace paths resolve under the private branch. Empty = branch root
-        (or active root when not on a worker). Must be a directory inside a
-        project root or `@scratch`. `cd` inside the program moves from here.
+        Starting directory: a path relative to the session folder, an
+        absolute path inside an attached folder, `@label/sub/path`, or
+        `@scratch/sub/path`. Empty starts in the session folder (the branch
+        root on a write worker). `cd` inside the program moves from here;
+        nothing carries to the next call.
     timeout_ms:
       type: integer
       minimum: 1000

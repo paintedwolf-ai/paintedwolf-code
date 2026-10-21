@@ -2146,6 +2146,12 @@
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the closing synthesis while the active review_loop phase's evidence gate is still open."
     },
+    "ROOT_NOT_ATTACHED": {
+      "branch_instruction": "Address the folder by its current absolute path or @label",
+      "category": "recoverable",
+      "emit": "guard:path",
+      "summary": "{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}; it was attached at {{ paintedwolf.former_path }}."
+    },
     "SANDBOX_APPROVAL_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; do not report the requested effect as forbidden",
       "category": "recoverable",

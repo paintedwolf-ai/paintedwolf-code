@@ -302,6 +302,14 @@ func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string,
 // stateRefusal turns an expansion, variable or memory admission refusal into a
 // latched stop located at the refused word when the refusal names one.
 func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error {
+	var address *AddressError
+	var coded interface{ MachineErrorCode() string }
+	if errors.As(err, &address) && errors.As(address.Cause, &coded) {
+		if address.Span != (toolcontract.SourceSpan{}) {
+			loc.Span = address.Span
+		}
+		return f.refuse(loc, coded.MachineErrorCode(), "an attached folder label", err)
+	}
 	var expansion *ExpansionError
 	if errors.As(err, &expansion) {
 		if expansion.Span != (toolcontract.SourceSpan{}) {

@@ -55,10 +55,10 @@ type ProgramRuntime struct {
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 
-	mu            sync.Mutex
-	outputs       map[string]*invocation.ProgramOutputRetention
-	resources     map[string]*sessionOutputResources
-	disabled      atomic.Bool
+	mu        sync.Mutex
+	outputs   map[string]*invocation.ProgramOutputRetention
+	resources map[string]*sessionOutputResources
+	disabled  atomic.Bool
 }
 
 // SetDisabled turns the command program control off or on. Turning it off
@@ -268,8 +268,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:  memory,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:      memory,
+		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {

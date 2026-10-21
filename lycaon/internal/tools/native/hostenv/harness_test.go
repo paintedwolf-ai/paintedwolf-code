@@ -93,7 +93,7 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 	exec.SetResolvedPathSource(func() string { return bin })
 	t.Cleanup(func() { exec.SetResolvedPathSource(nil) })
 	clock := &fixtureClock{at: time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("fixture", 5*3600))}
-	owners, err := NewOwners(host, clock.now, nil)
+	owners, err := NewOwners(host, clock.now)
 	testutil.FailErr(t, "owners", err)
 	tc := tools.ToolContext{
 		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},

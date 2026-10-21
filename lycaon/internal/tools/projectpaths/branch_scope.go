@@ -33,6 +33,9 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		var err error
 		branchRel, displayPath, err = projectroot.WorkerBranchRelative(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 		if err != nil {
+			if reject := declinedRootReject(tctx, modelPath, err); reject != nil {
+				return Resolved{}, reject
+			}
 			return Resolved{}, mapResolveErr(err, modelPath)
 		}
 	}

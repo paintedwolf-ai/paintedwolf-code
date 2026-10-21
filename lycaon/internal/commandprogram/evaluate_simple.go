@@ -217,6 +217,10 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
+		if syncErr := f.syncDirectory(ctx); syncErr != nil {
+			child.settle(result, errors.Join(err, syncErr))
+			return f.expansionRefusal(s.SyntaxLocation, syncErr)
+		}
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
 			child.close()

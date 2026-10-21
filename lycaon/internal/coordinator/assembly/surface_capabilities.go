@@ -125,6 +125,15 @@ func (e *promptSurface) applyToolBudgetVars(ctx context.Context, sess *api.Sessi
 		vars["worker_tool_budget_max"] = budget.Max
 	}
 }
+// sessionScratchDir is the scratch folder the session's tools resolve
+// @scratch and TMPDIR against.
+func (e *promptSurface) sessionScratchDir(ctx context.Context, sess *api.Session) string {
+	if e == nil || e.deps.SessionScratchDir == nil || sess == nil {
+		return ""
+	}
+	return e.deps.SessionScratchDir(ctx, sess)
+}
+
 func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
 		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, true

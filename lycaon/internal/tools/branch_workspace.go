@@ -45,6 +45,9 @@ func AgentLaunchAuthority(tctx ToolContext, confinement *confine.Confinement, le
 		if err := ValidateWorkerBranch(ctx, tctx); err != nil {
 			return err
 		}
+		if reject := ValidateRootsCurrent(tctx); reject != nil {
+			return reject
+		}
 		return lease.ValidateLaunch(ctx, confinement, identity)
 	}
 }

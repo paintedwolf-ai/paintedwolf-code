@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -18,6 +17,12 @@ func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.Operat
 	err := request.Validate()
 	if err == nil {
 		err = p.commandOutput(ctx, request.OperationID, request.Argv, streams.Output)
+	}
+	var utility *UtilityError
+	if errors.As(err, &utility) {
+		// An ordinary utility failure is the utility's own stderr and status.
+		_, writeErr := io.WriteString(nonNilWriter(streams.Error), request.OperationID+": "+utility.Error()+"\n")
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, writeErr
 	}
 	err = WithPathRejection(err, request.Invocation.Span)
 	if err == nil {
@@ -96,28 +101,16 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv comm
 		if len(args) != 0 {
 			return usage("pwd accepts no operands")
 		}
-		if _, err := p.Bind(ctx, ".", false); err != nil {
-			return err
-		}
-		_, err := io.WriteString(output, p.cwd.Resolved.DisplayPath+"\n")
-		return err
+		return p.printWorkingDirectory(ctx, physicalForm(bound), output)
 	case "cd":
 		if len(args) > 1 {
 			return usage("cd accepts at most one PATH")
 		}
-		if len(args) == 0 {
-			info, err := directoryInfo(p.initial)
-			if err != nil {
-				return err
-			}
-			if !os.SameFile(info, p.initialInfo) {
-				return invalidOperand("cd", "initial invocation directory identity changed")
-			}
-			p.cwd = p.initial
-			p.cwdInfo = info
-			return nil
+		operand := ""
+		if len(args) == 1 {
+			operand = args[0]
 		}
-		return p.Chdir(ctx, args[0])
+		return p.changeDirectory(ctx, operand, physicalForm(bound), output)
 	case "realpath":
 		if len(args) == 0 {
 			return usage("expected at least one PATH")
@@ -183,3 +176,21 @@ func (p *ProgramPaths) pathOutput(ctx context.Context, args []string, canonical 
 }
 
 var _ commandprogram.OperationDispatcher = (*ProgramPaths)(nil)
+
+// physicalForm reports the last of -L and -P, as cd and pwd apply them.
+func physicalForm(bound commandprogram.BoundArgv) bool {
+	physical := false
+	for _, item := range bound.Items {
+		if item.Option != nil && (item.Option.Key == "-L" || item.Option.Key == "-P") {
+			physical = item.Option.Key == "-P"
+		}
+	}
+	return physical
+}
+
+func nonNilWriter(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
+	}
+	return w
+}

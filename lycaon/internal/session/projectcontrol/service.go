@@ -63,6 +63,7 @@ type Service struct {
 	transcript      Transcript
 	anchors         Anchors
 	overlayPromoter OverlayPromoter
+	rootHistory     *projectroot.History
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
@@ -72,3 +73,6 @@ func (s *Service) SetProjects(projects Projects)      { s.projects = projects }
 func (s *Service) SetWorkers(workers Workers)         { s.workers = workers }
 func (s *Service) SetWorkerAbort(workers WorkerAbort) { s.workerAbort = workers }
 func (s *Service) SetAnchors(anchors Anchors)         { s.anchors = anchors }
+
+// SetRootHistory selects the attachment change record root changes advance.
+func (s *Service) SetRootHistory(history *projectroot.History) { s.rootHistory = history }
