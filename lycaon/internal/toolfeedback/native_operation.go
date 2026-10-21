@@ -17,10 +17,16 @@ func (bp *BlockPlane) RejectNativeObservation(ctx context.Context, profile strin
 	})
 }
 
-// EvaluateNative runs the existing preinvoke/handler policy with separate model
-// and operation identities. It does not admit or execute the operation itself.
-func (bp *BlockPlane) EvaluateNative(ctx context.Context, anchor, profile string, submitted map[string]any, operation toolcontract.BoundOperation) error {
-	return bp.Evaluate(ctx, anchor, "command", profile, submitted, func(gc *oar.GuardContext) error {
-		return gc.ObserveNativeOperation(operation)
-	})
+// EvaluateProgram retains a typed native policy block without rendering or
+// re-evaluating it. The actual frame supplies retention through delivery.
+func (bp *BlockPlane) EvaluateProgram(ctx context.Context, anchor, profile string, submitted map[string]any, operation *toolcontract.BoundOperation, retain func(context.Context, int64) error) error {
+	var observe func(*oar.GuardContext) error
+	if operation != nil {
+		observe = func(gc *oar.GuardContext) error { return gc.ObserveNativeOperation(*operation) }
+	}
+	decision, err := bp.evaluateBlock(ctx, anchor, "command", profile, submitted, observe)
+	if err != nil || decision == nil {
+		return err
+	}
+	return freezeProgramPolicyBlock(ctx, anchor, decision, operation, retain)
 }

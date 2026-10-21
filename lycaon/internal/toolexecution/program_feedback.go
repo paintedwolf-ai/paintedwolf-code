@@ -2,12 +2,14 @@ package toolexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -25,6 +27,7 @@ type PreparedProgramFailure struct {
 	operation toolcontract.BoundOperation
 	identity  tools.InvocationIdentity
 	memory    ProgramStateAdmission
+	policy    *toolfeedback.ProgramPolicyBlock
 	release   func()
 	mu        sync.Mutex
 	closed    bool
@@ -41,6 +44,7 @@ func (p *PreparedProgramFailure) Close() {
 		p.Rejection = nil
 		p.operation = toolcontract.BoundOperation{}
 		p.memory = nil
+		p.policy = nil
 		if p.release != nil {
 			p.release()
 			p.release = nil
@@ -99,6 +103,15 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			retained.Close()
 		}
 	}()
+	execution := retained.Execution
+	switch execution.State {
+	case "completed", "refused", "failed", "interrupted":
+	default:
+		return nil, fmt.Errorf("program feedback execution has not settled")
+	}
+	if execution.ID != inv.Identity.ExecutionID || (rejected.Code != execution.StopCode && rejected.Code != execution.HostStopCode) {
+		return nil, fmt.Errorf("program feedback rejection does not match settled execution")
+	}
 	projection := retained.Projection
 	if err = validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
 		return nil, err
@@ -128,7 +141,12 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	clone.Data["operation_source_unit_id"] = inv.SourceUnitID
 	clone.Data["operation_source_start_byte"], clone.Data["operation_source_end_byte"] = inv.Span.StartByte, inv.Span.EndByte
 	clone.Data["operation_source_line"], clone.Data["operation_source_column"] = inv.Span.Line, inv.Span.Column
-	return &PreparedProgramFailure{Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); release() }}, nil
+	var policy *toolfeedback.ProgramPolicyBlock
+	errors.As(cause, &policy)
+	if policy != nil && !policy.MatchesOperation(operation) {
+		return nil, fmt.Errorf("program policy copy belongs to another execution")
+	}
+	return &PreparedProgramFailure{policy: policy, Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); release() }}, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

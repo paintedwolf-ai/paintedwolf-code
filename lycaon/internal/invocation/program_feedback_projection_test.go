@@ -11,11 +11,15 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -71,6 +75,9 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	executor := toolexecution.NewExecutor(nil, nil, "fixture")
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)})
+	// A changed worker execution root can be the cause of refusal. Rendering
+	// settled authoritative facts does not attempt to authorize that root again.
+	tc.Source.WorkerBranchRoot = "changed-worker-tree"
 	rendered := executor.RenderProgramFailure(t.Context(), frame, tc, prepared)
 	refusal, ok := guidance.RefusalFromError(rendered)
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Actual command envelope selected") || toolrejection.AsToolReject(rendered) == nil {
@@ -123,7 +130,7 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
 	remote := f.childFor(t, "http_request")
 	f.start(t, remote)
-	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
+	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
 	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
 	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
 	memory := &feedbackMemory{}
@@ -157,5 +164,78 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	}
 	if strings.Contains(content, "program_replay_source_ref") {
 		t.Fatal("partial/unknown effects received whole-program replay")
+	}
+}
+
+type feedbackProgress struct{ store *progress.MemoryStore }
+
+func (p feedbackProgress) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
+	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+}
+
+type feedbackForbiddenStart struct{ called bool }
+
+func (s *feedbackForbiddenStart) BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+	s.called = true
+	return errors.New("policy block dispatched owner start")
+}
+
+func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	write := f.childFor(t, "write")
+	f.start(t, write)
+	testutil.FailErr(t, "record stated earlier completed effect", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, OwnerInvoked: true, DetailReference: "output:earlier-effect"}))
+	read := f.childFor(t, "read")
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
+	parent := read.Invocation()
+	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
+	memory := &feedbackMemory{}
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
+	testutil.FailErr(t, "capture actual program envelope", err)
+	defer frame.Close()
+	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
+	definition := read.Definition()
+	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
+	testutil.FailErr(t, "freeze actual profile", err)
+	testutil.FailErr(t, "install policy anchors", anchorcatalog.InstallBundled())
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	const code = "FIXTURE_NATIVE_POLICY_STOP"
+	rule := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolPreInvoke, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "read" && tool_arg_string("command") == "${op} arg"`, Copy: oar.Copy{What: "Frozen actual policy occurrence", Fix: "Inspect the existing result before preparing remaining work."}}
+	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, nil)
+	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
+	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)})
+	progressOwner := progress.NewMemoryStore()
+	testutil.FailErr(t, "set actual progress", progressOwner.Set(f.session, "- [ ] Inspect"))
+	start := &feedbackForbiddenStart{}
+	effect := toolexecution.NativeEffect{Operation: read, Stage: toolcontract.ExecutionStage{ExecutionID: read.Invocation().Identity.ExecutionID, OperationID: "read", Argv: []string{"cat"}}, Arguments: map[string]any{}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		t.Fatal("blocked operation reached owner preparation")
+		return toolexecution.PreparedNativeEffect{}, nil
+	}}
+	result, cause := executor.InvokeNative(t.Context(), frame, surface, memory, feedbackProgress{progressOwner}, start, effect, tc)
+	var policy *toolfeedback.ProgramPolicyBlock
+	if !errors.As(cause, &policy) || toolrejection.AsToolReject(cause) == nil || result.OwnerInvoked || start.called {
+		t.Fatalf("policy lost typed unrendered stop or invoked owner: %+v %v", result, cause)
+	}
+	if _, rendered := guidance.RefusalFromError(cause); rendered {
+		t.Fatal("policy rendered before recorder settlement")
+	}
+	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
+	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tc, read, cause)
+	testutil.FailErr(t, "prepare settled policy feedback", err)
+	defer prepared.Close()
+	// A later rule set cannot rewrite the already occurred policy guidance.
+	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: oar.NewGuardPipeline(oar.NewRuleSet(nil), nil, nil), Renderer: oar.NewRenderer(nil, nil)})
+	rendered := executor.RenderProgramFailure(t.Context(), frame, tc, prepared)
+	refusal, ok := guidance.RefusalFromError(rendered)
+	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
+		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
+	}
+	prepared.Close()
+	frame.Close()
+	if memory.active != 0 {
+		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
 	}
 }

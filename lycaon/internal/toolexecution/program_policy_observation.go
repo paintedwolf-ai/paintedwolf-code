@@ -17,6 +17,7 @@ import (
 type programPolicyObservation struct {
 	submitted map[string]any
 	operation *toolcontract.BoundOperation
+	frame     ProgramFrame
 }
 
 type deferredProgramRejectionKey struct{}
@@ -29,7 +30,7 @@ func prepareProgramPolicyObservation(ctx context.Context, frame ProgramFrame, ad
 	// Intrinsic failures remain typed until their actual recorder settles them.
 	// This marker changes feedback timing, never admission or authority.
 	ctx = context.WithValue(ctx, deferredProgramRejectionKey{}, true)
-	return ctx, &programPolicyObservation{submitted: submitted, operation: operation}, release, nil
+	return ctx, &programPolicyObservation{submitted: submitted, operation: operation, frame: frame}, release, nil
 }
 
 func programModelArguments(ctx context.Context, frame ProgramFrame, admission ProgramStateAdmission, tc tools.ToolContext) (map[string]any, func(), error) {
@@ -64,10 +65,5 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission Pr
 }
 
 func (p *programPolicyObservation) evaluate(ctx context.Context, bp *toolfeedback.BlockPlane, anchor, profile string) error {
-	if p.operation != nil {
-		return bp.EvaluateNative(ctx, anchor, profile, p.submitted, *p.operation)
-	}
-	// Envelope progress is a distinct host invocation, not a fabricated program
-	// child or legacy update_progress model call.
-	return bp.Evaluate(ctx, anchor, "command", profile, p.submitted, nil)
+	return bp.EvaluateProgram(ctx, anchor, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
 }
