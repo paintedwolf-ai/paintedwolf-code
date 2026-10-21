@@ -32,7 +32,6 @@ type invocation struct {
 	status  int
 	// effects counts mutations that committed, so a later stop reports them.
 	effects int
-	pins    []toolcontract.ExecutionRevision
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -101,8 +100,7 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 
 // recordPin retains one capture for this execution before its effect.
 func (inv *invocation) recordPin(pin toolcontract.ExecutionRevision) error {
-	inv.pins = append(inv.pins, pin)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, inv.request.Invocation.Identity.ExecutionID, inv.pins)
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin)
 }
 
 // ordinaryCodes are owner refusals the utilities report on stderr and survive.
