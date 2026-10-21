@@ -42,9 +42,12 @@ export function ResidentSurface(props: Props) {
     return parent === "pending" || props.presence === "pending" ? "pending" : "active";
   });
   const [root, setRoot] = createSignal<HTMLDivElement | undefined>();
-  let selection: ReturnType<typeof createRetainedWebKitSelection> | undefined;
-  onCleanup(() => {
-    selection?.dispose();
+  const selection = createMemo(() => {
+    const el = root();
+    if (!el) return;
+    const lifecycle = createRetainedWebKitSelection(el);
+    onCleanup(lifecycle.dispose);
+    return lifecycle;
   });
   const preparation = createPreparation();
   const [publishedGeneration, setPublishedGeneration] = createSignal<number>();
@@ -95,8 +98,8 @@ export function ResidentSurface(props: Props) {
   const inaccessible = () => hidden() || retained();
   // Regions inside become focusable only once the surface is reachable.
   createEffect(on(inaccessible, (hidden) => {
-    if (hidden) selection?.hide();
-    else selection?.restore();
+    if (hidden) selection()?.hide();
+    else selection()?.restore();
     queueMicrotask(noteFocusRegionReachability);
   }, { defer: true }));
 
@@ -113,10 +116,7 @@ export function ResidentSurface(props: Props) {
     <PresentationProvider preparation={preparation}>
     <ResidentPresenceProvider presence={presence()} interactive={!inaccessible()}>
       <div
-        ref={(el) => {
-          selection = createRetainedWebKitSelection(el);
-          setRoot(el);
-        }}
+        ref={setRoot}
         class="den-resident-surface den-retained-presentation"
         classList={{
           "den-resident-surface--idle": idle(),
