@@ -323,3 +323,5 @@ replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runt
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
 
 replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
+
+replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks

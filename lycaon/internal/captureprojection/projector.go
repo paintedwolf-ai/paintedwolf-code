@@ -165,35 +165,12 @@ func (p *Projector) TextSpans(
 	}}, byteSpans(value, matched), nil
 }
 
-// byteSpans converts rune-offset matches to input byte offsets in one pass.
+// byteSpans adapts the shared rune-to-original-byte conversion.
 func byteSpans(value string, hits []secretmatch.Match) []Span {
-	if len(hits) == 0 {
-		return nil
-	}
-	bounds := make([]int, 0, 2*len(hits))
-	for _, hit := range hits {
-		bounds = append(bounds, hit.Start, hit.End)
-	}
-	sort.Ints(bounds)
-	at := make(map[int]int, len(bounds))
-	next, runeIdx := 0, 0
-	for byteIdx := range value {
-		for next < len(bounds) && bounds[next] == runeIdx {
-			at[bounds[next]] = byteIdx
-			next++
-		}
-		runeIdx++
-	}
-	for next < len(bounds) {
-		at[bounds[next]] = len(value)
-		next++
-	}
-	out := make([]Span, 0, len(hits))
-	for _, hit := range hits {
-		start, end := at[hit.Start], at[hit.End]
-		if end > start {
-			out = append(out, Span{Start: start, End: end})
-		}
+	input := secretmatch.MatchByteSpans(value, hits)
+	out := make([]Span, len(input))
+	for i, span := range input {
+		out[i] = Span{span.Start, span.End}
 	}
 	return out
 }
@@ -501,8 +478,8 @@ func (m RasterMask) Union(o RasterMask) RasterMask {
 	out := RasterMask{
 		rects: append(append([]Rect(nil), m.rects...), o.rects...), cssWidth: max(m.cssWidth, o.cssWidth), cssHeight: max(m.cssHeight, o.cssHeight),
 		Metadata: Metadata{
-			RedactedCount:  max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
-			CatalogVersion: m.Metadata.CatalogVersion,
+			RedactedCount:      max(m.Metadata.RedactedCount, o.Metadata.RedactedCount),
+			CatalogVersion:     m.Metadata.CatalogVersion,
 			StructuredCoverage: m.Metadata.StructuredCoverage && o.Metadata.StructuredCoverage,
 		},
 	}
