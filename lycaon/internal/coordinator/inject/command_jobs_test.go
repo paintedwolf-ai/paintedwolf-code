@@ -56,3 +56,13 @@ func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
 		t.Fatalf("a held-only ledger names command controls: %q", block)
 	}
 }
+
+func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
+	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), "sess-inject-test", []bgprocess.JobSnapshot{{
+		Handle: "live-check", Mode: bgprocess.JobModeAwaited, OriginTool: "command", StartedAt: time.Now(),
+		Stages: []hostcmd.StageResult{{Command: strings.Repeat("long-command-", 100)}},
+	}}, nil, time.Now(), "coordinator")
+	if !strings.Contains(block, "handle=live-check") || !strings.Contains(block, "command_output") || strings.Contains(block, strings.Repeat("long-command-", 20)) {
+		t.Fatalf("unbounded preview or missing recovery handle: %q", block)
+	}
+}
