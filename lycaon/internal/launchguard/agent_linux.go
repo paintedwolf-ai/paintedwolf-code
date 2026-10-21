@@ -43,6 +43,11 @@ func RunBrokerAgent() error {
 		return err
 	}
 	unix.CloseOnExec(agentBrokerFD)
+	// Only the broker's own end may stay open here, or the agent would keep
+	// a client end alive and never see the launch end.
+	if err := unix.CloseRange(agentBrokerFD+1, ^uint(0), 0); err != nil {
+		return err
+	}
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}

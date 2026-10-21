@@ -30,6 +30,11 @@ func RunStage() error {
 	if gid, egid, sgid := unix.Getresgid(); gid != 0 || egid != 0 || sgid != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator identity")
 	}
+	// Descriptors arrive without close-on-exec; each child receives only the
+	// ones handed to it below.
+	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		return err
+	}
 	frame := os.NewFile(stageFrameFD, "sealed-entry-spec")
 	spec, err := readEntry(frame)
 	if err != nil {
