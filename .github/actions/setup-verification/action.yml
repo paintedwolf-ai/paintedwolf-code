@@ -5,7 +5,8 @@ inputs:
     description: >-
       What the lane builds: verification (shared toolchains), shell (also the Tauri
       shell and its staged engine), or harness (the Den Rust workspace and harness
-      stack, without the shell's packaging inputs)
+      stack, without the shell's packaging inputs), or frontend (Bun, Node, Rust,
+      ripgrep, and document-core dependencies)
     default: verification
     required: false
   notices:
@@ -53,6 +54,7 @@ runs:
     # Caches restore only what main saved: a run on any other ref cannot share
     # what it saves, and its entries would evict main's.
     - id: go
+      if: inputs.setup != 'frontend'
       uses: ./.github/actions/cache-go
       with:
         exact: ${{ inputs.save-caches }}
@@ -97,7 +99,7 @@ runs:
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       id: rust
-      if: inputs.setup != 'verification'
+      if: inputs.setup == 'shell' || inputs.setup == 'harness'
       with:
         workspaces: lycaon-den/src-tauri -> ../target
         shared-key: den-shell
@@ -109,6 +111,7 @@ runs:
       uses: ./.github/actions/cache-decide
 
     - name: Set up maintained OpenGrep
+      if: inputs.setup != 'frontend'
       uses: ./.github/actions/setup-opengrep
       with:
         save: ${{ inputs.save-caches }}
@@ -128,12 +131,13 @@ runs:
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
+      if: inputs.setup != 'frontend'
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.setup != 'frontend'
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
@@ -144,8 +148,16 @@ runs:
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
 
     - name: Provision pinned Go modules
+      if: inputs.setup != 'frontend'
       shell: bash
       run: ./task setup-dev -- --ci-inputs
+
+    - name: Provision frontend native test inputs
+      if: inputs.setup == 'frontend'
+      shell: bash
+      run: |
+        ./task --version
+        cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml
 
     - name: Provision native dependencies
       if: inputs.setup == 'shell' || inputs.notices == 'true'

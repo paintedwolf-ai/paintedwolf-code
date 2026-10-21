@@ -1,5 +1,5 @@
 name: Cache decision engine build
-description: Reuse the bialy release build and its compiled MLX kernels across verification jobs
+description: Reuse decision-engine test and release builds with their compiled MLX kernels
 inputs:
   save:
     description: Publish the prepared build (main only); the default restores without saving
@@ -16,26 +16,27 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        printf 'target=%s/decide-target\n' "$(python3 scripts/artifact_paths.py build "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
+        printf 'target=%s/decide\n' "$(python3 scripts/artifact_paths.py compiler-cache "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
         printf 'metal=%s/mlx-metal\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
 
-    # The target and the kernels it records as built are restored together:
-    # a target without its metallib would skip the MLX build that writes it.
+    # Restore compiler intermediates with the Metal kernels they reference.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
+          !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
+          !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
         restore-keys: |
-          decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-
+          decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-

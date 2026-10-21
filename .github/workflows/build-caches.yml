@@ -121,7 +121,7 @@ jobs:
         run: ./task build:decide
 
       - name: Warm desktop workspace builds
-        if: steps.setup.outputs.rust-cache-hit != 'true'
+        if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
       # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.

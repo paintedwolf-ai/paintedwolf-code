@@ -880,7 +880,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "frontend"
     },
     "native": {
       "targets": [

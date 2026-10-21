@@ -66,6 +66,7 @@ class BuiltRuntimeTests(unittest.TestCase):
 
             def build(command, **kwargs):
                 self.assertEqual(kwargs['env']['PW_BUILD_DIR'], str(source / '.bin'))
+                self.assertEqual(kwargs['env']['PW_COMPILER_CACHE_DIR'], str(root / 'compiler-cache'))
                 (runtime / 'scanner').write_text('built scanner')
                 return subprocess.CompletedProcess(command, 0)
 

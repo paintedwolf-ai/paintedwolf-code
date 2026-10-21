@@ -276,7 +276,8 @@ def build_application(run, environment):
             targets = ['build:lycaon-dev', 'eval:tool-usage']
     # The sealed application keeps its executables inside the prepared source.
     build_environment = {**environment, 'GOWORK': 'off', 'GOFLAGS': '-buildvcs=false',
-                         'PW_BUILD_DIR': str(source / '.bin')}
+                         'PW_BUILD_DIR': str(source / '.bin'),
+                         'PW_COMPILER_CACHE_DIR': str(run / 'compiler-cache')}
     with stage(run, 'build'), (run / 'build.log').open('w') as log:
         subprocess.run(['./task', *targets, 'BUILD_ONLY=true'],
                        cwd=source, env=build_environment, stdout=log, stderr=subprocess.STDOUT, check=True)

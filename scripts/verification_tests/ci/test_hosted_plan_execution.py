@@ -88,10 +88,11 @@ class HostedPlanTests(unittest.TestCase):
     def test_each_lane_installs_only_its_declared_setup(self):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
         self.assertEqual(setups["native"], "shell")
+        self.assertEqual(setups["frontend"], "frontend")
         # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
         nightly = {row["lane"]: row["setup"] for row in ci.matrix("nightly", "e2e")["include"]}
         self.assertEqual(nightly["webkit"], "harness")
-        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit"}},
+        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend"}},
                          {"verification"})
         for mutation in ("unknown", "missing", "boolean"):
             with self.subTest(mutation=mutation):
@@ -104,6 +105,14 @@ class HostedPlanTests(unittest.TestCase):
                 else:
                     del lane["setup"]
                     lane["native"] = True
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("check")
+
+    def test_frontend_setup_refuses_go_or_shell_targets(self):
+        for target in ("build", "decide:test", "den:test:rust", "lint:full"):
+            with self.subTest(target=target):
+                data = copy.deepcopy(planning.catalog())
+                data["ci"]["frontend"]["targets"].append(target)
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
