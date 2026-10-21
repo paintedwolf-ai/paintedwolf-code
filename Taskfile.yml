@@ -1011,7 +1011,7 @@ tasks:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
     cmds:
-      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
   nix:check:
     desc: Evaluate pinned Linux Nix package and development-shell contracts
