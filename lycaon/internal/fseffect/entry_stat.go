@@ -19,4 +19,9 @@ type EntryStat struct {
 	Inode   uint64
 	Links   uint64
 	Device  uint64
+	// Blocks counts allocated 512-byte units; BlockSize is the preferred I/O size.
+	Blocks    int64
+	BlockSize int64
+	// AccessTime and ChangeTime accompany ModTime when POSIX.
+	AccessTime, ChangeTime time.Time
 }
