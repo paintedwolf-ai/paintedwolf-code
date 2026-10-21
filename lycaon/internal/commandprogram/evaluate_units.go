@@ -166,6 +166,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		release()
 		return f.settle(run, ownerResult(err), err)
 	}
+	run.record.JobHandle = handle
 	f.state.lastJob, f.state.hasJob = handle, true
 	f.e.mu.Lock()
 	f.e.jobs = append(f.e.jobs, handle)

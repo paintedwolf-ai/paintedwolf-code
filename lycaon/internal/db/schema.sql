@@ -1577,9 +1577,17 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     published_revision TEXT NOT NULL DEFAULT '',
     detail_ref TEXT NOT NULL DEFAULT '',
     approval_ref TEXT NOT NULL DEFAULT '',
+    job_handle TEXT NOT NULL DEFAULT '',
+    conflict_path TEXT NOT NULL DEFAULT '',
+    conflict_expected_revision TEXT NOT NULL DEFAULT '',
+    conflict_observed_revision TEXT NOT NULL DEFAULT '',
+    -- A native name launched as its installed program: the command and the
+    -- unsupported form, counted so native coverage gaps stay visible.
+    native_gap_json TEXT NOT NULL DEFAULT '' CHECK (native_gap_json = '' OR json_valid(native_gap_json)),
     started_at TEXT NOT NULL,
     settled_at TEXT,
     CHECK (id != parent_execution_id),
+    CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
     UNIQUE (program_id, id),
     UNIQUE (program_id, ordinal),
     FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE
@@ -1601,6 +1609,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     complete INTEGER NOT NULL CHECK (complete IN (0,1)),
     redacted INTEGER NOT NULL CHECK (redacted IN (0,1)),
     mappings_json TEXT NOT NULL CHECK (json_valid(mappings_json)),
+    preview TEXT NOT NULL DEFAULT '',
+    preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
     created_at TEXT NOT NULL,
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT;

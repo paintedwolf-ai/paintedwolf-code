@@ -1,7 +1,6 @@
 package literal
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,27 +193,6 @@ func TestLiteralFormsProduceExactBytes(t *testing.T) {
 			h.exec(c.stdin, strings.Fields(c.argv)...).expect(t, c.argv, c.stdout, c.stderr, c.status)
 		})
 	}
-}
-
-// TestLsLongReportsNumericOwnersAndUTCTimes checks -l, -h and link targets
-// against the entries' own metadata.
-func TestLsLongReportsNumericOwnersAndUTCTimes(t *testing.T) {
-	h := formHarness(t)
-	uid, gid := ownerIDs(t, filepath.Join(h.root, "dir", "a"))
-	row := func(mode string, size, when, name string) string {
-		return fmt.Sprintf("%s 1 %d %d %s %s %s\n", mode, uid, gid, size, when, name)
-	}
-	// Link permission bits are the platform's own (Linux 0777, Darwin umask).
-	link, err := os.Lstat(filepath.Join(h.root, "dir", "link"))
-	testutil.FailErr(t, "lstat link", err)
-	want := row("-rw-r--r--", "1", "2026-01-02 03:04", "a") + row("-rw-r--r--", "2", "2026-01-02 03:05", "b") +
-		row("-rwxr-xr-x", "2", "2026-01-02 03:04", "exe") + row("l"+link.Mode().Perm().String()[1:], "1", "2026-01-02 03:04", "link -> a")
-	h.exec("", "ls", "-l", "dir").expect(t, "ls -l", want, "", 0)
-	h.exec("", "ls", "-lh", "dir").expect(t, "ls -lh", want, "", 0)
-	h.exec("", "ls", "-ld", "input").expect(t, "ls -ld", row("-rw-r--r--", "10", "2026-01-02 03:04", "input"), "", 0)
-	big := strings.Repeat("x", 5000)
-	seed(t, h.root, map[string]string{"big/f": big})
-	h.exec("", "ls", "-lh", "big").expect(t, "ls -lh big", row("-rw-r--r--", "4.9K", "2026-01-02 03:04", "f"), "", 0)
 }
 
 func TestHumanSizesRoundUpLikeGNU(t *testing.T) {

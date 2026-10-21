@@ -75,6 +75,9 @@ type StreamSpill struct {
 	closed         bool
 }
 
+// retainedFrameBytes covers a retained blob's framing and filesystem slack.
+const retainedFrameBytes = 4096
+
 func RetainScreenedStream(ctx context.Context, input ScreenedStream, options StreamSpillOptions) (*StreamSpill, error) {
 	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
 		return nil, fmt.Errorf("screened stream spill requires explicit bounded input, claim and quota admission")
@@ -132,9 +135,17 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store.StagedTTL = 7 * 24 * time.Hour
 	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), digest: sha256.New()}
 	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
+	release()
 	if err != nil {
-		release()
 		return nil, err
+	}
+	// Retention holds the stored bytes, not the encoder's worst case.
+	release, err = options.Admission.ReserveSpill(ctx, blob.Size+retainedFrameBytes)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, fmt.Errorf("spill admission returned no release")
 	}
 	if ctx.Err() != nil {
 		reader.failure = ctx.Err()
