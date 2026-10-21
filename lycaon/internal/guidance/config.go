@@ -67,7 +67,6 @@ type HintEntry struct {
 	Severity          string          `yaml:"severity,omitempty"`
 	When              string          `yaml:"when,omitempty"`
 	Tools             []string        `yaml:"tools,omitempty"`
-	Operations        []string        `yaml:"operations,omitempty"`
 	Message           string          `yaml:"message,omitempty"`
 	DraftOutcomeLabel string          `yaml:"draft_outcome_label,omitempty"`
 	What              string          `yaml:"what,omitempty"`
@@ -164,8 +163,11 @@ func (e *HintEntry) projectOARFields() {
 	e.Evidence = e.XEvidence
 	e.ContextSchema = e.XContextSchema
 	e.Tools = stringList(e.Selector["tool"])
-	e.Operations = stringList(e.Selector["paintedwolf.operation"])
 }
+
+// Operations is the rule's paintedwolf.operation selector: the bound native
+// operation beneath command, or the structured tool of that name.
+func (e HintEntry) Operations() []string { return stringList(e.Selector["paintedwolf.operation"]) }
 
 func stringList(v any) []string {
 	items, ok := v.([]any)

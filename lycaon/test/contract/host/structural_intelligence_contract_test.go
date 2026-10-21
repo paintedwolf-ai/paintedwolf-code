@@ -25,7 +25,7 @@ func TestStructuralIntelligenceStructuralHintsPointAtStructuralTools(t *testing.
 			t.Fatalf("hint %q emit=%q want guard:structural", code, entry.Emit)
 		}
 		want := map[string]bool{"grep": true, "code_rewrite": true}
-		selected := append(append([]string(nil), entry.Tools...), entry.Operations...)
+		selected := append(append([]string(nil), entry.Tools...), entry.Operations()...)
 		if len(selected) != len(want) {
 			t.Fatalf("hint %q tools=%v want %v", code, selected, want)
 		}

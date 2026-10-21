@@ -72,7 +72,7 @@ func entryCoversTool(code string, entry HintEntry, data map[string]any) error {
 	if operation == "" {
 		operation = tool
 	}
-	return selectorCovers(code, entry.Operations, operation)
+	return selectorCovers(code, entry.Operations(), operation)
 }
 
 func selectorCovers(code string, selected []string, value string) error {

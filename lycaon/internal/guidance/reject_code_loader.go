@@ -343,7 +343,7 @@ func scenarioTool(entry HintEntry, sc ScenarioEntry) string {
 	if tool := strings.TrimSpace(sc.Tool); tool != "" {
 		return tool
 	}
-	for _, tool := range append(append([]string(nil), entry.Tools...), entry.Operations...) {
+	for _, tool := range append(append([]string(nil), entry.Tools...), entry.Operations()...) {
 		if tool = strings.TrimSpace(tool); tool != "" {
 			return tool
 		}
