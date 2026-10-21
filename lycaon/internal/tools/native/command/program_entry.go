@@ -514,6 +514,12 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.ForLoop:
 			words(node.Items)
 			list(node.Body)
+		case commandsurface.CaseStatement:
+			words([]commandsurface.DeferredWord{node.Word})
+			for _, item := range node.Items {
+				words(item.Patterns)
+				list(item.Body)
+			}
 		case commandsurface.FunctionDeclaration:
 			statement(node.Body)
 		}

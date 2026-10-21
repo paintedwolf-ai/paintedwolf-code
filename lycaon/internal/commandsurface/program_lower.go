@@ -59,6 +59,12 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 	case *syntax.ForClause:
 		iter := v.Loop.(*syntax.WordIter)
 		return ForLoop{SyntaxLocation: loc, Variable: strings.Clone(iter.Name.Value), Positional: !iter.InPos.IsValid(), Items: c.words(iter.Items), Body: c.statements(v.Do)}
+	case *syntax.CaseClause:
+		out := CaseStatement{SyntaxLocation: loc, Word: c.word(v.Word)}
+		for _, item := range v.Items {
+			out.Items = append(out.Items, CaseItem{SyntaxLocation: c.location(item), Patterns: c.words(item.Patterns), Body: c.statements(item.Stmts)})
+		}
+		return out
 	case *syntax.FuncDecl:
 		return FunctionDeclaration{SyntaxLocation: loc, Name: strings.Clone(v.Name.Value), Body: c.statement(v.Body)}
 	case *syntax.TestClause:

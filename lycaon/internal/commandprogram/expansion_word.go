@@ -185,6 +185,9 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 		}
 		return r.emit(strings.Join(positional, " "), quoted)
 	}
+	if err := r.unbound(part); err != nil {
+		return err
+	}
 	value, err := parameterValue(r.scope, part)
 	if err != nil {
 		return err
@@ -275,4 +278,24 @@ func (r *expansionRun) join(pieces []expansionPiece, maximum int64, id string) (
 		value.WriteString(piece.text)
 	}
 	return value.String(), nil
+}
+
+// unbound refuses an unset variable or positional parameter under set -u.
+func (r *expansionRun) unbound(part commandsurface.ParameterPart) error {
+	scope, ok := r.scope.(interface{ Nounset() bool })
+	if !ok || !scope.Nounset() || part.Length {
+		return nil
+	}
+	set := true
+	switch {
+	case VariableName(part.Name):
+		_, set = r.scope.Variable(part.Name)
+	case positionalName(part.Name):
+		index, err := strconv.Atoi(part.Name)
+		set = err == nil && index <= len(r.scope.Positional())
+	}
+	if set {
+		return nil
+	}
+	return invalidValue(part.Span, part.Name+": unbound variable")
 }

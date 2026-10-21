@@ -69,10 +69,10 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 	cases := []string{
 		"printf changed > ./output; if false; then echo 'unterminated; fi",
 		"printf changed > ./output; if false; then eval dangerous; fi",
-		"echo <(cat ./input)", "echo $((1+2))", "((1+2))", "a=(one two)",
+		"echo <(cat ./input)", "echo $((i++))", "echo $((x=1))", "((1+2))", "a=(one two)",
 		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
 		"echo {one,two}", "case x in x) true;; esac", "until false; do :; done",
-		"select x in one; do :; done", "coproc echo x", "trap true EXIT", "set -e",
+		"select x in one; do :; done", "coproc echo x", "trap true EXIT", "set -x", "set +o pipefail", "set -- a b",
 		"cat <<< value", "cat 3> ./output", "cat 2>&3", "cat 1<> ./input",
 		"function helper { :; }", "cat() { :; }", "local x=value", "IFS=, echo x",
 		"echo $'escaped'", "echo $\"localized\"", "[[ -S ./sock ]]", "for ((i=0;i<1;i++)); do :; done",

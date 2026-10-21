@@ -148,6 +148,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 		})
 	case "unset":
 		return signal{}, f.unset(s, fields)
+	case "set":
+		return signal{}, f.setOptions(s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }
@@ -398,4 +400,46 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	}
 	child.settle(result, err)
 	return err
+}
+
+// setOptions applies set -e/-u/-o errexit/-o nounset and their + forms;
+// -o pipefail is the fixed pipeline semantics. Other operands are usage 2.
+func (f *frame) setOptions(s commandsurface.Statement, fields Fields) error {
+	options := f.state.options
+	args := fields.Values()[1:]
+	for i := 0; i < len(args); i++ {
+		flags, enable := strings.CutPrefix(args[i], "-")
+		if !enable {
+			flags, _ = strings.CutPrefix(args[i], "+")
+		}
+		if flags == "" || flags == args[i] {
+			return f.builtinStatus(s.SyntaxLocation, "set", 2)
+		}
+		for _, flag := range flags {
+			name := ""
+			switch flag {
+			case 'e':
+				name = "errexit"
+			case 'u':
+				name = "nounset"
+			case 'o':
+				if i+1 >= len(args) {
+					return f.builtinStatus(s.SyntaxLocation, "set", 2)
+				}
+				i++
+				name = args[i]
+			}
+			switch {
+			case name == "errexit":
+				options.errexit = enable
+			case name == "nounset":
+				options.nounset = enable
+			case name == "pipefail" && enable:
+			default:
+				return f.builtinStatus(s.SyntaxLocation, "set", 2)
+			}
+		}
+	}
+	f.state.options = options
+	return f.builtinStatus(s.SyntaxLocation, "set", 0)
 }

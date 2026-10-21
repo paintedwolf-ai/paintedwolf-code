@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -33,6 +34,7 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	}
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
+	g.state.options.errexit = false
 	g.streams = Streams{Input: NullInput(), Output: stdout, Error: f.streams.Error}
 	_, err = g.statements(ctx, part.Statements)
 	result := ordinaryResult(g.state.control.Status())
@@ -63,7 +65,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		return err
 	}
 	operands := bound.Operands()
-	if !bound.EndOfOptions || len(operands) != 1 {
+	if len(operands) != 1 || (!bound.EndOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
 		return f.builtinStatus(s.SyntaxLocation, "source", 2)
 	}
 	if int64(f.sources+1) > f.e.limits["source_depth"] {

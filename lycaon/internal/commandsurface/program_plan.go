@@ -102,6 +102,22 @@ type WhileLoop struct {
 
 func (WhileLoop) commandNode() {}
 
+// CaseStatement runs the body of the first item with a glob pattern matching
+// the word. Every item ends with ;; (no fallthrough).
+type CaseStatement struct {
+	SyntaxLocation
+	Word  DeferredWord
+	Items []CaseItem
+}
+
+type CaseItem struct {
+	SyntaxLocation
+	Patterns []DeferredWord
+	Body     []Statement
+}
+
+func (CaseStatement) commandNode() {}
+
 // ForLoop distinguishes omitted in from an explicitly empty iteration list.
 type ForLoop struct {
 	SyntaxLocation

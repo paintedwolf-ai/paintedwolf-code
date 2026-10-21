@@ -99,6 +99,9 @@ func (c *programCompiler) validateArithmetic(n syntax.Node) {
 	}
 }
 
+// Case words and patterns never undergo brace expansion.
+func (c *programCompiler) markPatternWord(word *syntax.Word) { c.markArithmeticWord(word) }
+
 // Arithmetic operand words never undergo brace expansion.
 func (c *programCompiler) markArithmeticWord(word *syntax.Word) {
 	if !c.reserveHeap(256, word) {

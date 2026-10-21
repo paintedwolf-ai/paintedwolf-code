@@ -47,6 +47,15 @@ func cloneCommand(cmd CommandNode) CommandNode {
 		v.Condition = cloneStatements(v.Condition)
 		v.Body = cloneStatements(v.Body)
 		return v
+	case CaseStatement:
+		v.Word = cloneWord(v.Word)
+		items := make([]CaseItem, len(v.Items))
+		for i, item := range v.Items {
+			item.Patterns, item.Body = cloneWords(item.Patterns), cloneStatements(item.Body)
+			items[i] = item
+		}
+		v.Items = items
+		return v
 	case ForLoop:
 		v.Items = cloneWords(v.Items)
 		v.Body = cloneStatements(v.Body)

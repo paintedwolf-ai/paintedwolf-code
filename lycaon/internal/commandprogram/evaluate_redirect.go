@@ -250,6 +250,12 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 		case commandsurface.ForLoop:
 			words(c.Items)
 			statements(c.Body)
+		case commandsurface.CaseStatement:
+			words([]commandsurface.DeferredWord{c.Word})
+			for _, item := range c.Items {
+				words(item.Patterns)
+				statements(item.Body)
+			}
 		case commandsurface.FunctionDeclaration:
 			if controlBuiltins[c.Name] || c.Name == "source" {
 				refuse(c.SyntaxLocation, "NAME() { ...; } with a non-reserved name")

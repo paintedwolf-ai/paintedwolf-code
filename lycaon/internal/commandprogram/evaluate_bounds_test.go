@@ -279,8 +279,13 @@ func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
 
 func TestSourceUsageAndDepth(t *testing.T) {
 	f := newEvalFixture(t)
-	if _, err := f.run(t, t.Context(), "source ./x; echo $?"); err != nil || f.stdout.String() != "2\n" {
-		t.Fatalf("missing -- was not usage: %v %q", err, f.stdout.String())
+	if _, err := f.run(t, t.Context(), "source -x; echo $?"); err != nil || f.stdout.String() != "2\n" {
+		t.Fatalf("an option operand was not usage: %v %q", err, f.stdout.String())
+	}
+	f = newEvalFixture(t)
+	f.sources.files["./lib.sh"] = "echo sourced\n"
+	if _, err := f.run(t, t.Context(), "source ./lib.sh; echo $?"); err != nil || !strings.HasSuffix(f.stdout.String(), "0\n") {
+		t.Fatalf("plain source path: %v %q", err, f.stdout.String())
 	}
 	limits, _ := catalogEvaluationLimits()
 	f = newEvalFixture(t)
