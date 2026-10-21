@@ -155,6 +155,29 @@ CREATE TABLE IF NOT EXISTS invocation_program_deliveries (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_deliveries_output ON invocation_program_deliveries(output_id);
 
+-- What each execution captured before preparing an effect: accepted document
+-- revisions, published disk identities, absence preconditions and the disk
+-- identity declared to an external launch. Never a conversational read base.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pins (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    role TEXT NOT NULL CHECK (role IN ('source','destination')),
+    mode TEXT NOT NULL CHECK (mode IN ('accepted_document','published_disk','absent')),
+    basis TEXT NOT NULL CHECK (basis IN ('captured','declared_at_launch')),
+    root_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    document_revision INTEGER NOT NULL CHECK (document_revision >= 0),
+    disk_sha256 TEXT NOT NULL,
+    representation TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    content_bytes INTEGER NOT NULL CHECK (content_bytes >= 0),
+    captured_at TEXT NOT NULL,
+    PRIMARY KEY (execution_id, ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
 -- Exact delivered-window identity makes retries idempotent without weakening
 -- historical handle identity or manufacturing a model response.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_records_source_delivery
