@@ -12,6 +12,11 @@ describe("InlineRenameInput", () => {
     ));
     const input = getByRole("textbox") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "New" } });
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(onCommit).not.toHaveBeenCalled();
+      expect(onCancel).not.toHaveBeenCalled();
+    }
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCommit).toHaveBeenCalledWith("New");
     expect(onCancel).not.toHaveBeenCalled();

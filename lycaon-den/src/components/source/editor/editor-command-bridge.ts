@@ -7,6 +7,7 @@ import { invokeShortcutBinding, dispatchKeyboardEvent, pendingLeaderChord } from
 import { leaderIsPrefix } from "../../../shortcuts/keymap.ts";
 import { shortcutPlatform } from "../../../shortcuts/platform.ts";
 import type { TauriPlatform } from "../../../platform/runtime.ts";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 
 /** Converts a canonical chord to editor keymap syntax. */
 export function denChordToCodeMirror(chord: string): string {
@@ -33,7 +34,7 @@ export function buildEditorCommandBridge(
   const customBindings = resolved.bindings.filter(binding => overrides?.[binding.bindingId]);
   return [Prec.highest(EditorView.domEventHandlers({
     keydown(event, view) {
-      if (event.isComposing || view.composing) return false;
+      if (isImeComposition(event) || view.composing) return false;
       const chord = eventToChord(event, platform);
       if (pendingLeaderChord() || chord && leaderIsPrefix(resolved, chord)) return dispatchKeyboardEvent(event).handled;
       const binding = customBindings.find(candidate => candidate.chord === chord);

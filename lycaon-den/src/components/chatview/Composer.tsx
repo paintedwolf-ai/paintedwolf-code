@@ -105,6 +105,7 @@ import {
   type HeightFollow,
   type HeightMotionTiming,
 } from "../../ui/height-toggle-motion.ts";
+import { handleSlashSuggestionKey } from "../../chat/composer/slash-suggestion-keys.ts";
 
 let nextSlashListboxId = 0;
 
@@ -560,49 +561,18 @@ export function Composer(props: Props) {
   };
 
   const onSlashSuggestionKeyDown = (event: KeyboardEvent) => {
-    if (
-      !showSlashSuggestions() ||
-      event.isComposing ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.altKey ||
-      event.shiftKey
-    ) {
-      return;
-    }
+    if (!showSlashSuggestions()) return;
     const suggestions = slashSuggestions();
-    if (suggestions.length === 0) return;
-    let handled = true;
-    switch (event.key) {
-      case "ArrowDown":
-        setActiveSlashSuggestion((index) => (index + 1) % suggestions.length);
-        break;
-      case "ArrowUp":
-        setActiveSlashSuggestion(
-          (index) => (index - 1 + suggestions.length) % suggestions.length,
-        );
-        break;
-      case "Home":
-        setActiveSlashSuggestion(0);
-        break;
-      case "End":
-        setActiveSlashSuggestion(suggestions.length - 1);
-        break;
-      case "Enter":
-        {
-          const suggestion = suggestions[activeSlashSuggestion()];
-          if (suggestion) applySlashSuggestion(suggestion.trigger);
-        }
-        break;
-      case "Escape":
-        setDismissedSlashText(text());
-        break;
-      default:
-        handled = false;
-    }
-    if (!handled) return;
-    event.preventDefault();
-    event.stopPropagation();
+    handleSlashSuggestionKey(event, {
+      count: suggestions.length,
+      active: activeSlashSuggestion,
+      setActive: setActiveSlashSuggestion,
+      choose: (index) => {
+        const suggestion = suggestions[index];
+        if (suggestion) applySlashSuggestion(suggestion.trigger);
+      },
+      dismiss: () => setDismissedSlashText(text()),
+    });
   };
 
   const clearAttachments = () => {

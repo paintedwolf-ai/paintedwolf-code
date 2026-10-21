@@ -1,4 +1,5 @@
 import { isPresented } from "../../ui/presented.ts";
+import { isImeComposition } from "./ime-composition.ts";
 
 const FOCUSABLE =
   'a[href],button,textarea,input,select,[contenteditable]:not([contenteditable="false"]),[tabindex]';
@@ -110,6 +111,7 @@ export function activateFocusTrap(
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    if (isImeComposition(e)) return;
     if (e.key === "Escape" && options.onEscape) {
       e.preventDefault();
       e.stopPropagation();

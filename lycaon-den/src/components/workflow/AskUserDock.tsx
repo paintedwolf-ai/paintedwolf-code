@@ -19,6 +19,7 @@ import {
   DockCollapseBody,
   DockCollapseHead,
 } from "../primitives/DockCollapse.tsx";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 export type AskUserDockSubmitFn = (
   composerText: string,
@@ -431,6 +432,7 @@ export function AskUserDock(props: Props) {
                 disabled={submitting()}
                 onInput={(event) => setSecretValue(event.currentTarget.value)}
                 onKeyDown={(event) => {
+                  if (isImeComposition(event)) return;
                   if (event.key === "Enter" && answerReady()) {
                     event.preventDefault();
                     void resolveSecret();
