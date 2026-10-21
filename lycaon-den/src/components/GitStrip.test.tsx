@@ -435,14 +435,14 @@ describe("GitStrip", () => {
     },
   );
 
-  it("commits on Enter but inserts a newline on Shift+Enter", () => {
+  it.each([{ shiftKey: true }, { isComposing: true }, { keyCode: 229 }])("leaves modified or composing Enter with the input: %j", (modifiers) => {
     const onCommit = vi.fn(async () => true);
     render(() => (
       <GitStrip {...base} status={loaded(dirty)} onCommit={onCommit} />
     ));
     const ta = screen.getByTestId("git-message") as HTMLTextAreaElement;
     fireEvent.input(ta, { target: { value: "feat: x" } });
-    fireEvent.keyDown(ta, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(ta, { key: "Enter", ...modifiers });
     expect(onCommit).not.toHaveBeenCalled();
     fireEvent.keyDown(ta, { key: "Enter" });
     expect(onCommit).toHaveBeenCalledWith("feat: x");

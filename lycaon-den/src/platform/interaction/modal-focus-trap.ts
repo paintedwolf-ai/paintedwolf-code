@@ -9,6 +9,7 @@ import {
   claimOverlayScope,
   claimShortcutBoundary,
 } from "../../shortcuts/dispatcher.ts";
+import { isImeComposition } from "./ime-composition.ts";
 
 export type SolidTrapOptions = Omit<FocusTrapOptions, "inertTarget"> & {
   inertTarget?: Accessor<HTMLElement | HTMLElement[] | null | undefined>;
@@ -95,6 +96,7 @@ export function createAnchoredPopoverFocus(
       element.focus({ preventScroll: true });
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isImeComposition(event)) return;
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();

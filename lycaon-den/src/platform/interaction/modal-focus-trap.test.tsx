@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal, Show } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,7 +39,14 @@ describe("modal focus traps", () => {
     }
 
     const view = render(() => <Harness />);
-    setOpen(false);
+    const control = view.getByRole("button", { name: "Popover control" });
+    await waitFor(() => expect(document.activeElement).toBe(control));
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(control, { key: "Escape", ...composition });
+      expect(open()).toBe(true);
+    }
+    fireEvent.keyDown(control, { key: "Escape" });
+    expect(open()).toBe(false);
     const destination = view.getByRole("button", { name: "Destination" });
     destination.focus();
     await Promise.resolve();

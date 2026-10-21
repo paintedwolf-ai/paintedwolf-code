@@ -351,7 +351,13 @@ describe("Files interactions with host rows", () => {
     const view = mount(treeViewFixture(), { createEntry }); await findFileRow("README.md");
     view.create("file");
     const input = await screen.findByRole("textbox", { name: /name/i });
-    fireEvent.input(input, { target: { value: "new.ts" } }); fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.input(input, { target: { value: "new.ts" } });
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(createEntry).not.toHaveBeenCalled();
+      expect(input.isConnected).toBe(true);
+    }
+    fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(createEntry).toHaveBeenCalledWith("file", "r1", "new.ts"));
     expect(view.onOpenFile).toHaveBeenCalledWith({ rootId: "r1", rootLabel: "repo", path: "new.ts" }, "permanent");
   });

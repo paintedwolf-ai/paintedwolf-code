@@ -193,6 +193,14 @@ describe("activateFocusTrap", () => {
     document.body.append(root);
     const onEscape = vi.fn();
     const trap = activateFocusTrap(root, { onEscape });
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      for (const key of ["Escape", "Tab"]) {
+        const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...composition });
+        root.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+        expect(onEscape).not.toHaveBeenCalled();
+      }
+    }
     const esc = new KeyboardEvent("keydown", {
       key: "Escape",
       bubbles: true,

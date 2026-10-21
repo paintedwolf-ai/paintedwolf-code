@@ -3,6 +3,7 @@ import { onCleanup, createEffect, on, type JSX } from "solid-js";
 import { ResidentPortal } from "./ResidentPortal.tsx";
 import { focusRetainingSelection } from "../../platform/interaction/selection-lease.ts";
 import { isPresented } from "../../ui/presented.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 export type AnchoredSide = "top" | "right" | "bottom" | "left";
 type AnchoredAlign = "start" | "center" | "end";
@@ -380,6 +381,7 @@ export function AnchoredSurface(props: Props) {
       props.onDismiss?.();
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isImeComposition(event)) return;
       if (
         props.dismissOnEscape === false ||
         event.key !== "Escape" ||
@@ -392,6 +394,7 @@ export function AnchoredSurface(props: Props) {
       (props.onEscape ?? props.onDismiss)?.();
     };
     const onMenuKeyDown = (event: KeyboardEvent) => {
+      if (isImeComposition(event)) return;
       if (event.defaultPrevented || props.role !== "menu") return;
       if (event.key === "Escape") {
         if (props.dismissOnEscape === false) return;
