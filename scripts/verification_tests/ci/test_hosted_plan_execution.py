@@ -23,19 +23,21 @@ class HostedPlanTests(unittest.TestCase):
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
-    def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
-        handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
+    def test_ready_tier_is_one_runner_with_full_lint_and_scoped_policy_contracts(self):
         rows = ci.matrix("fast")["include"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(ci.max_parallel("fast"), 1)
         stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
-        self.assertLessEqual(set(stages), handoff)
-        self.assertLessEqual({"lint:fast", "budgets", "den:typecheck", "den:lint"}, set(stages))
-        # Anything that runs tests waits for the merge queue.
+        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint"})
+        self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--",
+                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence"])
+        handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
+        self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
+        # Product suites and changed coverage run on the landing commit.
         self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
                                          "den:coverage:changes"})
-        self.assertLessEqual(rows[0]["minutes"], 15)
+        self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
         for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
@@ -55,6 +57,38 @@ class HostedPlanTests(unittest.TestCase):
                     data["ci"]["frontend"]["minutes"] = 360
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
+
+    def test_admission_refuses_invalid_package_selection(self):
+        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "absent"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                lane = data["ci"]["ready"]
+                if mutation == "missing":
+                    del lane["preflight"]
+                elif mutation == "target":
+                    lane["preflight"][0] = "test:full"
+                elif mutation == "scope":
+                    lane["preflight"][2] = "./..."
+                elif mutation == "empty":
+                    lane["preflight"] = ["test:contract", "--"]
+                elif mutation == "sharded":
+                    lane["shards"] = 2
+                elif mutation == "selector":
+                    lane["preflight"] += ["-run", "^TestMissing"]
+                elif mutation == "traversal":
+                    lane["preflight"][2] = "./test/contract/../internal"
+                elif mutation == "duplicate":
+                    lane["preflight"].append(lane["preflight"][2])
+                else:
+                    lane["preflight"][2] = "./test/contract/absent"
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("fast")
+
+    def test_admission_accepts_existing_contract_packages_without_name_filters(self):
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["ready"]["preflight"] = ["test:contract", "--", "./test/contract/evidence"]
+        with patch.object(ci, "catalog", return_value=data):
+            self.assertEqual(len(ci.matrix("fast")["include"]), 1)
 
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
