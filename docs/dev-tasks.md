@@ -634,6 +634,11 @@ own locks serialize compilation, and the decision build holds a publication lock
 until its executable is staged. The decision cache warmer compiles both test and
 release profiles in the verification source slot.
 
+Hosted frontend lanes install Bun, Node, Rust, ripgrep, and the native document
+core's pinned Cargo inputs. They skip the multi-gigabyte Go compiler cache,
+scanner provisioning, engine downloads, and Go generator tools. The catalog
+rejects this setup for targets that need those dependencies.
+
 Ordinary `./task` requests automatically share compatible verification on macOS
 and Linux: the oldest request admits up to 32 consecutive requests from the same
 checkout with the same declared environment, captures one source snapshot at
