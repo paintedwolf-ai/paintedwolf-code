@@ -2,17 +2,20 @@ package toolhost
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
+	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -36,6 +39,13 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
+	textOwners, err := textutil.NewOwners(revisions, recorder)
+	if err != nil {
+		return nil, err
+	}
+	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
+		return nil, err
+	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
@@ -44,6 +54,19 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
+			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
+				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
+				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
+					return nil, nil, err
+				}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}
+				release := func() {}
+				if spills != nil {
+					text.Spills = spills
+					release = func() { _ = spills.Close() }
+				}
+				return textOwners.Builtins(text), release, nil
+			},
 			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
 				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
 				return publication, publication

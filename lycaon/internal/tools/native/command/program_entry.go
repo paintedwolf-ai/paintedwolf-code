@@ -244,6 +244,19 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			}
 		}
 	}
+	if owners.Builtins != nil {
+		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources()})
+		if err != nil {
+			return "", err
+		}
+		releaseBefore := release
+		release = func() { releaseUtilities(); releaseBefore() }
+		for name, builtin := range utilities {
+			if _, taken := builtins[name]; !taken {
+				builtins[name] = builtin
+			}
+		}
+	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},

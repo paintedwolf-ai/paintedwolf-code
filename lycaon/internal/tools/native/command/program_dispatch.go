@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -47,6 +48,19 @@ type ProgramOwners struct {
 	// Redirections binds redirect owners to a directory frame after cd.
 	Redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	AdmitLaunch  func(context.Context, tools.ToolContext) error
+	// Builtins are in-process utility owners bound to this program's ports;
+	// release runs once the program and its jobs have settled.
+	Builtins func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
+}
+
+// BuiltinPorts are one program's resources for in-process utility owners.
+type BuiltinPorts struct {
+	ToolContext tools.ToolContext
+	Memory      *toolcontract.ProgramMemory
+	ProgramID   string
+	Nested      commandprogram.NestedCommand
+	Publication commandprogram.OutputPublication
+	Admission   tooloutput.SpillAdmission
 }
 
 // ProgramDispatcher routes each reached simple command: catalog natives bound
