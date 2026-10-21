@@ -85,6 +85,9 @@ func SealEntry(originNamespace *os.File) error {
 	if err := verifyNamespace(originNamespace); err != nil {
 		return err
 	}
+	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
+		return err
+	}
 	return unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
 }
 

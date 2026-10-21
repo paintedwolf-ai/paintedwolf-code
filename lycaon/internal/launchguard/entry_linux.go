@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"golang.org/x/sys/unix"
 )
@@ -49,10 +50,19 @@ type EntrySpec struct {
 // login identity inside the protected namespace, with every selection already
 // made by the privileged stage, and seals itself before executing the desktop.
 func EnterDesktop() error {
-	origin := os.NewFile(entryOriginFD, "original-user-namespace")
+	return enterDesktop(
+		os.NewFile(entryImageFD, "selected-desktop-image"),
+		os.NewFile(entrySpecFD, "sealed-entry-spec"),
+		os.NewFile(entryOriginFD, "original-user-namespace"),
+		entryBrokerFD,
+		os.NewFile(entryLifetimeFD, "generation-lifetime"),
+	)
+}
+
+func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File) error {
 	defer func() { _ = origin.Close() }()
-	frame := os.NewFile(entrySpecFD, "sealed-entry-spec")
 	defer func() { _ = frame.Close() }()
+	defer func() { _ = image.Close() }()
 	spec, err := readEntry(frame)
 	if err != nil {
 		return err
@@ -63,39 +73,38 @@ func EnterDesktop() error {
 	if err := SealEntry(origin); err != nil {
 		return err
 	}
-	image := os.NewFile(entryImageFD, "selected-desktop-image")
-	defer func() { _ = image.Close() }()
 	if err := rootRegular(image); err != nil {
 		return err
 	}
 	if err := pkgmanifest.VerifyOpened(image, spec.Image); err != nil {
 		return err
 	}
-	if err := verifyBroker(spec); err != nil {
+	if err := verifyBroker(brokerFD, spec); err != nil {
 		return err
 	}
-	lifetime := os.NewFile(entryLifetimeFD, "generation-lifetime")
 	if err := rootRegular(lifetime); err != nil {
 		return err
 	}
+	// Validate caller-owned paths such as HOME only after privilege drop.
+	env := DesktopEnvironment(spec.Environment, spec.UID)
 	// Bootstrap descriptors must not reach the desktop. The broker and the
 	// generation's lifetime lock stay open for it to claim.
 	if err := unix.CloseRange(entryImageFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
-	for _, fd := range []int{entryBrokerFD, entryLifetimeFD} {
+	for _, fd := range []int{brokerFD, int(lifetime.Fd())} {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
 			return err
 		}
 	}
-	unix.CloseOnExec(entryImageFD)
+	unix.CloseOnExec(int(image.Fd()))
 	// The execution domain belongs to this thread, which executes the desktop.
 	runtime.LockOSThread()
 	if err := restrictExecution(spec.Generation, image); err != nil {
 		return err
 	}
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
-	return syscall.Exec("/proc/self/fd/3", args, spec.Environment)
+	return syscall.Exec("/proc/self/fd/3", args, env)
 }
 
 // sameIdentity requires the clone's identity change to have produced exactly
@@ -132,14 +141,10 @@ func sameIdentity(spec EntrySpec) error {
 // peer is the supervisor named by the sealed frame. The kernel records a
 // socket pair's credentials when it is created, which the bootstrap did while
 // still privileged, so the peer reads as uid 0 even after the drop.
-func verifyBroker(spec EntrySpec) error {
-	peer, err := unix.GetsockoptUcred(entryBrokerFD, unix.SOL_SOCKET, unix.SO_PEERCRED)
-	if err != nil || peer.Uid != 0 || int(peer.Pid) != spec.SupervisorPID {
+func verifyBroker(brokerFD int, spec EntrySpec) error {
+	peer, err := launchbroker.CheckSocket(brokerFD)
+	if err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
 		return errors.New("desktop broker is not the launch supervisor")
-	}
-	kind, err := unix.GetsockoptInt(entryBrokerFD, unix.SOL_SOCKET, unix.SO_TYPE)
-	if err != nil || kind != unix.SOCK_SEQPACKET {
-		return errors.New("invalid desktop broker transport")
 	}
 	return nil
 }
@@ -215,7 +220,7 @@ func rootRegular(file *os.File) error {
 		return err
 	}
 	facts, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || facts.Uid != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
+	if !ok || facts.Uid != trustedOwner || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
 		return fmt.Errorf("%s is not a root-controlled regular object", file.Name())
 	}
 	return nil

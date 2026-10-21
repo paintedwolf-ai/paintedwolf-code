@@ -46,6 +46,7 @@ type Facts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *ExecProbe                  `json:"exec,omitempty"`
@@ -108,7 +109,9 @@ func main() {
 }
 
 // brokerProbe runs one program through the supervisor's broker and reports
-// where it ran, then abandons a second one and reports whether it ended.
+// where it ran, abandons a second one and reports whether it ended, and
+// starts a detached background child that must outlive the launch without
+// holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
 	broker := os.NewFile(6, "broker")
 	null, err := os.Open("/dev/null")
@@ -132,6 +135,7 @@ func brokerProbe(facts *Facts) {
 		return
 	}
 	output, _ := io.ReadAll(read)
+	_ = read.Close()
 	facts.BrokerOutput = string(output)
 	for {
 		event, err := launchbroker.ReadEvent(channel)
@@ -165,10 +169,34 @@ func brokerProbe(facts *Facts) {
 	for i := 0; i < 250; i++ {
 		if _, err := os.Stat("/proc/" + strconv.Itoa(started.Started)); err != nil {
 			facts.AbandonedEnded = true
-			return
+			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	if !facts.AbandonedEnded {
+		return
+	}
+	detachedRead, detachedWrite, err := os.Pipe()
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	detachedCall, err := launchbroker.Send(broker, launchbroker.Request{
+		Argv:        []string{"sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!"},
+		Environment: []string{"PATH=/usr/bin:/bin"},
+		Dir:         "/",
+		Detach:      true,
+	}, null, detachedWrite, null)
+	_ = detachedWrite.Close()
+	if err != nil {
+		_ = detachedRead.Close()
+		facts.BrokerError = err.Error()
+		return
+	}
+	rawPID, _ := io.ReadAll(detachedRead)
+	_ = detachedRead.Close()
+	_ = detachedCall.Close()
+	facts.DetachedPID, _ = strconv.Atoi(strings.TrimSpace(string(rawPID)))
 }
 
 // startName reports whether the kernel let this process execute path.

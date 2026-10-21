@@ -19,18 +19,34 @@ func TestBrokerRequestsAreBoundedAndComplete(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid request: %v", err)
 	}
+	detached := valid
+	detached.Detach = true
+	if err := detached.Validate(); err != nil {
+		t.Fatalf("detached request: %v", err)
+	}
 	for name, mutate := range map[string]func(*launchbroker.Request){
-		"version":       func(r *launchbroker.Request) { r.Version = 2 },
-		"no program":    func(r *launchbroker.Request) { r.Argv = nil },
-		"empty program": func(r *launchbroker.Request) { r.Argv = []string{""} },
-		"relative dir":  func(r *launchbroker.Request) { r.Dir = "tmp" },
-		"unclean dir":   func(r *launchbroker.Request) { r.Dir = "/tmp/../etc" },
-		"nul argument":  func(r *launchbroker.Request) { r.Argv = []string{"sh", "a\x00b"} },
-		"malformed env": func(r *launchbroker.Request) { r.Environment = []string{"NOEQUALS"} },
-		"empty env key": func(r *launchbroker.Request) { r.Environment = []string{"=x"} },
+		"version":           func(r *launchbroker.Request) { r.Version = 2 },
+		"no program":        func(r *launchbroker.Request) { r.Argv = nil },
+		"empty program":     func(r *launchbroker.Request) { r.Argv = []string{""} },
+		"relative dir":      func(r *launchbroker.Request) { r.Dir = "tmp" },
+		"unclean dir":       func(r *launchbroker.Request) { r.Dir = "/tmp/../etc" },
+		"terminal+detach":   func(r *launchbroker.Request) { r.Terminal = true; r.Detach = true },
+		"nul argument":      func(r *launchbroker.Request) { r.Argv = []string{"sh", "a\x00b"} },
+		"malformed env":     func(r *launchbroker.Request) { r.Environment = []string{"NOEQUALS"} },
+		"empty env key":     func(r *launchbroker.Request) { r.Environment = []string{"=x"} },
+		"oversized payload": func(r *launchbroker.Request) { r.Argv = []string{strings.Repeat("a", launchbroker.MaxRequest)} },
 	} {
 		request := valid
 		mutate(&request)
+		if name == "oversized payload" {
+			null, err := os.Open("/dev/null")
+			testutil.FailErr(t, "open null", err)
+			defer null.Close()
+			if _, err := launchbroker.Send(null, request, null, null, null); err == nil {
+				t.Fatalf("%s accepted", name)
+			}
+			continue
+		}
 		if err := request.Validate(); err == nil {
 			t.Fatalf("%s accepted", name)
 		}
@@ -83,8 +99,8 @@ func TestBrokerRequestsBoundTheirExtraDescriptors(t *testing.T) {
 		t.Fatalf("bounded extra descriptors: %v", err)
 	}
 	for name, mutate := range map[string]func(*launchbroker.Request){
-		"too many":         func(r *launchbroker.Request) { r.ExtraFiles = launchbroker.MaxExtraFiles + 1 },
-		"negative":         func(r *launchbroker.Request) { r.ExtraFiles = -1 },
+		"too many": func(r *launchbroker.Request) { r.ExtraFiles = launchbroker.MaxExtraFiles + 1 },
+		"negative": func(r *launchbroker.Request) { r.ExtraFiles = -1 },
 	} {
 		changed := request
 		mutate(&changed)

@@ -35,42 +35,51 @@ const (
 // administrator's generation, starts the privileged stage, then drops every
 // privilege and remains as the unprivileged supervisor of the launch.
 func RunBootstrap(arguments []string) (int, error) {
+	sessionEnv := ScrubBootstrapEnvironment()
 	caller, err := CaptureCaller()
 	if err != nil {
+		_ = DropPrivilegesForError()
+		return 1, err
+	}
+	fail := func(err error) (int, error) {
+		_ = dropPrivileges(caller)
 		return 1, err
 	}
 	if err := sanitizeProcess(); err != nil {
-		return 1, err
+		return fail(err)
 	}
 	self, err := openSelf()
 	if err != nil {
-		return 1, err
+		return fail(err)
 	}
 	defer func() { _ = self.Close() }()
 	generation, err := CaptureGeneration()
 	if err != nil {
-		return 1, err
+		return fail(err)
 	}
 	defer generation.Close()
 	origin, err := os.Open("/proc/self/ns/user")
 	if err != nil {
-		return 1, err
+		return fail(err)
 	}
 	defer func() { _ = origin.Close() }()
 	broker, desktopEnd, err := brokerPair()
 	if err != nil {
-		return 1, err
+		return fail(err)
 	}
 	defer func() { _ = desktopEnd.Close() }()
-	frame, err := CreateEntryFrame(generation, caller, arguments, DesktopEnvironment(os.Environ(), caller.UID))
+	frame, err := CreateEntryFrame(generation, caller, arguments, sessionEnv)
 	if err != nil {
-		return 1, err
+		_ = broker.Close()
+		return fail(err)
 	}
 	defer func() { _ = frame.Close() }()
-	// Descendants the stage leaves behind are reparented here, so the
-	// supervisor sees the whole tree end without any cgroup authority.
+	// Descendants the stage leaves behind are reparented here when the stage
+	// exits; once the stage has handed off entry and broker-agent, subreaper
+	// is cleared so detached desktop launches reparent outside the launch.
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
-		return 1, err
+		_ = broker.Close()
+		return fail(err)
 	}
 	stage := &exec.Cmd{
 		// The child executes its own copy of the retained image, at a
@@ -88,8 +97,10 @@ func RunBootstrap(arguments []string) (int, error) {
 		},
 	}
 	if err := stage.Run(); err != nil {
-		return 1, fmt.Errorf("privileged stage: %w", err)
+		_ = broker.Close()
+		return fail(fmt.Errorf("privileged stage: %w", err))
 	}
+	_ = unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0)
 	lifetime := generation.Lifetime
 	generation.Lifetime = nil
 	generation.Close()
@@ -99,15 +110,20 @@ func RunBootstrap(arguments []string) (int, error) {
 	_ = self.Close()
 	_ = broker.Close()
 	if err := dropPrivileges(caller); err != nil {
+		_ = lifetime.Close()
 		return 1, err
 	}
 	return superviseLaunch(lifetime), nil
 }
 
 // sanitizeProcess removes state a caller can hand a set-ID program: the
-// working directory, the umask, and descriptors beyond the standard three,
-// which must themselves be open so no later descriptor takes their numbers.
+// dumpable flag, the working directory, the umask, and descriptors beyond the
+// standard three, which must themselves be open so no later descriptor takes
+// their numbers.
 func sanitizeProcess() error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
 	for fd := 0; fd < 3; fd++ {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
 			return errors.New("bootstrap requires open standard streams")
@@ -142,8 +158,29 @@ func brokerPair() (*os.File, *os.File, error) {
 	return os.NewFile(uintptr(pair[0]), "launch-broker"), os.NewFile(uintptr(pair[1]), "desktop-broker"), nil
 }
 
+// DropPrivilegesForError drops any elevated effective or saved identity back to
+// the caller's real non-root identity before writing diagnostic output to
+// inherited descriptors. It returns true only when the process is unprivileged.
+func DropPrivilegesForError() bool {
+	uid, euid, suid := unix.Getresuid()
+	gid, egid, sgid := unix.Getresgid()
+	if uid <= 0 || gid < 0 {
+		return false
+	}
+	if egid != gid || sgid != gid {
+		_ = unix.Setresgid(gid, gid, gid)
+	}
+	if euid != uid || suid != uid {
+		_ = unix.Setresuid(uid, uid, uid)
+	}
+	_ = unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
+	ruid, reuid, rsuid := unix.Getresuid()
+	rgid, regid, rsgid := unix.Getresgid()
+	return ruid > 0 && reuid == ruid && rsuid == ruid && rgid >= 0 && regid == rgid && rsgid == rgid
+}
+
 // dropPrivileges leaves the supervisor as the original caller on every
-// credential, with no capability and no way back.
+// credential, non-dumpable, with no capability and no way back.
 func dropPrivileges(caller Identity) error {
 	groups := make([]int, len(caller.Groups))
 	for i, group := range caller.Groups {
@@ -157,6 +194,12 @@ func dropPrivileges(caller Identity) error {
 	}
 	if err := unix.Setresuid(int(caller.UID), int(caller.UID), int(caller.UID)); err != nil {
 		return err
+	}
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
+		return errors.New("process remained dumpable after privilege drop")
 	}
 	if uid, euid, suid := unix.Getresuid(); uid != int(caller.UID) || euid != uid || suid != uid {
 		return errors.New("supervisor kept a privileged identity")

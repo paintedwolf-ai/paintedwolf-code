@@ -80,6 +80,9 @@ func installFixture(dir string, binaries []string) error {
 		return errors.New("fixture needs bootstrap, entry and desktop binaries")
 	}
 	install := filepath.Join(dir, "install")
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
 	for _, path := range []string{dir, install, filepath.Join(install, "bin"), filepath.Join(dir, "staging"), filepath.Join(dir, "staging", "bin")} {
 		if err := os.Mkdir(path, 0o755); err != nil {
 			return err
@@ -192,9 +195,9 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	var nonce [8]byte
 	_, err := rand.Read(nonce[:])
 	testutil.FailErr(t, "fixture nonce", err)
-	// The fixture's whole ancestry must be root-controlled, which a caller's
-	// own temporary directory never is.
-	dir := filepath.Join("/tmp", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
+	// The fixture's whole ancestry from "/" must be root-owned and neither
+	// sticky nor group/world-writable.
+	dir := filepath.Join("/opt", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
 	build := t.TempDir()
 	module := "github.com/lycaon/lycaon/internal/launchguard"
 	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))
