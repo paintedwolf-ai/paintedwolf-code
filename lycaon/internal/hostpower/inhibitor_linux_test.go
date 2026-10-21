@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -55,21 +56,30 @@ func (d *fixtureDaemon) stop() { _ = d.cmd.Process.Kill(); _ = d.cmd.Wait() }
 func startFixtureBus(t *testing.T) *fixtureDaemon {
 	t.Helper()
 	path := filepath.Join(fixtureSocketDirectory(t), "bus")
-	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
+	config := fmt.Sprintf(`<busconfig><type>session</type><listen>unix:path=%s</listen><auth>EXTERNAL</auth><policy context="default"><allow user="*"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>`, path)
+	configPath := path + ".conf"
+	testutil.FailErr(t, "private bus configuration", os.WriteFile(configPath, []byte(config), 0o600))
+	cmd := exec.Command("dbus-daemon", "--nofork", "--config-file="+configPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	testutil.FailErr(t, "start isolated bus", cmd.Start())
 	daemon := &fixtureDaemon{path: path, cmd: cmd}
 	t.Cleanup(daemon.stop)
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
+	defer cancel()
+	var lastErr error
+	for ctx.Err() == nil {
+		connection, err := linuxbus.Connect(ctx, path)
+		if err == nil {
+			_ = connection.Close()
 			return daemon
 		}
+		lastErr = err
 		time.Sleep(time.Millisecond)
 	}
 	daemon.stop()
-	t.Fatalf("isolated bus did not start: %s", stderr.String())
+	t.Fatalf("isolated bus did not start: %v; %s", lastErr, stderr.String())
 	return nil
 }
 
@@ -285,9 +295,7 @@ func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
 	return servePortalWith(t, path, deny, nil)
 }
 
-// servePortalWith serves the portal with an introspection document naming the
-// interfaces it implements, as real portals do; a nil registry is an older
-// portal without the host registry.
+// servePortalWith advertises implemented interfaces through introspection.
 func servePortalWith(t *testing.T, path string, deny bool, registry *fixtureRegistry) *fixturePortal {
 	t.Helper()
 	server, err := linuxbus.Connect(t.Context(), path)
