@@ -35,10 +35,11 @@ func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
 		t.Run(outage, func(t *testing.T) {
 			lost := unavailableCustody(t)
 			want := ErrCustodianAbsent
-			if outage == "manifest unavailable" {
+			switch outage {
+			case "manifest unavailable":
 				_, badClient := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "manifest_unreadable"})
 				lost = probeCustody(badClient)
-			} else if outage == "launcher refused" {
+			case "launcher refused":
 				_, badClient := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusRefused, Code: "executable_mismatch"})
 				lost = probeCustody(badClient)
 				want = ErrLauncherRefused
