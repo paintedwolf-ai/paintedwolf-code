@@ -115,6 +115,8 @@ func TestLsInodeSizeTimesAndNumericOwners(t *testing.T) {
 	h.exec("", "ls", "-ut", "-r", "dir").expect(t, "ls -utr", lsByAccessReversed(t, h), "", 0)
 	h.exec("", "ls", "-uc", "dir/a").expect(t, "last of -u and -c wins", "dir/a\n", "", 0)
 
+	h.exec("", "ls", "-lG", "input").expect(t, "ls -lG omits the group", fmt.Sprintf("-rw-r--r-- 1 %s 10 2026-01-02 03:04 input\n", owner), "", 0)
+	h.exec("", "ls", "-nG", "input").expect(t, "ls -nG", fmt.Sprintf("-rw-r--r-- 1 %d 10 2026-01-02 03:04 input\n", uid), "", 0)
 	h.exec("", "ls", "-lL", "dir/link").expect(t, "ls -lL", fmt.Sprintf("-rw-r--r-- 1 %s %s 1 2026-01-02 03:04 dir/link\n", owner, group), "", 0)
 	h.exec("", "ls", "--color=always", "dir").refused(t, "color always", "COMMAND_OPERAND_INVALID")
 }

@@ -21,6 +21,8 @@ type lsOptions struct {
 	slash, inode, blocks, deref, unsorted, changeTime, accessTime, groupDirs          bool
 	// numeric is -n: owner and group stay decimal instead of account names.
 	numeric bool
+	// noGroup is GNU -G: long listings omit the group column.
+	noGroup bool
 }
 
 // time is the timestamp -c and -u select for display and sorting.
@@ -76,7 +78,7 @@ func runLs(inv *invocation) error {
 		long: inv.flag("-l") || inv.flag("-n"), numeric: inv.flag("-n"), all: inv.flag("-a"), almost: inv.flag("-A"), directory: inv.flag("-d"), recursive: inv.flag("-R"),
 		human: inv.flag("-h"), classify: inv.flag("-F"), byTime: inv.flag("-t"), bySize: inv.flag("-S"), reverse: inv.flag("-r"),
 		slash: inv.flag("-p"), inode: inv.flag("-i"), blocks: inv.flag("-s"), deref: inv.flag("-L"), unsorted: inv.flag("-U"),
-		groupDirs: inv.flag("--group-directories-first"),
+		groupDirs: inv.flag("--group-directories-first"), noGroup: inv.flag("-G"),
 	}
 	opts.changeTime, opts.accessTime = lastTimeSelection(inv)
 	if err := lsColor(inv); err != nil {
@@ -400,7 +402,11 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 		} else {
 			name += opts.suffix(entry.stat.Mode)
 		}
-		line := fmt.Sprintf("%s%s %*s %-*s %-*s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], widths[2], row[2], widths[3], row[3], widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
+		group := fmt.Sprintf(" %-*s", widths[3], row[3])
+		if opts.noGroup {
+			group = ""
+		}
+		line := fmt.Sprintf("%s%s %*s %-*s%s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], widths[2], row[2], group, widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
 		if err := inv.out.text(line); err != nil {
 			return err
 		}
