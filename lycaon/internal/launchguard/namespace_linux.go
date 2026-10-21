@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -65,6 +66,35 @@ func EntryAttributes(caller Identity) (*syscall.SysProcAttr, error) {
 	}, nil
 }
 
+func prctlAllThreads(option, arg2, arg3, arg4, arg5 uintptr) error {
+	if _, _, errno := syscall.AllThreadsSyscall6(unix.SYS_PRCTL, option, arg2, arg3, arg4, arg5, 0); errno != 0 {
+		return errno
+	}
+	return nil
+}
+
+func capsetAllThreads(header *unix.CapUserHeader, data *unix.CapUserData) error {
+	if _, _, errno := syscall.AllThreadsSyscall(
+		unix.SYS_CAPSET,
+		uintptr(unsafe.Pointer(header)),
+		uintptr(unsafe.Pointer(data)),
+		0,
+	); errno != 0 {
+		return fmt.Errorf("clear capabilities: %w", errno)
+	}
+	return nil
+}
+
+func clearCapabilities() error {
+	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	var capabilities [2]unix.CapUserData
+	return errors.Join(
+		prctlAllThreads(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0),
+		prctlAllThreads(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0),
+		capsetAllThreads(&header, &capabilities[0]),
+	)
+}
+
 // SealEntry removes capabilities and privilege-changing exec before any
 // application configuration or libraries can be consumed.
 func SealEntry(originNamespace *os.File) error {
@@ -74,16 +104,14 @@ func SealEntry(originNamespace *os.File) error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return fmt.Errorf("seal privilege transitions: %w", err)
 	}
-	if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
-		return fmt.Errorf("clear ambient capabilities: %w", err)
-	}
-	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
-	var capabilities [2]unix.CapUserData
-	if err := unix.Capset(&header, &capabilities[0]); err != nil {
-		return fmt.Errorf("clear capabilities: %w", err)
+	if err := clearCapabilities(); err != nil {
+		return err
 	}
 	if err := verifyNamespace(originNamespace); err != nil {
 		return err
+	}
+	if err := prctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("seal privilege transitions: %w", err)
 	}
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		return err

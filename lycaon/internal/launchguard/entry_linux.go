@@ -50,6 +50,7 @@ type EntrySpec struct {
 // login identity inside the protected namespace, with every selection already
 // made by the privileged stage, and seals itself before executing the desktop.
 func EnterDesktop() error {
+	runtime.LockOSThread()
 	return enterDesktop(
 		os.NewFile(entryImageFD, "selected-desktop-image"),
 		os.NewFile(entrySpecFD, "sealed-entry-spec"),
@@ -60,6 +61,8 @@ func EnterDesktop() error {
 }
 
 func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File) error {
+	// Keep the seal, verification, Landlock restriction and execve on one OS thread.
+	runtime.LockOSThread()
 	defer func() { _ = origin.Close() }()
 	defer func() { _ = frame.Close() }()
 	defer func() { _ = image.Close() }()
@@ -98,8 +101,6 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 		}
 	}
 	unix.CloseOnExec(int(image.Fd()))
-	// The execution domain belongs to this thread, which executes the desktop.
-	runtime.LockOSThread()
 	if err := restrictExecution(spec.Generation, image); err != nil {
 		return err
 	}

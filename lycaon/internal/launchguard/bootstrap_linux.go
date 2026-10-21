@@ -182,6 +182,9 @@ func DropPrivilegesForError() bool {
 // dropPrivileges leaves the supervisor as the original caller on every
 // credential, non-dumpable, with no capability and no way back.
 func dropPrivileges(caller Identity) error {
+	if err := prctlAllThreads(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0); err != nil {
+		return err
+	}
 	groups := make([]int, len(caller.Groups))
 	for i, group := range caller.Groups {
 		groups[i] = int(group)
@@ -204,13 +207,5 @@ func dropPrivileges(caller Identity) error {
 	if uid, euid, suid := unix.Getresuid(); uid != int(caller.UID) || euid != uid || suid != uid {
 		return errors.New("supervisor kept a privileged identity")
 	}
-	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
-	var capabilities [2]unix.CapUserData
-	if err := unix.Capget(&header, &capabilities[0]); err != nil {
-		return err
-	}
-	if capabilities != [2]unix.CapUserData{} {
-		return errors.New("supervisor kept a capability")
-	}
-	return nil
+	return clearCapabilities()
 }

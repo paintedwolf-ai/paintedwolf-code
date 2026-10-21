@@ -94,6 +94,13 @@ func TestBootstrapMountAndExecutionHelpersInProcess(t *testing.T) {
 	if !DropPrivilegesForError() {
 		t.Fatal("DropPrivilegesForError returned false for unprivileged test")
 	}
+	if err := prctlAllThreads(0, 0, 0, 0, 0); err == nil {
+		t.Fatal("prctlAllThreads accepted invalid option")
+	}
+	if err := capsetAllThreads(&unix.CapUserHeader{}, &unix.CapUserData{}); err == nil {
+		t.Fatal("capsetAllThreads accepted invalid capability version")
+	}
+	testutil.FailErr(t, "clearCapabilities", clearCapabilities())
 	_ = dropPrivileges(Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), Groups: []uint32{uint32(os.Getgid())}})
 
 	// bindGeneration validation paths before mount operations.

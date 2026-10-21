@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,6 +64,17 @@ func main() {
 	if len(os.Args) == 3 && os.Args[1] == "--engine-vault" {
 		runEngineVault(os.Args[2])
 		return
+	}
+	ready := make(chan struct{}, 4)
+	for range 4 {
+		go func() {
+			runtime.LockOSThread()
+			ready <- struct{}{}
+			select {}
+		}()
+	}
+	for range 4 {
+		<-ready
 	}
 	var facts Facts
 	facts.PID = os.Getpid()

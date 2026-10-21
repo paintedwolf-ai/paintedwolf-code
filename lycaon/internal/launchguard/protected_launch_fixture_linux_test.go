@@ -7,6 +7,7 @@ package launchguard
 // live in protected_launch_linux_test.go.
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -43,6 +44,10 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		err = stageFixtureGeneration(dir, "1.0.1", strings.Split(os.Getenv(fixtureBinsEnv), ":"), []byte("generation-1.0.1\n"))
 	case "vault-server":
 		err = runVaultServer(dir, os.Getenv(fixtureVaultBinEnv), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "seal-entry-parent":
+		err = runSealEntryParent(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "seal-entry-child":
+		err = runSealEntryChild(dir)
 	case "remove":
 		err = os.RemoveAll(dir)
 	case "lock-free":
@@ -100,7 +105,7 @@ func installFixture(dir string, binaries []string) error {
 	if _, _, err := copyRootBinary(binaries[0], filepath.Join(dir, "pw-launch"), 0o4755, nil); err != nil {
 		return err
 	}
-	return stageFixtureGeneration(dir, "1.0.0", binaries, nil)
+	return stageFixtureGeneration(dir, "1.0.0", binaries, bytes.Repeat([]byte("painted-wolf-code-desktop-image\n"), 512<<10))
 }
 
 func copyRootBinary(source, target string, mode uint32, extra []byte) (string, int64, error) {
