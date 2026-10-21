@@ -39,7 +39,18 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
 		return nil, fmt.Errorf("make mounts private: %w", err)
 	}
-	source := "/proc/self/fd/" + strconv.Itoa(int(generation.Fd()))
+	// A bind source must belong to this mount namespace, and the retained
+	// descriptor belongs to the bootstrap's. Reopen the generation here and
+	// bind it only if it is the very directory the bootstrap selected.
+	local, err := openRootControlled(policy.GenerationRoot, true)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = local.Close() }()
+	if err := sameObject(generation, local); err != nil {
+		return nil, err
+	}
+	source := "/proc/self/fd/" + strconv.Itoa(int(local.Fd()))
 	if err := unix.Mount(source, policy.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
 		return nil, fmt.Errorf("bind generation: %w", err)
 	}
@@ -61,6 +72,20 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 		return nil, errors.New("logical generation image differs from retained selection")
 	}
 	return mounted, nil
+}
+
+func sameObject(retained, reopened *os.File) error {
+	var a, b unix.Stat_t
+	if err := unix.Fstat(int(retained.Fd()), &a); err != nil {
+		return err
+	}
+	if err := unix.Fstat(int(reopened.Fd()), &b); err != nil {
+		return err
+	}
+	if a.Dev != b.Dev || a.Ino != b.Ino {
+		return errors.New("selected generation changed before its bind")
+	}
+	return nil
 }
 
 // freshMountNamespace refuses to change mounts anywhere but a namespace this
