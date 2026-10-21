@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import quote
 
+from command_contract import admit_program
 from common import digest
 
 
@@ -56,11 +57,13 @@ def accepted_row(record, db, identity, catalog_sha256):
         encoded = json.dumps(call["arguments"], sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         for char, escaped in (("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
             encoded = encoded.replace(char, escaped)
+        args_digest = hashlib.sha256(encoded.encode()).hexdigest()
         if (receipt is None or receipt["tool_name"] != call["name"] or receipt["status"] != "completed"
-                or not receipt["invoked"] or not receipt["settled_at"]
-                or receipt["args_digest"] != hashlib.sha256(encoded.encode()).hexdigest()):
+                or not receipt["invoked"] or not receipt["settled_at"] or receipt["args_digest"] != args_digest):
             raise ValueError("missing exact successful invocation receipt")
         receipt_ids.append(receipt["id"])
+        if identity["tool_surface"] == "command-v1":
+            receipt_ids.extend(admit_program(db, receipt, args_digest))
     if not target["tool_calls"]:
         # Final prose requires a dedicated closeout validator; model settlement
         # by itself does not establish publication or evidence correctness.
