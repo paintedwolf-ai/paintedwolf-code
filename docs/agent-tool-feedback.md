@@ -31,9 +31,15 @@ retain recovery guidance without synthesized file content.
 
 A reached native operation retains the actual `command` model call and its
 submitted argument object. `paintedwolf.native_operation` identifies the bound
-operation separately; operation inputs never replace `tool_args`. Policy must
-explicitly select that combination. Existing selector keys remain conjunctive:
-adding `command` to an old tool selector does not restrict it to one operation.
+operation separately; operation inputs never replace `tool_args`.
+`paintedwolf.operation` is that bound operation beneath `command`, otherwise
+the actual tool. An operation-specific unit selects it
+(`selector: {paintedwolf.operation: [chmod]}`) so one rule serves the
+structured call and the native child without impersonating either; command
+text and rejection data cannot set it. A unit keeps a `tool` selector for a
+native operation only when the native grammar cannot produce its occurrence,
+and `TestBundledPolicyDispositionsForNativeOperations` records each such
+exception.
 Owner rejection codes and finer source coordinates survive supplementation;
 the enclosing command stage has separate `operation_source_*` coordinates.
 

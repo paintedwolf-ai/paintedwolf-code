@@ -571,6 +571,7 @@ paths:
       tags:
         - sessions
       operationId: getCommandProgramReceipt
+      x-multi-stream-list: true
       summary: Inspect bounded program and host child receipts
       parameters:
         - $ref: '#/components/parameters/SessionId'
@@ -29116,6 +29117,57 @@ components:
           type: string
         detail_ref:
           type: string
+    CommandExecutionOutput:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - stream
+        - ref
+        - size_bytes
+        - complete
+        - redacted
+        - preview
+        - preview_truncated
+      properties:
+        stream:
+          type: string
+          enum:
+            - stdout
+            - stderr
+        ref:
+          type: string
+          description: Retained output handle owned by the program receipt.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        complete:
+          type: boolean
+          description: The stream reached its end; false is a retained prefix.
+        redacted:
+          type: boolean
+        preview:
+          type: string
+          description: Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
+        preview_truncated:
+          type: boolean
+    CommandRevisionConflict:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
+      required:
+        - path
+        - expected_revision
+        - observed_revision
+      properties:
+        path:
+          type: string
+        expected_revision:
+          type: string
+        observed_revision:
+          type: string
     CommandExecutionReceipt:
       x-go-generate: true
       type: object
@@ -29149,6 +29201,8 @@ components:
           format: uuid
         node_id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
         parent_execution_id:
           type: string
           format: uuid
@@ -29234,6 +29288,7 @@ components:
           type: string
         held_version_id:
           type: string
+          format: uuid
         accepted_revision:
           type: string
         published_revision:
@@ -29242,6 +29297,19 @@ components:
           type: string
         approval_ref:
           type: string
+        job_handle:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host background job this child started, for the existing background process views.
+        outputs:
+          type: array
+          maxItems: 2
+          description: Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
+          items:
+            $ref: '#/components/schemas/CommandExecutionOutput'
+        revision_conflict:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandRevisionConflict'
     CommandProgramNode:
       x-go-generate: true
       type: object
@@ -29257,8 +29325,12 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
         source_unit_id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Captured syntax unit identity within its program.
         start_byte:
           type: integer
           format: int64

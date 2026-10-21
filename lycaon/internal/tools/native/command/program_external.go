@@ -86,6 +86,17 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	return result, waitErr
 }
 
+// Installed reports whether the confined launch would find name: the same
+// final PATH, launch directory and environment as Launch.
+func (l ExternalStages) Installed(name string, environment []string) bool {
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra, l.ToolContext.Files.PackageExecution != nil)
+	if err != nil {
+		return false
+	}
+	_, err = lycexec.LaunchLookup(name, opts)
+	return err == nil
+}
+
 // externalArgv drops the explicit "external --" selector.
 func externalArgv(argv []string) []string {
 	if len(argv) >= 2 && argv[0] == "external" && argv[1] == "--" {

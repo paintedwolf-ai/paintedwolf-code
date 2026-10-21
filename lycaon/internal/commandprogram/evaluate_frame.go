@@ -22,8 +22,13 @@ type frameState struct {
 	hasJob    bool
 	// last is the most recent settled execution in this state; a pipeline
 	// stage reports it as the stage producer.
-	last *ChildRecord
+	last    *ChildRecord
+	options shellOptions
 }
+
+// shellOptions are the fixed set options: errexit and nounset. Pipelines
+// always report the rightmost failure, so pipefail is not a toggle.
+type shellOptions struct{ errexit, nounset bool }
 
 // frame is one lexical evaluation context. Values are copied for nested
 // contexts; state, publication and the shared evaluation are pointers.
@@ -43,14 +48,17 @@ type frame struct {
 	functions  int
 	sources    int
 	returnable bool
+	// errexitIgnored marks contexts whose failure never exits: conditions,
+	// the non-final side of && and ||, and negated statements.
+	errexitIgnored bool
 }
 
 // substitutionStatus retains the ordinary statuses of the substitutions one
 // command's expansion reached. The first nonzero one prevents its dispatch.
 type substitutionStatus struct {
-	mu                   sync.Mutex
-	last, failed         int
-	lastID, failedID     string
+	mu                  sync.Mutex
+	last, failed        int
+	lastID, failedID    string
 	reached, hasFailure bool
 }
 
@@ -130,7 +138,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob}
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, options: f.state.options}
 	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
@@ -144,6 +152,7 @@ func (f *frame) Variable(name string) (string, bool) {
 	return f.state.vars.Variable(name)
 }
 func (f *frame) ProgramName() string  { return f.unit }
+func (f *frame) Nounset() bool        { return f.state.options.nounset }
 func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
 func (f *frame) LastBackground() (string, bool) {

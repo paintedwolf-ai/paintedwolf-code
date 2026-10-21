@@ -19,10 +19,17 @@ type ProgramFeedbackLedger interface {
 	ReadProgramFeedback(context.Context, string, string, string, int, invocation.ProgramFeedbackAdmission) (*invocation.ProgramFeedbackLease, error)
 }
 
+// ProgramDiagnosticScreen is the host's bounded capture screening of owner
+// diagnostic data before model-visible feedback publication.
+type ProgramDiagnosticScreen interface {
+	ProjectOperationDiagnostic(context.Context, toolcontract.ReviewStateAdmission, map[string]any) (map[string]any, func(), error)
+}
+
 // PreparedProgramFailure keeps supplemental feedback charged until the caller
 // has serialized/delivered it and no longer retains the returned rejection data.
 type PreparedProgramFailure struct {
 	Rejection     *toolrejection.ToolReject
+	diagnostic    toolcontract.NativeValue
 	operation     toolcontract.BoundOperation
 	identity      tools.InvocationIdentity
 	memory        *toolcontract.ProgramMemory
@@ -43,6 +50,7 @@ func (p *PreparedProgramFailure) Close() {
 	if !p.closed {
 		p.closed = true
 		p.Rejection = nil
+		p.diagnostic = toolcontract.NativeValue{}
 		p.operation = toolcontract.BoundOperation{}
 		p.identity = tools.InvocationIdentity{}
 		p.memory = nil
@@ -55,17 +63,31 @@ func (p *PreparedProgramFailure) Close() {
 	}
 }
 
+// Diagnostic is the owner's exact diagnostic data as a host-only reversible
+// inspection value. The model-visible Rejection carries only screened data.
+func (p *PreparedProgramFailure) Diagnostic() (toolcontract.NativeValue, error) {
+	if p == nil {
+		return toolcontract.NativeValue{}, fmt.Errorf("prepared program feedback required")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || !p.diagnostic.Valid() {
+		return toolcontract.NativeValue{}, fmt.Errorf("program feedback diagnostic is closed")
+	}
+	return p.diagnostic, nil
+}
+
 // PrepareProgramFailure supplements an actual native rejection. External output
 // and ordinary utility failures are never converted into host policy codes.
 // The introducing command entry calls this after the existing owner settles.
-func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
 	}
 	inv := operation.Invocation()
-	if ctx == nil || ledger == nil || memory == nil || tc.Identity.ToolCallID == "" || tc.Identity.SessionID != inv.SessionID {
-		return nil, fmt.Errorf("program feedback requires actual parent, ledger and memory admission")
+	if ctx == nil || ledger == nil || memory == nil || screen == nil || tc.Identity.ToolCallID == "" || tc.Identity.SessionID != inv.SessionID {
+		return nil, fmt.Errorf("program feedback requires actual parent, ledger, diagnostic screening and memory admission")
 	}
 	if err = inv.Validate(); err != nil {
 		return nil, err
@@ -80,15 +102,32 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
 		}
 	}
-	// Reuse the admitted immutable native value snapshot for owner diagnostics.
-	// Nested data must neither alias a mutable producer nor escape accounting.
-	details, err := prepareNativeArguments(ctx, memory, rejected.Data)
+	// The exact owner diagnostic is retained only as an immutable host
+	// inspection value; publication uses the bounded capture screen's copy.
+	// Both are admitted before encoding, so neither aliases a mutable producer.
+	ownerData := rejected.Data
+	if ownerData == nil {
+		ownerData = map[string]any{}
+	}
+	diagnostic, releaseDiagnostic, err := toolcontract.NewNativeValue(ctx, memory, toolcontract.DiagnosticInspectionDomain, ownerData)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if prepared == nil {
-			details.close()
+			releaseDiagnostic()
+		}
+	}()
+	screened, releaseScreened, err := screen.ProjectOperationDiagnostic(ctx, memory, ownerData)
+	if err != nil {
+		return nil, err
+	}
+	if screened == nil || releaseScreened == nil {
+		return nil, fmt.Errorf("diagnostic screening returned no retained projection")
+	}
+	defer func() {
+		if prepared == nil {
+			releaseScreened()
 		}
 	}()
 	// Supplemental facts are bounded separately; SQL has its measured lease.
@@ -131,9 +170,9 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 		return nil, err
 	}
 	clone := *rejected
-	clone.Data = details.values
-	if clone.Data == nil {
-		clone.Data = map[string]any{}
+	clone.Data = make(map[string]any, len(screened)+len(facts)+16)
+	for name, value := range screened {
+		clone.Data[name] = value
 	}
 	completeNativeRejection(operation, &clone)
 	for name, value := range facts {
@@ -156,7 +195,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if policy != nil && !policy.MatchesOperation(operation) {
 		return nil, fmt.Errorf("program policy copy belongs to another execution")
 	}
-	return &PreparedProgramFailure{policy: policy, Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); details.close(); release() }}, nil
+	return &PreparedProgramFailure{policy: policy, Rejection: &clone, diagnostic: diagnostic, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseScreened(); releaseDiagnostic(); release() }}, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

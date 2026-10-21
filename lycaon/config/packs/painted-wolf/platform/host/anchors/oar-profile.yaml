@@ -88,6 +88,8 @@ host_facts:
    type: int
  - name: paintedwolf.native_operation
    type: string
+ - name: paintedwolf.operation
+   type: string
  - name: paintedwolf.program_id
    type: string
  - name: paintedwolf.execution_id

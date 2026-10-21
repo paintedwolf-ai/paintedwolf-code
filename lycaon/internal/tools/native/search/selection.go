@@ -35,6 +35,8 @@ type selection struct {
 	excludeDirs  []*regexp.Regexp
 	globs        []rgGlob
 	types        []*regexp.Regexp
+	notTypes     []*regexp.Regexp
+	noIgnore     bool
 	unrestricted int
 	hidden       bool
 	scopes       map[string]*sourcescope.Scope
@@ -63,6 +65,7 @@ func newSelection(inv *invocation, rg bool) selection {
 		}
 	}
 	s.hidden = !rg || s.unrestricted >= 2 || inv.flag("--hidden")
+	s.noIgnore = rg && inv.flag("--no-ignore")
 	return s
 }
 
@@ -89,16 +92,28 @@ func (s *selection) compileRg() error {
 		g.glob = s.compile(strings.TrimPrefix(glob, "/"), pattern.Filenames|pattern.GlobLeadingDot)
 		s.globs = append(s.globs, g)
 	}
-	for _, name := range s.inv.values("-t") {
-		globs, ok := rgTypes[name]
-		if !ok {
-			return s.inv.usage(name, "a catalogued file type ("+strings.Join(rgTypeNames(), ", ")+")")
-		}
-		for _, glob := range globs {
-			s.types = append(s.types, s.compile(glob, pattern.GlobLeadingDot))
-		}
+	var err error
+	if s.types, err = s.typeGlobs("-t"); err != nil {
+		return err
+	}
+	if s.notTypes, err = s.typeGlobs("-T"); err != nil {
+		return err
 	}
 	return s.err
+}
+
+func (s *selection) typeGlobs(key string) ([]*regexp.Regexp, error) {
+	var out []*regexp.Regexp
+	for _, name := range s.inv.values(key) {
+		globs, ok := rgTypes[name]
+		if !ok {
+			return nil, s.inv.usage(name, "a catalogued file type ("+strings.Join(rgTypeNames(), ", ")+")")
+		}
+		for _, glob := range globs {
+			out = append(out, s.compile(glob, pattern.GlobLeadingDot))
+		}
+	}
+	return out, nil
 }
 
 // commandLineFile applies grep's ordered name rules to an operand's trailing
@@ -155,7 +170,7 @@ func (s *selection) admit(e entry) (bool, error) {
 	if !s.rg {
 		return true, nil
 	}
-	if s.unrestricted == 0 && !s.ignoreAdmits(e) {
+	if s.unrestricted == 0 && !s.noIgnore && !s.ignoreAdmits(e) {
 		return false, nil
 	}
 	return s.rgGlobsAdmit(e), nil
@@ -184,10 +199,14 @@ func (s *selection) rgGlobsAdmit(e entry) bool {
 	if includes && !e.dir() && !admitted {
 		return false
 	}
-	if len(s.types) > 0 && !e.dir() {
-		return slices.ContainsFunc(s.types, func(re *regexp.Regexp) bool { return re.MatchString(e.name) })
+	if e.dir() {
+		return true
 	}
-	return true
+	matches := func(re *regexp.Regexp) bool { return re.MatchString(e.name) }
+	if slices.ContainsFunc(s.notTypes, matches) {
+		return false
+	}
+	return len(s.types) == 0 || slices.ContainsFunc(s.types, matches)
 }
 
 // ignoreAdmits applies the project ignore owner below the entry's root.

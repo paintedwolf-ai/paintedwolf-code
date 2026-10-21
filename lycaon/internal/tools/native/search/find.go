@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mvdan.cc/sh/v3/pattern"
 )
 
@@ -189,8 +191,8 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 			}
 			return re.MatchString(e.name), nil
 		})
-	case "-regex":
-		m, err := textsearch.Compile(inv.ctx, textsearch.Spec{Patterns: []string{value}, Dialect: textsearch.Extended, Line: true}, inv.owners.regex)
+	case "-regex", "-iregex":
+		m, err := textsearch.Compile(inv.ctx, textsearch.Spec{Patterns: []string{value}, Dialect: textsearch.Extended, Line: true, IgnoreCase: option.Key == "-iregex"}, inv.owners.regex)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +226,16 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 	case "-empty":
 		return test(func(r *findRun, e entry) (bool, error) { return r.empty(e) })
 	case "-mtime":
-		return r.mtimeTest(value)
+		return r.ageTest(value, 24*time.Hour, "-mtime [+-]N days")
+	case "-mmin":
+		return r.ageTest(value, time.Minute, "-mmin [+-]N minutes")
+	case "-perm":
+		return r.permTest(value)
+	case "-user":
+		return r.userTest(value)
+	case "-printf":
+		r.actions = true
+		return r.printfPrimary(value)
 	case "-newer":
 		return r.newerTest(value)
 	case "-prune":
@@ -281,20 +292,68 @@ func (r *findRun) sizeTest(value string) (*findNode, error) {
 	}}, nil
 }
 
-// mtimeTest is -mtime [+-]N: whole days since modification, truncated.
-func (r *findRun) mtimeTest(value string) (*findNode, error) {
+// ageTest is -mtime and -mmin [+-]N: whole units since modification,
+// truncated toward the past.
+func (r *findRun) ageTest(value string, unit time.Duration, form string) (*findNode, error) {
 	compare, digits := splitSign(value)
 	n, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil || n < 0 {
-		return nil, r.inv.usage(value, "-mtime [+-]N days")
+		return nil, r.inv.usage(value, form)
 	}
 	return &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) {
 		age := r.now.Sub(e.stat.ModTime)
-		days := int64(age / (24 * time.Hour))
-		if age < 0 && age%(24*time.Hour) != 0 {
-			days--
+		units := int64(age / unit)
+		if age < 0 && age%unit != 0 {
+			units--
 		}
-		return compare(days, n), nil
+		return compare(units, n), nil
+	}}, nil
+}
+
+// permTest is -perm MODE (exact permission and special bits), -MODE (all of
+// them set) or /MODE (any of them set), with an octal MODE.
+func (r *findRun) permTest(value string) (*findNode, error) {
+	kind, digits := byte('='), value
+	if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "/") {
+		kind, digits = value[0], value[1:]
+	}
+	want, err := strconv.ParseUint(digits, 8, 32)
+	if err != nil || want > 0o7777 {
+		return nil, r.inv.usage(value, "-perm [-/]OCTAL")
+	}
+	return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) {
+		have := uint64(e.stat.Mode.Perm())
+		if e.stat.Mode&fs.ModeSetuid != 0 {
+			have |= 0o4000
+		}
+		if e.stat.Mode&fs.ModeSetgid != 0 {
+			have |= 0o2000
+		}
+		if e.stat.Mode&fs.ModeSticky != 0 {
+			have |= 0o1000
+		}
+		switch kind {
+		case '-':
+			return have&want == want, nil
+		case '/':
+			return want == 0 || have&want != 0, nil
+		}
+		return have == want, nil
+	}}, nil
+}
+
+// userTest is -user UID with a numeric owner. Names are not resolved, and a
+// platform without POSIX owners refuses rather than guessing.
+func (r *findRun) userTest(value string) (*findNode, error) {
+	uid, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return nil, r.inv.usage(value, "-user with a numeric uid")
+	}
+	return &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) {
+		if !e.stat.POSIX {
+			return false, &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"command": "find -user", "capability": "POSIX owners"}}
+		}
+		return uint64(e.stat.UID) == uid, nil
 	}}, nil
 }
 

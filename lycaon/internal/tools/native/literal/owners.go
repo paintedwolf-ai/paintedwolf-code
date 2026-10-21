@@ -19,9 +19,10 @@ import (
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+// (invocation.SQLRecorder.RecordRevisionPins). pins hold ordinals first,
+// first+1, ... in capture order.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+	RecordRevisionPins(ctx context.Context, executionID string, first int, pins []toolcontract.ExecutionRevision) error
 }
 
 // Owners holds the shared typed operations behind every literal utility.

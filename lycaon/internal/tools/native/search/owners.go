@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -27,9 +28,10 @@ import (
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+// (invocation.SQLRecorder.RecordRevisionPins). pins hold ordinals first,
+// first+1, ... in capture order.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+	RecordRevisionPins(ctx context.Context, executionID string, first int, pins []toolcontract.ExecutionRevision) error
 }
 
 // Remover is the recoverable removal owner find -delete routes through. It
@@ -64,6 +66,11 @@ type Owners struct {
 	// Now is find's reference time for -mtime; nil reads the clock once per
 	// invocation.
 	Now func() time.Time
+	// Catalog accelerates grep and rg walks: a file whose cached Bloom filter
+	// was built from bytes with the file's current size, mode and mtime, and
+	// which proves the pattern's required literals absent, is a complete
+	// zero-match without being read. Nil searches every file live.
+	Catalog *sourcecatalog.Catalog
 
 	// overrides replaces catalog limits in fixtures that cannot reach them.
 	overrides map[string]int64
@@ -208,6 +215,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()
+	}
+	if err == nil {
+		err = inv.out.flush()
 	}
 	if streams.Input != nil {
 		_ = streams.Input.Close()

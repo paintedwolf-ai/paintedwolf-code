@@ -3,12 +3,13 @@ id: JQ_INPUT_TOO_LARGE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - jq
 requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.bytes
     - paintedwolf.max_bytes

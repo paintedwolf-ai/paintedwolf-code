@@ -2,15 +2,18 @@ oar: '1.0'
 id: CHMOD_NOT_FOUND
 kind: schema
 anchor: tool.rejected
+selector:
+  paintedwolf.operation:
+  - chmod
 requires:
   profiles:
   - filesystem
   - tool
   facts:
   - paintedwolf.rejection_code
-  - paintedwolf.native_operation
+  - paintedwolf.operation
   - paintedwolf.path
-when: (tool == "chmod" || (tool == "command" && paintedwolf.native_operation == "chmod")) && paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
+when: paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
 effect: block
 copy:
   what: The target for chmod path {{ paintedwolf.path }} does not exist.
