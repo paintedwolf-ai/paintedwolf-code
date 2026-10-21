@@ -2,7 +2,10 @@ package native
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 
@@ -75,4 +78,27 @@ func captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectp
 func recaptureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
 	_, revision, err := captureBytes(ctx, tctx, resolved, readcaps.MaxFileBytes)
 	return revision, err
+}
+
+// PinOpened identifies the published bytes of a file another owner has just
+// opened, hashing through the held descriptor without moving its offset, so
+// the pin names exactly the object that owner reads.
+func (e ExecutionRevisions) PinOpened(resolved projectpaths.Resolved, file *os.File) (toolcontract.ExecutionRevision, bool, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return toolcontract.ExecutionRevision{}, false, nil
+	}
+	h := sha256.New()
+	size, err := io.Copy(h, io.NewSectionReader(file, 0, info.Size()))
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	root, rel := revisionLocation(resolved)
+	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision,
+		RootID: root, Path: rel, DiskSHA256: digest, Representation: toolcontract.OriginalEncodedBytes, ContentSHA256: digest, ContentBytes: size}
+	return revision, true, revision.Validate()
 }

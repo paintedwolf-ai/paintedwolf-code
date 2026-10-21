@@ -3,6 +3,7 @@
 package projectpaths_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -64,5 +65,31 @@ func TestBoundMetadataReadsEntriesThroughTheHeldRoot(t *testing.T) {
 	}
 	if _, err := null.Readlink(); err == nil {
 		t.Fatal("readlink of the null device succeeded")
+	}
+}
+
+// TestReadSessionObserverSeesOpensBeforeContent: an observer sees each open
+// with its file and can refuse it.
+func TestReadSessionObserverSeesOpensBeforeContent(t *testing.T) {
+	tc, _ := readSessionContext(t)
+	reads := projectpaths.NewReadSession(nil, tc)
+	defer reads.Close()
+	resolved, err := reads.Resolve(t.Context(), "a.go")
+	testutil.FailErr(t, "resolve", err)
+	var seen []string
+	reads.Observe(func(r projectpaths.Resolved, f *os.File) error {
+		seen = append(seen, r.DisplayPath)
+		return nil
+	})
+	file, err := reads.Open(resolved)
+	testutil.FailErr(t, "observed open", err)
+	file.Close()
+	if !slices.Equal(seen, []string{"a.go"}) {
+		t.Fatalf("observed = %v", seen)
+	}
+	refused := errors.New("refused")
+	reads.Observe(func(projectpaths.Resolved, *os.File) error { return refused })
+	if _, err := reads.Open(resolved); !errors.Is(err, refused) {
+		t.Fatalf("refused open = %v", err)
 	}
 }
