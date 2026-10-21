@@ -2794,6 +2794,7 @@ dependencies = [
  "tokio",
  "ureq",
  "uuid",
+ "webkit2gtk",
  "wheel-glide",
  "which",
  "windows 0.62.2",
