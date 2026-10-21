@@ -61,6 +61,28 @@ type protectedFacts struct {
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
+	Exec            *engineProbe                `json:"exec,omitempty"`
+	ModuleUser      string                      `json:"module_user"`
+	ModuleLibrary   string                      `json:"module_library"`
+	BrokerUserExec  string                      `json:"broker_user_exec,omitempty"`
+}
+
+// engineProbe mirrors the fixture's report on the engine's launch paths.
+type engineProbe struct {
+	HostOutput      string `json:"host_output"`
+	HostCode        int    `json:"host_code"`
+	HostError       string `json:"host_error,omitempty"`
+	HostExecOutput  string `json:"host_execution_output"`
+	HostExecCode    int    `json:"host_execution_code"`
+	HostExecError   string `json:"host_execution_error,omitempty"`
+	ConfinedOutput  string `json:"confined_output"`
+	ConfinedError   string `json:"confined_error,omitempty"`
+	ConfinedCode    int    `json:"confined_code"`
+	ConfinedStderr  string `json:"confined_stderr,omitempty"`
+	TerminalSurvive bool   `json:"terminal_survived_interrupt"`
+	TerminalError   string `json:"terminal_error,omitempty"`
+	RelayLossEnded  bool   `json:"relay_loss_ended_session"`
+	RelayLossError  string `json:"relay_loss_error,omitempty"`
 }
 
 // launchFixture is one installed fixture layout.
@@ -187,6 +209,14 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.ExecOutside != "EACCES" || facts.ExecGeneration != "started" {
 		t.Fatalf("execution domain: outside %s, generation %s", facts.ExecOutside, facts.ExecGeneration)
 	}
+	// Native code maps executable only from the administrator's closure; the
+	// caller's own files stay executable for programs the broker starts.
+	if facts.ModuleUser != "EPERM" || facts.ModuleLibrary != "ok" {
+		t.Fatalf("module view: caller file %s, library root %s", facts.ModuleUser, facts.ModuleLibrary)
+	}
+	if facts.BrokerUserExec != "brokered-user-program" {
+		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
+	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}
@@ -204,7 +234,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatal("the generation lifetime lock was free while the desktop ran")
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	testutil.FailErr(t, "supervisor exit", launch.cmd.Wait())
+	waitLaunchEnd(t, launch.cmd)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
 }
 
@@ -285,4 +315,57 @@ func TestProtectedLaunchRefusesAGenerationThePolicyDoesNotName(t *testing.T) {
 	f := installLaunchFixture(t)
 	testutil.FailErr(t, "tamper policy", sudoFixture(t, "tamper", f.dir, fixtureHash+"="+f.digest))
 	refusedLaunch(t, exec.Command(f.bootstrap), "generation manifest differs from installed policy")
+}
+
+// waitLaunchEnd requires the supervisor to exit once the launch's last
+// process has ended, broker agent included.
+func waitLaunchEnd(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		testutil.FailErr(t, "supervisor exit", err)
+	case <-time.After(20 * time.Second):
+		t.Fatal("the supervisor outlived the launch's processes")
+	}
+}
+
+// Inside the protected launch, the engine starts every program through the
+// broker: unconfined ones in the caller's initial namespaces without
+// no_new_privs, confined ones in their own nested namespaces built outside
+// the protected one.
+func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
+	f := installLaunchFixture(t)
+	env := []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+	launch := startLaunch(t, f, env, "--exec-probe")
+	probe := launch.facts.Exec
+	if probe == nil {
+		t.Fatalf("the fixture engine reported no launches: %+v", launch.facts)
+	}
+	initial, err := os.Readlink("/proc/self/ns/user")
+	testutil.FailErr(t, "initial user namespace", err)
+	protected := fmt.Sprintf("user:[%d]", launch.facts.Namespace.Inode)
+	for name, run := range map[string]struct {
+		output, err string
+		code        int
+	}{
+		"host-internal":  {probe.HostOutput, probe.HostError, probe.HostCode},
+		"host execution": {probe.HostExecOutput, probe.HostExecError, probe.HostExecCode},
+	} {
+		if run.err != "" || run.code != 7 || !strings.Contains(run.output, initial) || !strings.Contains(run.output, "NoNewPrivs:\t0") {
+			t.Fatalf("%s launch did not run outside the protected namespace with its exit status: %q code %d error %q (want %s)", name, run.output, run.code, run.err, initial)
+		}
+	}
+	if probe.ConfinedError != "" && !strings.Contains(probe.ConfinedError, "exit status") || strings.Contains(probe.ConfinedOutput, initial) || strings.Contains(probe.ConfinedOutput, protected) || !strings.Contains(probe.ConfinedOutput, "NoNewPrivs:\t1") {
+		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr)
+	}
+	if !probe.TerminalSurvive {
+		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s", probe.TerminalError)
+	}
+	if !probe.RelayLossEnded {
+		t.Fatalf("killing the relay did not end the brokered session: %s", probe.RelayLossError)
+	}
+	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
+	waitLaunchEnd(t, launch.cmd)
 }

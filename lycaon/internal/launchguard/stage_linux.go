@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -28,6 +30,11 @@ func RunStage() error {
 	}
 	if gid, egid, sgid := unix.Getresgid(); gid != 0 || egid != 0 || sgid != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator identity")
+	}
+	// Descriptors arrive without close-on-exec; each child receives only the
+	// ones handed to it below.
+	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		return err
 	}
 	frame := os.NewFile(stageFrameFD, "sealed-entry-spec")
 	spec, err := readEntry(frame)
@@ -51,6 +58,20 @@ func RunStage() error {
 	if err := rootRegular(entryImage); err != nil {
 		return err
 	}
+	// The entry starts in the module view; the broker agent starts back in the
+	// launch's own mount namespace. Both views live on this thread, which stays
+	// locked: the stage exits once both children start.
+	runtime.LockOSThread()
+	leave, err := enterModuleView(spec.Generation, mounted)
+	if err != nil {
+		return err
+	}
+	viewed, err := reopenImage(spec.Generation, mounted)
+	if err != nil {
+		return err
+	}
+	_ = mounted.Close()
+	mounted = viewed
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -70,5 +91,25 @@ func RunStage() error {
 	if err := entry.Start(); err != nil {
 		return fmt.Errorf("start protected entry: %w", err)
 	}
+	if err := leave(); err != nil {
+		return fmt.Errorf("leave module view: %w", err)
+	}
+	agent := &exec.Cmd{
+		Path:       "/proc/self/fd/" + strconv.Itoa(agentSelfFD),
+		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
+		Env:        []string{},
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), entryImage},
+		SysProcAttr: &syscall.SysProcAttr{
+			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
+			Setsid:     true,
+		},
+	}
+	if err := agent.Start(); err != nil {
+		return fmt.Errorf("start broker agent: %w", err)
+	}
 	return nil
 }
+
+// agentSelfFD is where the broker agent's image sits for its execution.
+const agentSelfFD = agentBrokerFD + 1

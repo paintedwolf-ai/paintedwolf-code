@@ -82,9 +82,32 @@ func probeHelper() (string, error) {
 		defer func() { _ = pw.Close() }()
 		_, _ = pw.Write(raw)
 	}()
-	err = cmd.Run()
+	err = helperProbeRunner()(cmd)
 	_ = pr.Close()
 	return stderr.String(), err
+}
+
+var helperProbeRun struct {
+	sync.Mutex
+	run func(*exec.Cmd) error
+}
+
+// SetHelperProbeRunner replaces how the availability probe runs the helper.
+// The protected Linux launch starts every confinement helper outside its
+// namespace, so the probe must run where the helper will.
+func SetHelperProbeRunner(run func(*exec.Cmd) error) {
+	helperProbeRun.Lock()
+	helperProbeRun.run = run
+	helperProbeRun.Unlock()
+}
+
+func helperProbeRunner() func(*exec.Cmd) error {
+	helperProbeRun.Lock()
+	defer helperProbeRun.Unlock()
+	if helperProbeRun.run != nil {
+		return helperProbeRun.run
+	}
+	return (*exec.Cmd).Run
 }
 
 // renderProfile is the boundary plan the Linux helper applies.

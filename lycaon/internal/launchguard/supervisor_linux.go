@@ -6,27 +6,23 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
-// supervisor holds the generation's lifetime lock until every descendant of
-// the launch has exited, and serves the broker. As the subreaper, every
-// process the launch leaves behind is reparented here, so no descendant can
-// outlive the lock, and one reaper collects both those and brokered programs.
-type supervisor struct {
-	mu    sync.Mutex
-	calls map[int]*brokerCall
-}
-
-func supervise(lifetime, broker *os.File) int {
+// superviseLaunch holds the generation's lifetime lock until every
+// descendant of the launch has exited. As the subreaper, every process the
+// launch leaves behind, the broker agent's included, is reparented here, so
+// no descendant can outlive the lock. It returns the last exit status.
+func superviseLaunch(lifetime *os.File) int {
 	defer func() { _ = lifetime.Close() }()
-	s := &supervisor{calls: map[int]*brokerCall{}}
-	go s.serveBroker(broker)
 	status := 0
 	for {
 		var wait unix.WaitStatus
-		pid, err := unix.Wait4(-1, &wait, 0, nil)
+		_, err := unix.Wait4(-1, &wait, 0, nil)
 		switch {
 		case errors.Is(err, unix.EINTR):
 			continue
@@ -34,9 +30,6 @@ func supervise(lifetime, broker *os.File) int {
 			return status
 		case err != nil:
 			return 1
-		}
-		if s.finished(pid, wait) {
-			continue
 		}
 		switch {
 		case wait.Exited():
@@ -47,8 +40,40 @@ func supervise(lifetime, broker *os.File) int {
 	}
 }
 
+// brokerAgent starts brokered programs and is their parent: one reaper
+// collects them and reports each exit on its call channel.
+type brokerAgent struct {
+	mu    sync.Mutex
+	calls map[int]*brokerCall
+}
+
+// serve answers the broker until every protected holder of the socket has
+// closed it and every program it started has exited.
+func (s *brokerAgent) serve(broker *os.File) {
+	done := make(chan struct{})
+	go func() { s.serveBroker(broker); close(done) }()
+	for {
+		var wait unix.WaitStatus
+		pid, err := unix.Wait4(-1, &wait, 0, nil)
+		switch {
+		case errors.Is(err, unix.EINTR):
+			continue
+		case errors.Is(err, unix.ECHILD):
+			select {
+			case <-done:
+				return
+			case <-time.After(100 * time.Millisecond):
+				continue
+			}
+		case err != nil:
+			return
+		}
+		s.finished(pid, wait)
+	}
+}
+
 // finished reports a brokered program's exit on its call channel.
-func (s *supervisor) finished(pid int, wait unix.WaitStatus) bool {
+func (s *brokerAgent) finished(pid int, wait unix.WaitStatus) bool {
 	s.mu.Lock()
 	call, ok := s.calls[pid]
 	delete(s.calls, pid)
@@ -56,7 +81,7 @@ func (s *supervisor) finished(pid int, wait unix.WaitStatus) bool {
 	if !ok {
 		return false
 	}
-	event := BrokerEvent{Exited: true}
+	event := launchbroker.Event{Exited: true}
 	switch {
 	case wait.Exited():
 		event.Code = wait.ExitStatus()
@@ -67,7 +92,7 @@ func (s *supervisor) finished(pid int, wait unix.WaitStatus) bool {
 		_ = unix.Close(call.channel)
 		return true
 	}
-	sendBrokerEvent(call.channel, event)
+	launchbroker.SendEvent(call.channel, event)
 	// The channel's watcher owns the descriptor: shutting it down ends that
 	// watch, which then closes it, so its number is never reused under it.
 	_ = unix.Shutdown(call.channel, unix.SHUT_RDWR)
@@ -76,10 +101,10 @@ func (s *supervisor) finished(pid int, wait unix.WaitStatus) bool {
 
 // serveBroker answers requests until every protected holder of the socket
 // has closed it.
-func (s *supervisor) serveBroker(broker *os.File) {
+func (s *brokerAgent) serveBroker(broker *os.File) {
 	defer func() { _ = broker.Close() }()
-	payload := make([]byte, maxBrokerRequest+1)
-	control := make([]byte, unix.CmsgSpace(brokerRequestFDs*4)+brokerControlSize)
+	payload := make([]byte, launchbroker.MaxRequest+1)
+	control := make([]byte, launchbroker.ControlSpace())
 	for {
 		n, oobn, flags, _, err := unix.Recvmsg(int(broker.Fd()), payload, control, unix.MSG_CMSG_CLOEXEC)
 		switch {
@@ -88,11 +113,13 @@ func (s *supervisor) serveBroker(broker *os.File) {
 		case err != nil || n == 0 && oobn == 0:
 			return
 		}
-		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n > maxBrokerRequest {
-			closeRights(control[:oobn])
+		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n > launchbroker.MaxRequest {
+			for _, fd := range launchbroker.Rights(control[:oobn]) {
+				_ = unix.Close(fd)
+			}
 			continue
 		}
-		request, fds, err := decodeBrokerRequest(payload[:n], control[:oobn])
+		request, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
 		if err != nil {
 			continue
 		}
@@ -100,7 +127,7 @@ func (s *supervisor) serveBroker(broker *os.File) {
 	}
 }
 
-func (s *supervisor) start(request BrokerRequest, fds []int) {
+func (s *brokerAgent) start(request launchbroker.Request, fds []int) {
 	channel := fds[0]
 	defer func() {
 		for _, fd := range fds[1:] {
@@ -114,17 +141,17 @@ func (s *supervisor) start(request BrokerRequest, fds []int) {
 	}
 	s.mu.Unlock()
 	if err != nil {
-		sendBrokerEvent(channel, BrokerEvent{Error: err.Error()})
+		launchbroker.SendEvent(channel, launchbroker.Event{Error: err.Error()})
 		_ = unix.Close(channel)
 		return
 	}
-	sendBrokerEvent(channel, BrokerEvent{Started: pid})
+	launchbroker.SendEvent(channel, launchbroker.Event{Started: pid})
 	go s.endWhenAbandoned(channel, pid)
 }
 
 // endWhenAbandoned ends a brokered program's session when its caller closes
 // the call channel before the program exited.
-func (s *supervisor) endWhenAbandoned(channel, pid int) {
+func (s *brokerAgent) endWhenAbandoned(channel, pid int) {
 	buf := make([]byte, 1)
 	for {
 		n, err := unix.Read(channel, buf)
@@ -146,19 +173,5 @@ func (s *supervisor) endWhenAbandoned(channel, pid int) {
 	s.mu.Unlock()
 	if !running {
 		_ = unix.Close(channel)
-	}
-}
-
-func closeRights(control []byte) {
-	messages, err := unix.ParseSocketControlMessage(control)
-	if err != nil {
-		return
-	}
-	for _, message := range messages {
-		if fds, err := unix.ParseUnixRights(&message); err == nil {
-			for _, fd := range fds {
-				_ = unix.Close(fd)
-			}
-		}
 	}
 }

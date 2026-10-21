@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/lycaon/lycaon/internal/launchguard"
+	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/launchverify"
 )
 
@@ -48,6 +48,10 @@ type Facts struct {
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
+	Exec            *ExecProbe                  `json:"exec,omitempty"`
+	ModuleUser      string                      `json:"module_user"`
+	ModuleLibrary   string                      `json:"module_library"`
+	BrokerUserExec  string                      `json:"broker_user_exec,omitempty"`
 }
 
 func main() {
@@ -84,9 +88,18 @@ func main() {
 	facts.ExecGeneration = startName(filepath.Join(install, "bin", "pw-launch-entry"))
 	facts.InstallWrite = errnoName(os.WriteFile(filepath.Join(install, "planted"), []byte("x"), 0o644))
 	facts.Remount = errnoName(unix.Mount("", install, "", unix.MS_REMOUNT|unix.MS_BIND, ""))
+	facts.ModuleUser, facts.ModuleLibrary = moduleProbe()
 	for _, arg := range os.Args[1:] {
 		if arg == "--broker-probe" {
 			brokerProbe(&facts)
+		}
+		if arg == "--exec-probe" {
+			scratch, err := os.MkdirTemp("", "pw-protected-exec-")
+			if err == nil {
+				probe := execProbe(scratch)
+				facts.Exec = &probe
+				_ = os.RemoveAll(scratch)
+			}
 		}
 	}
 	// Stay dumpable and traceable by anyone: only the namespace can refuse.
@@ -113,7 +126,7 @@ func brokerProbe(facts *Facts) {
 		facts.BrokerError = err.Error()
 		return
 	}
-	channel, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+	channel, err := launchbroker.Send(broker, launchbroker.Request{
 		Argv:        []string{"sh", "-c", "readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status"},
 		Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
 	}, null, write, write)
@@ -125,7 +138,7 @@ func brokerProbe(facts *Facts) {
 	output, _ := io.ReadAll(read)
 	facts.BrokerOutput = string(output)
 	for {
-		event, err := launchguard.ReadBrokerEvent(channel)
+		event, err := launchbroker.ReadEvent(channel)
 		if err != nil {
 			facts.BrokerError = err.Error()
 			break
@@ -140,14 +153,15 @@ func brokerProbe(facts *Facts) {
 		}
 	}
 	_ = channel.Close()
-	sleeper, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+	facts.BrokerUserExec = brokeredUserProgram(broker, null)
+	sleeper, err := launchbroker.Send(broker, launchbroker.Request{
 		Argv: []string{"sleep", "60"}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
 	}, null, null, null)
 	if err != nil {
 		facts.BrokerError = err.Error()
 		return
 	}
-	started, err := launchguard.ReadBrokerEvent(sleeper)
+	started, err := launchbroker.ReadEvent(sleeper)
 	_ = sleeper.Close()
 	if err != nil || started.Started <= 0 {
 		facts.BrokerError = "abandoned call never started"
@@ -159,6 +173,72 @@ func brokerProbe(facts *Facts) {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// moduleProbe maps a file of the caller's own, and one from the fixture's
+// library root, executable, the way the dynamic loader maps a module.
+func moduleProbe() (user, library string) {
+	planted := filepath.Join(os.Getenv("HOME"), "planted.so")
+	if err := os.WriteFile(planted, []byte("not a module"), 0o755); err != nil {
+		return err.Error(), ""
+	}
+	user = mapExecutable(planted)
+	library = "no regular file in /usr/lib"
+	entries, _ := os.ReadDir("/usr/lib")
+	for _, entry := range entries {
+		if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			return user, mapExecutable(filepath.Join("/usr/lib", entry.Name()))
+		}
+	}
+	return user, library
+}
+
+func mapExecutable(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = file.Close() }()
+	region, err := unix.Mmap(int(file.Fd()), 0, 1, unix.PROT_READ|unix.PROT_EXEC, unix.MAP_PRIVATE)
+	if err != nil {
+		return errnoName(err)
+	}
+	_ = unix.Munmap(region)
+	return "ok"
+}
+
+// brokeredUserProgram runs a program from the caller's own files through the
+// broker, which executes outside the module view; its output is its result.
+func brokeredUserProgram(broker, null *os.File) string {
+	script := filepath.Join(os.Getenv("HOME"), "brokered.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho brokered-user-program\n"), 0o755); err != nil {
+		return err.Error()
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		return err.Error()
+	}
+	channel, err := launchbroker.Send(broker, launchbroker.Request{
+		Argv: []string{script}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
+	}, null, write, write)
+	_ = write.Close()
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = channel.Close() }()
+	output, _ := io.ReadAll(read)
+	for {
+		event, err := launchbroker.ReadEvent(channel)
+		if err != nil {
+			return err.Error()
+		}
+		if event.Error != "" {
+			return event.Error
+		}
+		if event.Exited {
+			return strings.TrimSpace(string(output))
+		}
 	}
 }
 
