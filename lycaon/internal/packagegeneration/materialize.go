@@ -25,7 +25,7 @@ func materialize(staging *os.Root, raw []byte, store, locks string, owner uint32
 	if err != nil {
 		return Generation{}, err
 	}
-	if err := controlledObject(rootInfo, owner); err != nil {
+	if err := controlledObject(".", rootInfo, owner); err != nil {
 		return Generation{}, err
 	}
 	manifest, err := pkgmanifest.Read(bytes.NewReader(raw))
@@ -151,7 +151,7 @@ func verifyExisting(path string, raw []byte, manifest *pkgmanifest.Manifest, own
 		return err
 	}
 	defer root.Close()
-	if err := controlledObject(info, owner); err != nil {
+	if err := controlledObject(path, info, owner); err != nil {
 		return err
 	}
 	actual, err := readSeal(root, len(raw), owner)
@@ -177,7 +177,7 @@ func copyEntry(source, target *os.Root, entry pkgmanifest.PayloadEntry, owner ui
 	if err != nil {
 		return err
 	}
-	if err := controlledObject(info, owner); err != nil {
+	if err := controlledObject(entry.Path, info, owner); err != nil {
 		return err
 	}
 	switch entry.Kind {
@@ -234,7 +234,7 @@ func readSeal(root *os.Root, size int, owner uint32) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() != int64(size) {
 		return nil, errors.New("native generation: invalid bounded seal")
 	}
-	if err := controlledObject(info, owner); err != nil {
+	if err := controlledObject("manifest.json", info, owner); err != nil {
 		return nil, err
 	}
 	file, err := root.Open("manifest.json")

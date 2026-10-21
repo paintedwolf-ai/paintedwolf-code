@@ -35,10 +35,13 @@ func controlledParents(name string, owner uint32) error {
 	return nil
 }
 
-func controlledObject(info os.FileInfo, owner uint32) error {
+func controlledObject(name string, info os.FileInfo, owner uint32) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != owner || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0022 != 0 {
-		return fmt.Errorf("native generation: uncontrolled payload object")
+	if !ok {
+		return fmt.Errorf("native generation: uncontrolled payload object %q: no ownership facts", name)
+	}
+	if stat.Uid != owner || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0022 != 0 {
+		return fmt.Errorf("native generation: uncontrolled payload object %q: uid %d mode %v", name, stat.Uid, info.Mode())
 	}
 	return nil
 }

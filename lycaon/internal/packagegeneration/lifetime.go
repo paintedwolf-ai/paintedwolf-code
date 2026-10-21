@@ -18,13 +18,14 @@ func openLifetime(directory, identity string, owner uint32) (*os.File, error) {
 	if err := controlledParents(directory, owner); err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(filepath.Join(directory, identity+".lock"), os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW, 0600)
+	name := filepath.Join(directory, identity+".lock")
+	file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW, 0600)
 	if err != nil {
 		return nil, err
 	}
 	info, err := file.Stat()
 	if err == nil {
-		err = controlledObject(info, owner)
+		err = controlledObject(name, info, owner)
 	}
 	if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm() != 0600) {
 		err = errors.New("native generation: unsafe lifetime lock")
