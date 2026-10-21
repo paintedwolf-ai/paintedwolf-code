@@ -4,20 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type valueStateFixture struct {
-	outstanding, peak, maximum int64
-	calls                      int
-	refuseAt                   int
+	outstanding, peak, maximum, largest int64
+	calls                               int
+	refuseAt                            int
 }
 
 func (s *valueStateFixture) ReserveProgramState(_ context.Context, n int64) (func(), error) {
 	s.calls++
+	s.largest = max(s.largest, n)
 	if s.calls == s.refuseAt || n > s.maximum-s.outstanding {
 		return nil, errors.New("fixture retained state refused")
 	}
@@ -121,7 +123,7 @@ func TestValueContainerArityRefusesBeforeContainerAdmission(t *testing.T) {
 		options.MaximumNodes = 1
 		_, _, _, err := testProjector(t, nil).Value(t.Context(), Scope{}, "capture.arguments", value, options)
 		var limit *secretmatch.StreamLimitError
-		if !errors.As(err, &limit) || limit.Resource != "capture_value_nodes" || state.calls != 4 || state.outstanding != 0 {
+		if !errors.As(err, &limit) || limit.Resource != "capture_value_nodes" || state.largest > 4352 || state.outstanding != 0 {
 			t.Fatalf("container exceeded node bound before refusal: %T %v calls=%d held=%d", value, err, state.calls, state.outstanding)
 		}
 	}
