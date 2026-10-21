@@ -29,7 +29,7 @@ describe("file manager label", () => {
     invoke.mockRejectedValueOnce(new Error("ipc closed"));
     await loadFileManagerName();
     expect(localPathDestinationLabel("file-manager")).toBe("File manager");
-    for (const [name, label] of [["macos", "Finder"], ["windows", "File Explorer"]]) {
+    for (const [name, label] of [["macos", "Finder"], ["windows", "File Explorer"]] as const) {
       platform.name = name;
       expect(localPathDestinationLabel("file-manager")).toBe(label);
     }
