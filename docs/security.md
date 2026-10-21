@@ -257,6 +257,7 @@ What the Linux adapter cannot express yet, and what it expresses differently, is
 - A host loopback datagram service that starts after launch, or listens in the ephemeral port range, is relayed once the process connects to it; an unconnected first send to it reaches nothing. A relay holds its address inside the sandbox, so a process there cannot bind it, as a process outside cannot bind a port the host's service holds. A granted datagram listener sees the host's datagrams arrive from the relay's address inside the sandbox, not the sender's.
 - A gateway is unavailable on a kernel without TUN support (`/dev/net/tun`); a launch that needs it fails with `datagram_gateway_unavailable`.
 - Unix datagram sockets and datagram socket pairs cannot be created, granted or not.
+- Only internet, Unix-domain, and netlink sockets can be created. A family the namespaces do not isolate, such as `AF_VSOCK`, which reaches a virtual machine's host from any network namespace, answers `EAFNOSUPPORT` in every network mode, as a kernel without it would.
 - A listener without a grant binds inside the sandbox, where only the command's own processes reach it; macOS refuses it. A granted wildcard bind listens on loopback only.
 - A process that binds a granted port before connecting from it gets a listening socket and cannot connect from it.
 - Socket options set before the supervisor replaces a socket are carried for `SO_REUSEADDR`, `SO_REUSEPORT`, `SO_KEEPALIVE`, `TCP_NODELAY`, and `IPV6_V6ONLY` only.

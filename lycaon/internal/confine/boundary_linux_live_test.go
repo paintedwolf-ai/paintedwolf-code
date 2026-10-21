@@ -47,6 +47,8 @@ func errnoName(err error) string {
 		return "EACCES"
 	case errors.Is(err, unix.ENOSYS):
 		return "ENOSYS"
+	case errors.Is(err, unix.EAFNOSUPPORT):
+		return "EAFNOSUPPORT"
 	}
 	return err.Error()
 }
@@ -143,6 +145,25 @@ func runLinuxProbe(mode string) int {
 		fmt.Println("socketpair:", n, string(buf[:n]), err)
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
+		return 0
+	case "families":
+		for _, family := range []struct {
+			name   string
+			domain int
+			kind   int
+			proto  int
+		}{
+			{"vsock", unix.AF_VSOCK, unix.SOCK_STREAM, 0},
+			{"vsock datagram", unix.AF_VSOCK, unix.SOCK_DGRAM, 0},
+			{"bluetooth", unix.AF_BLUETOOTH, unix.SOCK_STREAM, 0},
+			{"netlink", unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_ROUTE},
+		} {
+			fd, err := unix.Socket(family.domain, family.kind|unix.SOCK_CLOEXEC, family.proto)
+			if err == nil {
+				_ = unix.Close(fd)
+			}
+			fmt.Printf("family %s: %s\n", family.name, errnoName(err))
+		}
 		return 0
 	case "iouring":
 		params := make([]byte, 120)
@@ -490,6 +511,29 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+// AF_VSOCK reaches the hypervisor host from any network namespace, so no
+// network mode creates it; netlink stays inside the sandbox's namespace.
+func TestLinuxUnisolatedSocketFamiliesAreUnavailable(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	for _, c := range []confine.Confinement{
+		denyConfinement(t.TempDir()),
+		{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDirectIP, EgressOff: confine.EgressOffOverride},
+	} {
+		status, out := linuxConfinedRun(t, self, c, probeEnv("families"), self, probeTestFlag)
+		if status.ExitStatus() != 0 {
+			t.Fatalf("families probe (%v): exit %d: %s", c.Network, status.ExitStatus(), out)
+		}
+		for _, want := range []string{
+			"family vsock: EAFNOSUPPORT", "family vsock datagram: EAFNOSUPPORT",
+			"family bluetooth: EAFNOSUPPORT", "family netlink: ok",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("families probe (%v) missing %q:\n%s", c.Network, want, out)
+			}
+		}
 	}
 }
 

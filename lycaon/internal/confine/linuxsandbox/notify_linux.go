@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -128,7 +129,12 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return 0, unix.ENOSYS
 	}
 	if req.Op != OpListen {
-		if err := s.decodeAddress(&req, info, raw, target); err != nil {
+		err := s.decodeAddress(&req, info, raw, target)
+		if errors.Is(err, errUnisolatedFamily) {
+			s.refusals.report(Refusal{Operation: refusalOperation(req.Op), Target: "family:" + strconv.Itoa(info.domain), Process: target.comm()})
+			return 0, unix.EAFNOSUPPORT
+		}
+		if err != nil {
 			return 0, unix.EINVAL
 		}
 	}
@@ -175,6 +181,18 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	}
 }
 
+// errUnisolatedFamily marks an address of a family the sandbox's namespaces
+// do not isolate.
+var errUnisolatedFamily = errors.New("socket family is not isolated by the sandbox")
+
+// refusalOperation names a refused call in the macOS kernel's vocabulary.
+func refusalOperation(op SocketOp) string {
+	if op == OpBind {
+		return "network-bind"
+	}
+	return "network-outbound"
+}
+
 // decodeAddress fills the request's address from the supervisor's copy.
 func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []byte, target *targetProcess) error {
 	if len(raw) < 2 {
@@ -201,9 +219,14 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 	case family == unix.AF_INET6 && len(raw) >= 24:
 		port := binary.BigEndian.Uint16(raw[2:4])
 		req.IP = netip.AddrPortFrom(netip.AddrFrom16([16]byte(raw[8:24])), port)
-	default:
-		// Other families stay inside the sandbox's namespaces.
+	case info.domain == unix.AF_UNIX || slices.Contains(isolatedSocketFamilies, uint32(info.domain)):
+		// The kernel answers an address of another family on these sockets
+		// inside the sandbox's own namespaces.
 		return nil
+	default:
+		// The filter creates no socket of another family; one that reached
+		// the sandbox anyway is not one the namespaces isolate.
+		return errUnisolatedFamily
 	}
 	if req.Op == OpConnect && req.IP.Addr().Unmap().IsLoopback() && !req.HostSocket {
 		req.SandboxListener = sandboxListens(target.pid, info.typ, req.IP.Port())
