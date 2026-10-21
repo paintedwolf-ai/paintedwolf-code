@@ -21,4 +21,15 @@ func TestGuidancePolicyFreezesTheWrappedCommandProfile(t *testing.T) {
 	if _, _, err := NewGuidanceRejectPolicy(nil).FreezeCommandProfile(t.Context(), "fixture"); err == nil {
 		t.Fatal("a wrapped engine without a command boundary admitted a program")
 	}
+	inner := NewProfilePolicyEngine(boundary)
+	for _, command := range []string{"cat", "rm"} {
+		want, wantErr := inner.CommandOperationAllowed(t.Context(), "fixture", "read", command)
+		got, err := NewGuidanceRejectPolicy(inner).CommandOperationAllowed(t.Context(), "fixture", "read", command)
+		if got != want || (err == nil) != (wantErr == nil) {
+			t.Fatalf("%s visibility = %t %v, wrapped engine %t %v", command, got, err, want, wantErr)
+		}
+	}
+	if _, err := NewGuidanceRejectPolicy(nil).CommandOperationAllowed(t.Context(), "fixture", "read", "cat"); err == nil {
+		t.Fatal("a wrapped engine without native visibility exposed an operation")
+	}
 }

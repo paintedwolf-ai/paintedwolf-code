@@ -99,3 +99,18 @@ func (p *GuidanceRejectPolicy) FreezeCommandProfile(ctx context.Context, profile
 	}
 	return source.FreezeCommandProfile(ctx, profileID)
 }
+
+// CommandOperationAllowed delegates native operation visibility for command
+// programs to the wrapped engine; without one, no native operation is visible.
+func (p *GuidanceRejectPolicy) CommandOperationAllowed(ctx context.Context, profileID, identity, command string) (bool, error) {
+	if p == nil {
+		return false, errors.New("native operation profile policy required")
+	}
+	source, ok := p.inner.(interface {
+		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
+	})
+	if !ok {
+		return false, errors.New("native operation profile policy required")
+	}
+	return source.CommandOperationAllowed(ctx, profileID, identity, command)
+}
