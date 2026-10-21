@@ -89,17 +89,19 @@ func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []
 }
 
 type harness struct {
-	t      *testing.T
-	root   string
-	tc     tools.ToolContext
-	owners *Owners
-	pins   *pinLog
-	memory *toolcontract.ProgramMemory
-	spills string
-	quota  *spillQuota
-	nested commandprogram.NestedCommand
-	env    []string
-	runs   int
+	t       *testing.T
+	root    string
+	tc      tools.ToolContext
+	owners  *Owners
+	pins    *pinLog
+	memory  *toolcontract.ProgramMemory
+	spills  string
+	quota   *spillQuota
+	nested  commandprogram.NestedCommand
+	env     []string
+	runs    int
+	write   *native.WriteTool
+	barrier *native.PublicationBarrier
 }
 
 type run struct {
@@ -114,16 +116,18 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	root := t.TempDir()
 	pins := &pinLog{}
-	owners, err := NewOwners(native.ExecutionRevisions{Boundary: nativefixture.Boundary(t)}, pins)
+	boundary := nativefixture.Boundary(t)
+	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins)
 	testutil.FailErr(t, "owners", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
-	return &harness{t: t, root: root, tc: nativefixture.Context(root), owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}}
+	return &harness{t: t, root: root, tc: nativefixture.Context(root), owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30},
+		write: &native.WriteTool{Boundary: boundary}, barrier: &native.PublicationBarrier{}}
 }
 
-func (h *harness) write(name, content string) {
+func (h *harness) seed(name, content string) {
 	h.t.Helper()
 	path := filepath.Join(h.root, name)
 	testutil.FailErr(h.t, "mkdir", os.MkdirAll(filepath.Dir(path), 0o755))
@@ -131,7 +135,14 @@ func (h *harness) write(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Write: h.write, Barrier: h.barrier}
+}
+
+func (h *harness) read(name string) string {
+	h.t.Helper()
+	data, err := os.ReadFile(filepath.Join(h.root, name))
+	testutil.FailErr(h.t, "read "+name, err)
+	return string(data)
 }
 
 func (h *harness) run(source, stdin string) run {

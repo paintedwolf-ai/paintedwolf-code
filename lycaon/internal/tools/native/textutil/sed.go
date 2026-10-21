@@ -12,13 +12,10 @@ import (
 )
 
 // runSed parses the complete script before any input is read, then runs one
-// cycle per input record across every input in order. In-place editing is a
-// staged publication this frontend refuses; output preserves a final record's
-// missing newline.
+// cycle per input record across every input in order, or edits each file in
+// place with -i (GNU -i and BSD -i ”; a backup suffix refuses at binding).
+// Output preserves a final record's missing newline.
 func runSed(inv *invocation) error {
-	if _, inPlace := inv.argv.Last("-i"); inPlace {
-		return unsupported(inv, inv.commandWord(), "a redirect; sed -i publication is the mutation owner's")
-	}
 	if inv.owners.Regex == nil {
 		return toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": "sed", "capability": "the shared POSIX regex engine"})
 	}
@@ -29,6 +26,9 @@ func runSed(inv *invocation) error {
 	commands, err := parseSed(inv.ctx, script, inv.flag("-E"), inv.owners.Regex)
 	if err != nil {
 		return sedRefusal(inv, scriptWord, err)
+	}
+	if _, inPlace := inv.argv.Last("-i"); inPlace {
+		return sedInPlace(inv, commands, files)
 	}
 	sources, err := inv.openInputs(files)
 	if err != nil {
@@ -43,8 +43,9 @@ func runSed(inv *invocation) error {
 	if err != nil {
 		return err
 	}
-	run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records}
-	return run.cycles()
+	run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: inv.out}
+	_, err = run.cycles()
+	return err
 }
 
 // sedScript joins -e scripts with newlines, or takes the first operand.
@@ -90,6 +91,7 @@ type sedRun struct {
 	commands []*sedCommand
 	quiet    bool
 	records  *records
+	out      io.Writer
 	line     int
 	last     bool
 	newline  bool // current record ended with a newline
@@ -111,27 +113,28 @@ func (r *sedRun) read() ([]byte, bool, bool, error) {
 	return bytes.Clone(record), terminated, true, nil
 }
 
-func (r *sedRun) cycles() error {
+// cycles runs every record and reports whether q ended the run.
+func (r *sedRun) cycles() (bool, error) {
 	var err error
 	if r.next, r.nextLF, r.nextOK, err = r.read(); err != nil {
-		return err
+		return false, err
 	}
 	for r.nextOK {
 		space, terminated := r.next, r.nextLF
 		if err := r.inv.reserve(int64(len(space))); err != nil {
-			return err
+			return false, err
 		}
 		if r.next, r.nextLF, r.nextOK, err = r.read(); err != nil {
-			return err
+			return false, err
 		}
 		r.line++
 		r.last, r.newline = !r.nextOK, terminated
 		quit, err := r.cycle(space)
 		if err != nil || quit {
-			return err
+			return quit, err
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // cycle runs every command on one pattern space and reports a quit.
@@ -197,19 +200,19 @@ func (r *sedRun) cycle(space []byte) (bool, error) {
 // without it; any later output first restores that newline.
 func (r *sedRun) emit(record []byte, newline bool) error {
 	if r.pending {
-		if _, err := r.inv.out.Write([]byte{'\n'}); err != nil {
+		if _, err := r.out.Write([]byte{'\n'}); err != nil {
 			return err
 		}
 		r.pending = false
 	}
-	if _, err := r.inv.out.Write(record); err != nil {
+	if _, err := r.out.Write(record); err != nil {
 		return err
 	}
 	if !newline {
 		r.pending = true
 		return nil
 	}
-	_, err := r.inv.out.Write([]byte{'\n'})
+	_, err := r.out.Write([]byte{'\n'})
 	return err
 }
 

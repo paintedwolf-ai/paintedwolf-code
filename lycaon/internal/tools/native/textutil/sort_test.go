@@ -38,8 +38,8 @@ func TestSortGolden(t *testing.T) {
 
 func TestSortOperandsAndRefusals(t *testing.T) {
 	h := newHarness(t)
-	h.write("one.txt", "c\na\n")
-	h.write("two.txt", "b\n")
+	h.seed("one.txt", "c\na\n")
+	h.seed("two.txt", "b\n")
 	h.run("sort one.txt - two.txt", "d\n").expectOutput(t, "files and stdin", "a\nb\nc\nd\n", 0)
 	r := h.run("sort one.txt missing.txt", "")
 	r.expectOutput(t, "missing input", "", 2)

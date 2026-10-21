@@ -130,10 +130,18 @@ func TestUniqGolden(t *testing.T) {
 
 func TestUniqOperands(t *testing.T) {
 	h := newHarness(t)
-	h.write("in.txt", "q\nq\nr\n")
+	h.seed("in.txt", "q\nq\nr\n")
 	h.run("uniq in.txt", "ignored").expectOutput(t, "uniq INPUT", "q\nr\n", 0)
 	h.run("uniq - ", "s\ns\n").expectOutput(t, "uniq -", "s\n", 0)
-	h.run("uniq in.txt out.txt", "").expectRefusal(t, "uniq OUTPUT", "COMMAND_NATIVE_FORM_UNSUPPORTED")
+	h.run("uniq in.txt out.txt", "").expectOutput(t, "uniq OUTPUT", "", 0)
+	if got := h.read("out.txt"); got != "q\nr\n" {
+		t.Fatalf("OUTPUT holds %q", got)
+	}
+	h.seed("out.txt", "old\n")
+	h.run("uniq -c - out.txt", "s\ns\n").expectOutput(t, "uniq stdin to OUTPUT", "", 0)
+	if got := h.read("out.txt"); got != "2 s\n" {
+		t.Fatalf("OUTPUT holds %q", got)
+	}
 	h.run("uniq a b c", "").expectRefusal(t, "uniq too many", "COMMAND_OPERAND_INVALID")
 	r := h.run("uniq missing.txt", "")
 	r.expectOutput(t, "uniq missing", "", 1)
@@ -146,8 +154,8 @@ func TestUniqOperands(t *testing.T) {
 // pin recorded under the child's execution before its bytes are used.
 func TestFileOperandsArePinned(t *testing.T) {
 	h := newHarness(t)
-	h.write("one.txt", "b\na\n")
-	h.write("two.txt", "c\n")
+	h.seed("one.txt", "b\na\n")
+	h.seed("two.txt", "c\n")
 	r := h.run("sort one.txt - two.txt", "d\n")
 	r.expectOutput(t, "pinned sort", "a\nb\nc\nd\n", 0)
 	pins := h.pins.executions[r.execution]

@@ -103,6 +103,9 @@ type Ports struct {
 	Spills      SpillStorage
 	Admission   tooloutput.SpillAdmission
 	Nested      commandprogram.NestedCommand
+	// Write and Barrier publish sed -i files and uniq OUTPUT at their pins.
+	Write   *native.WriteTool
+	Barrier *native.PublicationBarrier
 }
 
 // Builtins returns one in-process dispatcher per utility for one program.

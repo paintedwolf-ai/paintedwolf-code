@@ -4,10 +4,17 @@ package textutil
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // fixturePosix is a test-only engine for sed's script parser and executor:
@@ -113,8 +120,9 @@ func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
 		{"sed 1~2d", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed q5", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 's//x/'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed -i s/a/b/ f", "COMMAND_NATIVE_FORM_UNSUPPORTED"},
-		{"sed -i '' s/a/b/ f", "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+		{"sed -i.bak s/a/b/ f", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed -i s/a/b/", "COMMAND_OPERAND_INVALID"},
+		{"sed -i s/a/b/ -", "COMMAND_OPERAND_INVALID"},
 		{"sed -f script", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 's/a/b'", "COMMAND_OPERAND_INVALID"},
 		{`sed 's/a/\1/'`, "COMMAND_OPERAND_INVALID"},
@@ -126,7 +134,7 @@ func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
 		{"sed 's/[/x/'", "COMMAND_OPERAND_INVALID"},
 		{"sed", "COMMAND_OPERAND_INVALID"},
 	} {
-		h.write("f", "a\n")
+		h.seed("f", "a\n")
 		h.run(c.source, "a\n").expectRefusal(t, c.source, c.code)
 	}
 	unwired := newHarness(t)
@@ -135,8 +143,8 @@ func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
 
 func TestSedReadsPinnedFilesAsOneStream(t *testing.T) {
 	h := sedHarness(t)
-	h.write("one", "a\nb\n")
-	h.write("two", "c\n")
+	h.seed("one", "a\nb\n")
+	h.seed("two", "c\n")
 	r := h.run("sed -n '$p;2p' one two", "")
 	r.expectOutput(t, "files", "b\nc\n", 0)
 	if len(h.pins.executions[r.execution]) != 2 {
@@ -174,4 +182,77 @@ func TestSedDifferentialAgainstHost(t *testing.T) {
 		}
 		h.run(c.source, input).expectOutput(t, c.source, string(want), 0)
 	}
+}
+
+// GNU -i SCRIPT FILE and BSD -i ” SCRIPT FILE edit each file separately,
+// publishing exact bytes at the pinned destination after a pinned source.
+func TestSedInPlacePublishesEachFileAtItsPin(t *testing.T) {
+	h := sedHarness(t)
+	h.seed("f", "a\na")
+	r := h.run("sed -i s/a/b/ f", "")
+	r.expectOutput(t, "GNU form", "", 0)
+	if got := h.read("f"); got != "b\nb" {
+		t.Fatalf("f holds %q", got)
+	}
+	pins := h.pins.executions[r.execution]
+	if len(pins) != 2 || pins[0].Role != toolcontract.DestinationRevision || pins[1].Role != toolcontract.SourceRevision || pins[0].Path != "f" {
+		t.Fatalf("pins %+v", pins)
+	}
+	h.seed("g", "1\n2\n")
+	h.seed("k", "3\n4\n")
+	h.run("sed -i '' 1d g k", "").expectOutput(t, "BSD form restarts lines per file", "", 0)
+	if g, k := h.read("g"), h.read("k"); g != "2\n" || k != "4\n" {
+		t.Fatalf("g %q k %q", g, k)
+	}
+	h.seed("q", "a\nb\nc\n")
+	h.seed("later", "x\n")
+	h.run("sed -i 2q q later", "").expectOutput(t, "q publishes and stops", "", 0)
+	if q, later := h.read("q"), h.read("later"); q != "a\nb\n" || later != "x\n" {
+		t.Fatalf("q %q later %q", q, later)
+	}
+	h.seed("ok", "a\n")
+	missing := h.run("sed -i s/a/b/ ok missing ok", "")
+	missing.expectOutput(t, "missing stops after earlier files", "", 2)
+	if h.read("ok") != "b\n" || missing.stderr != "sed: missing: No such file or directory\n" {
+		t.Fatalf("ok %q stderr %q", h.read("ok"), missing.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(h.root, "missing")); !os.IsNotExist(err) {
+		t.Fatal("a missing file was created")
+	}
+	h.seed("p", "x\n")
+	h.run("sed -i -n p p", "").expectOutput(t, "-n -i keeps printed lines only", "", 0)
+	if h.read("p") != "x\n" {
+		t.Fatalf("p %q", h.read("p"))
+	}
+}
+
+// A destination that moved after its capture is a typed revision conflict;
+// the prepared bytes are not refreshed or retried.
+func TestInPlacePublicationConflictIsTyped(t *testing.T) {
+	h := sedHarness(t)
+	h.seed("f", "a\n")
+	r := h.run("sed -n p f", "")
+	r.expectOutput(t, "setup", "a\n", 0)
+	inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports(), spec: h.owners.specs["sed"],
+		request: commandprogramRequest(r.execution + "-conflict")}
+	paths, err := inv.paths()
+	testutil.FailErr(t, "paths", err)
+	target, err := inv.captureDestination(paths, commandprogram.Field{Value: "f"})
+	testutil.FailErr(t, "capture destination", err)
+	h.seed("f", "moved\n")
+	err = inv.publish(target, []byte("b\n"))
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" {
+		t.Fatalf("err = %v", err)
+	}
+	if h.read("f") != "moved\n" {
+		t.Fatalf("conflicting publication changed f to %q", h.read("f"))
+	}
+	unwired := sedHarness(t)
+	unwired.write = nil
+	unwired.seed("f", "a\n")
+	unwired.run("sed -i p f", "").expectRefusal(t, "no write owner", "COMMAND_PLATFORM_UNAVAILABLE")
+}
+
+func commandprogramRequest(execution string) commandprogram.OperationRequest {
+	return commandprogram.OperationRequest{Invocation: toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ExecutionID: execution}}}
 }

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // runUniq collapses adjacent exact-byte records. -c prefixes an unpadded
@@ -16,13 +17,10 @@ import (
 // An OUTPUT operand is a staged owner publication this frontend refuses.
 func runUniq(inv *invocation) error {
 	operands := inv.operands()
-	switch {
-	case len(operands) > 2:
+	if len(operands) > 2 {
 		return inv.usage(operands[2], "at most INPUT and OUTPUT")
-	case len(operands) == 2:
-		return unsupported(inv, operands[1], "a redirect for OUTPUT")
 	}
-	sources, err := inv.openInputs(operands)
+	sources, err := inv.openInputs(operands[:min(len(operands), 1)])
 	if err != nil || len(sources) == 0 {
 		return err
 	}
@@ -31,6 +29,14 @@ func runUniq(inv *invocation) error {
 	if err != nil {
 		return err
 	}
+	if len(operands) == 2 {
+		return uniqOutput(inv, operands, func(out *nativeutility.Output) error { return uniqRecords(inv, records, out) })
+	}
+	return uniqRecords(inv, records, inv.out)
+}
+
+// uniqRecords writes the collapsed records to out.
+func uniqRecords(inv *invocation, records *records, out io.Writer) error {
 	count, repeated, single := inv.flag("-c"), inv.flag("-d"), inv.flag("-u")
 	var previous []byte
 	run := 0
@@ -39,11 +45,15 @@ func runUniq(inv *invocation) error {
 			return nil
 		}
 		if count {
-			if _, err := io.WriteString(inv.out, strconv.Itoa(run)+" "); err != nil {
+			if _, err := io.WriteString(out, strconv.Itoa(run)+" "); err != nil {
 				return err
 			}
 		}
-		return inv.writeRecord(previous, '\n')
+		if _, err := out.Write(previous); err != nil {
+			return err
+		}
+		_, err := out.Write([]byte{'\n'})
+		return err
 	}
 	for {
 		record, err := records.next()
