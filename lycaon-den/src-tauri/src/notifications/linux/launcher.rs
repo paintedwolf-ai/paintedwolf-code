@@ -7,9 +7,10 @@
 //! The shell publishes it directly on the session bus. GNOME Shell's own dash
 //! shows no counts; there the waiting count stays in notifications.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 
 use gtk::gio;
 use gtk::glib::{self, ToVariant};
@@ -28,7 +29,7 @@ fn properties(count: i64) -> HashMap<&'static str, glib::Variant> {
 /// The published entry; lives on the main context it was created on.
 pub(crate) struct LauncherEntry {
     connection: gio::DBusConnection,
-    count: Rc<Cell<i64>>,
+    count: Arc<AtomicI64>,
     registration: Option<gio::RegistrationId>,
 }
 
@@ -38,7 +39,7 @@ impl LauncherEntry {
             .map_err(|error| error.to_string())?
             .lookup_interface(INTERFACE)
             .ok_or("launcher entry interface is missing")?;
-        let count = Rc::new(Cell::new(0));
+        let count = Arc::new(AtomicI64::new(0));
         let state = count.clone();
         let registration = connection
             .register_object(
@@ -46,7 +47,7 @@ impl LauncherEntry {
                 &info,
                 move |_, _, _, _, method, _, invocation| {
                     if method == "Query" {
-                        invocation.return_value(Some(&(APP_URI, properties(state.get())).to_variant()));
+                        invocation.return_value(Some(&(APP_URI, properties(state.load(Ordering::Relaxed))).to_variant()));
                     } else {
                         invocation.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", "unknown method");
                     }
@@ -61,7 +62,7 @@ impl LauncherEntry {
     /// Shows `count` on the launcher icon; zero or less clears it.
     pub(crate) fn set(&self, count: i64) -> Result<(), String> {
         let count = count.max(0);
-        self.count.set(count);
+        self.count.store(count, Ordering::Relaxed);
         self.connection
             .emit_signal(None, PATH, INTERFACE, "Update", Some(&(APP_URI, properties(count)).to_variant()))
             .map_err(|error| error.to_string())
