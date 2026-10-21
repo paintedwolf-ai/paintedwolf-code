@@ -58,8 +58,8 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 	if strings.Contains(deferredWrite, "You may edit") {
 		t.Fatalf("card claimed inline edit while write/edit are deferred: %q", deferredWrite)
 	}
-	if !strings.Contains(deferredWrite, "until requested") {
-		t.Fatalf("card must say edits arrive on request: %q", deferredWrite)
+	if !strings.Contains(deferredWrite, "not loaded yet") {
+		t.Fatalf("card must distinguish unloaded tools from missing user authorization: %q", deferredWrite)
 	}
 	// The model describes what it needs; the card never teaches catalog names.
 	if strings.Contains(deferredWrite, "request_tools") || strings.Contains(deferredWrite, "`command`") {

@@ -4,6 +4,6 @@ schema:
   properties:
     need:
       type: string
-      description: "Describe the operation and target in your own words: create files, edit lines, run a process, fetch a URL, or inspect git changes. The host matches it to tools; names are optional. Name the mechanism, not the goal."
+      description: "Describe one concrete operation and target (such as create a file, edit code, or run a command), not the whole task, or pass a tool name from feedback."
   required: [need]
   additionalProperties: false

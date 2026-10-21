@@ -62,6 +62,7 @@ const (
 	InjectWorkerLeg              ID = "inject.worker_leg"
 	InjectAgentsMD               ID = "inject.agents_md"
 	InjectTransition             ID = "inject.transition"
+	InjectExecutionState         ID = "inject.execution_state"
 	InjectCommandJobs            ID = "inject.command_jobs"
 	InjectToolProcedures         ID = "inject.tool_procedures"
 	InjectSkillProcedure         ID = "inject.skill_procedure"

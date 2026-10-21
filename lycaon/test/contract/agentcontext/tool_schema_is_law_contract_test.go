@@ -57,7 +57,7 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestEditSchemaRejectNamesWriteSibling(t *testing.T) {
+func TestEditSchemaRejectPreservesSourcePrerequisite(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
@@ -74,8 +74,8 @@ func TestEditSchemaRejectNamesWriteSibling(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected edit schema reject")
 	}
-	if !strings.Contains(err.Error(), "write") {
-		t.Fatalf("reject should name write sibling, got %v", err)
+	if !strings.Contains(err.Error(), "read the current source") || strings.Contains(err.Error(), "switch to `write`") {
+		t.Fatalf("reject should preserve edit source prerequisite without switching to write, got %v", err)
 	}
 }
 

@@ -92,3 +92,11 @@ func FuzzTrailing(f *testing.F) {
 		}
 	})
 }
+
+func TestBlocksPreservesTopLevelSpans(t *testing.T) {
+	input := "Before\r\n````md\r\n```json\r\n{}\r\n```\r\n````\r\nMiddle\r\n~~~json\r\n{}\r\n~~~\r\nAfter\r\n```unclosed"
+	lines, blocks := jsonfence.Blocks(input)
+	if len(lines) != 12 || len(blocks) != 2 || blocks[0].StartLine != 1 || blocks[0].EndLine != 5 || blocks[1].StartLine != 7 || blocks[1].EndLine != 9 || blocks[0].Payload != "```json\n{}\n```" {
+		t.Fatalf("lines = %v, blocks = %+v", lines, blocks)
+	}
+}

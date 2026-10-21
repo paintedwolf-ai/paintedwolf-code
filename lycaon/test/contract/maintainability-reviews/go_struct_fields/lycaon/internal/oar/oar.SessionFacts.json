@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/oar/oar.SessionFacts",
+  "kind": "projection",
+  "workstream": "coordinator-communication",
+  "disposition": "retain",
+  "reason": "The session record carries lifecycle and current-turn observations. The three communication fields describe one assistant batch and offered-tool availability; the OAR rule owns the decision.",
+  "reviewed_commit": "5a4ee0af96857664ba3f7212498f74fe8792a3f1",
+  "ceiling": 22,
+  "boundaries": {
+    "lycaon/internal/coordinator/guard/wait_visibility_guard_test.go": "139d192d797619269adfa7d697a89caebd4f1fb7c6052687b4e6a4cd4765299d",
+    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2"
+  },
+  "reviewed_shape": "c4e8e580678481c337883f64718c52091fd8eae24cf072818a4a3bb123cef406"
+}

@@ -2,6 +2,7 @@ package oar
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
@@ -58,6 +59,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 	out := map[string]any{
 		"tool":                            gc.Invocation.Tool,
 		"tool_args":                       mapOrEmpty(gc.Invocation.ToolArgs),
+		"tool_turn_has_text":              gc.Session.ToolTurnHasText,
+		"tool_turn_has_agent_note":        gc.Session.ToolTurnHasAgentNote,
+		"surface_note_offered":            gc.Session.SurfaceNoteOffered,
 		"last_assistant":                  gc.Session.LastAssistant,
 		"turn_tools":                      strList(gc.Session.TurnTools),
 		"session_posture":                 gc.Session.SessionPosture,
@@ -202,15 +206,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"source_analysis_unavailable":     gc.Source.SourceAnalysisUnavailable,
 		"http_request_web_page":           gc.Invocation.HTTPRequestWebPage,
 	}
-	for name, value := range rejectObservationActivation(gc) {
-		out[name] = value
-	}
-	for name, value := range standardActivation(gc) {
-		out[name] = value
-	}
-	for name, value := range workflowActivation(gc) {
-		out[name] = value
-	}
+	maps.Copy(out, rejectObservationActivation(gc))
+	maps.Copy(out, standardActivation(gc))
+	maps.Copy(out, workflowActivation(gc))
 	return out
 }
 

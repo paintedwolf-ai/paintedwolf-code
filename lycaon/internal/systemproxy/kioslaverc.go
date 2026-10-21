@@ -1,13 +1,8 @@
 package systemproxy
 
 import (
-	"bufio"
-	"bytes"
-	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -25,48 +20,6 @@ const (
 	kioProxyDiscovery   = 3
 	kioProxyEnvironment = 4
 )
-
-// kioConfigurationPath follows the KDE configuration lookup for the user file.
-func kioConfigurationPath(lookupEnv func(string) (string, bool)) string {
-	if dir, ok := lookupEnv("XDG_CONFIG_HOME"); ok && filepath.IsAbs(dir) {
-		return filepath.Join(dir, "kioslaverc")
-	}
-	home, ok := lookupEnv("HOME")
-	if !ok || !filepath.IsAbs(home) {
-		return ""
-	}
-	return filepath.Join(home, ".config", "kioslaverc")
-}
-
-// readKIOConfiguration reports whether a proxy group exists in the user's
-// kioslaverc. Credentials for KDE proxies live in the wallet and are not read.
-func readKIOConfiguration(lookupEnv func(string) (string, bool)) (Configuration, bool, error) {
-	path := kioConfigurationPath(lookupEnv)
-	if path == "" {
-		return Configuration{}, false, nil
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Configuration{}, false, nil
-		}
-		return Configuration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-	var raw bytes.Buffer
-	if _, err := raw.ReadFrom(bufio.NewReader(&boundedReader{reader: file, remaining: maxKIOBytes + 1})); err != nil {
-		return Configuration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
-	}
-	if raw.Len() > maxKIOBytes {
-		return Configuration{}, false, errors.New("KDE proxy configuration exceeds its size limit")
-	}
-	group, ok := iniGroup(raw.String(), kioProxyGroup)
-	if !ok {
-		return Configuration{}, false, nil
-	}
-	config, err := parseKIOProxyGroup(group, lookupEnv)
-	return config, err == nil, err
-}
 
 func parseKIOProxyGroup(group map[string]string, lookupEnv func(string) (string, bool)) (Configuration, error) {
 	config := Configuration{Source: SourceKIO}
@@ -147,51 +100,4 @@ func kioProxyURL(raw, defaultScheme string) (*url.URL, error) {
 		proxy.Scheme = "socks5"
 	}
 	return &url.URL{Scheme: proxy.Scheme, Host: proxy.Host, User: proxy.User}, nil
-}
-
-// iniGroup returns one group's keys; locale and flag suffixes such as
-// `key[$e]` are stripped so configuration written by KDE tooling matches.
-func iniGroup(raw, name string) (map[string]string, bool) {
-	group := map[string]string{}
-	found, inside := false, false
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || line[0] == '#' {
-			continue
-		}
-		if line[0] == '[' {
-			inside = strings.TrimSuffix(line[1:], "]") == name
-			found = found || inside
-			continue
-		}
-		if !inside {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		if bracket := strings.IndexByte(key, '['); bracket >= 0 {
-			key = key[:bracket]
-		}
-		group[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
-	return group, found
-}
-
-type boundedReader struct {
-	reader    *os.File
-	remaining int
-}
-
-func (b *boundedReader) Read(p []byte) (int, error) {
-	if b.remaining <= 0 {
-		return 0, errors.New("KDE proxy configuration exceeds its size limit")
-	}
-	if len(p) > b.remaining {
-		p = p[:b.remaining]
-	}
-	n, err := b.reader.Read(p)
-	b.remaining -= n
-	return n, err
 }

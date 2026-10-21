@@ -40,7 +40,7 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 		"Report completion only with supporting evidence",
 		"verification results and remaining limits",
 		"## This turn",
-		"Invoke actions through the native tool-call channel, with empty assistant text",
+		"Assistant text alongside tool calls is internal, not shown to the user",
 		"A response without tools ends the turn, including a promise to start or continue",
 		"invoked:false", "action did not run", "invoked:true", "does not prove success",
 	} {
@@ -58,12 +58,12 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	})
 	testutil.FailErr(t, "render coordinator-core with surface_note", err)
 	for _, want := range []string{
-		"Use `surface_note` for progress updates.",
+		"Use `surface_note` for updates the user should see.",
 		"## Mid-turn note (`surface_note`)",
-		"Use `surface_note` whenever it would help keep the user up to date",
-		"meaningful progress or changes during the turn",
-		"Briefly say what happened and what comes next",
-		"cite the supporting evidence, then keep working",
+		"Use `surface_note` for meaningful progress updates or answers to mid-task check-ins, then keep working.",
+		"Keep `summary` under 600 characters.",
+		"`cited_evidence` takes strings",
+		`["write#1"]`,
 		"Avoid routine tool-by-tool updates",
 	} {
 		if !strings.Contains(noteCore, want) {

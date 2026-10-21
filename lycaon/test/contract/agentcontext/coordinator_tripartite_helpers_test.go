@@ -79,6 +79,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 		},
 		prompts.CoordinatorPromptGates{
 			PendingOverlayPromote: len(state.PendingOverlayIDs) > 0,
+			ProgressMissing:       state.ProgressMissing,
 			VerifyCommand:         state.VerifyCommand,
 		},
 		vars,

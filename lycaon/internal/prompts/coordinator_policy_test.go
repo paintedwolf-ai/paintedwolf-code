@@ -168,3 +168,57 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 		t.Fatalf("max_progress_label_chars = %v want %d", vars["max_progress_label_chars"], progress.MaxLabelRunes)
 	}
 }
+
+func TestRequestableToolsTeachesOperationFirstWithoutHardcodedNames(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	vars := prompts.CoordinatorPolicyTemplateVars([]string{"request_tools"}, []string{"write", "edit", "command"})
+	vars["requestable_capabilities"] = []string{"file and git changes"}
+	out, err := engine.Render(t.Context(), "partials/requestable-tools.md", vars)
+	testutil.FailErr(t, "render requestable operations", err)
+	for _, want := range []string{
+		"### More tools",
+		"file and git changes",
+		"call `request_tools` with `need` describing one concrete operation and target",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("requestable-tools.md missing %q: %s", want, out)
+		}
+	}
+	for _, forbidden := range []string{`request_tools({`, `"write"`, `"edit"`, `"command"`} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("requestable-tools.md must not contain %q: %s", forbidden, out)
+		}
+	}
+
+	emptyOut, err := engine.Render(t.Context(), "partials/requestable-tools.md", map[string]any{})
+	testutil.FailErr(t, "render empty requestable operations", err)
+	if strings.TrimSpace(emptyOut) != "" {
+		t.Fatalf("expected empty output without requestable_capabilities, got %q", emptyOut)
+	}
+}
+
+func TestImplementationRoleFollowsWriteAvailability(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	for _, tc := range []struct {
+		name                             string
+		offered, deferred                []string
+		writeOffered, wantRole, wantLoad bool
+	}{
+		{"loadable", []string{"request_tools"}, []string{"write"}, false, true, true},
+		{"loaded", []string{"request_tools", "write"}, nil, true, true, false},
+		{"loader unavailable", []string{"read"}, []string{"write"}, false, false, false},
+		{"write unavailable", []string{"request_tools"}, nil, false, false, false},
+		{"loadable again", []string{"request_tools"}, []string{"write"}, false, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.CoordinatorPolicyTemplateVars(tc.offered, tc.deferred)
+			vars["profile_has_write_tools"] = tc.writeOffered
+			out, err := engine.Render(t.Context(), "agents/coordinator-core.md", vars)
+			testutil.FailErr(t, "render implementation role", err)
+			hasRole := strings.Contains(out, "For implementation requests,") || strings.Contains(out, "Handle diagnosed small changes inline")
+			if hasRole != tc.wantRole || strings.Contains(out, "load the needed tools, create or edit workspace files") != tc.wantLoad {
+				t.Fatalf("role does not match write availability: %s", out)
+			}
+		})
+	}
+}

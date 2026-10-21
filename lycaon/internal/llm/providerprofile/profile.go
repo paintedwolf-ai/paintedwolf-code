@@ -61,6 +61,11 @@ type Profile struct {
 	// ToolResultImages places tool-result pixels on the chat-completions
 	// transport, whose tool messages accept images only on some providers.
 	ToolResultImages ToolResultImagePlacement
+	// OmitToolsWhenNotCallable drops tool definitions instead of sending
+	// tool_choice: none when the request forbids calling tools, for
+	// template-rendered servers that inject tool instructions whenever tools
+	// are present.
+	OmitToolsWhenNotCallable bool
 }
 
 // ToolResultImagePlacement selects where a tool-result image rides.
