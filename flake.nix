@@ -49,15 +49,22 @@
             scannerIdentityFile = "${resources}/scanner-identity.base64";
             gsettingsExecutable = "${pkgs.glib.bin}/bin/gsettings";
           };
+          application = pkgs.callPackage ./packaging/nix/application.nix {
+            source = self;
+            engine = bound-engine;
+            inherit shell bialy document-core resources;
+          };
         in {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
           inherit frontend resources shell bialy document-core bound-engine;
-          default = pkgs.callPackage ./packaging/nix/application.nix {
+          default = application;
+          closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
-            engine = bound-engine;
-            inherit shell bialy document-core resources;
+            inherit application;
+            components = [ shell bound-engine bialy document-core resources frontend ];
+            nixpkgsRevision = nixpkgs.rev;
           };
           browser = resources.inputs.browser;
           gitengine = resources.inputs.gitengine;
