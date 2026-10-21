@@ -1,0 +1,2800 @@
+{
+  "commands": [
+    {
+      "name": "sed",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "sed [-n] [-E|-r] [-e SCRIPT ...|SCRIPT] [-i [EMPTY_SUFFIX]] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sed-option-n-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E",
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sed-option-E-r",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 1,
+          "value_role": "script",
+          "fixture_id": "sed-option-e",
+          "consumption": "fixed",
+          "sample_values": [
+            "s/a/b/"
+          ]
+        },
+        {
+          "spellings": [
+            "-i"
+          ],
+          "arity": -1,
+          "value_role": "optional-empty-suffix",
+          "fixture_id": "sed-option-i",
+          "consumption": "optional-empty-only",
+          "sample_values": [
+            ""
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sed [-n] [-E|-r] [-e SCRIPT ...|SCRIPT] [-i [EMPTY_SUFFIX]] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "stream-script"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-i"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'alpha\\n' | sed 's/alpha/beta/'",
+        "stdout": "beta\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "sed.json defines address grammar and p/d/q/a/i/c/s. Both GNU -i SCRIPT FILE and BSD -i empty-string SCRIPT FILE mean no-backup replacement; nonempty backup suffix unsupported. P14 parses/transforms; P16 publishes. Reject w/e/r/W/R and s///e/w before effects including computed scripts. Default BRE, -E/-r ERE; output uses original record bytes/newline policy.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "sed-operands-valid",
+        "sed-rejection",
+        "sed-option-n-quiet",
+        "sed-option-E-r",
+        "sed-option-e",
+        "sed-option-i"
+      ]
+    },
+    {
+      "name": "awk",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "awk [-F SEP] [-v NAME=VALUE ...] PROGRAM [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-F"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "awk-option-F",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 1,
+          "value_role": "assignment",
+          "fixture_id": "awk-option-v",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture=alpha"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. awk [-F SEP] [-v NAME=VALUE ...] PROGRAM [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a b\\n' | awk '{print $2}'",
+        "stdout": "b\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GoAWK v1.32.0 adapter; NoExec/NoFileReads/NoFileWrites; nonnil empty Environ. AWK grammar: BEGIN/END, expression/range patterns, fields $0/$1..$NF, NR/NF, print/printf/sub/gsub/split/length/tolower/toupper; host input files preserve FILENAME/FNR. Refuse system(), pipes, getline secondary files and direct file redirection before effects. Bound work and allocation; no ambient filesystem/environment.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "awk-operands-valid",
+        "awk-rejection",
+        "awk-option-F",
+        "awk-option-v"
+      ]
+    },
+    {
+      "name": "printf",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "printf FORMAT [ARG ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. printf FORMAT [ARG ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf '%s\\n' alpha",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Formats %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G %%; fixed C locale, numeric fractions retained. Backslash a b e f n r t v backslash, octal/hex escapes; unknown conversion rejects. Repeat format for remaining args, missing numeric0/text empty. No %n or host pointer. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "printf-operands-valid",
+        "printf-rejection"
+      ]
+    },
+    {
+      "name": "echo",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "echo [-n] [-e|-E] [--] [TEXT ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "echo-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-e"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "echo-option-e",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-E"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "echo-option-E",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. echo [-n] [-e|-E] [--] [TEXT ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "echo alpha",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Default literal escapes, space separator and LF; -n omits LF, -e enables printf-style escapes, -E disables; last wins. Never evaluate text as grammar. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "echo-operands-valid",
+        "echo-rejection",
+        "echo-option-n",
+        "echo-option-e",
+        "echo-option-E"
+      ]
+    },
+    {
+      "name": "sort",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "sort [-rnu z] [-k KEY ...] [-t SEP] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-r",
+            "--reverse"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-r-reverse",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--numeric-sort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-n-numericsort",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unique"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-u-unique",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--key"
+          ],
+          "arity": 1,
+          "value_role": "key",
+          "fixture_id": "sort-option-k-key",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-t",
+            "--field-separator"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "sort-option-t-fieldseparator",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
+        },
+        {
+          "spellings": [
+            "-z",
+            "--zero-terminated"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "sort-option-z-zeroterminated",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sort [-rnu z] [-k KEY ...] [-t SEP] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'b\\na\\n' | sort",
+        "stdout": "a\nb\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Byte order, stable exact-byte tie-break; -n exact decimal sign/fraction comparison, no float rounding. KEY start[,end] one-based field[.character], optional n/r flags; default blanks fields, -t one-byte delimiter. Merge-sort byte-metered spill, long record refusal, -z NUL records. Output final record delimiter.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "sort-operands-valid",
+        "sort-rejection",
+        "sort-option-r-reverse",
+        "sort-option-n-numericsort",
+        "sort-option-u-unique",
+        "sort-option-k-key",
+        "sort-option-t-fieldseparator",
+        "sort-option-z-zeroterminated"
+      ]
+    },
+    {
+      "name": "uniq",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "uniq [-cdu] [--] [INPUT [OUTPUT]]",
+      "forms": [
+        {
+          "spellings": [
+            "-c",
+            "--count"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uniq-option-c-count",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--repeated"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uniq-option-d-repeated",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unique"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uniq-option-u-unique",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uniq [-cdu] [--] [INPUT [OUTPUT]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "stdin-input-only"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "OUTPUT-supplied"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a\\na\\n' | uniq -c",
+        "stdout": "2 a\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Adjacent exact-byte records, fixed unpadded count+space, d repeated only,u single only; -d and -u together select none. OUTPUT is staged owner publication.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "uniq-operands-valid",
+        "uniq-rejection",
+        "uniq-option-c-count",
+        "uniq-option-d-repeated",
+        "uniq-option-u-unique"
+      ]
+    },
+    {
+      "name": "cut",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "cut (-f LIST [-d SEP]|-c LIST|-b LIST) [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-f",
+            "--fields"
+          ],
+          "arity": 1,
+          "value_role": "list",
+          "fixture_id": "cut-option-f-fields",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-d",
+            "--delimiter"
+          ],
+          "arity": 1,
+          "value_role": "separator",
+          "fixture_id": "cut-option-d-delimiter",
+          "consumption": "fixed",
+          "sample_values": [
+            ":"
+          ]
+        },
+        {
+          "spellings": [
+            "-c",
+            "--characters"
+          ],
+          "arity": 1,
+          "value_role": "list",
+          "fixture_id": "cut-option-c-characters",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-b",
+            "--bytes"
+          ],
+          "arity": 1,
+          "value_role": "list",
+          "fixture_id": "cut-option-b-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cut (-f LIST [-d SEP]|-c LIST|-b LIST) [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'a:b\\n' | cut -d : -f 2",
+        "stdout": "b\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "LIST one-based N,N-M,-M,N-, comma union in source order, no duplicate output. Exactly one selector; default field tab. -c Unicode scalar, -b exact bytes; invalid text rejects -c. Missing delimiter preserves whole record; no silent byte-character conflation.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "cut-operands-valid",
+        "cut-rejection",
+        "cut-option-f-fields",
+        "cut-option-d-delimiter",
+        "cut-option-c-characters",
+        "cut-option-b-bytes"
+      ]
+    },
+    {
+      "name": "tr",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "tr [-d] [-s] SET1 [SET2]",
+      "forms": [
+        {
+          "spellings": [
+            "-d",
+            "--delete"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tr-option-d-delete",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--squeeze-repeats"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tr-option-s-squeezerepeats",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tr [-d] [-s] SET1 [SET2]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf 'aaab\\n' | tr -s a",
+        "stdout": "ab\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Byte alphabet independent of locale; ranges and ASCII [:class:] plus escapes. Translation pads short SET2 with its final byte; deletion uses SET1; squeeze final chosen set; refuse multibyte class semantics.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "tr-operands-valid",
+        "tr-rejection",
+        "tr-option-d-delete",
+        "tr-option-s-squeezerepeats"
+      ]
+    },
+    {
+      "name": "xargs",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "xargs [-0] [-n COUNT] [-I PLACEHOLDER] [--] [COMMAND [ARG ...]]",
+      "forms": [
+        {
+          "spellings": [
+            "-0",
+            "--null"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "xargs-option-0-null",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--max-args"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "xargs-option-n-maxargs",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-I"
+          ],
+          "arity": 1,
+          "value_role": "placeholder",
+          "fixture_id": "xargs-option-I",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. xargs [-0] [-n COUNT] [-I PLACEHOLDER] [--] [COMMAND [ARG ...]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "bound-child-effect-set"
+          ],
+          "mode": "each-nonempty-serial-batch"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf '' | xargs echo",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Empty input launches none. Default echo, fixed whitespace splitting with quote/backslash argv grammar; -0 exact NUL-delimited words. -I one input line/record replaces literal placeholder within args; input never reparsed as program. Serial ordered batches, each normal binder/receipt, bound argv. -n positive; -I and -n incompatible.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "xargs-operands-valid",
+        "xargs-rejection",
+        "xargs-option-0-null",
+        "xargs-option-n-maxargs",
+        "xargs-option-I"
+      ]
+    },
+    {
+      "name": "test",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "test EXPRESSION",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. test EXPRESSION",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "test alpha = alpha",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "test-operands-valid",
+        "test-rejection"
+      ]
+    },
+    {
+      "name": "[",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "[ EXPRESSION ]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [ EXPRESSION ]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "[ alpha = alpha ]",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "[-operands-valid",
+        "[-rejection"
+      ]
+    },
+    {
+      "name": "[[",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "[[ EXPRESSION ]]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. [[ EXPRESSION ]]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "[[ alpha == a* ]]",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "expression-fragment",
+        "words": [
+          "1",
+          "-eq"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "[[-operands-valid",
+        "[[-rejection"
+      ]
+    },
+    {
+      "name": "true",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "true [ARG ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. true",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "true",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "true-operands-valid",
+        "true-rejection"
+      ]
+    },
+    {
+      "name": "false",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "false [ARG ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. false",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "false",
+        "stdout": "",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "false-operands-valid",
+        "false-rejection"
+      ]
+    },
+    {
+      "name": ":",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": ": [ARG ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. : [ARG ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete true/success result",
+        "1": "complete false result (false/test only)",
+        "2": "usage/utility error; incomplete result"
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": ":",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access. Positional arguments beginning with - are data unless matching a declared leading option; arbitrary words are accepted for true/false/:. Scalar NUL is refused before dispatch.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        ":-operands-valid",
+        ":-rejection"
+      ]
+    },
+    {
+      "name": "sleep",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "sleep SECONDS",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. sleep SECONDS",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "sleep 0",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "sleep-operands-valid",
+        "sleep-rejection"
+      ]
+    },
+    {
+      "name": "which",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "which [--] NAME ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. which [--] NAME ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "which -- cat",
+        "stdout": "cat: native\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "which-operands-valid",
+        "which-rejection"
+      ]
+    },
+    {
+      "name": "command",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "command (-v|-V) [--] NAME ...",
+      "forms": [
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "command-option-v",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-V"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "command-option-V",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. command (-v|-V) [--] NAME ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "command -v -- cat",
+        "stdout": "cat\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "command-operands-valid",
+        "command-rejection",
+        "command-option-v",
+        "command-option-V"
+      ]
+    },
+    {
+      "name": "type",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "type [-a|-t] [--] NAME ...",
+      "forms": [
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "type-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "type-option-t",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. type [-a|-t] [--] NAME ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "type -t -- cat",
+        "stdout": "builtin\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "type-operands-valid",
+        "type-rejection",
+        "type-option-a",
+        "type-option-t"
+      ]
+    },
+    {
+      "name": "env",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "env [-i] [-u NAME ...] [NAME=VALUE ...] [COMMAND ARG ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-i",
+            "--ignore-environment"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "env-option-i-ignoreenvironment",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--unset"
+          ],
+          "arity": 1,
+          "value_role": "name",
+          "fixture_id": "env-option-u-unset",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. env [-i] [-u NAME ...] [NAME=VALUE ...] [COMMAND ARG ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "inspect",
+          "requires": []
+        },
+        {
+          "mode": "dispatch",
+          "requires": [
+            "bound-child-effect-set"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "env -i",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          },
+          "environment": {}
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "env-operands-valid",
+        "env-rejection",
+        "env-option-i-ignoreenvironment",
+        "env-option-u-unset"
+      ]
+    },
+    {
+      "name": "printenv",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "printenv [--] [NAME ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. printenv [--] [NAME ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printenv",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "printenv-operands-valid",
+        "printenv-rejection"
+      ]
+    },
+    {
+      "name": "export",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "export [NAME[=VALUE] ...]",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. export [NAME[=VALUE] ...]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "export",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "export-operands-valid",
+        "export-rejection"
+      ]
+    },
+    {
+      "name": "unset",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "unset NAME ...",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. unset NAME ...",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "unset",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "unset-operands-valid",
+        "unset-rejection"
+      ]
+    },
+    {
+      "name": "pwd",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "pwd",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. pwd",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "pwd",
+        "stdout": ".\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "pwd-operands-valid",
+        "pwd-rejection"
+      ]
+    },
+    {
+      "name": "uname",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "uname [-a|-s|-n|-r|-v|-m]",
+      "forms": [
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-s",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-r",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-v",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "uname-option-m",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. uname [-a|-s|-n|-r|-v|-m]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "uname",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "uname-operands-valid",
+        "uname-rejection",
+        "uname-option-a",
+        "uname-option-s",
+        "uname-option-n",
+        "uname-option-r",
+        "uname-option-v",
+        "uname-option-m"
+      ]
+    },
+    {
+      "name": "whoami",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "whoami",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. whoami",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "whoami",
+        "stdout": "fixture-user\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "whoami-operands-valid",
+        "whoami-rejection"
+      ]
+    },
+    {
+      "name": "id",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "id [-u|-g|-G] [-n]",
+      "forms": [
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "id-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-g"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "id-option-g",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-G"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "id-option-G",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "id-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. id [-u|-g|-G] [-n]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "id",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "id-operands-valid",
+        "id-rejection",
+        "id-option-u",
+        "id-option-g",
+        "id-option-G",
+        "id-option-n"
+      ]
+    },
+    {
+      "name": "hostname",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "hostname",
+      "forms": [],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. hostname",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "hostname",
+        "stdout": "fixture-host\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "hostname-operands-valid",
+        "hostname-rejection"
+      ]
+    },
+    {
+      "name": "date",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "date [-u] [+FORMAT]",
+      "forms": [
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "date-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. date [-u] [+FORMAT]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "date",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "No cross-invocation state. Discovery includes native and confined PATH binaries, consistent frozen python alias fallback. No ambient secret exposure in environment. test grammar/identity/date semantics in builtins.json; unsupported forms reject. source captures and validates complete reached unit, preserving earlier effects. native_path -0 emits exact NUL lists; scalar conversion refuses NUL/unrepresentable name; conversion grants no access.",
+      "reuse": {
+        "implementation": "lycaon/internal/exec/io.go",
+        "tests": [
+          "lycaon/internal/commandsurface/plan_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "date-operands-valid",
+        "date-rejection",
+        "date-option-u"
+      ]
+    }
+  ]
+}
