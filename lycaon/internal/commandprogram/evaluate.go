@@ -91,6 +91,9 @@ type EvaluationRefusal struct {
 	Node     commandsurface.SyntaxLocation
 	Expected string
 	Cause    error
+	// Command, Option and Form name a refused native form: the command, the
+	// refused word and the command's supported form.
+	Command, Option, Form string
 }
 
 func (e *EvaluationRefusal) Error() string {

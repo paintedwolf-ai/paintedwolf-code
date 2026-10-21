@@ -400,7 +400,11 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		var refusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
-			return toolrejection.RejectInvalidArguments(refusal.Code, map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected})
+			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			if refusal.Command != "" {
+				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			return toolrejection.RejectInvalidArguments(refusal.Code, data)
 		}
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
 			return reject

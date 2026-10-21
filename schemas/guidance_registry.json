@@ -549,7 +549,7 @@
       "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",
+      "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
       "summary": "The requested native form was refused before its effect attempt."
@@ -579,10 +579,10 @@
       "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
-      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "branch_instruction": "Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "An option is unsupported for native {{ paintedwolf.command }}."
+      "summary": "An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details."
     },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",

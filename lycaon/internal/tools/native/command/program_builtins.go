@@ -164,7 +164,7 @@ func readResult(status int) toolcontract.ProducerResult {
 // argvRejection projects a binder refusal with its exact word span.
 func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 	code := "COMMAND_OPERAND_INVALID"
-	data := map[string]any{"command": spec.Name}
+	data := map[string]any{"command": spec.Name, "expected_form": spec.Argv}
 	var argvErr *commandprogram.ArgvError
 	if errors.As(cause, &argvErr) {
 		code = argvErr.Code

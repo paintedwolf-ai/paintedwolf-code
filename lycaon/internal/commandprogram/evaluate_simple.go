@@ -223,7 +223,9 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 			if gap == nil {
 				f.hostRefusal(spec.Name, argv.Word, argv.Code)
 				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
-				return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
+				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+				refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
+				return refusal
 			}
 		}
 	}
