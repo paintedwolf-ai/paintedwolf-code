@@ -11,8 +11,22 @@ import unittest
 
 from linux_release.installed_results import admit
 from linux_release.support_matrix import CATALOG, expand
+from linux_release.support_variants import variants
 
 SOURCE = "a" * 40
+
+
+def passed_variants(environment: dict, capability: str, capabilities: set[str]) -> list[dict]:
+    """Every declared variant observed exactly, one package snapshot per release."""
+    result = []
+    for variant in variants(environment, capability, capabilities):
+        release = variant["release"]
+        result.append({"id": variant["id"], "status": "passed", "observed": {
+            "os_id": release["os_ids"][0], "version_id": release["version_id"],
+            "snapshot": {"kind": release["snapshot_kind"], "channel": release["channel"],
+                         "value": hashlib.sha256(release["id"].encode()).hexdigest()},
+            "display_protocol": variant["display"]["protocol"], "scales_percent": variant["scales_percent"]}})
+    return result
 
 
 class LinuxInstalledResultsTests(unittest.TestCase):
@@ -42,6 +56,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         self.final = {"format_version": 1, "source_commit": SOURCE, "artifacts": [artifact]}
         self.campaign = {**copy.deepcopy(self.final), "results": []}
         proof = {"path": "native.txt", "sha256": hashlib.sha256(self.proof.read_bytes()).hexdigest()}
+        capabilities = {item["id"] for item in self.catalog["capabilities"]}
         for row in expand(self.catalog):
             self.campaign["results"].append({
                 "row_id": row["id"], "source_commit": SOURCE, "artifact_id": "candidate",
@@ -50,6 +65,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                                       for key in self.catalog["recorded_environment_facts"]},
                 "cases": [{"id": case, "status": "passed", "evidence": [proof]}
                           for case in row["cases"]],
+                "variants": passed_variants(environment, row["capability"], capabilities),
             })
 
     def report(self):
@@ -77,6 +93,28 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         self.campaign = copy.deepcopy(original)
         self.campaign["results"][0]["cases"].pop()
         self.assertFalse(self.report()["accepted"])
+
+    def test_each_declared_variant_must_pass_on_its_own_release(self):
+        original = copy.deepcopy(self.campaign)
+        row = self.campaign["results"][0]
+        self.assertGreater(len(row["variants"]), 1)
+        row["variants"].pop()
+        result = self.report()
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["rows"][0]["status"], "unverified")
+        self.assertTrue(any(error.endswith(": missing") for error in result["rows"][0]["errors"]))
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"][0]["observed"]["version_id"] = "26.04"
+        result = self.report()
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["rows"][0]["status"], "unverified")
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"][0]["status"] = "failed"
+        self.assertEqual(self.report()["rows"][0]["status"], "failed")
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"].append(copy.deepcopy(self.campaign["results"][0]["variants"][0]))
+        with self.assertRaises(ValueError):
+            self.report()
 
     def test_emulation_only_satisfies_declared_functional_cases(self):
         functional = next(row for row in self.campaign["results"] if row["tier"] == "installed-functional")
@@ -116,6 +154,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
             lambda c: c["results"][0].update(environment_facts={}),
             lambda c: c["results"][0].update(status="available"),
             lambda c: c["results"][0].update(extra="ignored"),
+            lambda c: c["results"][0].pop("variants"),
             lambda c: c["results"][0]["cases"][0].update(evidence=[]),
             lambda c: c["results"][0]["cases"].append(copy.deepcopy(c["results"][0]["cases"][0])),
             lambda c: c.update(format_version=True),
