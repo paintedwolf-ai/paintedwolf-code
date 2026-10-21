@@ -28,6 +28,9 @@ func TestReleasedInvocationReceiptsRenderAfterUpgrade(t *testing.T) {
 	entries, err := os.ReadDir(releasedCorpus)
 	testutil.FailErr(t, "list released corpus", err)
 	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
 		version := entry.Name()
 		t.Run(version, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(releasedCorpus, version, "store.db"))
