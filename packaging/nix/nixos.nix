@@ -81,7 +81,7 @@ in {
       requires = [ "paintedwolf-vault-identity.socket" ];
       restartTriggers = [ policy ];
       serviceConfig = serviceContract.settings // {
-        ExecStart = "${cfg.package}/lib/painted-wolf-code/bin/pw-vault-identity --trust-policy ${policy} --require-dedicated-protection";
+        ExecStart = "${cfg.package}/lib/painted-wolf-code/bin/pw-vault-identity --trust-policy ${policy}";
       };
     };
   };
