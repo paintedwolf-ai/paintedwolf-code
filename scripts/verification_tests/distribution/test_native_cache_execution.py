@@ -15,13 +15,13 @@ class NativeCacheTests(unittest.TestCase):
     def test_compiler_directory_is_scoped_to_a_checkout_and_an_explicit_override(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict(os.environ, {"PW_ARTIFACT_ROOT": directory}, clear=True):
-            self.assertEqual(compiler_cache_dir("/source"), Path(directory) / "compiler-cache")
+            self.assertEqual(compiler_cache_dir("/source"), Path(directory).resolve() / "compiler-cache")
             with patch.dict(os.environ, {"PW_COMPILER_CACHE_DIR": directory + "/custom"}):
-                self.assertEqual(compiler_cache_dir("/snapshot"), Path(directory) / "custom")
+                self.assertEqual(compiler_cache_dir("/snapshot"), Path(directory).resolve() / "custom")
 
     def test_decision_build_ignores_tauri_target_and_stages_each_output(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             source = Path(__file__).resolve().parents[2]
             scripts = root / "scripts"
             (scripts / "toolchain").mkdir(parents=True)

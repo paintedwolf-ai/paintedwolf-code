@@ -13,7 +13,7 @@ for status in 0 7; do
   rc=0
   bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- bash -c '
     set -euo pipefail
-    [[ "$PW_COMPILER_CACHE_DIR" == "$1/artifacts/compiler-cache" ]]
+    [[ "$PW_COMPILER_CACHE_DIR" == "$(cd "$1" && pwd -P)/artifacts/compiler-cache" ]]
     [[ "$(python3 scripts/artifact_paths.py compiler-cache "$PWD")" == "$PW_COMPILER_CACHE_DIR" ]]
     [[ "$PW_COMPILER_CACHE_DIR" != "$PW_BUILD_DIR"/* ]]
     mkdir -p "$PW_COMPILER_CACHE_DIR/decide" "$PW_BUILD_DIR"
