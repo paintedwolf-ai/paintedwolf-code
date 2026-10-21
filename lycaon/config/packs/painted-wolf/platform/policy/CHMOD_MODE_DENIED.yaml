@@ -2,18 +2,16 @@ oar: '1.0'
 id: CHMOD_MODE_DENIED
 kind: schema
 anchor: tool.rejected
-selector:
-  tool:
-  - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.native_operation
   - paintedwolf.mode
   - paintedwolf.mode_denied
   - paintedwolf.chmod_allowed_modes
-when: paintedwolf.rejection_code == "CHMOD_MODE_DENIED"
+when: (tool == "chmod" || (tool == "command" && paintedwolf.native_operation == "chmod")) && paintedwolf.rejection_code == "CHMOD_MODE_DENIED"
 effect: block
 copy:
   what: chmod mode {{ paintedwolf.mode }} is not in the bundled allowlist.

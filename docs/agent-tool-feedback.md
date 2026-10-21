@@ -27,6 +27,31 @@ program output are unaffected. Exact replacement calls require representable
 paths and known output bytes; uncertain quoting, expansion, or output options
 retain recovery guidance without synthesized file content.
 
+## Native command failure attribution
+
+A reached native operation retains the actual `command` model call and its
+submitted argument object. `paintedwolf.native_operation` identifies the bound
+operation separately; operation inputs never replace `tool_args`. Policy must
+explicitly select that combination. Existing selector keys remain conjunctive:
+adding `command` to an old tool selector does not restrict it to one operation.
+Owner rejection codes and finer source coordinates survive supplementation;
+the enclosing command stage has separate `operation_source_*` coordinates.
+
+After receipt settlement, feedback reads binding and effect facts from one
+admitted database snapshot. It preserves completed and uncertain effects,
+executed reads, not-started and untaken work, progress settlement, evidence and
+recovery references, and exact child versus model identities. Whole oversized
+records are omitted with counts and durable references. Display compaction
+cannot turn uncertainty into success or authorize replay. A failed program is
+replayable only when its actual recorder proves zero execution and no effects;
+a successful last pipeline stage cannot erase an earlier producer failure.
+External stderr cannot select native rejection policy.
+
+These feedback ports do not by themselves establish connected runtime or
+installed-platform qualification. The command entry must settle the real
+operation, preserve its leases through delivery, and compose this observation
+with current capability and recovery admission.
+
 ## Internal tool-step notes
 
 Assistant text accompanying native tool calls is an internal working note, hidden
