@@ -65,7 +65,7 @@ fn show(
             let selected = gtk::FileFilter::new();
             selected.set_name(Some(&filter.name));
             for extension in &filter.extensions { selected.add_pattern(&format!("*.{extension}")); }
-            chooser.add_filter(&selected);
+            chooser.add_filter(selected);
         },
         _ => {},
     }
