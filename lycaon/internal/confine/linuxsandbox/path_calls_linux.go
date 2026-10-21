@@ -162,7 +162,7 @@ func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathA
 		call.Mode = uint32(binary.NativeEndian.Uint64(how[8:]))
 		call.Resolve = binary.NativeEndian.Uint64(how[16:])
 	}
-	caller := callerFactsOf(int(n.PID))
+	caller := target.caller
 	call.Path = selfRelative(call.Path, caller.nsPid, caller.nsTid)
 	call.NewPath = selfRelative(call.NewPath, caller.nsPid, caller.nsTid)
 	call.Umask = caller.umask
@@ -230,21 +230,21 @@ func (t *targetProcess) readPath(addr uint64) (string, error) {
 	return "", unix.ENAMETOOLONG
 }
 
-// callerFacts are what one calling thread's status says about it: its process
-// and thread ids as the sandbox's PID namespace numbers them, where the
-// performer lives, and its file creation mask.
+// callerFacts are what one calling thread's status says about it: its thread
+// group, its process and thread ids as the sandbox's PID namespace numbers
+// them, where the performer lives, and its file creation mask.
 type callerFacts struct {
-	nsPid, nsTid int
-	umask        uint32
+	tgid, nsPid, nsTid int
+	umask              uint32
 }
 
 // callerFactsOf reads the calling thread's status once; a mask it cannot read
 // is the most restrictive one.
-func callerFactsOf(tid int) callerFacts {
+func callerFactsOf(tid int) (callerFacts, error) {
 	facts := callerFacts{umask: 0o777}
 	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
 	if err != nil {
-		return facts
+		return facts, err
 	}
 	lastID := func(v string) int {
 		fields := strings.Fields(v)
@@ -260,6 +260,8 @@ func callerFactsOf(tid int) callerFacts {
 			continue
 		}
 		switch key {
+		case "Tgid":
+			facts.tgid = lastID(value)
 		case "Umask":
 			if mask, err := strconv.ParseUint(strings.TrimSpace(value), 8, 32); err == nil {
 				facts.umask = uint32(mask)
@@ -270,7 +272,10 @@ func callerFactsOf(tid int) callerFacts {
 			facts.nsTid = lastID(value)
 		}
 	}
-	return facts
+	if facts.tgid <= 0 {
+		return facts, unix.ESRCH
+	}
+	return facts, nil
 }
 
 // selfRelative rewrites the caller's own process links, which would name the

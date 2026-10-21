@@ -223,13 +223,14 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	old := unix.Umask(0o027)
 	defer unix.Umask(old)
 	runtime.LockOSThread()
-	facts := callerFactsOf(unix.Gettid())
+	facts, err := callerFactsOf(unix.Gettid())
 	runtime.UnlockOSThread()
-	if facts.umask != 0o027 || facts.nsPid != os.Getpid() || facts.nsTid <= 0 {
+	testutil.FailErr(t, "caller facts", err)
+	if facts.umask != 0o027 || facts.tgid != os.Getpid() || facts.nsPid != os.Getpid() || facts.nsTid <= 0 {
 		t.Fatalf("caller facts %+v, want umask 027 and pid %d", facts, os.Getpid())
 	}
-	if gone := callerFactsOf(-1); gone.umask != 0o777 {
-		t.Fatalf("unreadable caller %+v, want the most restrictive mask", gone)
+	if gone, err := callerFactsOf(-1); err == nil || gone.umask != 0o777 {
+		t.Fatalf("unreadable caller %+v %v, want an error and the most restrictive mask", gone, err)
 	}
 	cwd, err := target.openDir(unix.AT_FDCWD)
 	testutil.FailErr(t, "open working directory", err)
