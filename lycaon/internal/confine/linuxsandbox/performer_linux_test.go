@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 	"unsafe"
 
@@ -248,5 +249,38 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	testutil.FailErr(t, "close a tracked descriptor", fdCloser(pipe[0]).Close())
 	if err := fdCloser(pipe[0]).Close(); err != unix.EBADF {
 		t.Fatalf("second close: %v", err)
+	}
+}
+
+// BenchmarkPerformerCreate measures one create through the performer's
+// protocol, without the seccomp notification around it.
+func BenchmarkPerformerCreate(b *testing.B) {
+	root := b.TempDir()
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		b.Fatalf("socket: %v", err)
+	}
+	floors, _ := json.Marshal(Filesystem{WriteRoots: []string{root}, ReadOnlyNames: []NamedFloor{{Below: root, Name: "AGENTS.md"}}})
+	_ = unix.Sendmsg(pair[0], floors, nil, nil, 0)
+	go func() {
+		runtime.LockOSThread()
+		if unix.Unshare(unix.CLONE_FS) == nil {
+			_ = servePathCalls(pair[1])
+		}
+	}()
+	defer func() { _ = unix.Close(pair[0]) }()
+	client := newPerformerClient(pair[0])
+	dir, err := unix.Open(root, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		b.Fatalf("root: %v", err)
+	}
+	defer func() { _ = unix.Close(dir) }()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, opened, err := client.call(pathCall{Op: callOpen, Path: "f" + strconv.Itoa(i), Flags: unix.O_CREAT | unix.O_WRONLY, Mode: 0o644, Dirs: 1}, []int{dir})
+		if err != nil || result.Errno != 0 || opened < 0 {
+			b.Fatalf("create: %+v %v", result, err)
+		}
+		_ = unix.Close(opened)
 	}
 }
