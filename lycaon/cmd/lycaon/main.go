@@ -54,8 +54,11 @@ func runCLI(args []string) int {
 
 func run(ctx context.Context, args []string) error {
 	kind, verb, rest := classifyArgs(args)
-	if kind == dispatchOpen {
+	switch kind {
+	case dispatchOpen:
 		return runOpen(ctx, rest)
+	case dispatchVersion:
+		return printVersion(os.Stdout, rest)
 	}
 	switch verb {
 	case "serve":
