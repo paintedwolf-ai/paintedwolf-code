@@ -114,7 +114,8 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	for _, needle := range []string{
 		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
 		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
-		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
+		"name: linux-candidate-${{ matrix.updater_key }}",
 		"retention-days: 90", "Verify the catalog row for this candidate",
 		"CANDIDATE_RUNNER_LABEL:", "scripts/linux_release/candidates.py",
 		"./task release:candidate:diagnostics --",
