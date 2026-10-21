@@ -6,11 +6,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 // VerifyPayload checks the complete inventory beneath an already retained root.
 // The caller owns root identity, owner trust, immutability and lifetime locking.
-func (m *Manifest) VerifyPayload(root *os.Root) error {
+// excluded names top-level directories the installer keeps beside a package's
+// staged payload (its generation store); the payload may not claim them.
+func (m *Manifest) VerifyPayload(root *os.Root, excluded ...string) error {
 	if root == nil {
 		return errors.New("native manifest: missing retained payload root")
 	}
@@ -21,6 +25,11 @@ func (m *Manifest) VerifyPayload(root *os.Root) error {
 	for _, entry := range m.Payload {
 		expected[entry.Path] = entry
 	}
+	for _, name := range excluded {
+		if _, claimed := expected[name]; claimed || name == "manifest.json" || strings.Contains(name, "/") || name == "" || name == "." || name == ".." {
+			return fmt.Errorf("native manifest: %q cannot be excluded from the payload", name)
+		}
+	}
 	seen := make(map[string]bool, len(expected))
 	err := fs.WalkDir(root.FS(), ".", func(name string, actual fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -28,6 +37,9 @@ func (m *Manifest) VerifyPayload(root *os.Root) error {
 		}
 		if name == "." {
 			return nil
+		}
+		if skip, err := excludedDirectory(name, actual, excluded); skip || err != nil {
+			return err
 		}
 		if name == "manifest.json" {
 			if !actual.Type().IsRegular() {
@@ -94,4 +106,16 @@ func (m *Manifest) VerifyPayload(root *os.Root) error {
 		return errors.New("native manifest: payload inventory is incomplete")
 	}
 	return nil
+}
+
+// excludedDirectory skips an installer-owned top-level directory; anything else
+// at that name is refused rather than silently ignored.
+func excludedDirectory(name string, entry fs.DirEntry, excluded []string) (bool, error) {
+	if strings.Contains(name, "/") || !slices.Contains(excluded, name) {
+		return false, nil
+	}
+	if entry.Type()&fs.ModeType != fs.ModeDir {
+		return true, fmt.Errorf("native manifest: installer directory %q is not a physical directory", name)
+	}
+	return true, fs.SkipDir
 }

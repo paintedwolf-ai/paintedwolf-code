@@ -35,7 +35,10 @@ import tempfile
 import textwrap
 import time
 
+from linux_release.payload import load as load_payload
+
 PACKAGE_NAME = "painted-wolf-code"
+BOOTSTRAP = load_payload()["setuid_bootstrap"]
 OWNED_ROOT = "opt/painted-wolf-code"
 DEB_ARCHES = {"x86_64": "amd64", "aarch64": "arm64"}
 DEB_COMPRESSION = ("xz", "6")
@@ -336,6 +339,8 @@ def assemble(args: argparse.Namespace) -> int:
         staged = staged_tree(bundle_dir)
         place_shell(staged / "data", tauri_metadata(root)["identifier"])
         normalise_modes(staged / "data")
+        # Only the protected launch's bootstrap is setuid; staging refuses any other.
+        (staged / "data" / BOOTSTRAP["path"].lstrip("/")).chmod(0o4755)
         subprocess.run(
             [sys.executable, str(root / "scripts" / "linux-package-manifest.py"), "seal-tree", "--tree", str(staged / "data")],
             check=True,
