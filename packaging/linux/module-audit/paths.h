@@ -5,7 +5,7 @@
 static char pw_names[PW_NAME_LIMIT][PW_PATH_LIMIT];
 static unsigned pw_next_name;
 static int pw_root_controlled(const struct statx *facts,int directory) {
- return facts->stx_uid==0&&!(facts->stx_mode&0022)
+ return pw_stat_complete(facts)&&facts->stx_uid==0&&!(facts->stx_mode&0022)
   &&(facts->stx_mode&0170000)==(directory?0040000:0100000);
 }
 static int pw_same_file(const struct statx *a,const struct statx *b) {

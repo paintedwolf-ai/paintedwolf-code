@@ -6,7 +6,7 @@ static int handshake_pipe(void) {
  struct statx read,write;
  if(pw_stat(9,&read)||pw_stat(10,&write))return 0;
  long r=pw_call(PW_FCNTL,9,F_GETFL,0,0,0,0),w=pw_call(PW_FCNTL,10,F_GETFL,0,0,0,0);
- return read.stx_uid==0&&write.stx_uid==0&&(read.stx_mode&0170000)==0010000
+ return pw_stat_complete(&read)&&pw_stat_complete(&write)&&read.stx_uid==0&&write.stx_uid==0&&(read.stx_mode&0170000)==0010000
   &&(write.stx_mode&0170000)==0010000&&pw_same_file(&read,&write)
   &&r>=0&&w>=0&&(r&O_ACCMODE)==O_RDONLY&&(w&O_ACCMODE)==O_WRONLY
   &&(r&O_NONBLOCK)&&(w&O_NONBLOCK);

@@ -43,6 +43,10 @@ static inline long pw_call(long n,long a,long b,long c,long d,long e,long f) {
 static inline long pw_stat(int fd,struct statx *facts) {
  return pw_call(PW_STATX,fd,(long)"",AT_EMPTY_PATH|AT_SYMLINK_NOFOLLOW,STATX_BASIC_STATS,(long)facts,0);
 }
+static inline int pw_stat_complete(const struct statx *facts) {
+ unsigned required=STATX_TYPE|STATX_MODE|STATX_UID|STATX_INO|STATX_SIZE;
+ return (facts->stx_mask&required)==required;
+}
 static inline void pw_close(int fd) {pw_call(PW_CLOSE,fd,0,0,0,0,0);}
 __attribute__((noreturn)) static void pw_refuse(void) {
  static const char message[]="Painted Wolf Code refused an untrusted native module.\n";
