@@ -164,3 +164,29 @@ func TestTIFFOrientation(t *testing.T) {
 		t.Fatalf("short tiff = %d, want 1", got)
 	}
 }
+
+func TestDecodeRasterRejectsSecondGIFFrameBeforeDecodingItsPixels(t *testing.T) {
+	var buf bytes.Buffer
+	frame := image.NewPaletted(image.Rect(0, 0, 2, 2), color.Palette{color.White, color.Black})
+	if err := gif.Encode(&buf, frame, nil); err != nil {
+		t.Fatalf("encode gif: %v", err)
+	}
+	raw := buf.Bytes()
+	// A second image introducer is sufficient to refuse animation. Never decode
+	// or allocate its pixels, even when the remainder of that frame is incomplete.
+	animated := append(append([]byte(nil), raw[:len(raw)-1]...), 0x2c)
+	if _, err := decodeRaster(animated); err != errAnimatedRaster {
+		t.Fatalf("second frame err=%v", err)
+	}
+
+	// Image-separator bytes inside an extension are data, not additional frames.
+	commented := append(append([]byte(nil), raw[:len(raw)-1]...), 0x21, 0xfe, 2, 0x2c, 0x2c, 0, 0x3b)
+	if _, err := decodeRaster(commented); err != nil {
+		t.Fatalf("commented gif: %v", err)
+	}
+	for _, bad := range [][]byte{raw[:len(raw)-1], append(append([]byte(nil), raw[:len(raw)-1]...), 0x21), append(append([]byte(nil), raw[:len(raw)-1]...), 0x7f)} {
+		if _, err := decodeRaster(bad); err == nil {
+			t.Fatal("malformed gif was accepted")
+		}
+	}
+}
