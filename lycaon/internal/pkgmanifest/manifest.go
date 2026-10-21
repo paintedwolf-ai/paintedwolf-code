@@ -6,7 +6,6 @@ package pkgmanifest
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,21 +73,34 @@ func Load(path string) (*Manifest, error) {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(f, maxManifestBytes+1))
+	m, err := Read(f)
 	if err != nil {
-		return nil, fmt.Errorf("native manifest: read %s: %w", path, err)
+		return nil, fmt.Errorf("native manifest %s: %w", path, err)
+	}
+	return m, nil
+}
+
+// Read decodes a bounded manifest from a reader the caller already retained.
+// The caller owns the reader's identity, permissions and lifetime.
+func Read(reader io.Reader) (*Manifest, error) {
+	if reader == nil {
+		return nil, errors.New("native manifest: missing reader")
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, maxManifestBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("native manifest: read: %w", err)
 	}
 	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("native manifest: %s exceeds %d bytes", path, maxManifestBytes)
+		return nil, fmt.Errorf("native manifest: document exceeds %d bytes", maxManifestBytes)
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
-		return nil, fmt.Errorf("native manifest: decode %s: %w", path, err)
+		return nil, fmt.Errorf("native manifest: decode: %w", err)
 	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("native manifest: %s carries data after the document", path)
+		return nil, errors.New("native manifest: data after the document")
 	}
 	if err := m.Validate(); err != nil {
 		return nil, err
@@ -168,27 +180,4 @@ func (m *Manifest) Lookup(path string) (Executable, bool) {
 		}
 	}
 	return Executable{}, false
-}
-
-// Verify hashes the file at path and compares it with its manifest entry.
-func (m *Manifest) Verify(path string) error {
-	want, ok := m.Lookup(path)
-	if !ok {
-		return &UnlistedError{Path: path}
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return err
-	}
-	got := hex.EncodeToString(h.Sum(nil))
-	if n != want.Size || got != want.SHA256 {
-		return &MismatchError{Path: path, Want: want.SHA256, Got: got}
-	}
-	return nil
 }
