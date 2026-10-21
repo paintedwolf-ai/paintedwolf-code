@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/platform/interaction/text-edit-context.ts",
+  "kind": "module",
+  "workstream": "linux-app-menu-edit-target",
+  "disposition": "retain",
+  "reason": "Retain the existing 382-line text editing context as the owner of captured selection restoration and normal clipboard/edit actions. This correction exports its existing restoration operation for app-menu undo/redo rather than duplicating input, contenteditable and CodeMirror selection rules. The file gains no executable body or measured lines. Menu actions now use their opening field snapshot and reject disconnected or newly readonly targets instead of following menu focus to another element. Pointer and keyboard app-menu cut, detached-target refusal, editor history and the existing editing suite passed 27 scoped contracts. A new selection helper or forwarding layer would obscure this shared operation lifecycle. This measured ceiling permits no future growth or hard-limit change.",
+  "reviewed_commit": "3d9f76bd0222cd93129d9520bb113a62ac2fe307",
+  "ceiling": 382,
+  "boundaries": {
+    "lycaon-den/src/platform/interaction/text-edit-context.test.ts": "1d7820c59984de1b5f202fc233f8e0f658a3ea2dc09b6db6c98834627081bb8d",
+    "lycaon-den/src/platform/desktop/in-window-app-menu.test.tsx": "a003bddb9cb3e4400cffbc8901a0812cfc2964b29e6cf68dabdd18f15969bf53"
+  }
+}

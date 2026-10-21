@@ -120,7 +120,7 @@ describe("inWindowAppMenuItems", () => {
     textarea.remove();
   });
 
-  it("runs the edit entries against the editable focused when chosen", async () => {
+  it("retains the opening editable when menu focus moves, and refuses a removed target", async () => {
     const execCommand = vi.fn(() => true);
     Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
     copyTextToClipboard.mockClear();
@@ -136,13 +136,34 @@ describe("inWindowAppMenuItems", () => {
     edit.submenu.find((item) => item.label === "Copy")?.onSelect?.();
     await vi.waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith("draft"));
 
-    // Focus left every editable before the choice: the entry does nothing.
     textarea.blur();
     copyTextToClipboard.mockClear();
     edit.submenu.find((item) => item.label === "Copy")?.onSelect?.();
     edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    await vi.waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith("draft"));
+    expect(execCommand).toHaveBeenCalledTimes(3);
+    textarea.remove();
+    copyTextToClipboard.mockClear();
+    edit.submenu.find((item) => item.label === "Copy")?.onSelect?.();
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
     expect(copyTextToClipboard).not.toHaveBeenCalled();
-    expect(execCommand).toHaveBeenCalledTimes(2);
+    expect(execCommand).toHaveBeenCalledTimes(3);
+  });
+
+  it("refuses mutations after the opening field becomes readonly", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "draft";
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.setSelectionRange(0, 5);
+    const edit = section(inWindowAppMenuItems(), "Edit");
+    textarea.readOnly = true;
+    copyTextToClipboard.mockClear();
+    edit.submenu.find((item) => item.label === "Cut")?.onSelect?.();
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    expect(textarea.value).toBe("draft");
+    expect(copyTextToClipboard).not.toHaveBeenCalled();
+    textarea.remove();
   });
 
   it("steps a focused code editor through its own history", () => {
@@ -189,6 +210,34 @@ describe("inWindowAppMenuItems", () => {
 });
 
 describe("AppMenuButton", () => {
+  it.each(["pointer", "keyboard"])("cuts the captured selection after %s menu opening", async (method) => {
+    render(() => <AppMenuButton side="right" />);
+    const textarea = document.createElement("textarea");
+    textarea.value = "draft";
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.setSelectionRange(1, 4);
+    copyTextToClipboard.mockClear();
+    const trigger = screen.getByTestId("window-app-menu");
+    if (method === "pointer") {
+      const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+      expect(trigger.dispatchEvent(down)).toBe(false);
+      expect(document.activeElement).toBe(textarea);
+      trigger.click();
+    } else {
+      requestAppMenuOpen();
+    }
+    const edit = await vi.waitFor(() => screen.getByTestId("app-menu-section-edit"));
+    edit.click();
+    const cut = await vi.waitFor(() => screen.getByRole("menuitem", { name: /^Cut/ }));
+    expect(cut.getAttribute("aria-disabled")).not.toBe("true");
+    cut.click();
+    await vi.waitFor(() => expect(textarea.value).toBe("dt"));
+    expect(copyTextToClipboard).toHaveBeenCalledWith("raf");
+    expect(textarea.selectionStart).toBe(1);
+    textarea.remove();
+  });
+
   it("opens the menu from its button and from a keyboard request", async () => {
     render(() => <AppMenuButton side="right" />);
     const trigger = screen.getByTestId("window-app-menu");

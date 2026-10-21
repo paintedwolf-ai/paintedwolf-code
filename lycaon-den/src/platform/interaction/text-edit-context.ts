@@ -351,7 +351,7 @@ export async function pasteEditable(snap: EditableSnapshot): Promise<void> {
 }
 
 /** Puts focus and the captured selection back before a system edit action. */
-function restoreEditableSelection(snap: EditableSnapshot): void {
+export function restoreEditableSelection(snap: EditableSnapshot): void {
   const el = snap.el;
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     el.focus();

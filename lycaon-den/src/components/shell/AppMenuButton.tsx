@@ -18,10 +18,10 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
   let trigger: HTMLButtonElement | undefined;
   const close = () => setItems(null);
   const open = (keyboard: boolean) => {
+    const entries = inWindowAppMenuItems();
     trigger?.focus({ preventScroll: true });
     setFromKeyboard(keyboard);
-    // The spec is read as the menu opens, so enablement is current.
-    setItems(inWindowAppMenuItems());
+    setItems(entries);
   };
   const toggle = (keyboard: boolean) => (items() ? close() : open(keyboard));
   const binding = bindChromeContextMenu(() => open(false));
@@ -45,6 +45,7 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
         ref={(el) => {
           trigger = el;
         }}
+        onPointerDown={(event) => event.preventDefault()}
         onClick={() => toggle(false)}
         onKeyDown={binding.onKeyDown}
         onContextMenu={binding.onContextMenu}
