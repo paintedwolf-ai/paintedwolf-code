@@ -153,9 +153,9 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never": "loop_iterations",
+		"while x=1; do x=2; done; echo never":      "loop_iterations",
 		"f() { while x=1; do continue; done; }; f": "loop_iterations",
-		"while :; do :; done; echo never": "child_executions",
+		"while :; do :; done; echo never":          "child_executions",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)

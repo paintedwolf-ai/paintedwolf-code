@@ -172,6 +172,7 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 		c.unsupported(call.Args[0], "version 1 built-ins; source -- PATH for explicit scripts")
 	}
 }
+
 // validateSet admits literal -e, -u, -o errexit, -o nounset, -o pipefail and
 // their + forms (except +o pipefail), combined as in set -euo pipefail.
 func (c *programCompiler) validateSet(call *syntax.CallExpr) {

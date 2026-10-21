@@ -56,9 +56,9 @@ type frame struct {
 // substitutionStatus retains the ordinary statuses of the substitutions one
 // command's expansion reached. The first nonzero one prevents its dispatch.
 type substitutionStatus struct {
-	mu                   sync.Mutex
-	last, failed         int
-	lastID, failedID     string
+	mu                  sync.Mutex
+	last, failed        int
+	lastID, failedID    string
 	reached, hasFailure bool
 }
 
