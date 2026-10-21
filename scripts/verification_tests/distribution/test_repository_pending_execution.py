@@ -2,7 +2,7 @@
 
 import unittest
 
-from linux_release.repository_pending import activation_plan, marker
+from scripts.linux_release.repository_pending import activation_plan, marker
 
 
 class PendingActivationTests(unittest.TestCase):

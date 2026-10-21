@@ -1752,6 +1752,21 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
+  release:rehearse:native-repositories:
+    desc: 'Signed apt/dnf repository fixtures through isolated package-manager roots and a local TLS origin. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal fixtures {{.CLI_ARGS}}
+
+  release:rehearse:native-repositories-r2:
+    desc: 'The native repository fixtures also published under an isolated release-system-tests/ R2 prefix with test credentials. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal r2 {{.CLI_ARGS}}
+
+  release:rehearse:native-candidates:
+    desc: 'Retain actual DEB/RPM candidates as signed repositories under disposable test trust. Pass --candidate-dir, --retain-repositories, --source-commit, --version, --channel, --release-build, --architecture and --receipt after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal candidates {{.CLI_ARGS}}
+
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
     cmds:

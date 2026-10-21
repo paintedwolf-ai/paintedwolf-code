@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from linux_release.repository_objects import encoded, immutable
-from linux_release.repository_operations import identity, transition, retained, mark_withdrawal, archive_trust
+from scripts.linux_release.repository_objects import encoded, immutable
+from scripts.linux_release.repository_operations import identity, transition, retained, mark_withdrawal, archive_trust
 
 
 class RepositoryOperationsTests(unittest.TestCase):

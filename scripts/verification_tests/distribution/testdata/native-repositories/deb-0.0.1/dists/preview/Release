@@ -1,0 +1,17 @@
+Acquire-By-Hash: yes
+Codename: preview
+Date: Wed, 21 Oct 2026 01:23:46 +0000
+Origin: Painted Wolf Code
+Suite: preview
+MD5Sum:
+ 1a2af1553581ea2061e2819bb554eae8              618 main/binary-amd64/Packages
+ 048af9d8e95cfc8c9cb10220c42824b7              392 main/binary-amd64/Packages.gz
+SHA1:
+ d66f449ea320e9ce257e329ff2970291218956ab              618 main/binary-amd64/Packages
+ 1c1e0ff84360430be397472688ea0521affcd7e6              392 main/binary-amd64/Packages.gz
+SHA256:
+ 723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95              618 main/binary-amd64/Packages
+ ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53              392 main/binary-amd64/Packages.gz
+SHA512:
+ 39f4229c85ec9c70f856727f9e86ff3113a2f574ad771c3b1d6962016a5a42d9cb6fb1393f72b88952129c7a652f32b981018ffe7d164ea630448d9f7f1bd932              618 main/binary-amd64/Packages
+ 150982cedc45ba0f7ab48e6bca8c7baea627ff152ecb25db3da0ff4bbe2a053084ec4c574c17c363a71b575ad226c54087485ea670098c141bf3c3a27669aac5              392 main/binary-amd64/Packages.gz

@@ -1013,15 +1013,19 @@ a separate invocation. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
 **Native apt/dnf repository rehearsals.**
-`./task release:live-test -- --local-native-repositories --receipt /absolute/path/result.json`
+`./task release:rehearse:native-repositories -- --receipt /absolute/path/result.json`
 uses disposable keys and three tiny native package versions. It requires `apt-ftparchive`,
 `createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
 signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
 stale activation refusal and explicit recovery. It does not qualify the application,
-perform installed application upgrades, or publish to R2.
+perform installed application upgrades, or publish to R2. Assembly, signed-index
+admission, publication, recovery/withdrawal, candidate retention and setup-package
+refusals are exercised directly by `./task test:runner` against committed signed
+fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
+tests require the native tools and fail rather than skip when one is missing.
 
-The same local mode can retain repositories for actual application candidates:
-`./task release:live-test -- --local-native-repositories --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
+A separate target retains repositories for actual application candidates:
+`./task release:rehearse:native-candidates -- --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
 The input directory contains exactly one DEB and RPM for each selected architecture.
 The output must be new and outside the input directory; the receipt must remain outside
 both. Native package names, versions and architectures must match the independent
@@ -1133,9 +1137,9 @@ It verifies public custom-domain bytes and object cache roles before replacing
 Interrupted uploads retain unreferenced objects and retries accept identical bytes.
 Reviewed expected-generation checks run before and after upload. Cross-host
 serialization belongs to the protected release workflow, not an R2 list-before-write
-check. The local native rehearsal also runs deterministic publication contracts for
-ordering, interrupted upload/retry, stale plans, concurrent state changes, immutable
-collisions and fixture-prefix refusal. Those contracts do not replace a credentialed
+check. `test:runner` covers ordering, interrupted upload/retry, stale plans, concurrent
+state changes, immutable collisions and fixture-prefix refusal against a real local
+generation and an in-memory object store. Those contracts do not replace a credentialed
 custom-domain rehearsal. Use only explicitly supplied test credentials; no credential
 lookup or automatic production fallback occurs. Repository manifests bind the exact
 source commit, final signed package hashes and a canonical `inventory_sha256` over
@@ -1152,12 +1156,11 @@ facts; an ordinary release campaign cannot authorize another operation. Retained
 catalog fields never enter the origin. Existing installations and mutable data are
 outside this publication owner's mutation scope.
 
-The existing protected `release-system-live-test` workflow accepts explicit dispatch
-modes `native-repositories` and `pacman-repositories`; the scheduled/default updater
-rehearsal remains unchanged. Native mode uses amd64 and arm64 Ubuntu runners; pacman
-uses an official digest-pinned Arch base-devel container and an unprivileged fixture
-owner. Both use only the existing `release-rehearsal` test environment. No secret
-values need to be loaded locally. The `--r2` fixture mode stages immutable objects,
+The existing protected `release-system-live-test` workflow accepts the explicit dispatch
+mode `native-repositories`; the scheduled/default updater rehearsal remains
+`release:live-test`. Native mode runs `./task release:rehearse:native-repositories-r2`
+on amd64 and arm64 Ubuntu runners with only the existing `release-rehearsal` test
+environment. No secret values need to be loaded locally. The R2 target stages immutable objects,
 exercises a warmed missing authority, a deliberately corrupted test object and its
 restoration, retries, rotation, withdrawal and retained recovery under a unique
 `release-system-tests/` prefix. `--phase stage` supports interruption before activation;

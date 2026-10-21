@@ -1,0 +1,34 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Acquire-By-Hash: yes
+Codename: preview
+Date: Wed, 21 Oct 2026 01:23:46 +0000
+Origin: Painted Wolf Code
+Suite: preview
+MD5Sum:
+ 1a2af1553581ea2061e2819bb554eae8              618 main/binary-amd64/Packages
+ 048af9d8e95cfc8c9cb10220c42824b7              392 main/binary-amd64/Packages.gz
+SHA1:
+ d66f449ea320e9ce257e329ff2970291218956ab              618 main/binary-amd64/Packages
+ 1c1e0ff84360430be397472688ea0521affcd7e6              392 main/binary-amd64/Packages.gz
+SHA256:
+ 723b51927f1e049ff0d0792f9a9c26b510ab408437b00cb19635b98937dbdf95              618 main/binary-amd64/Packages
+ ef1a0b5a6c90d9e1a24bf20b9ff2309c24eba49cc116f4274481af48bb4f7a53              392 main/binary-amd64/Packages.gz
+SHA512:
+ 39f4229c85ec9c70f856727f9e86ff3113a2f574ad771c3b1d6962016a5a42d9cb6fb1393f72b88952129c7a652f32b981018ffe7d164ea630448d9f7f1bd932              618 main/binary-amd64/Packages
+ 150982cedc45ba0f7ab48e6bca8c7baea627ff152ecb25db3da0ff4bbe2a053084ec4c574c17c363a71b575ad226c54087485ea670098c141bf3c3a27669aac5              392 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQGzBAEBCgAdFiEEOeUM/6bzWDBpu30mR4APmdLwMcUFAmrYFCIACgkQR4APmdLw
+McUl3Qv/TZnL3zh1zKQY/9GrO3pB2py1lkbxlEDFnWGp/qE2O+RaGAxSPYLunp6J
+lK3m4OfJxGOgWy7J0pBAgg0M7WmQ0Dx150uPcK2sqruZ01WIFe6kVVbezoi5fEGb
+zwEqN3smw7Fns4DipjVrdq4JymBScYZhbO8M0oaj1YBRZu5KSEgWpjohCFbUJlQr
+JyLe77am8uK6H6iFUJD3QhGzrd9ZUCojA5k4YLHZFfNyQSad3FyQFa20uNsUXnxc
+mvf1J38nckBe7X+gQJ00VftjJ2gCBTWkUXahWq35x6IQmUr0jUuuAivChHFeQ5SE
+OJr+sFjmVYJ169K/0wcoX882R2aB2kZZmN3035VYGOz6mncEgZh2+DNfL9vCsMjP
+uxs9qEjRYx6xbdh6Ayru4amfVvCFc5tYWrKb8q2GCziINC/CmPLfZY5srX3jDCLL
+Kq1iQ0QOMTKO0Z8Gooz+Tf/rBPiv/OWOe/2ngJOfPUE2Q2zwa8/gRNBPwVu+OhyO
+nTD9HG0K
+=ITtW
+-----END PGP SIGNATURE-----

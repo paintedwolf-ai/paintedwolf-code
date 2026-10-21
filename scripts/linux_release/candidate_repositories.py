@@ -107,32 +107,3 @@ def retain(candidates: Path, destination: Path, source_commit: str, version: str
             raise ValueError("retained candidate test trust entered production admission")
     immutable(destination / "candidate-repositories.json", encoded(result))
     return result
-
-
-def rehearse(work: Path, packages: dict, package: str):
-    """Exercise retained signing through the actual candidate API with tiny native files."""
-    inputs = work / "candidate-inputs"
-    inputs.mkdir()
-    tree = work / "candidate-deb-tree"
-    subprocess.run(["dpkg-deb", "--raw-extract", str(packages["deb"]), str(tree)], check=True)
-    control = tree / "DEBIAN/control"
-    control.write_text(control.read_text().replace("Version: 0.0.1-1\n", "Version: 0.0.1\n"))
-    subprocess.run(["dpkg-deb", "--build", "--root-owner-group", str(tree), str(inputs / "candidate.deb")], check=True)
-    shutil.copyfile(packages["rpm"], inputs / "candidate.rpm")
-    for source, version in [("short", "0.0.1"), ("f" * 40, "0.0.2")]:
-        try:
-            retain(inputs, work / "invalid-candidate", source, version, "preview", 14, package=package)
-        except ValueError:
-            pass
-        else:
-            raise ValueError("candidate retention accepted a mismatched source or native version")
-    output = work / "retained-candidate"
-    receipt = retain(inputs, output, "f" * 40, "0.0.1", "preview", 14,
-                     [packages["architecture"]], package)
-    for row in receipt["packages"]:
-        if digest(output / row["path"]) != row["sha256"]:
-            raise ValueError("retained candidate differs from its final signed bytes")
-        if row["family"] == "rpm" and row["sha256"] == row["input_sha256"]:
-            raise ValueError("retained RPM did not preserve its post-signing identity")
-    if any("secret" in path.name for path in output.rglob("*")):
-        raise ValueError("candidate output retained private fixture trust")

@@ -350,6 +350,15 @@
     ],
     "release:live-test": [
       "release:live-test"
+    ],
+    "release:rehearse:native-repositories": [
+      "release:rehearse:native-repositories"
+    ],
+    "release:rehearse:native-repositories-r2": [
+      "release:rehearse:native-repositories-r2"
+    ],
+    "release:rehearse:native-candidates": [
+      "release:rehearse:native-candidates"
     ]
   },
   "private": [
@@ -374,7 +383,10 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
-    "release:live-test": "passthrough"
+    "release:live-test": "passthrough",
+    "release:rehearse:native-repositories": "passthrough",
+    "release:rehearse:native-repositories-r2": "passthrough",
+    "release:rehearse:native-candidates": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -697,6 +709,25 @@
     "release:live-test": {
       "locks": [
         "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories": {
+      "locks": [
+        "native-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories-r2": {
+      "locks": [
+        "native-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-candidates": {
+      "locks": [
+        "native-candidates"
       ],
       "workers": 1
     }
