@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -33,20 +34,26 @@ type supervisorLaunchResult struct {
 	Errno int `json:"errno"`
 }
 
+// supervisorStart is the parent's view of one supervisor's startup report.
+type supervisorStart struct {
+	read, write *os.File
+	target      string
+}
+
 func supervisorStartupError(cmd *exec.Cmd) error {
 	value, ok := supervisorStarts.LoadAndDelete(cmd)
 	if !ok {
 		return nil
 	}
-	read := value.(*os.File)
-	defer func() { _ = read.Close() }()
-	_ = cmd.ExtraFiles[len(cmd.ExtraFiles)-1].Close()
+	start := value.(supervisorStart)
+	defer func() { _ = start.read.Close() }()
+	_ = start.write.Close()
 	var result supervisorLaunchResult
-	if err := json.NewDecoder(read).Decode(&result); err != nil {
+	if err := json.NewDecoder(start.read).Decode(&result); err != nil {
 		return fmt.Errorf("command supervisor startup: %w", err)
 	}
 	if result.Errno != 0 {
-		return &os.PathError{Op: "fork/exec", Path: cmd.Args[4], Err: syscall.Errno(result.Errno)}
+		return &os.PathError{Op: "fork/exec", Path: start.target, Err: syscall.Errno(result.Errno)}
 	}
 	return nil
 }
@@ -54,6 +61,9 @@ func supervisorStartupError(cmd *exec.Cmd) error {
 func init() {
 	if len(os.Args) > 1 && os.Args[1] == supervisorCommand {
 		os.Exit(runCommandSupervisor(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == relayCommand {
+		os.Exit(runBrokerRelay(os.Args[2:]))
 	}
 }
 
@@ -76,11 +86,25 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 		cleanup()
 		return nil, nil, err
 	}
+	unconfined := !confine.IsHelperInvocation(cmd.Args)
 	count := len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, read, statusWrite)
-	supervisorStarts.Store(cmd, statusRead)
+	supervisorStarts.Store(cmd, supervisorStart{read: statusRead, write: statusWrite, target: cmd.Path})
 	cmd.Args = append([]string{self, supervisorCommand, strconv.Itoa(count), string(priority), cmd.Path}, cmd.Args...)
 	cmd.Path = self
+	if unconfined {
+		// Under the protected launch an unconfined program never runs inside
+		// the protected namespace: its supervisor starts through the broker.
+		if err := relayThroughBroker(cmd); err != nil {
+			_ = read.Close()
+			_ = write.Close()
+			_ = statusRead.Close()
+			_ = statusWrite.Close()
+			supervisorStarts.Delete(cmd)
+			cleanup()
+			return nil, nil, err
+		}
+	}
 	return cmd, func() {
 		_ = read.Close()
 		_ = write.Close()
@@ -91,8 +115,14 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 	}, nil
 }
 
+// commandSupervisor reports a supervised command: its supervisor, or the
+// broker relay standing in for a supervisor started outside the protected
+// namespace, which forwards the same signals.
 func commandSupervisor(cmd *exec.Cmd) bool {
-	return cmd != nil && len(cmd.Args) > 1 && cmd.Args[1] == supervisorCommand
+	if cmd == nil || len(cmd.Args) < 2 {
+		return false
+	}
+	return cmd.Args[1] == supervisorCommand || cmd.Args[1] == relayCommand && len(cmd.Args) > 2 && cmd.Args[2] == supervisorCommand
 }
 
 func signalSupervisor(pid int, start int64, hard bool) bool {

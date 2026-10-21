@@ -45,6 +45,7 @@ type Facts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	Exec            *ExecProbe                  `json:"exec,omitempty"`
 }
 
 func main() {
@@ -82,6 +83,14 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--broker-probe" {
 			brokerProbe(&facts)
+		}
+		if arg == "--exec-probe" {
+			scratch, err := os.MkdirTemp("", "pw-protected-exec-")
+			if err == nil {
+				probe := execProbe(scratch)
+				facts.Exec = &probe
+				_ = os.RemoveAll(scratch)
+			}
 		}
 	}
 	// Stay dumpable and traceable by anyone: only the namespace can refuse.

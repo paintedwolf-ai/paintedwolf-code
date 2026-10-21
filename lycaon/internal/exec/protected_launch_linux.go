@@ -1,0 +1,132 @@
+//go:build linux
+
+package exec
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/launchbroker"
+)
+
+// LaunchBrokerFDEnv names the descriptor on which the desktop hands the
+// engine the protected launch's broker. The engine reads it only when its own
+// user namespace shows the protected launch.
+const LaunchBrokerFDEnv = "LYCAON_LAUNCH_BROKER_FD"
+
+// relayCommand is the engine image's broker relay mode.
+const relayCommand = "__broker-relay"
+
+// ErrLaunchBrokerUnavailable refuses an unconfined launch inside the
+// protected namespace when the broker that must start it is missing.
+var ErrLaunchBrokerUnavailable = errors.New("the protected launch broker is unavailable, so an unconfined program cannot start")
+
+// protectedLaunch is this process's position relative to the protected
+// launch, decided once from kernel facts.
+type protectedLaunch struct {
+	protected bool
+	broker    *os.File
+	err       error
+}
+
+var protectedState = sync.OnceValue(func() protectedLaunch {
+	return detectProtectedLaunch(namespaceFacts, os.Getenv(LaunchBrokerFDEnv))
+})
+
+// userNamespaceFacts are what decide the protected launch: a user namespace
+// owned by uid 0 that has a parent, mapping every identity to itself.
+type userNamespaceFacts struct {
+	owner    int
+	nested   bool
+	identity bool
+}
+
+func (f userNamespaceFacts) protected() bool { return f.nested && f.owner == 0 && f.identity }
+
+func namespaceFacts() (userNamespaceFacts, error) {
+	own, err := os.Open("/proc/self/ns/user")
+	if err != nil {
+		return userNamespaceFacts{}, err
+	}
+	defer func() { _ = own.Close() }()
+	owner, err := unix.IoctlGetInt(int(own.Fd()), unix.NS_GET_OWNER_UID)
+	if err != nil {
+		return userNamespaceFacts{}, err
+	}
+	facts := userNamespaceFacts{owner: owner}
+	parent, err := unix.IoctlRetInt(int(own.Fd()), unix.NS_GET_PARENT)
+	switch {
+	case err == nil:
+		facts.nested = true
+		_ = unix.Close(parent)
+	case !errors.Is(err, unix.EPERM):
+		return userNamespaceFacts{}, err
+	}
+	raw, err := os.ReadFile("/proc/self/uid_map")
+	if err != nil {
+		return userNamespaceFacts{}, err
+	}
+	facts.identity = strings.Join(strings.Fields(string(raw)), " ") == "0 0 4294967295"
+	return facts, nil
+}
+
+// detectProtectedLaunch accepts the broker only from a process inside the
+// protected namespace, and only a broker created outside it: nobody inside
+// is uid 0, so a socket pair whose creator was uid 0 came from the bootstrap.
+func detectProtectedLaunch(read func() (userNamespaceFacts, error), named string) protectedLaunch {
+	facts, err := read()
+	if err != nil {
+		return protectedLaunch{err: fmt.Errorf("read user namespace facts: %w", err)}
+	}
+	if !facts.protected() {
+		return protectedLaunch{}
+	}
+	state := protectedLaunch{protected: true}
+	fd, err := strconv.Atoi(strings.TrimSpace(named))
+	if err != nil || fd < 3 {
+		state.err = fmt.Errorf("%w: no broker descriptor was handed to the engine", ErrLaunchBrokerUnavailable)
+		return state
+	}
+	peer, err := launchbroker.CheckSocket(fd)
+	if err != nil {
+		state.err = fmt.Errorf("%w: %w", ErrLaunchBrokerUnavailable, err)
+		return state
+	}
+	if peer.Uid != 0 {
+		state.err = fmt.Errorf("%w: the broker socket was not created by the bootstrap", ErrLaunchBrokerUnavailable)
+		return state
+	}
+	unix.CloseOnExec(fd)
+	state.broker = os.NewFile(uintptr(fd), "launch-broker")
+	return state
+}
+
+// relayThroughBroker turns a supervisor command into its broker relay when
+// this engine runs inside the protected launch. The relay receives the
+// broker as its last descriptor; everything else is the supervisor's.
+func relayThroughBroker(cmd *exec.Cmd) error {
+	state := protectedState()
+	if !state.protected {
+		// Outside the protected launch an unreadable namespace changes
+		// nothing: the command runs as it always has.
+		return nil
+	}
+	if state.err != nil {
+		return state.err
+	}
+	cmd.Args = append([]string{cmd.Args[0], relayCommand}, cmd.Args[1:]...)
+	cmd.ExtraFiles = append(cmd.ExtraFiles, state.broker)
+	return nil
+}
+
+// relayedCommand reports a command that is the broker relay.
+func relayedCommand(cmd *exec.Cmd) bool {
+	return cmd != nil && len(cmd.Args) > 1 && cmd.Args[1] == relayCommand
+}
