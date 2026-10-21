@@ -367,14 +367,15 @@
 }
 .tabs__panel-clip {
   position: relative;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
   border: 1px solid var(--den-line);
   border-top: 0;
   border-radius: 0 0 var(--den-radius) var(--den-radius);
   /* Same fill as the chip row. */
   background: var(--den-background);
+}
+.tabs__panel-clip > .den-scrollport__viewport {
+  overscroll-behavior: contain;
 }
 /* Split view caps panel height against the window. */
 .den-shell-stage-host--split .den-split-col--chat .tabs__panel-clip {

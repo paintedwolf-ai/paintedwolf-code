@@ -23,6 +23,8 @@ import { type FirstTimeTipId } from "../../first-time-tips/first-time-tips-catal
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
 
+import { Scrollport } from "../primitives/Scrollport.tsx";
+
 export type TabSpec = {
   id: TabId;
   label: string;
@@ -112,6 +114,7 @@ export function TabBar(props: TabBarProps) {
   };
 
   let clipEl: HTMLDivElement | undefined;
+  let clipViewport: HTMLDivElement | undefined;
   let heightAnim: Animation | undefined;
   let panelWashEl: HTMLDivElement | undefined;
   let panelWashAnim: Animation | undefined;
@@ -267,7 +270,7 @@ export function TabBar(props: TabBarProps) {
     props.onPanelHeightChange?.(to);
     const finish = () => {
       clip.style.height = settleTo;
-      clip.style.overflowY = settleTo === "auto" ? "" : "hidden";
+      if (clipViewport) clipViewport.style.overflowY = settleTo === "auto" ? "" : "hidden";
       settleOverlayExtent(to);
       onDone?.();
     };
@@ -279,7 +282,7 @@ export function TabBar(props: TabBarProps) {
       finish();
       return;
     }
-    clip.style.overflowY = "hidden";
+    if (clipViewport) clipViewport.style.overflowY = "hidden";
     clip.style.height = `${from}px`;
     settleOverlayExtent(from);
     animateOverlayExtent(from, to);
@@ -512,13 +515,14 @@ export function TabBar(props: TabBarProps) {
               </div>
               <div class="tabs__panel-shell">
                 <Show when={mounted() != null}>
-                  <div
+                  <Scrollport
+                    eager
                     class="tabs__panel-clip"
+                    viewportRef={(el) => { clipViewport = el; el.style.overflowY = "hidden"; }}
                     data-testid="tabs-clip"
                     ref={(el) => {
                       clipEl = el;
                       el.style.height = "0px";
-                      el.style.overflowY = "hidden";
                     }}
                   >
                     <Show when={showContent() ? mounted() : null} keyed>
@@ -543,7 +547,7 @@ export function TabBar(props: TabBarProps) {
                         );
                       }}
                     </Show>
-                  </div>
+                  </Scrollport>
                 </Show>
               </div>
             </div>
