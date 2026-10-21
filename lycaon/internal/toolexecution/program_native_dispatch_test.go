@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -58,7 +60,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "freeze actual profile", err)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &stageAdmissionFixture{})
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "freeze frame", err)
 	t.Cleanup(frame.Close)
 	child := parent
@@ -70,7 +72,8 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
-	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", inputPath}}, Arguments: args}
+	var stdout bytes.Buffer
+	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", inputPath}}, Arguments: args, Streams: commandprogram.Streams{Output: &stdout}}
 	effect.PrepareReviewed = func(ctx context.Context, resolved map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
 		args["path"] = "changed"
 		path := resolved["path"].(string)
@@ -83,7 +86,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 			return PreparedNativeEffect{}, err
 		}
 		prepared = true
-		return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext) (toolcontract.ProducerResult, error) {
+		return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			invoked = true
 			file, err := nativePath.Open()
 			if err != nil {
@@ -94,12 +97,15 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 			if err != nil || string(data) != "original bytes" {
 				t.Fatalf("executed unreviewed input %q: %v", data, err)
 			}
+			if _, err := streams.Output.Write(data); err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
 			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
 		}}, nil
 	}
 	starts := 0
 	observer := nativeStartFunc(func(_ context.Context, actual toolcontract.BoundOperation, call string, review toolcontract.ReviewedOperationInputs) error {
-		decoded, release, decodeErr := review.Arguments(t.Context(), &stageAdmissionFixture{})
+		decoded, release, decodeErr := review.Arguments(t.Context(), stageMemory(t, 64<<20))
 		if decodeErr != nil {
 			t.Fatal(decodeErr)
 		}
@@ -113,21 +119,21 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 		starts++
 		return nil
 	})
-	admission := &stageAdmissionFixture{}
+	admission := stageMemory(t, 64<<20)
 	result, err := executor.InvokeNative(t.Context(), frame, surface, admission, nativeProgressFixture{owner}, observer, effect, tc)
 	testutil.FailErr(t, "invoke actual native read binding", err)
-	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.NoEffect || starts != 1 || admission.held != 0 {
-		t.Fatalf("lost invoked/read distinction or reservation: %+v held%d", result, admission.held)
+	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.NoEffect || starts != 1 || admission.InUse().State != 0 || stdout.String() != "original bytes" {
+		t.Fatalf("lost invoked/read distinction or reservation: %+v held%d", result, admission.InUse().State)
 	}
 	invoked = false
 	denial := errors.New("start record refused")
-	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+	result, err = executor.InvokeNative(t.Context(), frame, surface, stageMemory(t, 64<<20), nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
 		return denial
 	}), effect, tc)
 	if !errors.Is(err, denial) || result.OwnerInvoked || invoked {
 		t.Fatalf("owner dispatched without start record: %+v %v", result, err)
 	}
-	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+	result, err = executor.InvokeNative(t.Context(), frame, surface, stageMemory(t, 64<<20), nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
 		frame.Close()
 		return nil
 	}), effect, tc)

@@ -4,13 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-)
 
-// ProgramStateAdmission refuses an aggregate state allocation before insertion.
-// It must not wait for this same program to relinquish memory to make room.
-type ProgramStateAdmission interface {
-	ReserveProgramState(context.Context, int64) (release func(), err error)
-}
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 // ProgramSnapshotLease owns one detached execution snapshot's accounting.
 // Keep the lease until every consumer has released the snapshot and its strings.
@@ -25,8 +21,8 @@ func (s *ProgramSnapshotLease) Close() error {
 	return nil
 }
 
-func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, admission ProgramStateAdmission) (*ProgramSnapshotLease, error) {
-	if ctx == nil || admission == nil {
+func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, memory *toolcontract.ProgramMemory) (*ProgramSnapshotLease, error) {
+	if ctx == nil || memory == nil {
 		return nil, fmt.Errorf("execution snapshot requires context and state admission")
 	}
 	if err := ctx.Err(); err != nil {
@@ -38,12 +34,9 @@ func (p *ParsedProgram) SnapshotWithMemory(ctx context.Context, admission Progra
 	if closed {
 		return nil, fmt.Errorf("parsed program is closed")
 	}
-	release, err := admission.ReserveProgramState(ctx, bound)
+	release, err := memory.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("snapshot state admission returned no release")
 	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()

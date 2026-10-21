@@ -35,11 +35,15 @@ type openedParent struct {
 type targetAt struct{ parent *openedParent }
 
 func openRoot(path string) (*openedRoot, error) {
+	return openRootFlags(path, unix.O_RDONLY)
+}
+
+func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 	canonical, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve effect root: %w", err)
 	}
-	fd, err := unix.Open(string(filepath.Separator), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	fd, err := unix.Open(string(filepath.Separator), accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, fmt.Errorf("open effect root: %w", err)
 	}
@@ -48,7 +52,7 @@ func openRoot(path string) (*openedRoot, error) {
 			continue
 		}
 		next, openErr := unix.Openat(fd, component,
-			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		_ = unix.Close(fd)
 		if openErr != nil {
 			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
@@ -273,18 +277,21 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return result, fmt.Errorf("commit replacement: %w", err)
 	}
 	committed = true
+	result.Publication = PublicationReplaced
 	if err := injectAt(inject, stageRenamed); err != nil {
 		return result, err
 	}
 	if err := fsyncFD(int(parent.file.Fd())); err != nil {
 		return result, fmt.Errorf("sync replacement directory: %w", err)
 	}
+	result.Publication = PublicationDurable
 	if err := injectAt(inject, stageDirSynced); err != nil {
 		return result, err
 	}
 	if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
 		return result, err
 	}
+	result.Publication = PublicationVerified
 	return result, injectAt(inject, stageVerified)
 }
 
@@ -560,8 +567,8 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	return result, nil
 }
 
-// Chown applies ownership to a target reached without symlink traversal.
-func Chown(loc Location, uid, gid int) error {
+// platformChown applies ownership to a target reached without symlink traversal.
+func platformChown(loc Location, uid, gid int) error {
 	parent, err := openParent(loc, false, 0)
 	if err != nil {
 		return err

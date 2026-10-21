@@ -43,39 +43,47 @@ func (t *ChmodTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		return "", toolkit.MissingArg("mode")
 	}
 
-	resp := chmodResponse{Results: make([]chmodResult, 0, len(paths))}
-	defer func() {
-		if runErr != nil && len(resp.Results) > 0 {
-			output, runErr = interruptedMutationBatch(resp, runErr)
+	results, err := t.Chmod(ctx, paths, modeSpec, tctx)
+	resp := chmodResponse{Results: results}
+	if resp.Results == nil {
+		resp.Results = []chmodResult{}
+	}
+	if err != nil {
+		if len(resp.Results) > 0 {
+			return interruptedMutationBatch(resp, err)
 		}
-	}()
-	prof := tctx.ProfileID()
-	for _, relPath := range paths {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		target, modeBefore, err := assertChmodTarget(ctx, t.Boundary, tctx, relPath, prof)
-		if err != nil {
-			return "", err
-		}
-		modeAfter, err := resolveChmodMode(modeBefore, modeSpec)
-		if err != nil {
-			return "", err
-		}
-		if err := chmodAgentPath(ctx, tctx, target, modeAfter); err != nil {
-			return "", fmt.Errorf("chmod %s: %w", relPath, err)
-		}
-		relSlash := filepath.ToSlash(relPath)
-		resp.Results = append(resp.Results, chmodResult{
-			Path:       relSlash,
-			ModeBefore: sourceview.FormatFileMode(uint32(modeBefore.Perm())),
-			ModeAfter:  sourceview.FormatFileMode(uint32(modeAfter.Perm())),
-		})
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		return "", err
 	}
 	raw, err := surveyjson.Marshal(resp)
 	if err != nil {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+// Chmod applies one mode specification to each path under scope, review and
+// the source journal, returning the changes already applied when one fails.
+func (t *ChmodTool) Chmod(ctx context.Context, paths []string, modeSpec string, tctx tools.ToolContext) ([]chmodResult, error) {
+	var results []chmodResult
+	prof := tctx.ProfileID()
+	for _, relPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
+		target, modeBefore, err := assertChmodTarget(ctx, t.Boundary, tctx, relPath, prof)
+		if err != nil {
+			return results, err
+		}
+		modeAfter, err := resolveChmodMode(modeBefore, modeSpec)
+		if err != nil {
+			return results, err
+		}
+		if err := chmodAgentPath(ctx, tctx, target, modeAfter); err != nil {
+			return results, fmt.Errorf("chmod %s: %w", relPath, err)
+		}
+		relSlash := filepath.ToSlash(relPath)
+		results = append(results, chmodResult{Path: relSlash, ModeBefore: sourceview.FormatFileMode(uint32(modeBefore.Perm())), ModeAfter: sourceview.FormatFileMode(uint32(modeAfter.Perm()))})
+		afterSuccessfulMutation(ctx, tctx, relSlash)
+	}
+	return results, nil
 }

@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/exec",
+  "kind": "module",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly32 immediate source files without growth. Preparation captures final native vectors and authority once; stage, pipeline, PTY and asynchronous owned-group entry points consume that capture while retaining their actual pipe/terminal/supervisor/reaper lifetimes. Platform variants implement those same native operations. The shared owned-group extraction is a real supervised process lifetime used by both browser branches, not a forwarding facade or second supervisor. Environment selection, byte plumbing and guard ownership remain distinct files in this existing execution boundary. Native group/pipeline/PTY, cancellation, missing-capture and exact script/vector fixtures passed. New members or structural growth require renewed review.",
+  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
+  "ceiling": 32,
+  "boundaries": {
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/owned_group_unix_test.go": "a0be3c178f6e19b122e12216e93f3b2a6934cc88931e9bfc15aee0925f78c28c",
+    "lycaon/internal/exec/pipeline_test.go": "a1755106920ac66fbc3e559e6e6eedaf26d97a00d6beb13e18f5fc230be9ec78",
+    "lycaon/internal/exec/pty_test.go": "b449e3f47fbcef83b85a50c31cebe38115e2ee49090d7aa21d51fcf4f2e973e1"
+  },
+  "reviewed_shape": "75492bd53b2e2ed76934b4ec1f3ab01417678d3c7f85a99084de57103dad95ff"
+}

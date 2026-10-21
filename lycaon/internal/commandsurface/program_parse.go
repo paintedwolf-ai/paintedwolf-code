@@ -82,14 +82,14 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 }
 
 // ParseProgram validates the complete syntax unit before exposing any plan.
-// This pure entry applies local bounds; execution uses NewProgramParser to
-// reserve scratch against its enclosing program before capture or parsing.
+// This pure entry applies local bounds; execution uses ParseAdmitted to charge
+// scratch against its enclosing program while parsing.
 // It only uses the upstream syntax package, never its interpreter or executor.
 func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 	return parseProgram(context.Background(), source, options, nil)
 }
 
-func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission) (*ParsedProgram, error) {
+func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory *toolcontract.ProgramMemory) (*ParsedProgram, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -114,10 +114,11 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if options.CatalogDigest != "" && options.CatalogDigest != toolcontract.LanguageCatalogDigest() {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "the frozen compiled language/catalog identity"}
 	}
-	pool, err := syntax.NewAllocationBudget(languageLimit(catalog, "evaluation_memory_bytes"))
+	pool, releaseScratch, err := scratchLedger(ctx, languageLimit(catalog, "evaluation_memory_bytes"), memory)
 	if err != nil {
 		return nil, err
 	}
+	defer releaseScratch()
 	// A source label is a path operand or an inline label. Reuse the declared
 	// per-argument byte ceiling; never retain a caller's large substring backing.
 	labelMaximum := languageLimit(catalog, "argument_bytes")
@@ -156,9 +157,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 		releaseState, err = memory.ReserveProgramState(ctx, hostBytes)
 		if err != nil {
 			return nil, err
-		}
-		if releaseState == nil {
-			return nil, fmt.Errorf("program state admission returned no release")
 		}
 		defer func() {
 			if !retained {
@@ -202,6 +200,10 @@ func unitStart() toolcontract.SourceSpan { return toolcontract.SourceSpan{Line: 
 func parserDiagnostic(err error, length int) error {
 	var budget *syntax.BudgetError
 	if errors.As(err, &budget) {
+		if budget.Cause != nil {
+			// Aggregate refusal (ProgramMemoryLimitError) or cancellation stays typed.
+			return budget.Cause
+		}
 		return &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: parserPosition(budget.Pos, length), Expected: "bounded parser working storage", Limit: "evaluation_memory_bytes", Unit: "bytes", Maximum: budget.Maximum, Observed: budget.Observed}
 	}
 	var dialect syntax.LangError
