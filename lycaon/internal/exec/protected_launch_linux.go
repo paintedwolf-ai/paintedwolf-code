@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
@@ -37,6 +38,17 @@ type protectedLaunch struct {
 	protected bool
 	broker    *os.File
 	err       error
+}
+
+func init() {
+	// Confinement availability is probed where confined commands run: under
+	// the protected launch, outside its namespace through the broker.
+	confine.SetHelperProbeRunner(func(cmd *exec.Cmd) error {
+		if protectedState().protected {
+			return RunInOwnGroup(cmd)
+		}
+		return cmd.Run()
+	})
 }
 
 var protectedState = sync.OnceValue(func() protectedLaunch {
