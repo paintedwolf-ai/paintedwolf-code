@@ -928,6 +928,10 @@ Installed GUI qualification is a local pre-release lane on the native qualificat
 
 Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
 
+Physical input reaches a guest only as fixed operations sealed in `installed_input/protocol.py`. Keyboard operations require a focused owned entry. The `windowing/file-tab-tear-off` case uses pointer operations: press on a file tab, fixed moves to a point that no tab strip accepts, then release or Escape. The guest gives the coordinates in framebuffer pixels, from AT-SPI extents of the fullscreen window and the output's mode and logical size. The controller refuses a drag planned for a different display size. The expected outcome comes from the compositor's globals:
+- `xdg_toplevel_drag_manager_v1` present: Escape keeps the tab and a release tears it off.
+- Absent: both tear off, Den's documented platform difference.
+
 The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
 
 Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.

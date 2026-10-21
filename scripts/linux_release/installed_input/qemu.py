@@ -1,4 +1,4 @@
-"""Deliver sealed keyboard steps only to a root-leased, captured QEMU process."""
+"""Deliver sealed keyboard and pointer steps only to a root-leased, captured QEMU process."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -13,12 +13,36 @@ import re
 import socket
 import stat
 import struct
+import tempfile
 import threading
 import time
 
-from .protocol import event_sha256, steps
+from .protocol import event_sha256, pointer_display, steps
 
 LIMIT = 16384
+ABSOLUTE_MAX = 0x7fff
+
+
+def absolute(value: int, size: int) -> int:
+    """QEMU's absolute pointer axes span 0..0x7fff across the whole display."""
+    return value * ABSOLUTE_MAX // (size - 1)
+
+
+def framebuffer_size(raw: bytes) -> tuple[int, int]:
+    """The width and height of a binary PPM screendump header."""
+    fields = raw.split(None, 4)
+    if len(fields) < 4 or fields[0] != b'P6' or not all(field.isdigit() for field in fields[1:4]):
+        raise ValueError('QEMU screendump is not a binary PPM')
+    return int(fields[1]), int(fields[2])
+
+
+def pointer_events(step: tuple, display: tuple[int, int]) -> list[dict]:
+    if step[0] == '@move' and len(step) == 3:
+        return [{'type': 'abs', 'data': {'axis': 'x', 'value': absolute(step[1], display[0])}},
+                {'type': 'abs', 'data': {'axis': 'y', 'value': absolute(step[2], display[1])}}]
+    if step[0] == '@button' and len(step) == 2 and step[1] in {'down', 'up'}:
+        return [{'type': 'btn', 'data': {'down': step[1] == 'down', 'button': 'left'}}]
+    raise ValueError('fixed pointer step has an unknown shape')
 
 
 def decode(raw):
@@ -200,12 +224,21 @@ class Actor:
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':
                     raise ValueError('leased guest is not running')
-                keys = [{'type': 'qcode', 'data': key} for key in sequence[ordinal]]
-                reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
-                if reply['return'] != {}:
-                    raise ValueError('QMP did not acknowledge its fixed keyboard step')
-                # QMP acknowledges before its automatic key-release timer fires.
-                time.sleep(0.1)
+                step = sequence[ordinal]
+                if step[0].startswith('@'):
+                    if ordinal == 0 and self.display() != pointer_display(operation):
+                        raise ValueError('pointer operation was planned for a different display size')
+                    reply = self.command('input-send-event', {'events': pointer_events(step, pointer_display(operation))})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its fixed pointer step')
+                    time.sleep(0.03)
+                else:
+                    keys = [{'type': 'qcode', 'data': key} for key in step]
+                    reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its fixed keyboard step')
+                    # QMP acknowledges before its automatic key-release timer fires.
+                    time.sleep(0.1)
                 self.validate()
                 self.ordinal += 1
                 return {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
@@ -215,6 +248,15 @@ class Actor:
             except BaseException:
                 self.failed = True
                 raise
+
+    def display(self) -> tuple[int, int]:
+        """The framebuffer QEMU renders now, read from a private screendump."""
+        with tempfile.TemporaryDirectory(prefix='pw-qmp-display-') as directory:
+            path = Path(directory) / 'screen.ppm'
+            if self.command('screendump', {'filename': str(path)})['return'] != {}:
+                raise ValueError('QMP did not acknowledge its display observation')
+            with path.open('rb') as stream:
+                return framebuffer_size(stream.read(64))
 
     def close(self):
         self.closed = True
