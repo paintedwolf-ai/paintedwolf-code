@@ -4,13 +4,9 @@ package linuxsandbox
 
 import (
 	"encoding/binary"
-	"encoding/json"
-	"errors"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -18,78 +14,6 @@ import (
 
 // handoffPerformer carries the performer's socket from the inner helper.
 const handoffPerformer = "performer"
-
-// pathCallTimeout bounds one performed call; a slow filesystem can take long.
-const pathCallTimeout = 60 * time.Second
-
-// performerClient is the supervisor's side of the performer's socket. Calls
-// run one at a time, so each answer belongs to the request before it.
-type performerClient struct {
-	mu sync.Mutex
-	fd int
-	// broken is set once an answer went missing.
-	broken bool
-}
-
-// newPerformerClient bounds the wait for each answer on fd.
-func newPerformerClient(fd int) *performerClient {
-	tv := unix.NsecToTimeval(pathCallTimeout.Nanoseconds())
-	_ = unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv)
-	return &performerClient{fd: fd}
-}
-
-func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.broken {
-		return pathResult{}, -1, errors.New("the sandbox performer stopped answering")
-	}
-	raw, err := json.Marshal(call)
-	if err != nil {
-		return pathResult{}, -1, err
-	}
-	var rights []byte
-	if len(dirs) > 0 {
-		rights = unix.UnixRights(dirs...)
-	}
-	err = unix.Sendmsg(c.fd, raw, rights, nil, 0)
-	for errors.Is(err, unix.EINTR) {
-		err = unix.Sendmsg(c.fd, raw, rights, nil, 0)
-	}
-	if err != nil {
-		c.broken = true
-		return pathResult{}, -1, err
-	}
-	buf := make([]byte, 4096)
-	oob := make([]byte, unix.CmsgSpace(4))
-	n, oobn, _, _, err := unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
-	// A receive timeout makes a signal, such as the runtime's preemption,
-	// interrupt the wait instead of restarting it.
-	for errors.Is(err, unix.EINTR) {
-		n, oobn, _, _, err = unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
-	}
-	if err != nil || n == 0 {
-		c.broken = true
-		return pathResult{}, -1, errors.New("no answer from the sandbox performer")
-	}
-	opened := -1
-	if fds := receivedFDs(oob[:oobn]); len(fds) == 1 {
-		opened = fds[0]
-	} else {
-		for _, fd := range fds {
-			_ = unix.Close(fd)
-		}
-	}
-	var result pathResult
-	if err := json.Unmarshal(buf[:n], &result); err != nil {
-		if opened >= 0 {
-			_ = unix.Close(opened)
-		}
-		c.broken = true
-		return pathResult{}, -1, err
-	}
-	return result, opened, nil
-}
 
 // isPathCall reports whether nr is a notified name-creating call.
 func isPathCall(nr int32) bool {
@@ -370,8 +294,3 @@ func selfRelative(path string, pid, tid int) string {
 	}
 	return path
 }
-
-// fdCloser closes a raw descriptor with the supervisor.
-type fdCloser int
-
-func (f fdCloser) Close() error { return unix.Close(int(f)) }
