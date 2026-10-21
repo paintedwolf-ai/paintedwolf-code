@@ -39,14 +39,14 @@ describe("Nix update ownership", () => {
     expect(screen.getByTestId("updates-nix-pin").textContent).toContain("unknown");
   });
 
-  it("withdraws the notice without changing a declared pin or offering installation", async () => {
-    const state = nix(); state.package!.source.pinned = true;
+  it("withdraws the notice without claiming a pin or offering installation", async () => {
+    const state = nix();
     const check = async () => ({ ...state, candidate: null, discovery: "up_to_date" as const });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state, check })} />);
-    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("does not change its pin");
+    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("does not change your Nix inputs");
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     await waitFor(() => expect(screen.queryByTestId("updates-package-upgrade")).toBeNull());
-    expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned");
+    expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned is unknown");
     expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });

@@ -1,0 +1,24 @@
+{
+  "owner": "system_package_manager",
+  "checked_at": null,
+  "database_owner": null,
+  "cached_only": true,
+  "availability": "candidate_found",
+  "database_version": "1.0.2pre.rc.1-2",
+  "architecture": "x86_64",
+  "candidate": {
+    "version": "1.0.2-2",
+    "architecture": "x86_64",
+    "repositories": [
+      {
+        "id": "configured-source",
+        "suite": null,
+        "trusted": null
+      }
+    ],
+    "newer_than_installed": true
+  },
+  "held": false,
+  "selection_priority": null,
+  "reason": null
+}

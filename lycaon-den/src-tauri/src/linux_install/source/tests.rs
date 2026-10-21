@@ -31,7 +31,6 @@ fn a_generation_does_not_establish_an_owner_pin_or_package_source() {
     assert_eq!(facts.availability, SourceAvailability::Unknown);
     assert_eq!(facts.reason, Some(QueryReason::UnsupportedOwner));
     assert_eq!(facts.owner, None);
-    assert_eq!(facts.pinned, None);
     assert!(!facts.cached_only);
     assert!(fake.calls.is_empty());
 }
@@ -42,8 +41,7 @@ fn initial_database_ownership_does_not_establish_source_policy() {
         let facts = PackageSourceFacts::for_family(family);
         assert_eq!(facts.owner, Some(PackageOwner::SystemPackageManager));
         assert_eq!(facts.availability, SourceAvailability::NotChecked);
-        assert_eq!(facts.pinned, None);
-        assert_eq!(facts.checked_at, None);
+            assert_eq!(facts.checked_at, None);
         assert_eq!(facts.candidate, None);
     }
 }
@@ -55,7 +53,6 @@ fn apt_uses_the_native_policy_candidate_and_preserves_package_version_and_suite(
     assert_eq!(facts.database_version.as_deref(), Some("1.0.2~rc.1"));
     assert_eq!(facts.selection_priority, Some(700));
     assert_eq!(facts.held, Some(false));
-    assert_eq!(facts.pinned, None);
     assert!(facts.cached_only && facts.checked_at.is_some());
     let candidate = facts.candidate.unwrap();
     assert_eq!(candidate.version, "1.0.2");
@@ -121,9 +118,16 @@ fn apt_hold_untrusted_and_missing_cache_are_explicit_outcomes() {
     let facts = apt_facts(report);
     assert_eq!((facts.availability, facts.reason), (SourceAvailability::Blocked, Some(QueryReason::UntrustedSource)));
     let mut report = apt_report(); report["candidate"]["origins"] = serde_json::json!([]);
-    assert_eq!(apt_facts(report).reason, Some(QueryReason::NoCachedCandidate));
+    let facts = apt_facts(report);
+    assert_eq!((facts.availability, facts.reason), (SourceAvailability::Unknown, Some(QueryReason::NoCachedCandidate)));
+    assert!(facts.candidate.is_none() && facts.selection_priority.is_none());
     let mut report = apt_report(); report["candidate"] = serde_json::Value::Null;
-    assert_eq!(apt_facts(report).reason, Some(QueryReason::NoCachedCandidate));
+    let facts = apt_facts(report);
+    assert_eq!(facts.reason, Some(QueryReason::NoCachedCandidate));
+    assert!(facts.candidate.is_none() && facts.selection_priority.is_none());
+    let mut report = apt_report(); report["held"] = true.into(); report["candidate"] = serde_json::Value::Null;
+    let facts = apt_facts(report);
+    assert_eq!((facts.availability, facts.reason, facts.candidate), (SourceAvailability::Blocked, Some(QueryReason::Held), None));
 }
 
 #[test]

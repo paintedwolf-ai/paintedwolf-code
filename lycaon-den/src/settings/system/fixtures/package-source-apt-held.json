@@ -1,0 +1,24 @@
+{
+  "owner": "system_package_manager",
+  "checked_at": null,
+  "database_owner": null,
+  "cached_only": true,
+  "availability": "blocked",
+  "database_version": "1.0.2~rc.1",
+  "architecture": "amd64",
+  "candidate": {
+    "version": "1.0.2",
+    "architecture": "amd64",
+    "repositories": [
+      {
+        "id": "Painted Wolf Code",
+        "suite": "stable",
+        "trusted": true
+      }
+    ],
+    "newer_than_installed": true
+  },
+  "held": true,
+  "selection_priority": 700,
+  "reason": "held"
+}
