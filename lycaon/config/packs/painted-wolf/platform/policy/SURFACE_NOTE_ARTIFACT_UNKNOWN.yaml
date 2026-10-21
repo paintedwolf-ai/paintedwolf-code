@@ -9,6 +9,9 @@ requires:
   facts:
   - paintedwolf.rejection_code
   - paintedwolf.surface_presentable_ids
+  - paintedwolf.can_capture_page
+  - paintedwolf.can_page_snapshot
+  - paintedwolf.can_request_tools
   profiles:
   - tool
 when: paintedwolf.rejection_code == "SURFACE_NOTE_ARTIFACT_UNKNOWN"
@@ -19,11 +22,16 @@ copy:
     to nothing.
   why: A presented still is a receipt. An id the turn never observed shows the user an image that answers a
     different question, or nothing at all.
-  fix: 'Use an actual producer ID for the intended visual. Presentable IDs from this turn: {{ paintedwolf.surface_presentable_ids
-    }}. An available ID is not automatically the right evidence; preserve the note’s meaning, and capture the
-    required still if none matches.'
-  instead: Branch on Code SURFACE_NOTE_ARTIFACT_UNKNOWN; copy a producer artifact_id from this turn or capture
-    one before presenting
+  fix: |
+    {% if paintedwolf.surface_presentable_ids %}Presentable IDs observed this turn: {{ paintedwolf.surface_presentable_ids }}. Use one only if it supports the intended visual.
+    {% else %}No presentable still has been observed since the last user message. A source write is not a rendered capture.
+    {% endif %}If a new still is needed, produce it before presenting it and use its returned artifact_id.
+    {% if paintedwolf.can_page_snapshot %}For an already open page, use `page_snapshot` with its observed page_id.
+    {% endif %}{% if paintedwolf.can_capture_page %}`capture_page` is offered: for a static site, set project_dir to the site root and path relative to it; for a running app, use url and its process_handle.
+    {% else %}{% if paintedwolf.can_request_tools %}If no offered producer fits, use `request_tools` to discover the required capture capability, then inspect the returned schemas; discovery does not capture anything.
+    {% else %}If no offered producer fits, report the capture limitation without claiming a capture.
+    {% endif %}{% endif %}
+  instead: Capture the required visual before presenting it, or omit artifact_ids and accurately report the remaining work.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:surface_note
 x-paintedwolf-message: That note named an artifact this turn has not produced.

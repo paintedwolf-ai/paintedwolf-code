@@ -4,7 +4,6 @@ package linuxbus
 
 import (
 	"context"
-	"errors"
 	"os"
 
 	"github.com/godbus/dbus/v5"
@@ -28,15 +27,4 @@ func ConnectSystem(ctx context.Context) (*dbus.Conn, error) {
 		return nil, err
 	}
 	return Session{Addresses: addresses}.Connect(ctx)
-}
-
-// NameOwned reports whether any process currently owns a well-known name.
-// Protocol providers are admitted by the name they serve, never by identity.
-func NameOwned(ctx context.Context, bus *dbus.Conn, name string) (bool, error) {
-	if bus == nil {
-		return false, errors.New("bus connection required")
-	}
-	var owned bool
-	err := bus.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.NameHasOwner", 0, name).Store(&owned)
-	return owned && err == nil, err
 }

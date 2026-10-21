@@ -112,7 +112,7 @@ func (p portalProvider) Check(ctx context.Context) error {
 		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	if err := nameOwnedOn(ctx, bus, portalName); err != nil {
+	if err := nameAvailableOn(ctx, bus, portalName); err != nil {
 		return err
 	}
 	return p.attribute(ctx, bus)
@@ -203,5 +203,5 @@ func nameServed(ctx context.Context, connect busConnector, name string) error {
 		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	return nameOwnedOn(ctx, bus, name)
+	return nameAvailableOn(ctx, bus, name)
 }
