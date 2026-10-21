@@ -208,6 +208,7 @@ case "${GOOS}" in
         exit 1
       }
       python3 "${ROOT}/scripts/linux-package-manifest.py" verify-tree --tree "${tree}" --version "${VERSION}" --architecture "${ARCH}"
+      python3 "${ROOT}/scripts/linux_release/build_paths.py" --tree "${tree}" --source "${ROOT}"
       LINUX_OPENGREP="$(verify_opengrep "${root}/engine-root" "${ENGINE}")"
       assert_native_arch "${label} bundled OpenGrep" "${LINUX_OPENGREP}"
       GIT_ENGINE_LINK="${root}/engine-root/gitengine/bin/git"

@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/cmd/lycaon-perf/runner.go",
+  "kind": "module",
+  "workstream": "performance-resource-observation",
+  "disposition": "retain",
+  "reason": "Runtime sample interpretation moved to runtime_capture.go as a real resource-report boundary, reducing this file from 695 to 613 measured lines. The remaining module owns fixture/API journeys, exact child lifecycle and final report assembly; keep these together within 620 lines while the focused lifecycle and capture contracts preserve ownership and measurement integrity.",
+  "reviewed_commit": "f04f72d953abeb58454581b13875454852bb317f",
+  "ceiling": 620,
+  "boundaries": {
+    "lycaon/cmd/lycaon-perf/capture_integrity_test.go": "06e57286822e028cb748043f650c2ba1ed653be29186b0b41a6e4465b3fbf62e",
+    "lycaon/cmd/lycaon-perf/runtime_capture_linux_test.go": "3ff46609d4fd5172e2ef282f38d90a6c3576ba5c23134dee4f460db751f5c9c9",
+    "lycaon/internal/observability/performance_descriptors_linux_test.go": "d4e908fbe610e688c14c3755e7d5ce86c27dce26d1097be1cbef2ed9fc2378d8"
+  }
+}
