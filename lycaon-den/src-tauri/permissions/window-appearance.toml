@@ -27,3 +27,8 @@ commands.allow = ["linux_decoration_layout"]
 identifier = "allow-linux-window-frame"
 description = "Read whether a Linux window floats with its frame's corners and shadow, and its content size."
 commands.allow = ["linux_window_frame"]
+
+[[permission]]
+identifier = "allow-den-window-close-disposition"
+description = "Ask whether the shell keeps this window after its close request, so the document does not destroy it."
+commands.allow = ["den_window_close_disposition"]

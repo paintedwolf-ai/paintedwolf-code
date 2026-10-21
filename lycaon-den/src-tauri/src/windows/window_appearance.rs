@@ -1,6 +1,5 @@
-//! Hidden-until-styled window creation and main-window close policy.
+//! Hidden-until-styled window creation.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -10,9 +9,6 @@ use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Theme, WebviewWind
 use crate::windows::window_backdrop;
 
 const MAIN_WINDOW_LABEL: &str = "main";
-
-/// Quit must close the main window; a workspace close only hides it.
-static QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Reveals a window if its document never reports a paint.
 const REVEAL_FALLBACK: Duration = Duration::from_millis(2500);
@@ -31,36 +27,6 @@ pub fn setup(app: &AppHandle) {
         return;
     };
     prepare(&window);
-    keep_main_workspace_alive(&window);
-}
-
-/// Hide the main window on close; dock reopen restores it.
-#[cfg(target_os = "macos")]
-fn keep_main_workspace_alive(window: &WebviewWindow) {
-    let main = window.clone();
-    window.on_window_event(move |event| {
-        if let WindowEvent::CloseRequested { api, .. } = event {
-            if !QUIT_REQUESTED.load(Ordering::Relaxed) {
-                api.prevent_close();
-                let _ = main.hide();
-            }
-        }
-    });
-}
-
-#[cfg(not(target_os = "macos"))]
-fn keep_main_workspace_alive(_window: &WebviewWindow) {}
-
-pub fn prepare_to_quit() {
-    QUIT_REQUESTED.store(true, Ordering::Relaxed);
-}
-
-/// Restores the main window from the dock.
-#[cfg(target_os = "macos")]
-pub fn restore_main_workspace(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        show_window(&window);
-    }
 }
 
 /// Applies the backdrop and starts the reveal fallback.

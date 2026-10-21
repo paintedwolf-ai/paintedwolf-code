@@ -42,6 +42,7 @@
     "allow-shared-composer-documents",
     "allow-den-reveal-window",
     "allow-den-set-window-bounds",
+    "allow-den-window-close-disposition",
     "allow-den-set-window-backdrop",
     "allow-set-app-menu",
     "allow-request-quit",

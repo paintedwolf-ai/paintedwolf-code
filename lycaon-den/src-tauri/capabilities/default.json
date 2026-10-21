@@ -80,6 +80,7 @@
     "allow-resolve-checkpoint-with-presence",
     "allow-den-reveal-window",
     "allow-den-set-window-bounds",
+    "allow-den-window-close-disposition",
     "allow-den-set-window-backdrop",
     "allow-den-set-badge-count",
     "allow-set-app-menu",

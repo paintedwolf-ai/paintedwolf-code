@@ -80,9 +80,9 @@ function assertView01(): void {
 
 function assertView02(): void {
   const items = readSourceText(join(denSrc, "../src-tauri/src/windows/item_windows.rs"));
-  const appearance = readSourceText(join(denSrc, "../src-tauri/src/windows/window_appearance.rs"));
+  const lifecycle = readSourceText(join(denSrc, "../src-tauri/src/windows/workspace_lifecycle.rs"));
   expect(items).toMatch(/close_item_window/);
-  expect(appearance).toMatch(/CloseRequested[\s\S]*main\.hide\(\)/);
+  expect(lifecycle).toMatch(/CloseRequested[\s\S]*main\.hide\(\)/);
 }
 
 export const BOOT_OPEN_INVARIANTS: InvariantEntry[] = [

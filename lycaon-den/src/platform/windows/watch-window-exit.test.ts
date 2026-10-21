@@ -164,6 +164,35 @@ describe("durable window exit", () => {
     await done;
   });
 
+  it("preserves a window the shell retains without releasing it or destroying it", async () => {
+    invoke.mockImplementation(async (name: string) => name === "den_window_close_disposition" ? "retained" : null);
+    const flush = vi.fn();
+    const release = vi.fn();
+    const resume = vi.fn();
+    watch(flush, { beforeDestroy: release, onKeepOpen: resume });
+    await installed();
+    const preventDefault = vi.fn();
+    await closeHandler?.({ preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith("den_window_close_disposition");
+    expect(flush).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(document.documentElement.inert).toBe(false);
+    invoke.mockImplementation(async () => null);
+    await closeHandler?.({ preventDefault: vi.fn() });
+    expect(release).toHaveBeenCalledOnce();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it("closes as before when the shell cannot answer", async () => {
+    invoke.mockImplementation(async (name: string) => { if (name === "den_window_close_disposition") throw new Error("ipc closed"); return null; });
+    watch(vi.fn());
+    await installed();
+    await closeHandler?.({ preventDefault: vi.fn() });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it("coalesces repeated desktop close requests", async () => {
     let finish!: () => void;
     const flush = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));

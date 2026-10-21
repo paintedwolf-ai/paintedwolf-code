@@ -150,6 +150,7 @@ pub fn run() {
             presence::ipc_resolve_checkpoint_with_presence,
             windows::window_appearance::den_reveal_window,
             windows::window_appearance::den_set_window_bounds,
+            windows::workspace_lifecycle::den_window_close_disposition,
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
             app_menu::request_quit,
@@ -166,6 +167,7 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
+            windows::workspace_lifecycle::setup(app.handle());
             clipboard::setup();
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
@@ -185,7 +187,7 @@ pub fn run() {
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, code, .. } => {
                 if app_exit::allow_exit(app, code) {
-                    windows::window_appearance::prepare_to_quit();
+                    windows::workspace_lifecycle::prepare_to_quit();
                 } else {
                     api.prevent_exit();
                 }
@@ -194,7 +196,7 @@ pub fn run() {
             RunEvent::Reopen {
                 has_visible_windows: false,
                 ..
-            } => windows::window_appearance::restore_main_workspace(app),
+            } => windows::workspace_lifecycle::restore_main_workspace(app),
             RunEvent::Exit => {
                 #[cfg(target_os = "linux")]
                 windows::linux_desktop_settings::portal::shutdown(app);
