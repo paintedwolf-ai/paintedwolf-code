@@ -18,28 +18,28 @@ func (p *ProgramPaths) LinkTarget(ctx context.Context, operand string) (string, 
 func (p *ProgramPaths) inspectPath(ctx context.Context, operand string, canonical bool) (string, error) {
 	bound, err := p.Bind(ctx, operand, false)
 	if err != nil {
-		return "", pathOperationError(operand, err)
+		return "", PathOperationError(operand, err)
 	}
 	if bound.Null {
 		return "", invalidOperand(operand, "null device is not a directory entry")
 	}
 	root, err := bound.openRoot()
 	if err != nil {
-		return "", pathOperationError(operand, err)
+		return "", PathOperationError(operand, err)
 	}
 	defer root.Close()
 	if canonical {
 		actual, err := root.Canonical(bound.exactRelative)
 		if err != nil {
-			return "", pathOperationError(operand, err)
+			return "", PathOperationError(operand, err)
 		}
 		if bound.admitRead != nil {
 			if err := bound.admitRead(actual); err != nil {
-				return "", pathOperationError(operand, err)
+				return "", PathOperationError(operand, err)
 			}
 		}
 		return actual, nil
 	}
 	target, err := root.Readlink(bound.exactRelative, bound.admitRead)
-	return target, pathOperationError(operand, err)
+	return target, PathOperationError(operand, err)
 }

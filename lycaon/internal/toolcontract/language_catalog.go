@@ -50,6 +50,7 @@ type LanguageDiagnostic struct {
 // CommandSpecification is the common source for parser admission and option help.
 type CommandSpecification struct {
 	Name                 string              `json:"name"`
+	OperandsEndOptions   bool                `json:"operands_end_options,omitempty"`
 	Aliases              []string            `json:"aliases"`
 	Family               string              `json:"family"`
 	Owner                string              `json:"owner"`
@@ -77,6 +78,8 @@ type RejectionFixture struct {
 }
 
 // OptionForm freezes spelling and consumption: -1 optional, -2 delimiter-terminated.
+// Shorthand admits -VALUE for this arity-1 form: "numeric" (decimal digits) or
+// "word" (any suffix whose first byte is not a declared short option).
 type OptionForm struct {
 	Spellings    []string `json:"spellings"`
 	Arity        int      `json:"arity"`
@@ -84,6 +87,7 @@ type OptionForm struct {
 	FixtureID    string   `json:"fixture_id"`
 	Scope        string   `json:"scope,omitempty"`
 	Consumption  string   `json:"consumption"`
+	Shorthand    string   `json:"shorthand,omitempty"`
 	SampleValues []string `json:"sample_values"`
 }
 

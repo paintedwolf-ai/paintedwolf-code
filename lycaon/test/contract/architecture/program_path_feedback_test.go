@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -39,7 +40,12 @@ func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
 		{"native_path", []string{"--", strings.Repeat("x", 131073)}, "COMMAND_LIMIT_EXCEEDED", "argument_bytes"},
 	} {
 		var stdout bytes.Buffer
-		result, err := paths.Invoke(t.Context(), commandprogram.OperationRequest{Invocation: invocation, OperationID: fixture.command, Arguments: fixture.args}, commandprogram.Streams{Output: &stdout})
+		statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(invocation.Identity.NodeID), Span: invocation.Span}}
+		argv := commandprogram.Fields{{Value: fixture.command, Span: invocation.Span}}
+		for _, arg := range fixture.args {
+			argv = append(argv, commandprogram.Field{Value: arg, Span: invocation.Span})
+		}
+		result, err := paths.Invoke(t.Context(), commandprogram.OperationRequest{Invocation: invocation, OperationID: fixture.command, Statement: statement, Argv: argv}, commandprogram.Streams{Output: &stdout})
 		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != fixture.code {
 			t.Fatalf("expected typed %s refusal, got %v", fixture.code, err)

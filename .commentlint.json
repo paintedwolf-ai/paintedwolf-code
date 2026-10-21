@@ -15,7 +15,8 @@
     "lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md",
     "lycaon-den/src-tauri/engine-root",
     "lycaon-den/src/api/types.ts",
-    "schemas/guidance_registry.json"
+    "schemas/guidance_registry.json",
+    "third_party/regexp2"
   ],
   "forbid": {}
 }

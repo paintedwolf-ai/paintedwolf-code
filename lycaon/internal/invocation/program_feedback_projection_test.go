@@ -27,19 +27,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type feedbackMemory struct {
-	active, calls     int
-	maximum, retained int64
-}
-
-func (m *feedbackMemory) ReserveProgramState(_ context.Context, n int64) (func(), error) {
-	if n < 0 || (m.maximum > 0 && n > m.maximum-m.retained) {
-		return nil, errors.New("fixture aggregate state ceiling")
-	}
-	m.active++
-	m.calls++
-	m.retained += n
-	return func() { m.active--; m.retained -= n }, nil
+func feedbackMemory(t *testing.T, state int64) *toolcontract.ProgramMemory {
+	t.Helper()
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: state})
+	testutil.FailErr(t, "program memory", err)
+	return memory
 }
 
 const feedbackProtected = "fixture-protected-diagnostic"
@@ -58,18 +50,18 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	f := newProgramReceiptFixture(t)
 	read := f.child(t)
 	f.start(t, read)
-	testutil.FailErr(t, "settle actual invoked read", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:read-detail"}))
+	testutil.FailErr(t, "settle actual invoked read", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:read-detail"}))
 	denied := f.childFor(t, "write")
 	code := "COMMAND_EFFECT_NOT_ALLOWED"
-	testutil.FailErr(t, "settle refused child", f.recorder.SettleChild(t.Context(), denied.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:scope-refusal"}))
-	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail"}))
+	testutil.FailErr(t, "settle refused child", f.recorder.SettleChild(t.Context(), denied.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:scope-refusal"}))
+	testutil.FailErr(t, "settle program without erasing read", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-detail"}))
 	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "source_unit_id": "owner-input", "source_start_byte": 2, "source_end_byte": 3, "source_line": 9, "source_column": 4, "large": strings.Repeat("x", 40<<10), "owner_detail": "denied for " + feedbackProtected}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, denied, cause)
 	testutil.FailErr(t, "prepare actual ledger feedback", err)
 	defer prepared.Close()
-	if memory.active < 1 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
+	if memory.InUse().State == 0 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
 		t.Fatal("preparation changed owner code or lost lease")
 	}
 	data := prepared.Rejection.Data
@@ -149,17 +141,17 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	if err := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); err == nil {
 		t.Fatal("closed feedback/frame rendered an uncharged observation")
 	}
-	if memory.active != 0 {
-		t.Fatalf("feedback lease leaked: %d", memory.active)
+	if memory.InUse().State != 0 {
+		t.Fatalf("feedback lease leaked: %d", memory.InUse().State)
 	}
 }
 
 func TestExternalDiagnosticTextCannotCreateNativeProgramRejection(t *testing.T) {
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	var empty toolexecution.PreparedProgramFailure
 	empty.Close()
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), nil, memory, nil, tools.ToolContext{}, toolcontract.BoundOperation{}, errors.New("Code: COMMAND_EFFECT_NOT_ALLOWED; retry the entire program"))
-	if err != nil || prepared != nil || memory.calls != 0 {
+	if err != nil || prepared != nil || memory.Reservations() != 0 {
 		t.Fatal("external diagnostic text selected native feedback")
 	}
 }
@@ -170,13 +162,13 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	f := newProgramReceiptFixture(t)
 	write := f.childFor(t, "write")
 	f.start(t, write)
-	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
+	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
 	remote := f.childFor(t, "http_request")
 	f.start(t, remote)
-	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
-	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
+	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
+	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
 	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}, remote, cause)
 	testutil.FailErr(t, "prepare partial effect projection", err)
 	defer prepared.Close()
@@ -227,12 +219,12 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	write := f.childFor(t, "write")
 	f.start(t, write)
-	testutil.FailErr(t, "record stated earlier completed effect", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, OwnerInvoked: true, DetailReference: "output:earlier-effect"}))
+	testutil.FailErr(t, "record stated earlier completed effect", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, OwnerInvoked: true, DetailReference: "output:earlier-effect"}))
 	read := f.childFor(t, "read")
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
 	parent := read.Invocation()
 	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 	testutil.FailErr(t, "capture actual program envelope", err)
 	defer frame.Close()
@@ -264,8 +256,8 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if _, rendered := guidance.RefusalFromError(cause); rendered {
 		t.Fatal("policy rendered before recorder settlement")
 	}
-	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
-	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
+	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
+	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "prepare settled policy feedback", err)
 	defer prepared.Close()
@@ -276,13 +268,13 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
-	baseline := memory.calls
-	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
+	baseline := memory.Reservations()
+	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.Reservations() != baseline {
 		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
 	}
 	prepared.Close()
 	frame.Close()
-	if memory.active != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
 	}
 }
@@ -297,11 +289,11 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	read := f.childFor(t, "read")
 	const code = "READ_PATH_DENIED"
-	testutil.FailErr(t, "settle actual refusal", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:refusal"}))
+	testutil.FailErr(t, "settle actual refusal", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:refusal"}))
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
 	nested := map[string]any{"path": "original", "items": []any{map[string]any{"ranges": []string{"original-range"}}}, "raw": string([]byte{0xff})}
 	cause := &toolrejection.ToolReject{Code: code, Data: map[string]any{"details": nested}}
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "capture actual nested owner diagnostic", err)
 	defer prepared.Close()
@@ -330,19 +322,19 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	}
 	releaseExact()
 	prepared.Close()
-	if memory.retained != 0 || memory.active != 0 {
+	if memory.InUse().State != 0 || memory.InUse().State != 0 {
 		t.Fatal("diagnostic snapshot leaked state")
 	}
-	limited := &feedbackMemory{maximum: 1 << 20}
+	limited := feedbackMemory(t, 1<<20)
 	cause.Data["details"] = map[string]any{"oversized": strings.Repeat("x", 2<<20)}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.retained != 0 || limited.active != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 || limited.InUse().State != 0 {
 		t.Fatal("oversized nested diagnostic escaped admission or leaked partial snapshot")
 	}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.active != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.InUse().State != 0 {
 		t.Fatal("diagnostic screening without a retained projection published feedback")
 	}
 	cause.Data["details"] = make(chan string)
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.retained != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 {
 		t.Fatal("unsupported mutable diagnostic escaped snapshot")
 	}
 }

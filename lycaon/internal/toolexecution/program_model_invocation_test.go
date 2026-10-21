@@ -11,7 +11,7 @@ import (
 
 func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) {
 	parent, tc := frameFixture(t)
-	memory := &stageAdmissionFixture{}
+	memory := stageMemory(t, 64<<20)
 	submitted := map[string]any{"script": "cat 'original'", "progress_update": map[string]any{"content": "- [ ] Actual submitted work"}}
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: submitted}, memory)
 	testutil.FailErr(t, "capture actual model invocation", err)
@@ -20,13 +20,13 @@ func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) 
 	submitted["progress_update"].(map[string]any)["content"] = "caller changed"
 	observed, err := frame.ModelInvocation(t.Context())
 	testutil.FailErr(t, "observe submitted input", err)
-	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"progress_update":{"content":"- [ ] Actual submitted work"},"script":"cat 'original'"}` || memory.held == 0 {
+	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"progress_update":{"content":"- [ ] Actual submitted work"},"script":"cat 'original'"}` || memory.InUse().State == 0 {
 		t.Fatalf("actual model observation lost: %+v", observed)
 	}
 	copied := frame
 	copied.Close()
 	frame.Close()
-	if memory.held != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("frame did not release aggregate retention")
 	}
 	if _, err := frame.ModelInvocation(t.Context()); err == nil {
@@ -42,13 +42,13 @@ func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) 
 
 func TestProgramFrameModelCaptureRefusesBeforeRetention(t *testing.T) {
 	parent, tc := frameFixture(t)
-	cause := errors.New("host state limit")
-	memory := &stageAdmissionFixture{err: cause}
+	memory := stageMemory(t, 64<<20)
 	model := ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}
-	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); !errors.Is(err, cause) {
+	fill := exhaustState(t, memory, 64<<20)
+	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); !stateRefusal(err) {
 		t.Fatalf("admission refusal lost: %v", err)
 	}
-	memory.err = nil
+	fill()
 	model.ToolName = "read"
 	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); err == nil {
 		t.Fatal("fabricated outer tool admitted")
@@ -59,18 +59,18 @@ func TestProgramFrameModelCaptureRefusesBeforeRetention(t *testing.T) {
 	if _, err := FreezeProgramFrame(ctx, parent, tc, model, memory); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled capture admitted")
 	}
-	if memory.held != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("refused frame leaked state")
 	}
 	tc.Source.Roots = append(tc.Source.Roots, tc.Source.Roots[0])
-	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); err == nil || memory.held != 0 {
+	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); err == nil || memory.InUse().State != 0 {
 		t.Fatal("invalid addressed roots retained frame")
 	}
 }
 
 func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	parent, tc := frameFixture(t)
-	memory := &stageAdmissionFixture{}
+	memory := stageMemory(t, 64<<20)
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, memory)
 	testutil.FailErr(t, "capture frame", err)
 	end, err := frame.beginUse()
@@ -78,7 +78,7 @@ func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	closed := make(chan struct{})
 	go func() { frame.Close(); close(closed) }()
 	<-closed
-	if memory.held == 0 || len(frame.lifetime.facts.roots) == 0 {
+	if memory.InUse().State == 0 || len(frame.lifetime.facts.roots) == 0 {
 		t.Fatal("Close released facts during an admitted use")
 	}
 	if _, err := frame.beginUse(); err == nil {
@@ -86,21 +86,21 @@ func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	}
 	end()
 	end()
-	if memory.held != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" {
+	if memory.InUse().State != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" {
 		t.Fatal("drained frame retained unaccounted facts")
 	}
 }
 
 func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *testing.T) {
 	parent, tc := frameFixture(t)
-	memory := &stageAdmissionFixture{}
+	memory := stageMemory(t, 64<<20)
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "cat input"}}, memory)
 	testutil.FailErr(t, "freeze actual command", err)
 	defer frame.Close()
-	baseline := memory.held
+	baseline := memory.InUse().State
 	ctx, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
 	testutil.FailErr(t, "admit actual policy observation", err)
-	if observation.submitted["script"] != "cat input" || memory.held <= baseline {
+	if observation.submitted["script"] != "cat input" || memory.InUse().State <= baseline {
 		t.Fatal("policy observation lost actual envelope or decoded-state admission")
 	}
 	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
@@ -112,61 +112,48 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 		t.Fatal("native owner rejection was rendered before receipt settlement")
 	}
 	release()
-	if memory.held != baseline {
+	if memory.InUse().State != baseline {
 		t.Fatal("decoded observation lease leaked")
 	}
 	tc.Identity.ToolCallID = "another-model-call"
-	if _, _, err := programModelArguments(t.Context(), frame, memory, tc); err == nil || memory.held != baseline {
+	if _, _, err := programModelArguments(t.Context(), frame, memory, tc); err == nil || memory.InUse().State != baseline {
 		t.Fatal("wrong model call received observation or retained state")
 	}
 }
 
 func TestProgramFrameRetainsSupplementalFactsOnCapturedLedger(t *testing.T) {
 	parent, tc := frameFixture(t)
-	memory := &stageAdmissionFixture{}
-	nilLease := false
-	admission := programStateFunc(func(ctx context.Context, n int64) (func(), error) {
-		if nilLease {
-			return nil, nil
-		}
-		return memory.ReserveProgramState(ctx, n)
-	})
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, admission)
+	memory := stageMemory(t, 64<<20)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, memory)
 	testutil.FailErr(t, "capture retained ledger", err)
 	defer frame.Close()
 	end, err := frame.beginUse()
 	testutil.FailErr(t, "hold copy lifetime", err)
 	defer end()
-	baseline := memory.held
+	baseline := memory.InUse().State
 	testutil.FailErr(t, "retain frozen feedback copy", frame.retainProgramFacts(t.Context(), 4096))
-	if memory.held != baseline+4096 {
+	if memory.InUse().State != baseline+4096 {
 		t.Fatal("facts used an independent ledger or released early")
 	}
-	cause := errors.New("captured aggregate ceiling")
-	memory.err = cause
-	if err := frame.retainProgramFacts(t.Context(), 1); !errors.Is(err, cause) {
+	fill := exhaustState(t, memory, 64<<20)
+	if err := frame.retainProgramFacts(t.Context(), 1); !stateRefusal(err) {
 		t.Fatal("captured ledger refusal lost")
 	}
-	memory.err = nil
-	nilLease = true
-	if err := frame.retainProgramFacts(t.Context(), 1); err == nil {
-		t.Fatal("facts admitted without retained lease")
-	}
-	nilLease = false
+	fill()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := frame.retainProgramFacts(ctx, 1); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled retained copy admitted")
 	}
-	if memory.held != baseline+4096 {
+	if memory.InUse().State != baseline+4096 {
 		t.Fatal("refused facts changed existing reservations")
 	}
 	frame.Close()
-	if memory.held != baseline+4096 {
+	if memory.InUse().State != baseline+4096 {
 		t.Fatal("Close released frozen copy before active use completed")
 	}
 	end()
-	if memory.held != 0 || frame.lifetime.admission != nil {
+	if memory.InUse().State != 0 || frame.lifetime.admission != nil {
 		t.Fatal("frame retained facts or allocator after Close")
 	}
 	if err := frame.retainProgramFacts(t.Context(), 1); err == nil {

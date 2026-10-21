@@ -59,6 +59,7 @@ const (
 	NoGlobStar                         // do not support "**"; negated shopt "globstar"
 	GlobLeadingDot                     // let wildcards match leading dots in filenames; shopt "dotglob"
 	ExtendedOperators                  // support extended pattern matching operators; shopt "extglob" for pathname expansion
+	ScalarCollation                    // locale-independent single-scalar collating/equivalence atoms
 )
 
 // Regexp turns a shell pattern into a regular expression that can be used with
@@ -298,7 +299,11 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				return literalBracket()
 			}
 		}
+		var lastCollation rune
+		hasLastCollation := false
 		for {
+			previousCollation := hasLastCollation
+			hasLastCollation = false
 			switch c {
 			case '\x00':
 				// Bash is inconsistent about invalid character classes
@@ -333,6 +338,17 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				start := sl.last()
 				end := sl.peekNext()
 				// TODO: what about overlapping ranges, like: [a--z]
+				if mode&ScalarCollation != 0 {
+					if previousCollation {
+						start = lastCollation
+					}
+					rest := sl.peekRest()
+					if len(rest) > 2 && rest[0] == '[' && (rest[1] == '.' || rest[1] == '=') {
+						if n, err := charClass(rest[1:], true); err == nil && n > 0 {
+							end, _ = utf8.DecodeRuneInString(rest[2 : n-1])
+						}
+					}
+				}
 				if end != ']' && start > end && deferredErr == nil {
 					deferredErr = &SyntaxError{msg: fmt.Sprintf("invalid range: %c-%c", start, end)}
 				}
@@ -351,7 +367,7 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				return nil
 			case '[':
 				rest := sl.peekRest()
-				n, err := charClass(rest)
+				n, err := charClass(rest, mode&ScalarCollation != 0)
 				if err != nil {
 					if classErr == nil {
 						classErr = &SyntaxError{msg: "charClass invalid", err: err}
@@ -359,6 +375,21 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 					if deferredErr == nil {
 						deferredErr = classErr
 					}
+				}
+				if err == nil && n > 0 && mode&ScalarCollation != 0 && (rest[0] == '.' || rest[0] == '=') {
+					atom := rest[1 : n-2]
+					lastCollation, _ = utf8.DecodeRuneInString(atom)
+					hasLastCollation = true
+					if filenames && atom == "/" {
+						hasSlash = true
+					}
+					if atom == "-" {
+						bsb.WriteString(`\-`)
+					} else {
+						bsb.WriteString(regexp.QuoteMeta(atom))
+					}
+					sl.i += n
+					break
 				}
 				bsb.WriteByte('[')
 				if n > 0 {
@@ -390,7 +421,7 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 // starting just after an opening "[" in s, such as ":alpha:]" for the
 // character class [:alpha:]. Elements which are well formed but invalid or
 // unsupported, such as collating symbols, return their length with an error.
-func charClass(s string) (int, error) {
+func charClass(s string, scalarCollation bool) (int, error) {
 	if len(s) > 0 && (s[0] == '.' || s[0] == '=') {
 		sep := ".]"
 		if s[0] == '=' {
@@ -399,6 +430,9 @@ func charClass(s string) (int, error) {
 		name, _, ok := strings.Cut(s[1:], sep)
 		if !ok {
 			return 0, fmt.Errorf("collating features not available")
+		}
+		if scalarCollation && utf8.ValidString(name) && utf8.RuneCountInString(name) == 1 {
+			return len(name) + 3, nil
 		}
 		return len(name) + 3, fmt.Errorf("collating features not available")
 	}

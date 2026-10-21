@@ -984,6 +984,16 @@
       "id": "COMMAND_NATIVE_FORM_UNSUPPORTED",
       "location": "Reached native operation or explicit structured admission mode; retain prior child outcomes.",
       "help": "Documented native forms and required admission; no shell fallback, refreshed inputs or whole-program replay."
+    },
+    {
+      "id": "COMMAND_REVISION_CONFLICT",
+      "location": "Pinned source or destination at acceptance; the prepared change is stopped and retained.",
+      "help": "Captured revisions are rechecked exactly; no refresh, rebase or rerun of the transform."
+    },
+    {
+      "id": "COMMAND_PUBLICATION_PENDING",
+      "location": "Dependent external launch after an accepted native write that is not saved.",
+      "help": "External processes read published disk; accepted edits stay recoverable and other drafts are never saved."
     }
   ],
   "source_locations": {

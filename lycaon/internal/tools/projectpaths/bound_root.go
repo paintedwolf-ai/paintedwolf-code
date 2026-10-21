@@ -38,7 +38,9 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	return root, nil
 }
 
-func pathOperationError(operand string, err error) error {
+// PathOperationError joins a confinement failure with its public rejection;
+// ordinary filesystem errors pass through unchanged.
+func PathOperationError(operand string, err error) error {
 	var reject *toolrejection.ToolReject
 	var pathErr *PathError
 	if errors.As(err, &reject) || errors.As(err, &pathErr) {
@@ -55,4 +57,45 @@ func pathOperationError(operand string, err error) error {
 		return errors.Join(err, mapResolveErr(err, operand))
 	}
 	return err
+}
+
+// OpenLaunchMetadata retains executable or cwd identity without source reads.
+func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null is not a metadata file")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	root, err := fseffect.OpenMetadataRoot(p.Resolved.Root.Path)
+	if err != nil {
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	defer root.Close()
+	held, err := root.OpenExact(".", true)
+	if err != nil {
+		return nil, err
+	}
+	info, err := held.Stat()
+	_ = held.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, p.rootInfo) {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	file, err := root.OpenExact(p.exactRelative, directory)
+	if err != nil {
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if p.admitRead != nil {
+		if err := p.admitRead(file.Name()); err != nil {
+			_ = file.Close()
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+	}
+	return file, nil
 }

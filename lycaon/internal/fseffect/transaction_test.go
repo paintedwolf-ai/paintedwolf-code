@@ -123,7 +123,7 @@ func TestReplaceCommitsAndVerifiesThroughHeldParent(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "Replace", err)
-	if result.Bytes != int64(len("complete\n")) {
+	if result.Bytes != int64(len("complete\n")) || result.Publication != fseffect.PublicationVerified {
 		t.Fatalf("Replace bytes = %d", result.Bytes)
 	}
 	got, err := os.ReadFile(filepath.Join(root, "nested", "file.txt"))
@@ -245,11 +245,15 @@ func TestChownAppliesAndRefusesSymlinkTarget(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "owned.txt")
 	testutil.FailErr(t, "seed target", os.WriteFile(target, []byte("x"), 0o644))
-	testutil.FailErr(t, "Chown", fseffect.Chown(fseffect.Location{Root: root, Rel: "owned.txt"}, os.Getuid(), os.Getgid()))
+	outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "owned.txt"}, UID: os.Getuid(), GID: os.Getgid()})
+	testutil.FailErr(t, "change ownership", err)
+	if !outcome.Applied || outcome.Capability != fseffect.MetadataAvailable {
+		t.Fatalf("ownership outcome = %+v", outcome)
+	}
 	outside := filepath.Join(t.TempDir(), "outside")
 	testutil.FailErr(t, "seed outside", os.WriteFile(outside, []byte("safe"), 0o600))
 	testutil.FailErr(t, "symlink target", os.Symlink(outside, filepath.Join(root, "out")))
-	if err := fseffect.Chown(fseffect.Location{Root: root, Rel: "out"}, os.Getuid(), os.Getgid()); !errors.Is(err, fseffect.ErrSymlink) {
+	if outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "out"}, UID: os.Getuid(), GID: os.Getgid()}); !errors.Is(err, fseffect.ErrSymlink) || outcome.Applied {
 		t.Fatalf("Chown symlink target error = %v, want ErrSymlink", err)
 	}
 }

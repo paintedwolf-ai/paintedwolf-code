@@ -42,6 +42,7 @@ type BoundPath struct {
 	rootInfo      os.FileInfo
 	exactRelative string
 	admitRead     func(string) error
+	admitEntry    func(string) error
 	admitMutation func(string) (Resolved, error)
 }
 
@@ -68,17 +69,17 @@ func (p BoundPath) Open() (*os.File, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			file.Close()
-			return nil, pathOperationError(p.Resolved.DisplayPath, err)
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	return file, nil
@@ -92,7 +93,7 @@ type ProgramPaths struct {
 	cwd           BoundPath
 	initial       BoundPath
 	initialInfo   os.FileInfo
-	forms         map[string]string
+	specs         map[string]toolcontract.CommandSpecification
 	cwdInfo       os.FileInfo
 	argumentLimit int64
 	outputLimit   int64
@@ -105,9 +106,9 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, forms: map[string]string{}}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}}
 	for _, command := range catalog.Commands {
-		p.forms[command.Name] = command.Argv
+		p.specs[command.Name] = command
 	}
 	for _, limit := range catalog.Language.Limits {
 		if limit.ID == "argument_bytes" {
@@ -207,6 +208,26 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		}
 		_, err = ResolveRead(ctx, p.boundary, p.context, authority)
 		return err
+	}
+	// Entry metadata is admitted at the entry's own address: the held walk
+	// enforces containment, so only read scope applies and a link is never
+	// followed to decide whether its own metadata may be read.
+	bound.admitEntry = func(actual string) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		authority, err := authorityAddress(resolved.Root.Path, actual)
+		if err != nil {
+			return err
+		}
+		scope := projectroot.ScopeRel(resolved.Root, authority)
+		if scope == "." || scope == "" {
+			return bound.admitRead(actual)
+		}
+		if p.boundary == nil {
+			return nil
+		}
+		return p.boundary.AssertReadGlobs(ctx, filepath.ToSlash(scope), p.context.ProfileID())
 	}
 	if write {
 		bound.admitMutation = func(actual string) (Resolved, error) {

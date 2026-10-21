@@ -3,17 +3,18 @@ package invocation
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
 // Expanded input capture and receipt insertion commit together. Neither a body
 // without a receipt nor a dynamic receipt pointing at placeholder inspection
 // text can be presented as a complete child preparation.
-func (r *SQLRecorder) prepareChildBody(ctx context.Context, in ChildStart, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
+func (r *SQLRecorder) prepareChildBody(ctx context.Context, in toolcontract.ProgramChildStart, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
 	if r == nil || r.database == nil || spill == nil || !spill.Complete {
 		return nil, fmt.Errorf("child preparation requires complete retained expanded inputs")
 	}
-	if err := in.Validate(); err != nil {
+	if err := validateChildStart(in); err != nil {
 		return nil, err
 	}
 	if spill.InitiatingClaimID() != in.Invocation.Identity.ExecutionID || (!redacted && spill.EmittedSHA256 != in.ExpandedInputs.ArgumentsDigest()) {
