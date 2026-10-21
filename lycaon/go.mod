@@ -10,6 +10,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/andybalholm/brotli v1.2.6
 	github.com/atotto/clipboard v0.1.4
+	github.com/benhoyt/goawk v1.32.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
@@ -323,6 +324,9 @@ replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runt
 replace github.com/odvcencio/gotreesitter => ../third_party/gotreesitter
 
 replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
+
+// Bounded awk execution; provenance and patch in third_party/README.md.
+replace github.com/benhoyt/goawk => ../third_party/goawk
 
 replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
