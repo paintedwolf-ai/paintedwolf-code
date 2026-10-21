@@ -52,6 +52,12 @@ func ensureIgnoreOverlayFormat(loc fseffect.Location) error {
 }
 
 func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string) error {
+	return applyAgentFileAdmitted(ctx, tctx, target, after, before, baseSHA256, nil)
+}
+
+// applyAgentFileAdmitted runs admit after review and the base check, just
+// before the reviewed bytes commit, so pinned inputs cannot move during review.
+func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target mutationTarget, after, before []byte, baseSHA256 string, admit func() error) error {
 	if before == nil && baseSHA256 != "" {
 		before = []byte{}
 	}
@@ -82,6 +88,11 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 			}
 			if err := verifyMutationSnapshot(target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
+			}
+			if admit != nil {
+				if err := admit(); err != nil {
+					return err
+				}
 			}
 			var err error
 			journal, err = prepareAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false)
