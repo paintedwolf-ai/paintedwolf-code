@@ -27,6 +27,9 @@ fn build_toplevel_drag() {
         .expect("wayland-client development files");
     let mut build = cc::Build::new();
     build.file(SOURCE).warnings(true).extra_warnings(true).warnings_into_errors(true);
+    if std::env::var("PROFILE").as_deref() == Ok("debug") {
+        build.define("PW_TOPLEVEL_DRAG_TESTS", None);
+    }
     for path in &wayland.include_paths {
         build.include(path);
     }

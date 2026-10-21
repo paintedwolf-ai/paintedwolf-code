@@ -17,6 +17,7 @@ extern "C" {
     fn pw_toplevel_drag_init(display: *mut c_void) -> libc::c_int;
     fn pw_toplevel_drag_arm_source();
     fn pw_toplevel_drag_arm_toplevel(x_offset: i32, y_offset: i32);
+    fn pw_toplevel_drag_disarm_toplevel();
     fn pw_toplevel_drag_active() -> libc::c_int;
     fn pw_toplevel_drag_attached() -> libc::c_int;
     fn pw_toplevel_drag_finish();
@@ -39,10 +40,13 @@ pub(crate) fn arm_source() {
     unsafe { pw_toplevel_drag_arm_source() }
 }
 
-/// The next window GTK maps on this thread is attached to the running drag,
-/// with the pointer at `offset` within it.
-pub(crate) fn arm_window(offset: (i32, i32)) {
-    unsafe { pw_toplevel_drag_arm_toplevel(offset.0, offset.1) }
+/// Shows `window` attached to the running drag, with the pointer at `offset`
+/// within it. Returns whether the compositor now moves it with the drag.
+pub(crate) fn show_attached(window: &gtk::ApplicationWindow, offset: (i32, i32)) -> bool {
+    unsafe { pw_toplevel_drag_arm_toplevel(offset.0, offset.1) };
+    window.show_all();
+    unsafe { pw_toplevel_drag_disarm_toplevel() };
+    attached()
 }
 
 /// A toplevel drag was created for the running GTK drag.
@@ -82,6 +86,41 @@ pub(crate) fn live_outcome(dropped: bool, received: bool) -> LiveOutcome {
 #[cfg(test)]
 mod tests {
     use super::{live_outcome, LiveOutcome};
+
+    extern "C" {
+        fn pw_toplevel_drag_test_without_libwayland_entry();
+        fn pw_toplevel_drag_test_disabled() -> libc::c_int;
+        fn wl_proxy_marshal_flags(proxy: *mut libc::c_void, opcode: u32, interface: *const libc::c_void,
+                                  version: u32, flags: u32, ...) -> *mut libc::c_void;
+    }
+
+    const MARKER: &str = "PW_TOPLEVEL_DRAG_FAIL_SAFE";
+
+    #[test]
+    fn without_libwayland_entry_the_feature_is_off_and_nothing_is_forwarded() {
+        if std::env::var_os(MARKER).is_some() {
+            unsafe {
+                pw_toplevel_drag_test_without_libwayland_entry();
+                assert_eq!(super::pw_toplevel_drag_init(std::ptr::null_mut()), 0);
+                assert_eq!(pw_toplevel_drag_test_disabled(), 1);
+                super::arm_source();
+                assert!(!super::active());
+                assert!(wl_proxy_marshal_flags(std::ptr::null_mut(), 0, std::ptr::null(), 1, 0, 7u32).is_null());
+                super::finish();
+            }
+            println!("\nfail-safe-ok");
+            return;
+        }
+        // Process-wide state: the check runs in its own process.
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "windows::item_windows::toplevel_drag::tests::without_libwayland_entry_the_feature_is_off_and_nothing_is_forwarded", "--nocapture", "--test-threads=1"])
+            .env(MARKER, "1")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success() && stdout.lines().any(|line| line == "fail-safe-ok"),
+            "{}\n{stdout}\n{}", output.status, String::from_utf8_lossy(&output.stderr));
+    }
 
     #[test]
     fn only_a_drop_tears_off_and_a_receiving_strip_wins() {

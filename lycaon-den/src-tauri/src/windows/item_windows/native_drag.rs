@@ -263,9 +263,8 @@ fn attach_window(app: &AppHandle, token: &str, label: &str) {
         close_pending_drag(app, label);
         return;
     };
-    toplevel_drag::arm_window((super::DROP_POINTER_X_INSET as i32, super::DROP_POINTER_Y_INSET as i32));
-    window.show_all();
-    if !toplevel_drag::attached() {
+    let offset = (super::DROP_POINTER_X_INSET as i32, super::DROP_POINTER_Y_INSET as i32);
+    if !toplevel_drag::show_attached(&window, offset) {
         close_pending_drag(app, label);
         return;
     }

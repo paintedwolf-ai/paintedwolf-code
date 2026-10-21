@@ -3,28 +3,44 @@
  * xdg_toplevel_drag_v1.
  *
  * GTK3 keeps each drag's wl_data_source and each window's xdg_toplevel
- * private, so the shell executable defines wl_proxy_marshal_flags. Every
- * request GTK and the shell marshal passes through it unchanged to
- * wl_proxy_marshal_array_flags. Two requests are acted on, and only while the
- * shell armed them on the GTK main thread:
+ * private, so the shell executable defines wl_proxy_marshal_flags. It never
+ * decodes or changes a request: every argument slot goes unchanged to
+ * libwayland's own wl_proxy_marshal_flags. Wayland request arguments are all
+ * integer class (wl_fixed_t is an int32), and on the supported ABIs (x86_64
+ * System V, AArch64 AAPCS64) each variadic one occupies one 8-byte register or
+ * stack slot. So the same slots forwarded in order reach libwayland exactly as
+ * the caller passed them. A few unused trailing slots are read and passed
+ * along; libwayland reads only the arguments the request's signature names.
+ *
+ * Two requests are observed, through the public wl_proxy_get_class, and only
+ * while the shell armed them on the GTK main thread:
  *
  * - wl_data_device.start_drag: the toplevel drag is created for GTK's source
  *   first, as the protocol requires.
- * - xdg_surface.get_toplevel: the new toplevel is attached to the drag before
- *   it maps.
+ * - The first request GTK sends on a new xdg_toplevel (set_title, before the
+ *   window's first commit): that toplevel is attached before it maps.
  *
- * Argument decoding follows the request signature of the proxy's interface.
- * libwayland lays out every proxy as a wl_object whose first member is that
- * interface; pw_toplevel_drag_init checks this on the display proxy before
- * anything is armed.
+ * If libwayland's entry point cannot be found, or the ABI is not one of the
+ * above, the feature stays off and drags behave as before.
  */
+#define _GNU_SOURCE
+#include <dlfcn.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <wayland-client.h>
 
-#define MAX_ARGS 20
+#if (defined(__x86_64__) || defined(__aarch64__)) && defined(__linux__)
+#define PW_FORWARDING_ABI 1
+#else
+#define PW_FORWARDING_ABI 0
+#endif
+
+/* Above the largest Wayland request's argument count we observe from GTK. */
+#define SLOTS 16
+
+typedef struct wl_proxy *(*marshal_flags_fn)(struct wl_proxy *, uint32_t, const struct wl_interface *,
+                                             uint32_t, uint32_t, ...);
 
 extern const struct wl_interface xdg_toplevel_drag_v1_interface;
 
@@ -55,50 +71,38 @@ const struct wl_interface xdg_toplevel_drag_manager_v1_interface = {
 };
 
 static struct {
+    marshal_flags_fn real;
+    int resolved;
+    int disabled;
     struct wl_display *display;
     struct wl_proxy *manager;
-    int layout_checked;
     int arm_source;
     int arm_toplevel;
     int32_t x_offset;
     int32_t y_offset;
     struct wl_proxy *drag;
     int attached;
-    int failures;
 } state;
 
-static int interface_is(const struct wl_interface *interface, const char *name)
-{
-    return interface && interface->name && strcmp(interface->name, name) == 0;
-}
+/* Swapped by tests to exercise a libwayland without the entry point. */
+static void *(*resolve)(void *, const char *) = dlsym;
 
-static const struct wl_interface *proxy_interface(struct wl_proxy *proxy)
+static marshal_flags_fn real_marshal(void)
 {
-    return *(const struct wl_interface *const *)proxy;
-}
-
-static int decode(const char *signature, union wl_argument *args, va_list ap)
-{
-    int count = 0;
-    for (const char *type = signature; *type; type++) {
-        if (*type == '?' || (*type >= '0' && *type <= '9'))
-            continue;
-        if (count == MAX_ARGS)
-            return -1;
-        switch (*type) {
-        case 'i': args[count].i = va_arg(ap, int32_t); break;
-        case 'u': args[count].u = va_arg(ap, uint32_t); break;
-        case 'f': args[count].f = va_arg(ap, wl_fixed_t); break;
-        case 's': args[count].s = va_arg(ap, const char *); break;
-        case 'o': args[count].o = va_arg(ap, struct wl_object *); break;
-        case 'n': args[count].o = va_arg(ap, struct wl_object *); break;
-        case 'a': args[count].a = va_arg(ap, struct wl_array *); break;
-        case 'h': args[count].h = va_arg(ap, int32_t); break;
-        default: return -1;
-        }
-        count++;
+    if (!state.resolved) {
+        state.resolved = 1;
+        if (PW_FORWARDING_ABI)
+            state.real = (marshal_flags_fn)resolve(RTLD_NEXT, "wl_proxy_marshal_flags");
+        if (!state.real)
+            state.disabled = 1;
     }
-    return count;
+    return state.real;
+}
+
+static int is_class(struct wl_proxy *proxy, const char *name)
+{
+    const char *class = proxy ? wl_proxy_get_class(proxy) : NULL;
+    return class && strcmp(class, name) == 0;
 }
 
 static void create_drag(struct wl_proxy *source)
@@ -108,8 +112,6 @@ static void create_drag(struct wl_proxy *source)
     args[1].o = (struct wl_object *)source;
     state.drag = wl_proxy_marshal_array_flags(state.manager, 1, &xdg_toplevel_drag_v1_interface,
                                               wl_proxy_get_version(state.manager), 0, args);
-    if (!state.drag)
-        state.failures++;
 }
 
 static void attach(struct wl_proxy *toplevel)
@@ -122,31 +124,35 @@ static void attach(struct wl_proxy *toplevel)
     state.attached = 1;
 }
 
+static void observe(struct wl_proxy *proxy, uint32_t opcode, uintptr_t first)
+{
+    if (state.arm_source && opcode == 0 && is_class(proxy, "wl_data_device") && first) {
+        state.arm_source = 0;
+        create_drag((struct wl_proxy *)first);
+    } else if (state.arm_toplevel && state.drag && is_class(proxy, "xdg_toplevel")) {
+        state.arm_toplevel = 0;
+        attach(proxy);
+    }
+}
+
 struct wl_proxy *wl_proxy_marshal_flags(struct wl_proxy *proxy, uint32_t opcode,
                                         const struct wl_interface *interface, uint32_t version,
                                         uint32_t flags, ...)
 {
-    union wl_argument args[MAX_ARGS];
-    const struct wl_interface *own = proxy_interface(proxy);
+    uintptr_t slot[SLOTS];
     va_list ap;
     va_start(ap, flags);
-    int count = decode(own->methods[opcode].signature, args, ap);
+    for (int i = 0; i < SLOTS; i++)
+        slot[i] = va_arg(ap, uintptr_t);
     va_end(ap);
-    /* Every wire type is decoded; anything else means a libwayland this file
-     * does not understand, and forwarding a guess would corrupt the stream. */
-    if (count < 0)
-        abort();
-
-    if (state.arm_source && opcode == 0 && interface_is(own, "wl_data_device") && args[0].o) {
-        state.arm_source = 0;
-        create_drag((struct wl_proxy *)args[0].o);
-    }
-    struct wl_proxy *made = wl_proxy_marshal_array_flags(proxy, opcode, interface, version, flags, args);
-    if (state.arm_toplevel && state.drag && made && opcode == 1 && interface_is(own, "xdg_surface")) {
-        state.arm_toplevel = 0;
-        attach(made);
-    }
-    return made;
+    marshal_flags_fn real = real_marshal();
+    if (!real)
+        return NULL;
+    if (!state.disabled)
+        observe(proxy, opcode, slot[0]);
+    return real(proxy, opcode, interface, version, flags, slot[0], slot[1], slot[2], slot[3], slot[4],
+                slot[5], slot[6], slot[7], slot[8], slot[9], slot[10], slot[11], slot[12], slot[13],
+                slot[14], slot[15]);
 }
 
 static void global(void *data, struct wl_registry *registry, uint32_t name, const char *interface,
@@ -167,15 +173,14 @@ static void global_remove(void *data, struct wl_registry *registry, uint32_t nam
 
 static const struct wl_registry_listener registry_listener = {global, global_remove};
 
-/* Returns 1 when the compositor offers the protocol and the proxy layout holds. */
+/* Returns 1 when forwarding is available and the compositor offers the protocol. */
 int pw_toplevel_drag_init(struct wl_display *display)
 {
     if (state.display)
         return state.manager != NULL;
     state.display = display;
-    if (proxy_interface((struct wl_proxy *)display) != &wl_display_interface)
+    if (!real_marshal())
         return 0;
-    state.layout_checked = 1;
     struct wl_event_queue *queue = wl_display_create_queue(display);
     if (!queue)
         return 0;
@@ -201,11 +206,11 @@ int pw_toplevel_drag_init(struct wl_display *display)
 /* The next start_drag gets a toplevel drag. */
 void pw_toplevel_drag_arm_source(void)
 {
-    if (state.manager && state.layout_checked && !state.drag)
+    if (state.manager && !state.disabled && !state.drag)
         state.arm_source = 1;
 }
 
-/* The next xdg_toplevel created is attached with this offset from the pointer. */
+/* The next xdg_toplevel GTK configures is attached with this offset from the pointer. */
 void pw_toplevel_drag_arm_toplevel(int32_t x_offset, int32_t y_offset)
 {
     if (state.drag && !state.attached) {
@@ -213,6 +218,12 @@ void pw_toplevel_drag_arm_toplevel(int32_t x_offset, int32_t y_offset)
         state.x_offset = x_offset;
         state.y_offset = y_offset;
     }
+}
+
+/* Nothing else is attached once the window the shell showed was configured. */
+void pw_toplevel_drag_disarm_toplevel(void)
+{
+    state.arm_toplevel = 0;
 }
 
 int pw_toplevel_drag_active(void)
@@ -236,3 +247,24 @@ void pw_toplevel_drag_finish(void)
     state.drag = NULL;
     state.attached = 0;
 }
+
+#ifdef PW_TOPLEVEL_DRAG_TESTS
+static void *missing(void *handle, const char *name)
+{
+    (void)handle;
+    (void)name;
+    return NULL;
+}
+
+/* Starts over as a process whose libwayland lacks the entry point. */
+void pw_toplevel_drag_test_without_libwayland_entry(void)
+{
+    memset(&state, 0, sizeof state);
+    resolve = missing;
+}
+
+int pw_toplevel_drag_test_disabled(void)
+{
+    return state.disabled;
+}
+#endif
