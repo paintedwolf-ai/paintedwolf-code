@@ -370,6 +370,7 @@ font-size: var(--text-den-compact);
   margin: 0;
   padding-left: 0;
   list-style: none;
+  font-size: var(--text-den-hint);
   overflow-wrap: anywhere;
 }
 

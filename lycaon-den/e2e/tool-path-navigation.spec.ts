@@ -104,7 +104,7 @@ webE2e.describe("command program card", () => {
       {
         id: crypto.randomUUID(), role: "tool", content: "Code: HTTP_REQUEST_FAILED", created_at: "2026-10-20T10:00:02Z", seq: 3, ord: 3,
         tool_result: {
-          tool_call_id: "call_command_1", assistant_message_id: assistantMessageId, tool: "command", content: "Code: HTTP_REQUEST_FAILED", outcome: "rejected",
+          tool_call_id: "call_command_1", assistant_message_id: assistantMessageId, tool: "command", tool_args: { command: source }, content: "Code: HTTP_REQUEST_FAILED", outcome: "rejected",
           command_program: program,
           feedback: [{ code: "HTTP_REQUEST_FAILED", details: { native_operation: "http_request", operation_source_line: 5, operation_source_column: 1 } }],
         },
@@ -122,5 +122,6 @@ webE2e.describe("command program card", () => {
       await expect(body.getByTestId(`command-program-section-${name}`)).toBeVisible();
     }
     await expect(body.getByTestId("command-program-section-program")).not.toContainText("quarterly totals");
+    await expect(body.getByTestId("command-program-section-program")).toContainText("Full program");
   });
 });

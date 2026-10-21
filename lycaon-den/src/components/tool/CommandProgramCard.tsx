@@ -91,16 +91,14 @@ function CommandProgramBody(props: Props & { program: CommandProgramReceipt }) {
             <For each={view().program}>{(statement) => <li><code>{statement}</code></li>}</For>
           </ol>
         </Show>
-        <Show when={props.part.argsReference} fallback={
-          <Show when={source()} keyed>{(text) => <ToolContentLink pane="args" label="Full program" content={{ kind: "inline", text }} projectId={props.projectId} />}</Show>
-        }>
-          <RetainedToolContent field="args" />
+        <Show when={source()} keyed fallback={<Show when={props.part.argsReference}><RetainedToolContent field="args" /></Show>}>
+          {(text) => <ToolContentLink pane="args" label="Full program" content={{ kind: "inline", text }} projectId={props.projectId} />}
         </Show>
       </Section>
       <Section label="Result" testId="command-program-section-result">
         <Facts facts={view().result} />
       </Section>
-      <Show when={view().stages.length > 0 || loaded()?.next_cursor || cursors().length > 0}>
+      <Show when={view().stages.length > 0 || cursors().length > 0}>
         <Section label="Stages" testId="command-program-section-stages">
           <ol class="den-command-program-stages">
             <For each={view().stages}>
@@ -120,6 +118,7 @@ function CommandProgramBody(props: Props & { program: CommandProgramReceipt }) {
           <Show when={loaded()?.executions_omitted}>
             {(omitted) => <p class="den-tool-part-card-note">{omitted()} more stages are in retained receipts</p>}
           </Show>
+          <Show when={cursors().length > 0 || loaded()?.next_cursor}>
           <div class="den-command-program-paging" role="group" aria-label="Stage pages">
             <button type="button" class="den-chat-content-link" data-testid="command-program-previous" disabled={cursors().length === 0} onClick={() => setCursors((all) => all.slice(0, -1))}>
               Previous stages
@@ -131,6 +130,7 @@ function CommandProgramBody(props: Props & { program: CommandProgramReceipt }) {
               Next stages
             </button>
           </div>
+          </Show>
         </Section>
       </Show>
       <Show when={view().changes.length > 0}>
