@@ -5,7 +5,15 @@ import { APP_SCOPE, noticeScopeKey } from "../../notices/notice-scope.ts";
 import { createUpdateState } from "./update-state.ts";
 import { mountUpdateNotice } from "./mount-update-notice.ts";
 import { packageFixture, packageSourceFixture, updateFixture, stagedFixture, updateServiceFixture } from "./update-test-fixture.ts";
-import type { NativeUpdateState } from "./update-service.ts";
+import type { NativeUpdateState, PackageSourceFacts } from "./update-service.ts";
+// Each fixture is what the native adapter produces; the Rust source tests hold them equal.
+import aptCandidate from "./fixtures/package-source-apt-candidate.json";
+import aptHeld from "./fixtures/package-source-apt-held.json";
+import pacmanCandidate from "./fixtures/package-source-pacman-candidate.json";
+import pacmanIgnored from "./fixtures/package-source-pacman-ignored.json";
+import dnfCandidate from "./fixtures/package-source-dnf-candidate.json";
+
+const produced = (facts: unknown): PackageSourceFacts => facts as PackageSourceFacts;
 
 async function fixture() {
   let deliver!: (state: NativeUpdateState) => void;
@@ -61,7 +69,7 @@ describe("update notices", () => {
   });
   it("uses native source observations independently of upstream feed releases", async () => {
     const f = await fixture();
-    const source = packageSourceFixture({ availability: "candidate_found", held: false, pinned: false,
+    const source = packageSourceFixture({ availability: "candidate_found", held: false,
       candidate: { version: "1.0.3-1", architecture: "amd64", repositories: [{ id: "configured", suite: "stable", trusted: true }], newer_than_installed: true } });
     const state = packageFixture({ candidate: null, discovery: "up_to_date" });
     state.package!.source = source;
@@ -82,12 +90,34 @@ describe("update notices", () => {
         await f.send(state);
         expect(f.rows()).toHaveLength(0);
       }
-      for (const policy of [{ held: true }, { pinned: true }, { pinned: null }, { owner: null }] as const) {
+      for (const policy of [{ held: true }, { held: null }, { owner: null }] as const) {
         state.package!.source = { ...source, ...policy };
         await f.send(state);
         expect(f.rows()).toHaveLength(0);
       }
     } finally { f.stop(); }
+  });
+  it("announces the package candidates that APT and pacman report", async () => {
+    for (const [family, facts] of [["deb", aptCandidate], ["pacman", pacmanCandidate]] as const) {
+      const f = await fixture();
+      const state = packageFixture({ candidate: null, discovery: "up_to_date" });
+      state.package = { ...state.package!, family, source: produced(facts) };
+      try {
+        await f.send(state);
+        expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
+      } finally { f.stop(); }
+    }
+  });
+  it("stays quiet for reported holds, ignore rules and unobserved versionlock policy", async () => {
+    for (const [family, facts] of [["deb", aptHeld], ["pacman", pacmanIgnored], ["rpm", dnfCandidate]] as const) {
+      const f = await fixture();
+      const state = packageFixture({ candidate: null, discovery: "up_to_date" });
+      state.package = { ...state.package!, family, source: produced(facts) };
+      try {
+        await f.send(state);
+        expect(f.rows()).toHaveLength(0);
+      } finally { f.stop(); }
+    }
   });
   it("stays quiet while package ownership is unknown", async () => {
     const f = await fixture();

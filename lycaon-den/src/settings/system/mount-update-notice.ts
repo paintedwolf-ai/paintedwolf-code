@@ -14,9 +14,11 @@ function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
   if (state.capabilities.can_restart_to_update && state.offer_confirmed_at !== null) return "update_ready";
   if (state.installation === "failed" && state.last_error && state.last_error.code !== "check_failed" && state.last_error.code !== "cancelled") return "update_failed";
   if (state.install_source === "system_package") {
+    // The host selects candidates through the native policy, so pins and priorities are already
+    // applied; an explicit hold or ignore rule must be observed absent.
     const source = state.package?.source;
     return source?.availability === "candidate_found"
-      && source.owner === "system_package_manager" && source.held === false && source.pinned === false
+      && source.owner === "system_package_manager" && source.held === false
       && source.candidate?.newer_than_installed === true
       ? "package_update_listed" : undefined;
   }
