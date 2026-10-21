@@ -72,6 +72,8 @@ type engineProbe struct {
 	HostExecError   string `json:"host_execution_error,omitempty"`
 	ConfinedOutput  string `json:"confined_output"`
 	ConfinedError   string `json:"confined_error,omitempty"`
+	ConfinedCode    int    `json:"confined_code"`
+	ConfinedStderr  string `json:"confined_stderr,omitempty"`
 	TerminalSurvive bool   `json:"terminal_survived_interrupt"`
 	TerminalError   string `json:"terminal_error,omitempty"`
 	RelayLossEnded  bool   `json:"relay_loss_ended_session"`
@@ -338,7 +340,7 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 		}
 	}
 	if probe.ConfinedError != "" && !strings.Contains(probe.ConfinedError, "exit status") || strings.Contains(probe.ConfinedOutput, initial) || strings.Contains(probe.ConfinedOutput, protected) || !strings.Contains(probe.ConfinedOutput, "NoNewPrivs:\t1") {
-		t.Fatalf("confined launch did not run in its own nested namespace: %q error %q", probe.ConfinedOutput, probe.ConfinedError)
+		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr)
 	}
 	if !probe.TerminalSurvive {
 		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s", probe.TerminalError)

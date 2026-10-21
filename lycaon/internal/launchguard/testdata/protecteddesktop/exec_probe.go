@@ -28,6 +28,8 @@ type ExecProbe struct {
 	HostExecError   string `json:"host_execution_error,omitempty"`
 	ConfinedOutput  string `json:"confined_output"`
 	ConfinedError   string `json:"confined_error,omitempty"`
+	ConfinedCode    int    `json:"confined_code"`
+	ConfinedStderr  string `json:"confined_stderr,omitempty"`
 	TerminalSurvive bool   `json:"terminal_survived_interrupt"`
 	TerminalError   string `json:"terminal_error,omitempty"`
 	RelayLossEnded  bool   `json:"relay_loss_ended_session"`
@@ -55,10 +57,10 @@ func execProbe(scratch string) ExecProbe {
 		probe.HostExecError = err.Error()
 	}
 	confinement := &confine.Confinement{Roots: []string{scratch}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
-	out, _, _, err = exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
+	out, stderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{
 		Launch: exec.AgentLaunch(exec.LaunchAgentCommand, "protected launch probe", confinement),
 	})
-	probe.ConfinedOutput = string(out)
+	probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedStderr = string(out), code, string(stderr)
 	if err != nil {
 		probe.ConfinedError = err.Error()
 	}
