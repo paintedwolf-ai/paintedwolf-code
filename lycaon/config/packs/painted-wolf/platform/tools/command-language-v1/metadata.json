@@ -231,6 +231,78 @@
           "fixture_id": "ls-option-G",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-g"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-g",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--kibibytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-k",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-m",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-H",
+            "--dereference-command-line"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-H",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-P",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ls [OPTIONS] [--] [PATH ...]",
@@ -281,7 +353,7 @@
           }
         }
       },
-      "notes": "Default .; byte-sorted one name per LF (no terminal columns). -a includes . and ..; -A omits those; -t modified descending, -S size descending, -r reverses final order; stable byte tie-break. -l names the owner and group through the platform account database (the decimal id when it has no name), with UTC timestamps, permissions and byte size; -h IEC units. -R bounded, no symlink recursion. -p appends / to directories; -i prefixes the inode and -s the allocated size in 1 KiB units (with -h, IEC), both right-aligned per listing, and -s adds the directory's total line; -n is -l with decimal uid and gid; -L describes link targets instead of links; -U keeps unsigned byte order (directory order is not deterministic); -c and -u select change and access time for -l, and sort by that time with -t or without -l; --group-directories-first lists directories before other entries; --color=never|auto prints plain names (output is never a terminal) and --color=always refuses; -G follows GNU: long listings omit the group column, and other listings are unchanged (BSD's color meaning does not apply).",
+      "notes": "Default .; byte-sorted one name per LF (no terminal columns). -a includes . and ..; -A omits those; -t modified descending, -S size descending, -r reverses final order; stable byte tie-break. -l names the owner and group through the platform account database (the decimal id when it has no name), with UTC timestamps, permissions and byte size; -h IEC units. -R bounded, no symlink recursion. -p appends / to directories; -i prefixes the inode and -s the allocated size in 1 KiB units (with -h, IEC), both right-aligned per listing, and -s adds the directory's total line; -n is -l with decimal uid and gid; -L describes link targets instead of links; -U keeps unsigned byte order (directory order is not deterministic); -c and -u select change and access time for -l, and sort by that time with -t or without -l; --group-directories-first lists directories before other entries; --color=never|auto prints plain names (output is never a terminal) and --color=always refuses; -G follows GNU: long listings omit the group column, and other listings are unchanged (BSD's color meaning does not apply). GNU, BSD and busybox spellings with one meaning are all accepted: -o is a long listing without the group and -g one without the owner; -f is -aU without long format; -k keeps -s in 1 KiB units (already the unit); -m separates names with ', ' and wraps before column 80; -H describes command-line links' targets; -P never follows links (the default).",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/stat.go",
         "tests": [
@@ -322,7 +394,14 @@
         "ls-option-u",
         "ls-option-group-directories-first",
         "ls-option-color",
-        "ls-option-G"
+        "ls-option-G",
+        "ls-option-o",
+        "ls-option-g",
+        "ls-option-f",
+        "ls-option-k",
+        "ls-option-m",
+        "ls-option-H",
+        "ls-option-P"
       ]
     },
     {

@@ -23,6 +23,8 @@ type lsOptions struct {
 	numeric bool
 	// noGroup is GNU -G: long listings omit the group column.
 	noGroup bool
+	// noOwner is -g; commas is -m; followArgs is -H (command-line links).
+	noOwner, commas, followArgs bool
 }
 
 // time is the timestamp -c and -u select for display and sorting.
@@ -78,7 +80,14 @@ func runLs(inv *invocation) error {
 		long: inv.flag("-l") || inv.flag("-n"), numeric: inv.flag("-n"), all: inv.flag("-a"), almost: inv.flag("-A"), directory: inv.flag("-d"), recursive: inv.flag("-R"),
 		human: inv.flag("-h"), classify: inv.flag("-F"), byTime: inv.flag("-t"), bySize: inv.flag("-S"), reverse: inv.flag("-r"),
 		slash: inv.flag("-p"), inode: inv.flag("-i"), blocks: inv.flag("-s"), deref: inv.flag("-L"), unsorted: inv.flag("-U"),
-		groupDirs: inv.flag("--group-directories-first"), noGroup: inv.flag("-G"),
+		groupDirs: inv.flag("--group-directories-first"), noGroup: inv.flag("-G") || inv.flag("-o"),
+		noOwner: inv.flag("-g"), commas: inv.flag("-m"), followArgs: inv.flag("-H"),
+	}
+	// -o and -g are long listings without the group or the owner; -f is
+	// -aU without long format, as GNU and BSD define them.
+	opts.long = opts.long || inv.flag("-o") || inv.flag("-g")
+	if inv.flag("-f") {
+		opts.all, opts.unsorted, opts.long = true, true, false
 	}
 	opts.changeTime, opts.accessTime = lastTimeSelection(inv)
 	if err := lsColor(inv); err != nil {
@@ -99,6 +108,11 @@ func runLs(inv *invocation) error {
 		var st fseffect.EntryStat
 		if err == nil {
 			st, err = opts.stat(bound)
+			if err == nil && opts.followArgs && typeLetter(st.Mode) == 'l' {
+				if target, targetErr := bound.Stat(true); targetErr == nil {
+					st = target
+				}
+			}
 		}
 		if err == nil && !opts.directory && !opts.long && !opts.classify && typeLetter(st.Mode) == 'l' {
 			// A command-line link to a directory lists that directory unless
@@ -359,6 +373,9 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 		return platformUnavailable("ls", "POSIX inode and allocation metadata")
 	}
 	prefixes := opts.prefixes(entries)
+	if opts.commas && !opts.long {
+		return inv.commaList(entries, prefixes, opts)
+	}
 	if !opts.long {
 		if total && opts.blocks {
 			if err := inv.out.text("total " + opts.total(entries) + "\n"); err != nil {
@@ -402,11 +419,15 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 		} else {
 			name += opts.suffix(entry.stat.Mode)
 		}
+		owner := fmt.Sprintf(" %-*s", widths[2], row[2])
+		if opts.noOwner {
+			owner = ""
+		}
 		group := fmt.Sprintf(" %-*s", widths[3], row[3])
 		if opts.noGroup {
 			group = ""
 		}
-		line := fmt.Sprintf("%s%s %*s %-*s%s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], widths[2], row[2], group, widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
+		line := fmt.Sprintf("%s%s %*s%s%s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], owner, group, widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
 		if err := inv.out.text(line); err != nil {
 			return err
 		}
@@ -494,4 +515,30 @@ func (a *accounts) name(cache *map[uint32]string, id uint32, numeric bool, looku
 	}
 	(*cache)[id] = name
 	return name
+}
+
+// commaList is -m: names separated by ", " and wrapped before column 80,
+// GNU's width when output is not a terminal.
+func (inv *invocation) commaList(entries []lsEntry, prefixes []string, opts lsOptions) error {
+	const width = 80
+	var b strings.Builder
+	pos := 0
+	for i, entry := range entries {
+		name := prefixes[i] + entry.name + opts.suffix(entry.stat.Mode)
+		if i > 0 {
+			if pos+2+len(name) < width {
+				b.WriteString(", ")
+				pos += 2
+			} else {
+				b.WriteString(",\n")
+				pos = 0
+			}
+		}
+		b.WriteString(name)
+		pos += len(name)
+	}
+	if len(entries) > 0 {
+		b.WriteString("\n")
+	}
+	return inv.out.text(b.String())
 }

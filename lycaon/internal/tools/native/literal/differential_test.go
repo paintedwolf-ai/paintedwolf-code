@@ -39,7 +39,8 @@ var differentialCases = []struct {
 	{argv: "ls dir"}, {argv: "ls -a dir"}, {argv: "ls -A dir"}, {argv: "ls -1 dir"}, {argv: "ls -d dir"}, {argv: "ls -F dir"}, {argv: "ls -R tree-a"},
 	{argv: "ls -t dir"}, {argv: "ls -S dir"}, {argv: "ls -r dir"}, {argv: "ls input dir"}, {argv: "ls missing", stderr: true},
 	{argv: "ls -p tree-a"}, {argv: "ls --group-directories-first tree-a"}, {argv: "ls -L dir"}, {argv: "ls -LF dir"},
-	{argv: "ls --color=never dir"}, {argv: "ls --color=auto dir"}, {argv: "ls -i dir"}, {argv: "ls -s dir"}, {argv: "ls -is tree-a"},
+	{argv: "ls --color=never dir"}, {argv: "ls --color=auto dir"}, {argv: "ls -i dir"}, {argv: "ls -s dir"}, {argv: "ls -is tree-a"}, {argv: "ls -m dir"}, {argv: "ls -k dir"}, {argv: "ls -H -F link"},
+	{argv: "stat input"}, {argv: "stat dir"}, {argv: "stat link"},
 	{argv: "stat -c %n|%s|%a|%A|%F|%Y input"}, {argv: "stat -c %F empty"}, {argv: "stat -c %F link"}, {argv: "stat -L -c %F link"}, {argv: "stat -c %%%s input"},
 	{argv: "diff same-a same-b"}, {argv: "diff -u old new"}, {argv: "diff -U 1 old new"}, {argv: "diff -q old new"}, {argv: "diff -u noeol-a noeol-b"},
 	{argv: "diff -u -w ws-a ws-b"}, {argv: "diff -u -b ws-a ws-b"}, {argv: "diff -u -B blank-a blank-b"}, {argv: "diff -u blank-a blank-b"},
@@ -52,19 +53,23 @@ var differentialCases = []struct {
 }
 
 // referenceBinary finds a host utility of the selected compatibility target.
+// Homebrew and other ports install GNU tools with a g prefix (gls, gstat)
+// beside the platform's own; either spelling qualifies when it is the target.
 func referenceBinary(name string) (string, bool) {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return "", false
-	}
 	family := referenceFamily[name]
-	if family == "hexdump" {
-		return path, true
-	}
-	for _, flag := range []string{"--version", "-v"} {
-		out, _ := exec.Command(path, flag).CombinedOutput()
-		if strings.Contains(string(out), family) {
+	for _, candidate := range []string{"g" + name, name} {
+		path, err := exec.LookPath(candidate)
+		if err != nil {
+			continue
+		}
+		if family == "hexdump" {
 			return path, true
+		}
+		for _, flag := range []string{"--version", "-v"} {
+			out, _ := exec.Command(path, flag).CombinedOutput()
+			if strings.Contains(string(out), family) {
+				return path, true
+			}
 		}
 	}
 	return "", false
