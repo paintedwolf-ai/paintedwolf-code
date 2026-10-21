@@ -12,9 +12,11 @@ use std::sync::{mpsc, Mutex, PoisonError};
 use std::time::Duration;
 
 use gtk::glib;
-use gtk::glib::variant::Handle;
 use gtk::prelude::*;
 use gtk::{gdk, gio};
+
+mod request;
+use request::{portal_open_fd, portal_open_uri};
 
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
 const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
@@ -47,6 +49,8 @@ const UNAVAILABLE_ERRORS: [&str; 8] = [
 enum ServiceError {
     /// No service answered the request; another path may handle it.
     Unavailable,
+    /// The person cancelled the accepted request.
+    Cancelled,
     /// The service refused or failed; no other path may bypass it.
     Failed(String),
 }
@@ -271,75 +275,6 @@ fn portal_owned(bus: &gio::DBusConnection) -> bool {
     .unwrap_or(false)
 }
 
-fn portal_options() -> glib::Variant {
-    glib::VariantDict::new(None).end()
-}
-
-fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result<(), ServiceError> {
-    bus.call_sync(
-        Some(PORTAL_BUS_NAME),
-        PORTAL_OBJECT_PATH,
-        OPEN_URI_INTERFACE,
-        "OpenURI",
-        Some(&glib::Variant::tuple_from_iter([
-            parent.to_variant(),
-            uri.to_variant(),
-            portal_options(),
-        ])),
-        Some(glib::VariantTy::new("(o)").expect("static signature")),
-        gio::DBusCallFlags::NONE,
-        CALL_TIMEOUT_MS,
-        gio::Cancellable::NONE,
-    )
-    .map(|_| ())
-    .map_err(|error| ServiceError::from_call(&error))
-}
-
-/// `OpenFile` and `OpenDirectory` take the entry as a file descriptor, so the
-/// portal opens exactly the entry this process could open. The request goes
-/// out as a message because the reply carries no descriptors back.
-fn portal_open_fd(
-    bus: &gio::DBusConnection,
-    method: &str,
-    parent: &str,
-    path: &Path,
-) -> Result<(), ServiceError> {
-    let file = std::fs::File::open(path)
-        .map_err(|error| ServiceError::Failed(format!("{}: {error}", path.display())))?;
-    let fd_list = gio::UnixFDList::new();
-    let index = fd_list
-        .append(file)
-        .map_err(|error| ServiceError::Failed(error.to_string()))?;
-    let message = gio::DBusMessage::new_method_call(
-        Some(PORTAL_BUS_NAME),
-        PORTAL_OBJECT_PATH,
-        Some(OPEN_URI_INTERFACE),
-        method,
-    );
-    message.set_body(&glib::Variant::tuple_from_iter([
-        parent.to_variant(),
-        Handle(index).to_variant(),
-        portal_options(),
-    ]));
-    message.set_unix_fd_list(Some(&fd_list));
-    let (reply, _serial) = bus
-        .send_message_with_reply_sync(
-            &message,
-            gio::DBusSendMessageFlags::NONE,
-            CALL_TIMEOUT_MS,
-            gio::Cancellable::NONE,
-        )
-        .map_err(|error| ServiceError::from_call(&error))?;
-    // A method return has nothing to convert; only an error reply names a cause.
-    if reply.message_type() == gio::DBusMessageType::Error {
-        return Err(ServiceError::from_error_name(
-            reply.error_name().as_deref(),
-            "the portal refused the request",
-        ));
-    }
-    Ok(())
-}
-
 fn launch_default_handler(uri: &str) -> Result<(), String> {
     gio::AppInfo::launch_default_for_uri(uri, gio::AppLaunchContext::NONE)
         .map_err(|error| format!("No application is registered for this item: {error}"))
@@ -427,6 +362,7 @@ fn settled(
     match result {
         Ok(()) => Some(Ok(via)),
         Err(ServiceError::Unavailable) => None,
+        Err(ServiceError::Cancelled) => Some(Err(format!("{service} request was cancelled"))),
         Err(ServiceError::Failed(reason)) => {
             Some(Err(format!("{service} did not open the item: {reason}")))
         }

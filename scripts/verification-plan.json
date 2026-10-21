@@ -374,7 +374,8 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
-    "release:rehearse:linux-signing": "passthrough"
+    "release:rehearse:linux-signing": "passthrough",
+    "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
     "den:harness:test": {
