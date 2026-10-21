@@ -89,11 +89,7 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 	if release == nil {
 		return fmt.Errorf("output lifetime entry returned no lease")
 	}
-	entry := &programRetainedBody{pending: spill, release: release}
-	// Retention identity is checked against the actual transfer callback, never
-	// reconstructed from operation provenance or a replacement retention marker.
-	entry.reference = tooloutput.RetainedStreamReference{Blob: spill.Blob, RetentionClaimID: claim, InitiatingClaimID: spill.InitiatingClaimID()}
-	r.entries[claim] = entry
+	entry := r.ownSpill(spill, release)
 	body, err := r.recorder.AttachProgramOutput(ctx, program, output, spill, r.resources)
 	if err != nil {
 		return err
@@ -221,4 +217,48 @@ func (r *ProgramOutputRetention) Close(ctx context.Context) error {
 	}
 	r.ready = false
 	return nil
+}
+
+// BeginProgram keeps the source token in this session lifecycle as the existing
+// recorder atomically attaches source/program identities, with no fake child.
+func (r *ProgramOutputRetention) BeginProgram(ctx context.Context, in ProgramStart, spill *tooloutput.StreamSpill, redacted bool) error {
+	if r == nil || ctx == nil || spill == nil {
+		return fmt.Errorf("program source retention requires actual stream")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.ready || r.release == nil {
+		return fmt.Errorf("program output recovery is incomplete")
+	}
+	var scoped bool
+	if err := r.recorder.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_receipts WHERE id=? AND session_id=? AND status='running')`, in.Version.ParentReceiptID, r.sessionID).Scan(&scoped); err != nil {
+		return err
+	}
+	if !scoped {
+		return fmt.Errorf("program source parent belongs to another session")
+	}
+	if r.entries[spill.RetentionClaimID()] != nil {
+		return fmt.Errorf("program source claim is already owned")
+	}
+	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(spill.RetentionClaimID())+len(in.Version.ProgramID))*4)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return fmt.Errorf("program source lifetime admission returned no lease")
+	}
+	entry := r.ownSpill(spill, release)
+	body, err := r.recorder.BeginProgramWithSource(ctx, in, spill, redacted)
+	if err != nil {
+		return err
+	}
+	entry.pending = nil
+	entry.body = body
+	return nil
+}
+
+func (r *ProgramOutputRetention) ownSpill(spill *tooloutput.StreamSpill, release func()) *programRetainedBody {
+	entry := &programRetainedBody{reference: tooloutput.RetainedStreamReference{Blob: spill.Blob, RetentionClaimID: spill.RetentionClaimID(), InitiatingClaimID: spill.InitiatingClaimID()}, pending: spill, release: release}
+	r.entries[entry.reference.RetentionClaimID] = entry
+	return entry
 }

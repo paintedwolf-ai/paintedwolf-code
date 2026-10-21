@@ -132,8 +132,7 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 		release()
 		return err
 	}
-	entry := &programRetainedBody{reference: tooloutput.RetainedStreamReference{Blob: spill.Blob, RetentionClaimID: spill.RetentionClaimID(), InitiatingClaimID: spill.InitiatingClaimID()}, pending: spill, release: release}
-	r.entries[entry.reference.RetentionClaimID] = entry
+	entry := r.ownSpill(spill, release)
 	if err != nil {
 		return err
 	}
@@ -151,3 +150,19 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 
 var _ ReviewedProgramInputRetention = ProgramInputCapture{}
 var _ ReviewedProgressInputRetention = ProgramInputCapture{}
+
+// PrepareChild atomically attaches the actual screened expanded-input body and
+// the new dynamic receipt. The caller supplies no placeholder body reference.
+func (p ProgramInputCapture) PrepareChild(ctx context.Context, in ChildStart) (string, error) {
+	invocation := in.Invocation
+	if err := invocation.Validate(); err != nil {
+		return "", err
+	}
+	if in.ArgumentsReference != "" || invocation.Kind != toolcontract.ProgramChildInvocation || invocation.Identity.ProgramID != p.ProgramID || invocation.SessionID != p.Scope.SessionID || invocation.Scope.ProjectID != p.Scope.ProjectID {
+		return "", fmt.Errorf("expanded child capture requires actual invocation scope and generated reference")
+	}
+	return p.retain(ctx, invocation.Identity.ExecutionID, in.ExpandedInputs, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
+		in.ArgumentsReference = reference
+		return p.Outputs.recorder.prepareChildBody(ctx, in, spill, redacted)
+	})
+}
