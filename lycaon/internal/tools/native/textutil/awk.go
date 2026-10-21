@@ -31,16 +31,15 @@ const awkInterpreterBytes = 1 << 20
 // iterations and function calls count against query_work_steps, and created
 // strings and array elements against evaluation_memory_bytes.
 func runAwk(inv *invocation) error {
-	operands := inv.operands()
-	if len(operands) == 0 {
-		return inv.usage(inv.commandWord(), "a PROGRAM")
+	programWord, text, operands, err := awkProgram(inv)
+	if err != nil {
+		return err
 	}
-	programWord := operands[0]
 	vars, err := awkVars(inv)
 	if err != nil {
 		return err
 	}
-	program, err := parser.ParseProgram([]byte(programWord.Value), nil)
+	program, err := parser.ParseProgram([]byte(text), nil)
 	if err != nil {
 		return errors.Join(err, inv.usage(programWord, "a valid AWK program: "+err.Error()))
 	}
@@ -49,7 +48,7 @@ func runAwk(inv *invocation) error {
 	}
 	files := pinnedFiles{}
 	var args []string
-	sources, err := inv.openInputs(operands[1:])
+	sources, err := inv.openInputs(operands)
 	if err != nil {
 		return err
 	}
@@ -57,7 +56,7 @@ func runAwk(inv *invocation) error {
 	if inv.status != 0 {
 		inv.status = 2
 	}
-	if len(operands) > 1 {
+	if len(operands) > 0 {
 		for _, source := range sources {
 			if source.name != "-" {
 				content, err := io.ReadAll(source.reader)
@@ -245,3 +244,25 @@ func (i pinnedInfo) Mode() fs.FileMode  { return 0o444 }
 func (i pinnedInfo) ModTime() time.Time { return time.Time{} }
 func (i pinnedInfo) IsDir() bool        { return false }
 func (i pinnedInfo) Sys() any           { return nil }
+
+// awkProgram is the -f files joined with newlines in order, as every awk
+// reads them, or else the first operand; the rest are inputs.
+func awkProgram(inv *invocation) (commandprogram.Field, string, commandprogram.Fields, error) {
+	operands := inv.operands()
+	files := inv.argv.Options("-f")
+	if len(files) == 0 {
+		if len(operands) == 0 {
+			return commandprogram.Field{}, "", nil, inv.usage(inv.commandWord(), "a PROGRAM")
+		}
+		return operands[0], operands[0].Value, operands[1:], nil
+	}
+	parts := make([]string, len(files))
+	for i, option := range files {
+		text, err := inv.scriptFile(option.Values[0])
+		if err != nil {
+			return commandprogram.Field{}, "", nil, err
+		}
+		parts[i] = text
+	}
+	return files[0].Values[0], strings.Join(parts, "\n"), operands, nil
+}

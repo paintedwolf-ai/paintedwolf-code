@@ -44,50 +44,6 @@ func settleStage(ctx context.Context, stage commandprogram.StagedOutput, err err
 	return err
 }
 
-// sedInPlace edits each file separately: line numbers, $ and ranges restart
-// per file. Each file's destination is staged, then its source pinned, and its
-// complete output published before the next file starts; the first failure
-// stops the run and earlier files stay published. q ends the run after
-// publishing the current file's output so far.
-func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fields) error {
-	if len(files) == 0 {
-		return inv.usage(inv.commandWord(), "a PATH to edit in place")
-	}
-	paths, err := inv.paths()
-	if err != nil {
-		return err
-	}
-	for _, operand := range files {
-		if operand.Value == "-" {
-			return inv.usage(operand, "a file; standard input cannot be edited in place")
-		}
-		// The destination is pinned first, so a change between the two
-		// captures conflicts at publication instead of being overwritten.
-		stage, err := inv.openDestination(operand)
-		if err != nil {
-			return err
-		}
-		reader, err := inv.captureExisting(paths, operand)
-		if err != nil || reader == nil {
-			return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
-		}
-		records, err := inv.records(reader, '\n')
-		if err != nil {
-			return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
-		}
-		for _, c := range commands {
-			c.active = false
-		}
-		out := nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))
-		run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: out}
-		quit, err := run.cycles()
-		if err = settleStage(inv.ctx, stage, regexBudget(err)); err != nil || quit {
-			return err
-		}
-	}
-	return nil
-}
-
 // captureExisting pins an in-place file's source; a missing or unreadable file
 // is an ordinary failure that stops the run before anything is staged for it.
 func (inv *invocation) captureExisting(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
@@ -109,4 +65,24 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 		return err
 	}
 	return settleStage(inv.ctx, stage, run(nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))))
+}
+
+// effectMode names the catalog mode of commands with several: sed -i and
+// inline w files, sort -o and uniq OUTPUT write; every other form reads.
+func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
+	switch argv.Command {
+	case "sed":
+		return o.sedMode(context.Background(), argv)
+	case "sort":
+		if argvFlag(argv, "-o") {
+			return "-o"
+		}
+		return "always"
+	case "uniq":
+		if len(argv.Operands()) > 1 {
+			return "OUTPUT-supplied"
+		}
+		return "stdin-input-only"
+	}
+	return ""
 }

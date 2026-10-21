@@ -1,8 +1,10 @@
 package textutil
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -29,18 +31,28 @@ type trSetError string
 
 func (e trSetError) Error() string { return string(e) }
 
-// parseTrSet expands escapes, ranges and [:class:] into an ordered byte list.
-// Bytes outside ASCII refuse: their meaning differs between byte and
-// character implementations, and this alphabet is bytes.
-func parseTrSet(text string) ([]byte, error) {
+// trSet is one expanded set. fill is the index where SET2's [c*] repeats
+// its byte until SET2 is as long as SET1, or -1.
+type trSet struct {
+	bytes []byte
+	fill  int
+	with  byte
+}
+
+// parseTrSet expands escapes, ranges, [:class:], [=c=] and [c*n] into an
+// ordered byte list; [c*] marks a fill. Bytes outside ASCII refuse: their
+// meaning differs between byte and character implementations, and this
+// alphabet is bytes.
+func parseTrSet(text string) (trSet, error) {
 	var raw []byte
 	var classes, escaped []int
+	fill, fillRaw := trSet{fill: -1}, -1
 	for i := 0; i < len(text); i++ {
 		if strings.HasPrefix(text[i:], "[:") {
 			if end := strings.Index(text[i:], ":]"); end > 2 {
 				member, ok := trClasses[text[i+2:i+end]]
 				if !ok {
-					return nil, trSetError("a known [:class:]")
+					return fill, trSetError("a known [:class:]")
 				}
 				for c := 0; c < 0x80; c++ {
 					if member(byte(c)) {
@@ -52,57 +64,107 @@ func parseTrSet(text string) ([]byte, error) {
 				continue
 			}
 		}
-		c := text[i]
-		if c == '\\' && i+1 < len(text) {
-			escaped = append(escaped, len(raw))
-			i++
-			switch e := text[i]; e {
-			case 'n':
-				c = '\n'
-			case 't':
-				c = '\t'
-			case 'r':
-				c = '\r'
-			case 'a':
-				c = '\a'
-			case 'b':
-				c = '\b'
-			case 'f':
-				c = '\f'
-			case 'v':
-				c = '\v'
-			default:
-				if e >= '0' && e <= '7' {
-					value, n := digits(text[i:], 8, 3)
-					if value > 0xff {
-						return nil, trSetError("an octal escape up to \\377")
-					}
-					c, i = byte(value), i+n-1
-				} else {
-					c = e
+		if c, count, width, ok := trBracket(text[i:]); ok {
+			if count < 0 {
+				if fillRaw >= 0 {
+					return fill, trSetError("at most one [c*] fill")
 				}
+				fillRaw, fill.with = len(raw), c
+				raw = append(raw, 0)
+				classes = append(classes, len(raw)-1)
 			}
+			for n := 0; n < count; n++ {
+				raw = append(raw, c)
+				classes = append(classes, len(raw)-1)
+			}
+			i += width - 1
+			continue
+		}
+		c, width, isEscape := trByte(text[i:])
+		if isEscape {
+			escaped = append(escaped, len(raw))
 		}
 		raw = append(raw, c)
+		i += width - 1
 	}
-	var out []byte
 	for i := 0; i < len(raw); i++ {
-		if raw[i] >= 0x80 {
-			return nil, trSetError("ASCII set members; tr works on bytes")
+		if i == fillRaw {
+			fill.fill = len(fill.bytes)
+			continue
 		}
-		if i+2 < len(raw) && raw[i+1] == '-' && !isClassMember(escaped, i+1) && !isClassMember(classes, i) && !isClassMember(classes, i+2) {
+		if raw[i] >= 0x80 {
+			return fill, trSetError("ASCII set members; tr works on bytes")
+		}
+		if i+2 < len(raw) && raw[i+1] == '-' && !isClassMember(escaped, i+1) && !isClassMember(classes, i) && !isClassMember(classes, i+1) && !isClassMember(classes, i+2) {
 			if raw[i+2] < raw[i] {
-				return nil, trSetError("ranges in ascending byte order")
+				return fill, trSetError("ranges in ascending byte order")
 			}
 			for c := int(raw[i]); c <= int(raw[i+2]); c++ {
-				out = append(out, byte(c))
+				fill.bytes = append(fill.bytes, byte(c))
 			}
 			i += 2
 			continue
 		}
-		out = append(out, raw[i])
+		fill.bytes = append(fill.bytes, raw[i])
 	}
-	return out, nil
+	return fill, nil
+}
+
+// trByte reads one possibly escaped byte and its width in text.
+func trByte(text string) (byte, int, bool) {
+	if text[0] != '\\' || len(text) == 1 {
+		return text[0], 1, false
+	}
+	e := text[1]
+	if b, ok := trEscapes[e]; ok {
+		return b, 2, true
+	}
+	if e >= '0' && e <= '7' {
+		value, n := digits(text[1:], 8, 3)
+		return byte(value), n + 1, true
+	}
+	return e, 2, true
+}
+
+var trEscapes = map[byte]byte{'n': '\n', 't': '\t', 'r': '\r', 'a': '\a', 'b': '\b', 'f': '\f', 'v': '\v'}
+
+// trBracket reads [=c=] (count 1), [c*n] and [c*] (count -1, a fill).
+func trBracket(text string) (c byte, count, width int, ok bool) {
+	if len(text) < 4 || text[0] != '[' {
+		return 0, 0, 0, false
+	}
+	if text[1] == '=' {
+		c, w, _ := trByte(text[2:])
+		if strings.HasPrefix(text[2+w:], "=]") {
+			return c, 1, 4 + w, true
+		}
+		return 0, 0, 0, false
+	}
+	c, w, _ := trByte(text[1:])
+	rest := text[1+w:]
+	if !strings.HasPrefix(rest, "*") {
+		return 0, 0, 0, false
+	}
+	end := strings.IndexByte(rest, ']')
+	if end < 0 {
+		return 0, 0, 0, false
+	}
+	repeat := rest[1:end]
+	if repeat == "" {
+		return c, -1, 1 + w + end + 1, true
+	}
+	base := 10
+	if repeat[0] == '0' {
+		base = 8
+	}
+	n, err := strconv.ParseInt(repeat, base, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	if n == 0 {
+		return c, -1, 1 + w + end + 1, true
+	}
+	return c, int(n), 1 + w + end + 1, true
 }
 
 func isClassMember(indexes []int, index int) bool {
@@ -114,8 +176,9 @@ func isClassMember(indexes []int, index int) bool {
 	return false
 }
 
-// runTr translates, deletes and squeezes bytes of standard input. A short SET2
-// is padded with its last byte; -s squeezes the last set given.
+// runTr translates, deletes and squeezes bytes of standard input. -c
+// complements SET1 in byte order; a short SET2 is padded with its last byte
+// unless -t truncates SET1; -s squeezes the last set given.
 func runTr(inv *invocation) error {
 	operands := inv.operands()
 	del, squeeze := inv.flag("-d"), inv.flag("-s")
@@ -132,18 +195,30 @@ func runTr(inv *invocation) error {
 	sets := make([][]byte, len(operands))
 	for i, operand := range operands {
 		set, err := parseTrSet(operand.Value)
+		if err == nil && set.fill >= 0 && i == 0 {
+			err = trSetError("[c*] only in SET2")
+		}
 		if err != nil {
 			return inv.usage(operand, err.Error())
 		}
-		sets[i] = set
+		sets[i] = set.bytes
+		if i == 0 && (inv.flag("-c")) {
+			sets[0] = complementBytes(set.bytes)
+		}
+		if set.fill >= 0 {
+			repeat := bytes.Repeat([]byte{set.with}, max(len(sets[0])-len(set.bytes), 0))
+			sets[i] = append(append(append([]byte{}, set.bytes[:set.fill]...), repeat...), set.bytes[set.fill:]...)
+		}
+	}
+	if len(sets) == 2 && inv.flag("-t") && len(sets[0]) > len(sets[1]) {
+		sets[0] = sets[0][:len(sets[1])]
 	}
 	var deleted, squeezed [256]bool
 	var mapping [256]byte
 	for c := range mapping {
 		mapping[c] = byte(c)
 	}
-	translate := len(sets) == 2 && !del
-	if translate {
+	if len(sets) == 2 && !del {
 		if len(sets[1]) == 0 {
 			return inv.usage(operands[1], "a nonempty SET2")
 		}
@@ -175,6 +250,21 @@ func runTr(inv *invocation) error {
 		}
 		return out
 	})
+}
+
+// complementBytes is every byte not in set, in ascending order.
+func complementBytes(set []byte) []byte {
+	var member [256]bool
+	for _, c := range set {
+		member[c] = true
+	}
+	var out []byte
+	for c := 0; c < 256; c++ {
+		if !member[c] {
+			out = append(out, byte(c))
+		}
+	}
+	return out
 }
 
 // transformBytes streams standard input through a byte transform in bounded chunks.

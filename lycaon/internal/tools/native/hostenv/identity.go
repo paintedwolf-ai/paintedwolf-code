@@ -199,3 +199,21 @@ func pad(value, width int) string {
 	}
 	return text
 }
+
+// runNproc prints the available processing units (--all: installed) less
+// --ignore N, never below one.
+func runNproc(inv *invocation) error {
+	ignore := 0
+	if option, ok := inv.argv.Last("--ignore"); ok {
+		n, err := strconv.Atoi(option.Values[0].Value)
+		if err != nil || n < 0 {
+			return inv.usage(option.Values[0], "a count from 0")
+		}
+		ignore = n
+	}
+	units, err := inv.owners.Host.Processors(inv.ctx, inv.flag("--all"))
+	if err != nil {
+		return inv.unavailable("processor count", err)
+	}
+	return inv.line(strconv.Itoa(max(units-ignore, 1)))
+}
