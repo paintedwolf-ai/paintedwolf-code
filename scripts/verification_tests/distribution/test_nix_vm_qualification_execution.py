@@ -22,9 +22,10 @@ class NixVMQualificationTests(unittest.TestCase):
             "closure": {APP: {"narHash": HASH, "narSize": 13, "references": [], "deriver": APP + ".drv"}}}
         self.vm = {**deepcopy(self.app), "component": "nixos-gnome-vm", "builds": [{"outputs": {"out": VM}}]}
         self.vm["closure"][VM] = {"narHash": HASH, "narSize": 23, "references": [APP], "deriver": VM + ".drv"}
-        self.run = {"conclusion": "success", "head_branch": "linux/nix-closure-admission",
+        self.run = {"conclusion": "success", "head_branch": "main",
             "path": ".github/workflows/linux-nix-qualification.yml", "head_sha": "d" * 40,
-            "repository": {"full_name": "paintedwolf-ai/paintedwolf-code"}}
+            "repository": {"full_name": "owner/repository"}}
+        self.controller = dict(repository="owner/repository", controller_ref="main")
         self.manifest = {**self.expected, "controller_commit": "d" * 40, "architecture": "x86_64",
             "execution": "native", "publication": "nonrelease"}
 
@@ -79,14 +80,20 @@ class NixVMQualificationTests(unittest.TestCase):
             self.bind(vm=vm)
 
     def test_only_matching_successful_repository_native_producer_is_admitted(self):
-        self.assertEqual(admit(self.run, self.manifest, self.app, **self.expected, architecture="x86_64"), APP)
+        self.assertEqual(admit(self.run, self.manifest, self.app, **self.expected, architecture="x86_64",
+                               **self.controller), APP)
         for field, value in [("conclusion", "failure"), ("head_branch", "other"), ("path", "release.yml"),
                              ("head_sha", "f" * 40), ("repository", {"full_name": "foreign/repo"})]:
             run = {**self.run, field: value}
             with self.subTest(field=field), self.assertRaises(ValueError):
-                admit(run, self.manifest, self.app, **self.expected, architecture="x86_64")
+                admit(run, self.manifest, self.app, **self.expected, architecture="x86_64", **self.controller)
+        for controller in ({"repository": "owner/repository", "controller_ref": "release"},
+                           {"repository": "owner/repository", "controller_ref": None},
+                           {"repository": None, "controller_ref": "main"}):
+            with self.subTest(controller=controller), self.assertRaises(ValueError):
+                admit(self.run, self.manifest, self.app, **self.expected, architecture="x86_64", **controller)
         with self.assertRaises(ValueError):
-            admit(self.run, self.manifest, self.app, **self.expected, architecture="aarch64")
+            admit(self.run, self.manifest, self.app, **self.expected, architecture="aarch64", **self.controller)
 
     def cache(self, root):
         (root / "nar").mkdir()

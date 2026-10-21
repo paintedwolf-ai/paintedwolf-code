@@ -1,10 +1,7 @@
 name: Linux Nix qualification
-run-name: Linux Nix qualification ${{ inputs.source_commit || github.sha }}
+run-name: Linux Nix qualification ${{ inputs.source_commit }}
 
 on:
-  push:
-    branches: [linux/nix-closure-admission]
-    paths: [packaging/nix/qualification-source.json]
   workflow_dispatch:
     inputs:
       source_commit:
@@ -22,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: linux-nix-qualification-${{ inputs.source_commit || github.sha }}
+  group: linux-nix-qualification-${{ inputs.source_commit }}
   cancel-in-progress: false
 
 jobs:
@@ -34,15 +31,14 @@ jobs:
           - runner: ubuntu-24.04
             machine: x86_64
             architecture: amd64
-            installer_sha256: 6ce3ce3703fdc241b560cba401c5d338042122fe5b1a81e07bf1a623f259eba0
           - runner: ubuntu-24.04-arm
             machine: aarch64
             architecture: arm64
-            installer_sha256: 4a770896faa4d308806d0b4516575e0581443dc817d634b951a219a280554c09
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     env:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
+      PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,33 +50,13 @@ jobs:
           EXPECTED_MACHINE: ${{ matrix.machine }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            SOURCE_COMMIT="$(python3 - <<'SOURCE_PY'
-          import json, re
-          from pathlib import Path
-          selected = json.loads(Path('packaging/nix/qualification-source.json').read_text())
-          if set(selected) != {'source_commit', 'source_tree'} or any(
-              not isinstance(value, str) or not re.fullmatch('[0-9a-f]{40}', value)
-              for value in selected.values()
-          ):
-              raise SystemExit('Invalid frozen qualification source')
-          print(selected['source_commit'])
-          SOURCE_PY
-            )"
-          fi
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          printf 'SOURCE_COMMIT=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_ENV"
           [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
           git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
           source_root="$RUNNER_TEMP/qualification-source"
           git worktree add --detach "$source_root" "$SOURCE_COMMIT"
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            expected_tree="$(python3 -c 'import json; print(json.load(open("packaging/nix/qualification-source.json"))["source_tree"])')"
-            [[ "$(git -C "$source_root" rev-parse 'HEAD^{tree}')" == "$expected_tree" ]]
-          fi
           printf 'path=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
-          printf 'tree=%s\n' "$(git -C "$source_root" rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
@@ -109,148 +85,39 @@ jobs:
 
       - name: Verify native kernel and supervisor boundaries
         working-directory: ${{ steps.source.outputs.path }}
-        env:
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
         run: |
           set -euo pipefail
           ./task test:confine:linux -- sandbox supervisor
           ./task test:digest -- ./internal/userpath -run '^(TestLinuxAccountLookup.*|TestLinuxNativeAccountLookupDoesNotRequireShellEnvironment|TestNixStoreAccountShell.*)$' -count=1
 
-      - name: Prepare the ephemeral runner for the pinned Nix toolchain
-        env:
-          MACHINE: ${{ matrix.machine }}
-          INSTALLER_SHA256: ${{ matrix.installer_sha256 }}
-        run: |
-          set -euo pipefail
-          [[ "$RUNNER_ENVIRONMENT" == github-hosted ]]
-          test ! -e /nix
-          # These SDKs are unused by the isolated Linux Nix build, on this job's disposable VM.
-          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h /
-          install_root="$RUNNER_TEMP/nix-installer"
-          mkdir "$install_root"
-          archive="nix-2.35.3-$MACHINE-linux.tar.xz"
-          curl --fail --location --connect-timeout 15 --max-time 300 \
-            "https://releases.nixos.org/nix/nix-2.35.3/$archive" --output "$install_root/$archive"
-          printf '%s  %s\n' "$INSTALLER_SHA256" "$install_root/$archive" | sha256sum --check
-          tar -xJf "$install_root/$archive" -C "$install_root"
-          printf 'sandbox = true\ntrusted-users = root\n' > "$install_root/nix.conf"
-          "$install_root/nix-2.35.3-$MACHINE-linux/install" --daemon --yes \
-            --daemon-user-count 4 --no-channel-add --no-modify-profile \
-            --nix-extra-conf-file "$install_root/nix.conf"
-          printf '%s\n' /nix/var/nix/profiles/default/bin >> "$GITHUB_PATH"
+      # These SDKs are unused by the isolated Linux Nix build, on this job's disposable VM.
+      - name: Free disk space for the Nix store
+        run: sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+
+      - name: Install pinned Nix and fetch locked inputs
+        working-directory: ${{ steps.source.outputs.path }}
+        run: ./task nix:check -- --prepare
 
       - name: Prepare the locked Nix development fixture
         working-directory: ${{ steps.source.outputs.path }}
-        env:
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
-        run: |
-          set -euo pipefail
-          ./task nix:build -- --component nix-workflow-fixture
-          python3 - <<'FIXTURE_PY'
-          import json, os, re
-          from pathlib import Path
-          reports = [json.loads(path.read_text()) for path in
-                     (Path(os.environ['PW_ARTIFACT_ROOT'])/'nix').glob('build-*.json')]
-          reports = [report for report in reports if report.get('component') == 'nix-workflow-fixture']
-          if len(reports) != 1 or not reports[0].get('passed') or reports[0].get('source_commit') != os.environ['SOURCE_COMMIT']:
-              raise SystemExit('Missing exact-source locked Nix workflow fixture')
-          output = reports[0]['builds'][0]['outputs']['out']
-          fixture = json.loads(Path(output).read_text())
-          if fixture.get('schema') != 1 or set(fixture) != {'schema', 'bash', 'coreutils', 'stdenv'}:
-              raise SystemExit('Invalid locked Nix workflow fixture')
-          with open(os.environ['GITHUB_ENV'], 'a') as environment:
-              for field in ('bash', 'coreutils', 'stdenv'):
-                  value = fixture[field]
-                  if not isinstance(value, str) or not re.fullmatch(r'/nix/store/[a-z0-9]{32}-[^\s]+', value):
-                      raise SystemExit('Invalid locked Nix workflow path')
-                  environment.write(f'PW_NIX_FIXTURE_{field.upper()}={value}\n')
-          FIXTURE_PY
+        run: ./task nix:build -- --component nix-workflow-fixture --qualify
 
       - name: Verify confined Nix development and explicit daemon authority
         working-directory: ${{ steps.source.outputs.path }}
-        env:
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
         run: ./task test:confine:linux -- nix
 
-      - name: Prepare the exact scanner builder executable
-        env:
-          SOURCE_ROOT: ${{ steps.source.outputs.path }}
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
-        run: |
-          set -euo pipefail
-          controller=70481454abe7489c8b9fd0747f1872c84168aa1c
-          git fetch --no-tags origin "$controller"
-          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
-          git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
-          (
-            cd "$RUNNER_TEMP/nix-build-controller"
-            ./task nix:build -- --component scanner-host-tools \
-              --application-source-root "$SOURCE_ROOT" --application-source-commit "$SOURCE_COMMIT"
-          )
-          python3 - <<'SCANNER_PY'
-          import json, os
-          from pathlib import Path
-          from scripts.linux_release.nix_scanner_host import authorize_scanner
-          reports = [json.loads(path.read_text()) for path in
-                     (Path(os.environ['PW_ARTIFACT_ROOT'])/'nix').glob('build-*.json')]
-          reports = [report for report in reports if report.get('component') == 'scanner-host-tools']
-          if len(reports) != 1 or not reports[0].get('passed') or reports[0].get('application', {}).get('source_commit') != os.environ['SOURCE_COMMIT']:
-              raise SystemExit('Missing exact-source native scanner preparation')
-          report = reports[0]
-          selected = report['scanner_tools']
-          if report['builds'][0]['outputs'] != {'out': selected['output']}:
-              raise SystemExit('Realized scanner output differs from admitted derivation')
-          evidence = authorize_scanner(selected['executable'])
-          (Path(os.environ['PW_ARTIFACT_ROOT'])/'scanner-builder-permission.json').write_text(json.dumps(evidence, indent=2)+'\n')
-          SCANNER_PY
+      - name: Prepare and authorize the exact scanner builder executable
+        working-directory: ${{ steps.source.outputs.path }}
+        run: ./task nix:build -- --component scanner-host-tools --qualify
 
-      - name: Evaluate and build the selected native component
+      - name: Evaluate, build and bind the selected native component
         working-directory: ${{ steps.source.outputs.path }}
         env:
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
-          COMPONENT: ${{ inputs.component || 'default' }}
+          COMPONENT: ${{ inputs.component }}
         run: |
           set -euo pipefail
-          [[ "$COMPONENT" == default || "$COMPONENT" == scanner-finalized || "$COMPONENT" == desktop-settings-observer || "$COMPONENT" == shell || "$COMPONENT" == desktop-shell-check ]]
           ./task nix:check
-          ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure"
-
-      - name: Bind the retained closure to the selected source
-        working-directory: ${{ steps.source.outputs.path }}
-        env:
-          EXPECTED_TREE: ${{ steps.source.outputs.tree }}
-          PW_ARTIFACT_ROOT: ${{ runner.temp }}/qualification-evidence
-          COMPONENT: ${{ inputs.component || 'default' }}
-        run: |
-          set -euo pipefail
-          python3 - <<'CI_PY'
-          import hashlib, json, os, platform
-          from pathlib import Path
-          evidence = Path(os.environ['PW_ARTIFACT_ROOT'])
-          reports = [json.loads(path.read_text()) for path in (evidence/'nix').glob('build-*.json')]
-          component = os.environ['COMPONENT']
-          reports = [report for report in reports if report.get('component') == component]
-          if len(reports) != 1:
-              raise SystemExit('Expected exactly one native closure build report')
-          report = reports[0]
-          expected = {'source_commit': os.environ['SOURCE_COMMIT'],
-                      'source_tree': os.environ['EXPECTED_TREE'],
-                      'lock_sha256': hashlib.sha256(Path('flake.lock').read_bytes()).hexdigest()}
-          if not report.get('passed') or any(report.get(key) != value for key,value in expected.items()):
-              raise SystemExit('Closure build does not match the frozen source and lock')
-          if report.get('archive', {}).get('publication') != 'nonrelease':
-              raise SystemExit('Missing nonrelease closure export')
-          manifest = {**expected, 'architecture': platform.machine(),
-                      'controller_commit': os.environ['GITHUB_SHA'],
-                      'execution': 'native', 'publication': 'nonrelease',
-                      'scope': 'Nix closure build; installed desktop qualification is separate'}
-          name = 'qualification-source.json'
-          if component != 'default':
-              name = 'component-source.json'
-              manifest.update(component=component, scope='Selected component only; no application closure or installed qualification')
-          (evidence/name).write_text(json.dumps(manifest, indent=2)+'\n')
-          CI_PY
+          ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure" --qualify
           uname -a > "$PW_ARTIFACT_ROOT/kernel.txt"
           cp /etc/os-release "$PW_ARTIFACT_ROOT/os-release"
           nix --version > "$PW_ARTIFACT_ROOT/nix-version.txt"

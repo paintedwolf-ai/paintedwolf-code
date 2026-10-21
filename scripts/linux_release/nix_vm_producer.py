@@ -1,20 +1,22 @@
 """Admit a successful same-repository closure artifact as a private VM build input."""
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 from pathlib import Path
+import platform
 import re
 import shutil
+import subprocess
 
 from .nix_closure import describe, nar_digest
 
 
-def admit(run, manifest, report, *, source_commit, source_tree, lock_sha256, architecture):
-    if (run.get("conclusion") != "success" or run.get("head_branch") != "linux/nix-closure-admission"
+def admit(run, manifest, report, *, source_commit, source_tree, lock_sha256, architecture, repository, controller_ref):
+    """The producer is this repository's Nix qualification on the same controller ref."""
+    if (run.get("conclusion") != "success" or not controller_ref or run.get("head_branch") != controller_ref
             or run.get("path") != ".github/workflows/linux-nix-qualification.yml"
-            or run.get("repository", {}).get("full_name") != "paintedwolf-ai/paintedwolf-code"):
+            or not repository or run.get("repository", {}).get("full_name") != repository):
         raise ValueError("VM input must come from the successful repository Nix qualification workflow")
     if (architecture not in {"x86_64", "aarch64"}
             or not isinstance(run.get("head_sha"), str) or not re.fullmatch("[0-9a-f]{40}", run["head_sha"])
@@ -93,27 +95,23 @@ def validate_cache(cache, closure):
         raise ValueError("retained cache contains undeclared objects or links")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("producer", "cache", "run", "evidence", "lock"):
-        parser.add_argument("--" + name, type=Path, required=True)
-    for name in ("source-commit", "source-tree", "architecture"):
-        parser.add_argument("--" + name, required=True)
-    args = parser.parse_args()
-    reports = [json.loads(path.read_text()) for path in (args.producer / "nix").glob("build-*.json")]
+def admit_retained(producer: Path, cache: Path, run: Path, evidence: Path, root: Path, environment) -> Path:
+    """Admit the producer's retained closure for the checkout at root; returns the cache to trust."""
+    reports = [json.loads(path.read_text()) for path in (producer / "nix").glob("build-*.json")]
     selected = [report for report in reports if report.get("component") == "default"]
     if len(selected) != 1:
         raise ValueError("producer must retain exactly one application build report")
     report = selected[0]
-    admit(json.loads(args.run.read_text()), json.loads((args.producer / "qualification-source.json").read_text()), report,
-          source_commit=args.source_commit, source_tree=args.source_tree,
-          lock_sha256=hashlib.sha256(args.lock.read_bytes()).hexdigest(), architecture=args.architecture)
-    validate_cache(args.cache, report["closure"])
-    (args.evidence / "nix").mkdir(parents=True)
-    (args.evidence / "nix" / "application-producer.json").write_text(json.dumps(report, indent=2) + "\n")
-    shutil.copyfile(args.run, args.evidence / "application-producer-run.json")
-    shutil.copyfile(args.producer / "qualification-source.json", args.evidence / "application-producer-source.json")
-
-
-if __name__ == "__main__":
-    main()
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
+    admit(json.loads(run.read_text()), json.loads((producer / "qualification-source.json").read_text()), report,
+          source_commit=commit, source_tree=tree,
+          lock_sha256=hashlib.sha256((root / "flake.lock").read_bytes()).hexdigest(),
+          architecture=platform.machine(), repository=environment.get("GITHUB_REPOSITORY"),
+          controller_ref=environment.get("GITHUB_REF_NAME"))
+    validate_cache(cache, report["closure"])
+    (evidence / "nix").mkdir(parents=True)
+    (evidence / "nix" / "application-producer.json").write_text(json.dumps(report, indent=2) + "\n")
+    shutil.copyfile(run, evidence / "application-producer-run.json")
+    shutil.copyfile(producer / "qualification-source.json", evidence / "application-producer-source.json")
+    return cache
