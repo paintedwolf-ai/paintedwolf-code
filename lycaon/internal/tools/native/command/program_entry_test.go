@@ -123,10 +123,10 @@ func (f *programFixture) jobHandle(t *testing.T) string {
 	var outcome struct{ Stdout string }
 	testutil.FailErr(t, "decode jobs outcome", json.Unmarshal([]byte(listed), &outcome))
 	fields := strings.Fields(outcome.Stdout)
-	if len(fields) != 3 || fields[1] != "running" {
+	if len(fields) != 3 || fields[0] != "[1]" || fields[2] != "running" {
 		t.Fatalf("jobs output %q", outcome.Stdout)
 	}
-	return fields[0]
+	return fields[1]
 }
 
 func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) {
@@ -184,8 +184,22 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	if _, err := f.call(t, t.Context(), "kill -TERM not-a-session-job"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("foreign job reference accepted: %v", err)
+	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
+		testutil.FailErr(t, "run foreign kill", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {
+			t.Fatalf("foreign job reference %s: %s", reference, out)
+		}
+	}
+}
+
+// %N, %% and $! name this session's jobs for kill and wait.
+func TestProgramEntryJobSpecsAddressSessionJobs(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `sleep 30 & first=$!; sleep 30 & kill %1; kill %%; wait $first; external -- /bin/echo "first=$?"; wait %2; external -- /bin/echo "second=$?"`)
+	testutil.FailErr(t, "run job specs", err)
+	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=130") || !strings.Contains(outcome.Stdout, "second=130") {
+		t.Fatalf("job spec outcome %s", out)
 	}
 }
 

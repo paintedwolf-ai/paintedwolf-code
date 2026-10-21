@@ -103,7 +103,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		}
 		var out strings.Builder
 		for _, job := range statuses {
-			out.WriteString(job.Handle + " running -\n")
+			fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err

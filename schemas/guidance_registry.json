@@ -536,6 +536,12 @@
       "emit": "guard:command_job",
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_JOB_UNKNOWN": {
+      "branch_instruction": "Use jobs and a %N job number or $!; do not signal host processes",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The job reference names no job of this session."
+    },
     "COMMAND_LIMIT_EXCEEDED": {
       "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
       "category": "recoverable",
