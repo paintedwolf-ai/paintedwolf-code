@@ -21,6 +21,7 @@ import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts"
 import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffers.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import { connectSourceTreeWorkspace, prepareSourceTreeWorkspace, type SourceTreeConnection } from "../tree/source-tree-store.ts";
+import { sourceWatchNotice } from "./source-watch-notice.ts";
 import { workspaceMismatchId } from "./source-workspace-identity.ts";
 import { resolveSourceWorkspaceRoots } from "./source-workspace-roots.ts";
 import { observeWorkspaceInvalidation } from "./workspace-invalidation.ts";
@@ -105,18 +106,7 @@ export function createFilesWorkspace(options: {
   };
   const observationNoticeFor = (buffer: FileBuffer): string | null => {
     if (buffer.jobId || isComposedBufferKind(buffer.kind)) return null;
-    const coverage = watchCoverage()[buffer.rootId];
-    if (!coverage) return null;
-    switch (coverage.state) {
-      case "live":
-        return coverage.policy_unwatched ? "Some folders are refreshed on demand" : null;
-      case "partial":
-        return "Outside changes in some folders are not watched";
-      case "faulted":
-        return "Watching for outside changes stopped; reopen the file to refresh";
-      case "unwatched":
-        return "Outside changes to this file are not being watched yet";
-    }
+    return sourceWatchNotice(watchCoverage()[buffer.rootId]);
   };
   const [workspaceRefreshRevision, setWorkspaceRefreshRevision] = createSignal(0);
   createEffect(() => {
