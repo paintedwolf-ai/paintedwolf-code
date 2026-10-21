@@ -57,6 +57,23 @@ incomplete input, denied authority, stale revisions and cancellation discard
 uncommitted staging. Earlier committed effects remain; programs are not
 multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
 
+Reached native operations freeze the normalized opaque-reference arguments
+before capability and policy review. Their separate `operation_arguments_v1`
+representation tags every scalar and container, sorts object keys by original
+bytes, and explicitly Base64-encodes non-UTF-8 strings and keys. Literal arrays
+cannot impersonate tags; numeric tokens retain their exact precision. The
+existing semantic grant normalization still removes declared authority-neutral
+arguments. Native review has a distinct identity domain; structured tool calls
+retain their existing digest and grant contracts. Owners receive the original
+frozen values, never a decoded inspection projection or resolved-secret record.
+
+The program frame separately retains the actual submitted `command` model
+arguments and real model call ID. Native operation arguments and child execution
+IDs cannot stand in for that outer observation. The immutable submitted JSON is
+borrowed until the frame closes. Closing denies new admission immediately;
+addressed roots and argument reservations remain held until active owner calls
+and prepared envelopes release their uses, then the shared facts are cleared.
+
 The golden program and option/limit fixture definitions are normative inputs
 for later acceptance suites. Catalog generation, reference probes and unit tests
 are distinct from executing native owners, live model qualification and installed

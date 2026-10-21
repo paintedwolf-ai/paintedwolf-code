@@ -59,19 +59,21 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
 	effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", inputPath}}, Arguments: args}
-	effect.PrepareReviewed = func(_ context.Context, resolved map[string]any, _ tools.ToolContext) (PreparedNativeEffect, error) {
+	effect.PrepareReviewed = func(ctx context.Context, resolved map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
 		args["path"] = "changed"
 		path := resolved["path"].(string)
+		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, ".")
+		if err != nil {
+			return PreparedNativeEffect{}, err
+		}
+		nativePath, err := paths.Bind(ctx, path, false)
+		if err != nil {
+			return PreparedNativeEffect{}, err
+		}
 		prepared = true
 		return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext) (toolcontract.ProducerResult, error) {
 			invoked = true
-			reads := projectpaths.NewReadSession(boundary, actual)
-			defer reads.Close()
-			resolved, err := reads.Resolve(ctx, path)
-			if err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			file, err := reads.Open(resolved)
+			file, err := nativePath.Open()
 			if err != nil {
 				return toolcontract.ProducerResult{}, err
 			}
@@ -112,5 +114,12 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	}), effect, tc)
 	if !errors.Is(err, denial) || result.OwnerInvoked || invoked {
 		t.Fatalf("owner dispatched without start record: %+v %v", result, err)
+	}
+	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+		frame.Close()
+		return nil
+	}), effect, tc)
+	if err == nil || result.OwnerInvoked || invoked {
+		t.Fatalf("owner dispatched after frame closed at marker: %+v %v", result, err)
 	}
 }

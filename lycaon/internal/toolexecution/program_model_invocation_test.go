@@ -85,7 +85,60 @@ func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	}
 	end()
 	end()
-	if memory.held != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" {
+	if memory.held != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" || frame.lifetime.admission != nil {
 		t.Fatal("drained frame retained unaccounted facts")
+	}
+}
+
+func TestProgramFrameRetainsSupplementalFactsOnCapturedLedger(t *testing.T) {
+	parent, tc := frameFixture(t)
+	memory := &stageAdmissionFixture{}
+	nilLease := false
+	admission := programStateFunc(func(ctx context.Context, n int64) (func(), error) {
+		if nilLease {
+			return nil, nil
+		}
+		return memory.ReserveProgramState(ctx, n)
+	})
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, admission)
+	testutil.FailErr(t, "capture retained ledger", err)
+	defer frame.Close()
+	end, err := frame.beginUse()
+	testutil.FailErr(t, "hold copy lifetime", err)
+	defer end()
+	baseline := memory.held
+	testutil.FailErr(t, "retain frozen feedback copy", frame.retainProgramFacts(t.Context(), 4096))
+	if memory.held != baseline+4096 {
+		t.Fatal("facts used an independent ledger or released early")
+	}
+	cause := errors.New("captured aggregate ceiling")
+	memory.err = cause
+	if err := frame.retainProgramFacts(t.Context(), 1); !errors.Is(err, cause) {
+		t.Fatal("captured ledger refusal lost")
+	}
+	memory.err = nil
+	nilLease = true
+	if err := frame.retainProgramFacts(t.Context(), 1); err == nil {
+		t.Fatal("facts admitted without retained lease")
+	}
+	nilLease = false
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := frame.retainProgramFacts(ctx, 1); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled retained copy admitted")
+	}
+	if memory.held != baseline+4096 {
+		t.Fatal("refused facts changed existing reservations")
+	}
+	frame.Close()
+	if memory.held != baseline+4096 {
+		t.Fatal("Close released frozen copy before active use completed")
+	}
+	end()
+	if memory.held != 0 || frame.lifetime.admission != nil {
+		t.Fatal("frame retained facts or allocator after Close")
+	}
+	if err := frame.retainProgramFacts(t.Context(), 1); err == nil {
+		t.Fatal("closed frame retained new facts")
 	}
 }

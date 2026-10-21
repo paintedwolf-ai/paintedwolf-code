@@ -52,6 +52,7 @@ type PreparedNativeEffect struct {
 // PrepareReviewed decodes actual reviewed/resolved values into the existing typed
 // operation. It must not reuse the adapter's stale pre-review input.
 type NativeEffect struct {
+	Inspection      toolcontract.OperationInspectionProjector
 	Operation       toolcontract.BoundOperation
 	Stage           toolcontract.ExecutionStage
 	Arguments       map[string]any
@@ -113,7 +114,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	tc.Invocation.NativeOperation, tc.Invocation.NativeStages = &bound, projection.BoundStages
-	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx,admission)
+	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx, admission, effect.Inspection)
 	defer tc.Invocation.NativeReview.Close()
 	ctx = invocationContext(ctx, tc)
 	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
@@ -173,28 +174,15 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	bound = prepared.Operation
 	tc.Invocation.NativeOperation = &bound
-	// Resume against current profile/root/workflow facts, while keeping the exact
-	// prepared inputs and existing once permits. Complete owners recheck effects.
-	current, err := e.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: surface.profile, SurfaceID: tc.Turn.TurnSurfaceID}, []toolcontract.OperationDefinition{definition})
-	if err != nil {
-		return result, err
-	}
-	if err = current.ValidateOperation(bound); err != nil {
-		return result, err
-	}
-	if err = frame.validateScope(invocation.Scope, tc); err != nil {
-		return result, err
-	}
-	if err = tools.ValidateWorkerBranch(ctx, tc); err != nil {
-		return result, err
-	}
-	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
-		return result, err
-	}
-	if err = ctx.Err(); err != nil {
+	if err = e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
 	if err = observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
+		return result, err
+	}
+	// Recorder calls may yield. Recheck current admission after the marker;
+	// the marker does not grant permission or keep a closed frame executable.
+	if err = e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
 	ownerStarted, result.OwnerInvoked = true, true
@@ -252,4 +240,25 @@ func nativeCommandPrefix(command string, argv []string) bool {
 		}
 	}
 	return true
+}
+
+// Reached input preparation and durable recording may both yield to held work.
+// Each resume uses fresh profile/root/progress authority for the same immutable
+// operation. Domain owners still perform their own effect-boundary checks.
+func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame ProgramFrame, profile string, bound toolcontract.BoundOperation, progressFacts ProgramProgressFacts, tc tools.ToolContext) error {
+	definition, invocation := bound.Definition(), bound.Invocation()
+	current, err := e.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: profile, SurfaceID: tc.Turn.TurnSurfaceID}, []toolcontract.OperationDefinition{definition})
+	if err != nil {
+		return err
+	}
+	if err = current.ValidateOperation(bound); err != nil {
+		return err
+	}
+	if err = frame.validateHostContext(ctx, tc); err != nil {
+		return err
+	}
+	if err = frame.validateScope(invocation.Scope, tc); err != nil {
+		return err
+	}
+	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
 }

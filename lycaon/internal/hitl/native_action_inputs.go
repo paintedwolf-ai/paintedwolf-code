@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -16,12 +15,13 @@ import (
 // aggregate ledger through all held reviews and the complete owner invocation.
 // It carries no grants and never resolves secrets or dispatches an operation.
 type NativeActionReview struct {
-	mu        sync.Mutex
-	ctx       context.Context
-	admission toolcontract.ReviewStateAdmission
-	releases  []func()
-	inputs    []*NativeActionInputs
-	closed    bool
+	mu         sync.Mutex
+	ctx        context.Context
+	admission  toolcontract.ReviewStateAdmission
+	projection toolcontract.OperationInspectionProjector
+	releases   []func()
+	inputs     []*NativeActionInputs
+	closed     bool
 }
 
 // NativeActionInputs separates full reviewed arguments from the existing
@@ -34,8 +34,8 @@ type NativeActionInputs struct {
 	arguments map[string]any
 }
 
-func NewNativeActionReview(ctx context.Context, admission toolcontract.ReviewStateAdmission) *NativeActionReview {
-	return &NativeActionReview{ctx: ctx, admission: admission}
+func NewNativeActionReview(ctx context.Context, admission toolcontract.ReviewStateAdmission, projection toolcontract.OperationInspectionProjector) *NativeActionReview {
+	return &NativeActionReview{ctx: ctx, admission: admission, projection: projection}
 }
 
 // Freeze follows host normalization and precedes every card. The existing
@@ -114,10 +114,11 @@ func (r *NativeActionReview) Close() {
 	r.releases = nil
 	r.admission = nil
 	r.ctx = nil
+	r.projection = nil
 }
 
-// Inspection applies the existing capture redactor to original scalar bytes and
-// field names before lossless encoding. The retained request context supplies
+// Inspection requires the bounded capture producer over original scalar bytes
+// and field names before lossless encoding. The retained request context supplies
 // cancellation only; all resource admission remains the explicit typed port.
 // This map is presentation data, never executable or restored owner arguments.
 func (i *NativeActionInputs) Inspection() (map[string]any, error) {
@@ -130,10 +131,20 @@ func (i *NativeActionInputs) Inspection() (map[string]any, error) {
 	if r.closed || r.ctx == nil {
 		return nil, fmt.Errorf("native review lifetime closed")
 	}
-	screened, ok := observability.RedactCaptureValue(i.arguments).(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("native review inspection must remain an object")
+	if r.projection == nil {
+		return nil, fmt.Errorf("native review requires bounded raw-value inspection producer")
 	}
+	screened, releaseProjection, err := r.projection.ProjectOperationInputs(r.ctx, r.admission, i.arguments)
+	if err != nil {
+		if releaseProjection != nil {
+			releaseProjection()
+		}
+		return nil, err
+	}
+	if releaseProjection == nil {
+		return nil, fmt.Errorf("native inspection producer returned no lease")
+	}
+	r.releases = append(r.releases, releaseProjection)
 	view, release, err := toolcontract.NewReviewedOperationInputs(r.ctx, r.admission, screened)
 	if err != nil {
 		return nil, err
