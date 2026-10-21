@@ -1,0 +1,138 @@
+name: Linux Nix qualification
+run-name: Linux Nix qualification ${{ inputs.source_commit }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Frozen commit available at refs/qualification/<commit>
+        type: string
+        required: true
+      component:
+        description: Fixed nonpublishing qualification scope
+        type: choice
+        options: [default, closure-notices, scanner-finalized, desktop-settings-observer, shell, desktop-shell-check]
+        default: default
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-nix-qualification-${{ inputs.source_commit }}
+  cancel-in-progress: false
+
+jobs:
+  closure:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            machine: x86_64
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            machine: aarch64
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Nix reads the source's Git history; a shallow controller root would cut it.
+          fetch-depth: 0
+
+      - name: Select the frozen qualification source
+        id: source
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          printf 'PW_ARTIFACT_ROOT=%s\n' "$RUNNER_TEMP/qualification-evidence" >> "$GITHUB_ENV"
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
+          git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          source_root="$RUNNER_TEMP/qualification-source"
+          git worktree add --detach "$source_root" "$SOURCE_COMMIT"
+          printf 'path=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: ${{ steps.source.outputs.path }}/lycaon/go.mod
+          cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ${{ steps.source.outputs.path }}/.bun-version
+          no-cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ steps.source.outputs.path }}/.node-version
+
+      - name: Prepare native confinement verification inputs
+        working-directory: ${{ steps.source.outputs.path }}
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+          ./task setup-dev -- --ci-inputs
+          if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+            sudo install -m 0644 .github/actions/setup-verification/apparmor-go-test-userns /etc/apparmor.d/paintedwolf-go-test
+            sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+          fi
+
+      - name: Verify native kernel and supervisor boundaries
+        working-directory: ${{ steps.source.outputs.path }}
+        run: |
+          set -euo pipefail
+          ./task test:confine:linux -- sandbox supervisor
+          ./task test:digest -- ./internal/userpath -run '^(TestLinuxAccountLookup.*|TestLinuxNativeAccountLookupDoesNotRequireShellEnvironment|TestNixStoreAccountShell.*)$' -count=1
+
+      # These SDKs are unused by the isolated Linux Nix build, on this job's disposable VM.
+      - name: Free disk space for the Nix store
+        run: sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+
+      - name: Install pinned Nix and fetch locked inputs
+        working-directory: ${{ steps.source.outputs.path }}
+        run: ./task nix:check -- --prepare
+
+      - name: Verify confined Nix development and explicit daemon authority
+        working-directory: ${{ steps.source.outputs.path }}
+        run: ./task test:confine:linux -- nix
+
+      - name: Prepare and authorize the exact scanner builder executable
+        working-directory: ${{ steps.source.outputs.path }}
+        run: ./task nix:build -- --component scanner-host-tools --qualify
+
+      - name: Evaluate, build and bind the selected native component
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          COMPONENT: ${{ inputs.component }}
+        run: |
+          set -euo pipefail
+          ./task nix:check
+          ./task nix:build -- --component "$COMPONENT" --archive-dir "$RUNNER_TEMP/nix-closure" --qualify
+          uname -a > "$PW_ARTIFACT_ROOT/kernel.txt"
+          cp /etc/os-release "$PW_ARTIFACT_ROOT/os-release"
+          nix --version > "$PW_ARTIFACT_ROOT/nix-version.txt"
+
+      - name: Retain the nonrelease native closure
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-${{ inputs.component != 'default' && inputs.component || 'closure' }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/nix-closure
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Retain qualification receipts and source identity
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nix-qualification-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/qualification-evidence
+          if-no-files-found: warn
+          retention-days: 14

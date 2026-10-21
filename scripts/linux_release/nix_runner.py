@@ -37,9 +37,14 @@ def install_command(directory: Path, machine: str) -> list[str]:
             "--nix-extra-conf-file", str(directory / "nix.conf")]
 
 
-def install(environment=os.environ, fetch=urllib.request.urlretrieve, run=subprocess.run) -> Path:
-    """Install the pinned multi-user Nix on an ephemeral hosted runner; elsewhere require an existing one."""
+def install(environment=os.environ, fetch=urllib.request.urlretrieve, run=subprocess.run,
+            substituter: Path | None = None) -> Path:
+    """Install the pinned multi-user Nix on an ephemeral hosted runner; elsewhere require an existing one.
+
+    An admitted local closure cache becomes the daemon's only extra trusted substituter."""
     if (PROFILE / "nix").exists():
+        if substituter is not None:
+            raise ValueError("a trusted closure cache is configured only while installing a fresh runner daemon")
         return PROFILE
     if environment.get("GITHUB_ACTIONS") != "true" or environment.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise ValueError("Nix is not installed; only an ephemeral GitHub-hosted runner installs it here")
@@ -54,7 +59,10 @@ def install(environment=os.environ, fetch=urllib.request.urlretrieve, run=subpro
         # The verified installer carries absolute store links, so only member paths are confined.
         with tarfile.open(archive) as source:
             source.extractall(directory, filter="tar")
-        (directory / "nix.conf").write_text(DAEMON_CONFIGURATION)
+        configuration = DAEMON_CONFIGURATION
+        if substituter is not None:
+            configuration += f"extra-substituters = {substituter.resolve().as_uri()}?trusted=1\n"
+        (directory / "nix.conf").write_text(configuration)
         run(install_command(directory, machine), check=True)
     if environment.get("GITHUB_PATH"):
         with open(environment["GITHUB_PATH"], "a", encoding="utf-8") as path:
@@ -69,8 +77,14 @@ def prefetch_commands(nix: list[str], root: Path) -> list[list[str]]:
              f"builtins.attrNames (import {root}/packaging/nix/flake-compat.nix {{ }})"]]
 
 
-def prepare(nix: list[str], root: Path, environment: dict, run=subprocess.run, installer=install) -> int:
-    profile = installer(environment)
+def prepare(nix: list[str], root: Path, environment: dict, run=subprocess.run, installer=install,
+            producer=None) -> int:
+    """producer: (directory, cache, run record, evidence) of an admitted application closure."""
+    substituter = None
+    if producer is not None:
+        from .nix_vm_producer import admit_retained
+        substituter = admit_retained(*producer, root, environment)
+    profile = installer(environment, substituter=substituter)
     environment = {**environment, "PATH": f"{profile}{os.pathsep}{environment.get('PATH', '')}"}
     for command in prefetch_commands(nix, root):
         result = run(command, cwd=root, env=environment, stdout=subprocess.DEVNULL)

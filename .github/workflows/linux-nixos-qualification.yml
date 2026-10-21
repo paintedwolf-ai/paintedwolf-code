@@ -1,0 +1,126 @@
+name: Linux NixOS factory qualification
+run-name: Linux NixOS factory qualification ${{ inputs.source_commit }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact frozen application source available at refs/qualification/<commit>
+        type: string
+        required: true
+      application_run_id:
+        description: Successful Linux Nix qualification run of that source on this ref
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: linux-nixos-qualification-${{ inputs.source_commit }}
+  cancel-in-progress: false
+
+jobs:
+  vm:
+    strategy:
+      fail-fast: false
+      matrix:
+        desktop: [gnome, plasma]
+        channel: [nixos-26.05, nixos-unstable]
+        architecture: [amd64, arm64]
+        include:
+          - runner: ubuntu-24.04
+            machine: x86_64
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            machine: aarch64
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      APPLICATION_RUN_ID: ${{ inputs.application_run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Nix reads the source's Git history; a shallow controller root would cut it.
+          fetch-depth: 0
+
+      - name: Select the exact source and its application producer run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          printf 'PW_ARTIFACT_ROOT=%s\n' "$RUNNER_TEMP/vm-qualification-evidence" >> "$GITHUB_ENV"
+          [[ "$APPLICATION_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPLICATION_RUN_ID" > "$RUNNER_TEMP/application-run.json"
+          git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          source_root="$RUNNER_TEMP/qualification-source"
+          git worktree add --detach "$source_root" "$SOURCE_COMMIT"
+          printf 'path=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
+
+      - name: Download the exact native application closure
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nix-closure-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/application-cache
+          run-id: ${{ env.APPLICATION_RUN_ID }}
+          github-token: ${{ github.token }}
+
+      - name: Download its qualification provenance
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nix-qualification-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/application-producer
+          run-id: ${{ env.APPLICATION_RUN_ID }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: ${{ steps.source.outputs.path }}/lycaon/go.mod
+          cache: false
+
+      - name: Free disk space for the Nix store
+        run: sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+
+      # Admission validates the retained closure before the daemon trusts it as a substituter.
+      - name: Admit the retained application and install pinned Nix
+        working-directory: ${{ steps.source.outputs.path }}
+        run: |
+          ./task nix:check -- --prepare --application-producer "$RUNNER_TEMP/application-producer" \
+            --application-cache "$RUNNER_TEMP/application-cache" --application-run "$RUNNER_TEMP/application-run.json"
+
+      - name: Build, archive and bind the native NixOS desktop factory
+        working-directory: ${{ steps.source.outputs.path }}
+        env:
+          DESKTOP: ${{ matrix.desktop }}
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          ./task nix:build -- --component "nixos-$DESKTOP-vm" --archive-dir "$RUNNER_TEMP/nixos-factory" \
+            --factory-source-root "$GITHUB_WORKSPACE" --factory-source-commit "$GITHUB_SHA" \
+            --factory-channel "$CHANNEL" --qualify
+
+      - name: Retain the nonrelease native desktop factory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nixos-${{ matrix.channel }}-${{ matrix.desktop }}-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/nixos-factory
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Retain VM build receipts and producer custody
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nixos-${{ matrix.channel }}-${{ matrix.desktop }}-qualification-${{ matrix.architecture }}-${{ env.SOURCE_COMMIT }}
+          path: ${{ runner.temp }}/vm-qualification-evidence
+          if-no-files-found: warn
+          retention-days: 14

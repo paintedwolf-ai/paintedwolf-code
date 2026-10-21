@@ -50,10 +50,23 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
                             "GH_TOKEN": "private", "LINUX_PACKAGE_SIGNING_KEY": "private",
                             "FEED_SIGNING_KEYS_JSON": "private", "TAURI_SIGNING_PRIVATE_KEY": "private"}
 
-    def invoke(self, operation, archive_dir=None):
+    def invoke(self, operation, archive_dir=None, qualify=False):
         with patch.dict(os.environ, self.environment), patch.object(nix.platform, "system", return_value="Linux"), \
                 patch.object(nix.platform, "machine", return_value="x86_64"):
-            return nix.execute(operation, self.root, archive_dir=archive_dir)
+            return nix.execute(operation, self.root, archive_dir=archive_dir, qualify=qualify)
+
+    def test_qualification_binds_only_a_retained_passed_build(self):
+        with patch.object(nix.nix_qualification, "qualify") as qualify:
+            self.assertEqual(self.invoke("build", qualify=True), 0)
+            report, evidence = qualify.call_args.args
+            self.assertEqual((report["component"], report["passed"]), ("default", True))
+            self.assertEqual(evidence.resolve(), (self.root / "artifacts").resolve())
+            self.assertEqual(self.reports()[0]["builds"], report["builds"])
+            self.environment["NIX_FIXTURE_EXIT"] = "29"
+            self.assertEqual(self.invoke("build", qualify=True), 29)
+            self.assertEqual(qualify.call_count, 1)
+            with self.assertRaises(ValueError):
+                self.invoke("check", qualify=True)
 
     def reports(self):
         return [json.loads(path.read_text()) for path in (self.root / "artifacts/nix").glob("*.json")]
@@ -121,6 +134,18 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
                 patch.object(sys, "argv", ["nix", "build", "--prepare"]):
             self.assertEqual(nix.main(), 1)
         prepare.assert_not_called()
+
+    def test_application_producers_are_admitted_only_whole_and_by_prepare(self):
+        producer = ["--application-producer", "/p", "--application-cache", "/c", "--application-run", "/r.json"]
+        for arguments in (["check", "--prepare", *producer[:2]], ["check", *producer]):
+            with self.subTest(arguments=arguments), patch.object(nix.nix_runner, "prepare") as prepare, \
+                    patch.object(sys, "argv", ["nix", *arguments]):
+                self.assertEqual(nix.main(), 1)
+                prepare.assert_not_called()
+        with patch.object(nix.nix_runner, "prepare", return_value=0) as prepare, \
+                patch.object(sys, "argv", ["nix", "check", "--prepare", *producer]):
+            self.assertEqual(nix.main(), 0)
+        self.assertEqual(prepare.call_args.kwargs["producer"][:3], (Path("/p"), Path("/c"), Path("/r.json")))
 
     def test_failures_have_a_failed_report_and_missing_lock_never_runs_nix(self):
         self.environment["NIX_FIXTURE_EXIT"] = "29"
