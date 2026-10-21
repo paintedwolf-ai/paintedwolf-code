@@ -70,6 +70,9 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 	if err := sameIdentity(spec); err != nil {
 		return err
 	}
+	// Thread-scoped privilege sealing and Landlock execution restriction apply
+	// to the OS thread that executes the desktop.
+	runtime.LockOSThread()
 	if err := SealEntry(origin); err != nil {
 		return err
 	}
@@ -98,8 +101,6 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 		}
 	}
 	unix.CloseOnExec(int(image.Fd()))
-	// The execution domain belongs to this thread, which executes the desktop.
-	runtime.LockOSThread()
 	if err := restrictExecution(spec.Generation, image); err != nil {
 		return err
 	}

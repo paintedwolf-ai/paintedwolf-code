@@ -33,15 +33,23 @@ srv.listen(4)
 port = srv.getsockname()[1]
 sys.stderr.write(f"DevTools listening on ws://127.0.0.1:{port}/devtools/browser/1\n")
 sys.stderr.flush()
-conn, _ = srv.accept()
-req = conn.recv(4096).decode("utf-8", "ignore")
-key = ""
-for line in req.split("\r\n"):
-    if line.lower().startswith("sec-websocket-key:"):
-        key = line.split(":", 1)[1].strip()
-accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
-conn.sendall(f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n".encode())
-time.sleep(60)
+while True:
+    conn, _ = srv.accept()
+    req = conn.recv(4096).decode("utf-8", "ignore")
+    if "sec-websocket-key:" in req.lower():
+        key = ""
+        for line in req.split("\r\n"):
+            if line.lower().startswith("sec-websocket-key:"):
+                key = line.split(":", 1)[1].strip()
+        accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+        conn.sendall(f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n".encode())
+        conn.recv(4096)
+        conn.sendall(b'\x81\x14{"id":1,"result":{}}')
+        time.sleep(60)
+    else:
+        body = f'{{"webSocketDebuggerUrl":"ws://127.0.0.1:{port}/devtools/browser/1"}}'.encode()
+        conn.sendall(f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode() + body)
+        conn.close()
 `
 
 func runBrowserEngineVictim(cacheDir, fakeChrome, readyFile string) int {
@@ -125,6 +133,11 @@ func browserEngineLossProbe(scratch string) (bool, string) {
 	killDeadline := time.Now().Add(10 * time.Second)
 	for _, pid := range pids {
 		for osprocess.Alive(pid) {
+			var status unix.WaitStatus
+			_, _ = unix.Wait4(-1, &status, unix.WNOHANG, nil)
+			if !osprocess.Alive(pid) {
+				break
+			}
 			if time.Now().After(killDeadline) {
 				return false, "brokered browser process " + strconv.Itoa(pid) + " survived SIGKILLed protected engine"
 			}

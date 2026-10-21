@@ -25,6 +25,7 @@ const reaperWriteTimeout = time.Second
 var reaper struct {
 	mu   sync.Mutex
 	pipe *os.File
+	cmd  *exec.Cmd
 }
 
 func init() {
@@ -71,13 +72,16 @@ func startReaperLocked(name string, args ...string) error {
 		return fmt.Errorf("start reaper: %w", err)
 	}
 	_ = read.Close()
-	// Collects the companion only if it exits while this process still runs.
-	go func() { _ = cmd.Wait() }()
 
 	previous := reaper.pipe
+	previousCmd := reaper.cmd
 	reaper.pipe = write
+	reaper.cmd = cmd
 	if previous != nil {
 		_ = previous.Close()
+		if previousCmd != nil {
+			_ = previousCmd.Wait()
+		}
 	}
 	return nil
 }
@@ -100,7 +104,11 @@ func sendReaper(op, kind byte, payload string) bool {
 	if _, err := reaper.pipe.WriteString(string([]byte{op, kind}) + payload + "\n"); err != nil {
 		slog.Warn("process reaper unavailable; engine children can outlive an abrupt exit", "err", err)
 		_ = reaper.pipe.Close()
+		if reaper.cmd != nil {
+			_ = reaper.cmd.Wait()
+		}
 		reaper.pipe = nil
+		reaper.cmd = nil
 		return false
 	}
 	return true

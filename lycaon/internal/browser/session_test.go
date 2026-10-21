@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +68,19 @@ func TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary(t *testing.T) {
 func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 	if dir := os.Getenv(unconfinedBrowserHelperEnv); dir != "" {
 		t.Setenv("LYCAON_SANDBOX", "off")
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"webSocketDebuggerUrl":"ws://%s/devtools/browser/test"}`, r.Host)
+		}))
+		defer srv.Close()
+		browserPIDFile := filepath.Join(dir, "browser.pid")
+		helperPIDFile := filepath.Join(dir, "helper.pid")
 		script := filepath.Join(dir, "fake-chrome.sh")
+		body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\nsleep 60 &\necho $! > %s\necho $$ > %s\necho 'DevTools listening on ws://%s/devtools/browser/test' >&2\nexec sleep 60\n",
+			strconv.Quote(helperPIDFile), strconv.Quote(browserPIDFile), srv.Listener.Addr().String())
+		if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+			os.Exit(1)
+		}
 		l := newHeadlessLauncher(context.Background(), script, dir, true, false)
 		if _, _, err := launchConfined(context.Background(), l, script, nil); err != nil {
 			_, _ = io.WriteString(os.Stderr, err.Error())
@@ -91,10 +105,6 @@ func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 	browserPIDFile := filepath.Join(dir, "browser.pid")
 	helperPIDFile := filepath.Join(dir, "helper.pid")
 	readyFile := filepath.Join(dir, "ready")
-	script := filepath.Join(dir, "fake-chrome.sh")
-	body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\nsleep 60 &\necho $! > %s\necho $$ > %s\necho 'DevTools listening on ws://127.0.0.1:9222/devtools/browser/test' >&2\nexec sleep 60\n",
-		strconv.Quote(helperPIDFile), strconv.Quote(browserPIDFile))
-	testutil.FailErr(t, "write fake browser script", os.WriteFile(script, []byte(body), 0o700))
 
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
