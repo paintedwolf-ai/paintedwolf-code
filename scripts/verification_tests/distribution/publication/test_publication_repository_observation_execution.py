@@ -9,6 +9,10 @@ from unittest.mock import Mock, patch
 from scripts.linux_release.publication.delivery import repository_observation as owner
 from scripts.linux_release.repository_operations import identity, transition
 from scripts.linux_release.repository_pending import activation_plan, marker
+from scripts.linux_release.openpgp import selection
+from scripts.linux_release.publication.trust.generations import CATALOG
+
+PROTECTED, _ = selection(CATALOG)
 
 
 class RepositoryObservationTests(unittest.TestCase):
@@ -16,7 +20,7 @@ class RepositoryObservationTests(unittest.TestCase):
         directory = root / 'generation'; directory.mkdir()
         package = directory / 'pool/pkg.deb'; package.parent.mkdir(); package.write_bytes(b'abc')
         manifest = {'family': 'deb', 'channel': 'stable', 'version': '1.2.3', 'source_commit': 'a' * 40,
-            'inventory_sha256': 'b' * 64, 'signing_generation': 1, 'key_fingerprint': 'C' * 40,
+            'inventory_sha256': 'b' * 64, 'signing_generation': 1, 'key_fingerprint': PROTECTED['fingerprint'],
             'rehearsal': False, 'packages': [], 'objects': [{'path': 'pool/pkg.deb', 'size': 3,
                 'sha256': hashlib.sha256(b'abc').hexdigest()}]}
         operation = transition(manifest, None, None)
@@ -26,11 +30,10 @@ class RepositoryObservationTests(unittest.TestCase):
         pending = marker(activation_plan(current, None, backend.prefix, backend.origin, 'activate', None, None), 'completed')
         states = {'channels/deb/stable/current.json': current, 'channels/deb/stable/pending.json': pending}
         backend.read.side_effect = lambda name: copy.deepcopy(states.get(name))
-        key = root / 'fixture-key.asc'; key.write_bytes(b'explicit unit fixture public key')
-        return manifest, directory, operation, backend, states, key
+        return manifest, directory, operation, backend, states
 
     def invoke(self, root, *, mutation=None):
-        manifest, directory, operation, backend, states, key = self.fixture(root)
+        manifest, directory, operation, backend, states = self.fixture(root)
         if mutation == 'withdrawn':
             states['withdrawn/' + identity(manifest) + '.json'] = {'withdrawn': True}
         if mutation == 'pending':
@@ -46,8 +49,8 @@ class RepositoryObservationTests(unittest.TestCase):
             if mutation == 'changed-during-read':
                 states['channels/deb/stable/current.json']['version'] = '1.2.4'
         backend.verify_public.side_effect = public
-        with patch('scripts.linux_release.repository_validation.admit') as admit, \
-                patch.object(owner, 'selection', return_value=({'generation': 1, 'fingerprint': 'C' * 40}, key)):
+        # Format admission verifies production repository signatures, which no fixture can carry.
+        with patch('scripts.linux_release.repository_validation.admit') as admit:
             try:
                 result = owner.observe(manifest, directory, operation, backend=backend)
             except ValueError:

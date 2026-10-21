@@ -82,7 +82,7 @@ def dispatch_body(payload):
     return {"event_type": "painted-wolf-release", "client_payload": release_notification(payload)}
 
 
-def confirm(payload, generation, base_url="https://paintedwolf.ai"):
+def confirm(payload, generation, base_url="https://paintedwolf.ai", seconds=1800):
     """Wait for the website to acknowledge both digests on every channel this release promotes."""
     from scripts.release_distribution import publication_channels, wait_for_website
     payload = release_notification(payload)
@@ -90,7 +90,7 @@ def confirm(payload, generation, base_url="https://paintedwolf.ai"):
         wait_for_website(base_url, {"channel": channel, "version": payload["version"],
                                     "manifest_sha256": payload["manifest_sha256"], "withdrawn_version": None,
                                     "distribution_sha256": payload["distribution_sha256"]},
-                         allow_newer=payload["channel"] == "stable" and channel == "preview")
+                         seconds, allow_newer=payload["channel"] == "stable" and channel == "preview")
 
 
 def main(arguments=None):
@@ -106,8 +106,9 @@ def main(arguments=None):
     try:
         payload = json.loads(args.notification.read_bytes())
         if args.command == "dispatch-body":
+            body = dispatch_body(payload)
             with args.output.open("x") as stream:
-                json.dump(dispatch_body(payload), stream)
+                json.dump(body, stream)
         else:
             confirm(payload, load_registry()["signing_generation"], args.base_url)
     except (OSError, ValueError, KeyError, TypeError) as error:

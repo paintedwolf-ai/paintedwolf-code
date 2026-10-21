@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from scripts.linux_release.publication.document import document_pipeline as owner
+from verification_tests.distribution.publication import signed_release as fixture
 
 
 class DocumentPipelineTests(unittest.TestCase):
@@ -64,25 +65,30 @@ class DocumentPipelineTests(unittest.TestCase):
     def test_package_and_feed_signing_generations_remain_independent(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = {'source_commit': 'a' * 40, 'source_tree': 'b' * 40, 'version': '1.2.3', 'flake_lock_sha256': 'c' * 64}
-            checkout = root / 'source'; checkout.mkdir()
-            released = Mock(root=root / 'selected-release')
-            selected = Mock()
+            selected, released, _ = self.fixture(root)
+            checkout = root / 'source'
+            commit, tree = fixture.source_repository(checkout, {'flake.lock': '{"nodes": {}}\n'})
             producer = {'repository_id': 1, 'controller_commit': 'd' * 40}
-            with patch.object(owner, 'facts', return_value=source), \
-                    patch.object(owner, 'retain_campaign', return_value=selected) as retain, \
+            # Campaign and release artifact selection and feed signing are the external roles here.
+            with patch.object(owner, 'retain_campaign', return_value=selected) as retain, \
                     patch.object(owner, 'retain_release', return_value=released), \
-                    patch.object(owner, 'package_files', return_value=({}, {'linux-x86_64': {'publication': 'public'}})), \
                     patch.object(owner, 'prepare', side_effect=lambda *args, **kwargs: (args[1].mkdir(), {'publication': 'nonrelease'})[1]) as prepare:
-                owner.produce(None, 'owner/repo', producer, checkout, source['source_commit'], 2, 3, 4, root / 'output',
+                owner.produce(None, 'owner/repo', producer, checkout, commit, 2, 3, 4, root / 'output',
                               catalog={}, signing_generation=3, package_signing_generation=7, key_fingerprint='e' * 40,
                               repository_base_url='https://example.invalid/linux/repositories')
             self.assertEqual(retain.call_args.kwargs['signing_generation'], 7)
             request = prepare.call_args.args[2]
             self.assertEqual(request['signing_generation'], 3)
+            self.assertEqual((request['source_commit'], request['source_tree']), (commit, tree))
+            self.assertEqual(request['package_content_types'],
+                             {'painted-wolf-code_v1.2.3_linux-x86_64.deb': 'application/vnd.debian.binary-package'})
+            self.assertEqual(request['nix']['source']['flake_lock_sha256'],
+                             hashlib.sha256((checkout / 'flake.lock').read_bytes()).hexdigest())
             self.assertEqual(request['repositories'], [])
             self.assertEqual(request['nix']['cache'], {'enabled': False})
             self.assertEqual(request['aur'], {'enabled': False})
+            self.assertEqual((root / 'output/packages/painted-wolf-code_v1.2.3_linux-x86_64.deb').read_bytes(),
+                             b'actual signed installed package')
             self.assertFalse(json.loads((root / 'output/preparation.json').read_text())['published'])
 
     def test_native_collection_keeps_bare_digest_sidecars_and_no_updater(self):
