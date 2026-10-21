@@ -138,9 +138,23 @@ func (p LaunchPlan) validate() error {
 // AgentLaunchOptions are the directory and environment inputs of one confined
 // agent launch. Launches and launch lookups (which, type, command -v) build
 // their options here, so discovery selects exactly what a launch would run.
-func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) ExecOpts {
+// A program's exported NAME=value entries apply over the sanitized inherited
+// (or reduced) host environment; a key the host reserves refuses with
+// ErrBlockedEnvKey rather than being dropped.
+func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) (ExecOpts, error) {
 	if reduced {
 		launch = launch.WithReducedEnvironment()
 	}
-	return ExecOpts{Launch: launch, Dir: dir, Env: append([]string{}, environment...), PathExtra: append([]string(nil), pathExtra...)}
+	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...)}
+	if len(environment) > 0 {
+		opts.InlineEnv = make(map[string]string, len(environment))
+		for _, entry := range environment {
+			name, value, _ := strings.Cut(entry, "=")
+			opts.InlineEnv[name] = value
+		}
+		if err := ValidateInlineEnv(opts.InlineEnv); err != nil {
+			return ExecOpts{}, err
+		}
+	}
+	return opts, nil
 }

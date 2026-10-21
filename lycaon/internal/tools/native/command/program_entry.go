@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,7 +47,8 @@ type ProgramRuntime struct {
 	Sessions SessionOwners
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
-	Natives  map[string]NativeOperation
+	// Owners composes one program's host owner set from its root directory frame.
+	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 
@@ -169,8 +169,18 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return "", err
 	}
 	defer frame.Close()
+	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
+	if err != nil {
+		return "", err
+	}
+	var owners ProgramOwners
+	if r.Owners != nil {
+		if owners, err = r.Owners(tc, paths); err != nil {
+			return "", err
+		}
+	}
 	var active []toolcontract.OperationDefinition
-	for _, operation := range r.Natives {
+	for _, operation := range owners.Natives {
 		if definition, ok := r.Registry.Definition(operation.Tool); ok {
 			active = append(active, definition.Operation)
 		}
@@ -194,10 +204,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
-	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
-	if err != nil {
-		return "", err
-	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
@@ -205,7 +211,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		listeners = lineage.SessionListeners
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher) {
 			if _, taken := builtins[name]; !taken {
@@ -214,15 +220,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
-	environment := lycexec.InheritedEnviron()
-	if tc.Files.PackageExecution != nil {
-		environment = lycexec.ReducedEnviron()
-	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
+		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:  memory,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr}, Environment: environment,
+		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {

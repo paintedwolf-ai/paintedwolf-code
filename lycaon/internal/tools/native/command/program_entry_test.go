@@ -34,6 +34,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -87,7 +88,9 @@ func newProgramFixture(t *testing.T) *programFixture {
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: fixtureSessions{},
-		Natives:  map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()},
+		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+			return command.ProgramOwners{Natives: map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}}, nil
+		},
 	}
 	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background}
 }
@@ -138,50 +141,62 @@ func (f *programFixture) executions(t *testing.T) map[string]string {
 // firstLineOperation is a typed fixture reader that copies one stdin line and
 // then stops reading, as head does.
 func firstLineOperation() command.NativeOperation {
-	return command.NativeOperation{Tool: "read",
-		Bind: func(_ context.Context, _ commandprogram.OperationRequest, _ commandprogram.BoundArgv, bound toolcontract.BoundOperation) (toolexecution.NativeEffect, error) {
-			return toolexecution.NativeEffect{PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					line, err := bufio.NewReader(streams.Input).ReadString('\n')
-					_ = streams.Input.Close()
-					if err == nil {
-						_, err = io.WriteString(streams.Output, line)
-					}
-					if err != nil {
-						return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-					}
-					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
-				}}, nil
-			}}, nil
-		}}
+	return command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("head"), request.Argv)
+		if err != nil {
+			return command.NativePrepared{}, err
+		}
+		return command.NativePrepared{Review: bound.Review("read"), Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			line, err := bufio.NewReader(streams.Input).ReadString('\n')
+			_ = streams.Input.Close()
+			if err == nil {
+				_, err = io.WriteString(streams.Output, line)
+			}
+			if err != nil {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+			}
+			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
+		}}, nil
+	}}
 }
 
 // teeOperation is a typed fixture owner bound through InvokeNative: it copies
-// its actual stdin to the reviewed operand and to stdout.
+// its actual stdin to the bound operand and to stdout.
 func teeOperation(dir string) command.NativeOperation {
-	return command.NativeOperation{Tool: "write", Mode: func(commandprogram.BoundArgv) string { return "each-target" },
-		Bind: func(_ context.Context, _ commandprogram.OperationRequest, _ commandprogram.BoundArgv, bound toolcontract.BoundOperation) (toolexecution.NativeEffect, error) {
-			return toolexecution.NativeEffect{PrepareReviewed: func(_ context.Context, resolved map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				operands, _ := resolved["operands"].([]any)
-				if len(operands) != 1 {
-					return toolexecution.PreparedNativeEffect{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"reason": "one target"})
-				}
-				target := filepath.Join(dir, operands[0].(string))
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					data, err := io.ReadAll(streams.Input)
-					if err == nil {
-						err = os.WriteFile(target, data, 0o600)
-					}
-					if err == nil {
-						_, err = streams.Output.Write(data)
-					}
-					if err != nil {
-						return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
-					}
-					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
-				}}, nil
-			}}, nil
-		}}
+	return command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("tee"), request.Argv)
+		if err != nil {
+			return command.NativePrepared{}, err
+		}
+		operands := bound.Operands()
+		if len(operands) != 1 {
+			return command.NativePrepared{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"reason": "one target"})
+		}
+		target := filepath.Join(dir, operands[0].Value)
+		return command.NativePrepared{Mode: "each-target", Review: bound.Review("write"), Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			data, err := io.ReadAll(streams.Input)
+			if err == nil {
+				err = os.WriteFile(target, data, 0o600)
+			}
+			if err == nil {
+				_, err = streams.Output.Write(data)
+			}
+			if err != nil {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
+			}
+			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
+		}}, nil
+	}}
+}
+
+func catalogSpec(name string) toolcontract.CommandSpecification {
+	catalog, _ := toolcontract.LanguageV1()
+	for _, spec := range catalog.Commands {
+		if spec.Name == name {
+			return spec
+		}
+	}
+	return toolcontract.CommandSpecification{}
 }
 
 // awaitExecution waits until an execution of operation reaches state.

@@ -26,7 +26,9 @@ type Streams struct {
 // Environment is the frame's exported NAME=value list, including assignments
 // scoped to this one dispatch, sorted by name; it carries no ambient host state.
 type OperationRequest struct {
-	Invocation  toolcontract.OperationInvocation
+	Invocation toolcontract.OperationInvocation
+	// OperationID is the catalog command name ("external" for launches); the
+	// typed owner's operation identity is the owner's own fact.
 	OperationID string
 	Statement   commandsurface.Statement
 	Argv        Fields

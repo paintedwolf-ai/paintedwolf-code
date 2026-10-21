@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -45,7 +46,10 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
+	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	if streams.Input != nil {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}

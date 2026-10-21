@@ -14,16 +14,36 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// NativeOperation binds one catalog command to its existing typed owner. Bind
-// turns the bound argv record into the owner's NativeEffect; it never runs
-// the owner itself. Mode is the catalog effect mode the form selects.
+// NativeOperation binds one catalog command to its existing typed owner under
+// the catalog operation identity Tool. Prepare binds argv from the current
+// directory frame and returns the reviewed form; it runs nothing.
 type NativeOperation struct {
-	Tool string
-	Mode func(commandprogram.BoundArgv) string
-	Bind func(context.Context, commandprogram.OperationRequest, commandprogram.BoundArgv, toolcontract.BoundOperation) (toolexecution.NativeEffect, error)
+	Tool    string
+	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.OperationRequest) (NativePrepared, error)
+}
+
+// NativePrepared is one bound owner invocation: its review record and the
+// single owner call admission reaches.
+type NativePrepared struct {
+	// Mode is the catalog effect mode the bound form selects; empty uses the
+	// evaluator's single declared mode.
+	Mode   string
+	Review commandprogram.ArgvReview
+	Invoke func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+}
+
+// ProgramOwners is one program's host owner set. Publication and Input serve
+// redirections; AdmitLaunch runs before every external launch so pending
+// publications land first.
+type ProgramOwners struct {
+	Natives     map[string]NativeOperation
+	Publication commandprogram.OutputPublication
+	Input       commandprogram.InputRedirection
+	AdmitLaunch func(context.Context, tools.ToolContext) error
 }
 
 // ProgramDispatcher routes each reached simple command: catalog natives bound
@@ -35,6 +55,8 @@ type ProgramDispatcher struct {
 	builtins map[string]commandprogram.OperationDispatcher
 	natives  map[string]NativeOperation
 	binder   commandprogram.ArgvBinder
+	// admitLaunch is the program's publication barrier for external launches.
+	admitLaunch func(context.Context, tools.ToolContext) error
 	// paths is this directory frame; cd moves it and Fork copies it.
 	paths  *projectpaths.ProgramPaths
 	shared *dispatchShared
@@ -72,6 +94,11 @@ func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	if d.admitLaunch != nil {
+		if err := d.admitLaunch(ctx, d.run.tc); err != nil {
+			return ownerFailure(err), err
+		}
+	}
 	return d.invokeExternal(ctx, request, streams)
 }
 
@@ -101,7 +128,7 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	switch {
 	case !native || spec.Name == "external":
 		return d.invokeExternal(ctx, request, streams)
-	case d.natives[spec.Name].Bind != nil:
+	case d.natives[spec.Name].Prepare != nil:
 		return d.invokeNative(ctx, spec, d.natives[spec.Name], request, streams)
 	case pathCommands[spec.Name]:
 		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
@@ -162,17 +189,17 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	argv, err := d.binder.Bind(spec, request.Argv)
-	if err != nil {
-		return d.refuseArgv(ctx, spec, request, err)
-	}
 	definition, ok := d.run.registry.Definition(operation.Tool)
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", operation.Tool)
 	}
-	mode := request.EffectMode
-	if operation.Mode != nil {
-		mode = operation.Mode(argv)
+	prepared, err := operation.Prepare(ctx, d.paths, request)
+	if err != nil {
+		return d.refuseArgv(ctx, spec, request, err)
+	}
+	mode := prepared.Mode
+	if mode == "" {
+		mode = request.EffectMode
 	}
 	if mode == "" && len(spec.Effects) > 0 {
 		mode = spec.Effects[0].Mode
@@ -181,14 +208,14 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
-	effect, err := operation.Bind(ctx, request, argv, bound)
-	if err != nil {
-		return d.refuseArgv(ctx, spec, request, err)
+	review := prepared.Review
+	effect := toolexecution.NativeEffect{
+		Operation: bound, Streams: streams, Argv: &review, Inspection: d.run.capture,
+		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Operation.Facts().Identity, Argv: request.Argv.Values()},
+		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
+		},
 	}
-	review := argv.Review(definition.Operation.Facts().Identity)
-	effect.Operation, effect.Streams, effect.Argv = bound, streams, &review
-	effect.Stage = toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Operation.Facts().Identity, Argv: request.Argv.Values()}
-	effect.Inspection = d.run.capture
 	child, err := d.prepareDefinition(ctx, definition.Operation, request, review.Arguments())
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
