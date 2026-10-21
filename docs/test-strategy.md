@@ -746,6 +746,13 @@ pinned browser under confinement) runs on both. Platform qualification's
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
 
+The `nix` lane runs `nix:check` nightly, in qualification, and in the merge
+queue when the Nix package sources, flake lock, non-flake entry or Nix build
+driver change. A lane's `paths` select it by repository prefix even within a
+broad change, and its `arguments` reach its single target. Setup installs the
+pinned Nix release and fetches every locked input with `nix:check -- --prepare`
+before the lane goes offline.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency

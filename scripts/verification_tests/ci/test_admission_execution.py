@@ -30,7 +30,7 @@ class AdmissionTests(unittest.TestCase):
 
     def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
-        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'webkit-gtk', 'confinement-arm64'})
+        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'webkit-gtk', 'confinement-arm64', 'nix'})
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',

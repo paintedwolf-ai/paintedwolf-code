@@ -14,14 +14,21 @@ import time
 import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source, nix_scanner_tools
+from . import nix_archive, factory_source, nix_runner, nix_scanner_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
+CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
+               "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
               "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
               "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
+
+
+def credential_free_environment() -> dict:
+    """Nix evaluation and builds never receive publication or repository credentials."""
+    return {name: value for name, value in os.environ.items() if name not in CREDENTIALS}
 
 
 def command(operation: str, root: Path, component: str = "default", source: str | None = None) -> list[str]:
@@ -73,10 +80,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     source = None if role is None else ("git+file://" + str(factory_root) + "?rev=" +
                                        factory_commit + "&dir=" + role["subdirectory"])
     invocation = command(operation, root, component, source)
-    environment = dict(os.environ)
-    for name in ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY",
-                 "FEED_SIGNING_KEYS_JSON", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
-        environment.pop(name, None)
+    environment = credential_free_environment()
     report = {
         "format_version": 1, "operation": operation, "component": component,
         "lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
@@ -183,8 +187,14 @@ def main() -> int:
     parser.add_argument("--prepare-factory-lock", action="store_true")
     parser.add_argument("--application-source-root", type=Path)
     parser.add_argument("--application-source-commit")
+    parser.add_argument("--prepare", action="store_true",
+                        help="provision pinned Nix and every locked input, then evaluate nothing")
     args = parser.parse_args()
     try:
+        if args.prepare:
+            if args.operation != "check":
+                raise ValueError("--prepare provisions evaluation inputs for check")
+            return nix_runner.prepare(NIX, ROOT, credential_free_environment())
         return execute(args.operation, component=args.component, archive_dir=args.archive_dir,
                        factory_root=args.factory_source_root, factory_commit=args.factory_source_commit,
                        factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock,

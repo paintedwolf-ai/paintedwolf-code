@@ -946,6 +946,27 @@
       "runner": "ubuntu-24.04-arm",
       "platform": "linux"
     },
+    "nix": {
+      "targets": [
+        "nix:check"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "platform": "linux",
+      "paths": [
+        "packaging/nix/",
+        "flake.nix",
+        "flake.lock",
+        "default.nix",
+        "scripts/linux_release/nix"
+      ]
+    },
     "race": {
       "targets": [
         "test:race"

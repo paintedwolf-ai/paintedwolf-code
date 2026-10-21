@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import tempfile
@@ -40,6 +41,18 @@ class HostedExecutionTests(unittest.TestCase):
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
+
+    def test_lane_arguments_reach_its_single_target(self):
+        data = copy.deepcopy(hosted_plan.catalog())
+        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(hosted_plan, "catalog", return_value=data), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("confinement-arm64")
+            self.assertEqual(run.call_args.args[0], ["./task", "test:confine:linux", "--", "nix"])
+            ci.run_lane("nix")
+            self.assertEqual(run.call_args.args[0], ["./task", "nix:check"])
 
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \

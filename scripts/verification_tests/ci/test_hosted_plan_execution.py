@@ -19,7 +19,7 @@ class HostedPlanTests(unittest.TestCase):
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk", "confinement-arm64"})
+                                   "webkit-gtk", "confinement-arm64", "nix"})
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
@@ -62,7 +62,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux"})
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -149,6 +149,40 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_nix_lane_follows_nix_sources_and_provisions_nix_before_running_offline(self):
+        def lanes(paths, full):
+            return {row["lane"] for row in ci.matrix("integration", scope=dict(full=full, paths=paths),
+                                                       platform=True)["include"]}
+        for path in ("packaging/nix/shell.nix", "flake.lock", "default.nix", "scripts/linux_release/nix.py"):
+            with self.subTest(path=path):
+                self.assertIn("nix", lanes([path], True))
+        self.assertNotIn("nix", lanes(["scripts/ci_policy/impact.py"], True))
+        self.assertNotIn("nix", lanes(["lycaon/internal/confine/boundary_linux.go"], False))
+        for profile in ("nightly", "release"):
+            rows = [row for row in ci.matrix(profile)["include"] if row["lane"] == "nix"]
+            self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
+        self.assertEqual({row["lane"] for row in ci.matrix("integration")["include"] if row["nix"]}, {"nix"})
+
+    def test_path_selection_and_lane_arguments_are_explicit(self):
+        for mutation in ("unplatformed", "empty", "absolute", "arguments-many-targets", "arguments-empty"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                if mutation == "unplatformed":
+                    data["ci"]["frontend"]["paths"] = ["lycaon-den/"]
+                elif mutation in ("empty", "absolute"):
+                    data["ci"]["nix"]["paths"] = [] if mutation == "empty" else ["/nix/store"]
+                elif mutation == "arguments-many-targets":
+                    data["ci"]["frontend"]["arguments"] = ["browser"]
+                else:
+                    data["ci"]["confinement-arm64"]["arguments"] = []
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("nightly")
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
+        with patch.object(ci, "catalog", return_value=data):
+            row = next(row for row in ci.matrix("nightly")["include"] if row["lane"] == "confinement-arm64")
+        self.assertEqual((row["nix"], row["browser"]), (True, False))
 
     def test_platform_selection_keeps_only_platform_lanes(self):
         for profile in ("integration", "nightly", "release"):
