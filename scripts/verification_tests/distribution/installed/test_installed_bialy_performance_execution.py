@@ -1,0 +1,242 @@
+"""Latency observations must include actual engine requests, never replay-cache hits."""
+from contextlib import contextmanager, redirect_stdout
+import io
+import json
+from pathlib import Path
+import tempfile
+import subprocess
+import sys
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+from scripts.bialy import bench_latency
+from linux_release.installed_cases import bialy_data, bialy_performance, bialy_stdio, process
+from linux_release.installed_cases.records import CaseUnavailable
+
+
+class BialyLatencyTests(unittest.TestCase):
+    def test_repeated_states_always_invoke_uncached_engine(self):
+        clock = [0.0]
+        engines = []
+        class Engine:
+            def __init__(self, path):
+                self.hello = {'engine': 'fixture'}
+                self.requests = []
+                self.closed = False
+                engines.append(self)
+            def call(self, request):
+                raise AssertionError('latency cannot use the replay answer cache')
+            def ask(self, request):
+                self.requests.append(request)
+                clock[0] += 0.025
+                return {'answers': {}}
+            def close(self):
+                self.closed = True
+        corpus = SimpleNamespace(surface_questions=lambda _: ['kind', 'candidate'],
+                                 spec={'deadline_ms': 10000})
+        output = io.StringIO()
+        with patch.object(bench_latency, 'Engine', Engine), \
+                patch.object(bench_latency.Corpus, 'load', return_value=corpus), \
+                patch.object(bench_latency.time, 'perf_counter', side_effect=lambda: clock[0]), \
+                patch('sys.argv', ['bench', '--corpus', 'fixture', '--engine', 'fixture', '--rounds', '20']), \
+                redirect_stdout(output):
+            bench_latency.main()
+        self.assertEqual(len(engines[0].requests), 21)
+        self.assertEqual(engines[0].requests[1], engines[0].requests[7])
+        self.assertTrue(engines[0].closed)
+        report = json.loads(output.getvalue())
+        self.assertEqual((report['p50_ms'], report['p95_ms']), (25, 25))
+        self.assertEqual(report['deadline_ms'], 10000)
+
+    def test_verified_data_receipt_refuses_mutation_missing_or_incomplete_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            self.assertIsNone(bialy_data.capture(root))
+            model = root / 'engine-root/decide/models/fixed-revision'
+            for name in ['rl_agent_config.json', 'model.safetensors', 'encoder/config.json',
+                         'tokenizer/tokenizer.json', 'tokenizer/tokenizer_config.json']:
+                path = model / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'fixed data')
+                path.chmod(0o644)
+            with patch.object(bialy_data, 'physical'):
+                receipt = bialy_data.capture(root)
+                binding = {'install_root': str(root), 'bialy_data': receipt}
+                self.assertEqual(bialy_data.unchanged(binding), receipt)
+                (model / 'model.safetensors').write_bytes(b'changed')
+                with self.assertRaisesRegex(ValueError, 'changed'):
+                    bialy_data.unchanged(binding)
+                (model / 'model.safetensors').unlink()
+                with self.assertRaisesRegex(ValueError, 'incomplete'):
+                    bialy_data.capture(root)
+            with self.assertRaises(CaseUnavailable):
+                bialy_data.unchanged({'install_root': str(root)})
+
+    def test_data_receipt_refuses_symlinks_privileged_or_oversized_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            model = root / 'engine-root/decide/models/model'
+            model.mkdir(parents=True)
+            file = model / 'data'
+            file.write_bytes(b'data')
+            file.chmod(0o755)
+            with patch.object(bialy_data, 'physical'):
+                with self.assertRaisesRegex(ValueError, 'bounds'):
+                    bialy_data.capture(root)
+                file.chmod(0o644)
+                with patch.object(bialy_data, 'MAX_BYTES', 1):
+                    with self.assertRaisesRegex(ValueError, 'bounds'):
+                        bialy_data.capture(root)
+            with self.assertRaises(ValueError):
+                bialy_data.physical(file, directory=False)
+            file.unlink()
+            file.symlink_to('/etc/passwd')
+            with self.assertRaises(ValueError):
+                bialy_data.physical(file, directory=False)
+
+    def test_reference_is_the_applications_gpu_choice_under_its_requirement(self):
+        data = {'model': '/sealed/model', 'files': {}}
+        identity = b'{"device": "vulkan:0", "adapter": "AMD Radeon RX 7900 XT", "probe_ms": 35.5}'
+        result = {'stdout': identity, 'stderr': b'', 'launch_identity': {'pid': 42},
+                  'timed_out': False, 'output_limit': False, 'exit_code': 0}
+        with patch.object(bialy_performance, 'unchanged', return_value=data) as unchanged, \
+                patch.object(bialy_performance, 'limits', return_value={'reference_ms': 1000, 'turn_ms': 10000}), \
+                patch.object(bialy_performance, 'run', return_value=result) as run:
+            report, streams = bialy_performance.reference({})
+            self.assertEqual((report['status'], report['device'], report['reference_ms']), ('observed', 'vulkan:0', 35.5))
+            self.assertTrue(report['reference_within_existing_budget'])
+            self.assertTrue(report['selected_application_device_qualified'])
+            self.assertFalse(report['quality_baseline_qualified'])
+            self.assertEqual(unchanged.call_count, 2)
+            run.assert_called_once_with({}, 'bialy', ['check', '--model', '/sealed/model', '--device', 'auto',
+                                                      '--qualify-ms', '1000'], timeout=600)
+            self.assertEqual(streams['bialy-stdout'], identity)
+            for raw in [b'{"device": "cpu", "probe_ms": 900}', b'{"device": "vulkan:0", "probe_ms": true}',
+                        b'{"device": "vulkan:0", "probe_ms": NaN}', b'{"probe_ms": 1}', b'[]']:
+                result['stdout'] = raw
+                with self.subTest(raw=raw):
+                    failed, retained = bialy_performance.reference({})
+                    self.assertEqual(failed['failure']['code'], 'invalid-engine-identity')
+                    self.assertEqual(retained['bialy-stdout'], raw)
+
+    def test_a_guest_without_a_gpu_proves_the_typed_disabled_state(self):
+        data = {'model': '/sealed/model', 'files': {}}
+        result = {'stdout': b'', 'stderr': b'bialy: no GPU the engine runs on', 'launch_identity': {'pid': 42},
+                  'timed_out': False, 'output_limit': False, 'exit_code': 4}
+        with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                patch.object(bialy_performance, 'limits', return_value={'reference_ms': 1000, 'turn_ms': 10000}), \
+                patch.object(bialy_performance, 'run', return_value=result):
+            report, streams = bialy_performance.reference({})
+            self.assertEqual((report['status'], report['reason']), ('disabled', 'no_gpu'))
+            self.assertNotIn('reference_ms', report)
+            self.assertEqual(streams['bialy-stderr'], result['stderr'])
+            result['exit_code'] = 3
+            self.assertEqual(bialy_performance.reference({})[0]['reason'], 'no_capable_device')
+            for change in ({'exit_code': 1}, {'exit_code': 4, 'timed_out': True}):
+                with self.subTest(change=change):
+                    result.update(change)
+                    failed, _ = bialy_performance.reference({})
+                    self.assertEqual(failed['status'], 'failed')
+                    self.assertEqual(failed['failure']['code'], 'check-process-failed')
+
+    def test_turn_latency_excludes_hello_and_warmup_without_a_quality_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'heads').mkdir()
+            (root / 'heads/release.json').write_text(json.dumps({'preload': {'encoding': 'independent', 'options': {str(i): str(i) for i in range(16)}}}))
+            data = {'root': str(root), 'model': '/sealed/model',
+                    'files': {'heads/release.json': {}, 'heads/turn-load.safetensors': {}}}
+            result = {'responses': [{'engine': {'device': 'cpu'}}] + [{'answers': {'tools': {'type': 'multi', 'confidence': 0.5,
+                          'probabilities': {str(i): 0.5 for i in range(16)}}}}] * 21,
+                      'roundtrip_ms': [500, 2000] + [25] * 20, 'stdout': b'', 'stderr': b''}
+            policy = {'engine': {'reference_ms': 1000}, 'turn': {'deadline_ms': 10000, 'tools': {'question': 'fixed'}}}
+            with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                    patch.object(bialy_performance, 'policy', return_value=policy), \
+                    patch.object(bialy_performance, 'exchange', return_value=result) as calls:
+                report, _ = bialy_performance.turn_latency({}, 'vulkan:0')
+                self.assertEqual(report['device'], 'vulkan:0')
+                self.assertIn('vulkan:0', calls.call_args.args[1])
+                self.assertEqual(report['measurements_ms']['p95'], 25)
+                self.assertEqual(report['measurements_ms']['samples'], 20)
+                self.assertFalse(report['quality_baseline_qualified'])
+                requests = calls.call_args.args[2]
+                self.assertEqual(len(requests), 22)
+                self.assertTrue(requests[1]['questions']['tools']['independent'])
+                self.assertEqual(requests[1], requests[7])
+                result['responses'][-1] = {'answers': {}}
+                with self.assertRaisesRegex(ValueError, 'fixed reference'):
+                    bialy_performance.turn_latency({}, 'vulkan:0')
+
+    def test_interactive_input_cannot_expand_to_other_native_roles(self):
+        with self.assertRaisesRegex(ValueError, 'restricted'):
+            with process.launch({}, 'pw', [], bialy_input=True):
+                self.fail('foreign role cannot launch')
+
+    @unittest.skipUnless(sys.platform == 'linux', 'actual bounded native pipe fixture requires Linux')
+    def test_stdio_has_one_inflight_request_and_rejects_protocol_mismatch(self):
+        processes = []
+        @contextmanager
+        def fixture_launch(binding, role, arguments, *, bialy_input):
+            self.assertEqual(role, 'bialy')
+            self.assertTrue(bialy_input)
+            child = subprocess.Popen([sys.executable, '-u', '-c', arguments[0]],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            processes.append(child)
+            try:
+                yield child, {'pid': child.pid}
+            finally:
+                process.stop_stack(child)
+        echo = "import sys,json\nfor n,line in enumerate(sys.stdin,1):\n r=json.loads(line);print(json.dumps({'id':r['id'],'count':n}),flush=True)"
+        with patch.object(bialy_stdio, 'launch', fixture_launch):
+            result = bialy_stdio.exchange({}, [echo], [{'method': 'hello'}] + [{'method': 'decide'}] * 21)
+            self.assertEqual([r['count'] for r in result['responses']], list(range(1, 23)))
+            self.assertEqual(len(result['roundtrip_ms']), 22)
+            self.assertTrue(all(value >= 0 for value in result['roundtrip_ms']))
+            for invalid in ["print('{\"id\":2}',flush=True)",
+                            "print('{\"id\":1}\\n{\"id\":2}',flush=True)",
+                            "print('{\"id\":true}',flush=True)"]:
+                with self.subTest(program=invalid), self.assertRaises(bialy_stdio.ExchangeFailure) as failure:
+                    bialy_stdio.exchange({}, [invalid], [{'method': 'hello'}])
+                self.assertEqual(failure.exception.observations['request_id'], 1)
+                self.assertEqual(failure.exception.observations['completed_responses'], 0)
+                self.assertIn('bialy-turn-stdout', failure.exception.streams)
+            with patch.object(bialy_stdio, 'LIMIT', 16):
+                with self.assertRaisesRegex(ValueError, 'bound'):
+                    bialy_stdio.exchange({}, ["import sys;sys.stderr.write('x'*100);sys.stderr.flush()"], [{'method': 'hello'}])
+        self.assertTrue(all(child.poll() is not None for child in processes))
+
+    def test_failed_exchange_preserves_evidence_without_a_latency_or_quality_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'heads').mkdir()
+            (root / 'heads/release.json').write_text(json.dumps({'preload': {'encoding': 'independent',
+                'options': {str(i): str(i) for i in range(16)}}}))
+            data = {'root': str(root), 'model': '/sealed/model',
+                    'files': {'heads/release.json': {}, 'heads/turn-load.safetensors': {}}}
+            failure = bialy_stdio.ExchangeFailure('fixture failure', {'phase': 'request-response', 'request_id': 3},
+                {'bialy-turn-stdout': b'partial', 'bialy-turn-stderr': b'diagnostic'})
+            with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                    patch.object(bialy_performance, 'policy', return_value={'turn': {'tools': {'question': 'fixed'}}}), \
+                    patch.object(bialy_performance, 'exchange', side_effect=failure):
+                report, streams = bialy_performance.turn_latency({}, 'vulkan:0')
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['failure']['request_id'], 3)
+            self.assertNotIn('measurements_ms', report)
+            self.assertFalse(report['quality_baseline_qualified'])
+            self.assertEqual(streams['bialy-turn-stderr'], b'diagnostic')
+
+    def test_missing_turn_fixture_retains_completed_reference_and_its_streams(self):
+        report = {'status': 'observed', 'device': 'vulkan:0', 'reference_ms': 35.5}
+        with patch.object(bialy_performance, 'reference', return_value=(report, {'bialy-stdout': b'reference'})), \
+                patch.object(bialy_performance, 'turn_latency', side_effect=CaseUnavailable('missing head')):
+            observed, streams = bialy_performance.measure({})
+        self.assertEqual(observed['reference_ms'], 35.5)
+        self.assertEqual(observed['turn_latency']['status'], 'unverified')
+        self.assertEqual(streams, {'bialy-stdout': b'reference'})
+        for status in ({'status': 'failed'}, {'status': 'disabled', 'reason': 'no_gpu'}):
+            with self.subTest(status=status), patch.object(bialy_performance, 'reference', return_value=(status, {})), \
+                    patch.object(bialy_performance, 'turn_latency') as turn:
+                observed, _ = bialy_performance.measure({})
+                self.assertEqual(observed, status)
+                turn.assert_not_called()

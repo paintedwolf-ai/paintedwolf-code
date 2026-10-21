@@ -153,7 +153,10 @@ def bind(final: dict, source: str, artifact_id: str, file_root: Path, install_ro
         header = launcher_image.pop("header")
         if launcher_image["mode"] & 0o111 == 0 or launcher_image["mode"] & 0o7000 or not header.startswith((b"#!", b"\x7fELF")):
             raise ValueError("final Nix output has no ordinary public application launcher")
+    from .installed_cases.bialy_data import capture
+    decision_data = capture(root)
     return {"format_version": 1, "source_commit": source, "artifact": artifact,
+            "bialy_data": decision_data,
             "install_root": str(root), "payload": payload, "launcher": {"path": str(launcher), **launcher_image}, **images}
 
 

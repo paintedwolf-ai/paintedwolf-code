@@ -21,14 +21,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from corpus import Corpus  # noqa: E402
 from replay_eval import Engine  # noqa: E402
 
-STATES = [
-    "Please build a professional todo app with SSO and run it in a docker container for local development.",
-    "What improvements would you recommend?",
-    "Explain how the auth module decides which session to use.",
-    "Bring up Gitea in Docker and build a release-management CLI against it.",
-    "commit the current changes in logical groups",
-    "Redesign my technical site with hugo and launch it locally so I can review it.",
-]
+from latency_workload import STATES  # noqa: E402
+
 
 
 def main():
@@ -45,13 +39,14 @@ def main():
     qs = corpus.surface_questions(args.surface)
     engine = Engine(args.engine)
     try:
-        # One warm call absorbs model load and allocator warm-up.
-        engine.call({"method": "decide", "head": "turn-load", "state": {"host": "coordinator", "user": STATES[0], "surface": args.surface}, "questions": qs})
+        # Replay scoring caches identical requests; latency must invoke the engine every time.
+        # One untimed call absorbs model load and allocator warm-up.
+        engine.ask({"method": "decide", "head": "turn-load", "state": {"host": "coordinator", "user": STATES[0], "surface": args.surface}, "questions": qs})
         samples = []
         for i in range(args.rounds):
             state = {"host": "coordinator", "user": STATES[i % len(STATES)], "root_count": 1, "surface": args.surface}
             started = time.perf_counter()
-            engine.call({"method": "decide", "head": "turn-load", "state": state, "questions": qs})
+            engine.ask({"method": "decide", "head": "turn-load", "state": state, "questions": qs})
             samples.append((time.perf_counter() - started) * 1000)
         samples.sort()
         report = {

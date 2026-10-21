@@ -11,6 +11,7 @@ import tempfile
 import time
 
 from .app import InstalledApp
+from .bialy_performance import measure as bialy_samples
 from .provider import ProviderFixture
 from .performance_resources import TreeSampler, resources, tree_summary
 from .records import CaseUnavailable, retain
@@ -89,6 +90,7 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
     app = InstalledApp(binding)
     samples = {'session.prepare': [], 'prompt.settle': []}
     witnesses = []
+    bialy, bialy_streams = bialy_samples(binding)
     with tempfile.TemporaryDirectory(prefix='paintedwolf-installed-perf-') as directory:
         project = Path(directory)
         (project / 'fixture.txt').write_text('Installed performance fixture.\n')
@@ -115,10 +117,14 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
     if not app.observations.get('capture_complete') or app.observations.get('output_limit'):
         raise ValueError('performance workflow lost its bounded process capture')
     return {'measurements_ms': {key: distribution(value) for key, value in samples.items()},
-            'samples_ms': samples, 'failures': enforce(samples, limits()), 'absolute_limits': limits(),
-            'workload': 'deterministic-local-provider-command', 'witnesses': witnesses,
+            'samples_ms': samples, 'failures': enforce(samples, limits()) +
+                ([{'metric': 'Bialy-CPU-probe', 'failure': bialy['failure']}]
+                 if bialy.get('status') == 'failed' else []) +
+                ([{'metric': 'Bialy-CPU-exchange', 'failure': bialy['turn_latency']['failure']}]
+                 if bialy.get('turn_latency', {}).get('status') == 'failed' else []), 'absolute_limits': limits(),
+            'workload': 'deterministic-local-provider-command', 'witnesses': witnesses, 'bialy_reference': bialy,
             'remaining_requirements': ['Bialy-load-reference-and-turn-latency', 'Bialy-quality-parity',
-                                       'parallel-index-search-scan', 'qualified-macos-reference']}, app.streams()
+                                       'parallel-index-search-scan', 'qualified-macos-reference']}, {**app.streams(), **bialy_streams}
 
 
 def resource_samples(binding: dict) -> tuple[dict, dict]:
