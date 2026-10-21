@@ -46,6 +46,7 @@ func TestResolveCaptureTarget_rejectsNonLoopback(t *testing.T) {
 
 func TestResolveCaptureTarget_projectDirNoListen(t *testing.T) {
 	dir := t.TempDir()
+	testutil.FailErr(t, "write index.html", os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html/>"), 0o644))
 	target, err := resolveCaptureTarget(CaptureRequest{ProjectDir: dir})
 	testutil.FailErr(t, "resolveCaptureTarget failed", err)
 	if target.RootDir == "" || target.URL != StaticOrigin {
@@ -55,6 +56,8 @@ func TestResolveCaptureTarget_projectDirNoListen(t *testing.T) {
 
 func TestResolveCaptureTarget_projectDirPath(t *testing.T) {
 	dir := t.TempDir()
+	testutil.FailErr(t, "mkdir talks", os.MkdirAll(filepath.Join(dir, "talks"), 0o755))
+	testutil.FailErr(t, "write talks/index.html", os.WriteFile(filepath.Join(dir, "talks", "index.html"), []byte("<html/>"), 0o644))
 	target, err := resolveCaptureTarget(CaptureRequest{ProjectDir: dir, Path: "/talks/"})
 	testutil.FailErr(t, "resolveCaptureTarget failed", err)
 	if target.URL != "http://lycaon.capture/talks/" {
@@ -62,6 +65,45 @@ func TestResolveCaptureTarget_projectDirPath(t *testing.T) {
 	}
 	if target.Origin != StaticOrigin || target.RootDir == "" {
 		t.Fatalf("got %#v", target)
+	}
+	absEntryTarget, err := resolveCaptureTarget(CaptureRequest{
+		ProjectDir: dir,
+		Path:       filepath.Join(dir, "talks", "index.html"),
+	})
+	testutil.FailErr(t, "resolveCaptureTarget with in-root absolute file path failed", err)
+	if absEntryTarget.URL != "http://lycaon.capture/talks/index.html" {
+		t.Fatalf("abs entry url=%q", absEntryTarget.URL)
+	}
+}
+
+func TestResolveCaptureTarget_rejectsMissingStaticEntry(t *testing.T) {
+	dir := t.TempDir()
+	testutil.FailErr(t, "mkdir talks", os.MkdirAll(filepath.Join(dir, "talks"), 0o755))
+	for _, tc := range []struct {
+		name      string
+		req       CaptureRequest
+		wantEntry string
+	}{
+		{"root index missing", CaptureRequest{ProjectDir: dir}, "index.html"},
+		{"directory slash entry missing", CaptureRequest{ProjectDir: dir, Path: "/talks/"}, "talks/index.html"},
+		{"existing directory path missing index", CaptureRequest{ProjectDir: dir, Path: "talks"}, "talks/index.html"},
+		{"explicit file missing", CaptureRequest{ProjectDir: dir, Path: "game.html"}, "game.html"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveCaptureTarget(tc.req)
+			rej := &browserengine.RejectError{}
+			if !errors.As(err, &rej) || rej.Code != "CAPTURE_STATIC_ENTRY_MISSING" || rej.Data["entry"] != tc.wantEntry {
+				t.Fatalf("got %#v want CAPTURE_STATIC_ENTRY_MISSING entry=%q", err, tc.wantEntry)
+			}
+		})
+	}
+	target, err := resolveCaptureTarget(CaptureRequest{
+		ProjectDir: dir,
+		Routes:     []RouteRule{{URL: "/", Body: "<!doctype html><title>fixture</title>", ContentType: "text/html"}},
+	})
+	testutil.FailErr(t, "route fixture should satisfy static entry", err)
+	if target.URL != StaticOrigin {
+		t.Fatalf("url=%q", target.URL)
 	}
 }
 
