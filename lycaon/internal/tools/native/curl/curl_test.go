@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -205,8 +206,10 @@ func TestCurlCookieJarRoundTrip(t *testing.T) {
 		}
 	})
 	h := newHarness(t)
-	if r := h.curl(t.Context(), "-s", "-c", "jar.txt", server.URL+"/login"); r.err != nil {
-		t.Fatalf("login: %v", r.err)
+	login := h.curl(t.Context(), "-s", "-D", "-", "-c", "jar.txt", server.URL+"/login")
+	// Set-Cookie is credential material: it reaches the jar, never -D or -i.
+	if login.err != nil || contains(login.stdout, "Set-Cookie") || !strings.HasPrefix(login.stdout, "HTTP/1.1 200 OK\r\n") {
+		t.Fatalf("login: %v %q", login.err, login.stdout)
 	}
 	jar := h.read("jar.txt")
 	if !strings.HasPrefix(jar, "# Netscape HTTP Cookie File") || !contains(jar, "#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tabc123") || !contains(jar, "127.0.0.1\tFALSE\t/prefs\tFALSE\t0\ttheme\tdark") {
@@ -361,6 +364,13 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		t.Skip("no /usr/bin/curl on this host")
 	}
 	server := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if hops := strings.TrimPrefix(r.URL.Path, "/hop/"); hops != r.URL.Path && hops != "0" {
+			stamp(w, "text/plain")
+			next, _ := strconv.Atoi(hops)
+			w.Header().Set("Location", fmt.Sprintf("/hop/%d", next-1))
+			w.WriteHeader(http.StatusFound)
+			return
+		}
 		stamp(w, "application/json")
 		w.Header().Set("X-Request", r.Method+" "+r.URL.Path)
 		w.Header().Set("Cache-Control", "no-store")
@@ -373,6 +383,10 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		{"-s", "-i", server.URL + "/b"},
 		{"-s", "-I", server.URL + "/c"},
 		{"-s", "-w", `[%{http_code}]\t%%\n`, server.URL + "/d"},
+		{"-s", "-L", "-D", "-", "-o", "/dev/null", "-w", `%{http_code} %{url_effective}\n`, server.URL + "/hop/2"},
+		{"-s", "-L", "-i", server.URL + "/hop/1"},
+		{"-s", "-L", "-I", server.URL + "/hop/2"},
+		{"-s", "-D", "-", server.URL + "/hop/1"},
 	} {
 		cmd := exec.Command(system, append([]string{"--noproxy", "*"}, args...)...)
 		cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*", "CURL_HOME=/nonexistent")

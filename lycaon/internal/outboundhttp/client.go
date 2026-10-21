@@ -114,6 +114,12 @@ type Hop struct {
 	// Method is present only when the redirect changes it.
 	Method string     `json:"method,omitempty"`
 	Timing *HopTiming `json:"timing_ms,omitempty"`
+	// StatusLine and Headers are the redirect response as presented (with
+	// Set-Cookie and Proxy-Authenticate withheld); Wire keeps a cleartext
+	// block in received order when requested.
+	StatusLine string       `json:"-"`
+	Headers    []Header     `json:"-"`
+	Wire       *WireHeaders `json:"-"`
 }
 
 type Response struct {
@@ -271,6 +277,10 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hop, redirectLimit, hops, hopTiming)
 		if err != nil {
 			return Response{}, err
+		}
+		adv.record.StatusLine, adv.record.Headers = statusLine(resp), responseHeaders(resp.Header)
+		if wire != nil {
+			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
 		hops = append(hops, adv.record)
 		method = adv.method

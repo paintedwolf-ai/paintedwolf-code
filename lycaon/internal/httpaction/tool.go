@@ -154,8 +154,10 @@ type ExchangeOptions struct {
 // the owner scrubbed any echoed protected value. ReceivedSHA256 identifies
 // the bytes the server sent; EmittedSHA256 the bytes handed on.
 type Exchange struct {
-	Response       outboundhttp.Response
-	FinalURL       string
+	Response outboundhttp.Response
+	FinalURL string
+	// Redirects are the followed hops with their presented response headers.
+	Redirects      []outboundhttp.Hop
 	SentHeaders    []outboundhttp.Header
 	ReceivedSHA256 string
 	EmittedSHA256  string
@@ -180,7 +182,7 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		return Exchange{}, err
 	}
 	sum := sha256.Sum256(ex.resp.Body)
-	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, SentHeaders: ex.sentHeaders, ReceivedSHA256: ex.receivedSHA256,
+	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders, ReceivedSHA256: ex.receivedSHA256,
 		EmittedSHA256: hex.EncodeToString(sum[:]), BodyRedacted: ex.bodyRedacted}, nil
 }
 

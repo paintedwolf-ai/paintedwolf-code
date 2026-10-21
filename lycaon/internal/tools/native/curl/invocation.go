@@ -107,12 +107,15 @@ func (inv *invocation) run() error {
 	}
 	resp := ex.Response
 	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, ReceivedBytes: resp.Bytes, ReceivedSHA256: ex.ReceivedSHA256}
-	headers := headerBlock(resp.StatusLine, resp.Headers)
-	if resp.Wire != nil {
-		// Cleartext responses keep received order and spelling; TLS
-		// responses present the owner's normalized header order.
-		headers = headerBlock(resp.Wire.StatusLine, resp.Wire.Headers)
+	// curl writes every followed hop's header block, then the final one.
+	// Cleartext responses keep received order and spelling; TLS responses
+	// present the owner's normalized order. Set-Cookie stays withheld.
+	var blocks strings.Builder
+	for _, hop := range ex.Redirects {
+		blocks.WriteString(presentedBlock(hop.StatusLine, hop.Headers, hop.Wire))
 	}
+	blocks.WriteString(presentedBlock(resp.StatusLine, resp.Headers, resp.Wire))
+	headers := blocks.String()
 	if inv.opts.dumpHeader == "-" {
 		if _, err := io.WriteString(inv.stdout, headers); err != nil {
 			return err
@@ -194,6 +197,13 @@ func (inv *invocation) writeOut(status int, size int64, finalURL string) error {
 	}
 	_, err := io.WriteString(inv.stdout, b.String())
 	return err
+}
+
+func presentedBlock(statusLine string, headers []outboundhttp.Header, wire *outboundhttp.WireHeaders) string {
+	if wire != nil {
+		return headerBlock(wire.StatusLine, wire.Headers)
+	}
+	return headerBlock(statusLine, headers)
 }
 
 // headerBlock is the received status line and headers as CRLF lines, ending
