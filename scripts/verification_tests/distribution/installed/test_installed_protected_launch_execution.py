@@ -32,7 +32,7 @@ def launch_tree():
     mounts = [['/', 'rw,nosuid,noexec'], ['/opt/painted-wolf-code', 'ro,nosuid'], [WEBKIT, 'ro'],
               ['/usr/lib/x86_64-linux-gnu', 'ro'], ['/home', 'rw,noexec']]
     return {'root': {'pid': 20, 'parent_pid': 1, 'start_time_ticks': 200}, 'initial': {'namespaces': INITIAL, 'user_namespace_owner': 0},
-            'processes': [row(20, 1, '/opt/painted-wolf-code/bin/pw-launch', [9, 99, 10], INITIAL, user_namespace_owner=0, uid_map=[[0, 0, 4294967295]], no_new_privs=0),
+            'processes': [row(20, 1, str(protected_launch.BOOTSTRAP), [9, 99, 10], INITIAL, user_namespace_owner=0, uid_map=[[0, 0, 4294967295]], no_new_privs=0),
                           row(21, 20, '/opt/painted-wolf-code/bin/pw-launch-entry', [9, 98, 10], INITIAL, no_new_privs=0),
                           row(22, 20, '/opt/painted-wolf-code/bin/painted-wolf-code', DESKTOP, PROTECTED, mounts=mounts),
                           row(23, 22, '/opt/painted-wolf-code/bin/pw', ENGINE, PROTECTED),
@@ -100,24 +100,36 @@ class ProtectedLaunchTests(unittest.TestCase):
             root = Path(directory)
             binding = {'install_root': str(root), 'images': {}}
             self.assertEqual(protected_launch.applicability(binding), (None, 'protected-launch-entry-not-in-manifest'))
-            binding['images'][str(root / protected_launch.ENTRY)] = {}
+            binding['images'][str(root / protected_launch.ENTRY)] = {'mode': 0o4755}
+            with self.assertRaises(ValueError):
+                protected_launch.applicability(binding)
+            binding['images'][str(root / protected_launch.ENTRY)] = {'mode': 0o755}
             with patch.object(protected_launch, 'read_policy', side_effect=FileNotFoundError()):
                 self.assertEqual(protected_launch.applicability(binding), (None, 'protected-launch-policy-absent'))
                 self.assertEqual(protected_launch.protected_launch(binding),
                                  ('unverified', {'reason': 'protected-launch-policy-absent', 'applicability': 'not-applicable'}, {}))
             with patch.object(protected_launch, 'read_policy', return_value={}):
                 self.assertEqual(protected_launch.applicability(binding), (None, 'protected-launch-bootstrap-absent'))
-                (root / 'bin').mkdir()
-                (root / protected_launch.BOOTSTRAP).write_bytes(b'\x7fELF')
-                with self.assertRaises(ValueError):
+                identity = {'sha256': 'a' * 64, 'bytes': 4, 'mode': 0o4755, 'device': 1, 'inode': 2}
+                binding['images'][str(protected_launch.BOOTSTRAP)] = dict(identity)
+                with patch.object(Path, 'lstat', side_effect=FileNotFoundError()):
+                    self.assertEqual(protected_launch.applicability(binding), (None, 'protected-launch-bootstrap-absent'))
+                for bad in (SimpleNamespace(st_mode=stat.S_IFREG | 0o755, st_uid=0, st_gid=0),
+                            SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_uid=1000, st_gid=0),
+                            SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_uid=0, st_gid=1000)):
+                    with patch.object(Path, 'lstat', return_value=bad), self.assertRaises(ValueError):
+                        protected_launch.applicability(binding)
+                setuid = SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_uid=0, st_gid=0)
+                with patch.object(Path, 'lstat', return_value=setuid), \
+                        patch.object(protected_launch, 'file_identity', return_value={**identity, 'sha256': 'b' * 64, 'header': b''}), \
+                        self.assertRaises(ValueError):
                     protected_launch.applicability(binding)
-                setuid = SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_uid=0)
-                identity = {'sha256': 'a' * 64, 'bytes': 4, 'mode': 0o4755, 'device': 1, 'inode': 2, 'header': b''}
-                with patch.object(Path, 'lstat', return_value=setuid), patch.object(protected_launch, 'file_identity', return_value=identity):
+                with patch.object(Path, 'lstat', return_value=setuid), \
+                        patch.object(protected_launch, 'file_identity', return_value={**identity, 'header': b''}):
                     selected, reason = protected_launch.applicability(binding)
                 self.assertIsNone(reason)
-                self.assertEqual(selected['bootstrap'], {'path': str(root / protected_launch.BOOTSTRAP), 'sha256': 'a' * 64,
-                                                         'bytes': 4, 'mode': 0o4755, 'device': 1, 'inode': 2})
+                self.assertEqual(protected_launch.BOOTSTRAP, Path('/usr/libexec/painted-wolf-code/pw-launch'))
+                self.assertEqual(selected['bootstrap'], {'path': str(protected_launch.BOOTSTRAP), **identity})
 
     def test_not_applicable_is_retained_as_unverified_never_skipped(self):
         with patch.object(security, 'require_owned_guest'), patch.object(security, 'retain', side_effect=lambda *args: args), \

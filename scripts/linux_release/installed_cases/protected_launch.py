@@ -33,11 +33,10 @@ from .lifecycle import SCRIPT, capture, cleanup
 from .provider import MODEL, ProviderFixture
 from .records import CaseUnavailable
 from .workflow import ToolTurn, accepted
-from ..installed_runtime import file_identity
+from ..installed_runtime import SETUID_LAUNCHER as BOOTSTRAP, file_identity
 
 POLICY = Path('/etc/paintedwolf/launch.json')
 ENTRY = 'bin/pw-launch-entry'
-BOOTSTRAP = 'bin/pw-launch'
 POLICY_LIMIT = 1 << 20
 
 
@@ -66,22 +65,30 @@ def read_policy(path: Path = POLICY) -> dict:
 def applicability(binding: dict) -> tuple[dict | None, str | None]:
     """The selected policy and bootstrap, or the typed reason the case does not apply."""
     root = Path(binding['install_root'])
-    if str(root / ENTRY) not in binding['images']:
+    entry = binding['images'].get(str(root / ENTRY))
+    if entry is None:
         return None, 'protected-launch-entry-not-in-manifest'
+    if entry.get('mode', 0o755) != 0o755:
+        raise ValueError('installed launch entry is not a 0755 program')
     try:
         policy = read_policy()
     except FileNotFoundError:
         return None, 'protected-launch-policy-absent'
-    path = root / BOOTSTRAP
+    expected = binding['images'].get(str(BOOTSTRAP))
+    if expected is None:
+        return None, 'protected-launch-bootstrap-absent'
     try:
-        info = path.lstat()
+        info = BOOTSTRAP.lstat()
     except FileNotFoundError:
         return None, 'protected-launch-bootstrap-absent'
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or not info.st_mode & stat.S_ISUID:
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0
+            or stat.S_IMODE(info.st_mode) != 0o4755):
         raise ValueError('installed launch bootstrap is not a root-owned setuid program')
-    bootstrap = file_identity(path)
+    bootstrap = file_identity(BOOTSTRAP)
     bootstrap.pop('header')
-    return {'policy': policy, 'bootstrap': {'path': str(path), **bootstrap}}, None
+    if expected and bootstrap != expected:
+        raise ValueError('installed launch bootstrap differs from its sealed manifest')
+    return {'policy': policy, 'bootstrap': {'path': str(BOOTSTRAP), **bootstrap}}, None
 
 
 def interpreter(path: Path) -> str | None:
