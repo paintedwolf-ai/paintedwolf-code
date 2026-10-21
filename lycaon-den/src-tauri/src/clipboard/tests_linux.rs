@@ -355,11 +355,23 @@ fn clipboard_owner_child() {
     let worker = std::thread::spawn(move || {
         let outcome = std::panic::catch_unwind(|| {
             exercise_adapter(peer);
+            // The compositor activates a surface only while the seat has a
+            // keyboard; one virtual keyboard stays present for the pastes.
+            let keyboard = (peer == Peer::Wayland).then(|| {
+                OwnedChild(
+                    Command::new("wtype")
+                        .args(["-k", "Shift_L", "-s", "60000", "-k", "Shift_L"])
+                        .stdin(Stdio::null())
+                        .spawn()
+                        .expect("hold a virtual keyboard for the native pastes"),
+                )
+            });
             super::tests_native_paste::exercise(move || {
                 if peer == Peer::Wayland {
                     peer.send_key_to_owner_window();
                 }
             });
+            drop(keyboard);
         });
         gtk::glib::MainContext::default().invoke(gtk::main_quit);
         outcome
