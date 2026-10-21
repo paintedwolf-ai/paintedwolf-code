@@ -31,5 +31,9 @@ fn build_toplevel_drag() {
         build.include(path);
     }
     build.compile("pw_toplevel_drag");
+    // After the archive, so the linker keeps the library it needs.
+    pkg_config::Config::new()
+        .probe("wayland-client")
+        .expect("wayland-client development files");
     println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol=wl_proxy_marshal_flags");
 }
