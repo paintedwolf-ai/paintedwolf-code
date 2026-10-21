@@ -229,7 +229,7 @@ A refusal is a fact about the boundary, not a verdict on the command. Recovery g
 
 ### Platform coverage
 
-The intended policy is platform-independent; enforcement adapters differ. macOS and Linux have adapters; macOS reads the kernel's refusals of every kind, and Linux reports the socket calls its supervisor refuses. Where the host enforces, a capability the adapter cannot represent fails that launch rather than running unconfined. Where no adapter can apply, nothing is enforced and the approval layer is the only containment: every spawning action asks as unconfined. User-installed scanner executables and app network clients have separately documented boundaries. “Runs on the device” does not imply “runs inside the agent subprocess sandbox.”
+The intended policy is platform-independent; enforcement adapters differ. macOS and Linux have adapters; macOS reads the kernel's refusals of every kind, and Linux reports the socket calls its supervisor refuses. Where the host enforces, a capability the adapter cannot represent fails that launch rather than running unconfined. When confinement is required, an unavailable adapter or missing kernel capability refuses the affected launch before target execution. Explicitly approved host execution and explicit process-level sandbox switches retain their separate authority. Managed helpers with no host-execution approval path stay unavailable until their boundary can apply. User-installed scanner executables and app network clients have separately documented boundaries. “Runs on the device” does not imply “runs inside the agent subprocess sandbox.”
 
 | Boundary | macOS (Seatbelt) | Linux (namespaces, Landlock, seccomp) |
 |---|---|---|
