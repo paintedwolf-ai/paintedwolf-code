@@ -1,6 +1,7 @@
 mod app_state;
 pub mod files;
 mod child_credentials;
+mod external_launch;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod linux_desktop;

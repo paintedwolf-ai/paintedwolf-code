@@ -1,6 +1,5 @@
 //! Ordinary desktop associations run from the protected shell, without a portal proxy.
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
@@ -72,16 +71,23 @@ fn launch(handler: gio::AppInfo, uri: &str) -> Result<Via, String> {
 }
 
 fn xdg_open(uri: &str) -> Result<Via, String> {
-    let mut command = Command::new("xdg-open");
-    command.arg(uri);
-    crate::child_credentials::prepare(&mut command);
-    let status = command.status().map_err(|error| format!("xdg-open: {error}"))?;
+    let status = crate::external_launch::External::new("xdg-open").args([uri]).status()
+        .map_err(|error| format!("xdg-open: {error}"))?;
     if status.success() { Ok(Via::XdgOpen) }
     else { Err(format!("xdg-open exited with {status}")) }
 }
 
+/// Under the protected launch nothing outside the generation may execute in the
+/// desktop's namespace, so the session's own resolver opens the item through the broker.
+fn protected() -> bool {
+    crate::protected_launch::broker().is_some()
+}
+
 pub fn open_uri(uri: &str) -> Result<Via, String> {
     let parsed = tauri::Url::parse(uri).map_err(|error| format!("Invalid destination: {error}"))?;
+    if protected() {
+        return xdg_open(uri);
+    }
     match gio::AppInfo::default_for_uri_scheme(parsed.scheme()) {
         Some(handler) => launch(handler, uri),
         None => xdg_open(uri),
@@ -91,6 +97,9 @@ pub fn open_uri(uri: &str) -> Result<Via, String> {
 pub fn open_file(path: &Path) -> Result<Via, String> {
     let file = gio::File::for_path(path);
     let uri = file.uri();
+    if protected() {
+        return xdg_open(&uri);
+    }
     match file.query_default_handler(gio::Cancellable::NONE) {
         Ok(handler) => launch(handler, &uri),
         Err(error) if error.matches(gio::IOErrorEnum::NotSupported) => xdg_open(&uri),
@@ -129,6 +138,9 @@ fn containing_folder(path: &Path) -> &Path {
 }
 
 pub fn open_in_default_browser(uri: &str) -> Result<(), String> {
+    if protected() {
+        return xdg_open(uri).map(|_| ());
+    }
     let browser = gio::AppInfo::default_for_uri_scheme("https")
         .ok_or_else(|| "No default browser is configured.".to_owned())?;
     launch(browser, uri).map(|_| ())

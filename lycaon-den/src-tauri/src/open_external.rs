@@ -3,7 +3,6 @@
 
 use crate::files::reveal_in_file_manager::path_under_roots;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Open `abs_path` in an external editor at optional `line`.
 /// The root check catches caller mistakes; configured launch arguments provide authority.
@@ -129,10 +128,7 @@ fn replace_tokens(mut input: &str, pairs: &[(&str, &str)]) -> String {
 }
 
 fn spawn_argv(program: &str, args: &[&str]) -> Result<(), String> {
-    let mut command = Command::new(program);
-    command.args(args);
-    crate::child_credentials::prepare(&mut command);
-    let status = command.status()
+    let status = crate::external_launch::External::new(program).args(args).status()
         .map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
