@@ -18,6 +18,7 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	nested  commandprogram.NestedCommand
+	bound   NativeBindings
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv

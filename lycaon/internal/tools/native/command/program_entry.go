@@ -49,11 +49,14 @@ type ProgramRuntime struct {
 	// Sessions names the person who started the session; the program acts for them.
 	Sessions SessionOwners
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
-	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
+	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
+	// ExternalHidden refuses the explicit `external --` selector; native gap
+	// launches still run and are recorded.
+	ExternalHidden bool
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -80,21 +83,22 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
-	executor      *toolexecution.Executor
-	registry      *tools.DefaultRegistry
-	recorder      *invocation.SQLRecorder
-	supervisor    *ProgramSupervisor
-	progress      toolexecution.ProgramProgressFacts
-	frame         toolexecution.ProgramFrame
-	surface       toolexecution.ProgramSurface
-	memory        *toolcontract.ProgramMemory
-	capture       invocation.ProgramInputCapture
-	tc            tools.ToolContext
-	root          toolcontract.OperationInvocation
-	parentReceipt string
-	source        string
-	catalog       toolcontract.LanguageCatalog
-	commands      map[string]toolcontract.CommandSpecification
+	externalHidden bool
+	executor       *toolexecution.Executor
+	registry       *tools.DefaultRegistry
+	recorder       *invocation.SQLRecorder
+	supervisor     *ProgramSupervisor
+	progress       toolexecution.ProgramProgressFacts
+	frame          toolexecution.ProgramFrame
+	surface        toolexecution.ProgramSurface
+	memory         *toolcontract.ProgramMemory
+	capture        invocation.ProgramInputCapture
+	tc             tools.ToolContext
+	root           toolcontract.OperationInvocation
+	parentReceipt  string
+	source         string
+	catalog        toolcontract.LanguageCatalog
+	commands       map[string]toolcontract.CommandSpecification
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -116,7 +120,18 @@ type ProgramOutcome struct {
 	ExecutedChildren int    `json:"executed_children"`
 	CompletedEffects int    `json:"completed_effects"`
 	UncertainEffects int    `json:"uncertain_effects"`
+	NativeGaps       int    `json:"native_gaps,omitempty"`
 	ReplayAvailable  bool   `json:"replay_available"`
+	// Refusal is the host decision that stopped the program; the output and
+	// status of every child that ran before it stay in this outcome.
+	Refusal *ProgramRefusal `json:"refusal,omitempty"`
+}
+
+// ProgramRefusal is a typed host refusal at the program's stop point with its
+// rendered feedback.
+type ProgramRefusal struct {
+	Code     string `json:"code"`
+	Feedback string `json:"feedback"`
 }
 
 const programOutputBytes = 64 << 10
@@ -230,6 +245,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.externalHidden = r.ExternalHidden
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
@@ -242,9 +258,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		listeners = lineage.SessionListeners
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	builtins["sleep"] = sleepBuiltin()
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
 	if r.Builtins != nil {
-		for name, builtin := range r.Builtins(tc, dispatcher) {
+		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
 			if _, taken := builtins[name]; !taken {
 				builtins[name] = builtin
 			}
@@ -292,15 +309,17 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	if feedback := r.feedback(ctx, run, dispatcher, evalErr); feedback != nil {
+	feedback := r.feedback(ctx, run, dispatcher, evalErr)
+	refusal := toolrejection.AsToolReject(feedback)
+	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
-	}
-	if settleErr != nil {
-		return "", settleErr
 	}
 	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
 	if err != nil {
-		return "", err
+		return "", errors.Join(feedback, err)
+	}
+	if refusal != nil {
+		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -389,6 +408,9 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			if refusal.Command != "" {
+				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
 			// A word refused by its owner (a stale @label) keeps the owner's facts.
 			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
 				for key, value := range cause.Data {
@@ -419,7 +441,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result to
 		return ProgramOutcome{}, err
 	}
 	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
-		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects}
+		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
 	for _, stream := range []struct {
 		buffer *boundedBuffer
 		target *string

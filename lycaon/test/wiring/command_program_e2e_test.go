@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -54,17 +55,20 @@ func (s *commandProgramSession) result(t *testing.T) string {
 	t.Helper()
 	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
-	var tool []string
-	for _, msg := range msgs {
-		if msg.Role != wire.MessageRoleTool {
+	// The messages API carries tool output only on the projected tool result.
+	for _, raw := range msgs {
+		msg := messageview.RedactMessage(raw)
+		if msg.Role != wire.MessageRoleTool || msg.ToolResult == nil || msg.ToolResult.ToolCallID != "program-1" {
 			continue
 		}
-		if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
-			return msg.Content
+		content, _, err := messageview.RetainedContent(raw, "tool_output", "program-1")
+		testutil.FailErr(t, "read projected command result", err)
+		if !strings.Contains(content, `"program_id"`) {
+			t.Fatalf("projected command result carries no program outcome: %q (%+v)", content, msg.ToolResult)
 		}
-		tool = append(tool, msg.Content)
+		return content
 	}
-	t.Fatalf("no delivered command program result; tool messages %q", tool)
+	t.Fatalf("no projected command result in %d messages", len(msgs))
 	return ""
 }
 

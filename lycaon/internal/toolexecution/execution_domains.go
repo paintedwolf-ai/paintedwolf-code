@@ -59,6 +59,8 @@ type Metadata struct {
 	registry     *tools.DefaultRegistry
 	toolSchemas  *toolschema.Config
 	schemaSource func(ctx context.Context, sessionID string) *toolschema.Config
+	// externalHidden withdraws the command schema's external selector copy.
+	externalHidden bool
 }
 
 // Approvals owns approval coordination and checkpoint lifetime.

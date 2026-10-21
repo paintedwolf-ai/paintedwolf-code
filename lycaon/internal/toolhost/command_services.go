@@ -118,6 +118,8 @@ type ProgramServices struct {
 	Projector *captureprojection.Projector
 	Progress  toolexecution.ProgramProgressFacts
 	Sessions  command.SessionOwners
+	// ExternalHidden withdraws the explicit external selector.
+	ExternalHidden bool
 }
 
 func (r *CommandServices) programs() *command.ProgramRuntime {
@@ -138,6 +140,10 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
 	programs.Progress, programs.Sessions = services.Progress, services.Sessions
 	programs.Supervisor.Interrupter = services.Recorder
+	programs.ExternalHidden = services.ExternalHidden
+	if programs.Executor != nil {
+		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
+	}
 	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {
 		return fmt.Errorf("compose command program owners: %w", err)

@@ -13,9 +13,9 @@ import (
 // port is absent; it never substitutes a shell or another owner.
 type EvaluationPorts struct {
 	// Invocation is the program's root execution; every child derives from it.
-	Invocation  toolcontract.OperationInvocation
-	Dispatch    Dispatch
-	Binder      ArgvBinder
+	Invocation toolcontract.OperationInvocation
+	Dispatch   Dispatch
+	Binder     ArgvBinder
 	// Files is the logical-path view pathname expansion lists; Evaluate builds
 	// the program's WordExpander over it with itself as the Substitution port.
 	Files       commandsurface.GlobFiles
@@ -91,6 +91,9 @@ type EvaluationRefusal struct {
 	Node     commandsurface.SyntaxLocation
 	Expected string
 	Cause    error
+	// Command, Option and Form name a refused native form: the command, the
+	// refused word and the command's supported form.
+	Command, Option, Form string
 }
 
 func (e *EvaluationRefusal) Error() string {

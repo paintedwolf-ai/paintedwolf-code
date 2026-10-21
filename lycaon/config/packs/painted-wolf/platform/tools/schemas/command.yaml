@@ -3,8 +3,7 @@ description: >-
   Runs one command program: pipelines, `&&`/`||`/`;`, if/for/while, functions,
   variables, `$()` substitutions, globs, here-documents, `<`/`>`/`>>`/`2>`
   redirects and trailing `&` jobs. Catalog utilities run natively; other
-  programs run confined, and `external -- NAME` selects an installed binary
-  that shares a native name. The whole program is checked before anything runs.
+  programs run confined. The whole program is checked before anything runs.
 schema:
   type: object
   properties:

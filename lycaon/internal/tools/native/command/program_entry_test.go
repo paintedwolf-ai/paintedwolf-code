@@ -15,12 +15,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -123,10 +123,10 @@ func (f *programFixture) jobHandle(t *testing.T) string {
 	var outcome struct{ Stdout string }
 	testutil.FailErr(t, "decode jobs outcome", json.Unmarshal([]byte(listed), &outcome))
 	fields := strings.Fields(outcome.Stdout)
-	if len(fields) != 3 || fields[1] != "running" {
+	if len(fields) != 3 || fields[0] != "[1]" || fields[2] != "running" {
 		t.Fatalf("jobs output %q", outcome.Stdout)
 	}
-	return fields[0]
+	return fields[1]
 }
 
 func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) {
@@ -184,8 +184,22 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	if _, err := f.call(t, t.Context(), "kill -TERM not-a-session-job"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("foreign job reference accepted: %v", err)
+	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
+		testutil.FailErr(t, "run foreign kill", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {
+			t.Fatalf("foreign job reference %s: %s", reference, out)
+		}
+	}
+}
+
+// %N, %% and $! name this session's jobs for kill and wait.
+func TestProgramEntryJobSpecsAddressSessionJobs(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `sleep 30 & first=$!; sleep 30 & kill %1; kill %%; wait $first; external -- /bin/echo "first=$?"; wait %2; external -- /bin/echo "second=$?"`)
+	testutil.FailErr(t, "run job specs", err)
+	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=130") || !strings.Contains(outcome.Stdout, "second=130") {
+		t.Fatalf("job spec outcome %s", out)
 	}
 }
 
@@ -291,8 +305,10 @@ func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
 	if !strings.Contains(out, `"stdout":""`) || !strings.Contains(out, `"status":1`) {
 		t.Fatalf("unowned port listed %s", out)
 	}
-	if _, err := f.call(t, t.Context(), "lsof -i 8080"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("malformed endpoint accepted: %v", err)
+	out, err = f.call(t, t.Context(), "lsof -i 8080")
+	testutil.FailErr(t, "lsof malformed endpoint", err)
+	if decodeOutcome(t, out).Refusal == nil {
+		t.Fatalf("malformed endpoint accepted: %s", out)
 	}
 	if len(asked) != 2 || asked[0] != f.Session || asked[1] != f.Session {
 		t.Fatalf("listener observation scope %v", asked)
@@ -316,9 +332,10 @@ func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
 func TestProgramEntryRefusesDesktopCaptureLaunch(t *testing.T) {
 	for _, program := range []string{"screencapture -x out.png", "/usr/sbin/screencapture -x out.png", "scrot shot.png", "xwd -root"} {
 		f := newProgramFixture(t)
-		_, err := f.call(t, t.Context(), program)
-		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "DESKTOP_CAPTURE_DISALLOWED" {
-			t.Fatalf("%q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", program, err)
+		out, err := f.call(t, t.Context(), program)
+		testutil.FailErr(t, "run refused capture", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "DESKTOP_CAPTURE_DISALLOWED" {
+			t.Fatalf("%q: expected DESKTOP_CAPTURE_DISALLOWED, got %s", program, out)
 		}
 		if executions := f.executions(t); executions["command"] != "refused;" {
 			t.Fatalf("%q: child receipts %v", program, executions)
@@ -335,5 +352,67 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 		if err != nil || !strings.Contains(out, `"state":"completed"`) {
 			t.Fatalf("program %d: %v %s", i, err, out)
 		}
+	}
+}
+
+// A native name without a native owner runs as its installed program, marked
+// external in its receipt with a native_gap fact; without one it refuses in
+// shell voice naming the command.
+func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), "external -- /bin/echo gap-line | grep gap")
+	testutil.FailErr(t, "run native gap", err)
+	if !strings.Contains(out, `"stdout":"gap-line\n"`) || decodeOutcome(t, out).NativeGaps != 1 {
+		t.Fatalf("gap launch outcome %s", out)
+	}
+	var operation, gap string
+	testutil.FailErr(t, "read gap receipt", f.Database.QueryRowContext(t.Context(), `SELECT operation_id, native_gap_json FROM invocation_program_executions WHERE native_gap_json != ''`).Scan(&operation, &gap))
+	if operation != "command" || !strings.Contains(gap, `"command":"grep"`) || !strings.Contains(gap, `"code":"COMMAND_NATIVE_FORM_UNSUPPORTED"`) {
+		t.Fatalf("gap receipt %s %s", operation, gap)
+	}
+	out, err = f.call(t, t.Context(), "external -- /bin/echo before; repo-map; external -- /bin/echo never")
+	testutil.FailErr(t, "run refused native name", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || !strings.Contains(outcome.Refusal.Feedback, "COMMAND_NATIVE_FORM_UNSUPPORTED") {
+		t.Fatalf("uninstalled native name: %s", out)
+	}
+	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: not supported here [COMMAND_NATIVE_FORM_UNSUPPORTED]") {
+		t.Fatalf("refusal replaced the partial result: %+v", outcome)
+	}
+}
+
+func decodeOutcome(t *testing.T, out string) command.ProgramOutcome {
+	t.Helper()
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
+	return outcome
+}
+
+// File predicates read the program's files from the statement's directory.
+func TestProgramEntryFilePredicatesReadRealFilesFromTheFrame(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "seed dir", os.MkdirAll(filepath.Join(f.Dir, "sub"), 0o755))
+	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("a"), 0o644))
+	testutil.FailErr(t, "seed nested file", os.WriteFile(filepath.Join(f.Dir, "sub", "b.txt"), []byte("b"), 0o644))
+	out, err := f.call(t, t.Context(), `test -f a.txt && [ -d sub ] && [[ -f sub/b.txt ]] && [ -s a.txt ] && ! test -f missing && ! [ -d a.txt ] && cd sub && test -f b.txt; external -- /bin/echo "status=$?"`)
+	testutil.FailErr(t, "run predicates", err)
+	if outcome := decodeOutcome(t, out); outcome.Stdout != "status=0\n" {
+		t.Fatalf("predicates outcome %s", out)
+	}
+}
+
+// With the external selector hidden, `external --` refuses with a typed code
+// while a native gap still launches the installed program and is counted.
+func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.ExternalHidden = true
+	out, err := f.call(t, t.Context(), "grep -q nothing /dev/null; external -- /bin/echo never")
+	testutil.FailErr(t, "run hidden selector", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" || outcome.NativeGaps != 1 {
+		t.Fatalf("hidden external outcome %s", out)
+	}
+	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
+		t.Fatalf("hidden external stderr %q", outcome.Stderr)
 	}
 }

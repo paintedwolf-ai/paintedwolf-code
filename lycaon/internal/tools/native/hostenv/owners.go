@@ -92,18 +92,25 @@ func (o *Owners) Commands() []string {
 // Builtins returns one in-process dispatcher per utility for one invocation's
 // tool context, the shape the program runtime composes. nested runs env's
 // COMMAND operand as its own child; without it that form is refused.
-func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher {
+func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedCommand, bound NativeBindings) map[string]commandprogram.OperationDispatcher {
 	out := make(map[string]commandprogram.OperationDispatcher, len(o.specs))
 	for name := range o.specs {
-		out[name] = dispatcher{owners: o, tc: tc, nested: nested}
+		out[name] = dispatcher{owners: o, tc: tc, nested: nested, bound: bound}
 	}
 	return out
+}
+
+// NativeBindings reports whether this program binds a name to a native owner;
+// type, which and command -v describe what dispatch actually does.
+type NativeBindings interface {
+	NativeBound(name string) bool
 }
 
 type dispatcher struct {
 	owners *Owners
 	tc     tools.ToolContext
 	nested commandprogram.NestedCommand
+	bound  NativeBindings
 }
 
 func (d dispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -111,7 +118,7 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	if err != nil {
 		return settle(err, 0), err
 	}
-	return prepared.InvokeOwner(ctx, d.tc, d.nested, streams)
+	return prepared.InvokeOwner(ctx, d.tc, d.nested, d.bound, streams)
 }
 
 // Prepared is one bound utility invocation; it performs no query until run.
@@ -147,14 +154,14 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 
 // InvokeOwner runs the bound utility once. Stdout is written only after the
 // complete result is known, so a refusal never leaves a plausible prefix.
-func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested commandprogram.NestedCommand, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested commandprogram.NestedCommand, bound NativeBindings, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {
 		return settle(errors.New("host environment invocation is not prepared"), 0), errors.New("host environment invocation is not prepared")
 	}
 	if err := ctx.Err(); err != nil {
 		return settle(err, 0), err
 	}
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, bound: bound, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
 	err := p.run(inv)
 	if inv.passthrough != nil {
 		return *inv.passthrough, err

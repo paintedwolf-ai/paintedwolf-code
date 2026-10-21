@@ -103,7 +103,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		}
 		var out strings.Builder
 		for _, job := range statuses {
-			out.WriteString(job.Handle + " running -\n")
+			fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
@@ -166,7 +166,7 @@ func readResult(status int) toolcontract.ProducerResult {
 // folder no longer attached) keeps its own code and facts.
 func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 	code := "COMMAND_OPERAND_INVALID"
-	data := map[string]any{"command": spec.Name}
+	data := map[string]any{"command": spec.Name, "expected_form": spec.Argv}
 	var argvErr *commandprogram.ArgvError
 	if reject := toolrejection.AsToolReject(cause); reject != nil && !errors.As(cause, &argvErr) {
 		return reject
