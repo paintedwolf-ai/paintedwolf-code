@@ -283,6 +283,11 @@ func TestExecuteOnlyNativePayload(t *testing.T) {
 func TestPreparedStrictBoundaryNeverFallsBackToHostExecution(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "forbidden-effect")
+	// Temporary writes are intentionally allowed by the native floor. Select a
+	// separate actual temp root before compiling the strict fixture boundary.
+	scratch := filepath.Join(root, "temp")
+	testutil.FailErr(t, "create fixture native temp root", os.Mkdir(scratch, 0700))
+	t.Setenv("TMPDIR", scratch)
 	boundary := &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}
 	plan := AgentLaunch(LaunchAgentCommand, "synthetic strict native boundary refusal", boundary).WithPathAuthority(confine.NativeLaunchPaths(root))
 	cmd, cleanup, err := PrepareCommand(t.Context(), "/bin/sh", []string{"-c", "printf forbidden > \"$1\"", "fixture", outside}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin"}})

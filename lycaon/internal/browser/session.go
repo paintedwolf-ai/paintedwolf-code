@@ -7,16 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/launcher/flags"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/confine"
-	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
 // LaunchOptions configures a headless browser launch.
@@ -71,36 +68,11 @@ func LaunchHeadless(ctx context.Context, opts LaunchOptions) (*rod.Browser, func
 	}
 	l := newHeadlessLauncher(launchCtx, resolved.Path, profileDir, opts.DisableJS, confined)
 
-	var (
-		controlURL string
-		kill       func()
-		launchErr  error
-	)
 	if confined {
 		confine.LogApplied("browser", "", conf)
-		controlURL, kill, launchErr = launchConfined(launchCtx, l, resolved.Path, *conf)
-	} else {
-		// The launch context bounds discovery while the process survives the call.
-		l = l.Leakless(true).Context(context.WithoutCancel(launchCtx))
-		kill = l.Kill
-
-		type launched struct {
-			url string
-			err error
-		}
-		done := make(chan launched, 1)
-		go func() {
-			url, err := l.Launch()
-			done <- launched{url: url, err: err}
-		}()
-		select {
-		case res := <-done:
-			controlURL, launchErr = res.url, res.err
-		case <-launchCtx.Done():
-			l.Kill()
-			launchErr = launchCtx.Err()
-		}
 	}
+	controlURL, kill, launchErr := launchBrowserProcess(launchCtx, l, resolved.Path, conf)
+
 	if launchErr != nil {
 		_ = os.RemoveAll(profileDir)
 		reason := "launch_failed"
@@ -173,73 +145,6 @@ func newHeadlessLauncher(ctx context.Context, browserPath, profileDir string, di
 		l = l.Set("disable-javascript", "true")
 	}
 	return l
-}
-
-// launchConfined starts a browser that outlives the discovery deadline.
-func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string, c confine.Confinement) (string, func(), error) {
-	// The confinement helper replaces itself with the browser.
-	l = l.Delete(flags.Leakless)
-	args := l.FormatArgs()
-
-	// Keep context values while allowing the browser to outlive this call.
-	cmd, profileCleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), chromePath, args, execpkg.ExecOpts{
-		Launch: execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", &c).WithReducedEnvironment(),
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	parser := launcher.NewURLParser().Context(ctx)
-	cmd.Stdout = parser
-	cmd.Stderr = parser
-	if err := execpkg.StartPrepared(cmd); err != nil {
-		profileCleanup()
-		return "", nil, err
-	}
-	// The browser stays in the engine's process group, so it is tracked alone;
-	// its helpers exit with it.
-
-	exit := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		// Natural exits also close the confinement profile pipe.
-		profileCleanup()
-		close(exit)
-	}()
-
-	kill := func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		select {
-		case <-exit:
-		case <-time.After(2 * time.Second):
-		}
-	}
-
-	u, err := waitParserURL(ctx, parser, exit)
-	if err != nil {
-		// Err synchronizes with concurrent stdout and stderr parsing.
-		detail := trimBuf(parser.Err().Error())
-		kill()
-		return "", nil, fmt.Errorf("%w: %s", err, detail)
-	}
-	resolved, err := launcher.ResolveURL(u)
-	if err != nil {
-		kill()
-		return "", nil, err
-	}
-	return resolved, kill, nil
-}
-
-func waitParserURL(ctx context.Context, parser *launcher.URLParser, exit <-chan struct{}) (string, error) {
-	select {
-	case u := <-parser.URL:
-		return u, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case <-exit:
-		return "", fmt.Errorf("browser exited before publishing debug URL")
-	}
 }
 
 func profileParent(cacheDir string) string {

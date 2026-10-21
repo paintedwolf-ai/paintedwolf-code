@@ -180,18 +180,13 @@ func StartPrepared(cmd *exec.Cmd) error {
 // algorithm while sharing the same admission, registration and settlement door.
 // Neither callback grants authority or selects a fallback execution mechanism.
 func StartPreparedWith(cmd *exec.Cmd, start func() error, register func(int) func()) error {
-	value, ok := preparedLifecycles.Load(cmd)
-	if !ok || start == nil || register == nil {
-		return fmt.Errorf("process lacks prepared lifecycle or native owner")
+	if start == nil || register == nil {
+		return fmt.Errorf("native start and owner are required")
 	}
-	state := value.(*preparedLifecycle)
-	state.mu.Lock()
-	if state.started || state.closed {
-		state.mu.Unlock()
-		return fmt.Errorf("prepared process was already consumed")
+	state, err := claimPrepared(cmd)
+	if err != nil {
+		return err
 	}
-	state.started = true
-	state.mu.Unlock()
 	if err := confine.ValidateProcessInputs(cmd); err != nil {
 		return err
 	}
@@ -244,4 +239,19 @@ func RunPrepared(cmd *exec.Cmd) error {
 		return err
 	}
 	return cmd.Wait()
+}
+
+func claimPrepared(cmd *exec.Cmd) (*preparedLifecycle, error) {
+	value, ok := preparedLifecycles.Load(cmd)
+	if !ok {
+		return nil, fmt.Errorf("process lacks prepared lifecycle")
+	}
+	state := value.(*preparedLifecycle)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.started || state.closed {
+		return nil, fmt.Errorf("prepared process was already consumed")
+	}
+	state.started = true
+	return state, nil
 }
