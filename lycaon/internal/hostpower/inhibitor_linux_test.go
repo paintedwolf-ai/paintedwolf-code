@@ -25,16 +25,43 @@ import (
 )
 
 type fixtureLogind struct {
-	mu        sync.Mutex
-	writer    *os.File
-	arguments []string
+	mu     sync.Mutex
+	writer *os.File
+	// legacy is a login manager from before block-weak existed.
+	legacy bool
+	calls  [][]string
 }
 
 func (f *fixtureLogind) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.arguments = []string{what, who, why, mode}
+	f.calls = append(f.calls, []string{what, who, why, mode})
+	if f.legacy && mode == "block-weak" {
+		return 0, dbus.NewError("org.freedesktop.DBus.Error.InvalidArgs", []any{"Invalid mode specification block-weak"})
+	}
 	return dbus.UnixFD(f.writer.Fd()), nil
+}
+
+func (f *fixtureLogind) recorded() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
+}
+
+// serveLogind exports a login manager on the fixture bus; the returned reader
+// sees EOF once every inhibitor descriptor it handed out is closed.
+func serveLogind(t *testing.T, path string, legacy bool) (*fixtureLogind, *os.File) {
+	t.Helper()
+	server, err := linuxbus.Connect(t.Context(), path)
+	testutil.FailErr(t, "connect login manager fixture", err)
+	t.Cleanup(func() { _ = server.Close() })
+	reader, writer, err := os.Pipe()
+	testutil.FailErr(t, "create inhibitor pipe", err)
+	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+	fixture := &fixtureLogind{writer: writer, legacy: legacy}
+	testutil.FailErr(t, "export login manager fixture", server.Export(fixture, linuxbus.Login1Path, linuxbus.Login1Name+".Manager"))
+	ownName(t, server, linuxbus.Login1Name)
+	return fixture, reader
 }
 
 func fixtureSocketDirectory(t *testing.T) string {
@@ -115,11 +142,9 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	if held.Provider() != "login1" {
 		t.Fatalf("provider = %q", held.Provider())
 	}
-	fixture.mu.Lock()
-	args := append([]string(nil), fixture.arguments...)
-	fixture.mu.Unlock()
-	if len(args) != 4 || args[0] != "idle:sleep" || args[1] != "Painted Wolf Code" || args[3] != "block" {
-		t.Fatalf("inhibitor arguments = %v", args)
+	// "idle" would also hold the desktop's display awake.
+	if calls := fixture.recorded(); len(calls) != 1 || !slices.Equal(calls[0], []string{"sleep", "Painted Wolf Code", "Active work", "block"}) {
+		t.Fatalf("inhibitor calls = %v", calls)
 	}
 	flags, err := unix.FcntlInt(held.(*logindLease).file.Fd(), unix.F_GETFD, 0)
 	testutil.FailErr(t, "inspect descriptor inheritance", err)
@@ -186,26 +211,28 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 	}
 }
 
+func layersOn(path string) sleepLayers {
+	return sleepLayers{
+		system:  login1Provider{connect: connectTo(path), semantics: &lockSemantics{}},
+		session: portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit},
+	}
+}
+
 func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 	path := fixtureBus(t)
-	providers := []provider{
-		login1Provider{connect: connectTo(path)},
-		portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit},
-		powerManagementProvider{connect: connectTo(path)},
-	}
+	layers := layersOn(path)
 	var unavailable *UnavailableError
-	if err := availabilityOf(providers); !errors.As(err, &unavailable) || len(unavailable.Reasons) != 3 {
+	if err := layers.availability(); !errors.As(err, &unavailable) {
 		t.Fatalf("missing services availability = %v", err)
 	}
 	want := []ProviderReason{
 		{Provider: "login1", Code: ReasonNotServed, Reason: "org.freedesktop.login1 is not served"},
 		{Provider: "portal", Code: ReasonNotServed, Reason: "org.freedesktop.portal.Desktop is not served"},
-		{Provider: "power-management", Code: ReasonNotServed, Reason: "org.freedesktop.PowerManagement is not served"},
 	}
 	if !slices.Equal(unavailable.Reasons, want) {
 		t.Fatalf("missing service reasons = %+v, want %+v", unavailable.Reasons, want)
 	}
-	if held, err := acquireFrom(providers); held != nil || !errors.As(err, &unavailable) || len(unavailable.Reasons) != 3 {
+	if held, err := layers.acquire(); held != nil || !errors.As(err, &unavailable) || !slices.Equal(unavailable.Reasons, want) {
 		t.Fatalf("missing services lease=%v error=%v", held, err)
 	}
 	client, err := linuxbus.Connect(t.Context(), path)
@@ -215,7 +242,7 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 		t.Fatalf("missing login manager lease=%v error=%v", held, err)
 	}
 	unreachable := connectTo(filepath.Join(t.TempDir(), "missing"))
-	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable, appID: testAppID}, powerManagementProvider{connect: unreachable}} {
+	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable, appID: testAppID}} {
 		if reason := reasonFor(candidate, candidate.Check(t.Context())); reason.Code != ReasonBusUnreachable {
 			t.Fatalf("%s without a bus = %+v", candidate.Name(), reason)
 		}
@@ -310,7 +337,7 @@ func servePortalWith(t *testing.T, path string, deny bool, registry *fixtureRegi
 	return fixture
 }
 
-func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
+func TestPortalInhibitorRequestsOnlySuspendAndClosesOnRelease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, false)
 	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}
@@ -325,7 +352,8 @@ func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 	fixture.mu.Lock()
 	flags, reason := fixture.flags, fixture.options["reason"].Value()
 	fixture.mu.Unlock()
-	if flags != portalFlagSuspend|portalFlagIdle || reason != "Painted Wolf Code: active work" {
+	// The Idle flag would suppress the desktop's screen lock.
+	if flags != portalFlagSuspend || reason != "Painted Wolf Code: active work" {
 		t.Fatalf("portal request flags=%d reason=%v", flags, reason)
 	}
 	select {
@@ -389,72 +417,6 @@ func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 	testutil.FailErr(t, "release after bus loss", held.Release())
 }
 
-type fixturePowerManagement struct {
-	mu          sync.Mutex
-	deny        bool
-	application string
-	reason      string
-	released    []uint32
-}
-
-func (f *fixturePowerManagement) Inhibit(application, reason string) (uint32, *dbus.Error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.deny {
-		return 0, dbus.NewError("org.freedesktop.PowerManagement.Error", []any{"refused"})
-	}
-	f.application, f.reason = application, reason
-	return 42, nil
-}
-
-func (f *fixturePowerManagement) UnInhibit(cookie uint32) *dbus.Error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.released = append(f.released, cookie)
-	return nil
-}
-
-func TestPowerManagementInhibitorReleasesItsCookie(t *testing.T) {
-	path := fixtureBus(t)
-	server, err := linuxbus.Connect(t.Context(), path)
-	testutil.FailErr(t, "connect power management fixture", err)
-	defer func() { _ = server.Close() }()
-	fixture := &fixturePowerManagement{deny: true}
-	testutil.FailErr(t, "export power management fixture", server.Export(fixture, powerManagementPath, powerManagementInhibit))
-	ownName(t, server, powerManagementName)
-	subject := powerManagementProvider{connect: connectTo(path)}
-	if err := subject.Check(t.Context()); err != nil {
-		t.Fatalf("served power management was not advertised: %v", err)
-	}
-	if held, err := subject.Acquire(t.Context()); held != nil || err == nil {
-		t.Fatalf("refused power management lease=%v error=%v", held, err)
-	}
-	fixture.mu.Lock()
-	fixture.deny = false
-	fixture.mu.Unlock()
-	held, err := acquireFrom([]provider{login1Provider{connect: connectTo(path)}, subject})
-	testutil.FailErr(t, "acquire through provider order", err)
-	if held.Provider() != "power-management" {
-		t.Fatalf("provider = %q", held.Provider())
-	}
-	controller := newController(true, &staticInhibitor{held: held})
-	controller.SetActive("work", true)
-	if status := controller.Snapshot(); !status.Inhibiting || status.Provider != "power-management" {
-		t.Fatalf("status = %+v", status)
-	}
-	testutil.FailErr(t, "close controller", controller.Close())
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	if fixture.application != "Painted Wolf Code" || fixture.reason == "" || len(fixture.released) != 1 || fixture.released[0] != 42 {
-		t.Fatalf("power management fixture = %+v", fixture)
-	}
-}
-
-type staticInhibitor struct{ held lease }
-
-func (staticInhibitor) Availability() error        { return nil }
-func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }
-
 const testAppID = "dev.paintedwolf.code"
 
 func inOwnUnit() string { return testAppID }
@@ -504,10 +466,8 @@ func TestPortalWithoutRegistryAttributesOnlyThroughTheApplicationsOwnUnit(t *tes
 	servePortal(t, path, false)
 	for name, unit := range map[string]func() string{"outside any unit": outsideAnyUnit, "another application's unit": func() string { return "com.visualstudio.code" }} {
 		subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: unit}
-		err := availabilityOf([]provider{subject})
-		var unavailableErr *UnavailableError
-		if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
-			t.Fatalf("%s: availability = %v", name, err)
+		if reason := reasonFor(subject, subject.Check(t.Context())); reason.Code != ReasonNoApplicationID {
+			t.Fatalf("%s: availability = %+v", name, reason)
 		}
 		if held, err := subject.Acquire(t.Context()); held != nil || reasonFor(subject, err).Code != ReasonNoApplicationID {
 			t.Fatalf("%s: acquired %v, %v", name, held, err)
@@ -545,10 +505,8 @@ func TestPortalRegistersTheApplicationOnEveryConnection(t *testing.T) {
 	registry.mu.Lock()
 	registry.deny = true
 	registry.mu.Unlock()
-	err = availabilityOf([]provider{subject})
-	var unavailableErr *UnavailableError
-	if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
-		t.Fatalf("refused registration availability = %v", err)
+	if reason := reasonFor(subject, subject.Check(t.Context())); reason.Code != ReasonNoApplicationID {
+		t.Fatalf("refused registration availability = %+v", reason)
 	}
 	held, err = subject.Acquire(t.Context())
 	if held != nil || reasonFor(subject, err).Code != ReasonNoApplicationID {

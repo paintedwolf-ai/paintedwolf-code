@@ -18,12 +18,9 @@ const (
 	portalPath        = dbus.ObjectPath("/org/freedesktop/portal/desktop")
 	portalInhibit     = "org.freedesktop.portal.Inhibit"
 	portalRequest     = "org.freedesktop.portal.Request"
+	// portalFlagSuspend is the only flag requested; the Idle flag (8) is the
+	// desktop's screen-saver and lock inhibitor.
 	portalFlagSuspend = uint32(4)
-	portalFlagIdle    = uint32(8)
-
-	powerManagementName    = "org.freedesktop.PowerManagement"
-	powerManagementPath    = dbus.ObjectPath("/org/freedesktop/PowerManagement/Inhibit")
-	powerManagementInhibit = "org.freedesktop.PowerManagement.Inhibit"
 )
 
 // sessionLease holds an inhibition that lives as long as its bus connection.
@@ -94,8 +91,10 @@ func (l *sessionLease) Release() error {
 	return l.releaseError
 }
 
-// portalProvider inhibits through the desktop portal; the request object the
-// portal returns is closed to release. The portal must attribute the caller to
+// portalProvider inhibits automatic suspend through the desktop portal, whose
+// backend forwards it to the session's power policy; a backend that cannot
+// inhibit suspend alone refuses the request. The request object the portal
+// returns is closed to release. The portal must attribute the caller to
 // appID before inhibiting (see portalAttribution).
 type portalProvider struct {
 	connect busConnector
@@ -139,7 +138,7 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		"reason":       dbus.MakeVariant("Painted Wolf Code: active work"),
 	}
 	var request dbus.ObjectPath
-	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend|portalFlagIdle, options).Store(&request)
+	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend, options).Store(&request)
 	if err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
@@ -164,44 +163,4 @@ func requestToken() (string, error) {
 		return "", fmt.Errorf("portal request token: %w", err)
 	}
 	return "pw" + hex.EncodeToString(raw[:]), nil
-}
-
-// powerManagementProvider uses the session power-management inhibit protocol
-// that standalone desktops serve; the cookie is released explicitly and the
-// service drops it when the connection ends.
-type powerManagementProvider struct{ connect busConnector }
-
-func (powerManagementProvider) Name() string { return "power-management" }
-
-func (p powerManagementProvider) Check(ctx context.Context) error {
-	return nameServed(ctx, p.connect, powerManagementName)
-}
-
-func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
-	bus, err := p.connect(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("connect to power management service: %w", err)
-	}
-	var cookie uint32
-	err = bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".Inhibit", 0, "Painted Wolf Code", "Active work").Store(&cookie)
-	if err != nil {
-		_ = bus.Close()
-		return nil, fmt.Errorf("acquire power management inhibitor: %w", err)
-	}
-	release := func(ctx context.Context) error {
-		if err := bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".UnInhibit", 0, cookie).Err; err != nil {
-			return fmt.Errorf("release power management inhibitor: %w", err)
-		}
-		return nil
-	}
-	return newSessionLease(bus, p.Name(), release, nil, ""), nil
-}
-
-func nameServed(ctx context.Context, connect busConnector, name string) error {
-	bus, err := connect(ctx)
-	if err != nil {
-		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
-	}
-	defer func() { _ = bus.Close() }()
-	return nameOwnedOn(ctx, bus, name)
 }
