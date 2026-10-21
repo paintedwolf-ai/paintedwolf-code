@@ -107,6 +107,7 @@ type sedRun struct {
 	last     bool
 	newline  bool // current record ended with a newline
 	pending  bool // the last output record omitted its newline
+	hold     []byte
 	appends  []string
 	// ahead is the next record, read early so $ is known.
 	ahead sedRecord
@@ -194,6 +195,24 @@ func (r *sedRun) cycle(space []byte) (bool, error) {
 			if err == nil && printed {
 				err = r.emit(space, r.newline)
 			}
+		case 'h':
+			if err = r.inv.reserve(int64(len(space))); err == nil {
+				r.hold = bytes.Clone(space)
+			}
+		case 'H':
+			if err = r.inv.reserve(int64(len(space) + 1)); err == nil {
+				r.hold = append(append(r.hold, '\n'), space...)
+			}
+		case 'g':
+			if err = r.inv.reserve(int64(len(r.hold))); err == nil {
+				space = bytes.Clone(r.hold)
+			}
+		case 'G':
+			if err = r.inv.reserve(int64(len(r.hold) + 1)); err == nil {
+				space = append(append(space, '\n'), r.hold...)
+			}
+		case 'x':
+			space, r.hold = r.hold, space
 		}
 		if err != nil {
 			return false, err

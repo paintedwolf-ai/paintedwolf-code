@@ -57,6 +57,7 @@ func TestSedGolden(t *testing.T) {
 		{`sed -E 's/(a|ab)(c|bcd)(d*)/[\1|\2|\3]/'`, "abcd\n", "[ab|c|d]\n", 0},
 		{`sed 's/a\tb/X/'`, "a\tb\n", "X\n", 0},
 		{"sed 's/é/e/g'", "café é\n", "cafe e\n", 0},
+		{"sed '1!G;h;$!d'", lines, "d\nc\nb\na\n", 0},
 	})
 }
 
@@ -67,7 +68,6 @@ func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
 		{"sed 's/a/b/w out'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 's/a/b/e'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 's/a/b/I'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed h", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 'y/a/b/'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 'b end'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 'r file'", "COMMAND_OPTION_UNSUPPORTED"},

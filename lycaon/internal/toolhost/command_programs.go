@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
@@ -15,8 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/gitcmd"
+	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/native/query"
 	"github.com/lycaon/lycaon/internal/tools/native/search"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
@@ -47,6 +50,10 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
+	queryOwners, err := query.NewOwners(revisions, recorder, t.operations.Write)
+	if err != nil {
+		return nil, err
+	}
 	searchOwners, err := search.NewOwners(revisions, recorder, search.DeleteRemover{Delete: t.operations.Delete})
 	if err != nil {
 		return nil, err
@@ -57,6 +64,10 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		return nil, err
 	}
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
+		return nil, err
+	}
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, t.boundary)
+	if err != nil {
 		return nil, err
 	}
 	gitNative, err := t.gitOperation()
@@ -82,7 +93,17 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 					text.Spills = spills
 					release = func() { _ = spills.Close() }
 				}
-				return textOwners.Builtins(text), release, nil
+				builtins := textOwners.Builtins(text)
+				var bound hostenv.NativeBindings
+				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {
+					bound = b
+				}
+				for name, builtin := range hostenvOwners.Builtins(ports.ToolContext, ports.Nested, bound) {
+					if _, taken := builtins[name]; !taken {
+						builtins[name] = builtin
+					}
+				}
+				return builtins, release, nil
 			},
 			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
 				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
@@ -106,7 +127,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Mode: search.EffectMode(prepared.Argv), Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
 		for _, name := range mutationOwners.Commands() {
@@ -116,7 +137,17 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+			}}
+		}
+		for _, name := range queryOwners.Commands() {
+			tool, _ := queryOwners.Operation(name)
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := queryOwners.Prepare(query.Program{Paths: frame, Barrier: barrier}, request)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
 		if gitNative.Prepare != nil {

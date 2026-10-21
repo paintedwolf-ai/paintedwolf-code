@@ -142,7 +142,7 @@ func (p *sedParser) command() error {
 		start := p.open[len(p.open)-1]
 		p.open = p.open[:len(p.open)-1]
 		p.commands[start].block = len(p.commands) + 1
-	case 'p', 'd':
+	case 'p', 'd', 'h', 'H', 'g', 'G', 'x':
 	case 'q':
 		if c.second != nil {
 			return p.fail("q with at most one address")
@@ -157,7 +157,7 @@ func (p *sedParser) command() error {
 			return err
 		}
 	default:
-		return p.unsupported("the catalog's p, d, q, a, i, c, s, { and } commands")
+		return p.unsupported("the catalog's p, d, q, a, i, c, s, h, H, g, G, x, { and } commands")
 	}
 	p.commands = append(p.commands, c)
 	return p.end(c.name)

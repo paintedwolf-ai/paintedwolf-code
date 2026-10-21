@@ -199,7 +199,7 @@ func TestProgramEntryJobSpecsAddressSessionJobs(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), `sleep 30 & first=$!; sleep 30 & kill %1; kill %%; wait $first; external -- /bin/echo "first=$?"; wait %2; external -- /bin/echo "second=$?"`)
 	testutil.FailErr(t, "run job specs", err)
-	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=130") || !strings.Contains(outcome.Stdout, "second=130") {
+	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=143") || !strings.Contains(outcome.Stdout, "second=143") {
 		t.Fatalf("job spec outcome %s", out)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -29,29 +28,26 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each capture of an
+// execution appends at its next position.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
+	if err := pin.Validate(); err != nil {
+		return err
 	}
-	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 

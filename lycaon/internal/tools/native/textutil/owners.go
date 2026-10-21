@@ -136,8 +136,17 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
+}
+
 // Prepared is one bound utility invocation; it reads no input until run.
 type Prepared struct {
+	Mode    string
 	Argv    commandprogram.BoundArgv
 	Review  commandprogram.ArgvReview
 	owners  *Owners
@@ -166,7 +175,29 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, request.Argv); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	mode := ""
+	if len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
+	}
+	switch command {
+	case "sed":
+		if _, ok := bound.Last("-i"); ok {
+			mode = "-i"
+		} else {
+			mode = "stream-script"
+		}
+	case "uniq":
+		if len(bound.Operands()) > 1 {
+			mode = "OUTPUT-supplied"
+		} else {
+			mode = "stdin-input-only"
+		}
+	case "sort":
+		if _, ok := bound.Last("-o"); ok {
+			mode = "-o"
+		}
+	}
+	return Prepared{Mode: mode, Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
@@ -243,5 +274,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
-	return nativeutility.Settle(err, inv.status, false), err
+	result := nativeutility.Settle(err, inv.status, false)
+	if inv.published && result.Terminal == toolcontract.ProducerCompleted {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	return result, err
 }

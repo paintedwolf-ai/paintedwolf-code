@@ -3,6 +3,7 @@ package mutation
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // Publication is one program's redirect owner: commandprogram.OutputPublication
@@ -35,17 +38,17 @@ var (
 func (p *Publication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
 	if err != nil {
-		return nil, err
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if bound.Null {
 		return &nullStage{}, nil
 	}
 	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
 	if err != nil {
-		return nil, err
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	target.append = strings.HasSuffix(destination.Redirect.Operator, ">>")
-	return &fileStage{owners: p.Owners, tools: p.Tools, barrier: p.Program.Barrier, target: target, maximum: p.Owners.limit("stream_bytes")}, nil
+	return &fileStage{owners: p.Owners, tools: p.Tools, barrier: p.Program.Barrier, target: target, operator: destination.Redirect.Operator, field: destination.Target, maximum: p.Owners.limit("stream_bytes")}, nil
 }
 
 // OpenInput serves a < operand from its pinned capture: the accepted document
@@ -53,19 +56,51 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, false)
 	if err != nil {
-		return nil, err
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if bound.Null {
 		return commandprogram.NullInput(), nil
 	}
 	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
 	if err != nil {
-		return nil, err
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if err := p.Owners.Pins.AppendRevisionPin(ctx, destination.Invocation.Identity.ExecutionID, source.Revision); err != nil {
-		return nil, err
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	return io.NopCloser(strings.NewReader(source.Content)), nil
+}
+
+func redirectError(operator string, target commandprogram.Field, err error) error {
+	if err == nil {
+		return nil
+	}
+	cmd := "redirect"
+	if operator != "" {
+		cmd = "redirect " + operator
+	}
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		if reject.Data == nil {
+			reject.Data = map[string]any{}
+		}
+		reject.Data["command"] = cmd
+		reject.Data["word"] = target.Value
+		reject.Data["source_start_byte"] = target.Span.StartByte
+		reject.Data["source_end_byte"] = target.Span.EndByte
+		reject.Data["source_line"] = target.Span.Line
+		reject.Data["source_column"] = target.Span.Column
+		return err
+	}
+	var pathErr *projectpaths.PathError
+	if errors.As(err, &pathErr) {
+		return errors.Join(err, toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
+			"command": cmd, "word": target.Value, "path": pathErr.Operand,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed,
+			"source_start_byte": target.Span.StartByte, "source_end_byte": target.Span.EndByte,
+			"source_line": target.Span.Line, "source_column": target.Span.Column,
+		}))
+	}
+	return err
 }
 
 // pinnedTarget is a destination captured before any bytes are prepared for it.
@@ -105,11 +140,13 @@ func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *nat
 // fileStage holds one destination's bytes until the evaluator publishes or
 // abandons them. Staging is bounded by stream_bytes and never touches the file.
 type fileStage struct {
-	owners  *Owners
-	tools   tools.ToolContext
-	barrier *native.PublicationBarrier
-	target  pinnedTarget
-	maximum int64
+	owners   *Owners
+	tools    tools.ToolContext
+	barrier  *native.PublicationBarrier
+	target   pinnedTarget
+	operator string
+	field    commandprogram.Field
+	maximum  int64
 
 	mu      sync.Mutex
 	buffer  bytes.Buffer
@@ -140,7 +177,7 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 	s.mu.Unlock()
 	result, err := s.owners.publish(ctx, s.tools, s.barrier, s.target, content)
 	if err != nil {
-		return commandprogram.OutputPublished{}, err
+		return commandprogram.OutputPublished{}, redirectError(s.operator, s.field, err)
 	}
 	published := commandprogram.OutputPublished{PublishedRevision: result.PublishedSHA256}
 	if result.AcceptedRevision > 0 {

@@ -124,8 +124,17 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.tc, d.nested, d.bound, streams)
 }
 
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
+}
+
 // Prepared is one bound utility invocation; it performs no query until run.
 type Prepared struct {
+	Mode    string
 	Argv    commandprogram.BoundArgv
 	Review  commandprogram.ArgvReview
 	owners  *Owners
@@ -152,7 +161,20 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	if err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	mode := ""
+	if len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
+	}
+	if command == "env" {
+		mode = "inspect"
+		for _, op := range bound.Operands() {
+			if idx := strings.IndexByte(op.Value, '='); idx <= 0 {
+				mode = "dispatch"
+				break
+			}
+		}
+	}
+	return Prepared{Mode: mode, Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once. Stdout is written only after the

@@ -44,6 +44,17 @@ func settleStage(ctx context.Context, stage commandprogram.StagedOutput, err err
 	return err
 }
 
+func (inv *invocation) settleStage(stage commandprogram.StagedOutput, err error) error {
+	if err != nil {
+		return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
+	}
+	published, err := stage.Publish(inv.ctx)
+	if err == nil && published.PublishedRevision != "" {
+		inv.published = true
+	}
+	return err
+}
+
 // sedInPlace edits each file separately: line numbers, $ and ranges restart
 // per file. Each file's destination is staged, then its source pinned, and its
 // complete output published before the next file starts; the first failure
@@ -81,7 +92,7 @@ func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fi
 		out := nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))
 		run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: out}
 		quit, err := run.cycles()
-		if err = settleStage(inv.ctx, stage, regexBudget(err)); err != nil || quit {
+		if err = inv.settleStage(stage, regexBudget(err)); err != nil || quit {
 			return err
 		}
 	}
@@ -108,5 +119,5 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 	if err != nil {
 		return err
 	}
-	return settleStage(inv.ctx, stage, run(nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))))
+	return inv.settleStage(stage, run(nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))))
 }

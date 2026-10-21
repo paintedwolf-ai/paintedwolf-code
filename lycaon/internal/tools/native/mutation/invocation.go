@@ -143,11 +143,21 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: certainty}, err
 	}
 	if reject := toolrejection.AsToolReject(err); reject != nil {
+		if reject.Data == nil {
+			reject.Data = map[string]any{}
+		}
+		if reject.Data["command"] == nil {
+			reject.Data["command"] = inv.name()
+		}
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: reject.Code, EffectCertainty: certainty}, err
 	}
 	var pathErr *projectpaths.PathError
 	if errors.As(err, &pathErr) {
-		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, err
+		reject := toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
+			"command": inv.name(), "word": pathErr.Operand, "path": pathErr.Operand,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed,
+		})
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, errors.Join(err, reject)
 	}
 	if certainty == toolcontract.NoEffect {
 		certainty = toolcontract.EffectUnknown

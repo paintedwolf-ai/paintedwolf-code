@@ -166,7 +166,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return fmt.Errorf("query reads require a program execution and pin recorder")
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
 
 // settle projects the run onto the producer contract. A published edit is a

@@ -296,6 +296,8 @@ func (f *frame) settleFrame(run *childRun, g *frame, err error) error {
 // invokes no operation (assignments, declarations, loop and branch results,
 // builtin usage errors). It is not a child execution and adds no trace event.
 func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
+	f.state.pipeStatus = []int{status}
+	f.state.vars.SetPipeStatus(f.state.pipeStatus)
 	return f.state.control.Record(uuid.NewString(), ordinaryResult(status), true, false)
 }
 

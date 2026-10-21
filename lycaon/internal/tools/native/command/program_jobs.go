@@ -29,8 +29,11 @@ type SessionJobs struct {
 
 	mu      sync.Mutex
 	results map[string]jobOutcome
+	signals map[string]int
 	// order lists handles in start order; %N names order[N-1].
 	order []string
+	// programOrder tracks handles started by the active program.
+	programOrder []string
 }
 
 type jobOutcome struct {
@@ -42,6 +45,28 @@ type jobOutcome struct {
 type jobStatus struct {
 	Handle      string
 	CommandLine string
+}
+
+// BeginProgram prunes finished jobs from prior programs before a new program
+// runs so %1 names the first active or newly started job.
+func (j *SessionJobs) BeginProgram() {
+	if j == nil || j.Registry == nil {
+		return
+	}
+	active := map[string]bool{}
+	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
+		active[job.Handle] = true
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	kept := j.order[:0]
+	for _, handle := range j.order {
+		if active[handle] {
+			kept = append(kept, handle)
+		}
+	}
+	j.order = kept
+	j.programOrder = nil
 }
 
 // start runs the job body detached from the launching statement's context.
@@ -66,8 +91,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
 			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
-			if ctx.Err() != nil && result.Terminal == "" {
-				result = toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
+			if ctx.Err() != nil {
+				status := j.signalStatus(handle)
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
 			return result.Status, err
@@ -81,9 +107,19 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
 	j.mu.Lock()
 	j.order = append(j.order, handle)
+	j.programOrder = append(j.programOrder, handle)
 	j.mu.Unlock()
 	close(ready)
 	return handle, nil
+}
+
+func (j *SessionJobs) signalStatus(handle string) int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if status := j.signals[handle]; status != 0 {
+		return status
+	}
+	return 130
 }
 
 func (j *SessionJobs) record(handle string, result toolcontract.ProducerResult, err error) {
@@ -115,11 +151,34 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 		if slices.Contains(j.order, reference) {
 			return reference, nil
 		}
+		if _, ok := j.results[reference]; ok {
+			return reference, nil
+		}
 	}
 	if index < 0 || index >= len(j.order) {
 		return "", unknownJob(reference)
 	}
 	return j.order[index], nil
+}
+
+// Unwaited returns the handles bare `wait` should wait on: jobs started by the
+// current program if any, otherwise all active session jobs.
+func (j *SessionJobs) Unwaited(ctx context.Context) ([]string, error) {
+	j.mu.Lock()
+	programHandles := slices.Clone(j.programOrder)
+	j.mu.Unlock()
+	if len(programHandles) > 0 {
+		return programHandles, nil
+	}
+	statuses, err := j.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(statuses))
+	for _, job := range statuses {
+		out = append(out, job.Handle)
+	}
+	return out, nil
 }
 
 // Number is a handle's %N job number in this session, or 0.
@@ -154,8 +213,14 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.
 // Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
 // job's stop. Acknowledgement is not proof of exit.
 func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error {
+	status := 143
 	switch signal {
-	case "TERM", "INT", "KILL", "15", "2", "9":
+	case "TERM", "15":
+		status = 143
+	case "INT", "2":
+		status = 130
+	case "KILL", "9":
+		status = 137
 	default:
 		return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
 	}
@@ -163,6 +228,12 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 	if err != nil {
 		return err
 	}
+	j.mu.Lock()
+	if j.signals == nil {
+		j.signals = map[string]int{}
+	}
+	j.signals[handle] = status
+	j.mu.Unlock()
 	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle); err != nil {
 		return jobLookupError(err, handle)
 	}
@@ -192,5 +263,5 @@ func jobLookupError(err error, handle string) error {
 // unknownJob refuses a reference that names no job of this session; kill,
 // wait and jobs never address host processes.
 func unknownJob(reference string) error {
-	return toolrejection.RejectInvalidArguments("COMMAND_JOB_UNKNOWN", map[string]any{"job": reference, "reason": "not a job of this session"})
+	return toolrejection.RejectInvalidArguments("COMMAND_JOB_UNKNOWN", map[string]any{"job": reference, "word": reference, "reason": "not a job of this session; use jobs to list this session's background jobs, then pass %N, %% or $!"})
 }

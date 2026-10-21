@@ -267,3 +267,71 @@ func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
 		t.Fatalf("stdout preview %q", preview)
 	}
 }
+
+func TestCommandProgramLiveRun2Regressions(t *testing.T) {
+	prog := `echo --- && echo --- section --- && ` +
+		`printf '{"a":1}\n' | jq -r '.a' && printf 'k: v\n' | yq '.k' && ` +
+		`printf '1\n2\n' | sed '1!G;h;$!d' && ` +
+		`find . -name '*.txt' | xargs wc -l | sort -n && ` +
+		`find . -name '*.txt' -print0 | xargs -0 grep -l note && ` +
+		`while read -r line; do echo "row:$line"; done < notes.txt && ` +
+		`(false | true; echo "pipe:${PIPESTATUS[0]}:${PIPESTATUS[1]}:${PIPESTATUS[@]}") && ` +
+		`touch touched.txt && echo redirected > redirected.txt && printf 'teed\n' | tee teed.txt && ` +
+		`wc notes.txt teed.txt && ` +
+		`ps aux >/dev/null && env | grep -q '^PWD=' && ! (env | grep -q '^PATH=') && ` +
+		`sleep 30 & pid=$!; ps aux | grep -q running && kill $pid; wait; echo "sig:$?"`
+	s := newCommandProgramSession(t, prog, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	for _, want := range []string{
+		`---`,
+		`--- section ---`,
+		`2\n1\n`,
+		`row:first note`,
+		`row:second note`,
+		`pipe:1:0:1 0`,
+		`teed`,
+		`total`,
+		`sig:143`,
+		`"completed_effects":3`,
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("missing %q in result: %s", want, result)
+		}
+	}
+	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	testutil.FailErr(t, "read messages", err)
+	projected := messageview.TranscriptMessages(msgs)
+	found := false
+	for _, m := range projected {
+		if m.Role == wire.MessageRoleTool && m.ToolResult != nil && m.ToolResult.Tool == "command" {
+			found = true
+			if m.Content == "" || m.ToolResult.CommandProgram == nil || m.ToolResult.CommandProgram.ID == "" || m.ToolResult.CommandProgram.State != "completed" {
+				t.Fatalf("projected tool message missing content or command_program receipt: content=%q tr=%+v", m.Content, m.ToolResult)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no projected command tool message")
+	}
+
+	for _, c := range []struct {
+		name, program, code, cmd, word string
+	}{
+		{"sed unsupported command", "echo before > saved.txt; sed 'w out.txt' notes.txt", "COMMAND_OPTION_UNSUPPORTED", "sed", "w"},
+		{"grep invalid regex", "echo before > saved.txt; grep '[' notes.txt", "GREP_REGEX_INVALID", "grep", "["},
+		{"kill pid", "echo before > saved.txt; kill 9999999", "COMMAND_JOB_UNKNOWN", "kill", "9999999"},
+		{"redirect escape", "echo before > saved.txt; echo hi > /outside-root-escape.txt", "SURVEY_PATH_ESCAPE", "redirect >", "/outside-root-escape.txt"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			rs := newCommandProgramSession(t, c.program, "")
+			testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
+			out := rs.result(t)
+			for _, want := range []string{c.code, c.cmd, c.word, `"completed_effects":1`, `1:`} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%s: missing %q in %s", c.name, want, out)
+				}
+			}
+		})
+	}
+}

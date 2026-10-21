@@ -22,8 +22,9 @@ type frameState struct {
 	hasJob    bool
 	// last is the most recent settled execution in this state; a pipeline
 	// stage reports it as the stage producer.
-	last    *ChildRecord
-	options shellOptions
+	last       *ChildRecord
+	pipeStatus []int
+	options    shellOptions
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -138,7 +139,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, options: f.state.options}
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options}
 	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
@@ -155,6 +156,12 @@ func (f *frame) ProgramName() string  { return f.unit }
 func (f *frame) Nounset() bool        { return f.state.options.nounset }
 func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
+func (f *frame) PipeStatus() []int {
+	if len(f.state.pipeStatus) > 0 {
+		return append([]int(nil), f.state.pipeStatus...)
+	}
+	return []int{f.state.control.Status()}
+}
 func (f *frame) LastBackground() (string, bool) {
 	return f.state.lastJob, f.state.hasJob
 }
