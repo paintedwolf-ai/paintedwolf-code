@@ -68,4 +68,5 @@ class ServerTests(unittest.TestCase):
             self.assertEqual([call.args[1] for call in hosts.call_args_list], [False, True])
             self.assertTrue(any("remove-trusted-cert" in call.args[0] for call in run.call_args_list))
             self.assertTrue(any("delete-certificate" in call.args[0] for call in run.call_args_list))
+            self.assertTrue(any("deny" in call.args[0] for call in run.call_args_list))
             self.assertTrue(json.loads((root / "host-cleanup.json").read_text())["success"])

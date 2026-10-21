@@ -92,3 +92,17 @@ class CaseTests(unittest.TestCase):
 
     def test_upgraded_health_must_report_the_candidate_schema(self):
         self.exercise(fault="schema")
+
+    def test_semantics_verification_syncs_the_desktop_engine_token(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config, fixture, evidence = root / "config", root / "fixture", root / "evidence"
+            for path in (config, fixture, evidence):
+                path.mkdir()
+            outputs = [unittest.mock.Mock(stdout="/Applications/Painted Wolf Code.app/Contents/MacOS/pw serve LYCAON_ADDR=127.0.0.1:0 LYCAON_API_TOKEN=desktop-bearer-token\n"),
+                       unittest.mock.Mock()]
+            with patch.object(driver.subprocess, "run", side_effect=outputs) as calls:
+                driver.verify_semantics(config, fixture, {"engine_pid": 42, "port": 1234}, evidence)
+            self.assertEqual((config / "api.token").read_text(), "desktop-bearer-token")
+            self.assertEqual((config / "api.token").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(calls.call_count, 2)

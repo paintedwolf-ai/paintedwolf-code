@@ -24,7 +24,24 @@ def materialize(fixture: Path, config: Path, project: Path):
         database.execute("UPDATE project_roots SET path = ? WHERE path = 'project-root' OR path LIKE 'project-root/%'", (str(project),))
 
 
+def sync_engine_token(config: Path, observation: dict):
+    pid = observation.get("engine_pid")
+    if type(pid) is not int or pid <= 1:
+        return
+    command = subprocess.run(["ps", "eww", "-p", str(pid), "-o", "command="],
+                             capture_output=True, text=True, check=True, timeout=5).stdout
+    for field in command.split():
+        if field.startswith("LYCAON_API_TOKEN="):
+            token = field.removeprefix("LYCAON_API_TOKEN=").strip()
+            if token:
+                token_file = config / "api.token"
+                token_file.write_text(token)
+                token_file.chmod(0o600)
+                return
+
+
 def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: Path):
+    sync_engine_token(config, observation)
     with (evidence / "semantics.log").open("wb") as log:
         subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
                         "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
