@@ -203,6 +203,17 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
+	if d.run.externalHidden && request.Argv[0].Value == "external" {
+		writeHostRefusal(streams, "external", "", "COMMAND_EXTERNAL_HIDDEN")
+		reject := toolrejection.RejectInvalidArguments("COMMAND_EXTERNAL_HIDDEN", map[string]any{"command": "external", "program": argv[0], "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: reject}
+		}
+		d.shared.mu.Unlock()
+		result := refusedResult("COMMAND_EXTERNAL_HIDDEN")
+		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+	}
 	if reject := desktopCaptureRefusal(argv[0], line); reject != nil {
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {

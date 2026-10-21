@@ -400,3 +400,19 @@ func TestProgramEntryFilePredicatesReadRealFilesFromTheFrame(t *testing.T) {
 		t.Fatalf("predicates outcome %s", out)
 	}
 }
+
+// With the external selector hidden, `external --` refuses with a typed code
+// while a native gap still launches the installed program and is counted.
+func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.ExternalHidden = true
+	out, err := f.call(t, t.Context(), "grep -q nothing /dev/null; external -- /bin/echo never")
+	testutil.FailErr(t, "run hidden selector", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" || outcome.NativeGaps != 1 {
+		t.Fatalf("hidden external outcome %s", out)
+	}
+	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
+		t.Fatalf("hidden external stderr %q", outcome.Stderr)
+	}
+}

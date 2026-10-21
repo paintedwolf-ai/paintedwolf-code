@@ -54,6 +54,9 @@ type ProgramRuntime struct {
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
+	// ExternalHidden refuses the explicit `external --` selector; native gap
+	// launches still run and are recorded.
+	ExternalHidden bool
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -80,21 +83,22 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
-	executor      *toolexecution.Executor
-	registry      *tools.DefaultRegistry
-	recorder      *invocation.SQLRecorder
-	supervisor    *ProgramSupervisor
-	progress      toolexecution.ProgramProgressFacts
-	frame         toolexecution.ProgramFrame
-	surface       toolexecution.ProgramSurface
-	memory        *toolcontract.ProgramMemory
-	capture       invocation.ProgramInputCapture
-	tc            tools.ToolContext
-	root          toolcontract.OperationInvocation
-	parentReceipt string
-	source        string
-	catalog       toolcontract.LanguageCatalog
-	commands      map[string]toolcontract.CommandSpecification
+	externalHidden bool
+	executor       *toolexecution.Executor
+	registry       *tools.DefaultRegistry
+	recorder       *invocation.SQLRecorder
+	supervisor     *ProgramSupervisor
+	progress       toolexecution.ProgramProgressFacts
+	frame          toolexecution.ProgramFrame
+	surface        toolexecution.ProgramSurface
+	memory         *toolcontract.ProgramMemory
+	capture        invocation.ProgramInputCapture
+	tc             tools.ToolContext
+	root           toolcontract.OperationInvocation
+	parentReceipt  string
+	source         string
+	catalog        toolcontract.LanguageCatalog
+	commands       map[string]toolcontract.CommandSpecification
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -241,6 +245,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.externalHidden = r.ExternalHidden
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
