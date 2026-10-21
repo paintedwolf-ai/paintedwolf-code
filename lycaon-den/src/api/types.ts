@@ -11322,6 +11322,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             program_id: string;
+            /** @description Host syntax node identity within its program. */
             node_id: string;
             /** Format: uuid */
             parent_execution_id: string;
@@ -11357,6 +11358,7 @@ export interface components {
             evidence_ref?: string;
             owner_ref?: string;
             recovery_ref?: string;
+            /** Format: uuid */
             held_version_id?: string;
             accepted_revision?: string;
             published_revision?: string;
@@ -11364,7 +11366,9 @@ export interface components {
             approval_ref?: string;
         };
         CommandProgramNode: {
+            /** @description Host syntax node identity within its program. */
             id: string;
+            /** @description Captured syntax unit identity within its program. */
             source_unit_id: string;
             /** Format: int64 */
             start_byte: number;
