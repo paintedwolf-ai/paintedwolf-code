@@ -12,10 +12,14 @@ export function createRetainedWebKitSelection(surface: HTMLElement) {
   let parkedDocument: Document | undefined;
   let intent: Intent | undefined;
   let parked = false;
+  let ownClearPending = false;
   const changed = () => { intent = undefined; };
   const content = new MutationObserver(changed);
   const selectionChanged = () => {
-    if (parked && parkedDocument?.getSelection()?.rangeCount) changed();
+    if (!parked) return;
+    const ownClear = ownClearPending && parkedDocument?.getSelection()?.rangeCount === 0;
+    ownClearPending = false;
+    if (!ownClear) changed();
   };
 
   const stop = () => {
@@ -24,11 +28,13 @@ export function createRetainedWebKitSelection(surface: HTMLElement) {
     parkedDocument?.removeEventListener("selectionchange", selectionChanged);
     parkedDocument = undefined;
     parked = false;
+    ownClearPending = false;
     if (mutated) changed();
   };
   const release = () => {
     const selection = surface.ownerDocument.getSelection();
     if (selection && (surface.contains(selection.anchorNode) || surface.contains(selection.focusNode))) {
+      ownClearPending = parked;
       selection.removeAllRanges();
     }
   };

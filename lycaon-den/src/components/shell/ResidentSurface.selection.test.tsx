@@ -54,6 +54,22 @@ describe("retained surface selection", () => {
     surface.remove();
   });
 
+  it.each([false, true])("distinguishes its own clear from a newer cleared selection: %s", (newerClear) => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    const surface = document.createElement("section");
+    surface.textContent = "Reader text";
+    document.body.append(surface);
+    const lifecycle = createRetainedWebKitSelection(surface);
+    const selection = select(surface);
+    lifecycle.hide();
+    document.dispatchEvent(new Event("selectionchange"));
+    if (newerClear) document.dispatchEvent(new Event("selectionchange"));
+    lifecycle.restore();
+    expect(selection.toString()).toBe(newerClear ? "" : "Reader text");
+    lifecycle.dispose();
+    surface.remove();
+  });
+
   it.each(["webkitgtk", "wkwebview", null])("releases only inaccessible WebKitGTK ranges: %s", async (engine) => {
     applyWebEngineFact(engine ? { engine, version: "2.54.1" } : null);
     const [presence, setPresence] = createSignal<"active" | "idle">("active");
