@@ -29,9 +29,14 @@ class InstalledRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "bin").mkdir()
-            entries = [image(root / "bin" / role) for role in sorted(ROLES)]
-            data = {"format_version": 1, "package": "painted-wolf-code", "version": "1.0.2",
-                    "architecture": "x86_64", "install_root": str(root), "executables": entries}
+            roles = sorted(ROLES)
+            entries = [image(root / "bin" / role) for role in roles]
+            payload = [{"path": "bin", "kind": "directory", "mode": 0o755, "sha256": None, "size": None, "target": None},
+                       *[{"path": f"bin/{role}", "kind": "file", "mode": 0o755,
+                          "sha256": row["sha256"], "size": row["size"], "target": None}
+                         for role, row in zip(roles, entries)]]
+            data = {"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
+                    "architecture": "x86_64", "install_root": str(root), "executables": entries, "payload": payload}
             path = root / "manifest.json"
             path.write_text(json.dumps(data))
             result = manifest(root, "amd64")
@@ -55,13 +60,21 @@ class InstalledRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "bin").mkdir()
-            entries = [image(root / "bin" / role) for role in sorted(ROLES)]
+            roles = sorted(ROLES)
+            entries = [image(root / "bin" / role) for role in roles]
             script = root / "resource"
             script.write_bytes(b"#!/bin/sh\nexit 0\n")
             script.chmod(0o755)
-            entries.append({"path": str(script), "sha256": hashlib.sha256(script.read_bytes()).hexdigest(), "size": script.stat().st_size})
-            data = {"format_version": 1, "package": "painted-wolf-code", "version": "1.0.2",
-                    "architecture": "x86_64", "install_root": str(root), "executables": entries}
+            script_sha = hashlib.sha256(script.read_bytes()).hexdigest()
+            script_size = script.stat().st_size
+            entries.append({"path": str(script), "sha256": script_sha, "size": script_size})
+            payload = [{"path": "bin", "kind": "directory", "mode": 0o755, "sha256": None, "size": None, "target": None},
+                       {"path": "resource", "kind": "file", "mode": 0o755, "sha256": script_sha, "size": script_size, "target": None},
+                       *[{"path": f"bin/{role}", "kind": "file", "mode": 0o755,
+                          "sha256": row["sha256"], "size": row["size"], "target": None}
+                         for role, row in zip(roles, entries[:-1])]]
+            data = {"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
+                    "architecture": "x86_64", "install_root": str(root), "executables": entries, "payload": payload}
             (root / "manifest.json").write_text(json.dumps(data))
             json.dumps(manifest(root, "amd64"))
             entries[-1]["path"] = "/usr/bin/unrelated"
@@ -107,6 +120,7 @@ class InstalledRuntimeTests(unittest.TestCase):
             for invalid in ({**base, "format_version": 0}, {**base, "format_version": 3},
                             {**base, "format_version": True}, {**base, "format_version": "2"},
                             {**base, "format_version": 1},
+                            {**{k: v for k, v in base.items() if k != "payload"}, "format_version": 1},
                             {k: v for k, v in base.items() if k != "payload"},
                             {**base, "payload": []},
                             {**base, "payload": [*payload, {"path": "manifest.json", "kind": "file", "mode": 0o644, "sha256": "a" * 64, "size": 1, "target": None}]},
