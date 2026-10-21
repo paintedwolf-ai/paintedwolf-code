@@ -27,6 +27,7 @@ mod installation;
 mod diagnostics;
 pub(crate) mod layout;
 mod logging;
+pub(crate) mod manifest;
 mod process;
 mod startup;
 pub(crate) mod supervisor;

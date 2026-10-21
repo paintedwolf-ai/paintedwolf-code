@@ -17,19 +17,37 @@ fn fixture(output: &Path, desktop: &[u8], helper: &[u8]) -> PathBuf {
         .unwrap(),
     )
     .unwrap();
-    let entries: Vec<_> = [("painted-wolf-code", desktop), ("pw", helper)].iter().map(|(role, bytes)| {
-        serde_json::json!({"path": root.join("bin").join(role), "sha256": hex::encode(Sha256::digest(bytes)), "size": bytes.len()})
-    }).collect();
+    let shell_path = root.join("bin/painted-wolf-code");
+    let pw_path = root.join("bin/pw");
+    let manifest_json = crate::sidecar::manifest::fixture_json(
+        &root,
+        "1.0.2",
+        &[(&shell_path, desktop), (&pw_path, helper)],
+    );
     std::fs::write(
         root.join("manifest.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "format_version": 1, "package": "painted-wolf-code", "version": "1.0.2",
-            "architecture": "x86_64", "install_root": root, "executables": entries
-        }))
-        .unwrap(),
+        serde_json::to_vec(&manifest_json).unwrap(),
     )
     .unwrap();
-    root.join("bin/painted-wolf-code")
+    shell_path
+}
+
+#[test]
+fn generation_refuses_legacy_v1_and_unknown_manifest_versions() {
+    let temporary = crate::test_support::TempDir::new("nix-manifest-version");
+    let desktop = fixture(&temporary, b"desktop", b"\x7fELFhelper");
+    let root = desktop.parent().unwrap().parent().unwrap();
+    let manifest_path = root.join("manifest.json");
+    let mut raw: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    for bad_version in [0, 1, 3, 99] {
+        raw["format_version"] = serde_json::json!(bad_version);
+        std::fs::write(&manifest_path, serde_json::to_vec(&raw).unwrap()).unwrap();
+        assert!(
+            capture(&desktop, File::open(&desktop).unwrap()).is_err(),
+            "format_version {bad_version} must be refused"
+        );
+    }
 }
 
 #[test]
