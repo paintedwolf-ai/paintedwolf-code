@@ -62,7 +62,7 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if err != nil {
 		return nil, err
 	}
-	if err := p.Owners.Pins.RecordRevisionPins(ctx, destination.Invocation.Identity.ExecutionID, []toolcontract.ExecutionRevision{source.Revision}); err != nil {
+	if err := p.Owners.Pins.RecordRevisionPins(ctx, destination.Invocation.Identity.ExecutionID, 0, []toolcontract.ExecutionRevision{source.Revision}); err != nil {
 		return nil, err
 	}
 	return io.NopCloser(strings.NewReader(source.Content)), nil
@@ -81,7 +81,7 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 	if err != nil {
 		return pinnedTarget{}, err
 	}
-	if err := o.Pins.RecordRevisionPins(ctx, executionID, append(append([]toolcontract.ExecutionRevision(nil), prior...), pin)); err != nil {
+	if err := o.Pins.RecordRevisionPins(ctx, executionID, len(prior), []toolcontract.ExecutionRevision{pin}); err != nil {
 		return pinnedTarget{}, err
 	}
 	return pinnedTarget{abs: abs, pin: pin}, nil

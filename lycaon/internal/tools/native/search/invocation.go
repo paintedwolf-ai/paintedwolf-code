@@ -153,7 +153,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return fmt.Errorf("search reads require a program execution and pin recorder")
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
 }
 
 // capture pins one file operand's exact bytes before any are searched.
