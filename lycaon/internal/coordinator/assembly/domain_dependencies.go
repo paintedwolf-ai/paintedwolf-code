@@ -31,6 +31,7 @@ type promptSurfaceDeps struct {
 	SessionView             SessionView
 	WebSearchEnabled        func() bool
 	WorkspaceRoots          WorkspaceRootsLoader
+	SessionScratchDir       func(context.Context, *api.Session) string
 	CoordinatorProfile      func(context.Context, string) string
 	WorkflowArchive         func(context.Context, string) string
 }
@@ -83,6 +84,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		SessionView:             snapshot.SessionView,
 		WebSearchEnabled:        snapshot.WebSearchEnabled,
 		WorkspaceRoots:          snapshot.WorkspaceRoots,
+		SessionScratchDir:       snapshot.SessionScratchDir,
 	}
 	if workflows := snapshot.Workflows; workflows != nil {
 		surfaceDeps.CoordinatorProfile = func(ctx context.Context, sessionID string) string {

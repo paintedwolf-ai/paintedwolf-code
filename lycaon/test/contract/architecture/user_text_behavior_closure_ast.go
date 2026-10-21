@@ -410,6 +410,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"completed_ago":                true,
 	"worker_digest":                true,
 	"primary_changed":              true,
+	"changes":                      true, // projectroot.DiffRoots rows in RootsChangedKickData
 	"active_root":                  true, // projectroot.ActiveRoot in RootsChangedKickData
 	"evidence_digest":              true,
 	"command_completion":           true,

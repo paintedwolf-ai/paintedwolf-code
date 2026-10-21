@@ -62,7 +62,7 @@ func TestProgramPathsKeepCwdInvocationLocal(t *testing.T) {
 	testutil.FailErr(t, "first invocation", err)
 	second, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "second invocation", err)
-	testutil.FailErr(t, "change logical cwd", first.Chdir(t.Context(), "pkg"))
+	testutil.FailErr(t, "change logical cwd", first.Chdir(t.Context(), "pkg", false))
 	bound, err := first.Bind(t.Context(), "b.go", false)
 	testutil.FailErr(t, "bind relative path", err)
 	if bound.Resolved.Abs != filepath.Join(root, "pkg", "b.go") || second.Cwd().Abs != root {
@@ -219,18 +219,18 @@ func TestProgramPathsAuthorizeActualLinkIdentity(t *testing.T) {
 }
 
 func TestCdNoArgumentRestoresInitialLogicalDirectory(t *testing.T) {
-	tc, _ := readSessionContext(t)
+	tc, root := readSessionContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "pkg")
 	testutil.FailErr(t, "initial subdirectory", err)
-	testutil.FailErr(t, "leave initial directory", p.Chdir(t.Context(), ".."))
+	testutil.FailErr(t, "leave initial directory", p.Chdir(t.Context(), "..", false))
 	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "cd", Argv: pathArgv("cd")}, commandprogram.Streams{})
 	testutil.FailErr(t, "restore initial directory", err)
 	testutil.FailErr(t, "validate cd terminal", result.Validate())
 	var out bytes.Buffer
 	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{Output: &out})
 	testutil.FailErr(t, "logical pwd", err)
-	if out.String() != "pkg\n" {
-		t.Fatalf("logical cwd=%q", out.String())
+	if out.String() != filepath.Join(root, "pkg")+"\n" {
+		t.Fatalf("absolute cwd=%q", out.String())
 	}
 }
 

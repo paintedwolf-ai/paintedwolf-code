@@ -309,7 +309,7 @@ anchors:
 
   - id: project.roots.changed
     title: Project roots changed
-    description: Project crosses from one folder to two or more (POST roots).
+    description: A project root was added, removed, moved, renamed or made primary.
     trigger_class: host_api
     surface: coordinator
     planes: [inform]

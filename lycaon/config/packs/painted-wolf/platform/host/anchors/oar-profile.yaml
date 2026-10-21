@@ -1240,6 +1240,18 @@ host_facts:
    type: string
  - name: paintedwolf.path
    type: string
+ - name: paintedwolf.root_label
+   type: string
+ - name: paintedwolf.root_status
+   type: string
+ - name: paintedwolf.former_path
+   type: string
+ - name: paintedwolf.current_label
+   type: string
+ - name: paintedwolf.current_path
+   type: string
+ - name: paintedwolf.attached_folders
+   type: list<string>
  - name: paintedwolf.port
    type: string
  - name: paintedwolf.pattern

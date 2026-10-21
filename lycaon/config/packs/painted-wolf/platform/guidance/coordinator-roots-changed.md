@@ -1,23 +1,13 @@
-Project folder roots changed — review the workspace block on your next turn.
-
-{% if added_count > 0 and before_count <= 1 and after_count >= 2 %}
-A folder was added — this project now spans {{ after_count }} folders:
+Folders changed: {% for c in changes %}{% if c.kind == "added" %}added {{ c.label }} → {{ c.path }}{% elif c.kind == "removed" %}removed {{ c.label }} (was {{ c.old_path }}){% elif c.kind == "moved" %}moved {{ c.label }} → {{ c.path }} (was {{ c.old_path }}){% else %}renamed {{ c.old_label }} → {{ c.label }} ({{ c.path }}){% endif %}{% if not forloop.Last %}; {% endif %}{% endfor %}{% if changes_omitted > 0 %}; {{ changes_omitted }} more{% endif %}{% if primary_changed %}{% if changes %}; {% endif %}primary is now {{ new_primary.label }} ({{ new_primary.path }}){% endif %}.
+{% if after_count == 0 %}
+No folder is attached now. File and command tools stay off until one is attached.
+{% else %}
+Current folders:
 {% for r in after %}
   • {{ r.label }}  {{ r.path }}{% if r.is_primary %}  (primary){% endif %}
 {% endfor %}
 {% if after_omitted_count > 0 %}
-{{ after_omitted_count }} additional folders are omitted from this wake; use the workspace tools for the complete set.
+{{ after_omitted_count }} more folders are omitted; the workspace block lists them all.
 {% endif %}
-Available tools retain their scope and capability limits.
-{% include "partials/multi-root-addressing.md" %}
-{% elif removed_count > 0 and after_count == 1 %}
-A folder was removed — this project is back to a single folder: {{ after.0.path }}.
-Both relative paths and @<label>/ addressing remain valid.
-{% elif removed_count > 0 and after_count == 0 %}
-The last folder was removed — this project has no folder attached. File tools are unavailable until you attach one.
-{% elif before_count == 1 and after_count == 1 and before.0.id == after.0.id and before.0.path != after.0.path %}
-The workspace is now at {{ after.0.path }}. Relative paths in this session are unchanged.
-{% elif primary_changed and after_count >= 2 %}
-The primary folder is now {{ new_primary.label }} ({{ new_primary.path }}).
+Removed or moved paths and old labels no longer resolve; use the folders above.{% if active_root %} Relative paths and new programs start in {{ active_root.label }} ({{ active_root.path }}).{% endif %}
 {% endif %}
-{% if active_root %}This session's active folder is {{ active_root.label }} ({{ active_root.path }}); bare relative paths resolve there.{% elif after_count > 0 %}Check this session's active folder in the workspace block before using relative paths.{% endif %}

@@ -35,6 +35,19 @@ type Options struct {
 	Session    string
 	Background *bgprocess.Registry
 	Natives    func(dir string) map[string]command.NativeOperation
+	// Context adjusts each call's tool context, for example its roots,
+	// scratch folder or root history.
+	Context func(dir string, tc *tools.ToolContext)
+	// Owners replaces the Natives-only owner set, for fixtures that compose
+	// real owners with the fixture's recorder and boundary.
+	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error)
+}
+
+// OwnerPorts are the fixture's shared dependencies for composed owners.
+type OwnerPorts struct {
+	Dir      string
+	Recorder *invocation.SQLRecorder
+	Boundary *sandbox.Boundary
 }
 
 // Fixture is one composed program entry rooted at Dir.
@@ -45,6 +58,7 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	Background *bgprocess.Registry
+	context    func(string, *tools.ToolContext)
 	calls      int
 }
 
@@ -101,7 +115,10 @@ func New(t *testing.T, options Options) *Fixture {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}
+	if options.Owners != nil {
+		runtime.Owners = options.Owners(OwnerPorts{Dir: dir, Recorder: recorder, Boundary: boundary})
+	}
+	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background, context: options.Context}
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
@@ -116,6 +133,9 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	if f.context != nil {
+		f.context(f.Dir, &tc)
+	}
 	return f.Runtime.Run(ctx, args, tc)
 }
 

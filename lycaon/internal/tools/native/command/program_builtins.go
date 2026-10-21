@@ -161,11 +161,16 @@ func readResult(status int) toolcontract.ProducerResult {
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
 }
 
-// argvRejection projects a binder refusal with its exact word span.
+// argvRejection projects a binder refusal with its exact word span. A typed
+// host refusal an owner raised while binding (a path outside every folder, a
+// folder no longer attached) keeps its own code and facts.
 func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 	code := "COMMAND_OPERAND_INVALID"
 	data := map[string]any{"command": spec.Name, "expected_form": spec.Argv}
 	var argvErr *commandprogram.ArgvError
+	if reject := toolrejection.AsToolReject(cause); reject != nil && !errors.As(cause, &argvErr) {
+		return reject
+	}
 	if errors.As(cause, &argvErr) {
 		code = argvErr.Code
 		data["word"], data["expected"] = argvErr.Word, argvErr.Expected

@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/policyindex"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
@@ -62,6 +63,7 @@ type Assembly struct {
 	WorkerContext assembly.WorkerContextBuilder
 	Workspace     *sessionscope.Service
 	Workspaces    *workerworkspace.Service
+	ToolContext   *toolcontext.Service
 }
 
 func (m *Assembly) Build() assembly.AssemblyDeps {
@@ -103,6 +105,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		SkillPreload:            m.Loading.SkillPreload,
 		SkillPointer:            m.Loading.SkillPointer,
 		WorkspaceRoots:          m.Workspace.PromptRootRows,
+		SessionScratchDir:       m.ToolContext.ScratchDir,
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
 		SessionView:             m.Catalog.ViewForSession,
 		AgentsMDIndex:           m.PolicyIndex.Index,

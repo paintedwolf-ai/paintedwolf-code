@@ -298,8 +298,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:  memory,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:      memory,
+		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -422,6 +423,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
 			}
 			return toolrejection.RejectInvalidArguments(refusal.Code, data)
 		}

@@ -6,20 +6,10 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // runPwd delegates to the path owner that also serves cd and native_path, in
 // a frame bound to the request's directory; it prints the logical cwd.
-func runPwd(inv *invocation) error {
-	paths, err := projectpaths.NewProgramPaths(inv.ctx, inv.owners.Boundary, inv.tc, inv.request.Invocation.Scope.Directory)
-	if err != nil {
-		return err
-	}
-	_, err = paths.Invoke(inv.ctx, inv.request, commandprogram.Streams{Output: &inv.out})
-	return err
-}
-
 func (inv *invocation) system() (SystemFacts, error) {
 	facts, err := inv.owners.Host.System(inv.ctx)
 	if errors.Is(err, ErrHostFactUnavailable) {
