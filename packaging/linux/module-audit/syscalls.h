@@ -2,6 +2,7 @@
 #define PW_MODULE_SYSCALLS_H
 #include <stdint.h>
 #include <stddef.h>
+#define PW_GUARD_WITNESS UINT64_C(0x7057474155444954)
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #if defined(__x86_64__)

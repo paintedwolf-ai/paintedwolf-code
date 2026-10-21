@@ -48,7 +48,7 @@ unsafe extern "C" fn gate() {
         || facts.add(29).read_volatile() & 0xf0 != 0x80
     { refuse() }
     for i in 0..8 {
-        if header.add(i).read_volatile() != b"PWMOD01\0".as_ptr().add(i).read_volatile()
+        if header.add(i).read_volatile() != b"PWMOD02\0".as_ptr().add(i).read_volatile()
             || response.add(i).read_volatile() != b"PWAUD01\0".as_ptr().add(i).read_volatile()
         { refuse() }
     }
