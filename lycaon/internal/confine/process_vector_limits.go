@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"syscall"
+	"unsafe"
 )
 
 // LaunchVectorLimits comes from the compiled language ceilings. This necessary
@@ -88,5 +89,5 @@ func NativeVectorLimits() (LaunchVectorLimits, error) {
 		return LaunchVectorLimits{}, fmt.Errorf("native argument allowance unavailable")
 	}
 	n := int64(maximum)
-	return LaunchVectorLimits{ArgumentBytes: n, ArgvBytes: n, EnvironmentBytes: n, ExpandedFields: n / 8}, nil
+	return LaunchVectorLimits{ArgumentBytes: n, ArgvBytes: n, EnvironmentBytes: n, ExpandedFields: n / int64(unsafe.Sizeof(uintptr(0)))}, nil
 }

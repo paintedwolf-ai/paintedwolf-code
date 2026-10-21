@@ -40,3 +40,32 @@ func TestTrackedTransportReturnsBeforeServerInitialization(t *testing.T) {
 		t.Fatal("transport initialization wrote payload input")
 	}
 }
+
+func TestTrackedTransportSettlesActualPostStartAuthorityRefusal(t *testing.T) {
+	root := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	fault := errors.New("synthetic current authority revoked")
+	checks := 0
+	plan := execpkg.HostLaunch("synthetic SDK post-start refusal")
+	plan.CurrentAuthority = func(context.Context) error {
+		checks++
+		if checks > 1 {
+			return fault
+		}
+		return nil
+	}
+	cmd, cleanup, err := execpkg.PrepareCommand(ctx, "/bin/sh", []string{"-c", "printf forbidden > effect; read request"}, execpkg.ExecOpts{Launch: plan, Dir: root})
+	testutil.FailErr(t, "prepare SDK refused handoff", err)
+	defer cleanup()
+	hardenSpawn(cmd)
+	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: cmd}, cleanup: cleanup}
+	connection, err := transport.Connect(ctx)
+	if !errors.Is(err, fault) || connection != nil || cmd.ProcessState == nil {
+		t.Fatalf("actual SDK post-start failure not settled: %v", err)
+	}
+	transport.release()
+	if _, err := os.Stat(filepath.Join(root, "effect")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("refused SDK handoff executed payload")
+	}
+}

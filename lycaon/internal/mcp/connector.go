@@ -156,6 +156,12 @@ func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, erro
 		connection, err = t.CommandTransport.Connect(ctx)
 		return err
 	}, execpkg.TrackProcessGroup)
+	if err != nil && connection != nil {
+		// The common failure path already completed Wait and closed parent pipes.
+		// SDK Close therefore stops its reader without entering a second Wait.
+		_ = connection.Close()
+		return nil, err
+	}
 	return connection, err
 }
 

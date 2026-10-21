@@ -279,3 +279,23 @@ func TestExecuteOnlyNativePayload(t *testing.T) {
 	fmt.Println(os.Args[2])
 	os.Exit(0)
 }
+
+func TestPreparedStrictBoundaryNeverFallsBackToHostExecution(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "forbidden-effect")
+	boundary := &confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}
+	plan := AgentLaunch(LaunchAgentCommand, "synthetic strict native boundary refusal", boundary).WithPathAuthority(confine.NativeLaunchPaths(root))
+	cmd, cleanup, err := PrepareCommand(t.Context(), "/bin/sh", []string{"-c", "printf forbidden > \"$1\"", "fixture", outside}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin"}})
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err == nil {
+		err = RunPrepared(cmd)
+	}
+	if err == nil {
+		t.Fatal("strict boundary rejection reported native success")
+	}
+	if _, statErr := os.Stat(outside); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatal("strict boundary rejection fell back and committed payload")
+	}
+}
