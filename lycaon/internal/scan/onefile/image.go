@@ -37,17 +37,17 @@ func Read(raw []byte) (*Image, error) {
 		return nil, fmt.Errorf("onefile image exceeds its size bounds")
 	}
 	size := binary.LittleEndian.Uint64(raw[len(raw)-8:])
-	if size < 7 || size > uint64(len(raw)-72) {
+	if size < 7 || size > uint64(len(raw))-72 {
 		return nil, fmt.Errorf("onefile payload length is invalid")
 	}
-	start := len(raw) - 8 - int(size)
+	start := uint64(len(raw)) - 8 - size
 	if !bytes.Equal(raw[start:start+7], []byte{'K', 'A', 'Y', 0x28, 0xb5, 0x2f, 0xfd}) {
 		return nil, fmt.Errorf("onefile compressed payload header is invalid")
 	}
 	if err := validateLauncher(raw[:start]); err != nil {
 		return nil, err
 	}
-	decoder, err := zstd.NewReader(bytes.NewReader(raw[start+3:len(raw)-8]), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(256<<20), zstd.WithDecoderMaxWindow(128<<20))
+	decoder, err := zstd.NewReader(bytes.NewReader(raw[start+3:uint64(len(raw))-8]), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(256<<20), zstd.WithDecoderMaxWindow(128<<20))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func Read(raw []byte) (*Image, error) {
 	reader := bufio.NewReaderSize(bounded, 1025)
 	image := &Image{Launcher: append([]byte(nil), raw[:start]...)}
 	seen := make(map[string]bool)
-	total := 0
+	total := uint64(0)
 	for {
 		name, err := readName(reader)
 		if err != nil {
@@ -91,11 +91,11 @@ func Read(raw []byte) (*Image, error) {
 			if err := binary.Read(reader, binary.LittleEndian, &checksum); err != nil {
 				return nil, err
 			}
-			if size > MaxBytes || uint64(total)+size > MaxBytes {
+			if size > MaxBytes || total+size > MaxBytes {
 				return nil, fmt.Errorf("onefile expanded payload exceeds its bound")
 			}
-			total += int(size)
-			member.Data = make([]byte, int(size))
+			total += size
+			member.Data = make([]byte, size)
 			if _, err := io.ReadFull(reader, member.Data); err != nil {
 				return nil, err
 			}
