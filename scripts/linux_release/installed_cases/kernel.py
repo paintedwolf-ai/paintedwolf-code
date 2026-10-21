@@ -11,11 +11,12 @@ import os
 from pathlib import Path
 import shlex
 import signal
+import subprocess
 import sys
 import tempfile
 import uuid
 
-from .app import InstalledApp
+from .app import InstalledApp, process_identity
 from .provider import ProviderFixture
 from .security_boundary import successful_invocation
 from .workflow import ToolTurn
@@ -128,6 +129,23 @@ _, status = os.waitpid(pid, 0)
 pathlib.Path('qualification-observation.json').write_text(json.dumps({
     'child': json.loads(raw), 'child_reaped': os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0}))
 '''
+
+
+def namespace_observer(identity: dict) -> dict:
+    """The selected engine's namespace identities, read while its identity holds."""
+    if process_identity(identity['pid']) != identity:
+        raise ValueError('helper observer lost its selected engine identity')
+    names = ('user', 'mnt', 'pid', 'net')
+    arguments = ['/usr/bin/sudo', '-n', '/usr/bin/stat', '-L', '-c', '%i',
+                 *[f"/proc/{identity['pid']}/ns/{name}" for name in names]]
+    result = subprocess.run(arguments, capture_output=True, timeout=10, check=False,
+                            env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'})
+    rows = result.stdout.splitlines()
+    if (result.returncode or len(rows) != len(names) or len(result.stdout) > 1024
+            or any(not row.isdigit() or int(row) <= 0 for row in rows)
+            or process_identity(identity['pid']) != identity):
+        raise ValueError('helper observer did not retain exact engine namespace identities')
+    return dict(zip(names, map(int, rows)))
 
 
 def helper_observation(observation: dict) -> bool:
