@@ -212,6 +212,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	// A validation run's source identity is captured before anything runs.
+	var verification func() commandSourceIdentity
+	if tc.Execution.VerificationCheck {
+		_, reader := commandSourceReaders(ctx, tc, paths.Cwd().Abs)
+		identity := reader()
+		verification = func() commandSourceIdentity { return identity }
+	}
 	var owners ProgramOwners
 	if r.Owners != nil {
 		if owners, err = r.Owners(tc, paths); err != nil {
@@ -316,8 +323,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		lifetime.settled()
 	})
 	var settleErr error
+	settledNow := false
 	select {
 	case settleErr = <-settled:
+		settledNow = true
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
@@ -332,6 +341,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
+	}
+	if settledNow {
+		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -689,4 +701,26 @@ func (r *programRun) childOutputs(request commandprogram.OperationRequest, strea
 			}
 		}
 	}
+}
+
+// stampProgramRun states the settled program's run for verification evidence:
+// passed on status 0, failed otherwise, unverifiable when the host stopped it.
+// A program whose jobs still run states nothing.
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+	if tc.Effects.Out == nil {
+		return
+	}
+	verdict := api.SourceVerdictPassed
+	switch {
+	case outcome.Refusal != nil || outcome.State == "interrupted":
+		verdict = api.SourceVerdictUnverifiable
+	case outcome.Status != 0:
+		verdict = api.SourceVerdictFailed
+	}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	if tc.Execution.VerificationCheck && verification != nil {
+		identity := verification()
+		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
+	}
+	tc.Effects.Out.SourceRun = run
 }
