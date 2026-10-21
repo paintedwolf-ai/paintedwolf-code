@@ -14,7 +14,7 @@ copy:
   what: "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
   cause: Work remains unfinished, or completed work has not been recorded.
   why: The final response and checklist must agree with observed results.
-  fix: 'If work remains, continue with tools and keep its rows pending. If work is complete, record it with `update_progress`, then answer. Use `surface_note` for updates while continuing.'
+  fix: 'If work remains, continue with tools and keep its rows pending. If work is complete, call `update_progress` first. After its result, send the final answer in a separate response with no tool calls. Use `surface_note` for updates while continuing.'
   instead: 'Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

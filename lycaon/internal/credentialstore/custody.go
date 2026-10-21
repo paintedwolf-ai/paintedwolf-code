@@ -38,6 +38,10 @@ type CustodyOutcome struct {
 var (
 	// ErrCustodianUnavailable: access to the identity custodian could not be established.
 	ErrCustodianUnavailable = errors.New("the credential vault custodian is unavailable")
+	// ErrCustodianAbsent: the custodian that held this vault's key is not
+	// installed, not running, or answered that it cannot serve; waiting does
+	// not bring it back, so the person may choose a destructive reset.
+	ErrCustodianAbsent = errors.New("the credential vault custodian is absent")
 	// ErrIdentityMissing: the selected custodian has no key for this vault.
 	ErrIdentityMissing = errors.New("the credential vault identity is missing")
 	// ErrLauncherRefused: the identity service refused this engine.
@@ -93,7 +97,7 @@ func CustodyErrorCode(err error) string {
 		return "password_invalid"
 	case errors.Is(err, ErrCustodyUnchanged):
 		return "unchanged"
-	case errors.Is(err, ErrCustodianUnavailable), errors.Is(err, ErrServiceUnverified), errors.Is(err, ErrLauncherRefused), errors.Is(err, ErrCustodyUnsupported):
+	case errors.Is(err, ErrCustodianUnavailable), errors.Is(err, ErrCustodianAbsent), errors.Is(err, ErrServiceUnverified), errors.Is(err, ErrLauncherRefused), errors.Is(err, ErrCustodyUnsupported):
 		return "service_unavailable"
 	default:
 		return "failed"
