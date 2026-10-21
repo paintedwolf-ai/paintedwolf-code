@@ -383,7 +383,7 @@
 +			return len(name) + 3, nil
 --- /dev/null
 +++ b/syntax/allocation_budget.go
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,90 @@
 +package syntax
 +
 +import (
@@ -396,9 +396,16 @@
 +// until the unit is discarded, independent of garbage collector timing.
 +// It is invocation-local and must not be shared concurrently.
 +type AllocationBudget struct {
-+	maximum int64
-+	used    int64
++	maximum  int64
++	used     int64
++	admitted int64
++	admit    func(int64) error
 +}
++
++// admissionChunk is the granularity at which an admitted ledger charges its
++// enclosing aggregate. The aggregate holds the ledger's high-water mark rounded
++// up to this size; frame releases stay charged until the caller discards it.
++const admissionChunk int64 = 64 << 10
 +
 +func NewAllocationBudget(maximum int64) (*AllocationBudget, error) {
 +	if maximum <= 0 || maximum > math.MaxInt64-8256 {
@@ -407,8 +414,26 @@
 +	return &AllocationBudget{maximum: maximum}, nil
 +}
 +
++// NewAdmittedAllocationBudget charges growth to an enclosing aggregate before
++// the ledger admits it, so the aggregate never holds unused headroom. The caller
++// releases everything admit accepted once it discards the ledger.
++func NewAdmittedAllocationBudget(maximum int64, admit func(int64) error) (*AllocationBudget, error) {
++	if admit == nil {
++		return nil, fmt.Errorf("admitted allocation budget requires an aggregate")
++	}
++	b, err := NewAllocationBudget(maximum)
++	if err != nil {
++		return nil, err
++	}
++	b.admit = admit
++	return b, nil
++}
++
 +func (b *AllocationBudget) UsedBytes() int64    { return b.used }
 +func (b *AllocationBudget) MaximumBytes() int64 { return b.maximum }
++
++// AdmittedBytes reports what the enclosing aggregate currently holds for this ledger.
++func (b *AllocationBudget) AdmittedBytes() int64 { return b.admitted }
 +
 +// ReserveBytes admits storage before allocation. Refusal leaves the ledger
 +// unchanged, so a caller cannot hide an earlier unit's retained allocations.
@@ -418,7 +443,14 @@
 +		observed = b.used + bytes
 +	}
 +	if observed > b.maximum {
-+		return &BudgetError{"parser_scratch_bytes", b.maximum, observed, pos}
++		return &BudgetError{Kind: "parser_scratch_bytes", Maximum: b.maximum, Observed: observed, Pos: pos}
++	}
++	if b.admit != nil && observed > b.admitted {
++		grow := min(max(observed-b.admitted, admissionChunk), b.maximum-b.admitted)
++		if err := b.admit(grow); err != nil {
++			return &BudgetError{Kind: "aggregate_admission", Maximum: b.maximum, Observed: observed, Pos: pos, Cause: err}
++		}
++		b.admitted += grow
 +	}
 +	b.used = observed
 +	return nil
@@ -428,7 +460,7 @@
 +// the selected parser's accounting. It also bounds pre-GC allocation churn.
 +func (b *AllocationBudget) ReserveHeap(bytes int64, pos Pos) error {
 +	if bytes < 0 || bytes > math.MaxInt64-8256 {
-+		return &BudgetError{"parser_scratch_bytes", b.maximum, math.MaxInt64, pos}
++		return &BudgetError{Kind: "parser_scratch_bytes", Maximum: b.maximum, Observed: math.MaxInt64, Pos: pos}
 +	}
 +	rounded := int64(16)
 +	if bytes <= 32768 {
@@ -444,7 +476,7 @@
 +func (b *AllocationBudget) releaseFrame(bytes int64) { b.used -= bytes }
 --- /dev/null
 +++ b/syntax/allocation_budget_test.go
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,110 @@
 +package syntax_test
 +
 +import (
@@ -517,6 +549,42 @@
 +	var refusal *syntax.BudgetError
 +	if err := pool.ReserveBytes(1, syntax.Pos{}); !errors.As(err, &refusal) || refusal.Observed != 161 || pool.UsedBytes() != 160 {
 +		t.Fatalf("one-byte excess = %v; retained=%d", err, pool.UsedBytes())
++	}
++}
++
++func TestAdmittedLedgerChargesAggregateBeforeGrowth(t *testing.T) {
++	var admitted []int64
++	refuse := errors.New("aggregate exhausted")
++	limit := int64(96 << 10)
++	pool, err := syntax.NewAdmittedAllocationBudget(1<<20, func(n int64) error {
++		var total int64
++		for _, a := range admitted {
++			total += a
++		}
++		if total+n > limit {
++			return refuse
++		}
++		admitted = append(admitted, n)
++		return nil
++	})
++	if err != nil {
++		t.Fatalf("create ledger: %v", err)
++	}
++	if err := pool.ReserveBytes(10, syntax.Pos{}); err != nil || pool.AdmittedBytes() != 64<<10 || len(admitted) != 1 {
++		t.Fatalf("first chunk = %v admitted=%d calls=%v", err, pool.AdmittedBytes(), admitted)
++	}
++	if err := pool.ReserveBytes(64<<10-10, syntax.Pos{}); err != nil || len(admitted) != 1 {
++		t.Fatalf("growth within chunk charged again: %v %v", err, admitted)
++	}
++	var refusal *syntax.BudgetError
++	if err := pool.ReserveBytes(64<<10, syntax.Pos{}); !errors.As(err, &refusal) || !errors.Is(err, refuse) || refusal.Kind != "aggregate_admission" || pool.UsedBytes() != 64<<10 {
++		t.Fatalf("aggregate refusal = %v used=%d", err, pool.UsedBytes())
++	}
++	if _, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader("printf '%s' fixture"), "fixture.pw"); !errors.Is(err, refuse) {
++		t.Fatalf("parser hid aggregate refusal: %v", err)
++	}
++	if _, err := syntax.NewAdmittedAllocationBudget(1, nil); err == nil {
++		t.Fatal("admitted ledger accepted no aggregate")
 +	}
 +}
 --- a/syntax/braces.go
@@ -688,7 +756,7 @@
 +}
 --- /dev/null
 +++ b/syntax/budget.go
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,194 @@
 +package syntax
 +
 +import (
@@ -719,11 +787,18 @@
 +	Kind              string
 +	Maximum, Observed int64
 +	Pos               Pos
++	// Cause is the enclosing aggregate's refusal for an admitted ledger.
++	Cause error
 +}
 +
 +func (e *BudgetError) Error() string {
++	if e.Cause != nil {
++		return fmt.Sprintf("%s refused at %d bytes: %v", e.Kind, e.Observed, e.Cause)
++	}
 +	return fmt.Sprintf("%s exceeded: maximum %d, requested %d", e.Kind, e.Maximum, e.Observed)
 +}
++
++func (e *BudgetError) Unwrap() error { return e.Cause }
 +
 +type budgetAbort struct{ err *BudgetError }
 +

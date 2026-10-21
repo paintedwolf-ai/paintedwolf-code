@@ -26,6 +26,50 @@ unless `operands_end_options` is declared. Find-style primaries bind whole words
 The bound record keeps each form's typed values; approval review presents that
 record with the operation identity rather than a legacy tool schema.
 
+## Evaluator
+
+`Evaluate(ctx, plan, EvaluationPorts)` is the host statement scheduler over a
+frozen `commandsurface.ProgramSnapshot`. It walks `;`, `&&`, `||`, `!`,
+pipelines, braces and isolated `( )` frames, `if`/`elif`/`else`, `for`,
+`while`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
+`exit`/`return`/`break`/`continue`, assignments, `export`/`unset`,
+redirections, here-documents and statement-trailing `&`. Every simple command
+is expanded through `Expander` when reached and dispatched through `Dispatch`:
+catalog names bind first through `ArgvBinder` and `Invoke`; other programs and
+`external --` use `Launch`. Unsupported option spellings refuse with the
+binder's code and never fall back to an installed binary.
+
+Status follows `StatusControl` and `OutcomeLatch`: the last executed status or
+explicit exit, ordinary failures stay handleable, and refusal, interruption,
+owner stops, invalid results and exhausted ceilings latch. There is no implicit
+`set -e`. Pipelines run each stage concurrently in an isolated frame joined by
+metered `BytePipe`s; each stage closes its own endpoints, every pipe is closed
+before return, and `SettlePipeline` settles all stages. The native byte-endpoint
+closure exception applies only to native producers. Functions share variables
+and exit control with their caller and keep positional arguments local.
+`( )`, `$( )`, pipeline stages and background jobs copy variables and functions
+and fork the directory through `Dispatch.Fork`; a job also gets its own latch
+and the streams `ProgramSupervision.StartJob` owns for it. `Substitute` is the
+`ExpansionScope` callback expansion uses for `$(...)`: captured stdout bounded by
+`substitution_bytes`, trailing LF removed, nonzero status as
+`SubstitutionFailure`. `source` captures through `LoadSourceUnit`, preflights the
+unit and runs it in the current frame; its pin is recorded in the outcome.
+
+Before the first statement, preflight refuses reserved function names and any
+construct whose owner port is absent, with `COMMAND_SYNTAX_UNSUPPORTED`. Every
+reached statement is one `statement_visits` unit, each `while` test and `for`
+item one `loop_iterations` unit, and function, source and substitution nesting
+are bounded by depth ceilings. Operations, in-process native builtins, function
+calls, substitutions, redirections, source units, isolated groups, pipelines
+and jobs are child executions: each charges `child_executions` and holds the
+catalog's per-execution trace settlement reservation until it settles.
+Evaluator bookkeeping (assignments, declarations, branch and loop results) is
+not a child execution. Variables are charged to `program_state_bytes` with
+`variable_count` and `variable_value_bytes`. Child receipts belong to the
+dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
+captured sources and job handles, and `Settlement` projects it onto the
+receipt owner's aggregate record.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv

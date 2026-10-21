@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// programMemory sizes working storage for exactly one parser reservation.
+// programMemory sizes working storage for one parse at its per-unit scratch ceiling.
 func programMemory(t *testing.T, state int64) *toolcontract.ProgramMemory {
 	t.Helper()
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: state})
@@ -26,15 +26,12 @@ func stateLimit(err error) bool {
 
 func TestExecutionPlanAndDetachedSnapshotRetainIndependentStateLeases(t *testing.T) {
 	memory := programMemory(t, 4<<20)
-	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
-	testutil.FailErr(t, "admit parser memory", err)
-	defer parser.Close()
-	program, err := parser.Parse([]byte(`printf '%s' 'retained bytes'`), commandsurface.ParseOptions{})
+	program, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte(`printf '%s' 'retained bytes'`), commandsurface.ParseOptions{})
 	testutil.FailErr(t, "retain execution plan", err)
 	defer program.Close()
 	planCharge := memory.InUse().State
-	if planCharge <= 0 || memory.InUse().Working != 32<<20 {
-		t.Fatal("plan returned without independent memory admission")
+	if planCharge <= 0 || memory.InUse().Working != 0 || memory.Peak().Working <= 0 {
+		t.Fatal("plan returned without independent memory admission or retained parser scratch")
 	}
 	view, err := program.SnapshotWithMemory(t.Context(), memory)
 	testutil.FailErr(t, "retain execution snapshot", err)
@@ -48,9 +45,8 @@ func TestExecutionPlanAndDetachedSnapshotRetainIndependentStateLeases(t *testing
 		t.Fatalf("aggregate ceiling did not refuse new snapshot: %v", err)
 	}
 	fill()
-	testutil.FailErr(t, "release parser scratch", parser.Close())
-	if memory.InUse().Working != 0 || memory.InUse().State != 2*planCharge {
-		t.Fatal("scratch release erased retained plan state")
+	if memory.InUse().State != 2*planCharge {
+		t.Fatal("released fill changed retained plan state")
 	}
 	testutil.FailErr(t, "release original program", program.Close())
 	if memory.InUse().State != planCharge || view.Plan.Version != 1 || len(view.Plan.Statements) != 1 {
@@ -68,13 +64,10 @@ func TestExecutionPlanAndDetachedSnapshotRetainIndependentStateLeases(t *testing
 
 func TestStateRefusalReturnsNoExecutionPlanAndKeepsScratchSeparate(t *testing.T) {
 	memory := programMemory(t, 1)
-	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
-	testutil.FailErr(t, "admit scratch before state refusal", err)
-	defer parser.Close()
-	if program, err := parser.Parse([]byte(`printf changed > ./output`), commandsurface.ParseOptions{}); program != nil || !stateLimit(err) {
+	if program, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte(`printf changed > ./output`), commandsurface.ParseOptions{}); program != nil || !stateLimit(err) {
 		t.Fatalf("state refusal exposed plan: %v", err)
 	}
-	if memory.InUse().State != 0 || memory.InUse().Working != 32<<20 {
+	if memory.InUse().State != 0 || memory.InUse().Working != 0 {
 		t.Fatal("refused plan changed independent memory leases")
 	}
 }
@@ -83,14 +76,11 @@ func TestSourceLabelIsBoundedDetachedAndCharged(t *testing.T) {
 	backing := strings.Repeat("x", 2<<20)
 	label := backing[:6]
 	memory := programMemory(t, 4<<20)
-	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
-	testutil.FailErr(t, "admit parser", err)
-	defer parser.Close()
-	plain, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{})
+	plain, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("true"), commandsurface.ParseOptions{})
 	testutil.FailErr(t, "parse without label", err)
 	plainCharge := memory.InUse().State
 	testutil.FailErr(t, "close plain plan", plain.Close())
-	named, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{SourceName: label})
+	named, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("true"), commandsurface.ParseOptions{SourceName: label})
 	testutil.FailErr(t, "parse detached label", err)
 	defer named.Close()
 	snapshot := named.Snapshot()
@@ -100,7 +90,7 @@ func TestSourceLabelIsBoundedDetachedAndCharged(t *testing.T) {
 	if memory.InUse().State != plainCharge+int64(len(label)) {
 		t.Fatal("source label bypassed retained-state admission")
 	}
-	if plan, err := parser.Parse([]byte("true"), commandsurface.ParseOptions{SourceName: backing}); plan != nil || err == nil {
+	if plan, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("true"), commandsurface.ParseOptions{SourceName: backing}); plan != nil || err == nil {
 		t.Fatal("unbounded source label admitted")
 	}
 }

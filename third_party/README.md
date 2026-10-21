@@ -55,16 +55,18 @@ The portable command host uses the selected syntax parser, never the interpreter
 P04 adds bounded parser, brace-classification and static quote-removal operations:
 allocation and recursive-entry reservations precede parser growth. Exact selected-tree node/depth admission stays
 in the host before constructing its plan; transient parser wrappers are scratch.
-The host reserves the full scratch allowance against its aggregate budget before
-parsing. An exhausted scratch budget returns a typed refusal with no partial tree.
+`NewAdmittedAllocationBudget` charges ledger growth to the host aggregate in
+64 KiB chunks before the ledger admits it; an aggregate refusal is a
+`BudgetError` whose `Cause` is the host's typed refusal. An exhausted scratch
+budget returns a typed refusal with no partial tree.
 The modifications are recorded in [mvdan-sh.patch](mvdan-sh.patch). Only
 `syntax.Parse` activates `WithBudget(Budget{MaxBytes: ...})` or the shared
 `WithBudget(Budget{Pool: ...})`; other parser entry
-points explicitly refuse that option. The host's selected allowance is 32 MiB
-from `evaluation_memory_bytes`, reserved before constructing the parser. All
-active parse calls, retained state and old/new host-plan overlap must fit the
-host aggregate reservation; a successful parse does not independently grant
-memory or effects.
+points explicitly refuse that option. The host's per-unit ceiling is 32 MiB
+from `evaluation_memory_bytes`; the aggregate holds only the ledger's admitted
+high-water mark and is released after lowering. All active parse calls,
+retained state and old/new host-plan overlap must fit the host aggregate; a
+successful parse does not independently grant memory or effects.
 
 The meter reserves payload/backing capacities before `new`, `make`, slice growth,
 byte-to-string conversion and diagnostic formatting. It conservatively rounds
