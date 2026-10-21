@@ -32,13 +32,8 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "paths", "arguments"}:
+                        "platform", "arguments"}:
             raise ValueError(f"unknown CI lane fields: {name}")
-        # A path-selected platform lane verifies one subsystem's sources; nightly and release always run it.
-        if "paths" in lane and ("platform" not in lane or not lane["paths"]
-                                or not all(isinstance(path, str) and path and not path.startswith("/")
-                                           for path in lane["paths"])):
-            raise ValueError(f"CI lane {name} paths must select a platform lane by repository prefixes")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
             raise ValueError(f"CI lane {name} arguments belong to exactly one target")
@@ -110,15 +105,9 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     selected = {name for name, lane in values.items() if "platform" in lane} if platform else set(values)
     # A broad change runs the whole check gate and every platform lane of the merge queue.
     broad = profile == "integration" and scope is not None and scope["full"]
-    # A path-selected lane runs when its paths change, or whenever the changed paths are unknown.
-    by_path = {name for name in selected if "paths" in values[name]}
-    if profile == "integration" and scope is not None and scope.get("paths"):
-        by_path = {name for name in by_path
-                   if any(path.startswith(tuple(values[name]["paths"])) for path in scope["paths"])}
     if profile == "integration" and scope is not None and not broad:
         from ci_policy.impact import selected_lanes
         selected &= selected_lanes(scope, values)
-    selected = {name for name in selected if "paths" not in values[name]} | by_path
     result = []
     for name, lane in values.items():
         if name not in selected:
