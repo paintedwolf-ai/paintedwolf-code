@@ -718,7 +718,8 @@ Native Rust source has explicit verification dependencies in
 [`native_impact.py`](../scripts/ci_policy/native_impact.py). Tauri source runs native
 and frontend checks beside the repository baseline. Decision-engine and document
 core source runs native checks and seeds the corresponding Go subtree's reverse import
-closure, including test callers. A missing Go dependency in the resolved graph falls back
+closure, including test callers. Document-core changes also run the frontend
+consumers against the native executable. A missing Go dependency in the resolved graph falls back
 to the full Go recipe. Cargo manifests and lockfiles, build scripts, fixtures,
 assets, and unrecognized native paths still widen to full verification. Mixed
 changes union their lane and package obligations.

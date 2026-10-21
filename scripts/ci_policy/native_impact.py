@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 DEPENDENCIES = {
     "lycaon-den/src-tauri/src/": {"lanes": {"native", "frontend"}, "go": ()},
     "lycaon/internal/decide/native/src/": {"lanes": {"native"}, "go": ("lycaon/internal/decide",)},
-    "lycaon/internal/documentcore/native/src/": {"lanes": {"native"}, "go": ("lycaon/internal/documentcore",)},
+    "lycaon/internal/documentcore/native/src/": {"lanes": {"native", "frontend"}, "go": ("lycaon/internal/documentcore",)},
 }
 
 
