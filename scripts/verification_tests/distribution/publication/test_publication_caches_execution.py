@@ -8,7 +8,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication.caches import verify
+from linux_release.publication.trust.caches import verify
 
 
 class PublicationCachesTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class PublicationCachesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             selection, policy, report, modules = self.fixture(root)
-            with patch("linux_release.publication.caches.POLICY", root / "policy.json"), \
+            with patch("linux_release.publication.trust.caches.POLICY", root / "policy.json"), \
                  patch.dict(sys.modules, {"scripts.nix_cache." + name: module for name, module in modules.items()}):
                 result = verify(root, selection)
             self.assertEqual(result[0]["system"], "x86_64-linux")
@@ -53,7 +53,7 @@ class PublicationCachesTests(unittest.TestCase):
                 else:
                     report["request"][mutation] = "aarch64-linux" if mutation == "system" else "rehearsal"
                 (root / "nix-cache/x86_64-linux/report.json").write_text(json.dumps(report))
-                with patch("linux_release.publication.caches.POLICY", root / "policy.json"), \
+                with patch("linux_release.publication.trust.caches.POLICY", root / "policy.json"), \
                      patch.dict(sys.modules, {"scripts.nix_cache." + name: module for name, module in modules.items()}):
                     with self.assertRaises(ValueError):
                         verify(root, selection)
@@ -65,7 +65,7 @@ class PublicationCachesTests(unittest.TestCase):
             root = Path(directory)
             selection, _, _, modules = self.fixture(root)
             modules["release_authority"].authorize.return_value = False
-            with patch("linux_release.publication.caches.POLICY", root / "policy.json"), \
+            with patch("linux_release.publication.trust.caches.POLICY", root / "policy.json"), \
                  patch.dict(sys.modules, {"scripts.nix_cache." + name: module for name, module in modules.items()}):
                 with self.assertRaisesRegex(ValueError, "independently admitted"):
                     verify(root, selection)
@@ -75,7 +75,7 @@ class PublicationCachesTests(unittest.TestCase):
             root=Path(directory)
             selection,_,_,modules=self.fixture(root)
             (root/"policy.json").write_text('{"schema_version":1,"enabled":false}')
-            with patch("linux_release.publication.caches.POLICY",root/"policy.json"), \
+            with patch("linux_release.publication.trust.caches.POLICY",root/"policy.json"), \
                     patch.dict(sys.modules,{"scripts.nix_cache."+name:module for name,module in modules.items()}):
                 self.assertEqual(verify(root,selection),[])
             modules["admission"].validate_request.assert_not_called()

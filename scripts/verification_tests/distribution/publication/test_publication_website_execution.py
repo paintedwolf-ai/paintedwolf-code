@@ -5,7 +5,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 from unittest.mock import patch, MagicMock
-from scripts.linux_release.publication import website
+from scripts.linux_release.publication.document import website
 from scripts.release_distribution_contract.document_schema import canonical
 ROOT = Path(__file__).resolve().parents[4]
 SPEC = importlib.util.spec_from_file_location("publication_website_distribution", ROOT / "scripts/release_distribution.py")

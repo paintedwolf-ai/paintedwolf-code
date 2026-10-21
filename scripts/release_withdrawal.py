@@ -86,7 +86,7 @@ def prepare(distribution: dict, *, distribution_documents=False) -> dict:
             manifest_digest = hashlib.sha256(download(f"updates/releases/{good}.json")).hexdigest()
         document_digests = {}
         if distribution_documents:
-            from scripts.linux_release.publication.withdrawal import digests
+            from scripts.linux_release.publication.document.withdrawal import digests
             document_digests = digests(bad, good, manifest_digest)
         rows.append({**document_digests, "channel": channel, "bad": bad, "last_good": good, "path": path,
                      "sha": current["sha"] if change_tap else None, "change_tap": change_tap,
@@ -121,7 +121,7 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
 def apply(prepared: dict) -> None:
     for row in prepared["channels"]:
         if "distribution_sha256" in row or "bad_distribution_sha256" in row:
-            from scripts.linux_release.publication.withdrawal import digests
+            from scripts.linux_release.publication.document.withdrawal import digests
             expected = digests(row["bad"], row["last_good"], row["manifest_sha256"])
             if any(row.get(key) != value for key, value in expected.items()):
                 raise ValueError("halt distribution identities changed after preparation")

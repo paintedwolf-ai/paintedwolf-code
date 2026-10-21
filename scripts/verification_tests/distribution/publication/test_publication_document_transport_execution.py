@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication import document_publication as owner
+from scripts.linux_release.publication.document import document_publication as owner
 from scripts.release_distribution_contract.document_schema import canonical
 
 

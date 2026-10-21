@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.publication import release_producer as owner
+from scripts.linux_release.publication.release import release_producer as owner
 
 
 class ReleaseProducerTests(unittest.TestCase):

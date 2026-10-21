@@ -3,7 +3,7 @@ import hashlib
 import unittest
 from unittest.mock import patch
 import release_withdrawal as owner
-from scripts.linux_release.publication import withdrawal
+from scripts.linux_release.publication.document import withdrawal
 
 class DistributionWithdrawalTests(unittest.TestCase):
     def test_authenticated_documents_and_updaters_are_bound_before_hashes_escape(self):

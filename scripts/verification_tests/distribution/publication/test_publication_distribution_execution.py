@@ -4,9 +4,9 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication.distribution import DistributionAuthority
+from scripts.linux_release.publication.document.distribution import DistributionAuthority
 
-OWNER = "scripts.linux_release.publication.distribution"
+OWNER = "scripts.linux_release.publication.document.distribution"
 
 
 class DistributionAuthorityTests(unittest.TestCase):
@@ -67,7 +67,7 @@ class DistributionAuthorityTests(unittest.TestCase):
 
 class InactiveDeliveryAuthorityTests(unittest.TestCase):
     def fixture(self):
-        from scripts.linux_release.publication.distribution import InactiveDeliveryReleaseAuthority
+        from scripts.linux_release.publication.document.distribution import InactiveDeliveryReleaseAuthority
         selected = Mock()
         selected.authorize.return_value = {"provenance": {}, "metadata": {}, "non_linux_packages": {}}
         binding = {"document": {"mode": "production", "origin": "https://downloads.paintedwolf.dev",

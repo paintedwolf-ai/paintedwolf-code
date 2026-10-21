@@ -1099,13 +1099,13 @@ require the protected main controller identity:
 
 | Task | Module | Role |
 |---|---|---|
-| `release:publish:linux-collection` | `publication.native_artifacts` | Collect admitted installed package bytes without rebuilding |
-| `release:publish:release-inputs` | `publication.release_producer` | Retain signed non-Linux release results |
-| `release:publish:linux-controls` | `publication.control_pipeline` | Sign nonpublishing controls and the qualification plan |
-| `release:publish:linux-campaign` | `publication.producer` | Retain a freshly admitted installed campaign |
-| `release:publish:linux-admission` | `publication.controller` | Reevaluate the campaign and imminent publication bytes |
-| `release:publish:linux-document` | `publication.document_pipeline` | Prepare, publish or notify the signed distribution document |
-| `release:publish:website` | `publication.website` | Build the dispatch body (`dispatch-body`) or confirm the published state (`confirm`) |
+| `release:publish:linux-collection` | `publication.campaign.native_artifacts` | Collect admitted installed package bytes without rebuilding |
+| `release:publish:release-inputs` | `publication.release.release_producer` | Retain signed non-Linux release results |
+| `release:publish:linux-controls` | `publication.control.control_pipeline` | Sign nonpublishing controls and the qualification plan |
+| `release:publish:linux-campaign` | `publication.campaign.producer` | Retain a freshly admitted installed campaign |
+| `release:publish:linux-admission` | `publication.campaign.controller` | Reevaluate the campaign and imminent publication bytes |
+| `release:publish:linux-document` | `publication.document.document_pipeline` | Prepare, publish or notify the signed distribution document |
+| `release:publish:website` | `publication.document.website` | Build the dispatch body (`dispatch-body`) or confirm the published state (`confirm`) |
 
 Rehearsals are declared verification targets with scoped locks.
 `./task release:rehearse:linux-controls -- ...` assembles controls with disposable

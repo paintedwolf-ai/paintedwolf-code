@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication import repository_observation as owner
+from scripts.linux_release.publication.delivery import repository_observation as owner
 from scripts.linux_release.repository_operations import identity, transition
 from scripts.linux_release.repository_pending import activation_plan, marker
 

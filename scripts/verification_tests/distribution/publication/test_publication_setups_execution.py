@@ -9,8 +9,8 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication.repositories import digest
-from linux_release.publication.setups import public_key, verify
+from linux_release.publication.trust.repositories import digest
+from linux_release.publication.trust.setups import public_key, verify
 
 
 class PublicationSetupsTests(unittest.TestCase):

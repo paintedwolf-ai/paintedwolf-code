@@ -4,9 +4,9 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication.delivery import ObservedDeliveryReleaseAuthority
+from scripts.linux_release.publication.delivery.delivery import ObservedDeliveryReleaseAuthority
 
-OWNER = "scripts.linux_release.publication.delivery"
+OWNER = "scripts.linux_release.publication.delivery.delivery"
 
 
 class DeliveryAuthorityTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class DeliveryAuthorityTests(unittest.TestCase):
 class RepositoryDeliveryFactsTests(unittest.TestCase):
     def test_pacman_config_is_derived_without_mutating_retained_generation(self):
         import tempfile
-        from scripts.linux_release.publication.delivery import repository_facts
+        from scripts.linux_release.publication.delivery.delivery import repository_facts
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             public = root / "trusted.asc"; public.write_bytes(b"selected public key")

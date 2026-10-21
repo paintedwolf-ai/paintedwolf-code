@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.publication import controls as owner
-from linux_release.publication import control_packages as packages
+from linux_release.publication.control import controls as owner
+from linux_release.publication.control import control_packages as packages
 
 
 class ControlRetentionTests(unittest.TestCase):

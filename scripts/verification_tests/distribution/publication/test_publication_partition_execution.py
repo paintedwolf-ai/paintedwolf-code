@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 
-from linux_release.publication.repositories import digest, verify_repositories
+from linux_release.publication.trust.repositories import digest, verify_repositories
 from verification_tests.distribution.test_linux_release_admission_execution import LinuxReleaseAdmissionTests
 
 

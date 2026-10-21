@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.publication import control_pipeline as owner
+from scripts.linux_release.publication.control import control_pipeline as owner
 
 SOURCE = {"source_commit": "a" * 40, "source_tree": "b" * 40}
 PRODUCER = {"repository_id": 1, "run_id": 2, "run_attempt": 1, "controller_commit": "c" * 40}

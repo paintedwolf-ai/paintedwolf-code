@@ -9,15 +9,15 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication.controller import SelectedCampaign, main, retain
+from linux_release.publication.campaign.controller import SelectedCampaign, main, retain
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
 class PublicationControllerTests(unittest.TestCase):
     def fixture(self, directory):
-        crypto = patch("linux_release.publication.controller.verify_generations")
+        crypto = patch("linux_release.publication.campaign.controller.verify_generations")
         crypto.start()
-        setups = patch("linux_release.publication.controller.verify_setups", return_value=[])
+        setups = patch("linux_release.publication.campaign.controller.verify_setups", return_value=[])
         setups.start()
         self.addCleanup(setups.stop)
         self.addCleanup(crypto.stop)
@@ -67,9 +67,9 @@ class PublicationControllerTests(unittest.TestCase):
 
     def test_refused_server_provenance_never_downloads_campaign_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch("linux_release.publication.controller.facts", return_value={}), \
-                 patch("linux_release.publication.controller.select_final", side_effect=ValueError("untrusted workflow")), \
-                 patch("linux_release.publication.controller.download") as download:
+            with patch("linux_release.publication.campaign.controller.facts", return_value={}), \
+                 patch("linux_release.publication.campaign.controller.select_final", side_effect=ValueError("untrusted workflow")), \
+                 patch("linux_release.publication.campaign.controller.download") as download:
                 with self.assertRaisesRegex(ValueError, "untrusted workflow"):
                     retain(None, "owner/repo", 42, 123, Path(directory), "a" * 40,
                            Path(directory) / "out", catalog={}, signing_generation=1, key_fingerprint="A" * 40)
@@ -78,7 +78,7 @@ class PublicationControllerTests(unittest.TestCase):
     def test_format_signature_refusal_cannot_be_replaced_with_accepted_campaign(self):
         with tempfile.TemporaryDirectory() as directory:
             root, selected = self.fixture(directory)
-            with patch("linux_release.publication.controller.verify_generations",
+            with patch("linux_release.publication.campaign.controller.verify_generations",
                        side_effect=ValueError("invalid repository signature")) as crypto:
                 with self.assertRaisesRegex(ValueError, "repository signature"):
                     selected.authorize()
@@ -104,8 +104,8 @@ class PublicationControllerTests(unittest.TestCase):
                     "GITHUB_SHA": "b" * 40, "GITHUB_WORKFLOW_SHA": "b" * 40,
                     "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
                     "LINUX_REPOSITORY_ORIGIN": "https://downloads.example.test"}), \
-                 patch("linux_release.publication.controller.CATALOG", root / "catalog.json"), \
-                 patch("linux_release.publication.controller.retain", return_value=selected):
+                 patch("linux_release.publication.campaign.controller.CATALOG", root / "catalog.json"), \
+                 patch("linux_release.publication.campaign.controller.retain", return_value=selected):
                 self.assertEqual(main(arguments), 0)
                 receipt = json.loads((root / "receipt.json").read_text())
                 self.assertEqual(receipt["publication_files"][0]["id"], "app")

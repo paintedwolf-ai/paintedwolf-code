@@ -1752,63 +1752,63 @@ tasks:
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.native_artifacts {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.campaign.native_artifacts {{.CLI_ARGS}}
 
   release:publish:release-inputs:
     desc: 'Protected release controller: retain signed non-Linux release results without publication'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.release_producer {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.release.release_producer {{.CLI_ARGS}}
 
   release:publish:linux-controls:
     desc: 'Protected release controller: sign nonpublishing Linux controls and the installed qualification plan'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.control_pipeline {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.control.control_pipeline {{.CLI_ARGS}}
 
   release:publish:linux-campaign:
     desc: 'Protected release controller: retain a freshly admitted installed Linux campaign'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.producer {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.campaign.producer {{.CLI_ARGS}}
 
   release:publish:linux-admission:
     desc: 'Protected release controller: reevaluate the retained Linux campaign and imminent publication bytes'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.controller {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.campaign.controller {{.CLI_ARGS}}
 
   release:publish:linux-document:
     desc: 'Protected release controller: prepare, publish or notify the signed distribution document'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.document_pipeline {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.document.document_pipeline {{.CLI_ARGS}}
 
   release:publish:website:
     desc: 'Protected release controller: build the website dispatch body or confirm the published distribution state'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.website {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.document.website {{.CLI_ARGS}}
 
   release:rehearse:linux-controls:
     desc: 'Local Linux control assembly with disposable signing identities; never production authority'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.controls {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.control.controls {{.CLI_ARGS}}
 
   release:rehearse:distribution-document:
     desc: 'Credentialed signed document rehearsal under one disposable R2 prefix with complete cleanup'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
-      - python3 -m scripts.linux_release.publication.rehearsal {{.CLI_ARGS}}
+      - python3 -m scripts.linux_release.publication.document.rehearsal {{.CLI_ARGS}}
 
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'

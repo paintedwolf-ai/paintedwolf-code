@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication import document_pipeline as owner
+from scripts.linux_release.publication.document import document_pipeline as owner
 
 
 class DocumentPipelineTests(unittest.TestCase):
@@ -86,7 +86,7 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertFalse(json.loads((root / 'output/preparation.json').read_text())['published'])
 
     def test_native_collection_keeps_bare_digest_sidecars_and_no_updater(self):
-        from scripts.linux_release.publication.native_artifacts import collect
+        from scripts.linux_release.publication.campaign.native_artifacts import collect
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             selected, released, source = self.fixture(root)
@@ -101,7 +101,7 @@ class DocumentPipelineTests(unittest.TestCase):
             self.assertFalse((root / 'refused').exists())
 
     def test_final_fresh_admission_failure_removes_only_owned_collection(self):
-        from scripts.linux_release.publication.native_artifacts import collect
+        from scripts.linux_release.publication.campaign.native_artifacts import collect
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             selected, released, source = self.fixture(root)

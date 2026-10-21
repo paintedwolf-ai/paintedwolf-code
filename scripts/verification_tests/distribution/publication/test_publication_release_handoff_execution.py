@@ -1,7 +1,7 @@
 """A current workflow handoff attests producer jobs, never workflow completion."""
 import copy
 import unittest
-from scripts.linux_release.publication.release_handoff import attest, AGGREGATE_STEPS, CONSUMERS
+from scripts.linux_release.publication.release.release_handoff import attest, AGGREGATE_STEPS, CONSUMERS
 
 
 class CurrentProducerHandoffTests(unittest.TestCase):
