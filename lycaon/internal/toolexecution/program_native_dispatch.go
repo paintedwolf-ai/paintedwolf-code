@@ -52,6 +52,7 @@ type PreparedNativeEffect struct {
 // PrepareReviewed decodes actual reviewed/resolved values into the existing typed
 // operation. It must not reuse the adapter's stale pre-review input.
 type NativeEffect struct {
+	Inspection      toolcontract.OperationInspectionProjector
 	Operation       toolcontract.BoundOperation
 	Stage           toolcontract.ExecutionStage
 	Arguments       map[string]any
@@ -113,7 +114,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	tc.Invocation.NativeOperation, tc.Invocation.NativeStages = &bound, projection.BoundStages
-	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx, admission)
+	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx, admission, effect.Inspection)
 	defer tc.Invocation.NativeReview.Close()
 	ctx = invocationContext(ctx, tc)
 	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
