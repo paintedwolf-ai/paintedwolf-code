@@ -16,6 +16,7 @@ func TestStartupFailureSeparatesCustodyFromCorruption(t *testing.T) {
 		credentialstore.ErrVaultUninitialized:   "credential_vault_uninitialized",
 		credentialstore.ErrVaultUnlockFailed:    "credential_vault_unlock_failed",
 		credentialstore.ErrCustodianUnavailable: "credential_vault_custodian_unavailable",
+		credentialstore.ErrCustodianAbsent:      "credential_vault_custodian_absent",
 		credentialstore.ErrLauncherRefused:      "credential_vault_launcher_refused",
 		credentialstore.ErrIdentityMissing:      "credential_vault_identity_missing",
 		credentialstore.ErrVaultCorrupt:         "credential_vault_corrupt",

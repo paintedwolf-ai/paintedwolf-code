@@ -51,6 +51,7 @@ pub enum SidecarStartError {
     CredentialVaultUnlockFailed(String),
     CredentialVaultCorrupt(String),
     CredentialVaultCustodianUnavailable(String),
+    CredentialVaultCustodianAbsent(String),
     CredentialVaultLauncherRefused(String),
     CredentialVaultIdentityMissing(String),
     Failed(String),
@@ -73,6 +74,7 @@ impl SidecarStartError {
             | Self::CredentialVaultUnlockFailed(message)
             | Self::CredentialVaultCorrupt(message)
             | Self::CredentialVaultCustodianUnavailable(message)
+            | Self::CredentialVaultCustodianAbsent(message)
             | Self::CredentialVaultLauncherRefused(message)
             | Self::CredentialVaultIdentityMissing(message)
             | Self::Failed(message) => message,

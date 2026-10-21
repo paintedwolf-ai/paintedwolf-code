@@ -473,6 +473,7 @@ tool_call_rejection_profiles:
         source: ollama/ollama model/parsers/ministral.go (toolByName)
         grammar: 'tool ''([a-zA-Z0-9_-]{1,64})'' not found'
       - kind: arguments_unparsed
+        diagnostic: unexpected_end
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'
 
@@ -483,6 +484,7 @@ providers:
 
 - **Ship catalog only.** Local instances inherit their kind's profile; they cannot define profiles or select a different one.
 - **Exact grammars.** Each `grammar` must span the whole message and every rule cites its `source`. `kind` is a closed set with host handling behind each value, and fixes how many names its grammar captures.
+- **Bounded diagnostics.** An `arguments_unparsed` rule may declare `diagnostic`: `unescaped_newline`, `unexpected_end`, or `invalid_escape`. The matched enum supplies a typed observation to OAR; provider text is not interpolated into guidance. Omitted diagnostics keep generic feedback. Rules are ordered, so specific grammars precede generic ones.
 - **Only when a call is possible.** The request must offer callable tools and set no structured output. Anything else, including unmatched text, keeps the provider's original error.
 - **`tool_not_offered`** captures exactly one name, which must be a function-name token outside the offered set; an offered name stays an error. The adapter restores a bare call with that name, and the prompt loop refuses it with `TOOL_NOT_OFFERED` before any definition lookup, so it never executes.
 - **`arguments_unparsed`** captures nothing and never becomes a call. A match becomes `ProviderToolCallUnparsedError`, which keeps the original message. The prompt loop answers it with `TOOL_CALL_UNPARSED` repair feedback ([tool feedback](agent-tool-feedback.md#model-response-repair)) for at most two consecutive responses, then fails with that error.

@@ -18,6 +18,8 @@ func startupFailureCode(err error) string {
 		code = "credential_vault_uninitialized"
 	case errors.Is(err, credentialstore.ErrVaultUnlockFailed):
 		code = "credential_vault_unlock_failed"
+	case errors.Is(err, credentialstore.ErrCustodianAbsent):
+		code = "credential_vault_custodian_absent"
 	case errors.Is(err, credentialstore.ErrCustodianUnavailable):
 		code = "credential_vault_custodian_unavailable"
 	case errors.Is(err, credentialstore.ErrLauncherRefused):
