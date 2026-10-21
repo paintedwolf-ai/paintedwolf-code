@@ -101,6 +101,13 @@ func measurePage(ctx context.Context, mp *browser.MeasurePool, pages *pagesessio
 	if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 		return browser.MeasureResult{}, err
 	}
+	if in.ProjectDir != "" {
+		if _, err := browser.ResolveTarget(browser.CaptureRequest{
+			ProjectDir: in.ProjectDir, Path: in.Path,
+		}); err != nil {
+			return browser.MeasureResult{}, err
+		}
+	}
 	return mp.Measure(ctx, req)
 }
 

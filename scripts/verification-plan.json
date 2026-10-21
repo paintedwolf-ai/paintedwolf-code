@@ -386,7 +386,8 @@
     "release:rehearse:linux-signing": "passthrough",
     "release:rehearse:native-repositories": "passthrough",
     "release:rehearse:native-repositories-r2": "passthrough",
-    "release:rehearse:native-candidates": "passthrough"
+    "release:rehearse:native-candidates": "passthrough",
+    "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
     "den:harness:test": {
