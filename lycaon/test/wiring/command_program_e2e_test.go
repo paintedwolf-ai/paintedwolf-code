@@ -241,3 +241,29 @@ func TestCommandProgramRefusesUnknownCapabilityRequestKeys(t *testing.T) {
 	}
 	t.Fatal("no command result delivered")
 }
+
+// Child receipts carry the started job's handle, a stale destination's
+// revision conflict and screened previews of each child's output.
+func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
+	s := newCommandProgramSession(t, `head -n 1 notes.txt; sleep 30 & kill %1; printf 'old\n' > target.txt; sh -c 'printf changed > target.txt; printf produced' > target.txt`, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	if !strings.Contains(result, "COMMAND_REVISION_CONFLICT") || !strings.Contains(result, "first note") {
+		t.Fatalf("conflict program result = %q", result)
+	}
+	var path, expected, observed string
+	testutil.FailErr(t, "read conflict receipt", s.h.DB.QueryRowContext(t.Context(), `SELECT conflict_path, conflict_expected_revision, conflict_observed_revision FROM invocation_program_executions WHERE conflict_path != ''`).Scan(&path, &expected, &observed))
+	if !strings.HasSuffix(path, "target.txt") || expected == "" || observed == "" || expected == observed {
+		t.Fatalf("revision conflict receipt %q %q %q", path, expected, observed)
+	}
+	var handle string
+	testutil.FailErr(t, "read job receipt", s.h.DB.QueryRowContext(t.Context(), `SELECT job_handle FROM invocation_program_executions WHERE job_handle != ''`).Scan(&handle))
+	if handle == "" {
+		t.Fatal("background child has no job handle")
+	}
+	var preview string
+	testutil.FailErr(t, "read output preview", s.h.DB.QueryRowContext(t.Context(), `SELECT preview FROM invocation_program_outputs WHERE stream = 'stdout' AND preview LIKE 'first note%'`).Scan(&preview))
+	if preview != "first note\n" {
+		t.Fatalf("stdout preview %q", preview)
+	}
+}

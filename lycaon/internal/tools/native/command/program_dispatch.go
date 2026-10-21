@@ -108,7 +108,9 @@ func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func
 }
 
 // Launch runs a confined external program from this frame's directory.
-func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
+	streams, retain := d.run.childOutputs(request, streams)
+	defer func() { retain(ctx) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -139,7 +141,9 @@ var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
 var _ commandprogram.NativeGaps = (*ProgramDispatcher)(nil)
 
 // Invoke admits, records, dispatches and settles one child.
-func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
+	streams, retain := d.run.childOutputs(request, streams)
+	defer func() { retain(ctx) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -310,7 +314,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		d.shared.mu.Unlock()
 	}
-	return native.Producer, errors.Join(runErr, d.settle(ctx, child, native.Producer, native.OwnerInvoked, native.HostStopCode))
+	return native.Producer, errors.Join(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -388,8 +392,15 @@ func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {
-	publishable := result.PublicationEligible && hostStop == ""
-	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, toolcontract.ProgramChildSettlement{Result: result, HostStopCode: hostStop, OutputPublishable: publishable, OwnerInvoked: ownerInvoked, DetailReference: child.reference})
+	return d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result, HostStopCode: hostStop, OwnerInvoked: ownerInvoked})
+}
+
+// settleWith records a child's settlement with its typed receipt facts: the
+// job a & statement started and a destination's revision conflict.
+func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, settlement toolcontract.ProgramChildSettlement) error {
+	settlement.OutputPublishable = settlement.Result.PublicationEligible && settlement.HostStopCode == ""
+	settlement.DetailReference = child.reference
+	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
 // catalogDefinition compiles one definition per catalog command without a
@@ -551,7 +562,7 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 		// Descendants own their effects; a structural node only aggregates them.
 		result.EffectCertainty = toolcontract.EffectUnknown
 	}
-	return d.settle(ctx, entry.child, result, entry.ownerInvoked, "")
+	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
 }
 
 // structuralDefinition compiles one definition per evaluator construct.
@@ -646,4 +657,20 @@ func writeHostRefusal(streams commandprogram.Streams, command, form, code string
 		subject += ": " + form
 	}
 	_, _ = fmt.Fprintf(streams.Error, "%s: not supported here [%s]\n", subject, code)
+}
+
+// revisionConflict is a COMMAND_REVISION_CONFLICT refusal's typed facts: the
+// destination path and its expected and observed revisions.
+func revisionConflict(err error) *toolcontract.RevisionConflict {
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" {
+		return nil
+	}
+	path, _ := reject.Data["path"].(string)
+	expected, _ := reject.Data["expected_revision"].(string)
+	observed, _ := reject.Data["observed_revision"].(string)
+	if path == "" || expected == "" || observed == "" || expected == observed {
+		return nil
+	}
+	return &toolcontract.RevisionConflict{Path: path, ExpectedRevision: expected, ObservedRevision: observed}
 }
