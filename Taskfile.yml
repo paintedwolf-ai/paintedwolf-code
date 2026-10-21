@@ -366,7 +366,7 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
       # The scope contract derives this applied-confinement inventory.
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestEngineLossFixtureProcess|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce)$'
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce)$'
       - |
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
@@ -1090,10 +1090,15 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - internal/toolcontract/language_catalog.go
+      - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
@@ -1103,9 +1108,14 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - internal/toolcontract/language_catalog.go
+      - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
 
@@ -1793,6 +1803,17 @@ tasks:
         msg: jq and python3 required for release:recovery:prepare
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
+
+  release:candidate:select:
+    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    silent: true
+    cmds:
+      - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
+
+  release:candidate:diagnostics:
+    desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
+    cmds:
+      - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'

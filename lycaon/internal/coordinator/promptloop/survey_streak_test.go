@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,23 +16,9 @@ func surveyRegistry(t *testing.T) *tools.StubRegistry {
 		t.Fatal("survey classification invoked a tool")
 		return "", nil
 	}
-	for name, lifecycle := range map[string]toolcontract.Lifecycle{
-		"git_diff": toolcontract.LifecycleReadOnly,
-		"read":     toolcontract.LifecycleReadOnly,
-		"edit":     toolcontract.LifecycleEffectAttempt,
-	} {
-		testutil.FailErr(t, "register "+name, reg.RegisterDefinition(tools.Definition{
-			Meta:     tools.ToolMeta{Name: name},
-			Contract: toolcontract.Contract{Owner: "survey-test", Lifecycle: lifecycle},
-			Handler:  handler,
-		}))
-	}
-	for _, name := range []string{"update_progress", "request_tools"} {
-		testutil.FailErr(t, "register "+name, reg.RegisterDefinition(tools.Definition{
-			Meta:     tools.ToolMeta{Name: name},
-			Contract: toolcontract.Contract{Owner: "survey-test", Lifecycle: toolcontract.LifecycleDBTransaction, SurveyNeutral: true},
-			Handler:  handler,
-		}))
+	// Catalog contracts supply the lifecycles and survey neutrality judged here.
+	for _, name := range []string{"git_diff", "read", "edit", "update_progress", "request_tools"} {
+		testutil.FailErr(t, "register "+name, reg.Register(name, handler))
 	}
 	return reg
 }

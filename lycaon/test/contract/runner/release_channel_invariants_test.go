@@ -103,39 +103,37 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Linux candidates build the catalog row's package families natively without publication authority.
-	candidates := extractYAMLJob(workflow, "linux-candidates")
+	// Release and independent candidate runs share one non-publishing build path.
+	call := extractYAMLJob(workflow, "linux-candidates")
+	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
+		if !strings.Contains(call, needle) {
+			t.Fatalf("release candidate caller is missing %q", needle)
+		}
+	}
+	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
-		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "Verify the catalog row for this candidate",
-		`jq -er '.package_extensions | join(",")'`,
-		"PACKAGE_EXTENSIONS: ${{ steps.catalog.outputs.package_extensions }}",
+		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
 		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
-		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90",
-	} {
-		if !strings.Contains(candidates, needle) {
-			t.Fatalf("linux-candidates job is missing %q", needle)
-		}
-	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-"} {
-		if strings.Contains(candidates, forbidden) {
-			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
-		}
-	}
-	if strings.Contains(candidates, "--package-extensions deb,rpm") {
-		t.Fatal("linux-candidates must stage the catalog row's package families, not a fixed list")
-	}
-	// The runner prepares the diagnostic's userns attachment itself; the probe gets no lease there.
-	for _, needle := range []string{
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
+		"name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90", "Verify the catalog row for this candidate",
+		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
+		"./task release:candidate:diagnostics --",
 		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
 		"TMPDIR: /tmp",
 	} {
 		if !strings.Contains(candidates, needle) {
-			t.Fatalf("linux-candidates job is missing %q", needle)
+			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	if strings.Contains(candidates, "PW_PACKAGE_PROBE_LEASE") {
-		t.Fatal("hosted Linux candidates must not hand the package probe an operation lease")
+	// Candidate runs carry no branch-scoped triggers, use one source checkout, and prepare userns locally without a probe lease.
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
+		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
+		"--package-extensions deb,rpm", "PW_PACKAGE_PROBE_LEASE"} {
+		if strings.Contains(candidates, forbidden) {
+			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
+		}
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
 		t.Fatal("aggregate-release must collect only signed platform results, never Linux candidates")
