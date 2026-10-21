@@ -223,9 +223,6 @@ func TestParseSupervisorTargetRequiresDescriptorCountAndCommand(t *testing.T) {
 			t.Errorf("accepted malformed supervisor arguments %q", args)
 		}
 	}
-}
-
-func TestForegroundTerminalClaimsOnlyControllingSessionTerminal(t *testing.T) {
 	read, write, err := os.Pipe()
 	testutil.FailErr(t, "open non-terminal pipe", err)
 	defer func() { _ = read.Close(); _ = write.Close() }()
