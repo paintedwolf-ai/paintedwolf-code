@@ -165,29 +165,40 @@ func (r *ProgramOutputRetention) Collect(ctx context.Context) error {
 	if r.release == nil {
 		return nil
 	}
-	var failures error
-	for claim, entry := range r.entries {
-		var retained bool
-		err := r.recorder.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_program_outputs WHERE retention_claim_id=?)`, claim).Scan(&retained)
-		if err != nil {
-			return err
+	// Multiple references can share one physical blob. Earlier Close attempts
+	// retain quota until the last actual claim permits collection. Retry those
+	// known local failures once after collection progress, rather than exposing a
+	// transient ordering failure or spinning on foreign/active references.
+	for pass := 0; pass < 2; pass++ {
+		var failures error
+		collected := false
+		for claim, entry := range r.entries {
+			var retained bool
+			err := r.recorder.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_program_outputs WHERE retention_claim_id=?)`, claim).Scan(&retained)
+			if err != nil {
+				return err
+			}
+			if retained {
+				continue
+			}
+			if entry.pending != nil {
+				err = entry.pending.Close()
+			} else {
+				err = entry.body.Close()
+			}
+			if err != nil {
+				failures = errors.Join(failures, err)
+				continue
+			}
+			collected = true
+			entry.release()
+			delete(r.entries, claim)
 		}
-		if retained {
-			continue
+		if failures == nil || !collected || pass == 1 {
+			return failures
 		}
-		if entry.pending != nil {
-			err = entry.pending.Close()
-		} else {
-			err = entry.body.Close()
-		}
-		if err != nil {
-			failures = errors.Join(failures, err)
-			continue
-		}
-		entry.release()
-		delete(r.entries, claim)
 	}
-	return failures
+	return nil
 }
 
 // Close succeeds only after callers release durable references and active reads.
