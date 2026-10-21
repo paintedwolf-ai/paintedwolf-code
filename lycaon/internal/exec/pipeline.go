@@ -357,7 +357,11 @@ func startWiredStages(wired []wiredStage) error {
 			_ = wired[i].pipeWriter.Close()
 			wired[i].pipeWriter = nil
 		}
-		if err := wired[i].guard.onStarted(wired[i].cmd); err != nil {
+		err = wired[i].guard.onStarted(wired[i].cmd)
+		if err == nil {
+			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+		}
+		if err != nil {
 			killWired(wired[:i+1])
 			reapWired(wired[:i+1])
 			releaseWired(wired[:i+1])

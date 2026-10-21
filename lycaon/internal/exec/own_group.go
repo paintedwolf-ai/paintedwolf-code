@@ -47,7 +47,11 @@ func StartInOwnGroup(cmd *exec.Cmd) (*ProcessGroup, error) {
 	if err := cmd.Start(); err != nil {
 		return fail(err)
 	}
-	if err := guard.onStarted(cmd); err != nil {
+	err = guard.onStarted(cmd)
+	if err == nil {
+		err = confine.ConfirmProcessLaunch(cmd)
+	}
+	if err != nil {
 		guard.kill(cmd)
 		_ = cmd.Wait()
 		return fail(fmt.Errorf("process group: %w", err))

@@ -46,7 +46,11 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		guard.release()
 		return nil, err
 	}
-	if err := guard.onStarted(cmd); err != nil {
+	err = guard.onStarted(cmd)
+	if err == nil {
+		err = confine.ConfirmProcessLaunch(cmd)
+	}
+	if err != nil {
 		_ = main.Close()
 		guard.kill(cmd)
 		// Reap the child after guard setup fails.

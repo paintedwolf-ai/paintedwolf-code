@@ -147,7 +147,7 @@ func ValidateProcessInputs(cmd *exec.Cmd) error {
 func ConfirmProcessLaunch(cmd *exec.Cmd) error {
 	value, ok := processHandoffs.Load(cmd)
 	if !ok {
-		return nil
+		return fmt.Errorf("prepared launch handoff is absent")
 	}
 	state := value.(*processHandoff)
 	ctx, cancel := context.WithTimeout(state.ctx, 10*time.Second)

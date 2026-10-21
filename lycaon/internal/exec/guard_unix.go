@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -79,9 +78,6 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	}
 	g.recordProcessGroup(cmd.Process.Pid)
 	if err := g.confirmLaunch(cmd); err != nil {
-		return err
-	}
-	if err := confine.ConfirmProcessLaunch(cmd); err != nil {
 		return err
 	}
 	if !g.belowNormal {

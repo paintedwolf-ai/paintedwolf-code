@@ -4,6 +4,8 @@ package exec
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/confine"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -93,5 +95,46 @@ func TestOwnedProcessGroupRefusesConsumedPreparedCommand(t *testing.T) {
 	testutil.FailErr(t, "settle first native group", group.Wait())
 	if second, err := StartInOwnGroup(cmd); err == nil || second != nil {
 		t.Fatal("consumed native command started twice")
+	}
+}
+
+func TestPreparedGroupRefusesRemovedCaptureAfterOwnerRegistration(t *testing.T) {
+	root := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd, cleanup, err := PrepareCommand(ctx, "/bin/sh", []string{"-c", "printf forbidden > effect"}, ExecOpts{Launch: HostLaunch("synthetic removed handoff"), Dir: root})
+	testutil.FailErr(t, "prepare gated native command", err)
+	defer cleanup()
+	cmd, supervisorCleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
+	testutil.FailErr(t, "select existing supervisor", err)
+	defer supervisorCleanup()
+	guard, err := newRunGuard(ProcessPriorityNormal)
+	testutil.FailErr(t, "create actual native tree owner", err)
+	defer guard.release()
+	guard.configure(cmd)
+	testutil.FailErr(t, "validate captured inputs", confine.ValidateProcessInputs(cmd))
+	testutil.FailErr(t, "start held native helper", cmd.Start())
+	settled := false
+	defer func() {
+		if !settled {
+			guard.kill(cmd)
+			_ = cmd.Wait()
+		}
+	}()
+	testutil.FailErr(t, "register native owner without releasing payload", guard.onStarted(cmd))
+	if _, err := os.Stat(filepath.Join(root, "effect")); !os.IsNotExist(err) {
+		t.Fatal("owner registration released payload")
+	}
+	removed := make(chan struct{})
+	go func() { cleanup(); close(removed) }()
+	<-removed
+	if confine.ConfirmProcessLaunch(cmd) == nil {
+		t.Fatal("removed capture reported accepted handoff")
+	}
+	guard.kill(cmd)
+	_ = cmd.Wait()
+	settled = true
+	if _, err := os.Stat(filepath.Join(root, "effect")); !os.IsNotExist(err) {
+		t.Fatal("removed capture released payload")
 	}
 }
