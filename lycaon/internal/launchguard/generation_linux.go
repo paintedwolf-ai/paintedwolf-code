@@ -220,6 +220,48 @@ func openRootControlled(path string, directory bool) (*os.File, error) {
 	return file, nil
 }
 
+// ensureControlledDirectory opens path below base one component at a time,
+// creating each missing directory 0755 and requiring every component, new or
+// existing, to satisfy trusted. Creation is relative to the held parent, so a
+// component replaced concurrently is refused rather than followed.
+func ensureControlledDirectory(base *os.File, path string, trusted func(os.FileInfo) error) (*os.File, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+		return nil, errors.New("trusted directory must be absolute, clean and below the root")
+	}
+	parent, err := unix.Dup(int(base.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	current := os.NewFile(uintptr(parent), "/")
+	for _, component := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+		if err := unix.Mkdirat(int(current.Fd()), component, 0o755); err == nil {
+			// The creator's umask must not decide the directory's mode.
+			if err := unix.Fchmodat(int(current.Fd()), component, 0o755, unix.AT_SYMLINK_NOFOLLOW); err != nil && !errors.Is(err, unix.EOPNOTSUPP) {
+				_ = current.Close()
+				return nil, err
+			}
+		} else if !errors.Is(err, unix.EEXIST) {
+			_ = current.Close()
+			return nil, err
+		}
+		fd, err := unix.Openat(int(current.Fd()), component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		_ = current.Close()
+		if err != nil {
+			return nil, err
+		}
+		current = os.NewFile(uintptr(fd), component)
+		info, err := current.Stat()
+		if err == nil {
+			err = trusted(info)
+		}
+		if err != nil {
+			_ = current.Close()
+			return nil, err
+		}
+	}
+	return current, nil
+}
+
 func trustedObject(info os.FileInfo) error {
 	facts, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || facts.Uid != 0 || info.Mode()&os.ModeSymlink != 0 || (info.Mode().Perm()&0022 != 0 && !(info.IsDir() && info.Mode()&os.ModeSticky != 0)) {
@@ -228,10 +270,20 @@ func trustedObject(info os.FileInfo) error {
 	return nil
 }
 
+// GenerationLockDirectory holds one persistent lifetime lock per generation.
+// It lives on the /run tmpfs, so it is absent after every boot until the first
+// privileged launch or package transaction creates it.
+const GenerationLockDirectory = "/run/paintedwolf/generation-locks"
+
 // The package collector uses the same persistent lock inode and never unlinks
 // it during a boot. A selected generation cannot be reclaimed under a launch.
 func retainGeneration(digest string) (*os.File, error) {
-	directory, err := openRootControlled("/run/paintedwolf/generation-locks", true)
+	root, err := os.Open("/")
+	if err != nil {
+		return nil, err
+	}
+	directory, err := ensureControlledDirectory(root, GenerationLockDirectory, trustedObject)
+	_ = root.Close()
 	if err != nil {
 		return nil, err
 	}
