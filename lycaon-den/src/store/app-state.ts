@@ -623,6 +623,10 @@ export function createAppStore(
       if (!nextTitle || state.currentSession?.id !== sessionId) return;
       setState("currentSession", "title", nextTitle);
     },
+    markSessionArchived(sessionId, archived) {
+      if (state.currentSession?.id !== sessionId) return;
+      setState("currentSession", "archived_at", archived ? new Date().toISOString() : undefined);
+    },
     mergeSession(event) {
       setState(
         produce((draft) => {
