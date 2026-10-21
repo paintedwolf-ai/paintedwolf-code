@@ -24,7 +24,7 @@ mod native {
     const PRESS_FRESHNESS: Duration = Duration::from_secs(2);
 
     thread_local! {
-        static PRESSES: RefCell<HashMap<String, (gdk::Event, Instant)>> = RefCell::new(HashMap::new());
+        static PRESSES: RefCell<HashMap<String, (gdk::EventButton, Instant)>> = RefCell::new(HashMap::new());
     }
 
     pub(super) fn install(window: &WebviewWindow) {
@@ -34,7 +34,7 @@ mod native {
             let label = label.clone();
             widget.connect_button_press_event(move |_, event| {
                 PRESSES.with(|presses| {
-                    presses.borrow_mut().insert(label.clone(), (event.clone().into(), Instant::now()));
+                    presses.borrow_mut().insert(label.clone(), (event.clone(), Instant::now()));
                 });
                 gtk::glib::Propagation::Proceed
             });
@@ -65,11 +65,12 @@ mod native {
         let surface = gtk.window().ok_or("the window is not shown")?;
         let press = PRESSES.with(|presses| {
             presses.borrow().get(window.label()).and_then(|(event, at)| {
-                (at.elapsed() <= PRESS_FRESHNESS && event.button() == Some(3)).then(|| event.clone())
+                (at.elapsed() <= PRESS_FRESHNESS && event.button() == 3).then(|| event.clone())
             })
         });
         let press = press.ok_or("no right-button press to anchor the window menu")?;
-        if surface.show_window_menu(&press) {
+        let mut event: gdk::Event = (*press).clone();
+        if surface.show_window_menu(&mut event) {
             Ok(())
         } else {
             Err("the desktop offers no window menu".into())
