@@ -1024,7 +1024,7 @@ tasks:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
     cmds:
-      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'

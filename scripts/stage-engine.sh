@@ -12,6 +12,15 @@ VAULT_IDENTITY_NAME="pw-vault-identity"
 DECIDE_NAME="bialy"
 DOCUMENT_CORE_NAME="pw-document-core"
 
+# OCR staging can qualify pinned resources without rebuilding unrelated engines.
+if [[ "${1:-}" == --minimal && "${2:-}" == --ocr-only ]]; then
+  shift 2
+  exec bash "${ROOT}/scripts/ocrengine-fetch.sh" "$@"
+elif [[ "${1:-}" == --ocr-only ]]; then
+  shift
+  exec bash "${ROOT}/scripts/ocrengine-fetch.sh" "$@"
+fi
+
 MODE="full"
 RELEASE_BUILD=0
 for arg in "$@"; do

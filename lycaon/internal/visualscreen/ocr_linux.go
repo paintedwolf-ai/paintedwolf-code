@@ -21,5 +21,5 @@ func DefaultOCRBackend() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrOCRUnavailable, err)
 	}
-	return "tesseract " + engine.Version + " at " + engine.Root, nil
+	return "tesseract " + engine.Version + " (languages: " + engine.LanguageArgument + ") at " + engine.Root, nil
 }

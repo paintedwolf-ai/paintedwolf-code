@@ -43,9 +43,10 @@ func TestLoadPinDescribesEveryShippedPlatform(t *testing.T) {
 func TestPinValidationRequiresProducerTagAndTrainedData(t *testing.T) {
 	data := pinPayload{SHA256: strings.Repeat("a", 64), Bytes: 1}
 	valid := Pin{
-		EngineVersion: "5.5.3+paintedwolf.1",
-		Producer:      pinProducer{Repository: "paintedwolf-ai/paintedwolf-tesseract", Tag: "v5.5.3+paintedwolf.1", Commit: strings.Repeat("b", 40)},
-		TrainedData:   map[string]pinPayload{"eng_traineddata": data, "osd_traineddata": data},
+		RecognitionLanguages: []string{"eng"},
+		EngineVersion:        "5.5.3+paintedwolf.1",
+		Producer:             pinProducer{Repository: "paintedwolf-ai/paintedwolf-tesseract", Tag: "v5.5.3+paintedwolf.1", Commit: strings.Repeat("b", 40)},
+		TrainedData:          map[string]pinPayload{"eng_traineddata": data, "osd_traineddata": data},
 	}
 	if err := valid.validate(); err != nil {
 		testutil.FailErr(t, "valid pin", err)
@@ -87,7 +88,8 @@ func stagedPin(t *testing.T) (string, *Pin, PlatformPin) {
 	eng := writePayload(t, root, englishTrainedDataRel, []byte("eng"), 0o644)
 	osd := writePayload(t, root, osdTrainedDataRel, []byte("osd"), 0o644)
 	pin := &Pin{
-		EngineVersion: "test",
+		RecognitionLanguages: []string{"eng"},
+		EngineVersion:        "test",
 		TrainedData: map[string]pinPayload{
 			"eng_traineddata": {SHA256: eng.SHA256, Bytes: eng.Bytes},
 			"osd_traineddata": {SHA256: osd.SHA256, Bytes: osd.Bytes},

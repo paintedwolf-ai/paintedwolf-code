@@ -126,8 +126,10 @@ Host-produced images are not screened here. `render_view` rasterizes markup and 
 | Platform | Text recognition |
 |---|---|
 | macOS (cgo build) | Apple Vision; an engine error is a coverage fact (`ocr_failed`) |
-| Linux | the bundled Tesseract engine ([Bundled OCR engine](dependencies.md#bundled-ocr-engine)) with the English model: Latin-script text, orientation detected per image; a missing or altered engine is `ocr_unavailable`, an engine failure, timeout, or output overflow is `ocr_failed` |
+| Linux | the bundled Tesseract engine ([Bundled OCR engine](dependencies.md#bundled-ocr-engine)) with the pinned English, German, French, Spanish, Russian, Arabic, simplified Chinese and Japanese profile; orientation detected per image; a missing or altered engine is `ocr_unavailable`, an engine failure, timeout, or output overflow is `ocr_failed` |
 | macOS without cgo, Windows | unavailable (`ocr_unavailable`) |
+
+Recognition is probabilistic. The representative Linux multilingual review found dropped French/Spanish accents and an Arabic line misread in mixed-language mode; language availability does not guarantee transcription accuracy or exhaustive secret detection.
 
 Both recognizers return the same shape: line spans with text, confidence on [0, 1], and a box normalized to the raster, which is what masking a match consumes.
 
