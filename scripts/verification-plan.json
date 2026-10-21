@@ -378,7 +378,8 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "nix:build": "passthrough",
-    "nix:check": "passthrough"
+    "nix:check": "passthrough",
+    "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
     "den:harness:test": {

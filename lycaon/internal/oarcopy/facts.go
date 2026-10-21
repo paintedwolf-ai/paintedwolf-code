@@ -39,6 +39,9 @@ var publishedFactNames = map[string]string{
 }
 
 var reasonFlags = map[string]string{
+	"unescaped_newline":   "paintedwolf.json_unescaped_newline",
+	"unexpected_end":      "paintedwolf.json_unexpected_end",
+	"invalid_escape":      "paintedwolf.json_invalid_escape",
 	"reference_required":  "paintedwolf.reference_required",
 	"grounding_escalated": "paintedwolf.grounding_escalated",
 	"bare_repo_scope":     "paintedwolf.bare_repo_scope",

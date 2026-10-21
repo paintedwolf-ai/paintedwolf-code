@@ -299,3 +299,95 @@ func PrepareStaticRoot(root string) (string, error) {
 	}
 	return abs, nil
 }
+
+// normalizeStaticEntry strips the project_dir filesystem prefix when a caller
+// passes an in-root filesystem path (such as /workspace/app/index.html) as path.
+func normalizeStaticEntry(rawDir, absRoot, entry string) string {
+	trimmed := strings.TrimSpace(entry)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return entry
+	}
+	if _, ok := resolveStaticFile(absRoot, trimmed); ok {
+		return entry
+	}
+	keepSlash := strings.HasSuffix(trimmed, "/")
+	candidates := []string{filepath.Clean(trimmed)}
+	if canon, err := evalSymlinksAllowMissingLeaf(trimmed); err == nil && canon != candidates[0] {
+		candidates = append(candidates, canon)
+	}
+	roots := []string{absRoot}
+	if rawAbs, err := filepath.Abs(strings.TrimSpace(rawDir)); err == nil && rawAbs != absRoot {
+		roots = append(roots, rawAbs)
+	}
+	for _, r := range roots {
+		for _, c := range candidates {
+			rel, err := filepath.Rel(r, c)
+			if err != nil || pathEscapesRoot(rel) {
+				continue
+			}
+			if rel == "." {
+				return ""
+			}
+			out := filepath.ToSlash(rel)
+			if keepSlash && !strings.HasSuffix(out, "/") {
+				out += "/"
+			}
+			return out
+		}
+	}
+	return entry
+}
+
+func evalSymlinksAllowMissingLeaf(p string) (string, error) {
+	if canon, err := filepath.EvalSymlinks(p); err == nil {
+		return canon, nil
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(p))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, filepath.Base(p)), nil
+}
+
+// requireStaticEntry ensures the initial navigation URL for a project_dir capture
+// resolves to a regular file under root or is answered by an active GET route fixture.
+func requireStaticEntry(root, entry, navURL string, routes []RouteRule) error {
+	if err := ValidateRoutes(routes); err != nil {
+		return err
+	}
+	u, err := url.Parse(navURL)
+	if err != nil {
+		return browserengine.Reject("CAPTURE_TARGET_INVALID", map[string]any{"reason": "bad_url", "url": navURL})
+	}
+	if len(routes) > 0 {
+		if rule, _, ok := newRouteTable(routes).match(http.MethodGet, u); ok && rule.answers() {
+			return nil
+		}
+	}
+	if _, ok := resolveStaticFile(root, u.EscapedPath()); ok {
+		return nil
+	}
+	return browserengine.Reject("CAPTURE_STATIC_ENTRY_MISSING", map[string]any{
+		"path":           root,
+		"entry":          missingStaticEntryPath(root, entry, u.EscapedPath()),
+		"navigation_url": navURL,
+	})
+}
+
+func missingStaticEntryPath(root, entry, urlPath string) string {
+	rel := strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if rel == "." || rel == "" {
+		return "index.html"
+	}
+	if !strings.HasSuffix(rel, "index.html") {
+		if strings.HasSuffix(strings.TrimSpace(entry), "/") {
+			return path.Join(rel, "index.html")
+		}
+		if full, ok := safeJoinUnderRoot(root, rel); ok {
+			if fi, err := os.Stat(full); err == nil && fi.IsDir() {
+				return path.Join(rel, "index.html")
+			}
+		}
+	}
+	return rel
+}
