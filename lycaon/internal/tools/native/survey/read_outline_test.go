@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildReadOutlineResponseSymbolsKind(t *testing.T) {
-	resp := buildReadOutlineResponse("main.go", fileoutline.Result{
+	resp := OutlineResponse("main.go", fileoutline.Result{
 		Path:       "main.go",
 		TotalLines: 10,
 		Source:     "tree_sitter",
