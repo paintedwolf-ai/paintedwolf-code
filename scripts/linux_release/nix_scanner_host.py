@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import stat
 import subprocess
+
+from . import nix_apparmor
 
 PNAME = 'painted-wolf-code-scanner-build-tools'
 STORE = r'/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._-]+'
@@ -21,12 +23,14 @@ def profile_source(executable: str) -> tuple[str, str]:
             or re.fullmatch(STORE + '/bin/opengrep-artifact', executable) is None
             or not Path(executable).parts[3][33:].startswith(PNAME + '-')):
         raise ValueError('scanner user-namespace permission requires an exact build-tools store executable')
-    name = 'paintedwolf-nix-scanner-' + hashlib.sha256(executable.encode()).hexdigest()
-    # Ubuntu's unconfined flag preserves existing access while permitting userns
-    # for this executable alone; it does not remove the scanner's own sandbox.
-    source = ('abi <abi/4.0>,\ninclude <tunables/global>\n'
-              f'profile {name} "{executable}" flags=(unconfined) {{\n  userns,\n}}\n')
-    return name, source
+    # The runner loads exactly the grant the build tools ship for source builds.
+    return nix_apparmor.profile('scanner-builder', PurePosixPath(executable))
+
+
+def shipped(executable: str, name: str) -> str:
+    """The grant text the build-tools output itself ships for this executable."""
+    output = executable.rsplit('/bin/', 1)[0]
+    return Path(output + '/share/painted-wolf-code/apparmor/' + name).read_text()
 
 
 def authorize_scanner(executable: str) -> dict:
@@ -35,6 +39,8 @@ def authorize_scanner(executable: str) -> dict:
             or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted'):
         raise ValueError('scanner build permission is limited to disposable native GitHub-hosted runners')
     name, source = profile_source(executable)
+    if shipped(executable, name) != source:
+        raise ValueError('scanner build tools ship a different user-namespace grant than their executable needs')
     path = Path(executable)
     information = path.lstat()
     if (path.resolve() != path or not stat.S_ISREG(information.st_mode)

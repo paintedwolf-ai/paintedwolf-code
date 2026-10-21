@@ -17,6 +17,7 @@ EXE = OUTPUT + '/bin/opengrep-artifact'
 class NixScannerHostTests(unittest.TestCase):
     def test_profile_has_one_literal_attachment_and_no_global_permission_change(self):
         name, source = host.profile_source(EXE)
+        self.assertTrue(name.startswith('paintedwolf-scanner-builder-'))
         self.assertIn(f'profile {name} "{EXE}" flags=(unconfined)', source)
         self.assertEqual(source.count('userns,'), 1)
         for bad in (EXE.replace('1.0.2', '*'), EXE.replace('1.0.2', '?'), '/tmp/opengrep-artifact',
@@ -48,6 +49,7 @@ class NixScannerHostTests(unittest.TestCase):
                 patch.object(host.platform, 'machine', return_value='aarch64'), \
                 patch.object(host, 'Path', side_effect=lambda value: Executable() if value == EXE else native(value)), \
                 patch.object(host, 'POLICY', policy), \
+                patch.object(host, 'shipped', return_value=source), \
                 patch.object(host.subprocess, 'run', side_effect=[SimpleNamespace(returncode=0),
                     SimpleNamespace(returncode=0, stdout=(name + ' (unconfined)\n').encode())]) as run:
             report = host.authorize_scanner(EXE)
@@ -57,3 +59,18 @@ class NixScannerHostTests(unittest.TestCase):
             self.assertEqual(run.call_args_list[0].args[0], ['sudo', '-n', 'apparmor_parser', '--replace'])
             self.assertEqual(run.call_args_list[1].args[0], ['sudo', '-n', 'cat', '/sys/kernel/security/apparmor/profiles'])
             self.assertEqual(run.call_args_list[0].kwargs['input'], source.encode())
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted'}), \
+                patch.object(host.platform, 'system', return_value='Linux'), \
+                patch.object(host.platform, 'machine', return_value='aarch64'), \
+                patch.object(host, 'shipped', return_value=source.replace('userns', 'capability')), \
+                patch.object(host.subprocess, 'run') as run, self.assertRaisesRegex(ValueError, 'different'):
+            host.authorize_scanner(EXE)
+        run.assert_not_called()
+
+    def test_shipped_grant_is_read_from_the_tools_output(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'tools'
+            (output / 'share/painted-wolf-code/apparmor').mkdir(parents=True)
+            (output / 'share/painted-wolf-code/apparmor/grant').write_text('profile text')
+            self.assertEqual(host.shipped(str(output / 'bin/opengrep-artifact'), 'grant'), 'profile text')
