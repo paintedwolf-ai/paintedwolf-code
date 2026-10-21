@@ -52,13 +52,22 @@ func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, erro
 	if len(dirs) > 0 {
 		rights = unix.UnixRights(dirs...)
 	}
-	if err := unix.Sendmsg(c.fd, raw, rights, nil, 0); err != nil {
+	err = unix.Sendmsg(c.fd, raw, rights, nil, 0)
+	for errors.Is(err, unix.EINTR) {
+		err = unix.Sendmsg(c.fd, raw, rights, nil, 0)
+	}
+	if err != nil {
 		c.broken = true
 		return pathResult{}, -1, err
 	}
 	buf := make([]byte, 4096)
 	oob := make([]byte, unix.CmsgSpace(4))
 	n, oobn, _, _, err := unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+	// A receive timeout makes a signal, such as the runtime's preemption,
+	// interrupt the wait instead of restarting it.
+	for errors.Is(err, unix.EINTR) {
+		n, oobn, _, _, err = unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+	}
 	if err != nil || n == 0 {
 		c.broken = true
 		return pathResult{}, -1, errors.New("no answer from the sandbox performer")
