@@ -178,6 +178,7 @@
           "value_role": "count",
           "fixture_id": "head-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -308,6 +309,7 @@
           "value_role": "count-or-plus-start",
           "fixture_id": "tail-option-n-lines",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]

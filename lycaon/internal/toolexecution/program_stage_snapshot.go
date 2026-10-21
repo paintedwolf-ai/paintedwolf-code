@@ -12,12 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ProgramStateAdmission is the existing host aggregate ledger's structural port.
-// It refuses before allocation and must not wait on this program's own memory.
-type ProgramStateAdmission interface {
-	ReserveProgramState(context.Context, int64) (func(), error)
-}
-
 // NativeStageSnapshot retains one admitted review/detection projection. Keep it
 // until policy, held review, dispatch and every derived stage event are released.
 // It is not a durable job and carries no effect permit.
@@ -34,7 +28,7 @@ type NativeStageSnapshot struct {
 // detection observation, event argv and wrapper-normalization scratch. Event
 // structs and bounded image/API projections are included; no display reparsing
 // or JSON conversion is needed for an already bound stage.
-func PrepareNativeStages(ctx context.Context, admission ProgramStateAdmission, stages []toolcontract.ExecutionStage) (*NativeStageSnapshot, error) {
+func PrepareNativeStages(ctx context.Context, admission *toolcontract.ProgramMemory, stages []toolcontract.ExecutionStage) (*NativeStageSnapshot, error) {
 	if ctx == nil || admission == nil || len(stages) == 0 {
 		return nil, fmt.Errorf("native stage snapshot requires context, state admission and stages")
 	}
@@ -48,9 +42,6 @@ func PrepareNativeStages(ctx context.Context, admission ProgramStateAdmission, s
 	release, err := admission.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("state admission returned no retained lease")
 	}
 	if err := ctx.Err(); err != nil {
 		release()

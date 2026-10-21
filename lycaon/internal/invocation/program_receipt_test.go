@@ -22,7 +22,7 @@ type programReceiptFixture struct {
 	parent, program, root, session string
 	definition                     toolcontract.OperationDefinition
 	span                           toolcontract.SourceSpan
-	sourceStart                    invocation.ProgramStart
+	sourceStart                    toolcontract.ProgramStart
 }
 
 func newProgramReceiptFixture(t *testing.T) programReceiptFixture {
@@ -48,7 +48,7 @@ func newProgramReceiptFixtureWithArgs(t *testing.T, args map[string]any) program
 	f := programReceiptFixture{recorder: recorder, database: database, parent: parent.ID, program: uuid.NewString(), root: uuid.NewString(), session: session, definition: definition, span: toolcontract.SourceSpan{StartByte: 0, EndByte: 9, Line: 1, Column: 1}}
 	digest := sha256.Sum256([]byte("${op} arg"))
 	sourceDigest := hex.EncodeToString(digest[:])
-	f.sourceStart = invocation.ProgramStart{Version: invocation.ProgramVersion{ProgramID: f.program, ParentReceiptID: f.parent, RootExecutionID: f.root, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"}, PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true, Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: 9}, DetailReference: "output:exact-program"}}, Nodes: []invocation.ProgramNode{{ID: "cat-node", SourceUnitID: "submitted", Span: f.span}, {ID: "untaken-node", SourceUnitID: "submitted", Span: f.span}}}
+	f.sourceStart = toolcontract.ProgramStart{Version: toolcontract.ProgramVersion{ProgramID: f.program, ParentReceiptID: f.parent, RootExecutionID: f.root, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"}, PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true, Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: 9}, DetailReference: "output:exact-program"}}, Nodes: []toolcontract.ProgramNode{{ID: "cat-node", SourceUnitID: "submitted", Span: f.span}, {ID: "untaken-node", SourceUnitID: "submitted", Span: f.span}}}
 	err = recorder.BeginProgram(t.Context(), f.sourceStart)
 	testutil.FailErr(t, "attach validated program", err)
 	return f
@@ -68,10 +68,10 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 	definition, err := toolcontract.ToolOperation(name, json.RawMessage(`{"type":"object"}`), contract)
 	testutil.FailErr(t, "freeze operation", err)
 	in := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: uuid.NewString(), ParentExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	expanded, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	expanded, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze lossless expanded arguments", err)
 	defer release()
-	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ExpandedInputs: expanded, Canonical: "cat input"}))
+	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ExpandedInputs: expanded, Canonical: "cat input"}))
 	bound, err := toolcontract.BindOperation(definition, in, definition.Facts().Commands[0].Name, definition.Facts().Commands[0].Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind actual native operation", err)
 	return bound
@@ -87,7 +87,7 @@ func (r *retainedInputsFixture) RetainReviewedProgramInputs(_ context.Context, _
 func (f programReceiptFixture) start(t *testing.T, bound toolcontract.BoundOperation) {
 	t.Helper()
 	inputs := &retainedInputsFixture{}
-	review, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), &progressMemory{}, map[string]any{"path": "input"})
+	review, release, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze actual lossless reviewed inputs", err)
 	defer release()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
@@ -106,10 +106,10 @@ func TestProgramLoopIterationsHaveIndependentSettlementAndHeldIdentity(t *testin
 	f.start(t, second)
 	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.NativeComparisonPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "result"}}
 	for _, bound := range []toolcontract.BoundOperation{first, second} {
-		err := f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:complete-result"})
+		err := f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:complete-result"})
 		testutil.FailErr(t, "settle independent iteration", err)
 	}
-	if err := f.recorder.SettleChild(t.Context(), first.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:duplicate"}); err == nil {
+	if err := f.recorder.SettleChild(t.Context(), first.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:duplicate"}); err == nil {
 		t.Fatal("duplicate settlement accepted")
 	}
 	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 1)
@@ -134,7 +134,7 @@ func TestProgramHostLossKeepsCompletedWriteAndUnknownAttemptSeparate(t *testing.
 	f.start(t, write)
 	f.start(t, unknown)
 	outcome := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: "journal:fixture-write", RecoveryRef: "journal:fixture-write"}}
-	testutil.FailErr(t, "retain completed owner outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: outcome, OwnerInvoked: true, DetailReference: "output:write-result", AcceptedRevision: "editor:2", PublishedRevision: "disk:2"}))
+	testutil.FailErr(t, "retain completed owner outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: outcome, OwnerInvoked: true, DetailReference: "output:write-result", AcceptedRevision: "editor:2", PublishedRevision: "disk:2"}))
 	count, err := f.recorder.InterruptPrograms(t.Context(), f.session, "output:host-loss")
 	testutil.FailErr(t, "interrupt without replay", err)
 	if count != 1 {

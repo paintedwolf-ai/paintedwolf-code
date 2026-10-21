@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // nativeArguments holds detached review inputs until admission, held review and
@@ -17,7 +18,7 @@ type nativeArguments struct {
 	leases []func()
 }
 
-func prepareNativeArguments(ctx context.Context, admission ProgramStateAdmission, values map[string]any) (*nativeArguments, error) {
+func prepareNativeArguments(ctx context.Context, admission *toolcontract.ProgramMemory, values map[string]any) (*nativeArguments, error) {
 	if ctx == nil || admission == nil {
 		return nil, fmt.Errorf("native review inputs require retained state admission")
 	}
@@ -34,7 +35,7 @@ func prepareNativeArguments(ctx context.Context, admission ProgramStateAdmission
 // values through the same aggregate ceiling instead of an unmetered recursive
 // walk. The conservative payload bound covers JSON escaping, review projections
 // and the detached map while overlapping review/dispatch facts remain live.
-func (s *nativeArguments) reserve(ctx context.Context, admission ProgramStateAdmission, value any) error {
+func (s *nativeArguments) reserve(ctx context.Context, admission *toolcontract.ProgramMemory, value any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -83,9 +84,6 @@ func (s *nativeArguments) reserve(ctx context.Context, admission ProgramStateAdm
 	release, err := admission.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return err
-	}
-	if release == nil {
-		return fmt.Errorf("native review state admission returned no lease")
 	}
 	s.leases = append(s.leases, release)
 	switch v := value.(type) {

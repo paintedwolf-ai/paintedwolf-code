@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
@@ -232,7 +233,7 @@ func (r *ProgramOutputRetention) Close(ctx context.Context) error {
 
 // BeginProgram keeps the source token in this session lifecycle as the existing
 // recorder atomically attaches source/program identities, with no fake child.
-func (r *ProgramOutputRetention) BeginProgram(ctx context.Context, in ProgramStart, spill *tooloutput.StreamSpill, redacted bool) error {
+func (r *ProgramOutputRetention) BeginProgram(ctx context.Context, in toolcontract.ProgramStart, spill *tooloutput.StreamSpill, redacted bool) error {
 	if r == nil || ctx == nil || spill == nil {
 		return fmt.Errorf("program source retention requires actual stream")
 	}

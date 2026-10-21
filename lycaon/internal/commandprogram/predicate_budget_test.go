@@ -11,6 +11,7 @@ import (
 
 	"github.com/dlclark/regexp2/v2"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestBoundedPredicateEngineResourceAndCancellationControls(t *testing.T) {
@@ -67,18 +68,22 @@ func TestBoundedPredicateEREPreservesMaintainedGrammarResults(t *testing.T) {
 	}
 }
 
-type predicateMemoryFunc func(context.Context, int64) (func(), error)
+func predicateMemory(t *testing.T, working int64) *toolcontract.ProgramMemory {
+	t.Helper()
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: working, State: 1})
+	testutil.FailErr(t, "program memory", err)
+	return memory
+}
 
-func (f predicateMemoryFunc) Reserve(ctx context.Context, n int64) (func(), error) { return f(ctx, n) }
 func TestPredicateWorkingMemoryRefusalCannotBecomeFalse(t *testing.T) {
-	cause := errors.New("aggregate memory exhausted")
-	memory := predicateMemoryFunc(func(context.Context, int64) (func(), error) { return nil, cause })
-	_, err := (PredicateRuntime{Memory: memory}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"x"})
-	if !errors.Is(err, cause) {
+	var limit *toolcontract.ProgramMemoryLimitError
+	exhausted := predicateMemory(t, 1)
+	_, err := (PredicateRuntime{Memory: exhausted}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"x"})
+	if !errors.As(err, &limit) || limit.Account != "working" {
 		t.Fatalf("argv allocation refusal lost %v", err)
 	}
-	_, err = (NativePredicatePatterns{Memory: memory}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: "a"}})
-	if !errors.Is(err, cause) {
+	_, err = (NativePredicatePatterns{Memory: exhausted}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: "a"}})
+	if !errors.As(err, &limit) {
 		t.Fatalf("pattern allocation refusal lost %v", err)
 	}
 	if _, err := (PredicateRuntime{}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"x"}); err == nil {
@@ -86,27 +91,21 @@ func TestPredicateWorkingMemoryRefusalCannotBecomeFalse(t *testing.T) {
 	}
 }
 
-func TestPredicateRejectsMissingAdmissionLeases(t *testing.T) {
-	for _, failAt := range []int{1, 2, 4} {
-		calls, held := 0, 0
-		memory := predicateMemoryFunc(func(context.Context, int64) (func(), error) {
-			calls++
-			if calls == failAt {
-				return nil, nil
-			}
-			held++
-			return func() { held-- }, nil
-		})
+func TestPredicateRefusalReleasesEarlierLeases(t *testing.T) {
+	for _, working := range []int64{512, 560, 600} {
+		memory := predicateMemory(t, working)
 		_, err := (PredicateRuntime{Memory: memory}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"a", "=", "a"})
-		if err == nil || held != 0 {
-			t.Fatalf("missing lease%d err%v held%d", failAt, err, held)
+		var limit *toolcontract.ProgramMemoryLimitError
+		if !errors.As(err, &limit) || memory.InUse().Working != 0 || memory.Peak().Working == 0 {
+			t.Fatalf("working%d err%v in use%+v peak%+v", working, err, memory.InUse(), memory.Peak())
 		}
 	}
-	memory := predicateMemoryFunc(func(context.Context, int64) (func(), error) { return nil, nil })
-	if _, err := (NativePredicatePatterns{Memory: memory}).MatchPredicate(t.Context(), "ere", "a", PredicateValue{{Value: "a"}}); err == nil {
-		t.Fatal("pattern admitted missing lease")
+	memory := predicateMemory(t, 1<<20)
+	if got, err := (PredicateRuntime{Memory: memory}).TestBuiltin(t.Context(), fixtureInvocation(), "test", []string{"a", "=", "a"}); err != nil || got.Status != 0 || memory.InUse().Working != 0 {
+		t.Fatalf("admitted comparison %+v %v in use %+v", got, err, memory.InUse())
 	}
-	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Second, Reserve: memory.Reserve}
+	missing := func(context.Context, int64) (func(), error) { return nil, nil }
+	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Second, Reserve: missing}
 	if _, err := regexp2.MatchPatternBounded(t.Context(), "a", "a", syntax.POSIX, nil, limits); err == nil {
 		t.Fatal("selected engine admitted missing lease")
 	}

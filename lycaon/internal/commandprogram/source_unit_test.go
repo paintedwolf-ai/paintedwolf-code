@@ -32,7 +32,7 @@ func TestCapturedSourceUnitUsesExactOwnerBytesAndPreservesIdentity(t *testing.T)
 		}
 		return capturedFixture(raw), nil
 	})
-	p, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "./script.pw", fixtureScratch{})
+	p, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "./script.pw", fixtureScratch(t))
 	testutil.FailErr(t, "capture and validate source", err)
 	raw[0] = 'x'
 	if string(p.Source()) != "printf '%s' \"$1\"\n" || captured.Pin.Revision != "revision-2" || p.Snapshot().SourceDigest != captured.Pin.SHA256 {
@@ -64,7 +64,7 @@ func TestCapturedSourceRejectsIncompleteIdentityAndUnsupportedRepresentation(t *
 			tc.change(&c)
 			p, _, err := LoadSourceUnit(t.Context(), sourceCaptureFunc(func(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error) {
 				return c, nil
-			}), sourceInvocation(), "script.pw", fixtureScratch{})
+			}), sourceInvocation(), "script.pw", fixtureScratch(t))
 			if p != nil || err == nil {
 				t.Fatalf("accepted invalid source pin: %+v", c.Pin)
 			}
@@ -87,19 +87,22 @@ func TestSourceCaptureRefusalAndSyntaxFailureNeverReturnPartialPlan(t *testing.T
 	}), sourceCaptureFunc(func(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error) {
 		return capturedFixture([]byte("printf changed > ./child; if")), nil
 	})} {
-		p, _, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "script.pw", fixtureScratch{})
+		p, _, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "script.pw", fixtureScratch(t))
 		if p != nil || err == nil {
 			t.Fatalf("partial source admitted: %#v %v", p, err)
 		}
 	}
 }
 
-type fixtureScratch struct{}
-
-func (fixtureScratch) ReserveParserScratch(context.Context, int64) (func(), error) {
-	return func() {}, nil
-}
-
-func (fixtureScratch) ReserveProgramState(context.Context, int64) (func(), error) {
-	return func() {}, nil
+func fixtureScratch(t *testing.T) *toolcontract.ProgramMemory {
+	t.Helper()
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	memory, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return memory
 }

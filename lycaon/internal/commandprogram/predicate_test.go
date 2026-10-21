@@ -19,8 +19,14 @@ func (f predicateFileFunc) TestPath(c context.Context, i toolcontract.OperationI
 
 type predicateExpansionFunc func(context.Context, commandsurface.DeferredWord) (PredicateValue, error)
 
-func (f predicateExpansionFunc) ExpandPredicate(c context.Context, w commandsurface.DeferredWord) (PredicateValue, error) {
+func (f predicateExpansionFunc) ExpandPattern(c context.Context, _ ExpansionScope, w commandsurface.DeferredWord) (PredicateValue, error) {
 	return f(c, w)
+}
+func (predicateExpansionFunc) ExpandFields(context.Context, ExpansionScope, commandsurface.DeferredWord) (Fields, error) {
+	return nil, errors.New("predicates never split fields")
+}
+func (predicateExpansionFunc) ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error) {
+	return "", errors.New("predicates expand patterns")
 }
 func TestNativeBooleanOperandsAreData(t *testing.T) {
 	for _, name := range []string{"true", "false", ":"} {

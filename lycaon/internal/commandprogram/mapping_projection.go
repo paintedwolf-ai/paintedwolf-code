@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -45,7 +44,7 @@ func (m *MappingLease) Close() error {
 // presentation slice. Retaining full output, printing paths or inspecting a
 // preview creates no mapping and no delivery evidence. Callers keep input
 // immutable until this projection returns.
-func ProjectStreamMappings(ctx context.Context, admission commandsurface.ProgramStateAdmission, input []toolcontract.StreamSourceMapping, start, length int64, transform MappingTransform) (*MappingLease, error) {
+func ProjectStreamMappings(ctx context.Context, admission *toolcontract.ProgramMemory, input []toolcontract.StreamSourceMapping, start, length int64, transform MappingTransform) (*MappingLease, error) {
 	if ctx == nil || admission == nil {
 		return nil, fmt.Errorf("source mapping projection requires context and state admission")
 	}
@@ -84,9 +83,6 @@ func ProjectStreamMappings(ctx context.Context, admission commandsurface.Program
 	release, err := admission.ReserveProgramState(ctx, charge)
 	if err != nil {
 		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("source mapping admission returned no release")
 	}
 	if err := ctx.Err(); err != nil {
 		release()

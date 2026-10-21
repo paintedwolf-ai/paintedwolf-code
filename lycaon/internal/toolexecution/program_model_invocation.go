@@ -32,13 +32,13 @@ type programFrameLifetime struct {
 	closed    bool
 	active    int
 	facts     programFrameFacts
-	admission ProgramStateAdmission
+	admission *toolcontract.ProgramMemory
 	model     ProgramModelObservation
 	arguments *nativeArguments
 	releases  []func()
 }
 
-func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission ProgramStateAdmission) (*programFrameLifetime, error) {
+func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (*programFrameLifetime, error) {
 	if ctx == nil || admission == nil || model.ToolName != "command" || model.Arguments == nil {
 		return nil, fmt.Errorf("program frame requires actual command invocation and retained state admission")
 	}
@@ -79,9 +79,6 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 	release, err := admission.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("program frame admission returned no lease")
 	}
 	lifetime := &programFrameLifetime{releases: []func(){release}, admission: admission}
 	snapshot, err := prepareNativeArguments(ctx, admission, model.Arguments)
@@ -251,9 +248,6 @@ func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
 	release, err := l.admission.ReserveProgramState(ctx, n)
 	if err != nil {
 		return err
-	}
-	if release == nil {
-		return fmt.Errorf("program fact admission returned no retained lease")
 	}
 	l.releases = append(l.releases, release)
 	return nil

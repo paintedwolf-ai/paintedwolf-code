@@ -153,7 +153,7 @@ var _ ReviewedProgressInputRetention = ProgramInputCapture{}
 
 // PrepareChild atomically attaches the actual screened expanded-input body and
 // the new dynamic receipt. The caller supplies no placeholder body reference.
-func (p ProgramInputCapture) PrepareChild(ctx context.Context, in ChildStart) (string, error) {
+func (p ProgramInputCapture) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) (string, error) {
 	invocation := in.Invocation
 	if err := invocation.Validate(); err != nil {
 		return "", err

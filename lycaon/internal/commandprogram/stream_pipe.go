@@ -111,6 +111,14 @@ func (p *BytePipe) CloseConsumer() error {
 	return nil
 }
 
+// ConsumerEnd is the stdin endpoint for Streams.Input; Close is CloseConsumer.
+func (p *BytePipe) ConsumerEnd() io.ReadCloser { return pipeConsumer{p} }
+
+type pipeConsumer struct{ pipe *BytePipe }
+
+func (c pipeConsumer) Read(b []byte) (int, error) { return c.pipe.Read(b) }
+func (c pipeConsumer) Close() error               { return c.pipe.CloseConsumer() }
+
 func (p *BytePipe) finish(termination StreamTermination, err error) {
 	p.once.Do(func() {
 		p.mu.Lock()

@@ -16,17 +16,16 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-// Accounting here belongs to the fixture; actual parser and admission objects
-// must retain and release their real leases through the composed owner call.
-type progressMemory struct{ held int64 }
-
-func (m *progressMemory) ReserveParserScratch(_ context.Context, n int64) (func(), error) {
-	return m.reserve(n), nil
+// progressMemory is the catalog-sized ledger; actual parser and admission
+// objects must retain and release their real leases through the composed call.
+func progressMemory(t *testing.T) *toolcontract.ProgramMemory {
+	t.Helper()
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "catalog memory limits", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "program memory", err)
+	return memory
 }
-func (m *progressMemory) ReserveProgramState(_ context.Context, n int64) (func(), error) {
-	return m.reserve(n), nil
-}
-func (m *progressMemory) reserve(n int64) func() { m.held += n; return func() { m.held -= n } }
 
 type progressFacts struct{ store progress.Store }
 
@@ -46,7 +45,7 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 				submitted["progress_update"].(map[string]any)["unknown_field"] = true
 			}
 			f := newProgramReceiptFixtureWithArgs(t, submitted)
-			memory := &progressMemory{}
+			memory := progressMemory(t)
 			parser, err := commandsurface.NewProgramParser(t.Context(), memory)
 			testutil.FailErr(t, "reserve actual parser", err)
 			plan, err := parser.Parse([]byte("${op} arg"), commandsurface.ParseOptions{})
@@ -54,8 +53,8 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			testutil.FailErr(t, "release parser scratch", parser.Close())
 			defer func() {
 				testutil.FailErr(t, "release actual plan", plan.Close())
-				if memory.held != 0 {
-					t.Fatalf("retained memory=%d", memory.held)
+				if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+					t.Fatalf("retained memory=%+v", memory.InUse())
 				}
 			}()
 			parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "unit", ExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
@@ -105,7 +104,7 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 					if err := f.recorder.SettleProgramProgress(t.Context(), invocation.ProgressSettlement{Identity: result.Identity, OwnerInvoked: true, State: "committed", DetailReference: "output:duplicate"}); err == nil {
 						t.Fatal("duplicate progress settlement accepted")
 					}
-					testutil.FailErr(t, "record later program refusal", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: "COMMAND_OPERATION_NOT_ALLOWED", DetailReference: "output:later-refusal"}))
+					testutil.FailErr(t, "record later program refusal", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", StopCode: "COMMAND_OPERATION_NOT_ALLOWED", DetailReference: "output:later-refusal"}))
 				}
 			}
 			page, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)

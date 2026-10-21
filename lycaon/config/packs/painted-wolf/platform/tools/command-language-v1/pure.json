@@ -942,6 +942,7 @@
     },
     {
       "name": "xargs",
+      "operands_end_options": true,
       "aliases": [],
       "family": "pure",
       "owner": "processes",
@@ -1872,6 +1873,7 @@
     },
     {
       "name": "env",
+      "operands_end_options": true,
       "aliases": [],
       "family": "pure",
       "owner": "processes",

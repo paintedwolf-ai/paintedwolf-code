@@ -6,6 +6,26 @@ execution. A binding still invokes the existing subsystem's complete authority,
 effect, evidence and recovery lifecycle. Package membership creates no owner or
 authority. The command catalog remains the source of syntax and numeric bounds.
 
+## Evaluator ports
+
+`ports.go` holds the seams the evaluator is built against. `OperationRequest`
+carries the typed plan statement and the complete expanded argv as `Fields`
+(value plus source-word span); `Streams` reach the owner through native dispatch.
+`Expander` performs field, scalar and pattern expansion under the evaluator's
+`ExpansionScope`. `ProgramRecorder` is the receipt owner's port over the
+`toolcontract` program receipt records, so this package stays free of storage.
+`OutputPublication` opens a redirect destination, stages bytes and publishes or
+abandons them through the destination owner. `toolcontract.ProgramMemory` is the
+one aggregate memory admission used by the parser, snapshots, predicates,
+streams and native dispatch.
+
+`CatalogBinder` binds argv to one catalog `CommandSpecification`: exact
+spellings, `--long[=value]`, clustered short options with attached or following
+values, the catalog's `shorthand` (`-N` or `-SIGNAL`), `--`, and permutation
+unless `operands_end_options` is declared. Find-style primaries bind whole words.
+The bound record keeps each form's typed values; approval review presents that
+record with the operation identity rather than a legacy tool schema.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv
@@ -67,10 +87,10 @@ ranges use scalar ordering. Unknown or multiscalar collating names are invalid.
 The same opt-in scalar profile feeds glob and ERE matching.
 Quoted ERE fragments remain literal substrings rather than implied equality.
 
-Production runtimes and pattern adapters require `PredicateMemory.Reserve` to
-join the invoking program's aggregate memory admission before allocating.
-Admission must observe cancellation and refuse exhausted same-program capacity
-without waiting for reservations already held by that operation. Pure
+Production runtimes and pattern adapters reserve working storage from the
+invoking program's `toolcontract.ProgramMemory` before allocating. It observes
+cancellation and refuses exhausted same-program capacity without waiting for
+reservations already held by that operation. Pure
 fixtures must explicitly select `LocalBoundsOnly`; that option establishes no
 aggregate qualification. Predicate AST nodes and fragment concatenation retain
 reservations through the operation. Argv predicate operator nodes are utility

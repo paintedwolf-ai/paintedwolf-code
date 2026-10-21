@@ -10,32 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ProgramSource records an exact capture. Recording input is not a delivered read.
-type ProgramSource struct {
-	UnitID          string
-	Pin             toolcontract.SourcePin
-	DetailReference string
-}
-
-// ProgramNode describes known syntax, not a speculative loop iteration.
-type ProgramNode struct {
-	ID           string
-	SourceUnitID string
-	Span         toolcontract.SourceSpan
-}
-
-// ProgramStart retains a validated plan and exact source before child admission.
-// PlanReference and SourceReference name screened durable bodies, not inline text.
-type ProgramStart struct {
-	Version         ProgramVersion
-	PlanReference   string
-	SourceExact     bool
-	SyntaxValidated bool
-	Sources         []ProgramSource
-	Nodes           []ProgramNode
-}
-
-func (s ProgramStart) validate() error {
+// validateProgramStart bounds receipt metadata by the catalog trace ceilings.
+func validateProgramStart(s toolcontract.ProgramStart) error {
 	if err := s.Version.Validate(); err != nil {
 		return err
 	}
@@ -94,8 +70,8 @@ func (s ProgramStart) validate() error {
 
 // BeginProgram attaches to the real running model receipt in one writer transaction.
 // It neither opens another model call nor settles the outer invocation.
-func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
-	if err := in.validate(); err != nil {
+func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramStart) error {
+	if err := validateProgramStart(in); err != nil {
 		return err
 	}
 	if r == nil || r.database == nil {
@@ -112,7 +88,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
 	return tx.Commit()
 }
 
-func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
+func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart) error {
 	var state string
 	if err := tx.QueryRowContext(ctx, "SELECT status FROM invocation_receipts WHERE id = ?", in.Version.ParentReceiptID).Scan(&state); err != nil {
 		return fmt.Errorf("program parent: %w", err)
@@ -143,8 +119,8 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
 
 // PrepareChild records the independently addressed dynamic execution before
 // approval, including rejected admission and held calls. Reuse its ID on resume.
-func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
-	if err := in.Validate(); err != nil {
+func (r *SQLRecorder) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) error {
+	if err := validateChildStart(in); err != nil {
 		return err
 	}
 	if r == nil || r.database == nil {
@@ -161,8 +137,8 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
 	return tx.Commit()
 }
 
-func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
-	if err := in.Validate(); err != nil {
+func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramChildStart) error {
+	if err := validateChildStart(in); err != nil {
 		return err
 	}
 	var err error
@@ -186,7 +162,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
 	return err
 }
 
-func validateChildParent(ctx context.Context, tx *sql.Tx, in ChildStart) error {
+func validateChildParent(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramChildStart) error {
 	var parent, root, session, state, catalog, unit string
 	var start, end int64
 	var line, column int

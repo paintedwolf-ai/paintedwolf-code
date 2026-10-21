@@ -74,7 +74,7 @@ func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalRefere
 
 // SettleChild preserves the exact typed owner result independently of a later
 // authority stop. A failed ledger commit does not change the caller's result.
-func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in ChildSettlement) error {
+func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in toolcontract.ProgramChildSettlement) error {
 	if err := in.Validate(); err != nil {
 		return err
 	}
@@ -115,36 +115,11 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in Ch
 	return tx.Commit()
 }
 
-// ProgramSettlement is the process owner's aggregate statement. Child evidence
-// remains independently queryable and is never rewritten by this transition.
-type ProgramSettlement struct {
-	State           string
-	Status          *int
-	StopCode        string
-	DetailReference string
-}
-
-func (s ProgramSettlement) validate() error {
-	switch s.State {
-	case "completed", "rejected", "failed", "interrupted":
-	default:
-		return fmt.Errorf("terminal program state required")
-	}
-	if s.Status != nil && (*s.Status < 0 || *s.Status > 255) {
-		return fmt.Errorf("invalid aggregate utility status")
-	}
-	if s.DetailReference == "" {
-		return fmt.Errorf("aggregate requires retained detail")
-	}
-
-	return nil
-}
-
-func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in ProgramSettlement) error {
+func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in toolcontract.ProgramSettlement) error {
 	if r == nil || r.database == nil {
 		return fmt.Errorf("invocation recorder is not configured")
 	}
-	if err := in.validate(); err != nil {
+	if err := in.Validate(); err != nil {
 		return err
 	}
 	tx, err := r.database.BeginTx(ctx, nil)

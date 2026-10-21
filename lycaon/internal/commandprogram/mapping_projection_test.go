@@ -2,7 +2,6 @@ package commandprogram
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -12,17 +11,11 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-type mappingStateFixture struct {
-	held    int64
-	refusal error
-}
-
-func (m *mappingStateFixture) ReserveProgramState(_ context.Context, n int64) (func(), error) {
-	if m.refusal != nil {
-		return nil, m.refusal
-	}
-	m.held += n
-	return func() { m.held -= n }, nil
+func mappingMemory(t *testing.T, state int64) *toolcontract.ProgramMemory {
+	t.Helper()
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1, State: state})
+	testutil.FailErr(t, "program memory", err)
+	return memory
 }
 
 func candidateMappingFixture() toolcontract.StreamSourceMapping {
@@ -31,12 +24,12 @@ func candidateMappingFixture() toolcontract.StreamSourceMapping {
 }
 
 func TestExactPresentationClipsCandidateRangesWithoutChangingCaptureIdentity(t *testing.T) {
-	memory := &mappingStateFixture{}
+	memory := mappingMemory(t, 1<<20)
 	input := []toolcontract.StreamSourceMapping{candidateMappingFixture()}
 	out, err := ProjectStreamMappings(t.Context(), memory, input, 12, 4, MappingExactSlice)
 	testutil.FailErr(t, "project exact displayed range", err)
 	defer out.Close()
-	if len(out.Mappings) != 1 || memory.held == 0 {
+	if len(out.Mappings) != 1 || memory.InUse().State == 0 {
 		t.Fatal("exact projection lost mapping or accounting")
 	}
 	got := out.Mappings[0]
@@ -48,24 +41,24 @@ func TestExactPresentationClipsCandidateRangesWithoutChangingCaptureIdentity(t *
 		t.Fatal("candidate snapshot changed with caller data")
 	}
 	testutil.FailErr(t, "release mapping metadata", out.Close())
-	if memory.held != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("mapping metadata lease leaked")
 	}
 }
 
 func TestUnseenArbitraryAndSourceLikeTextDoNotCreateDeliveryMappings(t *testing.T) {
-	memory := &mappingStateFixture{}
+	memory := mappingMemory(t, 1<<20)
 	for _, transform := range []MappingTransform{MappingUnspecified, MappingArbitrary} {
 		out, err := ProjectStreamMappings(t.Context(), memory, []toolcontract.StreamSourceMapping{candidateMappingFixture()}, 0, 100, transform)
 		testutil.FailErr(t, "drop arbitrary transform candidates", err)
-		if len(out.Mappings) != 0 || memory.held != 0 {
+		if len(out.Mappings) != 0 || memory.InUse().State != 0 {
 			t.Fatal("arbitrary transform retained source eligibility")
 		}
 		testutil.FailErr(t, "close empty mapping", out.Close())
 	}
 	out, err := ProjectStreamMappings(t.Context(), memory, nil, 0, 100, MappingExactSlice)
 	testutil.FailErr(t, "no source candidates for printed source-like bytes", err)
-	if len(out.Mappings) != 0 || memory.held != 0 {
+	if len(out.Mappings) != 0 || memory.InUse().State != 0 {
 		t.Fatal("presentation invented source evidence")
 	}
 	testutil.FailErr(t, "release empty metadata", out.Close())
@@ -80,18 +73,17 @@ func TestUnseenArbitraryAndSourceLikeTextDoNotCreateDeliveryMappings(t *testing.
 }
 
 func TestMappingQuotaAndInvalidRangesReturnNoCandidateOutput(t *testing.T) {
-	refused := errors.New("synthetic retained-state refusal")
-	memory := &mappingStateFixture{refusal: refused}
+	var refused *toolcontract.ProgramMemoryLimitError
 	input := []toolcontract.StreamSourceMapping{candidateMappingFixture()}
-	if out, err := ProjectStreamMappings(t.Context(), memory, input, 10, 10, MappingExactSlice); out != nil || !errors.Is(err, refused) {
+	if out, err := ProjectStreamMappings(t.Context(), mappingMemory(t, 1), input, 10, 10, MappingExactSlice); out != nil || !errors.As(err, &refused) {
 		t.Fatalf("mapping quota refusal=%v", err)
 	}
-	memory.refusal = nil
+	memory := mappingMemory(t, 1<<20)
 	input[0].SourceEndByte = 101
 	if out, err := ProjectStreamMappings(t.Context(), memory, input, 10, 10, MappingExactSlice); out != nil || err == nil {
 		t.Fatal("mapping outside captured source accepted")
 	}
-	if memory.held != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("invalid mapping retained quota")
 	}
 }

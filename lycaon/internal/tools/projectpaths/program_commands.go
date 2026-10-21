@@ -15,7 +15,10 @@ import (
 // Invoke binds path utility operands after normal per-child operation admission.
 // It does not run a shell, call a JSON tool, or inherit authority from stdout.
 func (p *ProgramPaths) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	err := p.commandOutput(ctx, request.OperationID, request.Arguments, streams.Output)
+	err := request.Validate()
+	if err == nil {
+		err = p.commandOutput(ctx, request.OperationID, request.Argv.Values()[1:], streams.Output)
+	}
 	var pathErr *PathError
 	if errors.As(err, &pathErr) {
 		span := request.Invocation.Span

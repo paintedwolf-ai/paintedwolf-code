@@ -12,7 +12,7 @@ import (
 )
 
 func TestValidatedProgramIdentityRequiresLiveExecutionLease(t *testing.T) {
-	memory := &programMemoryFixture{maximum: 4 << 20}
+	memory := programMemory(t, 4<<20)
 	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
 	testutil.FailErr(t, "admit parser", err)
 	defer parser.Close()
@@ -20,11 +20,11 @@ func TestValidatedProgramIdentityRequiresLiveExecutionLease(t *testing.T) {
 	program, err := parser.Parse(source, commandsurface.ParseOptions{})
 	testutil.FailErr(t, "validate execution unit", err)
 	defer program.Close()
-	before := memory.state
+	before := memory.InUse().State
 	digest, catalog, err := program.ValidatedProgramIdentity(t.Context())
 	testutil.FailErr(t, "identify validated leased program", err)
 	sum := sha256.Sum256(source)
-	if digest != hex.EncodeToString(sum[:]) || catalog != toolcontract.LanguageCatalogDigest() || memory.state != before {
+	if digest != hex.EncodeToString(sum[:]) || catalog != toolcontract.LanguageCatalogDigest() || memory.InUse().State != before {
 		t.Fatal("program identity differs or creates detached state")
 	}
 	testutil.FailErr(t, "close parser scratch", parser.Close())

@@ -9,7 +9,7 @@ import (
 // actual final shape before review serialization, retaining that immutable
 // object and its canonical encodings through the complete owner invocation.
 // The resolved-secret copy stays with its existing ephemeral owner.
-func admitReviewedOperationInputs(ctx context.Context, admission ProgramStateAdmission, canonical map[string]any) (*nativeArguments, toolcontract.ReviewedOperationInputs, error) {
+func admitReviewedOperationInputs(ctx context.Context, admission *toolcontract.ProgramMemory, canonical map[string]any) (*nativeArguments, toolcontract.ReviewedOperationInputs, error) {
 	snapshot, err := prepareNativeArguments(ctx, admission, canonical)
 	if err != nil {
 		return nil, toolcontract.ReviewedOperationInputs{}, err

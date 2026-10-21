@@ -22,7 +22,7 @@ type programPolicyObservation struct {
 
 type deferredProgramRejectionKey struct{}
 
-func prepareProgramPolicyObservation(ctx context.Context, frame ProgramFrame, admission ProgramStateAdmission, tc tools.ToolContext, operation *toolcontract.BoundOperation) (context.Context, *programPolicyObservation, func(), error) {
+func prepareProgramPolicyObservation(ctx context.Context, frame ProgramFrame, admission *toolcontract.ProgramMemory, tc tools.ToolContext, operation *toolcontract.BoundOperation) (context.Context, *programPolicyObservation, func(), error) {
 	submitted, release, err := programModelArguments(ctx, frame, admission, tc)
 	if err != nil {
 		return ctx, nil, nil, err
@@ -33,7 +33,7 @@ func prepareProgramPolicyObservation(ctx context.Context, frame ProgramFrame, ad
 	return ctx, &programPolicyObservation{submitted: submitted, operation: operation, frame: frame}, release, nil
 }
 
-func programModelArguments(ctx context.Context, frame ProgramFrame, admission ProgramStateAdmission, tc tools.ToolContext) (map[string]any, func(), error) {
+func programModelArguments(ctx context.Context, frame ProgramFrame, admission *toolcontract.ProgramMemory, tc tools.ToolContext) (map[string]any, func(), error) {
 	if admission == nil {
 		return nil, nil, fmt.Errorf("program observation requires state admission")
 	}
@@ -50,9 +50,6 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission Pr
 	release, err := admission.ReserveProgramState(ctx, int64(len(model.CanonicalArguments))*32+4096)
 	if err != nil {
 		return nil, nil, err
-	}
-	if release == nil {
-		return nil, nil, fmt.Errorf("program observation returned no state lease")
 	}
 	var submitted map[string]any
 	decoder := json.NewDecoder(strings.NewReader(model.CanonicalArguments))

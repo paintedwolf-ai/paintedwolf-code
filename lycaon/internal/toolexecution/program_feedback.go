@@ -25,7 +25,7 @@ type PreparedProgramFailure struct {
 	Rejection     *toolrejection.ToolReject
 	operation     toolcontract.BoundOperation
 	identity      tools.InvocationIdentity
-	memory        ProgramStateAdmission
+	memory        *toolcontract.ProgramMemory
 	policy        *toolfeedback.ProgramPolicyBlock
 	release       func()
 	mu            sync.Mutex
@@ -58,7 +58,7 @@ func (p *PreparedProgramFailure) Close() {
 // PrepareProgramFailure supplements an actual native rejection. External output
 // and ordinary utility failures are never converted into host policy codes.
 // The introducing command entry calls this after the existing owner settles.
-func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory ProgramStateAdmission, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
@@ -95,9 +95,6 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	release, err := memory.ReserveProgramState(ctx, 128<<10)
 	if err != nil {
 		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("program feedback admission returned no lease")
 	}
 	defer func() {
 		if prepared == nil {

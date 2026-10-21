@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -15,12 +14,6 @@ type PredicateFragment struct {
 	Quoted bool
 }
 type PredicateValue []PredicateFragment
-
-// PredicateExpansion expands only reached test words without splitting, pathname
-// expansion, or executable reparsing. Substitution errors stop the containing test.
-type PredicateExpansion interface {
-	ExpandPredicate(context.Context, commandsurface.DeferredWord) (PredicateValue, error)
-}
 
 // PredicateFiles asks existing filesystem authority about one exact operand.
 // A denied probe is an error, never a false predicate or a future write grant.
@@ -35,11 +28,14 @@ type PredicatePatterns interface {
 }
 
 // PredicateRuntime supplies only the ports needed by native boolean operations.
+// Test words use Expander.ExpandPattern under Scope: no splitting, pathname
+// expansion or reparsing; substitution errors stop the containing test.
 type PredicateRuntime struct {
-	Expansion       PredicateExpansion
+	Expansion       Expander
+	Scope           ExpansionScope
 	Files           PredicateFiles
 	Patterns        PredicatePatterns
-	Memory          PredicateMemory
+	Memory          *toolcontract.ProgramMemory
 	LocalBoundsOnly bool
 	quota           *predicateQuota
 }

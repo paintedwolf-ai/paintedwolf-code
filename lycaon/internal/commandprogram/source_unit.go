@@ -22,7 +22,7 @@ func (e *SourceIntegrityError) Error() string {
 // LoadSourceUnit captures through the source owner when the source statement is
 // reached, verifies exact bytes, and validates the entire captured syntax unit.
 // It performs no dispatch, aggregate settlement or replay of the parent program.
-func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolcontract.OperationInvocation, path string, scratch commandsurface.ProgramMemoryAdmission) (*commandsurface.ParsedProgram, CapturedSource, error) {
+func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolcontract.OperationInvocation, path string, memory *toolcontract.ProgramMemory) (*commandsurface.ParsedProgram, CapturedSource, error) {
 	if invocation.Kind != toolcontract.ProgramChildInvocation {
 		return nil, CapturedSource{}, fmt.Errorf("source unit requires a program-child invocation")
 	}
@@ -32,7 +32,7 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	if capture == nil {
 		return nil, CapturedSource{}, fmt.Errorf("source capture binding unavailable")
 	}
-	parser, err := commandsurface.NewProgramParser(ctx, scratch)
+	parser, err := commandsurface.NewProgramParser(ctx, memory)
 	if err != nil {
 		return nil, CapturedSource{}, err
 	}

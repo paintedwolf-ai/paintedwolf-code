@@ -141,7 +141,7 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	}
 	testutil.FailErr(t, "enter exact native directory", p.Chdir(t.Context(), root+"/link/.."))
 	var cwd bytes.Buffer
-	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: &cwd})
+	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{Output: &cwd})
 	testutil.FailErr(t, "report logical actual cwd", err)
 	if cwd.String() != "nested\n" {
 		t.Fatalf("logical cwd names lexical decoy: %q", cwd.String())

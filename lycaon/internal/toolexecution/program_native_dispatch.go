@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -45,24 +46,26 @@ type NativeEffectStart interface {
 // mutation, external launch or egress. Embedded programs are classified here.
 type PreparedNativeEffect struct {
 	Operation   toolcontract.BoundOperation
-	InvokeOwner func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)
+	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 }
 
 // NativeEffect binds one reached operation to its immutable review projection.
 // PrepareReviewed decodes actual reviewed/resolved values into the existing typed
-// operation. It must not reuse the adapter's stale pre-review input.
+// operation. It must not reuse the adapter's stale pre-review input. Streams are
+// handed to the owner only once admission has reached it.
 type NativeEffect struct {
 	Inspection      toolcontract.OperationInspectionProjector
 	Operation       toolcontract.BoundOperation
 	Stage           toolcontract.ExecutionStage
 	Arguments       map[string]any
+	Streams         commandprogram.Streams
 	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
 }
 
 // InvokeNative is reached-effect admission, not an interpreter or JSON tool call.
 // The introducing entry validates the complete syntax/progress envelope first.
 // A held review keeps the same child identity; a fresh invocation uses a new one.
-func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission ProgramStateAdmission, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
 	end, err := frame.beginUse()
 	if err != nil {
 		return result, err
@@ -191,7 +194,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	ownerStarted, result.OwnerInvoked = true, true
-	result.Producer, err = prepared.InvokeOwner(ctx, tc)
+	result.Producer, err = prepared.InvokeOwner(ctx, tc, effect.Streams)
 	err = toolsecrets.ReferenceEchoesInError(tc.Effects.Secrets, err)
 	if invalid := result.Producer.Validate(); invalid != nil {
 		return result, errors.Join(err, invalid)

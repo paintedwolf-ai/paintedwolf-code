@@ -44,7 +44,7 @@ func TestProgramPathHelpersUseActualEntries(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name+"/"+c.want, func(t *testing.T) {
 			var output bytes.Buffer
-			result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: c.name, Arguments: c.args}, commandprogram.Streams{Output: &output})
+			result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: c.name, Argv: pathArgv(c.name, c.args...)}, commandprogram.Streams{Output: &output})
 			testutil.FailErr(t, "invoke path helper", err)
 			testutil.FailErr(t, "validate producer terminal", result.Validate())
 			if result.Status != 0 || !result.Complete || !result.PublicationEligible || output.String() != c.want {
@@ -207,7 +207,7 @@ func TestProgramPathsAuthorizeActualLinkIdentity(t *testing.T) {
 	if _, err := p.Canonical(t.Context(), "alias"); err == nil {
 		t.Fatal("canonical metadata bypassed actual target authority")
 	}
-	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Arguments: []string{"--", "alias"}}, commandprogram.Streams{})
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Argv: pathArgv("realpath", "--", "alias")}, commandprogram.Streams{})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code {
 		t.Fatalf("scope refusal became ordinary failure: result=%+v err=%v", result, err)
@@ -223,11 +223,11 @@ func TestCdNoArgumentRestoresInitialLogicalDirectory(t *testing.T) {
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "pkg")
 	testutil.FailErr(t, "initial subdirectory", err)
 	testutil.FailErr(t, "leave initial directory", p.Chdir(t.Context(), ".."))
-	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "cd"}, commandprogram.Streams{})
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "cd", Argv: pathArgv("cd")}, commandprogram.Streams{})
 	testutil.FailErr(t, "restore initial directory", err)
 	testutil.FailErr(t, "validate cd terminal", result.Validate())
 	var out bytes.Buffer
-	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: &out})
+	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{Output: &out})
 	testutil.FailErr(t, "logical pwd", err)
 	if out.String() != "pkg\n" {
 		t.Fatalf("logical cwd=%q", out.String())
@@ -241,19 +241,19 @@ func TestPathProducerSettlesShortWriteAndTypedRefusals(t *testing.T) {
 	tc, _ := readSessionContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: shortPathWriter{}})
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{Output: shortPathWriter{}})
 	if !errors.Is(err, io.ErrShortWrite) || result.Terminal != toolcontract.ProducerFailed || result.PublicationEligible || result.Complete {
 		t.Fatalf("short write result=%+v err=%v", result, err)
 	}
 	testutil.FailErr(t, "validate short-write terminal", result.Validate())
-	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "basename", Arguments: []string{"--bad"}}, commandprogram.Streams{})
+	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "basename", Argv: pathArgv("basename", "--bad")}, commandprogram.Streams{})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMMAND_OPTION_UNSUPPORTED" || result.Terminal != toolcontract.ProducerRefused || result.StopCode != reject.Code || reject.Data["expected_form"] != "basename [--] PATH [SUFFIX]" {
 		t.Fatalf("unsupported result=%+v reject=%+v", result, reject)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	result, err = p.Invoke(ctx, commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{})
+	result, err = p.Invoke(ctx, commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{})
 	if !errors.Is(err, context.Canceled) || result.Terminal != toolcontract.ProducerInterrupted || result.PublicationEligible {
 		t.Fatalf("cancelled result=%+v err=%v", result, err)
 	}
@@ -408,13 +408,21 @@ func TestPathStreamingSeparatesDeliveredPrefixFromCompleteness(t *testing.T) {
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind streaming fixture", err)
 	var output bytes.Buffer
-	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "native_path", Arguments: []string{"--", "a.go", "/dev/null"}}, commandprogram.Streams{Output: &output})
+	result, err := p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "native_path", Argv: pathArgv("native_path", "--", "a.go", "/dev/null")}, commandprogram.Streams{Output: &output})
 	if err == nil || output.Len() != 0 || result.PublicationEligible {
 		t.Fatalf("invalid conversion exposed unvalidated prefix: output=%q result=%+v err=%v", output.String(), result, err)
 	}
-	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Arguments: []string{"--", "a.go", "missing"}}, commandprogram.Streams{Output: &output})
+	result, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "realpath", Argv: pathArgv("realpath", "--", "a.go", "missing")}, commandprogram.Streams{Output: &output})
 	if !errors.Is(err, os.ErrNotExist) || output.String() != filepath.Join(fspath.CanonicalPath(root), "a.go")+"\n" || result.Complete || result.PublicationEligible || result.Terminal != toolcontract.ProducerFailed {
 		t.Fatalf("partial output reported complete: output=%q result=%+v err=%v", output.String(), result, err)
 	}
 	testutil.FailErr(t, "validate incomplete producer", result.Validate())
+}
+
+func pathArgv(name string, args ...string) commandprogram.Fields {
+	argv := commandprogram.Fields{{Value: name}}
+	for _, arg := range args {
+		argv = append(argv, commandprogram.Field{Value: arg})
+	}
+	return argv
 }

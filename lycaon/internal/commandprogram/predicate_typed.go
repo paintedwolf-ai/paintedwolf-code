@@ -76,7 +76,7 @@ func (r PredicateRuntime) expand(ctx context.Context, n commandsurface.TestNode)
 	if !ok || r.Expansion == nil {
 		return nil, errors.New("predicate expansion port unavailable")
 	}
-	value, err := r.Expansion.ExpandPredicate(ctx, word.Word)
+	value, err := r.Expansion.ExpandPattern(ctx, r.Scope, word.Word)
 	if err != nil {
 		return nil, err
 	}

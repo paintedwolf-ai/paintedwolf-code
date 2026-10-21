@@ -15,15 +15,10 @@ import (
 	"mvdan.cc/sh/v3/pattern"
 )
 
-// PredicateMemory joins the invoking program's aggregate allocation admission.
-type PredicateMemory interface {
-	Reserve(context.Context, int64) (func(), error)
-}
-
 // NativePredicatePatterns preserves the selected shell glob and POSIX grammar.
 // The bounded existing VM exposes no PCRE grammar or captures.
 type NativePredicatePatterns struct {
-	Memory          PredicateMemory
+	Memory          *toolcontract.ProgramMemory
 	LocalBoundsOnly bool
 }
 
@@ -80,9 +75,6 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	lexicalBytes := 1024 + (raw+1)*(raw+1)*8
 	if p.Memory != nil {
 		release, err := p.Memory.Reserve(ctx, lexicalBytes)
-		if err == nil && release == nil {
-			err = errors.New("predicate pattern admission returned no lease")
-		}
 		if err != nil {
 			return false, err
 		}

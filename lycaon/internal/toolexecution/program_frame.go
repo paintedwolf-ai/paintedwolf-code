@@ -31,7 +31,7 @@ type programRoot struct {
 
 // FreezeProgramFrame captures immutable attribution before any child starts.
 // The host resolves its actor and project/session identity before calling this.
-func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission ProgramStateAdmission) (ProgramFrame, error) {
+func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (ProgramFrame, error) {
 	if err := parent.Validate(); err != nil {
 		return ProgramFrame{}, err
 	}

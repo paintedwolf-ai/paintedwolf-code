@@ -91,7 +91,7 @@ func TestProgramFeedbackTargetsRequestedIterationNotLastStoppedChild(t *testing.
 	for i, bound := range []toolcontract.BoundOperation{earlier, later} {
 		code := []string{"FIRST_OWNER_REFUSAL", "SECOND_OWNER_REFUSAL"}[i]
 		result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "refusal"}}
-		testutil.FailErr(t, "settle actual independent iteration", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result, OwnerInvoked: true, DetailReference: "output:owner-refusal-" + code}))
+		testutil.FailErr(t, "settle actual independent iteration", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, DetailReference: "output:owner-refusal-" + code}))
 	}
 	admission := feedbackAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil })
 	lease, err := f.recorder.ReadProgramFeedback(t.Context(), f.session, f.program, earlier.Invocation().Identity.ExecutionID, 1, admission)

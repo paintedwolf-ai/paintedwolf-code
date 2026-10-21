@@ -5,17 +5,11 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ProgramMemoryAdmission reserves working and retained storage against the enclosing
-// program's resource ledger. It supplies accounting, never operation authority.
-// Captured source and retained plans additionally consume program_state_bytes.
-type ProgramMemoryAdmission interface {
-	ReserveParserScratch(context.Context, int64) (release func(), err error)
-	ReserveProgramState(context.Context, int64) (release func(), err error)
-}
-
-// ProgramParser holds its reservation through validation and host lowering.
+// ProgramParser holds its working-memory reservation through validation and host lowering.
 // Callers acquire it before source capture and close it after parsing. A parser
 // must not be shared concurrently or used after Close.
 type ProgramParser struct {
@@ -23,11 +17,11 @@ type ProgramParser struct {
 	release func()
 	once    sync.Once
 	closed  bool
-	memory  ProgramMemoryAdmission
+	memory  *toolcontract.ProgramMemory
 }
 
-func NewProgramParser(ctx context.Context, admission ProgramMemoryAdmission) (*ProgramParser, error) {
-	if ctx == nil || admission == nil {
+func NewProgramParser(ctx context.Context, memory *toolcontract.ProgramMemory) (*ProgramParser, error) {
+	if ctx == nil || memory == nil {
 		return nil, fmt.Errorf("program parser requires context and scratch admission")
 	}
 	if err := ctx.Err(); err != nil {
@@ -37,14 +31,11 @@ func NewProgramParser(ctx context.Context, admission ProgramMemoryAdmission) (*P
 	if err != nil {
 		return nil, err
 	}
-	release, err := admission.ReserveParserScratch(ctx, languageLimit(catalog, "evaluation_memory_bytes"))
+	release, err := memory.Reserve(ctx, languageLimit(catalog, "evaluation_memory_bytes"))
 	if err != nil {
 		return nil, err
 	}
-	if release == nil {
-		return nil, fmt.Errorf("parser scratch admission returned no release")
-	}
-	return &ProgramParser{ctx: ctx, release: release, memory: admission}, nil
+	return &ProgramParser{ctx: ctx, release: release, memory: memory}, nil
 }
 
 func (p *ProgramParser) Close() error {

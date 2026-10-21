@@ -89,7 +89,7 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 	return parseProgram(context.Background(), source, options, nil)
 }
 
-func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission) (*ParsedProgram, error) {
+func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory *toolcontract.ProgramMemory) (*ParsedProgram, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -156,9 +156,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 		releaseState, err = memory.ReserveProgramState(ctx, hostBytes)
 		if err != nil {
 			return nil, err
-		}
-		if releaseState == nil {
-			return nil, fmt.Errorf("program state admission returned no release")
 		}
 		defer func() {
 			if !retained {
