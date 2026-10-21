@@ -113,7 +113,7 @@ func (s *BoundedSession) Close() { s.meter.Close() }
 // spans groups[2g:2g+2], -1 for an unset group. Without longest the match is
 // the backtracking engine's leftmost-first one. With longest each start
 // explores every path and returns its farthest group-0 end, which is the
-// POSIX leftmost-longest match; groups other than 0 are then unset.
+// POSIX leftmost-longest match with POSIX subexpression offsets.
 func (s *BoundedSession) Find(text []rune, start int, longest bool) (groups []int, err error) {
 	defer recoverBudget(&err)
 	if start < 0 || start > len(text) {
@@ -128,15 +128,15 @@ func (s *BoundedSession) Find(text []rune, start int, longest bool) (groups []in
 	for pos := start; pos <= len(text); pos++ {
 		s.meter.Step(1)
 		r.Runtextpos = pos
-		r.bestEnd = -1
+		r.best = nil
 		if err := executeDefault(r); err != nil {
 			return nil, err
 		}
-		if longest && r.bestEnd >= 0 {
-			return []int{pos, r.bestEnd}, nil
+		if longest && r.best != nil {
+			return r.best, nil
 		}
 		if !longest && r.runmatch.matchcount[0] > 0 {
-			return s.groups(), nil
+			return r.captureVector(), nil
 		}
 		r.Runtrackpos = len(r.runtrack)
 		r.Runstackpos = len(r.runstack)
@@ -146,9 +146,11 @@ func (s *BoundedSession) Find(text []rune, start int, longest bool) (groups []in
 	return nil, nil
 }
 
-func (s *BoundedSession) groups() []int {
-	m := s.runner.runmatch
-	code := s.runner.code
+// captureVector reads the current last capture of every group as scalar
+// offsets, -1 for an unset group.
+func (r *Runner) captureVector() []int {
+	m := r.runmatch
+	code := r.code
 	top := code.Capsize
 	if code.Caps != nil {
 		top = 0
@@ -156,27 +158,47 @@ func (s *BoundedSession) groups() []int {
 			top = max(top, group+1)
 		}
 	}
-	s.meter.Alloc(int64(top) * 16)
+	r.budget.Alloc(int64(top) * 16)
 	out := make([]int, 2*top)
 	for group := range top {
+		out[2*group], out[2*group+1] = -1, -1
 		index := group
 		if code.Caps != nil {
 			mapped, ok := code.Caps[group]
 			if !ok {
-				out[2*group], out[2*group+1] = -1, -1
 				continue
 			}
 			index = mapped
 		}
-		count := m.matchcount[index]
-		if count == 0 {
-			out[2*group], out[2*group+1] = -1, -1
-			continue
+		if count := m.matchcount[index]; count > 0 {
+			begin, length := m.matches[index][2*count-2], m.matches[index][2*count-1]
+			out[2*group], out[2*group+1] = begin, begin+length
 		}
-		begin, length := m.matches[index][2*count-2], m.matches[index][2*count-1]
-		out[2*group], out[2*group+1] = begin, begin+length
 	}
 	return out
+}
+
+// posixPrefers orders two complete matches from one start: the farther
+// overall end, then group by group a set group over an unset one, the
+// earlier start and the farther end.
+func posixPrefers(candidate, best []int) bool {
+	if candidate[1] != best[1] {
+		return candidate[1] > best[1]
+	}
+	for i := 2; i+1 < len(candidate); i += 2 {
+		switch {
+		case candidate[i] == best[i] && candidate[i+1] == best[i+1]:
+			continue
+		case best[i] < 0:
+			return true
+		case candidate[i] < 0:
+			return false
+		case candidate[i] != best[i]:
+			return candidate[i] < best[i]
+		}
+		return candidate[i+1] > best[i+1]
+	}
+	return false
 }
 
 func recoverBudget(err *error) {

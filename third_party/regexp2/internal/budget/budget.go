@@ -98,6 +98,7 @@ func (m *Meter) Alloc(n int64) {
 	}
 	m.bytes += n
 }
+
 // Steps reports the work admitted so far.
 func (m *Meter) Steps() int64 {
 	if m == nil {

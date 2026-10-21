@@ -216,8 +216,10 @@ validated against its declared grammar (pcre-common-v1 for `-P`); it is not a
 qualification of the engine's own syntax. A `BoundedSession` meters one
 record's steps, time and allocation across every search of that record, and
 `Find` returns leftmost-first spans or, in longest mode, the POSIX
-leftmost-longest span: `Stop` records the farthest group-0 end and keeps
-backtracking, so each start explores every path. The metered writer emits no
+leftmost-longest match with POSIX subexpression offsets: `Stop` keeps the
+preferred capture vector (farthest group-0 end, then per group in order a set
+group, the earliest start and the farthest end) and keeps backtracking, so
+each start explores every path. The metered writer emits no
 prefix or atomicity optimizations, which keeps that exploration exhaustive.
 
 The predicate grammar adapter also retains the selected Go1.26.4

@@ -178,7 +178,7 @@ func compilePOSIX(ctx context.Context, patterns []string, spec Spec, limits Limi
 	translated := make([]posixPattern, len(patterns))
 	offset := 0
 	for i, p := range patterns {
-		t, err := translatePOSIX(p, spec.Dialect == Extended, offset)
+		t, err := translatePOSIX(p, spec.Dialect == Extended, offset, false)
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +193,9 @@ func compilePOSIX(ctx context.Context, patterns []string, spec Spec, limits Limi
 func compileTranslated(ctx context.Context, raw []string, translated []posixPattern, spec Spec, limits Limits) (engine, error) {
 	var text strings.Builder
 	marked := spec.Word
+	groups := 0
 	for i, t := range translated {
+		groups += t.groups
 		if i > 0 {
 			text.WriteByte('|')
 		}
@@ -227,7 +229,7 @@ func compileTranslated(ctx context.Context, raw []string, translated []posixPatt
 	if err != nil {
 		return nil, budgetError(err)
 	}
-	return vmEngine{program: program, limits: limits, longest: true}, nil
+	return vmEngine{program: program, limits: limits, longest: true, groupCount: groups}, nil
 }
 
 // --- RE2 -------------------------------------------------------------------

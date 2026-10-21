@@ -32,11 +32,21 @@ type PinRecorder interface {
 	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
 }
 
-// Remover is the recoverable removal owner find -delete routes through
-// (P16's rm operation). It journals one entry so the removal can be
-// restored, refuses a non-empty directory, and never follows a final link.
+// Remover is the recoverable removal owner find -delete routes through. It
+// journals one entry so the removal can be restored, refuses a non-empty
+// directory, and never follows a final link.
 type Remover interface {
 	RemoveRecoverable(ctx context.Context, tc tools.ToolContext, target projectpaths.BoundPath) error
+}
+
+// DeleteRemover is the production Remover: the shared delete operation rm and
+// rmdir also call, removing one entry (a file, link or empty directory)
+// through its recoverable source journal.
+type DeleteRemover struct{ Delete *native.DeleteTool }
+
+func (d DeleteRemover) RemoveRecoverable(ctx context.Context, tc tools.ToolContext, target projectpaths.BoundPath) error {
+	_, err := d.Delete.Delete(ctx, native.DeleteInput{Paths: []string{target.Resolved.Abs}}, tc)
+	return err
 }
 
 // Owners holds the shared operations behind every search utility. One value
@@ -179,8 +189,8 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, dispatch commandprogr
 	if !ok || paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a search command", request.Argv[0].Value)
 	}
-	if request.OperationID != o.ops[spec.Name] {
-		return Prepared{}, fmt.Errorf("%s belongs to operation %s, not %s", spec.Name, o.ops[spec.Name], request.OperationID)
+	if request.OperationID != spec.Name {
+		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, spec.Name)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {

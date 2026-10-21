@@ -32,8 +32,8 @@ const (
 	MarkerWordBoundary    rune = 0x10FFF4 // GNU \b over the ASCII word class
 	MarkerNotWordBoundary rune = 0x10FFF5 // GNU \B over the ASCII word class
 	MaxMarkedGroup             = 0xEF
-	markerFirst         rune = 0x10FF00
-	markerLast          rune = 0x10FFFF
+	markerFirst           rune = 0x10FF00
+	markerLast            rune = 0x10FFFF
 )
 
 // IsMarker reports whether r is reserved for host markers.

@@ -106,7 +106,6 @@ func (d *childDispatch) record(request commandprogram.OperationRequest) {
 func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	d.record(request)
 	if _, owned := d.h.owners.Operation(request.OperationID); owned {
-		request.OperationID, _ = d.h.owners.Operation(request.OperationID)
 		return d.h.owners.Invoke(ctx, d.h.tc, mustPaths(d.h.t, d.h), d, request, streams)
 	}
 	return d.echo(request, streams)
@@ -215,10 +214,11 @@ func requestFor(h *harness, argv ...string) commandprogram.OperationRequest {
 	for i, word := range argv {
 		fields[i] = commandprogram.Field{Value: word, Span: toolcontract.SourceSpan{StartByte: i, EndByte: i + 1, Line: 1, Column: i + 1}}
 	}
-	operation, ok := h.owners.Operation(argv[0])
+	spec, ok := h.owners.spec(argv[0])
 	if !ok {
-		h.t.Fatalf("%s has no operation", argv[0])
+		h.t.Fatalf("%s is not a search command", argv[0])
 	}
+	operation := spec.Name
 	inv := h.invocation()
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
 	return commandprogram.OperationRequest{Invocation: inv, OperationID: operation, Statement: statement, Argv: fields, Environment: []string{"LANG=C"}}
@@ -265,4 +265,3 @@ func symlink(t *testing.T, target, path string) {
 	t.Helper()
 	testutil.FailErr(t, "symlink "+path, os.Symlink(target, path))
 }
-

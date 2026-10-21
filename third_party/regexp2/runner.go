@@ -21,10 +21,12 @@ type Runner struct {
 	code   *syntax.Code
 	debug  bool
 
-	// longest makes Stop record the farthest group-0 end and keep
-	// backtracking, so one attempt explores every path from its start.
+	// longest makes Stop record the preferred capture vector and keep
+	// backtracking, so one attempt explores every path from its start: the
+	// farthest group-0 end, then for each group in order the earliest start
+	// and the farthest end (POSIX subexpression rules).
 	longest bool
-	bestEnd int
+	best    []int
 
 	Runtextstart int // starting point for search
 
@@ -245,8 +247,10 @@ func executeDefault(r *Runner) error {
 		switch r.operator {
 		case syntax.Stop:
 			if r.longest && r.runmatch.matchcount[0] > 0 {
-				count := r.runmatch.matchcount[0]
-				r.bestEnd = max(r.bestEnd, r.runmatch.matches[0][2*count-2]+r.runmatch.matches[0][2*count-1])
+				candidate := r.captureVector()
+				if r.best == nil || posixPrefers(candidate, r.best) {
+					r.best = candidate
+				}
 				break
 			}
 			return nil

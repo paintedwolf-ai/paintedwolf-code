@@ -99,7 +99,7 @@
 +}
 --- a/bounded_find.go
 +++ b/bounded_find.go
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,212 @@
 +package regexp2
 +
 +import (
@@ -215,7 +215,7 @@
 +// spans groups[2g:2g+2], -1 for an unset group. Without longest the match is
 +// the backtracking engine's leftmost-first one. With longest each start
 +// explores every path and returns its farthest group-0 end, which is the
-+// POSIX leftmost-longest match; groups other than 0 are then unset.
++// POSIX leftmost-longest match with POSIX subexpression offsets.
 +func (s *BoundedSession) Find(text []rune, start int, longest bool) (groups []int, err error) {
 +	defer recoverBudget(&err)
 +	if start < 0 || start > len(text) {
@@ -230,15 +230,15 @@
 +	for pos := start; pos <= len(text); pos++ {
 +		s.meter.Step(1)
 +		r.Runtextpos = pos
-+		r.bestEnd = -1
++		r.best = nil
 +		if err := executeDefault(r); err != nil {
 +			return nil, err
 +		}
-+		if longest && r.bestEnd >= 0 {
-+			return []int{pos, r.bestEnd}, nil
++		if longest && r.best != nil {
++			return r.best, nil
 +		}
 +		if !longest && r.runmatch.matchcount[0] > 0 {
-+			return s.groups(), nil
++			return r.captureVector(), nil
 +		}
 +		r.Runtrackpos = len(r.runtrack)
 +		r.Runstackpos = len(r.runstack)
@@ -248,9 +248,11 @@
 +	return nil, nil
 +}
 +
-+func (s *BoundedSession) groups() []int {
-+	m := s.runner.runmatch
-+	code := s.runner.code
++// captureVector reads the current last capture of every group as scalar
++// offsets, -1 for an unset group.
++func (r *Runner) captureVector() []int {
++	m := r.runmatch
++	code := r.code
 +	top := code.Capsize
 +	if code.Caps != nil {
 +		top = 0
@@ -258,27 +260,47 @@
 +			top = max(top, group+1)
 +		}
 +	}
-+	s.meter.Alloc(int64(top) * 16)
++	r.budget.Alloc(int64(top) * 16)
 +	out := make([]int, 2*top)
 +	for group := range top {
++		out[2*group], out[2*group+1] = -1, -1
 +		index := group
 +		if code.Caps != nil {
 +			mapped, ok := code.Caps[group]
 +			if !ok {
-+				out[2*group], out[2*group+1] = -1, -1
 +				continue
 +			}
 +			index = mapped
 +		}
-+		count := m.matchcount[index]
-+		if count == 0 {
-+			out[2*group], out[2*group+1] = -1, -1
-+			continue
++		if count := m.matchcount[index]; count > 0 {
++			begin, length := m.matches[index][2*count-2], m.matches[index][2*count-1]
++			out[2*group], out[2*group+1] = begin, begin+length
 +		}
-+		begin, length := m.matches[index][2*count-2], m.matches[index][2*count-1]
-+		out[2*group], out[2*group+1] = begin, begin+length
 +	}
 +	return out
++}
++
++// posixPrefers orders two complete matches from one start: the farther
++// overall end, then group by group a set group over an unset one, the
++// earlier start and the farther end.
++func posixPrefers(candidate, best []int) bool {
++	if candidate[1] != best[1] {
++		return candidate[1] > best[1]
++	}
++	for i := 2; i+1 < len(candidate); i += 2 {
++		switch {
++		case candidate[i] == best[i] && candidate[i+1] == best[i+1]:
++			continue
++		case best[i] < 0:
++			return true
++		case candidate[i] < 0:
++			return false
++		case candidate[i] != best[i]:
++			return candidate[i] < best[i]
++		}
++		return candidate[i+1] > best[i+1]
++	}
++	return false
 +}
 +
 +func recoverBudget(err *error) {
@@ -292,7 +314,7 @@
 +}
 --- a/internal/budget/budget.go
 +++ b/internal/budget/budget.go
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +package budget
 +
 +import (
@@ -393,6 +415,7 @@
 +	}
 +	m.bytes += n
 +}
++
 +// Steps reports the work admitted so far.
 +func (m *Meter) Steps() int64 {
 +	if m == nil {
@@ -419,119 +442,123 @@
 +	re     *Regexp
 +	code   *syntax.Code
 +	debug  bool
-@@ -21,0 +24,5 @@
-+	// longest makes Stop record the farthest group-0 end and keep
-+	// backtracking, so one attempt explores every path from its start.
+@@ -21,0 +24,7 @@
++	// longest makes Stop record the preferred capture vector and keep
++	// backtracking, so one attempt explores every path from its start: the
++	// farthest group-0 end, then for each group in order the earliest start
++	// and the farthest end (POSIX subexpression rules).
 +	longest bool
-+	bestEnd int
++	best    []int
 +
-@@ -157,0 +165 @@
+@@ -157,0 +167 @@
 +		r.budget.Step(1)
-@@ -224,0 +233 @@
+@@ -224,0 +235 @@
 +		r.budget.Step(1)
-@@ -237,0 +247,5 @@
+@@ -237,0 +249,7 @@
 +			if r.longest && r.runmatch.matchcount[0] > 0 {
-+				count := r.runmatch.matchcount[0]
-+				r.bestEnd = max(r.bestEnd, r.runmatch.matches[0][2*count-2]+r.runmatch.matches[0][2*count-1])
++				candidate := r.captureVector()
++				if r.best == nil || posixPrefers(candidate, r.best) {
++					r.best = candidate
++				}
 +				break
 +			}
-@@ -537,0 +552 @@
+@@ -537,0 +556 @@
 +				r.budget.Step(1)
-@@ -556,0 +572 @@
+@@ -556,0 +576 @@
 +				r.budget.Step(1)
-@@ -703,0 +720 @@
+@@ -703,0 +724 @@
 +				r.budget.Step(1)
-@@ -722,0 +740 @@
+@@ -722,0 +744 @@
 +				r.budget.Step(1)
-@@ -742,0 +761 @@
+@@ -742,0 +765 @@
 +				r.budget.Step(1)
-@@ -763,0 +783 @@
+@@ -763,0 +787 @@
 +				r.budget.Step(1)
-@@ -788,0 +809 @@
+@@ -788,0 +813 @@
 +				r.budget.Step(1)
-@@ -813,0 +835 @@
+@@ -813,0 +839 @@
 +				r.budget.Step(1)
-@@ -971,0 +994,2 @@
+@@ -971,0 +998,2 @@
 +		r.budget.Step(int64(len(r.runstack)))
 +		r.budget.Alloc(int64(len(r.runstack)) * 16)
-@@ -981,0 +1006,2 @@
+@@ -981,0 +1010,2 @@
 +		r.budget.Step(int64(len(r.runstack)))
 +		r.budget.Alloc(int64(len(r.runstack)) * 16)
-@@ -997,0 +1024,2 @@
+@@ -997,0 +1028,2 @@
 +		r.budget.Step(int64(len(r.runcrawl)))
 +		r.budget.Alloc(int64(len(r.runcrawl)) * 16)
-@@ -1067,0 +1096,2 @@
+@@ -1067,0 +1100,2 @@
 +	r.budget.Step(int64(oldLen))
 +	r.budget.Alloc(int64(newLen) * 8)
-@@ -1278,0 +1309 @@
+@@ -1278,0 +1313 @@
 +			r.budget.Step(1)
-@@ -1286,0 +1318 @@
+@@ -1286,0 +1322 @@
 +			r.budget.Step(1)
-@@ -1325,0 +1358 @@
+@@ -1325,0 +1362 @@
 +			r.budget.Step(1)
-@@ -1335,0 +1369 @@
+@@ -1335,0 +1373 @@
 +			r.budget.Step(1)
-@@ -1429,0 +1464 @@
+@@ -1429,0 +1468 @@
 +			r.budget.Step(1)
-@@ -1436,0 +1472 @@
+@@ -1436,0 +1476 @@
 +			r.budget.Step(1)
-@@ -1562,0 +1599 @@
+@@ -1562,0 +1603 @@
 +			r.budget.Step(1)
-@@ -1563,0 +1601 @@
+@@ -1563,0 +1605 @@
 +				r.budget.Step(1)
-@@ -1580,0 +1619 @@
+@@ -1580,0 +1623 @@
 +		r.budget.Step(1)
-@@ -1587,0 +1627 @@
+@@ -1587,0 +1631 @@
 +			r.budget.Step(1)
-@@ -1617,0 +1658 @@
+@@ -1617,0 +1662 @@
 +		r.budget.Step(1)
-@@ -1645,0 +1687 @@
+@@ -1645,0 +1691 @@
 +		r.budget.Step(1)
-@@ -1674,0 +1717 @@
+@@ -1674,0 +1721 @@
 +		r.budget.Step(1)
-@@ -1703,0 +1747 @@
+@@ -1703,0 +1751 @@
 +		r.budget.Step(1)
-@@ -1711,0 +1756 @@
+@@ -1711,0 +1760 @@
 +			r.budget.Step(1)
-@@ -1730,0 +1776 @@
+@@ -1730,0 +1780 @@
 +		r.budget.Step(1)
-@@ -1738,0 +1785 @@
+@@ -1738,0 +1789 @@
 +			r.budget.Step(1)
-@@ -1751,0 +1799 @@
+@@ -1751,0 +1803 @@
 +			r.budget.Step(1)
-@@ -1880,0 +1929 @@
+@@ -1880,0 +1933 @@
 +		r.budget.Step(1)
-@@ -1926,0 +1976 @@
+@@ -1926,0 +1980 @@
 +			r.budget.Alloc(512 + int64(r.re.capsize)*32)
-@@ -1928,0 +1979 @@
+@@ -1928,0 +1983 @@
 +			r.budget.Alloc(512 + int64(r.re.capsize)*32)
-@@ -1961,0 +2013 @@
+@@ -1961,0 +2017 @@
 +	r.budget.Alloc(int64(tracksize+stacksize+32) * 8)
-@@ -2008,0 +2061,5 @@
+@@ -2008,0 +2065,5 @@
 +	if r.runmatch.matches[capnum] == nil {
 +		r.budget.Alloc(16)
 +	} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
 +		r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
 +	}
-@@ -2049,0 +2107,5 @@
+@@ -2049,0 +2111,5 @@
 +		if r.runmatch.matches[capnum] == nil {
 +			r.budget.Alloc(16)
 +		} else if r.runmatch.matchcount[capnum]*2+2 > len(r.runmatch.matches[capnum]) {
 +			r.budget.Alloc(int64(r.runmatch.matchcount[capnum]) * 64)
 +		}
-@@ -2087,0 +2150 @@
+@@ -2087,0 +2154 @@
 +		r.budget.Step(1)
-@@ -2117,0 +2181 @@
+@@ -2117,0 +2185 @@
 +		r.budget.Step(1)
-@@ -2170,0 +2235 @@
+@@ -2170,0 +2239 @@
 +		r.budget.Step(1)
-@@ -2181,0 +2247 @@
+@@ -2181,0 +2251 @@
 +		r.budget.Step(1)
-@@ -2213,0 +2280 @@
+@@ -2213,0 +2284 @@
 +		r.budget.Step(1)
-@@ -2223,0 +2291 @@
+@@ -2223,0 +2295 @@
 +		r.budget.Step(1)
-@@ -2296,0 +2365 @@
+@@ -2296,0 +2369 @@
 +		r.budget.Step(1)
 --- a/syntax/bounded_tree.go
 +++ b/syntax/bounded_tree.go
@@ -570,8 +597,8 @@
 +	MarkerWordBoundary    rune = 0x10FFF4 // GNU \b over the ASCII word class
 +	MarkerNotWordBoundary rune = 0x10FFF5 // GNU \B over the ASCII word class
 +	MaxMarkedGroup             = 0xEF
-+	markerFirst         rune = 0x10FF00
-+	markerLast          rune = 0x10FFFF
++	markerFirst           rune = 0x10FF00
++	markerLast            rune = 0x10FFFF
 +)
 +
 +// IsMarker reports whether r is reserved for host markers.

@@ -30,8 +30,10 @@ const (
 // translatePOSIX lexes one GNU BRE or ERE. Constructs outside the declared
 // dialect are refused, never reinterpreted: an unknown alphanumeric escape is
 // GREP_REGEX_UNSUPPORTED rather than GNU's warned literal.
-func translatePOSIX(pattern string, extended bool, groupOffset int) (posixPattern, error) {
-	t := posixTranslator{src: pattern, extended: extended, offset: groupOffset, atomStart: -1}
+// patternSpace admits the GNU sed escapes \n and \t for a subject that may
+// hold newlines; grep records never do.
+func translatePOSIX(pattern string, extended bool, groupOffset int, patternSpace bool) (posixPattern, error) {
+	t := posixTranslator{src: pattern, extended: extended, offset: groupOffset, atomStart: -1, patternSpace: patternSpace}
 	if err := t.run(); err != nil {
 		return posixPattern{}, err
 	}
@@ -39,16 +41,17 @@ func translatePOSIX(pattern string, extended bool, groupOffset int) (posixPatter
 }
 
 type posixTranslator struct {
-	src      string
-	extended bool
-	offset   int
-	pos      int
-	out      strings.Builder
-	groups   int
-	open     []int // group numbers still open
-	openAt   []int // output offsets of their opening parentheses
-	closed   map[int]bool
-	marked   bool
+	src          string
+	extended     bool
+	patternSpace bool
+	offset       int
+	pos          int
+	out          strings.Builder
+	groups       int
+	open         []int // group numbers still open
+	openAt       []int // output offsets of their opening parentheses
+	closed       map[int]bool
+	marked       bool
 	// atomStart is the output offset of the last quantifiable atom, -1 when
 	// a quantifier here would have nothing to repeat.
 	atomStart int
@@ -384,6 +387,10 @@ func (t *posixTranslator) escape() error {
 		t.marker(regexp2.MarkerWordBoundary, false)
 	case r == 'B':
 		t.marker(regexp2.MarkerNotWordBoundary, false)
+	case t.patternSpace && r == 'n':
+		t.atom(`\n`)
+	case t.patternSpace && r == 't':
+		t.atom(`\t`)
 	case r == 'w':
 		t.atom(asciiWordClass)
 	case r == 'W':

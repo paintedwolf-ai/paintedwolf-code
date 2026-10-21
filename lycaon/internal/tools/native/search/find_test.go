@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 var findTree = map[string]string{
@@ -239,4 +240,17 @@ func TestEffectModesFollowTheCatalog(t *testing.T) {
 	if !slices.Equal(h.owners.Commands(), []string{"find", "grep", "rg"}) {
 		t.Fatalf("commands %v", h.owners.Commands())
 	}
+}
+
+// TestFindDeleteUsesTheSharedDeleteOperation runs -delete through the same
+// delete operation rm uses, against the real write door.
+func TestFindDeleteUsesTheSharedDeleteOperation(t *testing.T) {
+	h := newHarness(t, findTree)
+	h.owners.Remover = DeleteRemover{Delete: &native.DeleteTool{Boundary: h.boundary}}
+	h.exec("", "find", "tree/sub", "-delete").expect(t, "delete", "", "", 0)
+	if _, err := os.Lstat(filepath.Join(h.root, "tree", "sub")); !os.IsNotExist(err) {
+		t.Fatalf("tree/sub still present: %v", err)
+	}
+	r := h.exec("", "find", "tree", "-maxdepth", "0", "-delete")
+	r.expect(t, "non-empty", "", "find: cannot delete 'tree': Directory not empty\n", 1)
 }
