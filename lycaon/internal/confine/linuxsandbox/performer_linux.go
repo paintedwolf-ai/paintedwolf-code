@@ -190,8 +190,8 @@ func servePathCalls(fd int) error {
 			return nil
 		}
 		dirs := receivedFDs(oob[:oobn])
-		var call pathCall
-		decoded := json.Unmarshal(buf[:n], &call) == nil
+		call, decodeErr := decodePathCall(buf[:n])
+		decoded := decodeErr == nil
 		if decoded && call.Op == callListener && len(dirs) == 1 && listener < 0 {
 			listener = dirs[0]
 			continue
@@ -340,7 +340,7 @@ func (c *performerClient) readResults(report func(pathResult)) {
 }
 
 func (c *performerClient) sendLocked(call pathCall, dirs []int) error {
-	raw, err := json.Marshal(call)
+	raw, err := encodePathCall(call)
 	if err != nil {
 		return err
 	}
