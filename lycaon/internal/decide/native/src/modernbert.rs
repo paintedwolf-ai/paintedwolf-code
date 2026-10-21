@@ -136,9 +136,56 @@ impl ModernBertMLP {
 impl Module for ModernBertMLP {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         let xs = xs.apply(&self.wi)?;
-        let xs = xs.chunk(2, D::Minus1)?;
-        let xs = (&xs[0].contiguous()?.gelu_erf()? * &xs[1].contiguous()?)?.apply(&self.wo)?; // GeGLU
-        Ok(xs)
+        let gated = if xs.device().is_cpu() && xs.dtype() == DType::F32 {
+            xs.contiguous()?.apply_op1_no_bwd(&CpuGeGlu)?
+        } else {
+            let halves = xs.chunk(2, D::Minus1)?;
+            (&halves[0].contiguous()?.gelu_erf()? * &halves[1].contiguous()?)?
+        };
+        gated.apply(&self.wo) // GeGLU
+    }
+}
+
+/// GeGLU over the last dimension, `gelu_erf(x[..n]) * x[n..]`, in one pass over all CPU
+/// threads. candle's element-wise CPU operators run on a single thread, which left the
+/// activation and its two half copies as the serial share of every encoder layer. The
+/// arithmetic matches candle's `gelu_erf` and multiply exactly.
+struct CpuGeGlu;
+
+impl candle_core::CustomOp1 for CpuGeGlu {
+    fn name(&self) -> &'static str {
+        "cpu-geglu"
+    }
+
+    fn cpu_fwd(
+        &self,
+        storage: &candle_core::CpuStorage,
+        layout: &candle_core::Layout,
+    ) -> Result<(candle_core::CpuStorage, candle_core::Shape)> {
+        use rayon::prelude::*;
+        let (candle_core::CpuStorage::F32(values), Some((start, end))) =
+            (storage, layout.contiguous_offsets())
+        else {
+            candle_core::bail!("cpu-geglu needs a contiguous f32 tensor");
+        };
+        let dims = layout.shape().dims();
+        let width = *dims.last().unwrap_or(&0);
+        if width == 0 || width % 2 != 0 {
+            candle_core::bail!("cpu-geglu needs an even last dimension, got {width}");
+        }
+        let half = width / 2;
+        let mut gated = vec![0f32; (end - start) / 2];
+        gated.par_chunks_mut(half).zip(values[start..end].par_chunks(width)).for_each(|(out, row)| {
+            let (x, gate) = row.split_at(half);
+            for ((out, &x), &gate) in out.iter_mut().zip(x).zip(gate) {
+                let gelu =
+                    (candle_core::cpu::erf::erf_f32(x * std::f32::consts::FRAC_1_SQRT_2) + 1.) * 0.5 * x;
+                *out = gelu * gate;
+            }
+        });
+        let mut shape = dims.to_vec();
+        *shape.last_mut().unwrap() = half;
+        Ok((candle_core::CpuStorage::F32(gated), candle_core::Shape::from(shape)))
     }
 }
 
@@ -314,5 +361,36 @@ impl ModernBert {
         }
         let xs = xs.apply(&self.final_norm)?;
         Ok(xs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The parallel CPU GeGLU returns exactly what candle's operators compute.
+    #[test]
+    fn cpu_geglu_matches_candles_gelu_erf_and_multiply_bit_for_bit() {
+        let values: Vec<f32> = (0..3 * 5 * 2 * 37).map(|i| ((i * 7919) % 2003) as f32 / 211.0 - 4.7).collect();
+        let xs = Tensor::from_vec(values, (3, 5, 74), &Device::Cpu).unwrap();
+        let halves = xs.chunk(2, D::Minus1).unwrap();
+        let reference = (&halves[0].contiguous().unwrap().gelu_erf().unwrap() * &halves[1].contiguous().unwrap())
+            .unwrap()
+            .flatten_all()
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
+        let gated = xs.apply_op1_no_bwd(&CpuGeGlu).unwrap();
+        assert_eq!(gated.dims(), &[3, 5, 37]);
+        let gated = gated.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        assert!(reference.iter().zip(&gated).all(|(a, b)| a.to_bits() == b.to_bits()));
+    }
+
+    #[test]
+    fn cpu_geglu_refuses_odd_or_strided_input() {
+        let odd = Tensor::zeros((2, 3), DType::F32, &Device::Cpu).unwrap();
+        assert!(odd.apply_op1_no_bwd(&CpuGeGlu).is_err());
+        let strided = Tensor::zeros((4, 2), DType::F32, &Device::Cpu).unwrap().t().unwrap();
+        assert!(strided.apply_op1_no_bwd(&CpuGeGlu).is_err());
     }
 }
