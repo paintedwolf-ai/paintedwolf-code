@@ -207,9 +207,16 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	// Many command names share one operation owner; each definition enters
+	// the surface once, keyed by its operation identity.
 	active := []toolcontract.OperationDefinition{external}
+	selected := map[string]bool{}
 	for _, operation := range owners.Natives {
+		if selected[operation.Tool] {
+			continue
+		}
 		if definition, ok := r.Registry.Definition(operation.Tool); ok {
+			selected[operation.Tool] = true
 			active = append(active, definition.Operation)
 		}
 	}
