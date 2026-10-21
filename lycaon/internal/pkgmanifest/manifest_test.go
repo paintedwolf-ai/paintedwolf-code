@@ -29,6 +29,10 @@ func fixture(t *testing.T, mutate func(m map[string]any)) (manifestPath, exePath
 		"version":        "1.0.2",
 		"architecture":   "x86_64",
 		"install_root":   root,
+		"payload": []map[string]any{
+			{"path": "bin", "kind": "directory", "mode": 0755, "sha256": nil, "size": nil, "target": nil},
+			{"path": "bin/pw", "kind": "file", "mode": 0755, "sha256": hex.EncodeToString(sum[:]), "size": len(content), "target": nil},
+		},
 		"executables": []map[string]any{
 			{"path": exePath, "sha256": hex.EncodeToString(sum[:]), "size": len(content)},
 		},
@@ -160,7 +164,7 @@ func TestVerifyReportsTamperingAndUnlistedPaths(t *testing.T) {
 }
 
 func TestVerifyReportsWrongRecordedSize(t *testing.T) {
-	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1 })
+	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1; m["payload"].([]map[string]any)[1]["size"] = 1 })
 	m, err := pkgmanifest.Load(manifestPath)
 	testutil.FailErr(t, "load manifest", err)
 	var mismatch *pkgmanifest.SizeMismatchError

@@ -1,6 +1,7 @@
 package pkgmanifest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -18,6 +19,29 @@ type PayloadEntry struct {
 	Target *string `json:"target"`
 }
 
+// UnmarshalJSON requires the complete tagged record, including explicit nulls.
+func (entry *PayloadEntry) UnmarshalJSON(raw []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	if len(fields) != 6 {
+		return errors.New("native manifest: incomplete payload record")
+	}
+	for _, key := range []string{"path", "kind", "mode", "sha256", "size", "target"} {
+		if _, ok := fields[key]; !ok {
+			return errors.New("native manifest: unsupported payload record")
+		}
+	}
+	type plain PayloadEntry
+	var decoded plain
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return err
+	}
+	*entry = PayloadEntry(decoded)
+	return nil
+}
+
 func (m *Manifest) validatePayload() error {
 	if len(m.Payload) == 0 {
 		return errors.New("native manifest: payload is empty")
@@ -30,7 +54,7 @@ func (m *Manifest) validatePayload() error {
 		if _, ok := entries[entry.Path]; ok {
 			return fmt.Errorf("native manifest: duplicate payload path %q", entry.Path)
 		}
-		if entry.Mode > 0777 || entry.Mode&0022 != 0 {
+		if entry.Mode > 0777 || entry.Kind != "symlink" && entry.Mode&0022 != 0 {
 			return fmt.Errorf("native manifest: unsafe payload mode for %q", entry.Path)
 		}
 		switch entry.Kind {
@@ -43,7 +67,7 @@ func (m *Manifest) validatePayload() error {
 				return fmt.Errorf("native manifest: invalid payload directory %q", entry.Path)
 			}
 		case "symlink":
-			if entry.SHA256 != nil || entry.Size != nil || entry.Target == nil || *entry.Target == "" || path.IsAbs(*entry.Target) {
+			if entry.Mode != 0777 || entry.SHA256 != nil || entry.Size != nil || entry.Target == nil || *entry.Target == "" || path.IsAbs(*entry.Target) {
 				return fmt.Errorf("native manifest: invalid payload link %q", entry.Path)
 			}
 			resolved := path.Clean(path.Join(path.Dir(entry.Path), *entry.Target))
@@ -59,6 +83,27 @@ func (m *Manifest) validatePayload() error {
 		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
 			if entries[parent].Kind != "directory" {
 				return fmt.Errorf("native manifest: missing physical payload parent %q", parent)
+			}
+		}
+	}
+	for _, entry := range entries {
+		if entry.Kind != "symlink" {
+			continue
+		}
+		selected := entry.Path
+		visited := map[string]bool{}
+		for entries[selected].Kind == "symlink" {
+			if visited[selected] {
+				return fmt.Errorf("native manifest: cyclic payload link %q", entry.Path)
+			}
+			visited[selected] = true
+			link := entries[selected]
+			selected = path.Clean(path.Join(path.Dir(selected), *link.Target))
+			if selected == "." {
+				break
+			}
+			if _, ok := entries[selected]; !ok {
+				return fmt.Errorf("native manifest: dangling payload link %q", entry.Path)
 			}
 		}
 	}
