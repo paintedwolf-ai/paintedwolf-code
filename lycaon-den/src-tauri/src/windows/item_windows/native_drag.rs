@@ -5,11 +5,15 @@
 //! the pointer. The compositor names the window under the pointer, and each Den
 //! window hit-tests its own tab strip in its own coordinates. The drag carries
 //! a shell-minted token (see `transfer`) and only drags from this process are
-//! accepted. A drop on no accepting window tears the tab off into a new
-//! window that the compositor places. On X11, Escape keeps the tab. Wayland
+//! accepted. Where the compositor offers `xdg_toplevel_drag_v1`, the tab's
+//! new window follows the pointer during the drag (see `toplevel_drag`): a drop
+//! on no Den strip keeps it there and Escape takes it away. Elsewhere a drop on
+//! no accepting window tears the tab off into a new window that the compositor
+//! places. On X11, Escape keeps the tab. Without the protocol, Wayland
 //! compositors report Escape, a drop over no window and a drop on another
-//! application as the same cancellation, so on Wayland each of them tears off.
+//! application as the same cancellation, so each of them tears off.
 
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use gtk::gdk;
@@ -18,6 +22,8 @@ use gtk::prelude::*;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
+use super::drag::{close_pending_drag, pending_view, promote_pending_drag};
+use super::toplevel_drag::{self, live_outcome, LiveOutcome};
 use super::transfer::{Delivery, Notice, Refusal, Settled, Transfers};
 use super::{
     open_item_window, valid_id, FileTabDragEvent, ItemWindowView, FILE_TAB_DRAG_EVENT,
@@ -34,7 +40,16 @@ struct ActiveDrag {
     token: String,
     initiator: String,
     hovered: Option<String>,
+    /// The compositor moves a window with this drag; set once it is attached.
+    live: Option<String>,
+    /// A drag carrying a window ended with a release, wherever it landed.
+    dropped: bool,
+    /// A Den strip took the tab.
+    received: bool,
 }
+
+/// Torn-off windows waiting for the initiator's latest draft, by token.
+static TORN_OFF: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 static ACTIVE: LazyLock<Mutex<Option<ActiveDrag>>> = LazyLock::new(|| Mutex::new(None));
 
@@ -96,6 +111,21 @@ fn deliver(app: &AppHandle, token: &str, delivery: Delivery) {
         Delivery::TearOff { view } => {
             let app = app.clone();
             let token = token.to_string();
+            let carried = TORN_OFF.lock().ok().and_then(|mut torn| torn.remove(&token));
+            if let Some(label) = carried {
+                let promoted = app
+                    .get_webview_window(&label)
+                    .ok_or_else(|| "the torn-off window closed".to_string())
+                    .and_then(|window| promote_pending_drag(&app, &window, &view));
+                if let Err(err) = &promoted {
+                    eprintln!("Could not keep the torn-off file window: {err}");
+                    close_pending_drag(&app, &label);
+                }
+                if let Some(notice) = transfers().torn_off(&token, promoted.is_ok()) {
+                    notify(&app, notice);
+                }
+                return;
+            }
             // Window creation re-enters the event loop; leave the GTK callback first.
             tauri::async_runtime::spawn(async move {
                 let opened = open_item_window(
@@ -160,6 +190,9 @@ pub fn ipc_begin_native_file_tab_drag(
             token: token.clone(),
             initiator,
             hovered: None,
+            live: None,
+            dropped: false,
+            received: false,
         });
     }
     let started = token.clone();
@@ -168,18 +201,112 @@ pub fn ipc_begin_native_file_tab_drag(
         .with_webview(move |webview| {
             let widget: gtk::Widget = webview.inner().upcast();
             let targets = gtk::TargetList::new(&[gtk::TargetEntry::new(TAB_TARGET, gtk::TargetFlags::SAME_APP, 0)]);
+            if toplevel_drag::supported(&widget.display()) {
+                toplevel_drag::arm_source();
+            }
             if widget
                 .drag_begin_with_coordinates(&targets, gdk::DragAction::MOVE, 1, None, -1, -1)
                 .is_none()
             {
+                toplevel_drag::finish();
                 end_active(&started);
                 if let Some(notice) = transfers().cancel(&started) {
                     notify(&source, notice);
                 }
+            } else if toplevel_drag::active() {
+                carry_window(source, started);
             }
         })
         .map_err(|err| err.to_string())?;
     Ok(token)
+}
+
+/// Builds the tab's window and attaches it to the running drag before it maps.
+fn carry_window(app: AppHandle, token: String) {
+    let Some(view) = transfers().view_of(&token) else {
+        return;
+    };
+    let Some(initiator) = active_token().filter(|(active, _)| *active == token).map(|(_, initiator)| initiator) else {
+        return;
+    };
+    // Window creation re-enters the event loop; leave the GTK callback first.
+    tauri::async_runtime::spawn(async move {
+        let opened = open_item_window(
+            app.clone(),
+            "file".into(),
+            view.project_id.clone(),
+            None,
+            view.root_id.clone(),
+            view.path.clone(),
+            None,
+            view.title.clone(),
+            None,
+            None,
+            Some(initiator),
+        );
+        let label = match opened {
+            Ok(label) => label,
+            Err(err) => {
+                eprintln!("Could not build the carried file window: {err}");
+                return;
+            }
+        };
+        let main = app.clone();
+        let _ = app.run_on_main_thread(move || attach_window(&main, &token, &label));
+    });
+}
+
+fn attach_window(app: &AppHandle, token: &str, label: &str) {
+    let running = active_token().is_some_and(|(active, _)| active == token);
+    let window = app.get_webview_window(label).and_then(|window| window.gtk_window().ok());
+    let (Some(window), true) = (window, running && toplevel_drag::active()) else {
+        close_pending_drag(app, label);
+        return;
+    };
+    toplevel_drag::arm_window((super::DROP_POINTER_X_INSET as i32, super::DROP_POINTER_Y_INSET as i32));
+    window.show_all();
+    if !toplevel_drag::attached() {
+        close_pending_drag(app, label);
+        return;
+    }
+    if let Some(drag) = active().as_mut().filter(|drag| drag.token == token) {
+        drag.live = Some(label.to_string());
+    }
+}
+
+/// The drag ended while carrying `window`.
+fn settle_live(app: &AppHandle, token: &str, window: &str, outcome: LiveOutcome) {
+    match outcome {
+        LiveOutcome::Delivered => close_pending_drag(app, window),
+        LiveOutcome::Reverted => {
+            close_pending_drag(app, window);
+            if let Some(notice) = transfers().cancel(token) {
+                notify(app, notice);
+            }
+        }
+        LiveOutcome::TornOff => {
+            if pending_view(window).is_none() {
+                if let Some(notice) = transfers().cancel(token) {
+                    notify(app, notice);
+                }
+                return;
+            }
+            if let Ok(mut torn) = TORN_OFF.lock() {
+                torn.insert(token.to_string(), window.to_string());
+            }
+            match transfers().tear_off(token) {
+                Ok(Some(delivery)) => deliver(app, token, delivery),
+                Ok(None) => {}
+                Err(refusal) => {
+                    eprintln!("{}", refused(refusal));
+                    if let Ok(mut torn) = TORN_OFF.lock() {
+                        torn.remove(token);
+                    }
+                    close_pending_drag(app, window);
+                }
+            }
+        }
+    }
 }
 
 /// The initiator published the tab's latest draft.
@@ -287,6 +414,9 @@ fn active_token() -> Option<(String, String)> {
 fn accept_drop(app: &AppHandle, label: &str, token: &str, x: f64, y: f64) -> bool {
     if active_token().is_some_and(|(active, initiator)| active == token && initiator == label) {
         // Back on its own strip: an ordinary reorder, nothing changes owner.
+        if let Some(drag) = active().as_mut() {
+            drag.received = true;
+        }
         let view = transfers().view_of(token);
         if let Some(notice) = transfers().cancel(token) {
             notify(app, notice);
@@ -304,6 +434,11 @@ fn accept_drop(app: &AppHandle, label: &str, token: &str, x: f64, y: f64) -> boo
         return false;
     };
     let dropped = transfers().drop_at(token, label, &project, x, y);
+    if dropped.is_ok() {
+        if let Some(drag) = active().as_mut().filter(|drag| drag.token == token) {
+            drag.received = true;
+        }
+    }
     match dropped {
         Ok(Some(delivery)) => {
             deliver(app, token, delivery);
@@ -387,6 +522,12 @@ fn connect_source(widget: &gtk::Widget, app: &AppHandle, label: &str) {
                 return;
             }
             context.drag_set_icon_name("text-x-generic", 0, 0);
+            context.connect_local("drop-performed", false, |_| {
+                if let Some(drag) = active().as_mut() {
+                    drag.dropped = true;
+                }
+                None
+            });
         });
     }
     {
@@ -412,7 +553,10 @@ fn connect_source(widget: &gtk::Widget, app: &AppHandle, label: &str) {
             if !carries_tab(context) {
                 return Propagation::Proceed;
             }
-            source_failed(&app, &label, protocol(&widget.display()), result);
+            // A drag carrying a window settles when it ends, from the drop itself.
+            if !active().as_ref().is_some_and(|drag| drag.live.is_some()) {
+                source_failed(&app, &label, protocol(&widget.display()), result);
+            }
             // No snap-back animation: the tab either stayed or moved.
             Propagation::Stop
         });
@@ -430,10 +574,18 @@ fn connect_source(widget: &gtk::Widget, app: &AppHandle, label: &str) {
             if initiator != label {
                 return;
             }
-            if let Some(hovered) = end_active(&token).and_then(|drag| drag.hovered) {
+            toplevel_drag::finish();
+            let Some(drag) = end_active(&token) else {
+                return;
+            };
+            if let Some(hovered) = &drag.hovered {
                 if let Some(view) = transfers().view_of(&token) {
                     let _ = app.emit_to(hovered.as_str(), FILE_TAB_DRAG_EVENT, tab_event("leave", &token, &view, 0.0, 0.0, true));
                 }
+            }
+            if let Some(window) = &drag.live {
+                settle_live(&app, &token, window, live_outcome(drag.dropped, drag.received));
+                return;
             }
             // A drag that ended without a drop or failure keeps its tab.
             if let Some(notice) = transfers().cancel(&token) {
