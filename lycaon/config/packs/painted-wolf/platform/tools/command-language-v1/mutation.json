@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "cp [-a] [-r|-R] [-f|-n] [-p] [-v] [--] SOURCE ... DEST",
+      "argv": "cp [-a] [-r|-R] [-f|-n] [-p] [-v] [-c] [-X] [--] SOURCE ... DEST",
       "forms": [
         {
           "spellings": [
@@ -69,6 +69,26 @@
           "fixture_id": "cp-option-v-verbose",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-X"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cp-option-X",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cp [--] SOURCE ... DEST",
@@ -123,7 +143,7 @@
           }
         }
       },
-      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses. -a is -R -p and refuses a tree holding a symbolic link, since links are copied as links and no owner creates links. -v prints GNU 'SRC' -> 'DEST' lines.",
+      "notes": "Bounded recursive -r/-R preserves entries, never follows escaping symlinks; -p supported metadata or capability refusal; -n skips existing target without mutation, -f reviewed replacement. Same-source/destination refuses. -a is -R -p and refuses a tree holding a symbolic link, since links are copied as links and no owner creates links. -v prints GNU 'SRC' -> 'DEST' lines. BSD -c (clone) produces the same copy, and -X (no extended attributes) matches what the owner copies.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/copy.go",
         "tests": [
@@ -148,7 +168,9 @@
         "cp-option-n",
         "cp-option-p",
         "cp-option-a-archive",
-        "cp-option-v-verbose"
+        "cp-option-v-verbose",
+        "cp-option-c",
+        "cp-option-X"
       ]
     },
     {
@@ -272,7 +294,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "rm [-r|-R] [-f] [-v] [--] PATH ...",
+      "argv": "rm [-r|-R|-d] [-f] [-v] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -303,6 +325,17 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "rm-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--dir"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rm-option-d-dir",
           "consumption": "fixed",
           "sample_values": []
         }
@@ -359,7 +392,7 @@
           }
         }
       },
-      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit. Never prompts; -i is not offered. -v prints GNU removed lines.",
+      "notes": "Recoverable recursive removal; -f missing is complete no-op; refuse root/self/parent; 10000-file/100MiB limits captured before effects; partial commits explicit. Never prompts; -i is not offered. -v prints GNU removed lines. -d removes empty directories, as GNU and BSD rm do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/delete.go",
         "tests": [
@@ -381,7 +414,8 @@
         "rm-rejection",
         "rm-option-r-R",
         "rm-option-f",
-        "rm-option-v-verbose"
+        "rm-option-v-verbose",
+        "rm-option-d-dir"
       ]
     },
     {
@@ -589,7 +623,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "touch [-c] [-m] [-a] [-t STAMP|-d DATE|-r FILE] [--] PATH ...",
+      "argv": "touch [-c] [-f] [-m] [-a] [-t STAMP|-d DATE|-r FILE] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -658,6 +692,16 @@
           "sample_values": [
             "input"
           ]
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "touch-option-f",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. touch [--] PATH ...",
@@ -712,7 +756,7 @@
           }
         }
       },
-      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock. -t [[CC]YY]MMDDhhmm[.ss], -d DATE (ISO 8601, RFC 5322, @SECONDS, now, today, yesterday, tomorrow, N UNIT ago) and -r FILE set explicit times; at most one of them; a new file receives them after creation.",
+      "notes": "Create absent empty file or update existing timestamps to captured invocation time through owner; retain bytes and revision; no implicit truncate. -c no-create; -m modification only, -a access only, default both; timestamps use one captured operation clock. -t [[CC]YY]MMDDhhmm[.ss], -d DATE (ISO 8601, RFC 5322, @SECONDS, now, today, yesterday, tomorrow, N UNIT ago) and -r FILE set explicit times; at most one of them; a new file receives them after creation. -f is accepted and ignored, as BSD and GNU touch do.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/source_write.go",
         "tests": [
@@ -737,7 +781,8 @@
         "touch-option-a",
         "touch-option-t",
         "touch-option-d-date",
-        "touch-option-r-reference"
+        "touch-option-r-reference",
+        "touch-option-f"
       ]
     },
     {

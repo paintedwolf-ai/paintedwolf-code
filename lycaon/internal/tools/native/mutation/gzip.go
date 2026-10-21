@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
@@ -18,9 +19,10 @@ import (
 // writes to stdout and keeps inputs, -k keeps inputs, -f replaces an existing
 // output, -d decompresses and -l lists. Without PATH it filters stdin.
 func runGzip(inv *invocation) error {
-	if inv.flag("-d") {
+	if inv.flag("-d") || inv.flag("-t") {
 		return runGunzip(inv)
 	}
+	level := inv.gzipLevel()
 	if inv.flag("-l") {
 		return inv.gzipList()
 	}
@@ -29,7 +31,7 @@ func runGzip(inv *invocation) error {
 		if err != nil {
 			return err
 		}
-		compressed, err := gzipMember(data, "", time.Time{})
+		compressed, err := gzipMember(data, "", time.Time{}, level)
 		if err != nil {
 			return err
 		}
@@ -46,7 +48,11 @@ func runGzip(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		compressed, err := gzipMember(data, filepath.Base(operand), info.ModTime())
+		name, modified := filepath.Base(operand), info.ModTime()
+		if inv.flag("-n") {
+			name, modified = "", time.Time{}
+		}
+		compressed, err := gzipMember(data, name, modified, level)
 		if err != nil {
 			return 0, err
 		}
@@ -60,9 +66,12 @@ func runGzip(inv *invocation) error {
 
 // gzipMember writes one member as GNU gzip does: the stored name and time of
 // a file input, the Unix OS byte, and no name or time for a stream.
-func gzipMember(data []byte, name string, modified time.Time) ([]byte, error) {
+func gzipMember(data []byte, name string, modified time.Time, level int) ([]byte, error) {
 	var out bytes.Buffer
-	gz := gzip.NewWriter(&out)
+	gz, err := gzip.NewWriterLevel(&out, level)
+	if err != nil {
+		return nil, err
+	}
 	gz.Name, gz.ModTime, gz.OS = name, modified, 3
 	if _, err := gz.Write(data); err != nil {
 		return nil, err
@@ -71,6 +80,26 @@ func gzipMember(data []byte, name string, modified time.Time) ([]byte, error) {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+// gzipLevel is the last of -1 through -9, --fast and --best; GNU and BSD
+// gzip both default to 6.
+func (inv *invocation) gzipLevel() int {
+	level := 6
+	for _, item := range inv.argv.Items {
+		if item.Option == nil {
+			continue
+		}
+		switch item.Option.Key {
+		case "-1":
+			level = int(item.Option.Spelling[1] - '0')
+		case "--fast":
+			level = 1
+		case "--best":
+			level = 9
+		}
+	}
+	return level
 }
 
 func (inv *invocation) stdinBounded(limit string) ([]byte, error) {
@@ -113,8 +142,17 @@ func runGunzip(inv *invocation) error {
 		_, err = inv.stdout.Write(decoded)
 		return err
 	}
-	toStdout := inv.flag("-c")
+	toStdout, testOnly := inv.flag("-c"), inv.flag("-t")
 	return inv.each(inv.operands(), func(operand string) (int, error) {
+		if testOnly {
+			if _, err := inv.gunzipFile(operand); err != nil {
+				if _, ok := ordinary(err); ok || toolrejection.AsToolReject(err) != nil {
+					return 0, err
+				}
+				inv.fail(operand, "invalid compressed data--format violated")
+			}
+			return 0, nil
+		}
 		output, ok := gunzipOutput(operand)
 		if !ok && !toStdout {
 			inv.fail(operand, "unknown suffix -- ignored")

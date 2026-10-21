@@ -40,7 +40,7 @@ func (inv *invocation) each(operands []string, op func(string) (int, error)) err
 }
 
 func runRm(inv *invocation) error {
-	recursive, force := inv.flag("-r"), inv.flag("-f")
+	recursive, force, directories := inv.flag("-r"), inv.flag("-f"), inv.flag("-d")
 	if len(inv.operands()) == 0 && !force {
 		return inv.usage(inv.name(), "at least one PATH")
 	}
@@ -49,11 +49,11 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		directories, err := inv.directoriesUnder(bound.Resolved.Abs)
+		dirs, err := inv.directoriesUnder(bound.Resolved.Abs)
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive && !directories, Recursive: recursive, Force: force}, inv.tc)
 		// The owner reports the operand as given and the entries beneath it
 		// scope-relative; both map back onto the bound path.
 		scope := filepath.ToSlash(bound.Resolved.ScopeRel) + "/"
@@ -63,7 +63,7 @@ func runRm(inv *invocation) error {
 				abs = filepath.Join(abs, filepath.FromSlash(rel))
 			}
 			kind := "removed"
-			if directories[abs] {
+			if dirs[abs] {
 				kind = "removed directory"
 			}
 			inv.verbose("%s %s", kind, quote(displayed(abs, bound.Resolved.Abs, operand)))

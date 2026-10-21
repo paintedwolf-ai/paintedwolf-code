@@ -295,3 +295,40 @@ func TestTarVerboseListingAndMemberSelection(t *testing.T) {
 		t.Fatalf("tar -xv member: %q %v", extract.stdout, extract.err)
 	}
 }
+
+// BSD and GNU share these spellings; each is accepted with the shared meaning.
+func TestSharedBSDSpellings(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": strings.Repeat("alpha\n", 200), "empty/": "", "full/x.txt": "x", "c.txt": "c"})
+	if r := h.run("", "touch", "-f", "a.txt"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("touch -f: %v", r.err)
+	}
+	if r := h.run("", "cp", "-c", "-X", "c.txt", "c2.txt"); r.err != nil || h.read("c2.txt") != "c" {
+		t.Fatalf("cp -c -X: %v", r.err)
+	}
+	if r := h.run("", "rm", "-d", "empty"); r.err != nil || !h.absent("empty") {
+		t.Fatalf("rm -d empty: %v", r.err)
+	}
+	if r := h.run("", "rm", "-d", "full"); h.absent("full/x.txt") || (r.err == nil && r.result.Status == 0) {
+		t.Fatalf("rm -d removed a non-empty directory: %+v %v", r.result, r.err)
+	}
+	fast, best := h.run("", "gzip", "-c", "-1", "a.txt"), h.run("", "gzip", "-c", "--best", "a.txt")
+	if fast.err != nil || best.err != nil || gunzipString(t, []byte(fast.stdout)) != h.read("a.txt") || gunzipString(t, []byte(best.stdout)) != h.read("a.txt") {
+		t.Fatalf("gzip levels: %v %v", fast.err, best.err)
+	}
+	noName := h.run("", "gzip", "-c", "-n", "a.txt")
+	reader, err := gzip.NewReader(bytes.NewReader([]byte(noName.stdout)))
+	testutil.FailErr(t, "read -n member", err)
+	if reader.Name != "" || !reader.ModTime.IsZero() {
+		t.Fatalf("gzip -n stored %q %v", reader.Name, reader.ModTime)
+	}
+	if r := h.run("", "gzip", "-k", "-q", "a.txt"); r.err != nil || h.absent("a.txt.gz") {
+		t.Fatalf("gzip -q: %v", r.err)
+	}
+	if r := h.run("", "gzip", "-t", "a.txt.gz"); r.err != nil || r.result.Status != 0 || r.stdout != "" || !h.absent("a.txt.gz.out") {
+		t.Fatalf("gzip -t: %+v %v", r.result, r.err)
+	}
+	testutil.FailErr(t, "seed corrupt", os.WriteFile(h.path("bad.gz"), []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3, 1, 2, 3}, 0o644))
+	if r := h.run("", "gunzip", "-t", "bad.gz"); r.result.Status != 1 || h.absent("bad.gz") {
+		t.Fatalf("gunzip -t corrupt: %+v %v", r.result, r.err)
+	}
+}

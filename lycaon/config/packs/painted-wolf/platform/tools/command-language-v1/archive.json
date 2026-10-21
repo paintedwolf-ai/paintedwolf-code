@@ -461,7 +461,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "gzip [-c] [-d] [-f] [-k] [-l] [--] [PATH ...]",
+      "argv": "gzip [-1..-9|--fast|--best] [-c] [-d] [-f] [-k] [-l] [-n|-N] [-q] [-t] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -517,6 +517,88 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "gzip-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-1",
+            "-2",
+            "-3",
+            "-4",
+            "-5",
+            "-6",
+            "-7",
+            "-8",
+            "-9"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-level",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--fast"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-fast",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--best"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-best",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--no-name"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-n-noname",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-N",
+            "--name"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-N-name",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--test"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gzip-option-t-test",
           "consumption": "fixed",
           "sample_values": []
         }
@@ -579,7 +661,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name. -1 through -9, --fast and --best set the level; -n omits the stored name and time, -N keeps them (the default); -q is accepted; -t tests integrity without writing.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -603,7 +685,14 @@
         "gzip-option-d-uncompress",
         "gzip-option-f-force",
         "gzip-option-k-keep",
-        "gzip-option-l-list"
+        "gzip-option-l-list",
+        "gzip-option-level",
+        "gzip-option-fast",
+        "gzip-option-best",
+        "gzip-option-n-noname",
+        "gzip-option-N-name",
+        "gzip-option-q-quiet",
+        "gzip-option-t-test"
       ]
     },
     {
@@ -611,7 +700,7 @@
       "aliases": [],
       "family": "archive",
       "owner": "filesystem",
-      "argv": "gunzip [-c] [-f] [-k] [-l] [--] [PATH ...]",
+      "argv": "gunzip [-c] [-f] [-k] [-l] [-q] [-t] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -655,6 +744,28 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "gunzip-option-l-list",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-q-quiet",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--test"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "gunzip-option-t-test",
           "consumption": "fixed",
           "sample_values": []
         }
@@ -717,7 +828,7 @@
           }
         }
       },
-      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name.",
+      "notes": "Pure Go codecs and existing guarded archive sink; exact entry identity or explicit refusal, never TrimSpace renaming. Refuse traversal, escaping symlinks, bombs, unsupported metadata. Existing extract caps remain500 entries/50MiB; recursive mutation10k/100MiB is separate. tar -cj uses pinned dsnet bzip2 writer; standard library only decodes. gzip/gunzip replace through recovery, zcat always stream; stdin - supported. tar short mode bundles -xzf/-tf accepted; repeated modes/codecs reject. gzip -c streams and keeps inputs, -k keeps inputs, -f replaces an existing output, -d decompresses, -l prints GNU columns; with no PATH gzip and gunzip filter stdin to stdout. gunzip restores .gz and .tgz names; gunzip -c accepts any name. -q is accepted; -t tests integrity without writing.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/extract_archive.go",
         "tests": [
@@ -740,7 +851,9 @@
         "gunzip-option-c-tostdout",
         "gunzip-option-f-force",
         "gunzip-option-k-keep",
-        "gunzip-option-l-list"
+        "gunzip-option-l-list",
+        "gunzip-option-q-quiet",
+        "gunzip-option-t-test"
       ]
     },
     {
