@@ -3,14 +3,17 @@
 package launchguard
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -49,6 +52,9 @@ func TestModuleRootsIncludesLibrariesSystemExecutablesAndInterpreter(t *testing.
 	if _, err := reopenImage(GenerationPolicy{LogicalInstallRoot: t.TempDir()}, file); err == nil {
 		t.Fatal("reopenImage accepted a missing desktop image")
 	}
+	if _, err := allowedModuleMountPoints(GenerationPolicy{LogicalInstallRoot: t.TempDir()}); err == nil {
+		t.Fatal("allowedModuleMountPoints accepted a missing desktop image")
+	}
 	otherRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(otherRoot, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
@@ -59,6 +65,45 @@ func TestModuleRootsIncludesLibrariesSystemExecutablesAndInterpreter(t *testing.
 	if _, err := reopenImage(GenerationPolicy{LogicalInstallRoot: otherRoot}, file); err == nil {
 		t.Fatal("reopenImage accepted a different desktop inode")
 	}
+	if _, err := allowedModuleMountPoints(GenerationPolicy{LogicalInstallRoot: otherRoot}); err == nil {
+		t.Fatal("allowedModuleMountPoints accepted a non-ELF desktop image")
+	}
+	checkMountInfoHelpers(t)
+}
+
+func checkMountInfoHelpers(t *testing.T) {
+	t.Helper()
+	if got := unescapeMountPath(`/media/pw/USB\040Drive\011Tab\012NL\134Back\999`); got != "/media/pw/USB Drive\tTab\nNL\\Back\\999" {
+		t.Fatalf("unescapeMountPath = %q", got)
+	}
+	raw := []byte("20 1 8:1 / / rw,noexec,relatime - ext4 /dev/sda1 rw\n" +
+		"21 20 0:25 / /opt/paintedwolf ro,nosuid,nodev - ext4 /dev/sda1 ro\n" +
+		"22 20 0:26 / /usr/lib rw,relatime - ext4 /dev/sda1 rw\n" +
+		"23 20 0:27 / /media/pw/USB\\040Drive rw,relatime - vfat /dev/sdb1 rw\n" +
+		"24 23 0:28 / /media/pw/USB\\040Drive rw,relatime - tmpfs tmpfs rw\n" +
+		"25 20 0:29 / /mnt/done rw,noexec,nosuid,nodev - tmpfs tmpfs rw\n" +
+		"bad line\n" +
+		"x y 0:0 / /mnt rw - tmpfs tmpfs rw\n")
+	entries := parseMountInfo(raw)
+	if len(entries) != 6 {
+		t.Fatalf("parseMountInfo len = %d, want 6", len(entries))
+	}
+	if !isShadowedMount(entries[3], entries) || isShadowedMount(entries[4], entries) {
+		t.Fatalf("shadowed mount detection mismatch: %+v", entries)
+	}
+	exempt := baselineExemptMounts(entries[:3], "/opt/paintedwolf", []string{"/usr/lib"})
+	if !exempt[20] || !exempt[21] || !exempt[22] || exempt[23] {
+		t.Fatalf("baselineExemptMounts = %v", exempt)
+	}
+	failed := map[int]string{25: "rw"}
+	scrubModuleMounts(entries, exempt, failed)
+	if _, ok := failed[25]; ok {
+		t.Fatalf("completed mount kept failure record: %v", failed)
+	}
+	if failed[24] == "" {
+		t.Fatalf("unprivileged scrub of missing mount point did not record failure: %v", failed)
+	}
+	scrubModuleMounts(entries, exempt, failed)
 }
 
 func verifyModuleViewIsolation(dir, rawPID string) error {
@@ -69,13 +114,20 @@ func verifyModuleViewIsolation(dir, rawPID string) error {
 	if err := checkLiveDesktopMountIsolation(dir, rawPID); err != nil {
 		return err
 	}
-	return checkDirectModuleViewIsolation(dir)
+	if err := checkDirectModuleViewIsolation(dir); err != nil {
+		return err
+	}
+	return checkModuleWatcherSeal()
 }
 
 func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	pid, err := strconv.Atoi(rawPID)
 	if err != nil || pid <= 1 {
 		return fmt.Errorf("invalid desktop pid %q", rawPID)
+	}
+	existing := filepath.Join(dir, "live-existing.so")
+	if err := os.WriteFile(existing, []byte("existing"), 0o755); err != nil {
+		return err
 	}
 	lateDir, underlying, lateFile, err := prepareLateMountPoint(filepath.Join(dir, "live-late"))
 	if err != nil {
@@ -101,11 +153,17 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	if err := unix.Setns(int(desktopNS.Fd()), unix.CLONE_NEWNS); err != nil {
 		return fmt.Errorf("enter live desktop mount namespace: %w", err)
 	}
-	checkErr := assertIsolatedNoexecView(lateFile, underlying)
+	checkErr := assertScrubbedNoexecView(lateDir, lateFile, underlying, existing)
 	if restoreErr := unix.Setns(int(hostNS.Fd()), unix.CLONE_NEWNS); restoreErr != nil && checkErr == nil {
 		checkErr = restoreErr
 	}
-	return checkErr
+	if checkErr != nil {
+		return checkErr
+	}
+	if err := canMapExecutable(lateFile); err != nil {
+		return fmt.Errorf("host mount lost executable mapping outside module view: %w", err)
+	}
+	return nil
 }
 
 func checkDirectModuleViewIsolation(dir string) error {
@@ -113,6 +171,10 @@ func checkDirectModuleViewIsolation(dir string) error {
 		return err
 	}
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+		return err
+	}
+	existing := filepath.Join(dir, "direct-existing.so")
+	if err := os.WriteFile(existing, []byte("existing"), 0o755); err != nil {
 		return err
 	}
 	lateDir, underlying, lateFile, err := prepareLateMountPoint(filepath.Join(dir, "direct-late"))
@@ -130,11 +192,12 @@ func checkDirectModuleViewIsolation(dir string) error {
 		return err
 	}
 	defer func() { _ = parentNS.Close() }()
-	viewNS, stageNS, err := buildStageAndModuleViews(dir)
+	viewNS, stageNS, stopWatcher, err := buildStageAndModuleViews(dir)
 	if err != nil {
 		return err
 	}
 	defer func() {
+		stopWatcher()
 		_ = viewNS.Close()
 		_ = stageNS.Close()
 	}()
@@ -153,60 +216,119 @@ func checkDirectModuleViewIsolation(dir string) error {
 	if err := unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
 	}
-	return assertIsolatedNoexecView(lateFile, underlying)
+	return assertScrubbedNoexecView(lateDir, lateFile, underlying, existing)
 }
 
-func buildStageAndModuleViews(dir string) (viewNS, stageNS *os.File, err error) {
+func buildStageAndModuleViews(dir string) (viewNS, stageNS *os.File, stop func(), err error) {
 	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_SLAVE, ""); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "launch.json"))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	policy, err := decodePolicy(raw)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := unix.Mount(policy.GenerationRoot, policy.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	desktop, err := os.Open(filepath.Join(policy.LogicalInstallRoot, "bin/painted-wolf-code"))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer func() { _ = desktop.Close() }()
 	leave, err := enterModuleView(policy, desktop)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	viewed, err := reopenImage(policy, desktop)
 	if err != nil {
 		_ = leave()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	_ = viewed.Close()
 	viewNS, err = os.Open("/proc/thread-self/ns/mnt")
 	if err != nil {
 		_ = leave()
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	stop, err = startInProcessModuleWatcher(policy, viewNS)
+	if err != nil {
+		_ = viewNS.Close()
+		_ = leave()
+		return nil, nil, nil, err
 	}
 	if err := leave(); err != nil {
+		stop()
 		_ = viewNS.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	stageNS, err = os.Open("/proc/thread-self/ns/mnt")
 	if err != nil {
+		stop()
 		_ = viewNS.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return viewNS, stageNS, nil
+	return viewNS, stageNS, stop, nil
 }
 
-func prepareLateMountPoint(lateDir string) (dir, underlying, lateFile string, err error) {
+func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func(), error) {
+	roots, err := allowedModuleMountPoints(policy)
+	if err != nil {
+		return nil, err
+	}
+	watchR, watchW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	readyR, readyW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		_ = unix.Unshare(unix.CLONE_FS)
+		_ = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
+		mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+		if err != nil {
+			_ = readyW.Close()
+			done <- err
+			return
+		}
+		defer func() { _ = mountinfo.Close() }()
+		done <- watchModuleMounts(int(mountinfo.Fd()), int(watchR.Fd()), int(readyW.Fd()), policy.LogicalInstallRoot, roots)
+	}()
+	var ack [1]byte
+	_, err = io.ReadFull(readyR, ack[:])
+	_ = readyR.Close()
+	if err != nil {
+		_ = watchW.Close()
+		_ = watchR.Close()
+		return nil, err
+	}
+	return func() { _ = watchW.Close(); _ = <-done; _ = watchR.Close() }, nil
+}
+
+func checkModuleWatcherSeal() error {
+	uid, _ := strconv.Atoi(os.Getenv("SUDO_UID"))
+	gid, _ := strconv.Atoi(os.Getenv("SUDO_GID"))
+	if uid <= 0 || gid <= 0 {
+		uid, gid = 1000, 1000
+	}
+	return sealModuleWatcher(Identity{UID: uint32(uid), GID: uint32(gid), Groups: []uint32{uint32(gid)}})
+}
+
+func prepareLateMountPoint(baseDir string) (dir, underlying, lateFile string, err error) {
+	if err := os.MkdirAll(baseDir, 0o700); err != nil {
+		return "", "", "", err
+	}
+	lateDir := filepath.Join(baseDir, "USB Drive")
 	if err := os.MkdirAll(lateDir, 0o755); err != nil {
 		return "", "", "", err
 	}
@@ -224,14 +346,32 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 	return os.WriteFile(lateFile, []byte("late-module"), 0o755)
 }
 
-func assertIsolatedNoexecView(lateFile, underlying string) error {
-	if _, err := os.Stat(lateFile); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("post-launch mount propagated into module view: stat %s = %v", lateFile, err)
+func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) error {
+	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
+		return fmt.Errorf("existing mount in module view mapped executable: %v, want EPERM", err)
 	}
-	if err := canMapExecutable(underlying); !errors.Is(err, unix.EPERM) {
-		return fmt.Errorf("underlying mount in module view mapped executable: %v, want EPERM", err)
+	if _, err := os.Stat(underlying); !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("post-launch mount did not cover underlying directory in module view: stat %s = %v", underlying, err)
 	}
-	return nil
+	content, err := os.ReadFile(lateFile)
+	if err != nil || !bytes.Equal(content, []byte("late-module")) {
+		return fmt.Errorf("post-launch mount not readable in module view: %q (%v)", content, err)
+	}
+	const bound = 100 * time.Millisecond
+	deadline := time.Now().Add(bound)
+	for {
+		mapErr := canMapExecutable(lateFile)
+		var st unix.Statfs_t
+		statErr := unix.Statfs(lateDir, &st)
+		const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
+		if errors.Is(mapErr, unix.EPERM) && statErr == nil && st.Flags&wantFlags == wantFlags {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("post-launch mount was not scrubbed within %s: map=%v statErr=%v flags=%#x", bound, mapErr, statErr, st.Flags)
+		}
+		time.Sleep(50 * time.Microsecond)
+	}
 }
 
 func canMapExecutable(path string) error {
