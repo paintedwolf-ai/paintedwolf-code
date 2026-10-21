@@ -4,6 +4,30 @@ use std::path::{Component, Path, PathBuf};
 #[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
+/// The name of the desktop's file manager, the application it opens folders
+/// with; `None` where the platform's file manager has a fixed name or the
+/// desktop names none.
+#[tauri::command]
+pub fn file_manager_name() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::gio::prelude::AppInfoExt;
+        let application = gtk::gio::AppInfo::default_for_type("inode/directory", false)?;
+        usable_name(&application.display_name())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// A desktop entry name fit for a menu label.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+fn usable_name(raw: &str) -> Option<String> {
+    let name = raw.trim();
+    (!name.is_empty() && name.chars().count() <= 48 && !name.chars().any(char::is_control)).then(|| name.to_owned())
+}
+
 /// Reveal `absolute_path` in the platform file manager after root validation.
 /// The desktop call waits on the session bus, so it runs off the main thread.
 #[tauri::command]
@@ -177,6 +201,15 @@ fn spawn_reveal(path: &Path, window: &tauri::WebviewWindow) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn file_manager_names_must_fit_a_menu_label() {
+        assert_eq!(super::usable_name(" Dolphin "), Some("Dolphin".into()));
+        assert_eq!(super::usable_name("Files"), Some("Files".into()));
+        for raw in ["", "   ", "Thunar\nFile Manager", &"x".repeat(49)] {
+            assert_eq!(super::usable_name(raw), None, "{raw:?}");
+        }
+    }
+
     use super::*;
 
     #[test]
