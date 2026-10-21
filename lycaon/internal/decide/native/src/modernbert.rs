@@ -146,69 +146,102 @@ impl Module for ModernBertMLP {
     }
 }
 
-/// ModernBERT's bias-free layer norm. On CPU in f32 it runs as one parallel pass with the
-/// exact arithmetic of candle's bias-free path, whose separate sum, centre, square, divide
-/// and scale operators each ran on a single thread.
+/// ModernBERT's bias-free layer norm. On CPU in f32 the element-wise steps run across all
+/// threads with the exact arithmetic of candle's bias-free path, whose centre, divide and
+/// scale operators each ran on a single thread; the two row sums stay candle's own.
 fn normalize(norm: &LayerNorm, xs: &Tensor) -> Result<Tensor> {
-    if norm.bias().is_none() && norm.remove_mean() && xs.device().is_cpu() && xs.dtype() == DType::F32 {
-        xs.contiguous()?.apply_op2_no_bwd(norm.weight(), &CpuLayerNorm { eps: norm.eps() })
-    } else {
-        xs.apply(norm)
+    if !(norm.bias().is_none() && norm.remove_mean() && xs.device().is_cpu() && xs.dtype() == DType::F32) {
+        return xs.apply(norm);
+    }
+    let xs = xs.contiguous()?;
+    let inverse = (1. / xs.dim(D::Minus1)? as f64) as f32;
+    let centered = xs.apply_op2_no_bwd(&xs.sum_keepdim(D::Minus1)?, &CpuCentre { inverse })?;
+    let variance = centered.sqr()?.sum_keepdim(D::Minus1)?;
+    centered.apply_op3_no_bwd(&variance, norm.weight(), &CpuScale { inverse, eps: norm.eps() as f32 })
+}
+
+/// Contiguous f32 values of a CPU tensor.
+fn f32_values<'a>(storage: &'a candle_core::CpuStorage, layout: &candle_core::Layout) -> Result<&'a [f32]> {
+    match (storage, layout.contiguous_offsets()) {
+        (candle_core::CpuStorage::F32(values), Some((start, end))) => Ok(&values[start..end]),
+        _ => candle_core::bail!("the fused CPU layer norm needs contiguous f32 operands"),
     }
 }
 
-struct CpuLayerNorm {
-    eps: f64,
+/// `x - sum / width` per row, as candle's affine mean and broadcast subtraction compute it.
+struct CpuCentre {
+    inverse: f32,
 }
 
-impl candle_core::CustomOp2 for CpuLayerNorm {
+impl candle_core::CustomOp2 for CpuCentre {
     fn name(&self) -> &'static str {
-        "cpu-layer-norm"
+        "cpu-layer-norm-centre"
     }
 
     fn cpu_fwd(
         &self,
         storage: &candle_core::CpuStorage,
         layout: &candle_core::Layout,
+        sums: &candle_core::CpuStorage,
+        sums_layout: &candle_core::Layout,
+    ) -> Result<(candle_core::CpuStorage, candle_core::Shape)> {
+        use rayon::prelude::*;
+        let (values, sums) = (f32_values(storage, layout)?, f32_values(sums, sums_layout)?);
+        let width = *layout.shape().dims().last().unwrap_or(&0);
+        if width == 0 || values.len() != sums.len() * width {
+            candle_core::bail!("cpu-layer-norm-centre needs one sum per row");
+        }
+        let mut centered = vec![0f32; values.len()];
+        centered.par_chunks_mut(width).zip(values.par_chunks(width)).zip(sums.par_iter()).for_each(
+            |((out, row), &sum)| {
+                let mean = sum * self.inverse + 0.;
+                for (out, &x) in out.iter_mut().zip(row) {
+                    *out = x - mean;
+                }
+            },
+        );
+        Ok((candle_core::CpuStorage::F32(centered), layout.shape().clone()))
+    }
+}
+
+/// `centered / sqrt(variance + eps) * weight` per row, as candle's affine, broadcast divide
+/// and broadcast multiply compute it.
+struct CpuScale {
+    inverse: f32,
+    eps: f32,
+}
+
+impl candle_core::CustomOp3 for CpuScale {
+    fn name(&self) -> &'static str {
+        "cpu-layer-norm-scale"
+    }
+
+    fn cpu_fwd(
+        &self,
+        storage: &candle_core::CpuStorage,
+        layout: &candle_core::Layout,
+        variance: &candle_core::CpuStorage,
+        variance_layout: &candle_core::Layout,
         weight: &candle_core::CpuStorage,
         weight_layout: &candle_core::Layout,
     ) -> Result<(candle_core::CpuStorage, candle_core::Shape)> {
-        use candle_core::cpu::kernels::VecOps;
         use rayon::prelude::*;
-        let (
-            candle_core::CpuStorage::F32(values),
-            candle_core::CpuStorage::F32(weight),
-            Some((start, end)),
-            Some((weight_start, weight_end)),
-        ) = (storage, weight, layout.contiguous_offsets(), weight_layout.contiguous_offsets())
-        else {
-            candle_core::bail!("cpu-layer-norm needs contiguous f32 values and weight");
-        };
-        let width = *layout.shape().dims().last().unwrap_or(&0);
-        let weight = &weight[weight_start..weight_end];
-        if width == 0 || weight.len() != width {
-            candle_core::bail!("cpu-layer-norm weight has {} values for width {width}", weight.len());
+        let values = f32_values(storage, layout)?;
+        let (variance, weight) = (f32_values(variance, variance_layout)?, f32_values(weight, weight_layout)?);
+        let width = weight.len();
+        if width == 0 || values.len() != variance.len() * width {
+            candle_core::bail!("cpu-layer-norm-scale needs one variance per row and one weight per column");
         }
-        // The scalar steps reproduce candle's affine operators: divide is multiply-by-reciprocal.
-        let (inverse, eps) = ((1. / width as f64) as f32, self.eps as f32);
-        let mut normed = vec![0f32; end - start];
-        normed.par_chunks_mut(width).zip(values[start..end].par_chunks(width)).for_each(|(out, row)| {
-            let mut sum = 0f32;
-            unsafe { f32::vec_reduce_sum(row.as_ptr(), &mut sum, width) };
-            let mean = sum * inverse + 0.;
-            for (out, &x) in out.iter_mut().zip(row) {
-                *out = x - mean;
-            }
-            let squares: Vec<f32> = out.iter().map(|&x| x * x).collect();
-            let mut variance = 0f32;
-            unsafe { f32::vec_reduce_sum(squares.as_ptr(), &mut variance, width) };
-            let deviation = (variance * inverse + 0.) * 1. + eps;
-            let deviation = deviation.sqrt();
-            for (out, &weight) in out.iter_mut().zip(weight) {
-                *out = *out / deviation * weight;
-            }
-        });
-        Ok((candle_core::CpuStorage::F32(normed), layout.shape().clone()))
+        let mut scaled = vec![0f32; values.len()];
+        scaled.par_chunks_mut(width).zip(values.par_chunks(width)).zip(variance.par_iter()).for_each(
+            |((out, row), &variance)| {
+                let deviation = ((variance * self.inverse + 0.) * 1. + self.eps).sqrt();
+                for ((out, &x), &weight) in out.iter_mut().zip(row).zip(weight) {
+                    *out = x / deviation * weight;
+                }
+            },
+        );
+        Ok((candle_core::CpuStorage::F32(scaled), layout.shape().clone()))
     }
 }
 
