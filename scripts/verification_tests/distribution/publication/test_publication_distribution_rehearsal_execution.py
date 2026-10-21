@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.publication.distribution_rehearsal import RehearsalReleaseAuthority
+from scripts.linux_release.publication.document.distribution_rehearsal import RehearsalReleaseAuthority
 
 
 class RehearsalDistributionTests(unittest.TestCase):

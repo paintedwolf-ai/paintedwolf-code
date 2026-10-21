@@ -38,22 +38,33 @@ class NativePublicationBoundaryTests(unittest.TestCase):
             self.assertEqual(len(list(output.iterdir())), 7)
             self.assertFalse(any(path.name.endswith('.sig') for path in output.iterdir()))
 
-    def updater(self, root, rows):
+    def updater(self, root, rows, *, signed_version='1.2.3', binding=None):
         module = load('release-assemble-updater-manifest')
+        from updater_signature import rehearsal_signature
         catalog, notes, output = root / 'catalog.json', root / 'notes', root / 'updater.json'
         fragments = root / 'fragments'; fragments.mkdir()
         catalog.write_text(json.dumps({'schema_version': 2, 'platforms': rows}))
         notes.write_text('Actual fixture release notes')
-        (fragments / 'darwin.json').write_text(json.dumps({'platform': 'darwin-aarch64', 'signature': 'fixture',
-            'updater_artifact': 'painted-wolf-code_v1.2.3_darwin-aarch64.app.tar.gz', 'update_keys': {}}))
+        artifact = 'painted-wolf-code_v1.2.3_darwin-aarch64.app.tar.gz'
+        keys = module.release_binding(module.load_registry(), '1.2.3') if binding is None else binding
+        (fragments / 'darwin.json').write_text(json.dumps({'platform': 'darwin-aarch64',
+            'signature': rehearsal_signature(signed_version, artifact), 'updater_artifact': artifact, 'update_keys': keys}))
         with patch('sys.argv', ['assemble', '--catalog', str(catalog), '--fragments', str(fragments),
                                '--version', '1.2.3', '--notes', str(notes), '--pub-date', '2026-10-20T12:00:00Z',
-                               '--base-url', 'https://example.invalid', '--output', str(output)]), \
-                patch.object(module, 'load_registry', return_value={}), \
-                patch.object(module, 'release_binding', return_value={}), \
-                patch.object(module, 'require_version'):
-            code = module.main()
+                               '--base-url', 'https://example.invalid', '--output', str(output)]):
+            try:
+                code = module.main()
+            except SystemExit as exit:
+                code = exit.code
         return code, output
+
+    def test_fragment_signed_for_another_version_or_key_generation_refuses(self):
+        rows = [{'updater_key': 'darwin-aarch64', 'goos': 'darwin', 'publication': 'public', 'updater_extension': 'app.tar.gz'}]
+        for keywords in ({'signed_version': '1.2.4'}, {'binding': {'signing_generation': 9}}):
+            with self.subTest(keywords=keywords), tempfile.TemporaryDirectory() as temporary:
+                code, output = self.updater(Path(temporary), rows, **keywords)
+                self.assertNotEqual(code, 0)
+                self.assertFalse(output.exists())
 
     def test_public_linux_needs_no_updater_fragment_but_non_linux_still_does(self):
         rows = [{'updater_key': 'linux-x86_64', 'goos': 'linux', 'publication': 'public', 'updater_extension': None},

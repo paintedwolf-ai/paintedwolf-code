@@ -1,83 +1,93 @@
 """Immutable metadata and notifications recheck live authority rather than saved receipts."""
-from contextlib import ExitStack
 import hashlib
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
 
-from scripts.linux_release.publication import document_publication as owner
-from scripts.release_distribution_contract.document_schema import canonical
+from scripts.linux_release.publication.document import document_publication as owner
+from verification_tests.distribution.publication import signed_release as fixture
+
+ADMITTED = lambda binding: True
 
 
 class DocumentTransportTests(unittest.TestCase):
-    def fixture(self, root):
-        document = {"version": "1.2.3", "channel": "stable", "signing_generation": 1,
-                    "updater_manifest_sha256": "a" * 64}
-        (root / "distribution.v1.json").write_bytes(canonical(document))
-        (root / "distribution.v1.json.sig").write_text("signed fixture")
-        stack = ExitStack()
-        self.addCleanup(stack.close)
-        stack.enter_context(patch.object(owner, "decode", return_value=document))
-        construct = stack.enter_context(patch.object(owner, "construct", return_value=document))
-        stack.enter_context(patch.object(owner, "generation", return_value={"feed_public_key": "fixture"}))
-        stack.enter_context(patch.object(owner, "check"))
-        verify = stack.enter_context(patch.object(owner, "verify"))
-        arguments = (root, {"mode": "rehearsal"}, Path("catalog"), Path("updater"), Path("artifacts"))
-        return document, construct, verify, arguments
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root, arguments = fixture.inputs(Path(temporary.name) / "release")
+        self.arguments = (self.root, *arguments)
+        self.signer = fixture.minisign()
+        self.calls = self.signer.__enter__()
+        self.addCleanup(self.signer.__exit__, None, None, None)
 
-    def test_both_immutable_files_are_verified_with_fresh_admission_before_and_after(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, construct, verify, arguments = self.fixture(root)
-            backend = Mock()
-            result = owner.publish(*arguments, authorize=Mock(), backend=backend, registry={})
-            self.assertEqual(construct.call_count, 5)
-            self.assertEqual(verify.call_count, 5)
-            self.assertEqual([call.args[0] for call in backend.put.call_args_list],
-                             ["releases/v1.2.3/distribution.v1.json", "releases/v1.2.3/distribution.v1.json.sig"])
-            self.assertEqual(backend.verify.call_count, 2)
-            self.assertEqual(result["distribution_sha256"], hashlib.sha256((root / "distribution.v1.json").read_bytes()).hexdigest())
-            def mutate(*args, **kwargs):
-                (root / "distribution.v1.json").write_bytes(b"changed")
-            backend.put.side_effect = mutate
-            with self.assertRaisesRegex(ValueError, "freshly admitted"):
-                owner.publish(*arguments, authorize=Mock(), backend=backend, registry={})
+    def publish(self, backend, authorize=ADMITTED):
+        return owner.publish(*self.arguments, authorize=authorize, backend=backend)
 
-    def test_notification_binds_independent_updater_and_distribution_digests(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, construct, _, arguments = self.fixture(root)
-            payload = owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={},
-                                         bad_distribution_sha256="b" * 64, bad_version="1.2.4", backend=Mock())
-            self.assertEqual(payload["distribution_sha256"], hashlib.sha256((root / "distribution.v1.json").read_bytes()).hexdigest())
-            self.assertEqual(payload["bad_distribution_sha256"], "b" * 64)
-            self.assertEqual(set(payload), {"channel", "bad_version", "last_good_version", "manifest_sha256", "distribution_sha256", "bad_distribution_sha256"})
-            self.assertEqual(payload["manifest_sha256"], "a" * 64)
-            self.assertEqual(construct.call_count, 2)
-            with self.assertRaisesRegex(ValueError, "updater digest"):
-                owner.notification(*arguments, authorize=Mock(), manifest_sha256="c" * 64, registry={}, backend=Mock())
-            with self.assertRaisesRegex(ValueError, "bad distribution"):
-                owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={},
-                                   bad_distribution_sha256="invalid", backend=Mock())
+    def notify(self, backend, **keywords):
+        return owner.notification(*self.arguments, authorize=ADMITTED, backend=backend,
+                                  **{"manifest_sha256": fixture.manifest_sha256(), **keywords})
 
-    def test_failed_crypto_cannot_upload_or_dispatch(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, _, verify, arguments = self.fixture(root)
-            verify.side_effect = ValueError("signature refused")
-            backend = Mock()
-            with self.assertRaisesRegex(ValueError, "signature refused"):
-                owner.publish(*arguments, authorize=Mock(), backend=backend, registry={})
-            backend.put.assert_not_called()
+    def test_committed_signed_document_is_published_byte_for_byte_after_fresh_construction(self):
+        backend = fixture.FixtureOrigin()
+        admitted = self.publish(backend)
+        self.assertEqual(backend.objects, {key: raw for key, raw in fixture.stored().items() if key.startswith("releases/")})
+        self.assertEqual(admitted["distribution_sha256"],
+                         hashlib.sha256((fixture.FIXTURE / fixture.DOCUMENT).read_bytes()).hexdigest())
+        self.assertTrue(self.calls)
 
-    def test_local_admission_alone_cannot_create_a_public_notification(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, _, _, arguments = self.fixture(root)
-            with self.assertRaisesRegex(ValueError, "public byte verification"):
-                owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={})
-            backend = Mock()
-            backend.verify.side_effect = ValueError("public object absent")
-            with self.assertRaisesRegex(ValueError, "public object absent"):
-                owner.notification(*arguments, authorize=Mock(), manifest_sha256="a" * 64, registry={}, backend=backend)
+    def test_document_changed_during_upload_refuses_the_second_object(self):
+        def mutate(key):
+            (self.root / fixture.DOCUMENT).write_bytes((fixture.MISMATCH / fixture.DOCUMENT).read_bytes())
+        backend = fixture.FixtureOrigin(mutate=mutate)
+        with self.assertRaisesRegex(ValueError, "freshly admitted"):
+            self.publish(backend)
+        self.assertNotIn("releases/v1.2.3/" + fixture.SIGNATURE, backend.objects)
+
+    def test_tampered_document_and_refused_campaign_never_reach_storage(self):
+        backend = fixture.FixtureOrigin()
+        with self.assertRaisesRegex(ValueError, "refused distribution facts"):
+            self.publish(backend, authorize=lambda binding: False)
+        shutil.copyfile(fixture.MISMATCH / fixture.DOCUMENT, self.root / fixture.DOCUMENT)
+        with self.assertRaisesRegex(ValueError, "differs from freshly admitted"):
+            self.publish(backend)
+        self.assertEqual(backend.objects, {})
+
+    def test_mismatched_or_unverifiable_signatures_never_reach_storage(self):
+        for name, message in (("wrong-file.sig", "bound to 'latest.json'"), ("wrong-version.sig", "version 1.2.4"),
+                              ("foreign-signer.sig", "registered feed key"),
+                              ("unverifiable.sig", "^feed signature verification failed$")):
+            with self.subTest(signature=name):
+                shutil.copyfile(fixture.MISMATCH / name, self.root / fixture.SIGNATURE)
+                backend = fixture.FixtureOrigin()
+                with self.assertRaisesRegex(ValueError, message):
+                    self.publish(backend)
+                self.assertEqual(backend.objects, {})
+
+    def test_notification_requires_public_bytes_and_binds_independent_digests(self):
+        with self.assertRaisesRegex(ValueError, "public byte verification"):
+            self.notify(None)
+        with self.assertRaisesRegex(ValueError, "public object absent"):
+            self.notify(fixture.FixtureOrigin())
+        backend = fixture.FixtureOrigin()
+        admitted = self.publish(backend)
+        payload = self.notify(backend)
+        self.assertEqual(payload, {"version": "1.2.3", "tag": "v1.2.3", "channel": "stable",
+                                   "manifest_sha256": fixture.manifest_sha256(),
+                                   "distribution_sha256": admitted["distribution_sha256"]})
+        with self.assertRaisesRegex(ValueError, "updater digest differs"):
+            self.notify(backend, manifest_sha256="c" * 64)
+
+    def test_halt_notification_carries_the_explicit_bad_identity(self):
+        backend = fixture.FixtureOrigin()
+        admitted = self.publish(backend)
+        payload = self.notify(backend, bad_distribution_sha256="b" * 64, bad_version="1.2.4")
+        self.assertEqual(payload, {"channel": "stable", "bad_version": "1.2.4", "last_good_version": "1.2.3",
+                                   "manifest_sha256": fixture.manifest_sha256(),
+                                   "distribution_sha256": admitted["distribution_sha256"],
+                                   "bad_distribution_sha256": "b" * 64})
+        for keywords, message in (({"bad_distribution_sha256": "invalid", "bad_version": "1.2.4"}, "bad distribution digest"),
+                                  ({"bad_distribution_sha256": "b" * 64, "bad_version": "1.2.3"}, "must differ"),
+                                  ({"bad_version": "1.2.4"}, "independent bad distribution")):
+            with self.subTest(keywords=keywords), self.assertRaisesRegex(ValueError, message):
+                self.notify(backend, **keywords)

@@ -347,6 +347,12 @@
     ],
     "licenses:notices": [
       "licenses:notices"
+    ],
+    "release:rehearse:linux-controls": [
+      "release:rehearse:linux-controls"
+    ],
+    "release:rehearse:distribution-document": [
+      "release:rehearse:distribution-document"
     ]
   },
   "private": [
@@ -370,7 +376,9 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "release:rehearse:linux-controls": "passthrough",
+    "release:rehearse:distribution-document": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -687,6 +695,18 @@
     "licenses:notices": {
       "locks": [
         "notices"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:linux-controls": {
+      "locks": [
+        "linux-control-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:distribution-document": {
+      "locks": [
+        "r2-rehearsal"
       ],
       "workers": 1
     }
