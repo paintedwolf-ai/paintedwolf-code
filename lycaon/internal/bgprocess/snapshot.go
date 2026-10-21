@@ -306,7 +306,7 @@ func (r *Registry) HasPipelineHandles(sessionID string) bool {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	for _, proc := range r.jobs.sessions[trim(sessionID)] {
-		if proc.kind == processKindPipeline && !proc.silent {
+		if (proc.kind == processKindPipeline || proc.kind == processKindProgram) && !proc.silent {
 			return true
 		}
 	}
@@ -322,7 +322,7 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	defer r.jobs.mu.Unlock()
 	var out []JobSnapshot
 	for _, proc := range r.jobs.sessions[trim(sessionID)] {
-		if !proc.running || proc.kind != processKindPipeline || proc.silent {
+		if !proc.running || (proc.kind != processKindPipeline && proc.kind != processKindProgram) || proc.silent {
 			continue
 		}
 		out = append(out, JobSnapshot{

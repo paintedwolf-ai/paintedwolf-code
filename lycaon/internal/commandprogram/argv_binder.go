@@ -122,6 +122,27 @@ func (b BoundArgv) Review(operationID string) ArgvReview {
 	return review
 }
 
+// Arguments is the review record as the native review/approval input value.
+func (r ArgvReview) Arguments() map[string]any {
+	options := make([]any, 0, len(r.Options))
+	for _, option := range r.Options {
+		values := make([]any, len(option.Values))
+		for i, value := range option.Values {
+			values[i] = value
+		}
+		entry := map[string]any{"option": option.Option, "value_role": option.ValueRole, "values": values}
+		if option.Scope != "" {
+			entry["scope"] = option.Scope
+		}
+		options = append(options, entry)
+	}
+	operands := make([]any, len(r.Operands))
+	for i, operand := range r.Operands {
+		operands[i] = operand
+	}
+	return map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+}
+
 // ArgvError carries an existing public rejection code and the exact word span.
 type ArgvError struct {
 	Code     string
