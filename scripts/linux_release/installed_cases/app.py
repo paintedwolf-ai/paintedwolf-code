@@ -29,6 +29,18 @@ def process_identity(pid: int) -> dict:
 
 
 
+def descends(identity: dict, ancestor: int) -> bool:
+    """Whether identity's live parent chain reaches ancestor within a bounded depth."""
+    current = identity
+    for _ in range(16):
+        if current["parent_pid"] == ancestor:
+            return True
+        if current["parent_pid"] <= 1:
+            return False
+        current = process_identity(current["parent_pid"])
+    return False
+
+
 def engine_image(pid: int) -> tuple:
     before = process_identity(pid)
     try:
@@ -114,8 +126,12 @@ def session_environment(session: dict) -> dict:
 
 
 class InstalledApp:
-    def __init__(self, binding: dict, *, arguments: list[str] | None = None, timeout: float = 60):
+    def __init__(self, binding: dict, *, arguments: list[str] | None = None, timeout: float = 60,
+                 launcher: dict | None = None):
+        # A launcher override is another sealed entry point (the protected
+        # bootstrap) with the same identity record as binding['launcher'].
         self.binding, self.arguments, self.timeout = binding, arguments or [], timeout
+        self.launcher = launcher
         if not 0 < timeout <= 300:
             raise ValueError("installed launcher readiness timeout exceeds its bound")
         for value in self.arguments:
@@ -163,7 +179,8 @@ class InstalledApp:
             pid = previous.get("pid")
             if type(pid) is int and pid > 1 and Path(f"/proc/{pid}").exists():
                 raise CaseUnavailable("guest already has a running engine; preserving its owner")
-        launcher = dict(self.binding["launcher"])
+        selected = self.launcher or self.binding["launcher"]
+        launcher = dict(selected)
         path = Path(launcher.pop("path"))
         current = file_identity(path)
         current.pop("header")
@@ -171,7 +188,7 @@ class InstalledApp:
             raise ValueError("installed application launcher changed since final artifact binding")
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-        self.observations.update({"launcher": self.binding["launcher"], "session": session,
+        self.observations.update({"launcher": selected, "session": session,
                                   "launch_identity": process_identity(self.process.pid)})
 
         def capture(name, stream):
@@ -238,8 +255,8 @@ class InstalledApp:
             engine = process_identity(pid)
         except FileNotFoundError:
             return False
-        if engine["parent_pid"] != self.process.pid:
-            raise ValueError("installed engine is not the captured application's child")
+        if not descends(engine, self.process.pid):
+            raise ValueError("installed engine is not a descendant of the captured application")
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
         if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
