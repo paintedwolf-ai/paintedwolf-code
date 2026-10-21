@@ -155,7 +155,9 @@ runs:
     - name: Provision frontend native test inputs
       if: inputs.setup == 'frontend'
       shell: bash
-      run: cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml
+      run: |
+        ./task --version
+        cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml
 
     - name: Provision native dependencies
       if: inputs.setup == 'shell' || inputs.notices == 'true'
