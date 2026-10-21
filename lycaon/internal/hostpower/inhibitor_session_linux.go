@@ -109,7 +109,7 @@ func (p portalProvider) Check(ctx context.Context) error {
 		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	if err := nameOwnedOn(ctx, bus, portalName); err != nil {
+	if err := nameAvailableOn(ctx, bus, portalName); err != nil {
 		return err
 	}
 	return p.attribute(ctx, bus)

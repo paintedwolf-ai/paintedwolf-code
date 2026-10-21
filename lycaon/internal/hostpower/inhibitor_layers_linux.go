@@ -32,13 +32,19 @@ func (p login1Provider) blocksOwnUser(ctx context.Context) error {
 		return unavailable(ReasonBusUnreachable, "system bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	var owner string
-	if err := bus.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", 0, linuxbus.Login1Name).Store(&owner); err != nil {
-		return unavailable(ReasonQueryFailed, "query %s owner: %w", linuxbus.Login1Name, err)
+	state, err := linuxbus.DiscoverName(ctx, bus, linuxbus.Login1Name)
+	if err != nil {
+		return unavailable(ReasonQueryFailed, "query %s: %w", linuxbus.Login1Name, err)
 	}
-	if p.semantics != nil {
+	if state.Owner == "" && !state.Activatable {
+		return unavailable(ReasonNotServed, "%s is not served", linuxbus.Login1Name)
+	}
+	// An activatable login manager that is not running yet starts for the
+	// probe; its instance is cached once it has an owner.
+	cache := p.semantics != nil && state.Owner != ""
+	if cache {
 		p.semantics.mu.Lock()
-		known, strong := p.semantics.owner == owner, p.semantics.strong
+		known, strong := p.semantics.owner == state.Owner, p.semantics.strong
 		p.semantics.mu.Unlock()
 		if known {
 			return ownUserVerdict(strong)
@@ -48,9 +54,9 @@ func (p login1Provider) blocksOwnUser(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if p.semantics != nil {
+	if cache {
 		p.semantics.mu.Lock()
-		p.semantics.owner, p.semantics.strong = owner, strong
+		p.semantics.owner, p.semantics.strong = state.Owner, strong
 		p.semantics.mu.Unlock()
 	}
 	return ownUserVerdict(strong)

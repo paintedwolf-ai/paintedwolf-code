@@ -20,7 +20,7 @@ import (
 const busDeadline = 500 * time.Millisecond
 
 // provider is one named inhibition protocol. Availability comes from the bus
-// name being served; which program serves it is never inspected.
+// name's owner or activation contract; which program serves it is never inspected.
 type provider interface {
 	Name() string
 	// Check is nil when the protocol is served, otherwise why it cannot be used.
@@ -57,61 +57,70 @@ type sleepLayers struct {
 func (l sleepLayers) availability() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*busDeadline)
 	defer cancel()
-	unavailable := &UnavailableError{}
+	refused := &UnavailableError{}
 	systemErr := l.system.Check(ctx)
 	if systemErr != nil {
-		unavailable.Reasons = append(unavailable.Reasons, reasonFor(l.system, systemErr))
+		refused.refuse(l.system, systemErr)
 	}
 	sessionErr := l.session.Check(ctx)
 	if sessionErr == nil {
 		return nil
 	}
-	unavailable.Reasons = append(unavailable.Reasons, reasonFor(l.session, sessionErr))
-	if systemErr == nil {
-		if err := l.system.blocksOwnUser(ctx); err != nil {
-			unavailable.Reasons = append(unavailable.Reasons, reasonFor(l.system, err))
-			return unavailable
-		}
-		return nil
+	refused.refuse(l.session, sessionErr)
+	if systemErr != nil {
+		return refused
 	}
-	return unavailable
+	if err := l.system.blocksOwnUser(ctx); err != nil {
+		refused.refuse(l.system, err)
+		return refused
+	}
+	return nil
 }
 
 // acquire holds every served layer. The session layer may be absent only when
-// the login manager's lock also binds the person's own desktop.
+// the login manager's lock also binds the person's own desktop. A refusal
+// carries each consulted layer's reason and native cause; a served system
+// layer that refuses ends the attempt.
 func (l sleepLayers) acquire() (lease, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*busDeadline)
 	defer cancel()
-	unavailable := &UnavailableError{}
+	refused := &UnavailableError{}
 	var parts []lease
 	systemErr := l.system.Check(ctx)
 	if systemErr == nil {
 		held, err := l.system.Acquire(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", l.system.Name(), err)
+			refused.refuse(l.system, err)
+			return nil, refused
 		}
 		parts = append(parts, held)
 	} else {
-		unavailable.Reasons = append(unavailable.Reasons, reasonFor(l.system, systemErr))
+		refused.refuse(l.system, systemErr)
 	}
-	sessionErr := l.session.Check(ctx)
-	if sessionErr == nil {
-		held, err := l.session.Acquire(ctx)
-		if err == nil {
-			return layered(append(parts, held)), nil
-		}
-		sessionErr = fmt.Errorf("%s: %w", l.session.Name(), err)
+	if err := l.session.Check(ctx); err != nil {
+		refused.refuse(l.session, err)
+	} else if held, err := l.session.Acquire(ctx); err != nil {
+		refused.refuse(l.session, err)
 	} else {
-		unavailable.Reasons = append(unavailable.Reasons, reasonFor(l.session, sessionErr))
+		return layered(append(parts, held)), nil
 	}
 	if systemErr != nil {
-		return nil, unavailable
+		return nil, refused
 	}
 	if err := l.system.blocksOwnUser(ctx); err != nil {
-		releaseAll(parts)
-		return nil, errors.Join(sessionErr, fmt.Errorf("%s: %w", l.system.Name(), err))
+		refused.refuse(l.system, err)
+		if releaseErr := releaseAll(parts); releaseErr != nil {
+			return nil, errors.Join(refused, releaseErr)
+		}
+		return nil, refused
 	}
 	return layered(parts), nil
+}
+
+// refuse records why candidate cannot be used, keeping its native cause.
+func (e *UnavailableError) refuse(candidate provider, err error) {
+	e.Reasons = append(e.Reasons, reasonFor(candidate, err))
+	e.causes = append(e.causes, err)
 }
 
 // unavailableProvider is a protocol that cannot be used, with its classified cause.
@@ -133,6 +142,19 @@ func reasonFor(candidate provider, err error) ProviderReason {
 	var classified *unavailableProvider
 	if errors.As(err, &classified) {
 		code = classified.code
+	}
+	switch callErrorName(err) {
+	case "org.freedesktop.DBus.Error.AccessDenied", "org.freedesktop.DBus.Error.AuthFailed", "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired":
+		code = ReasonPermissionDenied
+	case "org.freedesktop.DBus.Error.UnknownMethod", "org.freedesktop.DBus.Error.UnknownInterface", "org.freedesktop.DBus.Error.NotSupported":
+		code = ReasonUnsupportedOperation
+	case "org.freedesktop.DBus.Error.Disconnected", "org.freedesktop.DBus.Error.NameHasNoOwner", "org.freedesktop.DBus.Error.ServiceUnknown":
+		code = ReasonDisconnected
+	}
+	if errors.Is(err, dbus.ErrClosed) {
+		code = ReasonDisconnected
+	} else if errors.Is(err, context.Canceled) {
+		code = ReasonCanceled
 	}
 	return ProviderReason{Provider: candidate.Name(), Code: code, Reason: err.Error()}
 }
@@ -168,17 +190,15 @@ func logindAvailability(ctx context.Context, bus *dbus.Conn) error {
 	if !bus.SupportsUnixFDs() {
 		return unavailable(ReasonNoDescriptorPassing, "the system bus connection cannot pass file descriptors")
 	}
-	return nameOwnedOn(ctx, bus, linuxbus.Login1Name)
+	return nameAvailableOn(ctx, bus, linuxbus.Login1Name)
 }
 
-// nameOwnedOn is nil when name has an owner on bus; an activatable name that
-// is not running is not served.
-func nameOwnedOn(ctx context.Context, bus *dbus.Conn, name string) error {
-	owned, err := linuxbus.NameOwned(ctx, bus, name)
+func nameAvailableOn(ctx context.Context, bus *dbus.Conn, name string) error {
+	state, err := linuxbus.DiscoverName(ctx, bus, name)
 	if err != nil {
 		return unavailable(ReasonQueryFailed, "query %s: %w", name, err)
 	}
-	if !owned {
+	if state.Owner == "" && !state.Activatable {
 		return unavailable(ReasonNotServed, "%s is not served", name)
 	}
 	return nil
