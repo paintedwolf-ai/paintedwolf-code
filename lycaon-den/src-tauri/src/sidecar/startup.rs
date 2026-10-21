@@ -296,6 +296,11 @@ where
                                     "Restore the vault identity service; encrypted credentials are preserved.".into(),
                                 )
                             }
+                            "credential_vault_custodian_absent" => {
+                                SidecarStartError::CredentialVaultCustodianAbsent(
+                                    "The vault identity service is gone; reinstall or re-enable it, or reset the vault.".into(),
+                                )
+                            }
                             "credential_vault_launcher_refused" => {
                                 SidecarStartError::CredentialVaultLauncherRefused(
                                     "Quit and open the installed desktop app; encrypted credentials are preserved.".into(),

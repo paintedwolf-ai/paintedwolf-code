@@ -138,6 +138,7 @@ describe("resolveCriticalStop", () => {
     ["credential_vault_custodian_unavailable", "reconnect"],
     ["credential_vault_launcher_refused", "reconnect"],
     ["credential_vault_identity_missing", "reconnect"],
+    ["credential_vault_custodian_absent", "reconnect"],
   ] as const)("maps %s to its vault recovery", (startFailure, recovery) => {
     const stop = resolveCriticalStop({ sidecarStatus: "disconnected", startFailure });
     expect(stop?.code).toBe(startFailure);
@@ -152,9 +153,9 @@ describe("resolveCriticalStop", () => {
     ] as const) {
       expect(resolveCriticalStop({ sidecarStatus: "disconnected", startFailure })?.resettable).toBeUndefined();
     }
-    expect(
-      resolveCriticalStop({ sidecarStatus: "disconnected", startFailure: "credential_vault_identity_missing" })?.resettable,
-    ).toBe(true);
+    for (const startFailure of ["credential_vault_identity_missing", "credential_vault_custodian_absent"] as const) {
+      expect(resolveCriticalStop({ sidecarStatus: "disconnected", startFailure })?.resettable).toBe(true);
+    }
   });
 
   it.each([

@@ -264,8 +264,11 @@ describe("createCriticalStop", () => {
     expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
   });
 
-  it("offers a confirmed reset when the vault's key is gone, and retry first", async () => {
-    startFailure = "credential_vault_identity_missing";
+  it.each([
+    "credential_vault_identity_missing",
+    "credential_vault_custodian_absent",
+  ] as const)("offers a confirmed reset for %s, and retry first", async (failure) => {
+    startFailure = failure;
     connectAppBackend.mockRejectedValue(new Error("key missing"));
     const { appStore, rendered } = mount();
     appStore.actions.setSidecarStatus("disconnected");

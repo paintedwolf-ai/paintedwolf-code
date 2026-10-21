@@ -19,6 +19,7 @@ export type ClientNoticeAction = "retry_contribution_frame";
 export type ClientNoticeKind =
   | "contribution_frame_unavailable"
   | "credential_vault_corrupt"
+  | "credential_vault_custodian_absent"
   | "credential_vault_custodian_unavailable"
   | "credential_vault_identity_missing"
   | "credential_vault_launcher_refused"
@@ -70,6 +71,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Credential vault needs to be reset",
     message: "The encrypted credential vault or the key that opens it is damaged. Resetting removes saved credentials but does not delete projects or conversation history.",
     suggestedAction: "The credential vault could not be reset. Quit and reopen the app, then try again.",
+    scope: "app",
+  },
+  credential_vault_custodian_absent: {
+    title: "Vault identity service is gone",
+    message: "The vault identity service that held the key to your saved credentials is not installed, not running, or cannot serve this computer. If an administrator can reinstall or re-enable it, do that and try again. Otherwise reset the vault: the key the service held cannot be recovered, so saved credentials are removed; projects and conversation history are not deleted.",
+    suggestedAction: "The vault identity service is still unavailable. Reinstall or re-enable it and try again, or reset the vault.",
     scope: "app",
   },
   credential_vault_custodian_unavailable: {

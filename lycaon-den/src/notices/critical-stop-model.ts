@@ -107,6 +107,10 @@ const NAMED_START_FAILURES: Record<
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,
   },
+  credential_vault_custodian_absent: {
+    code: "credential_vault_custodian_absent",
+    copy: CLIENT_NOTICES.credential_vault_custodian_absent,
+  },
   credential_vault_launcher_refused: {
     code: "credential_vault_launcher_refused",
     copy: CLIENT_NOTICES.credential_vault_launcher_refused,
@@ -141,9 +145,13 @@ function offlineCriticalStop(
     message: copy.message,
     retryFailed: copy.suggestedAction,
     recovery,
-    // A custodian that answered the key is gone cannot be waited out; an
-    // unreachable or refusing one can, so it never offers destruction.
-    ...(startFailure === "credential_vault_identity_missing" ? { resettable: true } : {}),
+    // A key the custodian says is gone, or a custodian that is not installed,
+    // not running or cannot serve, cannot be waited out; a briefly unreachable
+    // or refusing one can, so it never offers destruction.
+    ...(startFailure === "credential_vault_identity_missing" ||
+      startFailure === "credential_vault_custodian_absent"
+      ? { resettable: true }
+      : {}),
     // Known startup failures already have actionable catalog copy.
     diagnostic:
       startFailure === "store_locked" ||
