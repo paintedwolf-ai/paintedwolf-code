@@ -45,6 +45,7 @@ var rejectCodeObservation = map[string]string{
 	"CAPTURE_PROJECT_DIR_INVALID":               "project_dir_invalid",
 	"CAPTURE_PROJECT_DIR_MISSING":               "missing",
 	"CAPTURE_SERVE_FAILED":                      "serve_failed",
+	"CAPTURE_STATIC_ENTRY_MISSING":              "missing",
 	"CAPTURE_TARGET_INVALID":                    "target_invalid",
 	"CAPTURE_URL_NOT_LOOPBACK":                  "url_not_loopback",
 	"CAPTURE_URL_UNREACHABLE":                   "url_unreachable",
