@@ -1,0 +1,80 @@
+{
+  "artifact": {
+    "id": "fd3bf3ea-8acb-46dc-8e81-c573be5b5c2d",
+    "mime": "image/png",
+    "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
+  },
+  "grant": {
+    "category": "host",
+    "expires_at": "2099-01-01T00:00:00Z",
+    "granted_at": "2026-10-20T12:46:54.32411Z",
+    "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
+    "pattern": "*.example.com",
+    "scope": "device"
+  },
+  "messages": [
+    {
+      "content": "corpus seed",
+      "id": "628ba5a5-d10b-4b5a-b1c6-48176aa1d2f2",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "id": "91431963-4787-5bc1-85ab-ea85c43c8e15",
+      "role": "system"
+    },
+    {
+      "content": "Corpus seed turn complete.",
+      "id": "9f427c3b-4195-431f-9ce3-d0aa68fc0356",
+      "role": "assistant"
+    },
+    {
+      "content": ">>> Tool feedback\nThe report has no cited_evidence or cited_urls although recorded tool observations are available.\n\nCause: The report omitted typed references to observed tool evidence.\n\nWhy: Observed sample: README.md\nFix: The host preserves the report and attaches a bounded sample of observed paths or URLs when available, without requesting another model turn.\nNext: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.\nCode: INVEST_CITATIONS_REQUIRED\n\n{\"anchor\":\"coordinator.closeout_check\",\"rule\":\"INVEST_CITATIONS_REQUIRED\",\"effect\":\"warn\",\"code\":\"INVEST_CITATIONS_REQUIRED\",\"details\":{\"observed_handles_count\":1,\"observed_handles_omitted\":0,\"observed_handles_sample\":\"read#1\",\"observed_paths_count\":1,\"observed_paths_omitted\":0,\"observed_paths_sample\":\"README.md\",\"observed_urls_count\":0,\"observed_urls_omitted\":0,\"observed_urls_sample\":\"\",\"offender_count\":0,\"offenders_omitted\":0,\"offenders_sample\":\"\",\"profile\":\"coordinator\",\"repair_observations\":\"[]\",\"retained_citations\":\"{\\\"cited_evidence\\\":[],\\\"cited_urls\\\":[]}\",\"worker_leg\":false},\"subject\":{\"kind\":\"session\",\"id\":\"69e9e4ac-fede-4bfd-aadb-bafc1c535598\"}}",
+      "id": "c24322ee-a972-489b-abdd-7d022ac19770",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "id": "c8255099-b0bb-44d2-80bb-7bd5e80a458c",
+      "role": "tool"
+    },
+    {
+      "content": "",
+      "id": "ebcc5403-cdb9-4290-9616-2b504e5ccb8e",
+      "role": "assistant"
+    }
+  ],
+  "project_id": "a7a2e5e1-913a-4b4e-b284-979b631957a2",
+  "trust_read": {
+    "review": {
+      "changes": [
+        {
+          "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
+          "before": "format: 1\ndisabled: []\n",
+          "id": "7e37385c-cc09-5270-9194-4f258f3b72f8",
+          "kind": "modified",
+          "path": ".paintedwolf/extensions.yaml",
+          "root_id": "715a7f9f-5149-4afb-962e-2f21803efcd0",
+          "root_label": "seed-project",
+          "surface_ids": [
+            "extension_config",
+            "extension_suggestions"
+          ]
+        }
+      ],
+      "id": "7816650b-ac81-57f4-b767-46363c089cc6",
+      "project_id": "a7a2e5e1-913a-4b4e-b284-979b631957a2"
+    },
+    "surfaces": {
+      "agents_md": true,
+      "extension_config": true,
+      "extension_suggestions": true,
+      "project_mcp": true,
+      "project_settings": true,
+      "prompt_overrides": true,
+      "scan_config": true,
+      "skills": true
+    },
+    "unread_count": 0
+  }
+}

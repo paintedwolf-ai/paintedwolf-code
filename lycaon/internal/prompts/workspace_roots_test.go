@@ -29,6 +29,9 @@ func TestWorkspaceRootsPartialSingleRoot(t *testing.T) {
 	if !strings.Contains(out, "User absolute paths") {
 		t.Fatalf("single-root output missing absolute-path grant rule: %q", out)
 	}
+	if !strings.Contains(out, "`src/main.py` for files, `.` for root") {
+		t.Fatalf("single-root output must distinguish file paths from folder root: %q", out)
+	}
 }
 
 func TestWorkspaceRootsPartialMultiRoot(t *testing.T) {

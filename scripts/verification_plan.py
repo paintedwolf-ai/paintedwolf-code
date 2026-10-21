@@ -93,7 +93,8 @@ def catalog():
         names.update(value[section])
     if not isinstance(value["selection"], dict) or not set(value["selection"]).issubset(names):
         raise ValueError("selection grammars must be declared for declared verification names")
-    if not set(value["selection"].values()).issubset(SELECTION_GRAMMARS | {PASSTHROUGH}):
+    if any(grammar not in SELECTION_GRAMMARS | {PASSTHROUGH} and not re.fullmatch(r"fixed:[a-z][a-z0-9-]{0,63}", grammar)
+           for grammar in value["selection"].values()):
         raise ValueError("unknown verification selection grammar")
     if any(grammar == "go" and name not in value["go"] for name, grammar in value["selection"].items()):
         raise ValueError("a Go selection grammar requires a Go recipe")
@@ -317,6 +318,9 @@ def validate_selection(names, arguments):
         if missing:
             raise ValueError(f"{names[0]}: {' '.join(missing)} matches no test file under {DEN.name}/src. "
                              "No verification was queued")
+    elif grammar.startswith("fixed:"):
+        if list(arguments) != [grammar.removeprefix("fixed:")]:
+            raise ValueError(f"{names[0]} accepts only the fixed component {grammar.removeprefix('fixed:')}. No verification was queued")
     elif grammar == "playwright":
         missing = unmatched_playwright_filters(selection_filters(arguments, PLAYWRIGHT_FLAGS, names[0]))
         if missing:

@@ -79,13 +79,13 @@ func OpenHeld(ctx context.Context, pool *Pool, opts OpenOpts) (*HeldPage, error)
 	if err != nil {
 		return nil, err
 	}
-	target, err := resolveCaptureTarget(CaptureRequest{
-		URL: opts.URL, ProjectDir: opts.ProjectDir, Path: opts.Path,
-	})
-	if err != nil {
+	if err := ValidateRoutes(opts.Routes); err != nil {
 		return nil, err
 	}
-	if err := ValidateRoutes(opts.Routes); err != nil {
+	target, err := resolveCaptureTarget(CaptureRequest{
+		URL: opts.URL, ProjectDir: opts.ProjectDir, Path: opts.Path, Routes: opts.Routes,
+	})
+	if err != nil {
 		return nil, err
 	}
 	page, err := pool.NewPage(ctx, width, height)
@@ -134,6 +134,11 @@ func (h *HeldPage) Reload(ctx context.Context, width, height int, wait string, r
 	}
 	if err := ValidateRoutes(routes); err != nil {
 		return err
+	}
+	if h.RootDir != "" {
+		if err := requireStaticEntry(h.RootDir, "", h.TargetURL, routes); err != nil {
+			return err
+		}
 	}
 	h.drive.routes.replace(routes)
 	ctx, cancel := pageOperationContext(ctx, h.Page, RasterizeTimeout)

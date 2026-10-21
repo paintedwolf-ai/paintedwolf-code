@@ -40,7 +40,7 @@ var ContextDietMatrix = []ContextDietMatrixRow{
 		// First-user investigate is the plan-authoring window where both verify steers can
 		// fire (undeclared command + unverified work on an inline edit) — measure that
 		// worst-case render so the cap covers both clauses.
-		State: surface.ImplementSessionState{VerifyUnverified: true},
+		State: surface.ImplementSessionState{VerifyUnverified: true, ProgressMissing: true},
 	},
 	{
 		Name:       "implement_synthesis_path_explorer_chain",
@@ -76,7 +76,7 @@ var ContextDietMatrix = []ContextDietMatrixRow{
 		SurfaceID:  surface.SurfaceImplementOverlayPromote,
 		ModeRefs:   []string{"implement-overlay-promote"},
 		MaxModes:   2,
-		State:      surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}, VerifyUnverified: true},
+		State:      surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}, VerifyUnverified: true, ProgressMissing: true},
 	},
 	{
 		Name:       "implement_investigate_follow_up",

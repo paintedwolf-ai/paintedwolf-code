@@ -14,8 +14,8 @@ function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
   if (state.capabilities.can_restart_to_update && state.offer_confirmed_at !== null) return "update_ready";
   if (state.installation === "failed" && state.last_error && state.last_error.code !== "check_failed" && state.last_error.code !== "cancelled") return "update_failed";
   if (state.candidate?.rollout_eligibility !== "eligible") return undefined;
-  // A system package never downloads here, so the only offer is the package manager command.
-  if (state.install_source === "system_package") return "update_available";
+  // Package-managed installs never download here, so the only offer is the package manager command.
+  if (state.install_source === "system_package" || state.install_source === "homebrew_cask") return "update_available";
   if (!state.automatic_updates_enabled && state.capabilities.can_download) return "update_available";
   return undefined;
 }

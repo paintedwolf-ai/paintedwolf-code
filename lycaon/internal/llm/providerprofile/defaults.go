@@ -148,12 +148,16 @@ func Litellm() Profile {
 }
 
 func LocalInference(profile Profile) Profile {
+	if profile.ReasoningWire == "" {
+		profile.ReasoningWire = ReasoningWireContent
+	}
 	profile.SystemPreambleOnly = true
 	profile.StreamResponseHeaderTimeout = LocalInferenceStreamResponseHeaderTimeout
 	profile.CompleteResponseHeaderTimeout = LocalInferenceCompleteResponseHeaderTimeout
 	profile.UtilityCallTimeout = LocalInferenceUtilityCallTimeout
 	profile.BackgroundUtilityCallTimeout = LocalInferenceBackgroundUtilityCallTimeout
 	profile.UtilitySingleFlight = true
+	profile.OmitToolsWhenNotCallable = true
 	return profile
 }
 

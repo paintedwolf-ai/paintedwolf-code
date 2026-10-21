@@ -76,11 +76,19 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
+ - name: paintedwolf.json_unescaped_newline
+   type: bool
+ - name: paintedwolf.json_unexpected_end
+   type: bool
+ - name: paintedwolf.json_invalid_escape
+   type: bool
  - name: paintedwolf.rejection_reason
    type: string
  - name: paintedwolf.rejection_field
    type: string
  - name: paintedwolf.mime
+   type: string
+ - name: paintedwolf.missing_required_arguments
    type: string
  - name: paintedwolf.worker_budget_at_max
    type: bool
@@ -322,6 +330,12 @@ host_facts:
    type: bool
  - name: paintedwolf.overlay_state
    type: string
+ - name: paintedwolf.tool_turn_has_text
+   type: bool
+ - name: paintedwolf.tool_turn_has_agent_note
+   type: bool
+ - name: paintedwolf.surface_note_offered
+   type: bool
  - name: paintedwolf.surface_may_finish
    type: bool
  - name: paintedwolf.is_host_cycle_turn
@@ -996,6 +1010,8 @@ host_facts:
    type: string
  - name: paintedwolf.page_key
    type: string
+ - name: paintedwolf.mutation_new_path
+   type: bool
  - name: paintedwolf.parse_reason
    type: string
  - name: paintedwolf.parse_language
@@ -1102,6 +1118,8 @@ host_facts:
    type: string
  - name: paintedwolf.type
    type: string
+ - name: paintedwolf.directory_change
+   type: bool
  - name: paintedwolf.env_assignment
    type: bool
  - name: paintedwolf.reissue_via_command
