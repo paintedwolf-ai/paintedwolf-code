@@ -129,6 +129,7 @@ tasks:
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
+      - scripts/toolchain/rust-path-remap.sh
     generates:
       - '{{.BUILD_DIR}}/bialy'
     preconditions:
@@ -1024,7 +1025,7 @@ tasks:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
     cmds:
-      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
@@ -1796,8 +1797,8 @@ tasks:
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby && command -v aws
+        msg: bun, curl, jq, python3, ruby, and AWS CLI v2 required for release:live-test
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
 
