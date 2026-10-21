@@ -19,7 +19,7 @@ func assertEveryMatchCarriesAGenericShape(t *testing.T, root string) {
 	scanned := 0
 	for _, file := range []string{
 		"lycaon/internal/secretmatch/secretmatch.go",
-		"lycaon/internal/secretmatch/harvest_fusion.go",
+		"lycaon/internal/secretmatch/needle_cursor.go",
 	} {
 		src := contractcheck.ReadRepoFile(t, root, file)
 		for _, literal := range matchCompositeLiterals(src) {
