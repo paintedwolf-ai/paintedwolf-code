@@ -4,8 +4,8 @@
   "kind": "module",
   "workstream": "linux-public-distribution-contract",
   "disposition": "retain",
-  "reason": "Retain the existing isolated release rehearsal lifecycle at 362 code lines, with no growth allowance. This change only tightens its two catalog projections to rows that are both public and application-updated; package-managed Linux artifacts cannot become synthetic updater archives. Object lifecycle, signing, locks and recovery remain in their existing owners. The coherent scenario sequence still owns its scratch prefix from creation through cleanup; extracting that sequence for two predicates would hide its transaction and recovery context. At ccfcf7513a, managed runner verification passed 517 tests with one platform skip, including the public package/updater ownership and malformed-catalog contracts. Distribution construction/signing now has a separate owner and never expands this shell lifecycle. Credentialed cross-controller transport qualification remains separately scoped.",
-  "reviewed_commit": "ccfcf7513a1df082c80daec64f78b24589a98d0c",
+  "reason": "Retain the existing credentialed R2 rehearsal at its measured 362 code lines, with no growth allowance. This change edits only its two catalog projections so they select rows that are both public and application-updated, matching public_updaters in release_distribution_contract/platforms.py; package-managed Linux rows can never become synthetic updater archives. The script's one coherent scenario owns its scratch prefix from creation through cleanup, and extracting that sequence for two predicates would hide its transaction and recovery context. Local package, signing and distribution rehearsals belong in their own release:rehearse targets and never extend this script. The pinned platform and collector contracts drive the public package and updater ownership refusals through the real assembler, collector and validator.",
+  "reviewed_commit": "2d32d550d40b513cdaa55418fccbad7e563a4435",
   "ceiling": 362,
   "boundaries": {
     "scripts/release-r2-live-test.sh": "b2dd5be9d3e22360324eb1633f607513beb6f8df5be97c40c2692520153b6c37",
