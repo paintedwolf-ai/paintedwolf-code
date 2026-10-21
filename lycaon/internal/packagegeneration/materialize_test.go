@@ -10,12 +10,17 @@ import (
 	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func fixture(t *testing.T, content string) (*os.Root, []byte) {
 	t.Helper()
 	path := t.TempDir()
+	// t.TempDir honors the host umask; an installer stages with explicit modes.
+	if err := os.Chmod(path, 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Mkdir(filepath.Join(path, "bin"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -52,16 +57,25 @@ func fixture(t *testing.T, content string) (*os.Root, []byte) {
 	return root, raw
 }
 
+// testLayout anchors trust at an explicitly moded private base; host umask and
+// shared temporary ancestors are outside the fixture's control.
+func testLayout(t *testing.T) layout {
+	t.Helper()
+	base := t.TempDir()
+	if err := os.Chmod(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	return layout{store: filepath.Join(base, "generations"), locks: filepath.Join(base, "locks"), anchor: base, owner: uint32(os.Geteuid())}
+}
+
 func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) {
 	source, raw := fixture(t, "old resource")
-	base := t.TempDir()
-	store, locks := filepath.Join(base, "generations"), filepath.Join(base, "locks")
-	owner := uint32(os.Geteuid())
-	old, err := materialize(source, raw, store, locks, owner)
+	l := testLayout(t)
+	old, err := l.materialize(source, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lock, err := openLifetime(locks, old.ManifestSHA256, owner)
+	lock, err := l.openLifetime(old.ManifestSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,12 +83,12 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
 		t.Fatal(err)
 	}
-	current, err := materialize(source, raw, store, locks, owner)
+	current, err := l.materialize(source, raw)
 	if err != nil || current != old {
 		t.Fatalf("live identical reinstall=%+v,%v", current, err)
 	}
 	nextSource, nextRaw := fixture(t, "new resource")
-	next, err := materialize(nextSource, nextRaw, store, locks, owner)
+	next, err := l.materialize(nextSource, nextRaw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,34 +102,51 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 	if err != nil || string(content) != "old resource" {
 		t.Fatalf("old generation changed: %q,%v", content, err)
 	}
-	if removed, err := reclaim(old.ManifestSHA256, func() (string, error) { return next.Root, nil }, store, locks, owner); removed || err != nil {
+	if removed, err := l.reclaim(old.ManifestSHA256, func() (string, error) { return next.Root, nil }); removed || err != nil {
 		t.Fatalf("reclaimed live runtime=%v,%v", removed, err)
 	}
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_UN); err != nil {
 		t.Fatal(err)
 	}
-	if removed, err := reclaim(old.ManifestSHA256, func() (string, error) { return old.Root, nil }, store, locks, owner); removed || err != nil {
+	if removed, err := l.reclaim(old.ManifestSHA256, func() (string, error) { return old.Root, nil }); removed || err != nil {
 		t.Fatalf("reclaimed selected runtime=%v,%v", removed, err)
 	}
-	if removed, err := reclaim(old.ManifestSHA256, func() (string, error) { return next.Root, nil }, store, locks, owner); !removed || err != nil {
+	if removed, err := l.reclaim(old.ManifestSHA256, func() (string, error) { return next.Root, nil }); !removed || err != nil {
 		t.Fatalf("reclaim unselected runtime=%v,%v", removed, err)
 	}
-	if _, err := os.Stat(filepath.Join(locks, old.ManifestSHA256+".lock")); err != nil {
+	if _, err := os.Stat(filepath.Join(l.locks, old.ManifestSHA256+".lock")); err != nil {
 		t.Fatal("lifetime lock inode was removed", err)
+	}
+}
+
+func TestMaterializeRefusesWritableStagingRoot(t *testing.T) {
+	source, raw := fixture(t, "resource")
+	info, err := source.Stat(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := source.Chmod(".", 0775); err != nil {
+		t.Fatal(err)
+	}
+	l := testLayout(t)
+	_, err = l.materialize(source, raw)
+	if err == nil || !strings.Contains(err.Error(), "uncontrolled payload object") {
+		t.Fatalf("group-writable staging root (was %v) accepted: %v", info.Mode(), err)
+	}
+	if _, err := os.Lstat(l.store); !os.IsNotExist(err) {
+		t.Fatalf("refused staging created store: %v", err)
 	}
 }
 
 func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *testing.T) {
 	source, raw := fixture(t, "resource")
-	base := t.TempDir()
-	store, locks := filepath.Join(base, "generations"), filepath.Join(base, "locks")
-	owner := uint32(os.Geteuid())
-	generation, err := materialize(source, raw, store, locks, owner)
+	l := testLayout(t)
+	generation, err := l.materialize(source, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	refused := errors.New("policy commit refused")
-	if err := selectGeneration(generation.ManifestSHA256, func(Generation) error { return refused }, store, locks, owner); !errors.Is(err, refused) {
+	if err := l.selectGeneration(generation.ManifestSHA256, func(Generation) error { return refused }); !errors.Is(err, refused) {
 		t.Fatal(err)
 	}
 	if err := source.WriteFile("resource.data", []byte("tampered"), 0644); err != nil {
@@ -124,7 +155,7 @@ func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *te
 	if err := os.WriteFile(filepath.Join(generation.Root, "resource.data"), []byte("corrupt retained"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := materialize(source, raw, store, locks, owner); err == nil {
+	if _, err := l.materialize(source, raw); err == nil {
 		t.Fatal("reinstall silently replaced corrupt retained generation")
 	}
 	content, _ := os.ReadFile(filepath.Join(generation.Root, "resource.data"))
@@ -132,7 +163,7 @@ func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *te
 		t.Fatal("retained bytes were rewritten")
 	}
 	called := false
-	if err := selectGeneration(generation.ManifestSHA256, func(Generation) error { called = true; return nil }, store, locks, owner); err == nil || called {
+	if err := l.selectGeneration(generation.ManifestSHA256, func(Generation) error { called = true; return nil }); err == nil || called {
 		t.Fatal("unverified generation reached policy writer")
 	}
 }

@@ -17,7 +17,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func materialize(staging *os.Root, raw []byte, store, locks string, owner uint32) (Generation, error) {
+func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
+	owner := l.owner
 	if staging == nil {
 		return Generation{}, errors.New("native generation: missing retained staging root")
 	}
@@ -37,19 +38,19 @@ func materialize(staging *os.Root, raw []byte, store, locks string, owner uint32
 	}
 	sum := sha256.Sum256(raw)
 	identity := hex.EncodeToString(sum[:])
-	selected := Generation{Root: filepath.Join(store, identity), ManifestSHA256: identity, LogicalInstallRoot: manifest.InstallRoot}
-	for _, name := range []string{store, locks} {
-		if err := controlledParents(name, owner); err != nil {
+	selected := Generation{Root: filepath.Join(l.store, identity), ManifestSHA256: identity, LogicalInstallRoot: manifest.InstallRoot}
+	for _, name := range []string{l.store, l.locks} {
+		if err := l.controlledParents(name); err != nil {
 			return Generation{}, err
 		}
 		if err := os.MkdirAll(name, 0755); err != nil {
 			return Generation{}, err
 		}
-		if err := controlledParents(name, owner); err != nil {
+		if err := l.controlledParents(name); err != nil {
 			return Generation{}, err
 		}
 	}
-	lock, err := openLifetime(locks, identity, owner)
+	lock, err := l.openLifetime(identity)
 	if err != nil {
 		return Generation{}, err
 	}
@@ -84,7 +85,7 @@ func materialize(staging *os.Root, raw []byte, store, locks string, owner uint32
 	if !bytes.Equal(sourceManifest, raw) {
 		return Generation{}, errors.New("native generation: staging seal differs from selection")
 	}
-	temporary, err := os.MkdirTemp(store, ".install-")
+	temporary, err := os.MkdirTemp(l.store, ".install-")
 	if err != nil {
 		return Generation{}, err
 	}
@@ -132,7 +133,7 @@ func materialize(staging *os.Root, raw []byte, store, locks string, owner uint32
 		return Generation{}, err
 	}
 	complete = true
-	if err := syncDirectory(store); err != nil {
+	if err := syncDirectory(l.store); err != nil {
 		return Generation{}, err
 	}
 	return selected, nil

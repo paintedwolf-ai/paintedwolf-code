@@ -19,14 +19,14 @@ func Select(identity string, commit func(Generation) error) error {
 	if os.Geteuid() != 0 {
 		return errors.New("native generation: selection requires root")
 	}
-	return selectGeneration(identity, commit, nativeStore, lifetimeLocks, 0)
+	return native.selectGeneration(identity, commit)
 }
 
-func selectGeneration(identity string, commit func(Generation) error, store, locks string, owner uint32) error {
+func (l layout) selectGeneration(identity string, commit func(Generation) error) error {
 	if commit == nil {
 		return errors.New("native generation: missing protected policy writer")
 	}
-	lock, err := openLifetime(locks, identity, owner)
+	lock, err := l.openLifetime(identity)
 	if err != nil {
 		return err
 	}
@@ -34,15 +34,15 @@ func selectGeneration(identity string, commit func(Generation) error, store, loc
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
 		return err
 	}
-	root, raw, manifest, err := retainedGeneration(store, identity, owner)
+	root, raw, manifest, err := l.retainedGeneration(identity)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	if err := verifyExisting(filepath.Join(store, identity), raw, manifest, owner); err != nil {
+	if err := verifyExisting(filepath.Join(l.store, identity), raw, manifest, l.owner); err != nil {
 		return err
 	}
-	return commit(Generation{Root: filepath.Join(store, identity), ManifestSHA256: identity, LogicalInstallRoot: manifest.InstallRoot})
+	return commit(Generation{Root: filepath.Join(l.store, identity), ManifestSHA256: identity, LogicalInstallRoot: manifest.InstallRoot})
 }
 
 // Reclaim never blocks a running generation. The fixed policy reader is called
@@ -51,14 +51,14 @@ func Reclaim(identity string, freshSelection func() (string, error)) (bool, erro
 	if os.Geteuid() != 0 {
 		return false, errors.New("native generation: reclamation requires root")
 	}
-	return reclaim(identity, freshSelection, nativeStore, lifetimeLocks, 0)
+	return native.reclaim(identity, freshSelection)
 }
 
-func reclaim(identity string, freshSelection func() (string, error), store, locks string, owner uint32) (bool, error) {
+func (l layout) reclaim(identity string, freshSelection func() (string, error)) (bool, error) {
 	if freshSelection == nil {
 		return false, errors.New("native generation: missing protected selection reader")
 	}
-	lock, err := openLifetime(locks, identity, owner)
+	lock, err := l.openLifetime(identity)
 	if err != nil {
 		return false, err
 	}
@@ -73,11 +73,11 @@ func reclaim(identity string, freshSelection func() (string, error), store, lock
 	if err != nil {
 		return false, err
 	}
-	path := filepath.Join(store, identity)
+	path := filepath.Join(l.store, identity)
 	if selected == path || strings.HasPrefix(selected, path+string(os.PathSeparator)) {
 		return false, nil
 	}
-	root, raw, manifest, err := retainedGeneration(store, identity, owner)
+	root, raw, manifest, err := l.retainedGeneration(identity)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
@@ -85,18 +85,18 @@ func reclaim(identity string, freshSelection func() (string, error), store, lock
 		return false, err
 	}
 	defer root.Close()
-	if err := verifyExisting(path, raw, manifest, owner); err != nil {
+	if err := verifyExisting(path, raw, manifest, l.owner); err != nil {
 		return false, err
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return false, err
 	}
-	return true, syncDirectory(store)
+	return true, syncDirectory(l.store)
 }
 
-func retainedGeneration(store, identity string, owner uint32) (*os.Root, []byte, *pkgmanifest.Manifest, error) {
-	path := filepath.Join(store, identity)
-	if err := controlledParents(path, owner); err != nil {
+func (l layout) retainedGeneration(identity string) (*os.Root, []byte, *pkgmanifest.Manifest, error) {
+	path := filepath.Join(l.store, identity)
+	if err := l.controlledParents(path); err != nil {
 		return nil, nil, nil, err
 	}
 	root, err := os.OpenRoot(path)
@@ -116,7 +116,7 @@ func retainedGeneration(store, identity string, owner uint32) (*os.Root, []byte,
 	if info.Size() < 0 || info.Size() > 4<<20 {
 		return nil, nil, nil, errors.New("native generation: oversized retained seal")
 	}
-	raw, err := readSeal(root, int(info.Size()), owner)
+	raw, err := readSeal(root, int(info.Size()), l.owner)
 	if err != nil {
 		return nil, nil, nil, err
 	}

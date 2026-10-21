@@ -10,22 +10,22 @@ import (
 	"path/filepath"
 )
 
-func openLifetime(directory, identity string, owner uint32) (*os.File, error) {
+func (l layout) openLifetime(identity string) (*os.File, error) {
 	decoded, err := hex.DecodeString(identity)
 	if err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != identity {
 		return nil, errors.New("native generation: invalid identity")
 	}
-	if err := controlledParents(directory, owner); err != nil {
+	if err := l.controlledParents(l.locks); err != nil {
 		return nil, err
 	}
-	name := filepath.Join(directory, identity+".lock")
+	name := filepath.Join(l.locks, identity+".lock")
 	file, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW, 0600)
 	if err != nil {
 		return nil, err
 	}
 	info, err := file.Stat()
 	if err == nil {
-		err = controlledObject(name, info, owner)
+		err = controlledObject(name, info, l.owner)
 	}
 	if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm() != 0600) {
 		err = errors.New("native generation: unsafe lifetime lock")

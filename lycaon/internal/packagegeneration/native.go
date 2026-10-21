@@ -24,5 +24,5 @@ func Materialize(staging *os.Root, manifest []byte) (Generation, error) {
 	if os.Geteuid() != 0 {
 		return Generation{}, errors.New("native generation: installation requires root")
 	}
-	return materialize(staging, manifest, nativeStore, lifetimeLocks, 0)
+	return native.materialize(staging, manifest)
 }
