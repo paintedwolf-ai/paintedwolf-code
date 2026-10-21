@@ -119,6 +119,21 @@ func TestGrepFormsProduceExactBytes(t *testing.T) {
 		{name: "color never", argv: []string{"grep", "--color=never", "alpha", "input"}, stdout: "alpha\n"},
 		{name: "colour auto", argv: []string{"grep", "--colour=auto", "alpha", "input"}, stdout: "alpha\n"},
 		{name: "line buffered", argv: []string{"grep", "--line-buffered", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "text mode prints binary lines", argv: []string{"grep", "-a", "alpha", "bin.dat"}, stdout: "alpha\x00binary\n"},
+		{name: "binary files text", argv: []string{"grep", "--binary-files=text", "alpha", "bin.dat"}, stdout: "alpha\x00binary\n"},
+		{name: "ignore binary files", argv: []string{"grep", "-I", "alpha", "bin.dat", "input"}, stdout: "input:alpha\n"},
+		{name: "binary without match counts zero", argv: []string{"grep", "-c", "--binary-files=without-match", "alpha", "bin.dat"}, stdout: "0\n", status: 1},
+		{name: "explicit basic regexp", argv: []string{"grep", "-G", "-o", `\(ab\)\1`, "repeat"}, stdout: "abab\n"},
+		{name: "obsolete -y", argv: []string{"grep", "-y", "ALPHA", "sub/c.txt"}, stdout: "Alpha\nalphabet\n"},
+		{name: "silent", argv: []string{"grep", "--silent", "alpha", "a.txt"}},
+		{name: "numeric context shorthand", argv: []string{"grep", "-1", "six", "a.txt"}, stdout: "five\nsix alpha\n"},
+		{name: "skip directories", argv: []string{"grep", "-d", "skip", "alpha", "sub", "input"}, stdout: "input:alpha\n"},
+		{name: "recurse directories", argv: []string{"grep", "--directories=recurse", "deep", "sub"}, stdout: "sub/deep/d.md:alpha deep\n"},
+		{name: "devices", argv: []string{"grep", "-D", "skip", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "include dir", argv: []string{"grep", "-r", "--include-dir=deep", "alpha", "sub"}, stdout: "sub/.hidden:alpha hidden\nsub/c.txt:alphabet\nsub/deep/d.md:alpha deep\n"},
+		{name: "include dir prunes", argv: []string{"grep", "-r", "--include-dir=none", "deep", "sub"}, status: 1},
+		{name: "no-op compatibility flags", argv: []string{"grep", "-u", "-U", "--mmap", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "stdin label", argv: []string{"grep", "-H", "--label=piped", "b"}, stdin: "a\nb\n", stdout: "piped:b\n"},
 	})
 }
 
@@ -186,6 +201,8 @@ func TestGrepRecursionLinks(t *testing.T) {
 	r := h.exec("", "grep", "-R", "alpha", "d")
 	r.expect(t, "-R follows links", "d/f:alpha\nd/ld/t:alpha\nd/lf:alpha\nd/loop/target/t:alpha\n", "grep: d/loop/d: warning: recursive directory loop\n", 0)
 	h.exec("", "grep", "alpha", "d/lf").expect(t, "named link", "alpha\n", "", 0)
+	h.exec("", "grep", "-r", "-S", "alpha", "d/ld").expect(t, "BSD -S follows", "d/ld/t:alpha\n", "", 0)
+	h.exec("", "grep", "-R", "-p", "alpha", "d").expect(t, "BSD -p follows none", "d/f:alpha\n", "", 0)
 }
 
 func TestSearchPinsEveryRead(t *testing.T) {
@@ -246,6 +263,10 @@ func TestSearchRefusals(t *testing.T) {
 		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, "COMMAND_OPERAND_INVALID"},
 		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "COMMAND_OPERAND_INVALID"},
 		{"color always", []string{"grep", "--color=always", "a", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"basic with extended", []string{"grep", "-G", "-E", "a", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"bad binary mode", []string{"grep", "--binary-files=maybe", "a", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"bad directory action", []string{"grep", "-d", "maybe", "a", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"BSD decompression", []string{"grep", "-J", "a", "input"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{"outside the roots", []string{"grep", "a", "/etc/hosts"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {

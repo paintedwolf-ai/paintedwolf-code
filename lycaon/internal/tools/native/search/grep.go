@@ -47,7 +47,10 @@ type grepRun struct {
 	follow       bool
 	selection    selection
 	searchBinary bool
-	walker       *walker
+	// binaryMode is binary (notice), text (-a) or without-match (-I).
+	binaryMode      string
+	skipDirectories bool
+	walker          *walker
 	// json is rg --json's printer; nil for the plain forms.
 	json *rgJSON
 	// prune holds the index requirement when acceleration applies; drafts
@@ -68,6 +71,9 @@ func runGrep(inv *invocation) error {
 	}
 	r.recursive = inv.flag("-r") || inv.flag("-R")
 	r.follow = inv.flag("-R")
+	if err := r.bsdModes(); err != nil {
+		return err
+	}
 	r.quietErrors = inv.flag("-s")
 	r.names = lastChoice(inv, "-H", "-h")
 	r.selection = newSelection(inv, false)
@@ -136,7 +142,7 @@ func (r *grepRun) grepDialect() (textsearch.Dialect, error) {
 	case "fgrep":
 		chosen[textsearch.Fixed] = true
 	}
-	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl} {
+	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl, "-G": textsearch.Basic} {
 		if r.inv.flag(key) {
 			chosen[dialect] = true
 		}
@@ -437,6 +443,9 @@ func (r *grepRun) searchStdin() error {
 	if r.json != nil {
 		label = "<stdin>"
 	}
+	if named, ok := r.inv.value("--label"); ok {
+		label = named
+	}
 	err = r.searchContent(label, data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
@@ -469,6 +478,9 @@ func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
 		return r.searchFile(e, r.forcedNames(multiple))
 	}
 	if !r.recursive {
+		if r.skipDirectories {
+			return nil
+		}
 		inv.fail(r.quietErrors, "%s: Is a directory", operand)
 		return nil
 	}
@@ -601,4 +613,53 @@ func (r *grepRun) color() error {
 		return nil
 	}
 	return r.inv.usage(option.Values[0].Value, "--color=never or --color=auto")
+}
+
+// bsdModes applies the GNU and BSD spellings that select binary, directory,
+// device and link handling; for each, the last occurrence wins.
+func (r *grepRun) bsdModes() error {
+	r.binaryMode = "binary"
+	for _, item := range r.inv.argv.Items {
+		option := item.Option
+		if option == nil {
+			continue
+		}
+		value := ""
+		if len(option.Values) > 0 {
+			value = option.Values[0].Value
+		}
+		switch option.Key {
+		case "-a":
+			r.binaryMode = "text"
+		case "-I":
+			r.binaryMode = "without-match"
+		case "--binary-files":
+			switch value {
+			case "binary", "text", "without-match":
+				r.binaryMode = value
+			default:
+				return r.inv.usage(value, "--binary-files=binary, text or without-match")
+			}
+		case "-d":
+			switch value {
+			case "read":
+				r.skipDirectories = false
+			case "skip":
+				r.skipDirectories = true
+			case "recurse":
+				r.recursive = true
+			default:
+				return r.inv.usage(value, "-d read, skip or recurse")
+			}
+		case "-D":
+			if value != "read" && value != "skip" {
+				return r.inv.usage(value, "-D read or skip")
+			}
+		case "-S":
+			r.follow = true
+		case "-p", "-O":
+			r.follow = false
+		}
+	}
+	return nil
 }

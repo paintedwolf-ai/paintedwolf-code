@@ -72,6 +72,17 @@ func TestFindFormsProduceExactBytes(t *testing.T) {
 		{name: "perm any bit", argv: []string{"find", "tree/sub", "-type", "f", "-perm", "/111"}},
 		{name: "printf", argv: []string{"find", "tree/sub", "-printf", "%y %d %P|%f|%h|%m\\n"}, stdout: "d 0 |sub|tree|755\nf 1 c.go|c.go|tree/sub|644\nf 1 empty.txt|empty.txt|tree/sub|644\n"},
 		{name: "printf size", argv: []string{"find", "tree/sub", "-type", "f", "-printf", "%s\\t%T@\\n"}, stdout: "10\t1767323045.0000000000\n0\t1767323045.0000000000\n"},
+		{name: "BSD -E and -s", argv: []string{"find", "-E", "-s", "tree", "-regex", ".*/[ab]\\.(go|txt)"}, stdout: "tree/a.go\ntree/b.txt\n"},
+		{name: "depth first", argv: []string{"find", "tree/sub", "-depth"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\ntree/sub\n"},
+		{name: "BSD -d", argv: []string{"find", "-d", "tree/sub"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\ntree/sub\n"},
+		{name: "BSD depth test", argv: []string{"find", "tree", "-depth", "2"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "BSD depth less", argv: []string{"find", "tree", "-depth", "-1"}, stdout: "tree\n"},
+		{name: "same device", argv: []string{"find", "tree/sub", "-xdev"}, stdout: "tree/sub\ntree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "BSD -x", argv: []string{"find", "-x", "tree/sub"}, stdout: "tree/sub\ntree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "long operators", argv: []string{"find", "tree", "-name", "a.go", "-or", "-name", "c.go", "-and", "-type", "f"}, stdout: "tree/a.go\ntree/sub/c.go\n"},
+		{name: "true and false", argv: []string{"find", "tree/sub", "-true", "-name", "c.go", "-o", "-false"}, stdout: "tree/sub/c.go\n"},
+		{name: "size words", argv: []string{"find", "tree", "-type", "f", "-size", "5w"}, stdout: "tree/a.go\ntree/sub/c.go\n"},
+		{name: "size gibibytes", argv: []string{"find", "tree", "-type", "f", "-size", "-1G", "-name", "*.go"}},
 		{name: "printf literal and percent", argv: []string{"find", "tree/sub/c.go", "-printf", "[%p] 100%%\\0"}, stdout: "[tree/sub/c.go] 100%\x00"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -122,6 +133,8 @@ func TestFindRefusals(t *testing.T) {
 		{"printf escape", []string{"find", "tree", "-printf", "\\q"}, "COMMAND_OPERAND_INVALID"},
 		{"bad perm", []string{"find", "tree", "-perm", "u+x"}, "COMMAND_OPERAND_INVALID"},
 		{"user name", []string{"find", "tree", "-user", "root"}, "COMMAND_OPERAND_INVALID"},
+		{"group name", []string{"find", "tree", "-group", "wheel"}, "COMMAND_OPERAND_INVALID"},
+		{"leading option after paths", []string{"find", "tree", "-E"}, "COMMAND_OPERAND_INVALID"},
 		{"bad mmin", []string{"find", "tree", "-mmin", "x"}, "COMMAND_OPERAND_INVALID"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -226,6 +239,12 @@ func TestFindVisitsLinksAsEntries(t *testing.T) {
 	symlink(t, "../target", filepath.Join(h.root, "d", "ld"))
 	h.exec("", "find", "d").expect(t, "links are not followed", "d\nd/f\nd/ld\n", "", 0)
 	h.exec("", "find", "d", "-type", "l").expect(t, "type l", "d/ld\n", "", 0)
+	h.exec("", "find", "-L", "d").expect(t, "-L follows", "d\nd/f\nd/ld\nd/ld/t\n", "", 0)
+	h.exec("", "find", "-L", "d", "-type", "l").expect(t, "-L type l is unreachable links only", "", "", 0)
+	h.exec("", "find", "-H", "d/ld").expect(t, "-H follows the command line", "d/ld\nd/ld/t\n", "", 0)
+	h.exec("", "find", "-P", "d/ld").expect(t, "-P keeps links", "d/ld\n", "", 0)
+	symlink(t, "..", filepath.Join(h.root, "d", "up"))
+	h.exec("", "find", "-L", "d", "-name", "t").expect(t, "loop detected", "d/ld/t\nd/up/target/t\n", "find: File system loop detected; 'd/up/d' is part of the same file system loop as 'd'.\n", 1)
 }
 
 func TestEffectModesFollowTheCatalog(t *testing.T) {
@@ -276,4 +295,17 @@ func TestFindUserMatchesNumericOwner(t *testing.T) {
 	h.exec("", "find", "tree/sub", "-type", "f", "-user", uid).expect(t, "own files", "tree/sub/c.go\ntree/sub/empty.txt\n", "", 0)
 	h.exec("", "find", "tree/sub", "-type", "f", "-user", strconv.Itoa(os.Getuid()+1)).expect(t, "other owner", "", "", 0)
 	h.exec("", "find", "tree/sub/c.go", "-printf", "%U\\n").expect(t, "printf uid", uid+"\n", "", 0)
+	gid := strconv.Itoa(os.Getgid())
+	h.exec("", "find", "tree/sub", "-type", "f", "-uid", uid, "-gid", gid).expect(t, "uid and gid", "tree/sub/c.go\ntree/sub/empty.txt\n", "", 0)
+	h.exec("", "find", "tree/sub/c.go", "-group", gid).expect(t, "group", "tree/sub/c.go\n", "", 0)
+}
+
+func TestFindAccessAndChangeAges(t *testing.T) {
+	h := newHarness(t, findTree)
+	file := filepath.Join(h.root, "tree", "b.txt")
+	testutil.FailErr(t, "access time", os.Chtimes(file, fixtureTime.Add(-48*time.Hour), fixtureTime))
+	h.exec("", "find", "tree", "-type", "f", "-atime", "+2").expect(t, "atime", "tree/b.txt\n", "", 0)
+	h.exec("", "find", "tree", "-type", "f", "-amin", "+3000").expect(t, "amin", "tree/b.txt\n", "", 0)
+	h.owners.Now = time.Now
+	h.exec("", "find", "tree/b.txt", "-cmin", "-5", "-ctime", "0").expect(t, "ctime", "tree/b.txt\n", "", 0)
 }
