@@ -15,7 +15,7 @@ import (
 
 // commandProgramEntry routes the command tool to the v1 program entry. It
 // flips with the statement evaluator; the legacy argv path is then removed.
-const commandProgramEntry = false
+const commandProgramEntry = true
 
 func registerCommandTools(
 	reg *tools.DefaultRegistry,

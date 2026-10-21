@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -95,6 +97,9 @@ type programRun struct {
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
 
+	// envelope carries the call's launch capability requests to each launch.
+	envelope map[string]any
+
 	externalOnce sync.Once
 	external     toolcontract.OperationDefinition
 	externalErr  error
@@ -127,6 +132,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	if r != nil && r.disabled.Load() {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
+	}
+	if timeout := toolkit.ClampIntArg(args, "timeout_ms", 0, 0, 7200000); timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+		defer cancel()
 	}
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
@@ -192,7 +202,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return "", err
 		}
 	}
-	run := &programRun{catalog: catalog, commands: commandIndex(catalog)}
+	run := &programRun{catalog: catalog, commands: commandIndex(catalog), envelope: launchEnvelope(args)}
 	external, err := run.externalDefinition()
 	if err != nil {
 		return "", err
@@ -561,4 +571,29 @@ func (l *programLifetime) settled() {
 	if finished {
 		l.release()
 	}
+}
+
+// launchCapabilityFields are the call's declarations that every confined launch
+// it reaches is reviewed with: confinement capabilities, SOCKS injection and
+// managed-secret use.
+var launchCapabilityFields = []string{"capability_request", "socks_proxy", "secret_use"}
+
+func launchEnvelope(args map[string]any) map[string]any {
+	envelope := map[string]any{}
+	for _, field := range launchCapabilityFields {
+		if value, ok := args[field]; ok {
+			envelope[field] = value
+		}
+	}
+	return envelope
+}
+
+// launchArguments are the arguments the existing command review, detection
+// and policy evaluate for one launch.
+func (r *programRun) launchArguments(line, cwd string) map[string]any {
+	arguments := map[string]any{"command": line, "cwd": cwd}
+	for field, value := range r.envelope {
+		arguments[field] = value
+	}
+	return arguments
 }

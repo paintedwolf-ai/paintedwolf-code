@@ -185,7 +185,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
-		Arguments: map[string]any{"command": line, "cwd": display},
+		Arguments: d.run.launchArguments(line, display),
 		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {

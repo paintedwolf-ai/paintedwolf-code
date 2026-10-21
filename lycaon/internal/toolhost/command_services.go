@@ -147,5 +147,8 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) {
 func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 	if programs := r.programs(); programs != nil {
 		programs.Executor = executor
+		if commandProgramEntry {
+			executor.SetProgramEntry("command", command.CaptureInvocation)
+		}
 	}
 }
