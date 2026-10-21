@@ -4,7 +4,7 @@ import { createNoticeStore } from "../../notices/notice-store.ts";
 import { APP_SCOPE, noticeScopeKey } from "../../notices/notice-scope.ts";
 import { createUpdateState } from "./update-state.ts";
 import { mountUpdateNotice } from "./mount-update-notice.ts";
-import { packageFixture, updateFixture, stagedFixture, updateServiceFixture } from "./update-test-fixture.ts";
+import { packageFixture, packageSourceFixture, updateFixture, stagedFixture, updateServiceFixture } from "./update-test-fixture.ts";
 import type { NativeUpdateState } from "./update-service.ts";
 
 async function fixture() {
@@ -59,22 +59,34 @@ describe("update notices", () => {
       expect(f.rows().map(row => row.code)).toEqual(["update_ready"]);
     } finally { f.stop(); }
   });
-  it("announces a newer system package even though nothing can be downloaded", async () => {
+  it("uses native source observations independently of upstream feed releases", async () => {
     const f = await fixture();
+    const source = packageSourceFixture({ availability: "candidate_found", held: false, pinned: false,
+      candidate: { version: "1.0.3-1", architecture: "amd64", repositories: [{ id: "configured", suite: "stable", trusted: true }], newer_than_installed: true } });
+    const state = packageFixture({ candidate: null, discovery: "up_to_date" });
+    state.package!.source = source;
     try {
       await f.send(packageFixture());
-      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
-      await f.send(packageFixture({ automatic_updates_enabled: false }));
-      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
-      const held = packageFixture();
-      held.candidate!.rollout_eligibility = "held_back";
-      await f.send(held);
       expect(f.rows()).toHaveLength(0);
-      await f.send(packageFixture({ candidate: null, discovery: "up_to_date" }));
+      await f.send(state);
+      expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
+      expect(f.rows()[0]!.message).toContain("does not confirm");
+      f.notices.dismiss(f.rows()[0]!.id);
+      await f.send({ ...state, candidate: updateFixture().candidate });
       expect(f.rows()).toHaveLength(0);
-      // Automatic updates on a downloadable install stay quiet: the host installs on quit.
-      await f.send(updateFixture());
-      expect(f.rows()).toHaveLength(0);
+      state.package!.source = { ...source, candidate: { ...source.candidate!, version: "1.0.4-1" } };
+      await f.send(state);
+      expect(f.rows()).toHaveLength(1);
+      for (const availability of ["blocked", "unknown", "failed", "no_newer_candidate", "not_checked"] as const) {
+        state.package!.source = { ...source, availability };
+        await f.send(state);
+        expect(f.rows()).toHaveLength(0);
+      }
+      for (const policy of [{ held: true }, { pinned: true }, { pinned: null }, { owner: null }] as const) {
+        state.package!.source = { ...source, ...policy };
+        await f.send(state);
+        expect(f.rows()).toHaveLength(0);
+      }
     } finally { f.stop(); }
   });
   it("keeps held-back and offline checks quiet and uses the existing notice rail for failures", async () => {

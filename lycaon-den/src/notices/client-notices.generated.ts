@@ -32,6 +32,7 @@ export type ClientNoticeKind =
   | "host_incompatible"
   | "model_catalog_refresh_failed"
   | "offline"
+  | "package_update_listed"
   | "project_removal_incomplete"
   | "project_removal_unconfirmed"
   | "provider_check_unfinished"
@@ -142,6 +143,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Cannot connect",
     message: "The app cannot reach its local engine. Try again to reconnect.",
     suggestedAction: "That did not work. Reopening the app is the next thing to try.",
+    scope: "app",
+  },
+  package_update_listed: {
+    title: "Newer package listed",
+    message: "Your configured package metadata lists a newer Painted Wolf Code package. This does not confirm that its repository is currently reachable.",
+    suggestedAction: "Open Settings → General → Updates to review the package source and update command.",
     scope: "app",
   },
   project_removal_incomplete: {
