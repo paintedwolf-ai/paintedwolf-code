@@ -151,12 +151,12 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 		return fmt.Errorf("live module-view watchers in %s = %v, want 1", desktopMnt, watchers)
 	}
 	watcherPID := watchers[0]
-	if err := verifyMountNamespaceOwner(desktopPID, initUser); err != nil {
+	if err := verifyMountNamespaceOwner(desktopPID, watcherPID, initUser); err != nil {
 		return err
 	}
 	userNS, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/user", watcherPID))
-	if err != nil || userNS != initUser {
-		return fmt.Errorf("watcher user namespace = %q (%v), want %q", userNS, err, initUser)
+	if err != nil || userNS == initUser {
+		return fmt.Errorf("watcher user namespace = %q (%v), must not be initial %q", userNS, err, initUser)
 	}
 	info, err := os.Stat(fmt.Sprintf("/proc/%d/fd", watcherPID))
 	if err != nil {
@@ -219,7 +219,7 @@ func readProcStatusFields(path string) (map[string]string, error) {
 	return fields, nil
 }
 
-func verifyMountNamespaceOwner(desktopPID int, initUser string) error {
+func verifyMountNamespaceOwner(desktopPID, watcherPID int, initUser string) error {
 	mntFile, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", desktopPID))
 	if err != nil {
 		return err
@@ -236,14 +236,25 @@ func verifyMountNamespaceOwner(desktopPID int, initUser string) error {
 	if ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID); err != nil || ownerUID != 0 {
 		return fmt.Errorf("M_view owning user namespace owner UID = %d (%v), want 0", ownerUID, err)
 	}
-	if parentFD, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_PARENT); !errors.Is(err, unix.EPERM) {
-		if err == nil {
-			_ = unix.Close(parentFD)
-		}
-		return fmt.Errorf("M_view owning user namespace NS_GET_PARENT = %v, want EPERM (initial user namespace)", err)
+	parentFD, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_PARENT)
+	if err != nil {
+		return fmt.Errorf("M_view owning user namespace NS_GET_PARENT: %w", err)
 	}
-	var ownerStat, desktopUserStat unix.Stat_t
+	var parentStat, ownerStat, watcherUserStat, desktopUserStat unix.Stat_t
+	err = unix.Fstat(parentFD, &parentStat)
+	_ = unix.Close(parentFD)
+	if err != nil || parentStat.Ino != 0xEFFFFFFD {
+		return fmt.Errorf("M_view owning userns parent ino = %#x (%v), want 0xEFFFFFFD (%s)", parentStat.Ino, err, initUser)
+	}
 	if err := unix.Fstat(ownerUserFD, &ownerStat); err != nil {
+		return err
+	}
+	watcherUserFile, err := os.Open(fmt.Sprintf("/proc/%d/ns/user", watcherPID))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = watcherUserFile.Close() }()
+	if err := unix.Fstat(int(watcherUserFile.Fd()), &watcherUserStat); err != nil {
 		return err
 	}
 	desktopUserFile, err := os.Open(fmt.Sprintf("/proc/%d/ns/user", desktopPID))
@@ -254,9 +265,8 @@ func verifyMountNamespaceOwner(desktopPID int, initUser string) error {
 	if err := unix.Fstat(int(desktopUserFile.Fd()), &desktopUserStat); err != nil {
 		return err
 	}
-	ownerLink := fmt.Sprintf("user:[%d]", ownerStat.Ino)
-	if ownerStat.Ino != 0xEFFFFFFD || ownerLink != initUser || ownerStat.Ino == desktopUserStat.Ino {
-		return fmt.Errorf("M_view owning userns = %s (desktop userns ino=%d), want initial %s", ownerLink, desktopUserStat.Ino, initUser)
+	if ownerStat.Ino == 0xEFFFFFFD || ownerStat.Ino != watcherUserStat.Ino || ownerStat.Ino == desktopUserStat.Ino {
+		return fmt.Errorf("M_view owning userns ino=%d (watcher=%d desktop=%d), want watcher userns != initial and != desktop", ownerStat.Ino, watcherUserStat.Ino, desktopUserStat.Ino)
 	}
 	return nil
 }
@@ -322,15 +332,32 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 	if mountPoint == "" {
 		return
 	}
+	runtime.LockOSThread()
+	// Before unsharing M_view, mountPoint is owned by init_user_ns: the child
+	// user namespace has zero capabilities in init_user_ns, so mount_setattr
+	// is refused with EPERM even as uid 0 in the child user namespace.
 	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
-		t.Fatalf("scrubSingleMount(%q) as uid 0 in root-owned child user namespace = %v, want EPERM", mountPoint, err)
+		t.Fatalf("scrubSingleMount(%q) on init_user_ns mount from child userns = %v, want EPERM", mountPoint, err)
+	}
+	// Unshare M_view inside the child user namespace so this userns owns M_view.
+	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
+		t.Fatalf("unshare M_view in child userns: %v", err)
+	}
+	if err := watcherUserNamespace(); err != nil {
+		t.Fatalf("watcherUserNamespace in (U_view, M_view): %v", err)
 	}
 	caller := Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
 	if err := sealModuleWatcher(caller); err != nil {
-		t.Fatalf("sealModuleWatcher in root-owned child user namespace: %v", err)
+		t.Fatalf("sealModuleWatcher in (U_view, M_view): %v", err)
 	}
-	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
-		t.Fatalf("scrubSingleMount(%q) as sealed watcher in root-owned child user namespace = %v, want EPERM", mountPoint, err)
+	// Inside M_view (owned by U_view), the sealed watcher can add NOEXEC|NOSUID|NODEV.
+	if err := scrubSingleMount(mountPoint); err != nil {
+		t.Fatalf("scrubSingleMount(%q) in watcher-owned M_view: %v", mountPoint, err)
+	}
+	var st unix.Statfs_t
+	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
+	if err := unix.Statfs(mountPoint, &st); err != nil || st.Flags&wantFlags != wantFlags {
+		t.Fatalf("statfs(%q) in watcher-owned M_view = %#x (%v), want %#x", mountPoint, st.Flags, err, wantFlags)
 	}
 }
 

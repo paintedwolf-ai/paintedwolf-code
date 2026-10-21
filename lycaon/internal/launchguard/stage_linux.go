@@ -67,6 +67,12 @@ func RunStage() error {
 	if err != nil {
 		return err
 	}
+	watchLifetime, err := startModuleViewWatcher(frame, entryImage)
+	if err != nil {
+		_ = leave()
+		return err
+	}
+	defer func() { _ = watchLifetime.Close() }()
 	viewed, err := reopenImage(spec.Generation, mounted)
 	if err != nil {
 		_ = leave()
@@ -74,12 +80,6 @@ func RunStage() error {
 	}
 	_ = mounted.Close()
 	mounted = viewed
-	watchLifetime, err := startModuleViewWatcher(frame, entryImage)
-	if err != nil {
-		_ = leave()
-		return err
-	}
-	defer func() { _ = watchLifetime.Close() }()
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -139,6 +139,12 @@ func startModuleViewWatcher(frame, entryImage *os.File) (*os.File, error) {
 		Env:        []string{},
 		Stderr:     os.Stderr,
 		ExtraFiles: []*os.File{frame, watchR, readyW, entryImage},
+		SysProcAttr: &syscall.SysProcAttr{
+			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+			UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappingsEnableSetgroups: true,
+		},
 	}
 	err = watcher.Start()
 	_ = watchR.Close()
@@ -154,6 +160,17 @@ func startModuleViewWatcher(frame, entryImage *os.File) (*os.File, error) {
 	if err != nil {
 		_ = watchW.Close()
 		return nil, fmt.Errorf("module view watcher did not become ready: %w", err)
+	}
+	viewNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", watcher.Process.Pid))
+	if err != nil {
+		_ = watchW.Close()
+		return nil, fmt.Errorf("open module view mount namespace: %w", err)
+	}
+	err = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
+	_ = viewNS.Close()
+	if err != nil {
+		_ = watchW.Close()
+		return nil, fmt.Errorf("enter module view mount namespace: %w", err)
 	}
 	return watchW, nil
 }

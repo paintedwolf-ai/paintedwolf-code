@@ -24,8 +24,9 @@ import (
 // library names it. Propagation stays receive-only (MS_SLAVE) so volumes
 // mounted after launch appear inside the desktop and engine, while the
 // module-view watcher marks each newly propagated mount noexec, nosuid and
-// nodev. The mounts are owned by the initial user namespace, so nothing inside
-// the protected namespace can clear the attribute.
+// nodev. The module view is cloned into the watcher's root-owned user namespace
+// after baseline noexec flags are applied, locking MNT_LOCK_NOEXEC across the
+// user-namespace boundary so neither the desktop nor the watcher can clear it.
 //
 // The broker agent keeps the launch's original mount namespace: programs it
 // starts outside the protected namespace keep the caller's ordinary authority,

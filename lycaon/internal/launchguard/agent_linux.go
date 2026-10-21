@@ -66,19 +66,17 @@ func RunBrokerAgent() error {
 	return nil
 }
 
-// runModuleViewWatcher runs inside the module view in the initial user
-// namespace as the caller's identity with only CAP_SYS_ADMIN and
-// CAP_DAC_READ_SEARCH retained, marking every mount propagated into the view
+// runModuleViewWatcher runs inside the module view in the root-owned user
+// namespace that owns M_view as the caller's identity with only
+// CAP_SYS_ADMIN and CAP_DAC_READ_SEARCH retained in that namespace (and none
+// in the initial user namespace), marking every mount propagated into the view
 // after launch noexec, nosuid and nodev until the launch ends.
 func runModuleViewWatcher(spec EntrySpec) error {
 	runtime.LockOSThread()
 	if gid, egid, sgid := unix.Getresgid(); gid != 0 || egid != 0 || sgid != 0 {
 		return errors.New("module view watcher requires administrator group identity")
 	}
-	if err := initialUserNamespace(); err != nil {
-		return err
-	}
-	if err := freshMountNamespace(); err != nil {
+	if err := watcherUserNamespace(); err != nil {
 		return err
 	}
 	for _, fd := range []int{watcherLifetimeFD, watcherReadyFD} {
@@ -108,11 +106,52 @@ const watcherCapabilityMask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << 
 
 func isModuleViewWatcher() bool {
 	uid, euid, suid := unix.Getresuid()
-	if uid != 0 || euid != 0 || suid != 0 {
+	if uid != 0 || euid != 0 || suid != 0 || initialUserNamespace() == nil {
 		return false
 	}
 	var stat unix.Stat_t
 	return unix.Fstat(watcherLifetimeFD, &stat) == nil && stat.Mode&unix.S_IFMT == unix.S_IFIFO
+}
+
+func watcherUserNamespace() error {
+	own, err := os.Open("/proc/self/ns/user")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = own.Close() }()
+	var ownStat, ownerStat unix.Stat_t
+	if err := unix.Fstat(int(own.Fd()), &ownStat); err != nil {
+		return err
+	}
+	if ownStat.Ino == 0xEFFFFFFD {
+		return errors.New("module view watcher must not run in the initial user namespace")
+	}
+	if owner, err := unix.IoctlGetInt(int(own.Fd()), unix.NS_GET_OWNER_UID); err != nil || owner != 0 {
+		return errors.New("module view watcher user namespace is not owned by the administrator")
+	}
+	// NS_GET_PARENT requires CAP_SYS_ADMIN in the parent user namespace; EPERM
+	// proves the watcher holds no capabilities in the initial user namespace.
+	if parentFD, err := unix.IoctlRetInt(int(own.Fd()), unix.NS_GET_PARENT); !errors.Is(err, unix.EPERM) {
+		if err == nil {
+			_ = unix.Close(parentFD)
+		}
+		return errors.New("module view watcher unexpectedly holds capabilities in its parent user namespace")
+	}
+	mnt, err := os.Open("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = mnt.Close() }()
+	ownerFD, err := unix.IoctlRetInt(int(mnt.Fd()), unix.NS_GET_USERNS)
+	if err != nil {
+		return err
+	}
+	err = unix.Fstat(ownerFD, &ownerStat)
+	_ = unix.Close(ownerFD)
+	if err != nil || ownerStat.Ino != ownStat.Ino {
+		return errors.New("module view watcher user namespace does not own the module view")
+	}
+	return nil
 }
 
 // sealModuleWatcher switches every OS thread of the watcher to the caller's
