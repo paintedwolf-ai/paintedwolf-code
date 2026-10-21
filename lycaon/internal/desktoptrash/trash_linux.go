@@ -57,7 +57,7 @@ func platformMove(path string) (Receipt, error) {
 		return Receipt{}, syncErr
 	}
 	receipt := Receipt{Path: filepath.Join(files, name), Metadata: infoPath}
-	err = fseffect.RelocateGuarded(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: files, Rel: name}, identity)
+	err = relocateLinuxEntry(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: files, Rel: name}, identity)
 	if err != nil {
 		if _, statErr := os.Lstat(path); statErr == nil {
 			_ = os.Remove(infoPath)
@@ -65,6 +65,10 @@ func platformMove(path string) (Receipt, error) {
 		return receipt, err
 	}
 	return receipt, nil
+}
+
+func restoreEntry(receipt Receipt, destination fseffect.Location) error {
+	return relocateLinuxEntry(fseffect.Location{Root: filepath.Dir(receipt.Path), Rel: filepath.Base(receipt.Path)}, destination, receipt.Identity)
 }
 
 // File managers decode the recorded path as a URL, so every byte outside the
@@ -77,7 +81,7 @@ func encodeTrashPath(path string) string {
 	return strings.Join(segments, "/")
 }
 
-// Trash stays on the selected volume; crossing devices must never turn deletion into a copy.
+// Trash stays on the selected mount; crossing mounts must never turn deletion into a copy.
 func linuxTrashFor(path string) (string, string, error) {
 	home, err := resolveLinuxTrashDir()
 	if err != nil {
@@ -86,33 +90,60 @@ func linuxTrashFor(path string) (string, string, error) {
 	if err := os.MkdirAll(filepath.Dir(home), 0700); err != nil {
 		return "", "", err
 	}
-	same, err := fspath.SameFilesystem(path, filepath.Dir(home))
+	entryDir, err := resolveMountDir(filepath.Dir(path))
+	if err != nil {
+		return "", "", err
+	}
+	homeDir, err := resolveMountDir(filepath.Dir(home))
+	if err != nil {
+		return "", "", err
+	}
+	same, err := sameMount(entryDir, homeDir)
 	if err != nil {
 		return "", "", err
 	}
 	if same {
 		return home, path, nil
 	}
-	top, err := volumeTop(path)
+	resolvedPath := filepath.Join(entryDir, filepath.Base(path))
+	top, err := volumeTop(resolvedPath)
 	if err != nil {
 		return "", "", err
 	}
-	relative, err := filepath.Rel(top, path)
+	relative, err := filepath.Rel(top, resolvedPath)
 	if err != nil {
 		return "", "", err
 	}
 	return volumeTrashDir(top), relative, nil
 }
 
-// volumeTop walks up to the highest directory on the entry's filesystem.
+// volumeTop resolves the enclosing mount point from /proc/self/mountinfo
+// matched by STATX_MNT_ID, matching GIO/GVFS and KIO mount discovery.
 func volumeTop(path string) (string, error) {
-	top := filepath.Dir(path)
+	dir, err := resolveMountDir(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	mntID, ok, err := statxMountID(dir)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		if top, found := mountPointFromProc(mntID, dir); found {
+			return top, nil
+		}
+	}
+	return volumeTopWalk(dir)
+}
+
+func volumeTopWalk(dir string) (string, error) {
+	top := dir
 	for {
 		parent := filepath.Dir(top)
 		if parent == top {
 			return top, nil
 		}
-		same, err := fspath.SameFilesystem(top, parent)
+		same, err := sameMount(top, parent)
 		if err != nil {
 			return "", err
 		}
