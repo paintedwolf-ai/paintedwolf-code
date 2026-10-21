@@ -350,6 +350,9 @@
     ],
     "test:linux:installed": [
       "test:linux:installed"
+    ],
+    "release:rehearse:linux-signing": [
+      "release:rehearse:linux-signing"
     ]
   },
   "private": [
@@ -374,6 +377,7 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
+    "release:rehearse:linux-signing": "passthrough",
     "den:test:rust": "fixed:desktop-settings-observer",
     "test:linux:installed": "passthrough"
   },
@@ -697,6 +701,12 @@
     },
     "test:linux:installed": {
       "locks": [],
+      "workers": 1
+    },
+    "release:rehearse:linux-signing": {
+      "locks": [
+        "linux-signing-fixture"
+      ],
       "workers": 1
     }
   },
