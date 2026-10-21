@@ -2,16 +2,14 @@ oar: '1.0'
 id: CHOWN_UNSUPPORTED
 kind: schema
 anchor: tool.rejected
-selector:
-  tool:
-  - chown
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.native_operation
   - paintedwolf.unsupported
-when: paintedwolf.rejection_code == "CHOWN_UNSUPPORTED"
+when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_UNSUPPORTED"
 effect: block
 copy:
   cause: The current platform has no supported native ownership operation.

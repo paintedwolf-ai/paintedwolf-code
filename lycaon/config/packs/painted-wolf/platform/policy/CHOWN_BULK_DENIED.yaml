@@ -2,18 +2,16 @@ oar: '1.0'
 id: CHOWN_BULK_DENIED
 kind: schema
 anchor: tool.rejected
-selector:
-  tool:
-  - chown
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.native_operation
   - paintedwolf.bulk_denied
   - paintedwolf.requested
   - paintedwolf.max_paths
-when: paintedwolf.rejection_code == "CHOWN_BULK_DENIED"
+when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_BULK_DENIED"
 effect: block
 copy:
   cause: The explicit path batch exceeds the per-call bound.

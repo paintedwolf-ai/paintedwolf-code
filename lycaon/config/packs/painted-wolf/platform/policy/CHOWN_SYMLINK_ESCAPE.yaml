@@ -2,17 +2,15 @@ oar: '1.0'
 id: CHOWN_SYMLINK_ESCAPE
 kind: schema
 anchor: tool.rejected
-selector:
-  tool:
-  - chown
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.native_operation
   - paintedwolf.path_escape
   - paintedwolf.path
-when: paintedwolf.rejection_code == "CHOWN_SYMLINK_ESCAPE"
+when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_SYMLINK_ESCAPE"
 effect: block
 copy:
   cause: The resolved target leaves the workspace or write scope.

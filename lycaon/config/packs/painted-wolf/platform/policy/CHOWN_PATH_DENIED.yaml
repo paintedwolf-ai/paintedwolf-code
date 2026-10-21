@@ -2,17 +2,15 @@ oar: '1.0'
 id: CHOWN_PATH_DENIED
 kind: schema
 anchor: tool.rejected
-selector:
-  tool:
-  - chown
 requires:
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.native_operation
   - paintedwolf.path
   profiles:
   - filesystem
   - tool
-when: paintedwolf.rejection_code == "CHOWN_PATH_DENIED"
+when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_PATH_DENIED"
 effect: block
 copy:
   cause: The target crosses a host write-protection boundary.
