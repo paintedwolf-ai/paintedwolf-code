@@ -19,7 +19,7 @@ class HostedPlanTests(unittest.TestCase):
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk", "confinement-arm64", "nix"})
+                                   "webkit-gtk", "confinement-arm64", "nix", "nix-confine"})
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
@@ -147,24 +147,31 @@ class HostedPlanTests(unittest.TestCase):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
-                    self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
+                    lane = ci.lanes()[row["lane"]]
+                    self.assertEqual(row["browser"], "test:confine:linux" in lane["targets"]
+                                     and "browser" in lane.get("arguments", ["browser"]))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
     def test_nix_lane_follows_nix_sources_and_provisions_nix_before_running_offline(self):
         def lanes(paths, full):
             return {row["lane"] for row in ci.matrix("integration", scope=dict(full=full, paths=paths),
                                                        platform=True)["include"]}
-        for path in ("packaging/nix/shell.nix", "flake.lock", "default.nix", "scripts/linux_release/nix.py"):
+        for path in ("packaging/nix/shell.nix", "flake.lock", "scripts/linux_release/nix.py"):
             with self.subTest(path=path):
-                self.assertIn("nix", lanes([path], True))
+                self.assertLessEqual({"nix", "nix-confine"}, lanes([path], True))
+        self.assertEqual({"nix", "nix-confine"} & lanes(["default.nix"], True), {"nix"})
         self.assertNotIn("nix", lanes(["scripts/ci_policy/impact.py"], True))
+        self.assertNotIn("nix-confine", lanes(["scripts/ci_policy/impact.py"], True))
         self.assertNotIn("nix", lanes(["lycaon/internal/confine/boundary_linux.go"], False))
         # A narrow change still runs the path-selected lanes its paths name.
         self.assertIn("nix", lanes(["scripts/linux_release/nix_runner.py"], False))
+        # The confined Nix suites follow the sandbox and Nix authority sources, not the package graph alone.
+        self.assertIn("nix-confine", lanes(["lycaon/internal/confine/nix_workflows_linux_test.go"], False))
         for profile in ("nightly", "release"):
-            rows = [row for row in ci.matrix(profile)["include"] if row["lane"] == "nix"]
-            self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
-        self.assertEqual({row["lane"] for row in ci.matrix("integration")["include"] if row["nix"]}, {"nix"})
+            rows = [row for row in ci.matrix(profile)["include"] if row["lane"] in ("nix", "nix-confine")]
+            self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False), (True, False)])
+        self.assertEqual({row["lane"] for row in ci.matrix("integration")["include"] if row["nix"]},
+                         {"nix", "nix-confine"})
 
     def test_path_selection_and_lane_arguments_are_explicit(self):
         for mutation in ("unplatformed", "empty", "absolute", "arguments-many-targets", "arguments-empty"):

@@ -51,6 +51,14 @@ run_leg() {
   local browser
   case "$1" in
     nix)
+      if ! command -v nix >/dev/null; then
+        echo "test:confine:linux: unverified: the Nix leg needs an installed Nix" >&2
+        return 2
+      fi
+      # The suites read the exact store tools of this checkout's locked workflow fixture.
+      local fixture
+      fixture="$(cd "${ROOT}" && python3 -m scripts.linux_release.nix_fixture)" || return 1
+      eval "${fixture}"
       bash "${ROOT}/scripts/go-test-digest.sh" --full --tags nixworkflow --name test:confine:linux-nix -- ./internal/confine -run '^TestLinuxNix' -count=1
       ;;
     sandbox)
