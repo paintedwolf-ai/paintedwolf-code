@@ -290,6 +290,10 @@ This control establishes a safer downloaded-code boundary; it is not package pro
 
 External access is compiled before spawn or held before dial. The host distinguishes destination authority from filesystem authority and from the tool surface itself.
 
+### TLS trust
+
+The engine's own TLS connections, including model providers, web research and updates, trust the operating system's certificate store. On Linux the engine ignores `SSL_CERT_FILE` and `SSL_CERT_DIR` for itself, because any same-user process can set a session's environment and would otherwise choose the engine's trust anchors; macOS's platform verifier ignores them already. Commands and tools the engine starts still receive both variables unchanged. A private or enterprise certificate authority belongs in the system store (`update-ca-certificates`, `update-ca-trust`, or the distribution's equivalent), which also covers Git: its network invocations use the system bundle through `GIT_SSL_CAINFO`, which outranks a repository's `http.sslCAInfo`, so project content cannot choose the anchors a credentialed push trusts.
+
 ### Direct IP
 
 Direct IP authority is chat-scoped because the broker cannot describe the eventual host-level destinations. Approval copy states that limitation. The person reviews the capability, not a destination, so declared destinations narrow one invocation's boundary rather than the chat's approval. Direct networking includes the local network and local listeners; it does not grant a filesystem path, a local service socket, or an external service identity.
