@@ -47,6 +47,7 @@ type ProposedAction struct {
 
 // ActionInvocation captures tool invocation facts.
 type ActionInvocation struct {
+	NativeInputs  *NativeActionInputs `json:"-"`
 	BoundStages   []toolcontract.ExecutionStage
 	Tool          string
 	Args          map[string]any

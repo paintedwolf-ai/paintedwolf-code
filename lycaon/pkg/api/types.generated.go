@@ -1276,20 +1276,22 @@ type CodeScanPage struct {
 
 // CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
 type CommandExecutionReceipt struct {
-	ID                      string   `json:"id"`
-	ProgramID               string   `json:"program_id"`
-	NodeID                  string   `json:"node_id"`
-	ParentExecutionID       string   `json:"parent_execution_id"`
-	Owner                   string   `json:"owner"`
-	Lifecycle               string   `json:"lifecycle"`
-	DefinitionDigest        string   `json:"definition_digest"`
-	ArgumentsDigest         string   `json:"arguments_digest"`
-	ReviewedArgumentsDigest string   `json:"reviewed_arguments_digest,omitempty"`
-	ReviewedArgumentsRef    string   `json:"reviewed_arguments_ref,omitempty"`
-	NativeCommand           string   `json:"native_command,omitempty"`
-	EffectMode              string   `json:"effect_mode,omitempty"`
-	EffectClasses           []string `json:"effect_classes,omitempty"`
-	ArgumentsRef            string   `json:"arguments_ref"`
+	ID                              string   `json:"id"`
+	ProgramID                       string   `json:"program_id"`
+	NodeID                          string   `json:"node_id"`
+	ParentExecutionID               string   `json:"parent_execution_id"`
+	Owner                           string   `json:"owner"`
+	Lifecycle                       string   `json:"lifecycle"`
+	DefinitionDigest                string   `json:"definition_digest"`
+	ArgumentsRepresentation         string   `json:"arguments_representation,omitempty"`
+	ArgumentsDigest                 string   `json:"arguments_digest"`
+	ReviewedArgumentsRepresentation string   `json:"reviewed_arguments_representation,omitempty"`
+	ReviewedArgumentsDigest         string   `json:"reviewed_arguments_digest,omitempty"`
+	ReviewedArgumentsRef            string   `json:"reviewed_arguments_ref,omitempty"`
+	NativeCommand                   string   `json:"native_command,omitempty"`
+	EffectMode                      string   `json:"effect_mode,omitempty"`
+	EffectClasses                   []string `json:"effect_classes,omitempty"`
+	ArgumentsRef                    string   `json:"arguments_ref"`
 	// Compact display only. Not authority or replay input.
 	Command string `json:"command"`
 	State   string `json:"state"`
@@ -1373,14 +1375,15 @@ type CommandProgramNode struct {
 
 // CommandProgramProgressReceipt Existing progress owner's envelope invocation, independent of shell effects.
 type CommandProgramProgressReceipt struct {
-	ExecutionID     string `json:"execution_id"`
-	ProgramID       string `json:"program_id"`
-	RootSessionID   string `json:"root_session_id"`
-	State           string `json:"state"`
-	OwnerInvoked    bool   `json:"owner_invoked"`
-	ArgumentsDigest string `json:"arguments_digest"`
-	ArgumentsRef    string `json:"arguments_ref"`
-	DetailRef       string `json:"detail_ref"`
+	ExecutionID             string `json:"execution_id"`
+	ProgramID               string `json:"program_id"`
+	RootSessionID           string `json:"root_session_id"`
+	State                   string `json:"state"`
+	OwnerInvoked            bool   `json:"owner_invoked"`
+	ArgumentsRepresentation string `json:"arguments_representation,omitempty"`
+	ArgumentsDigest         string `json:"arguments_digest"`
+	ArgumentsRef            string `json:"arguments_ref"`
+	DetailRef               string `json:"detail_ref"`
 }
 
 // CommandProgramReceipt

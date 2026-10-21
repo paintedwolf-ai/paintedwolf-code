@@ -34,7 +34,11 @@ components:
         owner: {type: string}
         lifecycle: {type: string}
         definition_digest: {type: string}
+        arguments_representation:
+          type: string
         arguments_digest: {type: string}
+        reviewed_arguments_representation:
+          type: string
         reviewed_arguments_digest: {type: string}
         reviewed_arguments_ref: {type: string}
         native_command: {type: string}
@@ -111,6 +115,8 @@ components:
         root_session_id: {type: string, format: uuid}
         state: {type: string, enum: [running, unchanged, committed, rejected, unknown]}
         owner_invoked: {type: boolean}
+        arguments_representation:
+          type: string
         arguments_digest: {type: string}
         arguments_ref: {type: string}
         detail_ref: {type: string}

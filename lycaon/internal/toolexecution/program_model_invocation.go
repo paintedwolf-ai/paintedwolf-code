@@ -30,6 +30,8 @@ type ProgramModelObservation struct {
 type programFrameLifetime struct {
 	mu        sync.Mutex
 	closed    bool
+	active    int
+	facts     programFrameFacts
 	model     ProgramModelObservation
 	arguments *nativeArguments
 	releases  []func()
@@ -52,7 +54,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		bound += int64(len(value)) * 8
 		return true
 	}
-	for _, value := range []string{parent.ActorID, parent.SessionID, parent.SourceUnitID, parent.CatalogDigest, parent.Identity.ProgramID, parent.Identity.NodeID, parent.Identity.ExecutionID, parent.Identity.ParentExecutionID, parent.Scope.ProjectID, parent.Scope.RootID, parent.Scope.BranchID, parent.Scope.Directory, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID, tc.Identity.MessageID, tc.Identity.Agent, tc.Source.WorkerBranchRoot, tc.Turn.TurnSurfaceID} {
+	for _, value := range []string{parent.ActorID, parent.SessionID, parent.SourceUnitID, parent.CatalogDigest, parent.Identity.ProgramID, parent.Identity.NodeID, parent.Identity.ExecutionID, parent.Identity.ParentExecutionID, parent.Scope.ProjectID, parent.Scope.RootID, parent.Scope.BranchID, parent.Scope.Directory, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID, tc.Identity.MessageID, tc.Identity.Agent, tc.Identity.WorkerJobID, tc.Identity.ParentSessionID, tc.Identity.RootSessionID, tc.Identity.HandoffSessionID, tc.Identity.HandoffAgentID, tc.Source.WorkerBranchRoot, tc.Turn.TurnSurfaceID} {
 		if !add(value) {
 			return nil, fmt.Errorf("program frame scalar bound overflow")
 		}
@@ -148,6 +150,15 @@ func (l *programFrameLifetime) close() {
 		return
 	}
 	l.closed = true
+	if l.active > 0 {
+		return
+	}
+	l.clear()
+}
+
+// clear runs under the lifetime lock after all admitted uses have finished.
+func (l *programFrameLifetime) clear() {
+	l.facts = programFrameFacts{}
 	l.model = ProgramModelObservation{}
 	if l.arguments != nil {
 		l.arguments.close()
@@ -185,4 +196,32 @@ func modelJSONUTF8(value any) bool {
 		}
 	}
 	return true
+}
+
+// beginUse retains the actual frame facts throughout one admission/owner call.
+// Close denies new uses immediately, but releases quota only after active uses
+// return. Shared maps are cleared under that same lifetime before release.
+func (f ProgramFrame) beginUse() (func(), error) {
+	if f.lifetime == nil {
+		return nil, fmt.Errorf("uncaptured program frame")
+	}
+	l := f.lifetime
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return nil, fmt.Errorf("program frame is closed")
+	}
+	l.active++
+	l.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			l.active--
+			if l.closed && l.active == 0 {
+				l.clear()
+			}
+		})
+	}, nil
 }

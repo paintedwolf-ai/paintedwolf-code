@@ -13,7 +13,14 @@ func applyToolApprovalRequest(row *StoredCheckpoint, req CheckpointRequest) erro
 		return fmt.Errorf("proposed_action required for tool_approval")
 	}
 	row.ToolName = observability.RedactCaptureText(req.ProposedAction.Invocation.Tool)
-	if scrubbed, ok := observability.RedactCaptureValue(req.ProposedAction.Invocation.Args).(map[string]any); ok {
+	if req.ProposedAction.Invocation.NativeInputs != nil {
+		inspection, err := req.ProposedAction.Invocation.NativeInputs.Inspection()
+		if err != nil {
+			return err
+		}
+		row.Args = inspection
+		row.Payload["native_arguments_representation"] = inspection["representation"]
+	} else if scrubbed, ok := observability.RedactCaptureValue(req.ProposedAction.Invocation.Args).(map[string]any); ok {
 		row.Args = scrubbed
 	}
 	row.Files = append([]string(nil), req.ProposedAction.Invocation.Files...)
@@ -21,6 +28,12 @@ func applyToolApprovalRequest(row *StoredCheckpoint, req CheckpointRequest) erro
 		row.Files[i] = observability.RedactCaptureText(row.Files[i])
 	}
 	row.ProjectDir = observability.RedactCaptureText(req.ProposedAction.Scope.ProjectDir)
+	if req.ProposedAction.Invocation.NativeInputs != nil {
+		for i := range row.Files {
+			row.Files[i] = reviewDisplayText(row.Files[i])
+		}
+		row.ProjectDir = reviewDisplayText(row.ProjectDir)
+	}
 	row.Description = observability.RedactCaptureText(row.Description)
 	if req.ToolCallID != "" {
 		row.Payload["tool_call_id"] = req.ToolCallID

@@ -25,6 +25,11 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if err = p.validate(ctx); err != nil {
 		return result, err
 	}
+	end, err := p.frame.beginUse()
+	if err != nil {
+		return result, err
+	}
+	defer end()
 	if p.update == nil {
 		return result, nil
 	}
@@ -108,7 +113,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	}
 	result.Identity = p.identity
 	result.Identity.RootSessionID = current.RootSessionID
-	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest
+	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
 	p.attempted = true
 	if err = observer.BeforeProgressOwner(ctx, result.Identity, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err

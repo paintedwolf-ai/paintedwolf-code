@@ -2,7 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -15,22 +14,11 @@ func admitReviewedOperationInputs(ctx context.Context, admission ProgramStateAdm
 	if err != nil {
 		return nil, toolcontract.ReviewedOperationInputs{}, err
 	}
-	reviewed, err := freezeReviewedOperationInputs(snapshot.values)
+	reviewed, release, err := toolcontract.NewReviewedOperationInputs(ctx, admission, snapshot.values)
 	if err != nil {
 		snapshot.close()
 		return nil, toolcontract.ReviewedOperationInputs{}, err
 	}
+	snapshot.leases = append(snapshot.leases, release)
 	return snapshot, reviewed, nil
-}
-
-func freezeReviewedOperationInputs(canonical map[string]any) (toolcontract.ReviewedOperationInputs, error) {
-	encoded, err := authzcontext.CanonicalJSON(canonical)
-	if err != nil {
-		return toolcontract.ReviewedOperationInputs{}, err
-	}
-	digest, err := authzcontext.CanonicalDigest(canonical)
-	if err != nil {
-		return toolcontract.ReviewedOperationInputs{}, err
-	}
-	return toolcontract.ReviewedOperationInputs{ArgumentsDigest: digest, CanonicalArguments: string(encoded)}, nil
 }

@@ -195,8 +195,7 @@ func (p *Projector) JSON(ctx context.Context, scope Scope, label string, raw []b
 		}
 		return nil, Metadata{}, fmt.Errorf("decode captured JSON trailer: %w", err)
 	}
-	meta := Metadata{StructuredCoverage: true}
-	projected, err := p.projectJSONValue(ctx, scope, label, value, &meta)
+	projected, meta, err := p.Value(ctx, scope, label, value)
 	if err != nil {
 		return nil, Metadata{}, err
 	}
@@ -249,8 +248,10 @@ func (p *Projector) projectJSONValue(
 			out[safeKey] = projected
 		}
 		return out, nil
-	default:
+	case nil, bool, json.Number:
 		return value, nil
+	default:
+		return nil, fmt.Errorf("unsupported captured value type %T", value)
 	}
 }
 

@@ -14,13 +14,14 @@ import (
 // It carries no grants: people, confinement, revision and content-review owners
 // must still admit each reached effect. ActorID comes from the host's captured
 // invocation, never curator/debug metadata or a model-supplied argument.
-type ProgramFrame struct {
+type ProgramFrame struct{ lifetime *programFrameLifetime }
+
+type programFrameFacts struct {
 	parent     toolcontract.OperationInvocation
 	identity   tools.InvocationIdentity
 	roots      map[string]programRoot
 	workerRoot string
 	surfaceID  string
-	lifetime   *programFrameLifetime
 }
 
 type programRoot struct {
@@ -47,19 +48,20 @@ func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvoca
 			lifetime.close()
 		}
 	}()
-	frame := ProgramFrame{lifetime: lifetime, parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot, surfaceID: tc.Turn.TurnSurfaceID}
+	lifetime.facts = programFrameFacts{parent: parent, identity: tc.Identity, roots: map[string]programRoot{}, workerRoot: tc.Source.WorkerBranchRoot, surfaceID: tc.Turn.TurnSurfaceID}
+	frame := ProgramFrame{lifetime: lifetime}
 	for _, root := range tc.Source.Roots {
 		if root.ID == "" || root.Path == "" {
 			return ProgramFrame{}, fmt.Errorf("program frame requires addressed root identity")
 		}
-		if _, exists := frame.roots[root.ID]; exists {
+		if _, exists := frame.lifetime.facts.roots[root.ID]; exists {
 			return ProgramFrame{}, fmt.Errorf("duplicate addressed program root")
 		}
 		branch, err := tc.SourceBranch(root.ID)
 		if err != nil {
 			return ProgramFrame{}, err
 		}
-		frame.roots[root.ID] = programRoot{root: root, branch: branch}
+		frame.lifetime.facts.roots[root.ID] = programRoot{root: root, branch: branch}
 	}
 	if err := frame.validateScope(parent.Scope, tc); err != nil {
 		return ProgramFrame{}, err
@@ -69,16 +71,21 @@ func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvoca
 }
 
 func (f ProgramFrame) validateScope(scope toolcontract.OperationScope, tc tools.ToolContext) error {
+	end, err := f.beginUse()
+	if err != nil {
+		return err
+	}
+	defer end()
 	if err := f.alive(); err != nil {
 		return err
 	}
-	if scope.Kind != f.parent.Scope.Kind || scope.ProjectID != f.parent.Scope.ProjectID {
+	if scope.Kind != f.lifetime.facts.parent.Scope.Kind || scope.ProjectID != f.lifetime.facts.parent.Scope.ProjectID {
 		return fmt.Errorf("program scope changed")
 	}
 	if scope.Kind == toolcontract.SessionOperationScope {
 		return nil
 	}
-	pinned, ok := f.roots[scope.RootID]
+	pinned, ok := f.lifetime.facts.roots[scope.RootID]
 	if !ok {
 		return fmt.Errorf("program root was not captured")
 	}
@@ -113,13 +120,18 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 }
 
 func (f ProgramFrame) childContext(ctx context.Context, name string, contract toolcontract.Contract, child toolcontract.OperationInvocation, tc tools.ToolContext) (tools.ToolContext, error) {
+	end, err := f.beginUse()
+	if err != nil {
+		return tools.ToolContext{}, err
+	}
+	defer end()
 	if err := ctx.Err(); err != nil {
 		return tools.ToolContext{}, err
 	}
 	if err := child.Validate(); err != nil {
 		return tools.ToolContext{}, err
 	}
-	if f.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.parent.Identity.ProgramID || child.ActorID != f.parent.ActorID || child.SessionID != f.parent.SessionID || child.CatalogDigest != f.parent.CatalogDigest {
+	if f.lifetime.facts.parent.Identity.ProgramID == "" || child.Kind != toolcontract.ProgramChildInvocation || child.Identity.ProgramID != f.lifetime.facts.parent.Identity.ProgramID || child.ActorID != f.lifetime.facts.parent.ActorID || child.SessionID != f.lifetime.facts.parent.SessionID || child.CatalogDigest != f.lifetime.facts.parent.CatalogDigest {
 		return tools.ToolContext{}, fmt.Errorf("program child attribution changed")
 	}
 	if err := f.validateScope(child.Scope, tc); err != nil {
@@ -132,13 +144,18 @@ func (f ProgramFrame) childContext(ctx context.Context, name string, contract to
 }
 
 func (f ProgramFrame) validateHostContext(ctx context.Context, tc tools.ToolContext) error {
+	end, err := f.beginUse()
+	if err != nil {
+		return err
+	}
+	defer end()
 	if err := f.alive(); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if tc.Identity != f.identity || tc.Source.WorkerBranchRoot != f.workerRoot || tc.Turn.TurnSurfaceID != f.surfaceID {
+	if tc.Identity != f.lifetime.facts.identity || tc.Source.WorkerBranchRoot != f.lifetime.facts.workerRoot || tc.Turn.TurnSurfaceID != f.lifetime.facts.surfaceID {
 		return fmt.Errorf("program host attribution changed")
 	}
 	return tools.ValidateWorkerBranch(ctx, tc)

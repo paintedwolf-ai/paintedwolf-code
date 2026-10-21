@@ -41,15 +41,18 @@ func TestEffectPermitMigrationPreservesStructuredIdentity(t *testing.T) {
 
 func TestEffectPermitMigrationRefusesUnknownAuthorityShapes(t *testing.T) {
 	for name, input := range map[string]string{
-		"unknown kind":       strings.Replace(retainedOnceFixture, `"socket_permit"`, `"future_permit"`, 1),
-		"unknown field":      strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","future_grant":true`, 1),
-		"native identity":    strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","execution_id":"child"`, 1),
-		"empty new identity": strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","execution_id":""`, 1),
-		"missing parent":     strings.Replace(retainedOnceFixture, `"tool_call_id":"actual-call",`, "", 1),
-		"empty options":      `{"approval_plan":{"id":"plan","action_digest":"digest","stage":"pre_dial","recommended_option_id":"once","options":[]}}`,
-		"unknown socket":     strings.Replace(retainedOnceFixture, `"approved_path":"/tmp/fixture.sock"`, `"approved_path":"/tmp/fixture.sock","future_path":"/tmp/other.sock"`, 1),
-		"wrong socket type":  strings.Replace(retainedOnceFixture, `"approved_path":"/tmp/fixture.sock"`, `"approved_path":42`, 1),
-		"unknown plan":       strings.Replace(retainedOnceFixture, `"id":"plan"`, `"id":"plan","future_release":true`, 1),
+		"native review marker":  `{"native_arguments_representation":"operation_arguments_v1"}`,
+		"unknown native marker": `{"native_arguments_representation":"future"}`,
+		"native marker null":    `{"native_arguments_representation":null}`,
+		"unknown kind":          strings.Replace(retainedOnceFixture, `"socket_permit"`, `"future_permit"`, 1),
+		"unknown field":         strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","future_grant":true`, 1),
+		"native identity":       strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","execution_id":"child"`, 1),
+		"empty new identity":    strings.Replace(retainedOnceFixture, `"kind":"socket_permit"`, `"kind":"socket_permit","execution_id":""`, 1),
+		"missing parent":        strings.Replace(retainedOnceFixture, `"tool_call_id":"actual-call",`, "", 1),
+		"empty options":         `{"approval_plan":{"id":"plan","action_digest":"digest","stage":"pre_dial","recommended_option_id":"once","options":[]}}`,
+		"unknown socket":        strings.Replace(retainedOnceFixture, `"approved_path":"/tmp/fixture.sock"`, `"approved_path":"/tmp/fixture.sock","future_path":"/tmp/other.sock"`, 1),
+		"wrong socket type":     strings.Replace(retainedOnceFixture, `"approved_path":"/tmp/fixture.sock"`, `"approved_path":42`, 1),
+		"unknown plan":          strings.Replace(retainedOnceFixture, `"id":"plan"`, `"id":"plan","future_release":true`, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := structuredEffectPermitPayload([]byte(input)); err == nil {

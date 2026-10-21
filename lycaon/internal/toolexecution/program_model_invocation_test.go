@@ -66,3 +66,26 @@ func TestProgramFrameModelCaptureRefusesBeforeRetention(t *testing.T) {
 		t.Fatal("invalid addressed roots retained frame")
 	}
 }
+
+func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
+	parent, tc := frameFixture(t)
+	memory := &stageAdmissionFixture{}
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, memory)
+	testutil.FailErr(t, "capture frame", err)
+	end, err := frame.beginUse()
+	testutil.FailErr(t, "hold actual owner lifetime", err)
+	closed := make(chan struct{})
+	go func() { frame.Close(); close(closed) }()
+	<-closed
+	if memory.held == 0 || len(frame.lifetime.facts.roots) == 0 {
+		t.Fatal("Close released facts during an admitted use")
+	}
+	if _, err := frame.beginUse(); err == nil {
+		t.Fatal("Close admitted a new use")
+	}
+	end()
+	end()
+	if memory.held != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" {
+		t.Fatal("drained frame retained unaccounted facts")
+	}
+}

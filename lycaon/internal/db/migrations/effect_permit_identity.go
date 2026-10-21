@@ -71,6 +71,9 @@ func structuredEffectPermitPayload(raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {
 		return nil, fmt.Errorf("payload must be an object")
 	}
+	if _, present := payload["native_arguments_representation"]; present {
+		return nil, fmt.Errorf("revision4 cannot assert native argument representation")
+	}
 	encoded, ok := payload["approval_plan"]
 	if !ok {
 		return nil, nil

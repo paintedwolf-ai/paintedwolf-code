@@ -26,7 +26,10 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		return nil, fmt.Errorf("gate decision required")
 	}
 	action := *req.ProposedAction
-	displayAction := redactedApprovalAction(action)
+	displayAction, err := redactedApprovalAction(action)
+	if err != nil {
+		return nil, err
+	}
 	title := observability.RedactCaptureText(req.Title)
 	stage := ApprovalStagePreSpawn
 	subject := genericApprovalSubject(displayAction, title)
@@ -170,7 +173,7 @@ func sentenceCase(s string) string {
 	return string(unicode.ToUpper(r)) + s[size:]
 }
 
-func redactedApprovalAction(action ProposedAction) ProposedAction {
+func redactedApprovalAction(action ProposedAction) (ProposedAction, error) {
 	action.Invocation.Tool = observability.RedactCaptureText(action.Invocation.Tool)
 	action.Presentation.PresentationTool = observability.RedactCaptureText(action.Presentation.PresentationTool)
 	action.Presentation.Command = observability.RedactCaptureText(action.Presentation.Command)
@@ -187,7 +190,19 @@ func redactedApprovalAction(action ProposedAction) ProposedAction {
 	if scrubbed, ok := observability.RedactCaptureValue(action.Invocation.Args).(map[string]any); ok {
 		action.Invocation.Args = scrubbed
 	}
-	return action
+	if action.Invocation.NativeInputs != nil {
+		inspection, err := action.Invocation.NativeInputs.Inspection()
+		if err != nil {
+			return ProposedAction{}, err
+		}
+		action.Invocation.Args = inspection
+		action.Presentation.Command = reviewDisplayText(action.Presentation.Command)
+		action.Scope.ProjectDir = reviewDisplayText(action.Scope.ProjectDir)
+		for i := range action.Invocation.Files {
+			action.Invocation.Files[i] = reviewDisplayText(action.Invocation.Files[i])
+		}
+	}
+	return action, nil
 }
 
 // redactedFileChanges screens the text and paths a person reads. Sizes and

@@ -40,7 +40,7 @@ func TestReviewedInputsFreezeFinalObjectAndReleaseEncodingFailure(t *testing.T) 
 	snapshot, reviewed, err := admitReviewedOperationInputs(t.Context(), admission, input)
 	testutil.FailErr(t, "freeze final review", err)
 	input["path"] = "caller changed"
-	if snapshot.values["path"] != "reviewed" || !strings.Contains(reviewed.CanonicalArguments, `"path":"reviewed"`) || !strings.Contains(reviewed.CanonicalArguments, "9007199254740993") || len(reviewed.ArgumentsDigest) != 64 {
+	if snapshot.values["path"] != "reviewed" || !strings.Contains(reviewed.CanonicalArguments(), `["utf8","reviewed"]`) || !strings.Contains(reviewed.CanonicalArguments(), "9007199254740993") || len(reviewed.ArgumentsDigest()) != 64 {
 		t.Fatal("final reviewed object lost immutable value identity")
 	}
 	snapshot.close()

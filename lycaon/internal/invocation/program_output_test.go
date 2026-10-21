@@ -30,7 +30,7 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	f := newProgramReceiptFixture(t)
 	_, err := f.database.ExecContext(t.Context(), `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "prepare fresh actual parent", err)
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir()})
+	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	quota := &outputQuota{}
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("${op} arg"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: f.program, MaximumBytes: 64, PreviewBytes: 3, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain screened exact submitted source", err)
@@ -60,6 +60,16 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	testutil.FailErr(t, "inspect host executions", f.database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, f.program).Scan(&children))
 	if children != 0 {
 		t.Fatal("source retention fabricated a child")
+	}
+	// A mistaken/ambiguous cleanup attempt must preserve the very marker
+	// required by boot reconstruction while SQL still names this attachment.
+	if err = body.Close(); err == nil {
+		t.Fatal("durable source allowed premature close")
+	}
+	claimed, err := store.HasRetentionClaim(claim, body.Reference().Blob.ID)
+	testutil.FailErr(t, "keep exact marker after durable close refusal", err)
+	if !claimed || quota.disk != 1 || quota.state != 1 {
+		t.Fatal("durable close stranded recovery claim or accounting")
 	}
 	// Simulate a new process's accounting. Restore uses the SAME durable claim;
 	// it neither renews it nor manufactures producer completion from readable bytes.

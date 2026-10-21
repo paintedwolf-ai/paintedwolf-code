@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -99,5 +100,49 @@ func TestBodyTransferPreservesExactClaimAndLeasesAfterDurableAttachment(t *testi
 	testutil.FailErr(t, "collect transferred body", token.Close())
 	if q.disk != 0 || q.state != 0 {
 		t.Fatalf("transferred leases leaked %+v", q)
+	}
+}
+
+func TestDurableReferenceClosePreservesActualClaimUntilReleased(t *testing.T) {
+	for _, callbackFailure := range []bool{false, true} {
+		t.Run(fmt.Sprint(callbackFailure), func(t *testing.T) {
+			retained := true
+			cause := errors.New("fixture durable reference unavailable")
+			store := blobstore.Store{Root: t.TempDir(), Dir: ToolOutputSpillDir, Retained: func(string) (bool, error) {
+				if callbackFailure {
+					return false, cause
+				}
+				return retained, nil
+			}}
+			quota := &referenceQuota{}
+			spill := referenceSpill(t, store, quota)
+			body, err := spill.TransferBody(t.Context(), func(context.Context, RetainedStreamReference) error { return nil })
+			testutil.FailErr(t, "attach original body claim", err)
+			reference := body.Reference()
+			err = body.Close()
+			if err == nil || (callbackFailure && !errors.Is(err, cause)) {
+				t.Fatalf("durable reference did not stop collection: %v", err)
+			}
+			claimed, err := store.HasRetentionClaim(reference.RetentionClaimID, reference.Blob.ID)
+			testutil.FailErr(t, "inspect exact original marker", err)
+			if !claimed || quota.disk != 1 || quota.state != 1 {
+				t.Fatalf("refused collection changed claim or quota: claimed=%v quota=%+v", claimed, quota)
+			}
+			if reader, err := body.Open(t.Context()); err == nil {
+				_ = reader.Close()
+				t.Fatal("closing body reopened")
+			}
+			retained = false
+			callbackFailure = false
+			testutil.FailErr(t, "collect after durable owner releases reference", body.Close())
+			claimed, err = store.HasRetentionClaim(reference.RetentionClaimID, reference.Blob.ID)
+			testutil.FailErr(t, "inspect released marker", err)
+			if claimed {
+				t.Fatal("released durable body retained its old marker")
+			}
+			if quota.disk != 0 || quota.state != 0 {
+				t.Fatalf("released reference leaked accounting %+v", quota)
+			}
+		})
 	}
 }

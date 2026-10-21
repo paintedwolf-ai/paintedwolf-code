@@ -45,11 +45,14 @@ type ChildStart struct {
 	Invocation         toolcontract.OperationInvocation
 	Definition         toolcontract.OperationDefinition
 	ArgumentsReference string
-	ArgumentsDigest    string
+	ExpandedInputs     toolcontract.ReviewedOperationInputs
 	Canonical          string
 }
 
 func (c ChildStart) Validate() error {
+	if err := validateReviewedInputs(c.ExpandedInputs); err != nil {
+		return err
+	}
 	if c.ParentReceiptID == "" || c.Invocation.Kind != toolcontract.ProgramChildInvocation {
 		return fmt.Errorf("child receipt requires an actual parent and host execution identity")
 	}
@@ -60,12 +63,8 @@ func (c ChildStart) Validate() error {
 	if c.Definition.Digest() == "" || facts.CatalogDigest != c.Invocation.CatalogDigest {
 		return fmt.Errorf("child receipt requires its frozen offered definition")
 	}
-	if c.ArgumentsReference == "" || len(c.ArgumentsDigest) != 64 {
+	if c.ArgumentsReference == "" {
 		return fmt.Errorf("child receipt requires retained expanded-input identity")
-	}
-	var digest [32]byte
-	if _, err := hex.Decode(digest[:], []byte(c.ArgumentsDigest)); err != nil {
-		return fmt.Errorf("expanded input digest: %w", err)
 	}
 	return nil
 }
