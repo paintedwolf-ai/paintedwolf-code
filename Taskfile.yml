@@ -129,6 +129,7 @@ tasks:
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
+      - scripts/toolchain/rust-path-remap.sh
     generates:
       - '{{.BUILD_DIR}}/bialy'
     preconditions:
@@ -369,6 +370,11 @@ tasks:
       - |
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+
+  test:linux:installed:
+    desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
+    cmds:
+      - python3 -m scripts.linux_release.installed_results {{.CLI_ARGS}}
 
   test:confine:linux:
     desc: 'Applied Linux confinement on this architecture: confine live suites, command supervisor, confined pinned browser (--full, linux; optional legs, e.g. -- browser)'
@@ -627,8 +633,21 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-      - cargo test --workspace --all-targets --quiet
+      - |
+        component='{{.CLI_ARGS}}'
+        case "$component" in
+          "")
+            bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
+            cargo test --workspace --all-targets --quiet
+            ;;
+          desktop-settings-observer)
+            cargo test --package desktop-settings-observer --all-targets --quiet
+            retained="$(mktemp -d '{{.ARTIFACT_DIR}}/desktop-settings-component.XXXXXX')"
+            cp Cargo.lock "$retained/Cargo.lock"
+            echo "Desktop settings component lock retained at $retained/Cargo.lock"
+            ;;
+          *) echo "unsupported Rust test component" >&2; exit 2 ;;
+        esac
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
@@ -1011,7 +1030,7 @@ tasks:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
     cmds:
-      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
+      - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
@@ -1431,6 +1450,26 @@ tasks:
         --out-reserved-ts ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
         --check
 
+  codegen:browser-driver:
+    desc: Regenerate the browser page driver embedded by the host
+    sources:
+      - Taskfile.yml
+      - lycaon-den/src/platform/semantic-driver/**/*.ts
+    generates:
+      - lycaon/internal/browser/embed/semantic_driver.js
+    cmds:
+      - |
+        bash scripts/repo-snapshot-lock.sh generate -- bash <<'SCRIPT'
+        set -euo pipefail
+        source scripts/snapshot-publish.sh
+        output=lycaon/internal/browser/embed/semantic_driver.js
+        stage="$(mktemp "${output}.XXXXXX")"
+        trap 'rm -f "$stage"; snapshot_publish_finish' EXIT
+        bun build lycaon-den/src/platform/semantic-driver/inject.ts \
+          --minify --target=browser --outfile="$stage"
+        snapshot_publish_file "$stage" "$output"
+        SCRIPT
+
   codegen:theme-tokens:
     desc: >-
       Derive the baked token stylesheet, CodeMirror highlight style, theme
@@ -1707,14 +1746,27 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-boot.sh {{.CLI_ARGS}}
 
   upgrade:rehearse:
-    desc: 'Rehearse supported released-store upgrades, semantic history, and full backup restore (prior-release leg skips before v1)'
-    deps:
-      - build:lycaon-dev
+    desc: 'Rehearse released-store upgrades, or signed desktop activation with --bundle --fixtures DIR --evidence DIR'
     preconditions:
-      - sh: command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node
-        msg: curl, jq, python3, sqlite3, and node required for the upgrade rehearsal
+      - sh: |
+          {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+          command -v python3 && command -v bun && command -v minisign
+          {{else if hasPrefix "--bundle" .CLI_ARGS}}
+          command -v python3 && command -v openssl
+          {{else}}
+          command -v curl && command -v jq && command -v python3 && command -v sqlite3 && command -v node && command -v minisign
+          {{end}}
+        msg: Required upgrade rehearsal tools are unavailable
     cmds:
-      - bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+      - |
+        {{if hasPrefix "--prepare-bundle" .CLI_ARGS}}
+        python3 {{.SCRIPTS_DIR}}/release_control.py bundle-prepare {{trimPrefix "--prepare-bundle" .CLI_ARGS}}
+        {{else if hasPrefix "--bundle" .CLI_ARGS}}
+        python3 {{.SCRIPTS_DIR}}/release_control.py bundle-rehearse {{trimPrefix "--bundle" .CLI_ARGS}}
+        {{else}}
+        ./task build:lycaon-dev
+        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+        {{end}}
 
   upgrade:corpus:prepare:
     desc: 'Prepare the versioned upgrade fixture for VERSION before tagging'
@@ -1820,10 +1872,15 @@ tasks:
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby && command -v aws
+        msg: bun, curl, jq, python3, ruby, and AWS CLI v2 required for release:live-test
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+
+  release:rehearse:linux-signing:
+    desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
+    cmds:
+      - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
