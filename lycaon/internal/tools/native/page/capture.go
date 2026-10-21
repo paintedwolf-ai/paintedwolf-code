@@ -92,6 +92,13 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 		if err := resolveDriveFixtures(ctx, tctx, in.Routes, in.Actions); err != nil {
 			return "", err
 		}
+		if in.ProjectDir != "" {
+			if _, err := browser.ResolveTarget(browser.CaptureRequest{
+				ProjectDir: in.ProjectDir, Path: in.Path, Routes: in.Routes,
+			}); err != nil {
+				return "", mapBrowserReject(err)
+			}
+		}
 		width, height := 0, 0
 		if in.Viewport != nil {
 			width = in.Viewport.Width

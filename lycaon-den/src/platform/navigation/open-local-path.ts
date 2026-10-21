@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { browserDestinationLabel, browserDestinationUnavailable, DEFAULT_APPLICATION_LABEL } from "../desktop/open-browser.ts";
 import localFileFormats from "../../../shared/local-file-formats.json";
 import { externalOpenPrefs, EDITOR_LABELS } from "../../settings/editor/external-open-prefs.ts";
@@ -57,12 +58,31 @@ export function localPathDestinationUnavailable(target: LocalPathTarget, destina
   return undefined;
 }
 
+const [fileManagerName, setFileManagerName] = createSignal<string | null>(null);
+
+/**
+ * Learns the name of the desktop's file manager (Files, Dolphin, Thunar…).
+ * Linux desktops differ, so the shell reads the application the desktop
+ * opens folders with; until it answers, labels say "File manager".
+ */
+export async function loadFileManagerName(): Promise<void> {
+  if (!isTauriRuntime() || tauriPlatform() !== "linux") return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    setFileManagerName((await invoke<string | null>("file_manager_name")) ?? null);
+  } catch (error) {
+    console.debug("[open-local-path] file manager name unavailable", error);
+  }
+}
+
 export function localPathDestinationLabel(destination: LocalPathDestination): string {
   const prefs = externalOpenPrefs();
   switch (destination) {
     case "file-manager": {
       const platform = tauriPlatform();
-      return platform === "windows" ? "File Explorer" : platform === "linux" ? "Files" : platform === "macos" ? "Finder" : "File manager";
+      if (platform === "windows") return "File Explorer";
+      if (platform === "macos") return "Finder";
+      return (platform === "linux" ? fileManagerName() : null) ?? "File manager";
     }
     case "editor": return prefs.externalEditor === "custom" ? "External editor" : EDITOR_LABELS[prefs.externalEditor];
     case "browser": return browserDestinationLabel(prefs.browser);

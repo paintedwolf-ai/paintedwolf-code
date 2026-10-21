@@ -261,6 +261,50 @@ describe("createCriticalStop", () => {
     expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "credential_vault_custodian_unavailable",
+    "credential_vault_launcher_refused",
+  ] as const)("preserves credentials for %s and retries without a password", async (failure) => {
+    startFailure = failure;
+    connectAppBackend.mockResolvedValue({});
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
+    // The way out is retry or a report bundle, never a reset.
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent ?? "").not.toContain("Reset");
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "credential_vault_identity_missing",
+    "credential_vault_custodian_absent",
+  ] as const)("offers a confirmed reset for %s, and retry first", async (failure) => {
+    startFailure = failure;
+    connectAppBackend.mockRejectedValue(new Error("key missing"));
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
+    const primary = await findByTestId(root, "critical-stop-primary");
+    expect(primary.textContent).toContain("Try again");
+    const secondary = await findByTestId(root, "critical-stop-secondary");
+    expect(secondary.textContent).toContain("Reset vault…");
+    confirmDestructive.mockResolvedValueOnce(false);
+    secondary.click();
+    await waitFor(() => expect(confirmDestructive).toHaveBeenCalled());
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+    confirmDestructive.mockResolvedValueOnce(true);
+    secondary.click();
+    await waitFor(() => expect(resetCredentialVault).toHaveBeenCalled());
+    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
+  });
+
   it("resets a forgotten credential vault only after confirmation", async () => {
     startFailure = "credential_vault_locked";
     connectAppBackend.mockRejectedValue(new Error("password required"));
