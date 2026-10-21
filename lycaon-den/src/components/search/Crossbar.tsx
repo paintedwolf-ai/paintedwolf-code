@@ -48,7 +48,6 @@ import {
   actionableCrossbarRows,
   buildCrossbarRows,
   canEscalateCrossbar,
-  cycleCrossbarMode,
   effectiveCrossbarMode,
   nextCrossbarIndex,
   crossbarArm,
@@ -62,7 +61,6 @@ import {
 } from "../../search/crossbar-model.ts";
 import {
   SEARCH_MODE_COMMAND_BY_MODE,
-  SEARCH_MODE_JUMP_COMMANDS,
   CROSSBAR_MODE_LABEL,
   CROSSBAR_MODES,
   type CrossbarMode,
@@ -71,7 +69,6 @@ import {
   ariaKeyShortcutsForHandler,
   bindingForHandler,
   displayBindingFor,
-  handlerMatchesEvent,
 } from "../../shortcuts/display-binding-for.ts";
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
@@ -100,7 +97,7 @@ import {
   globIndicatorTitle,
   renderMatchUnderline,
 } from "./CrossbarResults.tsx";
-import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
+import { handleCrossbarPanelKey } from "../../search/crossbar-panel-keys.ts";
 
 export type CrossbarProps = {
   open: boolean;
@@ -897,60 +894,15 @@ export function Crossbar(props: CrossbarProps) {
     scheduleSearch(value);
   };
 
-  const onPanelKeyDown = (e: KeyboardEvent) => {
-    if (isImeComposition(e)) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      if (flowCommand()) {
-        setFlowCommand(null);
-      } else {
-        props.onClose();
-      }
-      return;
-    }
-    const modeStep = handlerMatchesEvent("search.mode.next", e)
-      ? 1
-      : handlerMatchesEvent("search.mode.prev", e)
-        ? -1
-        : 0;
-    if (modeStep !== 0) {
-      e.preventDefault();
-      selectMode(cycleCrossbarMode(activeMode(), modeStep));
-      return;
-    }
-
-    if (handlerMatchesEvent("search.toggleMatchCase", e)) {
-      e.preventDefault();
-      patchMatchPrefs({ caseSensitive: !matchPrefs().caseSensitive });
-      return;
-    }
-    if (handlerMatchesEvent("search.toggleWholeWord", e)) {
-      e.preventDefault();
-      patchMatchPrefs({ wholeWord: !matchPrefs().wholeWord });
-      return;
-    }
-    if (handlerMatchesEvent("search.toggleRegex", e)) {
-      e.preventDefault();
-      patchMatchPrefs({ regex: !matchPrefs().regex });
-      return;
-    }
-
-    const modeMatch = SEARCH_MODE_JUMP_COMMANDS.find(({ commandId }) =>
-      handlerMatchesEvent(commandId, e),
-    );
-    if (modeMatch) {
-      e.preventDefault();
-      selectMode(modeMatch.mode);
-      return;
-    }
-
-    if (handlerMatchesEvent("search.escalate", e)) {
-      e.preventDefault();
+  const onPanelKeyDown = (e: KeyboardEvent) =>
+    handleCrossbarPanelKey(e, {
+      dismiss: () => (flowCommand() ? setFlowCommand(null) : props.onClose()),
+      activeMode,
+      selectMode,
+      toggleMatch: (key) => patchMatchPrefs({ [key]: !matchPrefs()[key] }),
       // A prefixed source query is meaningless in the depth view.
-      if (!activeSource()) escalate();
-    }
-  };
+      escalate: () => { if (!activeSource()) escalate(); },
+    });
 
   const modeTooltip = (m: CrossbarMode): string => {
     return `${CROSSBAR_MODE_LABEL[m]} (${bindingForHandler(SEARCH_MODE_COMMAND_BY_MODE[m])})`;

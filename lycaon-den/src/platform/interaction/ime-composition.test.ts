@@ -16,12 +16,12 @@ const NON_KEY_READS: Record<string, string> = {
 /** Keyboard owners whose local Enter, Escape, Tab, navigation or command keys leave composition to the input method. */
 const KEYBOARD_OWNERS = [
   "components/GitStrip.tsx",
-  "components/chatview/Composer.tsx",
+  "chat/composer/slash-suggestion-keys.ts",
   "components/chatview/QueuePopover.tsx",
   "components/home/HomeView.tsx",
   "components/inline-rename/InlineRenameInput.tsx",
   "components/primitives/AnchoredSurface.tsx",
-  "components/search/Crossbar.tsx",
+  "search/crossbar-panel-keys.ts",
   "components/search/SearchQueryBar.tsx",
   "components/search/search-result-navigation.ts",
   "components/settings/appearance/KeyboardSettingsPanel.tsx",
