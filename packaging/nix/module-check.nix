@@ -15,15 +15,27 @@ let
   package = fixture "painted-wolf-module-selected";
   previous = fixture "painted-wolf-module-previous";
   runtime = pkgs.runCommand "painted-wolf-module-runtime" {} ''mkdir -p "$out"'';
-  evaluateWith = apparmor: settings: (nixpkgs.lib.nixosSystem {
+  systemWith = apparmor: desktop: settings: nixpkgs.lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
-    modules = [ (import ./nixos.nix { packageFor = _: package; }) {
+    modules = [ (import ./nixos.nix { packageFor = _: package; }) desktop {
       system.stateVersion = "26.05";
       security.apparmor.enable = apparmor;
       services.painted-wolf-code = settings;
     } ];
-  }).config;
+  };
+  evaluateWith = apparmor: settings: (systemWith apparmor { } settings).config;
   evaluate = evaluateWith false;
+  # An ordinary desktop configuration with no runtime packages named for the vault.
+  desktopSystem = systemWith false ({ pkgs, ... }: {
+    hardware.graphics.enable = true;
+    programs.dconf.enable = true;
+    i18n.inputMethod = { enable = true; type = "ibus"; };
+    users.users.member = { isNormalUser = true; packages = [ pkgs.hello ]; };
+  }) { enable = true; };
+  desktop = desktopSystem.config;
+  desktopPolicy = builtins.elemAt (pkgs.lib.splitString " "
+    desktop.systemd.services.paintedwolf-vault-identity.serviceConfig.ExecStart) 2;
+  ownerOnly = pkgs.runCommand "painted-wolf-module-unselected" {} ''mkdir -p "$out"'';
   enabled = evaluate { enable = true; additionalTrustedPackages = [ previous ]; extraRuntimePackages = [ runtime ]; };
   disabled = evaluate { enable = false; };
   override = evaluate { enable = true; package = previous; polkit.enable = false; };
@@ -64,5 +76,17 @@ pkgs.runCommand "painted-wolf-code-nixos-module-check" { nativeBuildInputs = [ p
     (.generations[0].store_paths | index($package)) != null and
     (.generations[0].store_paths | index($previous)) == null
   ' ${policy}
+  jq -e --arg package ${pkgs.lib.escapeShellArg (toString package)} \
+    --arg path ${pkgs.lib.escapeShellArg (toString desktop.system.path)} \
+    --arg graphics ${pkgs.lib.escapeShellArg (toString desktop.hardware.graphics.package)} \
+    --arg dconf ${pkgs.lib.escapeShellArg (toString desktopSystem.pkgs.dconf.lib)} \
+    --arg input ${pkgs.lib.escapeShellArg (toString desktop.i18n.inputMethod.package)} \
+    --arg member ${pkgs.lib.escapeShellArg (toString desktopSystem.pkgs.hello)} \
+    --arg foreign ${pkgs.lib.escapeShellArg (toString ownerOnly)} '
+    (.generations | length) == 1 and
+    all([$package, $path, $graphics, $dconf, $input, $member][];
+        . as $required | (.generations[0].store_paths | index($required)) != null) and
+    (.generations[0].store_paths | index($foreign)) == null
+  ' ${desktopPolicy}
   touch "$out"
 ''

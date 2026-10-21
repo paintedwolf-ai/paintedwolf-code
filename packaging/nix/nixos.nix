@@ -11,9 +11,25 @@ let
     apparmor_parser --skip-kernel-load --skip-cache \
       -I ${pkgs.apparmor-profiles}/etc/apparmor.d "$out"
   '';
+  # Modules the configured desktop loads into the shell, all selected in this system
+  # configuration: system and per-user profile packages (GTK modules, input methods),
+  # the graphics driver environment, and session GIO and pixbuf module locations.
+  # Packages a user installs outside the configuration stay foreign.
+  sessionModules = lib.concatMap (name:
+    lib.concatMap (variables: lib.toList (variables.${name} or [ ]))
+      [ config.environment.sessionVariables config.environment.variables ])
+    [ "GIO_EXTRA_MODULES" "GDK_PIXBUF_MODULE_FILE" ];
+  desktopRuntime = [ config.system.path ]
+    ++ lib.concatMap (user: user.packages) (lib.attrValues config.users.users)
+    ++ lib.optionals config.hardware.graphics.enable
+      ([ config.hardware.graphics.package ] ++ config.hardware.graphics.extraPackages)
+    ++ lib.optional config.i18n.inputMethod.enable config.i18n.inputMethod.package
+    ++ lib.filter (value: builtins.hasContext value) sessionModules;
   closures = map (package: {
     inherit package;
-    closure = pkgs.closureInfo { rootPaths = [ package ] ++ cfg.extraRuntimePackages; };
+    closure = pkgs.closureInfo {
+      rootPaths = [ package ] ++ desktopRuntime ++ cfg.extraRuntimePackages;
+    };
   }) selected;
   policy = pkgs.runCommand "painted-wolf-code-custody-policy.json" {
     nativeBuildInputs = [ pkgs.jq ];
@@ -57,7 +73,7 @@ in {
     extraRuntimePackages = mkOption {
       type = types.listOf types.package;
       default = [];
-      description = "Explicit runtime outputs, such as selected graphics drivers, whose executable mappings are allowed for each selected generation.";
+      description = "Runtime outputs beyond this configuration's desktop, graphics, input-method and session module packages whose executable mappings are allowed for each selected generation.";
     };
     polkit.enable = mkOption {
       type = types.bool;
