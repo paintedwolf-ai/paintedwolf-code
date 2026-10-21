@@ -1000,7 +1000,7 @@ from the protected `LINUX_PACKAGE_SIGNING_KEY` environment or an explicitly
 selected owner-only file; it is never a command argument. This trust is distinct
 from updater/feed signatures and Nix cache trust.
 
-`./task release:live-test -- --local-linux-signing --receipt /absolute/path/result.json`
+`./task release:rehearse:linux-signing -- --receipt /absolute/path/result.json`
 runs a local, non-publishing rehearsal with a disposable key and tiny RPM fixture.
 Add `--candidate-dir /absolute/path/candidates --require-architectures x86_64,aarch64`
 to exercise retained candidate packages without changing their original bytes.
@@ -1008,8 +1008,9 @@ The candidate CI legs run this mode and retain its public receipt. It checks
 correct/wrong keys, unsigned and damaged RPMs, changed metadata, clear and detached
 signatures, and production rejection of fixture keys. Private fixture material
 and its agent/keyring are removed when the rehearsal finishes. No production
-credential or R2 request is needed. The default credentialed R2 rehearsal remains
-a separate invocation. Repository activation, key rotation and CDN consistency
+credential or R2 request is needed. The verification queue admits it under its
+own `linux-signing-fixture` lock, apart from the credentialed `release:live-test`
+R2 rehearsal. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.

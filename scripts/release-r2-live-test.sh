@@ -3,15 +3,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ "${1:-}" == --local-linux-signing ]]; then
-  shift
-  cd "${ROOT}"
-  exec python3 -m scripts.linux_release.signing_rehearsal "$@"
-fi
-[[ $# -eq 0 ]] || { echo "error: unknown release rehearsal arguments" >&2; exit 1; }
-for executable in bun curl jq python3 ruby; do
-  command -v "${executable}" >/dev/null || { echo "error: ${executable} is required" >&2; exit 1; }
-done
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)

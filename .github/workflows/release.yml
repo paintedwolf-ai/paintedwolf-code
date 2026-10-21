@@ -547,7 +547,7 @@ jobs:
 
       - name: Rehearse Linux signatures with a disposable local key
         run: |
-          ./task release:live-test -- --local-linux-signing \
+          ./task release:rehearse:linux-signing -- \
             --candidate-dir "${RUNNER_TEMP}/candidate" \
             --require-architectures "${{ matrix.artifact_arch }}" \
             --receipt "${RUNNER_TEMP}/candidate/signing-rehearsal.json"
