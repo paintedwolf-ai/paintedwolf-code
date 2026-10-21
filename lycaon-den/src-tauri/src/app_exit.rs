@@ -324,8 +324,11 @@ fn cancel_app_exit(app: AppHandle, request_id: u64) -> Result<(), String> {
         .0
         .lock()
         .map_err(|_| "Application preservation lock failed.")?;
-    if !state.approved && !state.committing && state.cancel(request_id) {
+    let cancelled = !state.approved && !state.committing && state.cancel(request_id);
+    drop(state);
+    if cancelled {
         let _ = app.emit(CANCEL, ExitRequest { request_id });
+        crate::windows::workspace_lifecycle::exit_cancelled(&app);
     }
     Ok(())
 }

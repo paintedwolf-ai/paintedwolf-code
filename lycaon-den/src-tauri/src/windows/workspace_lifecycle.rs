@@ -54,6 +54,12 @@ fn main_close(platform: Platform, quitting: bool, other_visible_windows: bool) -
     }
 }
 
+/// Whether closing a peer window leaves only the hidden workspace, which on
+/// Linux nothing on screen could bring back: that close is a quit.
+fn quits_after_peer_close(platform: Platform, main_hidden: bool, other_visible_windows: bool) -> bool {
+    platform == Platform::Linux && main_hidden && !other_visible_windows
+}
+
 /// Whether the shell, not the document, ends this window's close request.
 fn retains(platform: Platform, label: &str, quitting: bool) -> bool {
     label == MAIN_WINDOW_LABEL && main_close(platform, quitting, false) != MainClose::Close
@@ -99,6 +105,31 @@ fn follow_application_activation(app: &AppHandle, window: &WebviewWindow) {
     };
     let target = app.clone();
     application.connect_activate(move |_| restore_main_workspace(&target));
+}
+
+/// Follows a destroyed peer window.
+pub fn window_destroyed(app: &AppHandle, label: &str) {
+    if label == MAIN_WINDOW_LABEL || QUIT_REQUESTED.load(Ordering::Acquire) {
+        return;
+    }
+    let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    let others = app.webview_windows().values().any(|other| {
+        other.label() != MAIN_WINDOW_LABEL && other.label() != label && other.is_visible().unwrap_or(false)
+    });
+    if quits_after_peer_close(PLATFORM, !main.is_visible().unwrap_or(true), others) {
+        app.exit(0);
+    }
+}
+
+/// "Keep working" after a close-initiated quit: on Linux, a workspace hidden
+/// with nothing else on screen comes back.
+pub fn exit_cancelled(app: &AppHandle) {
+    let visible = app.webview_windows().values().any(|window| window.is_visible().unwrap_or(false));
+    if PLATFORM == Platform::Linux && !visible {
+        restore_main_workspace(app);
+    }
 }
 
 pub fn prepare_to_quit() {
@@ -157,6 +188,14 @@ mod tests {
         assert_eq!(main_close(Platform::Linux, false, false), MainClose::Quit);
         assert_eq!(main_close(Platform::Linux, true, true), MainClose::Close);
         assert_eq!(main_close(Platform::Other, false, true), MainClose::Close);
+    }
+
+    #[test]
+    fn closing_the_last_visible_linux_window_beside_a_hidden_workspace_quits() {
+        assert!(quits_after_peer_close(Platform::Linux, true, false));
+        assert!(!quits_after_peer_close(Platform::Linux, true, true));
+        assert!(!quits_after_peer_close(Platform::Linux, false, false));
+        assert!(!quits_after_peer_close(Platform::MacOs, true, false));
     }
 
     #[test]

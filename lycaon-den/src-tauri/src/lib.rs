@@ -197,6 +197,11 @@ pub fn run() {
                 has_visible_windows: false,
                 ..
             } => windows::workspace_lifecycle::restore_main_workspace(app),
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Destroyed,
+                ..
+            } => windows::workspace_lifecycle::window_destroyed(app, &label),
             RunEvent::Exit => {
                 #[cfg(target_os = "linux")]
                 windows::linux_desktop_settings::portal::shutdown(app);
