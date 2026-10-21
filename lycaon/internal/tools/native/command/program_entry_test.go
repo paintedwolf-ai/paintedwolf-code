@@ -46,6 +46,7 @@ type programFixture struct {
 	dir        string
 	calls      int
 	background *bgprocess.Registry
+	executor   *toolexecution.Executor
 }
 
 type fixtureSessions struct{}
@@ -64,6 +65,13 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 // session process registry and supervisor around the command entry.
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
+	return newProgramFixtureWith(t, nil)
+}
+
+// newProgramFixtureWith replaces the inert structured owners named in
+// structured with working handlers.
+func newProgramFixtureWith(t *testing.T, structured map[string]tools.ToolHandler) *programFixture {
+	t.Helper()
 	dir := t.TempDir()
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
@@ -71,13 +79,21 @@ func newProgramFixture(t *testing.T) *programFixture {
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"write", "read"} {
-		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-			return "", errors.New("structured tool is not exercised")
-		}))
+		handler := structured[name]
+		if handler == nil {
+			handler = func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				return "", errors.New("structured tool is not exercised")
+			}
+		}
+		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, handler))
 	}
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
 	testutil.FailErr(t, "compile profile effects", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	offered := map[string]bool{}
+	for name := range structured {
+		offered[name] = true
+	}
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", Tools: offered, CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
@@ -92,22 +108,28 @@ func newProgramFixture(t *testing.T) *programFixture {
 			return command.ProgramOwners{Natives: map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}}, nil
 		},
 	}
-	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background}
+	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background, executor: executor}
 }
 
 // call opens a real model receipt for one command call and runs the entry.
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
 	t.Helper()
+	args := map[string]any{"command": source}
+	return f.runtime.Run(ctx, args, f.modelCall(t, "command", args))
+}
+
+// modelCall opens a real model receipt for one tool call in the fixture session.
+func (f *programFixture) modelCall(t *testing.T, tool string, args map[string]any) tools.ToolContext {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
-	args := map[string]any{"command": source}
-	contract, _ := toolcontract.Lookup("command")
-	parent, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
+	contract, _ := toolcontract.Lookup(tool)
+	parent, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: callID, ToolName: tool, Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.session, callID
 	tc.Invocation.ID = parent.ID
-	return f.runtime.Run(ctx, args, tc)
+	return tc
 }
 
 func (f *programFixture) programRows(t *testing.T) []string {
