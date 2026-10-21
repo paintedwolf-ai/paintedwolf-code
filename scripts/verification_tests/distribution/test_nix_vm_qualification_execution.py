@@ -7,7 +7,10 @@ import tempfile
 import unittest
 
 from linux_release.nix_vm import bind
-from linux_release.nix_vm_producer import admit, nix_hash, validate_cache
+from linux_release.nix_vm_producer import admit, admit_retained, nix_hash, validate_cache
+import json
+import subprocess
+from unittest.mock import patch
 
 APP = "/nix/store/" + "0" * 32 + "-painted-wolf-code"
 VM = "/nix/store/" + "1" * 32 + "-nixos-vm"
@@ -129,6 +132,41 @@ class NixVMQualificationTests(unittest.TestCase):
             (root / "foreign").write_text("not selected")
             with self.assertRaises(ValueError):
                 validate_cache(root, self.app["closure"])
+
+    def test_retained_producer_is_admitted_for_this_checkout_and_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checkout, producer, cache, evidence = (root / name for name in ("checkout", "producer", "cache", "evidence"))
+            checkout.mkdir()
+            (checkout / "flake.lock").write_text("{}")
+            subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+            subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Fixture", "-c", "user.email=f@example.invalid",
+                            "add", "flake.lock"], check=True)
+            subprocess.run(["git", "-C", str(checkout), "-c", "user.name=Fixture", "-c", "user.email=f@example.invalid",
+                            "commit", "-q", "-m", "fixture"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
+            tree = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD^{tree}"], text=True).strip()
+            lock = hashlib.sha256(b"{}").hexdigest()
+            identity = dict(source_commit=commit, source_tree=tree, lock_sha256=lock)
+            (producer / "nix").mkdir(parents=True)
+            (producer / "nix/build-1.json").write_text(json.dumps({**self.app, **identity}))
+            (producer / "nix/build-2.json").write_text(json.dumps({**self.app, **identity, "component": "shell"}))
+            (producer / "qualification-source.json").write_text(json.dumps({**self.manifest, **identity}))
+            run = root / "run.json"
+            run.write_text(json.dumps(self.run))
+            cache.mkdir()
+            self.cache(cache)
+            environment = {"GITHUB_REPOSITORY": "owner/repository", "GITHUB_REF_NAME": "main"}
+            with patch("linux_release.nix_vm_producer.platform.machine", return_value="x86_64"):
+                self.assertEqual(admit_retained(producer, cache, run, evidence, checkout, environment), cache)
+                self.assertEqual(json.loads((evidence / "nix/application-producer.json").read_text())["source_commit"], commit)
+                self.assertEqual(json.loads((evidence / "application-producer-run.json").read_text()), self.run)
+                (producer / "nix/build-3.json").write_text(json.dumps({**self.app, **identity}))
+                with self.assertRaisesRegex(ValueError, "exactly one application build"):
+                    admit_retained(producer, cache, run, root / "other", checkout, environment)
+                (producer / "nix/build-3.json").unlink()
+                with self.assertRaises(ValueError):
+                    admit_retained(producer, cache, run, root / "branch", checkout, {**environment, "GITHUB_REF_NAME": "other"})
 
     def test_nix_hash_padding_boundaries(self):
         self.assertEqual(nix_hash(bytes(32)), "sha256:" + "0" * 52)

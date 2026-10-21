@@ -135,6 +135,18 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
             self.assertEqual(nix.main(), 1)
         prepare.assert_not_called()
 
+    def test_application_producers_are_admitted_only_whole_and_by_prepare(self):
+        producer = ["--application-producer", "/p", "--application-cache", "/c", "--application-run", "/r.json"]
+        for arguments in (["check", "--prepare", *producer[:2]], ["check", *producer]):
+            with self.subTest(arguments=arguments), patch.object(nix.nix_runner, "prepare") as prepare, \
+                    patch.object(sys, "argv", ["nix", *arguments]):
+                self.assertEqual(nix.main(), 1)
+                prepare.assert_not_called()
+        with patch.object(nix.nix_runner, "prepare", return_value=0) as prepare, \
+                patch.object(sys, "argv", ["nix", "check", "--prepare", *producer]):
+            self.assertEqual(nix.main(), 0)
+        self.assertEqual(prepare.call_args.kwargs["producer"][:3], (Path("/p"), Path("/c"), Path("/r.json")))
+
     def test_failures_have_a_failed_report_and_missing_lock_never_runs_nix(self):
         self.environment["NIX_FIXTURE_EXIT"] = "29"
         self.assertEqual(self.invoke("check"), 29)
