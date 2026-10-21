@@ -67,7 +67,7 @@ class ProfileProviderTests(unittest.TestCase):
                 observer.selected([{**self.row, **changed}], ENDPOINT)
         for rows in [[self.row, self.row], [self.row, {**self.row, 'id': 'other-fixture'}]]:
             with self.assertRaises(ValueError):
-                observer.selected(rows)
+                observer.selected(rows, ENDPOINT)
 
     def test_nonprivate_or_symlink_catalog_is_refused_without_mutation(self):
         self.write([self.row])
@@ -90,9 +90,9 @@ class ProfileProviderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 observer.find_gui_provider(self.app, ENDPOINT)
         selected = observer.selected
-        def changed(rows):
+        def changed(rows, endpoint):
             self.app.observations['engine_identity'] = {'pid': 456, 'start_time_ticks': 10}
-            return selected(rows)
+            return selected(rows, endpoint)
         with patch.object(observer, 'selected', side_effect=changed):
             with self.assertRaises(ValueError):
                 observer.find_gui_provider(self.app, ENDPOINT)
