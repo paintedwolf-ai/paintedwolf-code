@@ -1,1 +1,0 @@
-"""NixOS system integration contracts."""
