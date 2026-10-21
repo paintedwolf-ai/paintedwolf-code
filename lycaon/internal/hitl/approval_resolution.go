@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/presence"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,6 +20,14 @@ type ApprovalAuthorityInstaller interface {
 
 type approvalAuthorityRecovery interface {
 	RollbackApprovalOption(ctx context.Context, checkpointID string, option ApprovalOption) error
+}
+
+// SetNativeAuthorityAdmission wires the aggregate state ledger that admits
+// restoring native authority for resolution, recovery and chat grant replay.
+func (m *ApprovalAuthority) SetNativeAuthorityAdmission(state toolcontract.ReviewStateAdmission) {
+	if m != nil {
+		m.nativeAdmission = state
+	}
 }
 
 // SetApprovalAuthorityInstaller wires the one authority mutation boundary.
@@ -137,11 +146,11 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if err != nil {
 		return nil, fmt.Errorf("approval plan: %w", err)
 	}
-	option, ok := plan.Option(optionID)
+	display, ok := plan.Option(optionID)
 	if !ok {
 		return nil, ErrApprovalOptionNotFound
 	}
-	if option.Disabled {
+	if display.Disabled {
 		return nil, ErrApprovalOptionUnavailable
 	}
 	if m.authorityInstaller == nil {
@@ -151,6 +160,11 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if err != nil {
 		return nil, err
 	}
+	option, approved, releaseAuthority, err := approvedOption(ctx, m.store, m.nativeAdmission, *row, plan, display, resolution)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseAuthority()
 	now := time.Now().UTC()
 	var opened *presence.Unlock
 	if plan.releasesHeld(option) {
@@ -158,8 +172,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 			return nil, err
 		}
 	}
-	option = option.grantedBy(resolution)
-	if err := m.store.prepareApprovalOperation(ctx, checkpointID, sessionID, option); err != nil {
+	if err := m.store.prepareApprovalOperation(ctx, checkpointID, sessionID, approved); err != nil {
 		return nil, fmt.Errorf("prepare approval authority: %w", err)
 	}
 
@@ -199,7 +212,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 		if err := m.authzRecorder.AppendApprovalGateTx(ctx, tx, approvalRecordInput(sealed, DecisionStatusApproved)); err != nil {
 			return err
 		}
-		if err := recordChatGrantsTx(ctx, tx, checkpointID, option, now); err != nil {
+		if err := recordChatGrantsTx(ctx, tx, checkpointID, option, approved, now); err != nil {
 			return err
 		}
 		if opened != nil {
@@ -237,10 +250,11 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 
 // RecoverApprovalOperations rolls back authority installed without a committed checkpoint.
 func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error {
-	pending, err := m.store.preparedApprovalOperations(ctx)
+	pending, releasePending, err := restoredApprovalOperations(ctx, m.store, m.nativeAdmission)
 	if err != nil {
 		return err
 	}
+	defer releasePending()
 	if len(pending) == 0 {
 		return nil
 	}
@@ -269,16 +283,20 @@ type ApprovalAuthority struct {
 	presence               heldPresence
 	onToolApprovalTerminal func(string, string, DecisionStatus)
 	onToolApprovalRestored func(StoredCheckpoint)
+	// nativeAdmission is the host aggregate ledger that admits restoring native
+	// authority; without it, native rows refuse rather than fall back.
+	nativeAdmission toolcontract.ReviewStateAdmission
 }
 
 type approvalAuthorityStore interface {
 	Get(context.Context, string) (*StoredCheckpoint, error)
-	prepareApprovalOperation(context.Context, string, string, ApprovalOption) error
+	prepareApprovalOperation(context.Context, string, string, approvedAuthority) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error
 	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
 	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
 	forgetChatGrant(context.Context, string) (bool, error)
+	nativeAuthority() nativeAuthorityReader
 }
 
 type heldPresence interface {

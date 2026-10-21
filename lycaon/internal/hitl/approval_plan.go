@@ -268,6 +268,9 @@ type ApprovalPlan struct {
 	// their chat is locked, each such answer needs the person's verified
 	// presence, which unlocks it.
 	Held *HeldRelease `json:"held,omitempty"`
+	// native keeps a native action's authority lossless in memory. Durable rows
+	// persist it separately; any JSON copy carries only the screened display.
+	native *NativeActionInputs
 }
 
 // NewApprovalPlan validates, orders, and selects the recommended option.
@@ -297,14 +300,35 @@ func NewApprovalPlan(action ProposedAction, stage ApprovalStage, subject Approva
 		return nil, err
 	}
 	candidate.ID = id
-	// Canonical round-tripping detaches caller-supplied references.
-	stored, err := json.Marshal(candidate)
+	return detachApprovalPlan(candidate, action.Invocation.NativeInputs)
+}
+
+// detachApprovalPlan copies a candidate so callers retain no references.
+// JSON would replace non-UTF-8 path bytes, so native authority detaches
+// through its typed binding instead.
+func detachApprovalPlan(candidate ApprovalPlan, native *NativeActionInputs) (*ApprovalPlan, error) {
+	structured := candidate
+	if native != nil {
+		structured.Options = nil
+	}
+	stored, err := json.Marshal(structured)
 	if err != nil {
 		return nil, fmt.Errorf("copy approval plan: %w", err)
 	}
 	var plan ApprovalPlan
 	if err := json.Unmarshal(stored, &plan); err != nil {
 		return nil, fmt.Errorf("copy approval plan: %w", err)
+	}
+	if native != nil {
+		// Outside its authority a native plan is display, which must already be
+		// screened text: an exact JSON copy proves no bytes were replaced.
+		if again, err := json.Marshal(plan); err != nil || string(again) != string(stored) {
+			return nil, fmt.Errorf("native approval display carries unscreened bytes")
+		}
+		if plan.Options, err = native.detachAuthority(candidate.Options); err != nil {
+			return nil, err
+		}
+		plan.native = native
 	}
 	if err := plan.Validate(); err != nil {
 		return nil, err

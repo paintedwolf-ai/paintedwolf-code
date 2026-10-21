@@ -21,6 +21,8 @@ type ChatGrant struct {
 	Delta         ApprovalAuthorityDelta
 	// ExpiresAt is fixed when the approval commits; nil lasts for the chat.
 	ExpiresAt *time.Time
+	// authorityFormat marks Delta as the display of native authority.
+	authorityFormat string
 }
 
 // ChatLifetime reports the chat a delta's authority lasts for and the id
@@ -88,14 +90,23 @@ func (g ChatGrant) rebased(now time.Time) (ApprovalAuthorityDelta, bool) {
 }
 
 // recordChatGrantsTx writes an option's chat grants in the approval's commit.
-func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, option ApprovalOption, approvedAt time.Time) error {
+// A native grant row keeps the whole approved option's lossless projection
+// beside the screened JSON copy of its own delta.
+func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, option ApprovalOption, approved approvedAuthority, approvedAt time.Time) error {
 	queries := db.New(tx)
-	for _, delta := range option.Authority {
+	authority, err := approved.columns()
+	if err != nil {
+		return err
+	}
+	if len(approved.display.Authority) != len(option.Authority) {
+		return fmt.Errorf("approved display does not match its authority")
+	}
+	for n, delta := range option.Authority {
 		chat, id, ok := delta.ChatLifetime()
 		if !ok {
 			continue
 		}
-		raw, err := json.Marshal(delta)
+		raw, err := json.Marshal(approved.display.Authority[n])
 		if err != nil {
 			return fmt.Errorf("encode chat grant %s: %w", id, err)
 		}
@@ -106,6 +117,7 @@ func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, op
 		if err := queries.UpsertChatGrant(ctx, db.UpsertChatGrantParams{
 			ChatSessionID: chat, ID: id, CheckpointID: checkpointID,
 			DeltaJson: string(raw), CreatedAt: db.FormatTime(approvedAt), ExpiresAt: expiresAt,
+			AuthorityFormat: authority.format, AuthorityDigest: authority.digest, AuthorityBody: authority.body,
 		}); err != nil {
 			return fmt.Errorf("record chat grant %s: %w", id, err)
 		}
@@ -123,7 +135,7 @@ func (s *SQLStore) chatGrants(ctx context.Context, now time.Time) ([]ChatGrant, 
 	}
 	out := make([]ChatGrant, 0, len(rows))
 	for _, row := range rows {
-		grant := ChatGrant{ChatSessionID: row.ChatSessionID, ID: row.ID, CheckpointID: row.CheckpointID}
+		grant := ChatGrant{ChatSessionID: row.ChatSessionID, ID: row.ID, CheckpointID: row.CheckpointID, authorityFormat: row.AuthorityFormat}
 		if err := json.Unmarshal([]byte(row.DeltaJson), &grant.Delta); err != nil {
 			return nil, fmt.Errorf("decode chat grant %s: %w", row.ID, err)
 		}
@@ -161,10 +173,11 @@ func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
 	now := time.Now().UTC()
-	grants, err := m.store.chatGrants(ctx, now)
+	grants, releaseGrants, err := restoredChatGrants(ctx, m.store, m.nativeAdmission, now)
 	if err != nil {
 		return err
 	}
+	defer releaseGrants()
 	for _, grant := range grants {
 		delta, live := grant.rebased(now)
 		if !live {

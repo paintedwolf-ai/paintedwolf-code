@@ -15,20 +15,16 @@ type preparedApprovalOperation struct {
 	CheckpointID string
 	SessionID    string
 	Option       ApprovalOption
+	// authorityFormat marks Option as the display of native authority.
+	authorityFormat string
 }
 
-func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, option ApprovalOption) error {
-	raw, err := json.Marshal(option)
+func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, approved approvedAuthority) error {
+	params, err := approved.operation(checkpointID, sessionID)
 	if err != nil {
 		return err
 	}
-	rows, err := s.queries.PrepareApprovalOperation(ctx, db.PrepareApprovalOperationParams{
-		CheckpointID: checkpointID,
-		SessionID:    sessionID,
-		OptionID:     option.ID,
-		OptionJson:   string(raw),
-		CreatedAt:    db.FormatTime(time.Now().UTC()),
-	})
+	rows, err := s.queries.PrepareApprovalOperation(ctx, params)
 	if err != nil {
 		return err
 	}
@@ -185,7 +181,7 @@ func (s *SQLStore) preparedApprovalOperations(ctx context.Context) ([]preparedAp
 	}
 	out := make([]preparedApprovalOperation, 0, len(rows))
 	for _, row := range rows {
-		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID}
+		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID, authorityFormat: row.AuthorityFormat}
 		if err := json.Unmarshal([]byte(row.OptionJson), &op.Option); err != nil {
 			return nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
 		}
