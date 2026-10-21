@@ -7527,12 +7527,12 @@ export interface components {
          */
         AttachmentKind: "image" | "text" | "document" | "video";
         /**
-         * @description Attachment-reference family. Path kinds are jailed under an attached project root; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet. Never carries bytes or a server-opened absolute path.
+         * @description Attachment-reference family. Path kinds are jailed under an attached project root; external path kinds resolve absolute paths outside attached roots with host-authoritative confinement and explicit human grants; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet.
          * @enum {string}
          */
-        PromptReferenceKind: "path-file" | "path-folder" | "artifact" | "search-hit";
-        /** @description A pointer to something already on disk (under an attached project root), an existing visual artifact, or a stored search hit. Carries jailed coordinates only — never bytes and never an absolute filesystem path the server opens. The host fences path/folder refs so the agent reads them in place with its own jailed tools. */
-        PromptReferencePart: components["schemas"]["PromptReferencePathFile"] | components["schemas"]["PromptReferencePathFolder"] | components["schemas"]["PromptReferenceArtifact"] | components["schemas"]["PromptReferenceSearchHit"];
+        PromptReferenceKind: "path-file" | "path-folder" | "external-file" | "external-folder" | "artifact" | "search-hit";
+        /** @description A pointer to something already on disk (under an attached project root or an explicitly granted external path), an existing visual artifact, or a stored search hit. The host fences references and enforces confinement and explicit human grants so the agent reads and edits them with its own tools. */
+        PromptReferencePart: components["schemas"]["PromptReferencePathFile"] | components["schemas"]["PromptReferencePathFolder"] | components["schemas"]["PromptReferenceExternalFile"] | components["schemas"]["PromptReferenceExternalFolder"] | components["schemas"]["PromptReferenceArtifact"] | components["schemas"]["PromptReferenceSearchHit"];
         PromptAcceptedResponse: {
             /**
              * @description Durable submission state observed at admission or replay. queued means the turn is waiting for session execution; eligible text-only turns may also appear in the editable next-turn draft. canceled means the user removed a waiting draft item before it ran.
@@ -10172,7 +10172,7 @@ export interface components {
          * @description What a retrieval part points at, stamped from the reference variant the host ingested. Clients branch on this rather than on the hint prose the fence carries for the model.
          * @enum {string}
          */
-        MessageReferenceKind: "path_file" | "path_folder" | "search_hit";
+        MessageReferenceKind: "path_file" | "path_folder" | "external_file" | "external_folder" | "search_hit";
         MessageContentPart: {
             content: string;
             origin: components["schemas"]["MessageOrigin"];
@@ -11307,6 +11307,32 @@ export interface components {
              */
             root_id?: string;
             /** @description Project-relative folder path; never absolute; jailed under root_id. */
+            path: string;
+        };
+        PromptReferenceExternalFile: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "external-file";
+            /** Format: uuid */
+            project_id: string;
+            /** @description Absolute filesystem path outside attached roots, explicitly granted by human drop. */
+            path: string;
+            /** @description Inclusive 1-based start line for a selection range. */
+            start_line?: number;
+            /** @description Inclusive 1-based end line; defaults to start_line. */
+            end_line?: number;
+        };
+        PromptReferenceExternalFolder: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "external-folder";
+            /** Format: uuid */
+            project_id: string;
+            /** @description Absolute folder path outside attached roots, explicitly granted by human drop. */
             path: string;
         };
         PromptReferenceArtifact: {
@@ -29875,6 +29901,8 @@ export type InvocationReceiptList = components["schemas"]["InvocationReceiptList
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];
 export type PromptReferencePathFolder = components["schemas"]["PromptReferencePathFolder"];
+export type PromptReferenceExternalFile = components["schemas"]["PromptReferenceExternalFile"];
+export type PromptReferenceExternalFolder = components["schemas"]["PromptReferenceExternalFolder"];
 export type PromptReferenceArtifact = components["schemas"]["PromptReferenceArtifact"];
 export type PromptReferenceSearchHit = components["schemas"]["PromptReferenceSearchHit"];
 export type AbortSessionRequest = components["schemas"]["AbortSessionRequest"];

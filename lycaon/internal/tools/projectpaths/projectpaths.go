@@ -182,7 +182,14 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		return Resolved{}, reject
 	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
+		resolved, err := resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
+		if err == nil {
+			return resolved, nil
+		}
+		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
+			return granted, nil
+		}
+		return Resolved{}, err
 	}
 	if len(tctx.Source.Roots) == 0 {
 		return Resolved{}, noRootsReject()

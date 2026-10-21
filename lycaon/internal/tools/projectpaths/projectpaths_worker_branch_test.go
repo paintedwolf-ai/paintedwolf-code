@@ -161,3 +161,43 @@ func TestResolveWriteWorkerWithoutBranchRejected(t *testing.T) {
 		t.Fatalf("ResolveRead without branch: %v", err)
 	}
 }
+
+func TestResolveWorkerBranchGrantedExternalAccess(t *testing.T) {
+	base := t.TempDir()
+	primary := filepath.Join(base, "primary")
+	branch := filepath.Join(base, "branch")
+	external := t.TempDir()
+	extFile := filepath.Join(external, "shared.txt")
+	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
+	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o755))
+	testutil.FailErr(t, "write extFile", os.WriteFile(extFile, []byte("external content"), 0o644))
+
+	grantEverything(t, external)
+
+	tctx := tools.ToolContext{
+		Source: tools.InvocationSource{
+			Roots:            []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+		},
+		Identity: tools.InvocationIdentity{
+			Agent:       "implementer",
+			WorkerJobID: "job-1",
+			SessionID:   "worker-session",
+		},
+	}
+
+	readRes, err := projectpaths.ResolveRead(context.Background(), nil, tctx, extFile)
+	testutil.FailErr(t, "ResolveRead granted external file on worker branch", err)
+	if readRes.Abs != canon(t, extFile) {
+		t.Fatalf("readRes.Abs = %q want %q", readRes.Abs, canon(t, extFile))
+	}
+
+	writeRes, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, extFile)
+	testutil.FailErr(t, "ResolveWrite granted external file on worker branch", err)
+	if writeRes.Abs != canon(t, extFile) {
+		t.Fatalf("writeRes.Abs = %q want %q", writeRes.Abs, canon(t, extFile))
+	}
+}
+
