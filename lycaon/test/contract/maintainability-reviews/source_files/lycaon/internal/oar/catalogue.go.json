@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/oar/catalogue.go",
+  "kind": "projection",
+  "workstream": "coordinator-communication",
+  "disposition": "retain",
+  "reason": "The declaration table remains the single typed policy vocabulary. Three turn-visibility facts join the existing session facts without moving policy decisions into Go.",
+  "reviewed_commit": "5a4ee0af96857664ba3f7212498f74fe8792a3f1",
+  "ceiling": 465,
+  "boundaries": {
+    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
+    "lycaon/internal/oar/capability_document_test.go": "29dfc4d7287cb919a0a86a1d3e353315408e49ea333720971591d5908aa82bba"
+  }
+}

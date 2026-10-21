@@ -744,6 +744,10 @@ fn custody_failures_keep_distinct_startup_tags() {
             "credential_vault_custodian_unavailable",
         ),
         (
+            SidecarStartError::CredentialVaultCustodianAbsent("preserved".into()),
+            "credential_vault_custodian_absent",
+        ),
+        (
             SidecarStartError::CredentialVaultLauncherRefused("preserved".into()),
             "credential_vault_launcher_refused",
         ),

@@ -3,6 +3,7 @@ package credentialstore
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
@@ -26,6 +27,20 @@ type custody struct {
 	launcherPID int
 	client      *vaultidentity.Client
 	refusal     error
+	// absent marks an unavailable custodian that is not installed, not
+	// running, or cannot serve, as opposed to one briefly unreachable.
+	absent bool
+}
+
+// serviceExecutable is the packaged identity service; a test points it at a
+// fixture.
+var serviceExecutable = "/opt/painted-wolf-code/bin/pw-vault-identity"
+
+// serviceInstalled reports the structured fact that the identity service
+// program is installed.
+func serviceInstalled() bool {
+	info, err := os.Stat(serviceExecutable)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func newServiceClient() *vaultidentity.Client {
@@ -38,7 +53,10 @@ func probeCustody(client *vaultidentity.Client) custody {
 	resp, err := client.Do(vaultidentity.Request{Op: vaultidentity.OpProbe})
 	if err != nil {
 		_ = client.Close()
-		return custody{mode: custodyUnavailable, refusal: err}
+		// No socket or nobody listening on it means the service is not
+		// enabled or not installed; a failure on a live socket is transient.
+		absent := errors.Is(err, vaultidentity.ErrServiceAbsent) || !serviceInstalled()
+		return custody{mode: custodyUnavailable, refusal: err, absent: absent}
 	}
 	switch resp.Status {
 	case vaultidentity.StatusOK:
@@ -47,8 +65,9 @@ func probeCustody(client *vaultidentity.Client) custody {
 		_ = client.Close()
 		return custody{mode: custodyRefused, refusal: resp.Err()}
 	default:
+		// The service answered that it cannot serve this installation.
 		_ = client.Close()
-		return custody{mode: custodyUnavailable, refusal: resp.Err()}
+		return custody{mode: custodyUnavailable, refusal: resp.Err(), absent: true}
 	}
 }
 
@@ -59,8 +78,15 @@ func (c custody) provider(path string) identityProvider {
 	case custodyRefused:
 		return refusedIdentityProvider{refusal: c.refusal}
 	case custodyUnavailable:
+		if c.absent {
+			return &passphraseIdentityProvider{
+				path: identityPath(path), missingError: ErrCustodianAbsent,
+				missingGuidance: "; the vault identity service that held its key is not installed, not running, " +
+					"or cannot serve; reinstall or re-enable it to recover, or reset the vault",
+			}
+		}
 		return &passphraseIdentityProvider{
-			path: identityPath(path), missingError: ErrCustodianUnavailable,
+			path: identityPath(path), missingError: ErrCustodianUnavailable, unreachableVault: path,
 			missingGuidance: "; restore the vault identity service and open the installed desktop app; " +
 				"an app password requires a previously exported identity",
 		}

@@ -265,3 +265,61 @@ func TestNativeRequestDoesNotExecuteTextExamples(t *testing.T) {
 		t.Fatalf("plain text must request repair: %+v %v", out, err)
 	}
 }
+
+func TestClassifyToolResponseDetectsAndRecoversXMLAndDeferredToolCalls(t *testing.T) {
+	leakedWrite := "I'll continue building the Tic-Tac-Toe game. Let me create the game files now.\n<tool_call>\n<function=write>\n<parameter=content>\n<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Tic-Tac-Toe</title></head>\n<body><div id=\"game\"></div></body>\n</html>\n</parameter>\n<parameter=path>\ntic-tac-toe-ai/index.html\n</parameter>\n</function>\n</tool_call>"
+
+	investigateReq := modelcall.CompletionRequest{
+		ToolProtocol: modelcall.ToolProtocolNative,
+		Tools: []tools.ToolMeta{
+			{Name: "ask_user"},
+			{Name: "find"},
+			{Name: "grep"},
+			{Name: "list_dir"},
+			{Name: "read"},
+			{Name: "recall"},
+			{Name: "request_tools"},
+			{Name: "skills_read"},
+			{Name: "summarize"},
+			{Name: "surface_note"},
+			{Name: "update_progress"},
+		},
+	}
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), investigateReq, &modelcall.Completion{Content: leakedWrite}, "p", "m")
+	if err != nil {
+		t.Fatalf("unexpected error classifying native leaked XML tool call: %v", err)
+	}
+	if len(out.Completion.ToolCalls) != 0 {
+		t.Fatalf("native protocol must not execute text tool calls, got %+v", out.Completion.ToolCalls)
+	}
+	if len(out.TextActionTools) != 1 || out.TextActionTools[0] != "write" {
+		t.Fatalf("TextActionTools = %v, want [write]", out.TextActionTools)
+	}
+
+	envelopeReq := modelcall.CompletionRequest{
+		ToolProtocol: modelcall.ToolProtocolEnvelope,
+		Tools:        []tools.ToolMeta{{Name: "read"}, {Name: "write"}},
+	}
+	recovered, err := ClassifyToolResponse(providerprofile.OpenAI(), envelopeReq, &modelcall.Completion{Content: leakedWrite}, "p", "m")
+	if err != nil {
+		t.Fatalf("unexpected error recovering XML tool call: %v", err)
+	}
+	if len(recovered.Completion.ToolCalls) != 1 {
+		t.Fatalf("recovered %d tool calls, want 1", len(recovered.Completion.ToolCalls))
+	}
+	call := recovered.Completion.ToolCalls[0]
+	if call.Name != "write" {
+		t.Fatalf("call.Name = %q, want write", call.Name)
+	}
+	if gotPath, _ := call.Args["path"].(string); gotPath != "tic-tac-toe-ai/index.html" {
+		t.Fatalf("call.Args[path] = %q, want tic-tac-toe-ai/index.html", gotPath)
+	}
+	wantContent := "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Tic-Tac-Toe</title></head>\n<body><div id=\"game\"></div></body>\n</html>"
+	if gotContent, _ := call.Args["content"].(string); gotContent != wantContent {
+		t.Fatalf("call.Args[content] = %q, want %q", gotContent, wantContent)
+	}
+	if recovered.Completion.Content != "" {
+		t.Fatalf("recovered content not blanked: %q", recovered.Completion.Content)
+	}
+}
+
