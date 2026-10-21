@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -80,9 +79,19 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
 		}
 	}
-	// This reservation covers our bounded supplemental facts and shallow owner
-	// detail map. SQL metadata has its own measured reservation below.
-	release, err := memory.ReserveProgramState(ctx, int64(128<<10)+int64(len(rejected.Data))*128)
+	// Reuse the admitted immutable native value snapshot for owner diagnostics.
+	// Nested data must neither alias a mutable producer nor escape accounting.
+	details, err := prepareNativeArguments(ctx, memory, rejected.Data)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if prepared == nil {
+			details.close()
+		}
+	}()
+	// Supplemental facts are bounded separately; SQL has its measured lease.
+	release, err := memory.ReserveProgramState(ctx, 128<<10)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +133,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 		return nil, err
 	}
 	clone := *rejected
-	clone.Data = maps.Clone(rejected.Data)
+	clone.Data = details.values
 	if clone.Data == nil {
 		clone.Data = map[string]any{}
 	}
@@ -149,7 +158,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if policy != nil && !policy.MatchesOperation(operation) {
 		return nil, fmt.Errorf("program policy copy belongs to another execution")
 	}
-	return &PreparedProgramFailure{policy: policy, Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); release() }}, nil
+	return &PreparedProgramFailure{policy: policy, Rejection: &clone, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); details.close(); release() }}, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

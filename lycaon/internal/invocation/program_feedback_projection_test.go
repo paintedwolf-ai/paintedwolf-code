@@ -25,12 +25,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type feedbackMemory struct{ active, calls int }
+type feedbackMemory struct {
+	active, calls     int
+	maximum, retained int64
+}
 
-func (m *feedbackMemory) ReserveProgramState(context.Context, int64) (func(), error) {
+func (m *feedbackMemory) ReserveProgramState(_ context.Context, n int64) (func(), error) {
+	if n < 0 || (m.maximum > 0 && n > m.maximum-m.retained) {
+		return nil, errors.New("fixture aggregate state ceiling")
+	}
 	m.active++
 	m.calls++
-	return func() { m.active-- }, nil
+	m.retained += n
+	return func() { m.active--; m.retained -= n }, nil
 }
 
 func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testing.T) {
@@ -241,5 +248,38 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	frame.Close()
 	if memory.active != 0 {
 		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
+	}
+}
+
+func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	read := f.childFor(t, "read")
+	const code = "READ_PATH_DENIED"
+	testutil.FailErr(t, "settle actual refusal", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, DetailReference: "output:refusal"}))
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
+	nested := map[string]any{"path": "original", "items": []any{map[string]any{"ranges": []string{"original-range"}}}, "raw": string([]byte{0xff})}
+	cause := &toolrejection.ToolReject{Code: code, Data: map[string]any{"details": nested}}
+	memory := &feedbackMemory{}
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, tc, read, cause)
+	testutil.FailErr(t, "capture actual nested owner diagnostic", err)
+	defer prepared.Close()
+	nested["path"] = "changed-after-preparation"
+	nested["items"].([]any)[0].(map[string]any)["ranges"].([]string)[0] = "changed-range"
+	frozen := prepared.Rejection.Data["details"].(map[string]any)
+	if frozen["path"] != "original" || frozen["items"].([]any)[0].(map[string]any)["ranges"].([]string)[0] != "original-range" || frozen["raw"] != string([]byte{0xff}) {
+		t.Fatal("owner mutation or lossy JSON changed retained diagnostic")
+	}
+	prepared.Close()
+	if memory.retained != 0 || memory.active != 0 {
+		t.Fatal("diagnostic snapshot leaked state")
+	}
+	limited := &feedbackMemory{maximum: 1 << 20}
+	cause.Data["details"] = map[string]any{"oversized": strings.Repeat("x", 2<<20)}
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, tc, read, cause); refused != nil || err == nil || limited.retained != 0 || limited.active != 0 {
+		t.Fatal("oversized nested diagnostic escaped admission or leaked partial snapshot")
+	}
+	cause.Data["details"] = make(chan string)
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, tc, read, cause); refused != nil || err == nil || limited.retained != 0 {
+		t.Fatal("unsupported mutable diagnostic escaped snapshot")
 	}
 }
