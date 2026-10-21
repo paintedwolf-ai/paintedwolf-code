@@ -432,6 +432,87 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	}
 }
 
+// A terminal interrupt reaches the confined program, not the helpers between
+// it and the terminal, so an interactive interpreter survives Ctrl-C.
+func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
+	requireLinuxSandbox(t)
+	self, err := os.Executable()
+	testutil.FailErr(t, "test binary", err)
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interactive interpreter", err)
+	master, slave := openPty(t)
+	defer master.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(t.TempDir()))
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid, cmd.SysProcAttr.Setctty, cmd.SysProcAttr.Ctty = true, true, 0
+	testutil.FailErr(t, "start confined interpreter", cmd.Start())
+	_ = slave.Close()
+	terminal := watchTerminal(master)
+	send := func(text string) {
+		t.Helper()
+		_, err := master.WriteString(text)
+		testutil.FailErr(t, "write terminal input", err)
+	}
+	send("print('ready' + '-for-input')\n")
+	terminal.await(t, "ready-for-input")
+	send("\x03")
+	terminal.await(t, "KeyboardInterrupt")
+	send("print('interrupt' + '-survived')\n")
+	terminal.await(t, "interrupt-survived")
+	send("raise SystemExit(7)\n")
+	_ = cmd.Wait()
+	if status, _ := cmd.ProcessState.Sys().(syscall.WaitStatus); status.Signaled() || status.ExitStatus() != 7 {
+		t.Fatalf("interpreter exit after the interrupt: %v\n%q", status, terminal.text())
+	}
+}
+
+// terminalWatch accumulates what a terminal's main side reads.
+type terminalWatch struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func watchTerminal(master *os.File) *terminalWatch {
+	w := &terminalWatch{}
+	go func() {
+		chunk := make([]byte, 4096)
+		for {
+			n, err := master.Read(chunk)
+			w.mu.Lock()
+			w.buf.Write(chunk[:n])
+			w.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return w
+}
+
+func (w *terminalWatch) text() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func (w *terminalWatch) await(t *testing.T, marker string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for !strings.Contains(w.text(), marker) {
+		if time.Now().After(deadline) {
+			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // openPty opens a pseudo-terminal pair that is no session's controlling terminal.
 func openPty(t *testing.T) (master, slave *os.File) {
 	t.Helper()
