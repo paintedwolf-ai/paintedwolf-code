@@ -74,6 +74,9 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 		return Report{Language: failure.Language, Status: StatusIncomplete, Failure: failure}
 	}
 	entry := resolveEntry(ctx, langName, filename, src)
+	if entry != nil && entry.Name == "css" {
+		return cssMarkupHealth(src)
+	}
 	if entry == nil || entry.Language == nil || !supported(entry.Name) {
 		return Report{Status: StatusUnsupported}
 	}
@@ -109,49 +112,6 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 	report.Burden = faultBurden(faults)
 	report.Diagnostics, report.DiagnosticsTruncated = buildDiagnostics(faults, src, entry.Language())
 	return report
-}
-
-// Grammar recovery can hide unclosed strings and handlerless try statements.
-func pythonStructuralFaults(root *gotreesitter.Node, language *gotreesitter.Language, src []byte) []fault {
-	var out []fault
-	gotreesitter.Walk(root, func(node *gotreesitter.Node, _ int) gotreesitter.WalkAction {
-		if node == nil {
-			return gotreesitter.WalkContinue
-		}
-		typ := node.Type(language)
-		if typ == "string_start" && node.Parent() != nil && node.Parent().Type(language) != "string" {
-			out = append(out, fault{node: node, start: int(node.StartByte()), end: int(node.EndByte()), kind: DiagnosticMissing})
-			return gotreesitter.WalkContinue
-		}
-		if node.ChildCount() != 0 || typ != "try" || string(node.Text(src)) != "try" {
-			return gotreesitter.WalkContinue
-		}
-		statement := node.Parent()
-		for statement != nil && statement.Type(language) != "try_statement" {
-			statement = statement.Parent()
-		}
-		if statement == nil || !pythonTryHasHandler(statement, language) {
-			out = append(out, fault{
-				node: node, start: int(node.StartByte()), end: int(node.EndByte()), kind: DiagnosticError,
-			})
-		}
-		return gotreesitter.WalkContinue
-	})
-	return out
-}
-
-func pythonTryHasHandler(statement *gotreesitter.Node, language *gotreesitter.Language) bool {
-	for i := 0; i < statement.NamedChildCount(); i++ {
-		child := statement.NamedChild(i)
-		if child == nil {
-			continue
-		}
-		switch child.Type(language) {
-		case "except_clause", "finally_clause":
-			return true
-		}
-	}
-	return false
 }
 
 func resolveEntry(ctx context.Context, langName, filename string, src []byte) *grammars.LangEntry {

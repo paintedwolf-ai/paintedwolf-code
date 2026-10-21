@@ -42,11 +42,42 @@ func SystemPreamble(messages []api.Message) []api.Message {
 	}
 	for _, message := range messages[leading:] {
 		if message.Role == api.MessageRoleSystem {
+			if len(out) > 0 && out[len(out)-1].Role == api.MessageRoleTool {
+				foldSystemIntoTool(&out[len(out)-1], message)
+				continue
+			}
 			message.Role = api.MessageRoleUser
 		}
 		out = append(out, message)
 	}
 	return out
+}
+
+func foldSystemIntoTool(tool *api.Message, system api.Message) {
+	base := tool.Content
+	if base == "" && tool.ToolResult != nil {
+		base = tool.ToolResult.Content
+	}
+	tool.Content = joinContent(base, system.Content)
+	if tool.ToolResult != nil {
+		tr := *tool.ToolResult
+		tr.Content = joinContent(tr.Content, system.Content)
+		tool.ToolResult = &tr
+	}
+	if system.PromptCacheBreakpoint != api.PromptCacheTierNone {
+		tool.PromptCacheBreakpoint = system.PromptCacheBreakpoint
+	}
+}
+
+func joinContent(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + "\n\n" + b
+	}
 }
 
 // Host events start conversation content even before the first user message.

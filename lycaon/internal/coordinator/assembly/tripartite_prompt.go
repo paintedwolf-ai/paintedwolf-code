@@ -35,7 +35,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	if frame.RequiresEvidence("verify") {
 		settingsFP += ";verify=1"
 	}
-	settingsFP += fmt.Sprintf(";verify_command=%s;overlay_promote=%t", strings.TrimSpace(implState.VerifyCommand), len(implState.PendingOverlayIDs) > 0)
+	settingsFP += fmt.Sprintf(";verify_command=%s;overlay_promote=%t;progress_missing=%t", strings.TrimSpace(implState.VerifyCommand), len(implState.PendingOverlayIDs) > 0, implState.ProgressMissing)
 	webSearchEnabled := true
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
@@ -153,6 +153,7 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		},
 		prompts.CoordinatorPromptGates{
 			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
+			ProgressMissing:       implState.ProgressMissing,
 			VerifyRequired:        frame.RequiresEvidence("verify"),
 			VerifyCommand:         implState.VerifyCommand,
 		},

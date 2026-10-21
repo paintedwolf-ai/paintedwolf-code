@@ -49,10 +49,9 @@ export function UpdatePanel(props: UpdatePanelProps) {
         <div class="den-settings-pref-row" {...settingAnchor("update-checks")}>
           <div class="den-settings-pref-copy">
             <span class="den-settings-pref-label">{settingLabel("update-checks")}</span>
-            <Show when={state()?.install_source === "system_package"} fallback={<p class="den-settings-hint">Downloads updates in the background and installs them when you quit or next open Painted Wolf Code. The app never restarts automatically while you’re using it.</p>}>
-              <p class="den-settings-hint" data-testid="updates-package-hint">Checks for updates in the background and tells you when a newer package is available. Updates install through the system package manager, never from inside the app.</p>
+            <Show when={state()?.install_source === "system_package" || state()?.install_source === "homebrew_cask"} fallback={<p class="den-settings-hint">Downloads updates in the background and installs them when you quit or next open Painted Wolf Code. The app never restarts automatically while you’re using it.</p>}>
+              <p class="den-settings-hint" data-testid="updates-package-hint">Checks for updates in the background and tells you when a newer package is available. Updates install through {state()?.install_source === "homebrew_cask" ? "Homebrew" : "the system package manager"}, never from inside the app.</p>
             </Show>
-            <p class="den-settings-hint">Checks shortly after launch and every six hours. New releases reach devices gradually over their first two days; Check now always offers the newest version. Requests carry no device identifier or account information. Homebrew installations update through Homebrew.</p>
           </div>
           <DenCheckbox checked={state()?.automatic_updates_enabled ?? false} disabled={locked()} data-testid="updates-check-enabled" onChange={(event) => { const enabled = event.currentTarget.checked; void updates.run(() => updates.service.setAutomaticUpdatesEnabled(enabled)); }}><span class="sr-only">Automatic updates</span></DenCheckbox>
         </div>

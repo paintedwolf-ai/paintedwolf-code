@@ -32,3 +32,7 @@ checkpoint_approval: >-
   The approval resolves this tool invocation's access decision. Continue the
   original task from the tool result, checking any remaining deliverables and
   verification before reporting completion.
+
+internal_step_note: >-
+  Internal working note, not shown to the user. Tool results record what executed
+  and whether it succeeded.
