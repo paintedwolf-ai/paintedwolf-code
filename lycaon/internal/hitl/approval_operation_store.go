@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -16,6 +15,8 @@ type preparedApprovalOperation struct {
 	CheckpointID string
 	SessionID    string
 	Option       ApprovalOption
+	// authorityFormat marks Option as the display of native authority.
+	authorityFormat string
 }
 
 func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, approved approvedAuthority) error {
@@ -186,31 +187,18 @@ func (s *SQLStore) rollbackApprovalOperation(ctx context.Context, checkpointID s
 	})
 }
 
-// preparedApprovalOperations reads interrupted approvals for rollback. A
-// native operation's option comes only from its lossless reader.
-func (s *SQLStore) preparedApprovalOperations(ctx context.Context, state toolcontract.ReviewStateAdmission) ([]preparedApprovalOperation, func(), error) {
+func (s *SQLStore) preparedApprovalOperations(ctx context.Context) ([]preparedApprovalOperation, error) {
 	rows, err := s.queries.ListPreparedApprovalOperations(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var releases releaseList
 	out := make([]preparedApprovalOperation, 0, len(rows))
 	for _, row := range rows {
-		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID}
+		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID, authorityFormat: row.AuthorityFormat}
 		if err := json.Unmarshal([]byte(row.OptionJson), &op.Option); err != nil {
-			releases.release()
-			return nil, nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
-		}
-		if row.AuthorityFormat != "" {
-			option, release, err := s.nativeAuthority().approvedOption(ctx, state, operationAuthoritySource(row.CheckpointID), op.Option)
-			if err != nil {
-				releases.release()
-				return nil, nil, err
-			}
-			releases = append(releases, release)
-			op.Option = option
+			return nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
 		}
 		out = append(out, op)
 	}
-	return out, releases.release, nil
+	return out, nil
 }

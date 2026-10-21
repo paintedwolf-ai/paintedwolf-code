@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -145,10 +146,6 @@ func (s nativeAuthorityReader) read(ctx context.Context, state toolcontract.Revi
 	return projection, release, nil
 }
 
-func (s *SQLStore) checkpointAuthority(ctx context.Context, state toolcontract.ReviewStateAdmission, checkpointID string) (NativeAuthorityProjection, func(), error) {
-	return s.nativeAuthority().read(ctx, state, checkpointAuthoritySource(checkpointID))
-}
-
 // restoredNativeOptions restores a row's options and binds them to the
 // screened display copy its JSON column holds; any difference refuses.
 func restoredNativeOptions(ctx context.Context, state toolcontract.ReviewStateAdmission, projection NativeAuthorityProjection, display []ApprovalOption) ([]ApprovalOption, func(), error) {
@@ -181,7 +178,7 @@ func approvedOption(ctx context.Context, store approvalAuthorityStore, state too
 		option := display.grantedBy(resolution)
 		return option, approvedAuthority{display: option}, func() {}, nil
 	}
-	projection, releaseProjection, err := store.checkpointAuthority(ctx, state, row.ID)
+	projection, releaseProjection, err := store.nativeAuthority().read(ctx, state, checkpointAuthoritySource(row.ID))
 	if err != nil {
 		return ApprovalOption{}, approvedAuthority{}, nil, fmt.Errorf("approval authority: %w", err)
 	}
@@ -271,4 +268,50 @@ func (s nativeAuthorityReader) chatGrant(ctx context.Context, state toolcontract
 		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
 	}
 	return options[0].Authority[found], release, nil
+}
+
+// restoredApprovalOperations reads interrupted approvals for rollback. A
+// native operation's option comes only from its lossless reader.
+func restoredApprovalOperations(ctx context.Context, store approvalAuthorityStore, state toolcontract.ReviewStateAdmission) ([]preparedApprovalOperation, func(), error) {
+	ops, err := store.preparedApprovalOperations(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	var releases releaseList
+	for n, op := range ops {
+		if op.authorityFormat == "" {
+			continue
+		}
+		option, release, err := store.nativeAuthority().approvedOption(ctx, state, operationAuthoritySource(op.CheckpointID), op.Option)
+		if err != nil {
+			releases.release()
+			return nil, nil, err
+		}
+		releases = append(releases, release)
+		ops[n].Option = option
+	}
+	return ops, releases.release, nil
+}
+
+// restoredChatGrants reads live chat grants for boot replay. A native grant's
+// delta comes only from its lossless reader.
+func restoredChatGrants(ctx context.Context, store approvalAuthorityStore, state toolcontract.ReviewStateAdmission, now time.Time) ([]ChatGrant, func(), error) {
+	grants, err := store.chatGrants(ctx, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	var releases releaseList
+	for n, grant := range grants {
+		if grant.authorityFormat == "" {
+			continue
+		}
+		delta, release, err := store.nativeAuthority().chatGrant(ctx, state, grant.ChatSessionID, grant.ID, grant.Delta)
+		if err != nil {
+			releases.release()
+			return nil, nil, err
+		}
+		releases = append(releases, release)
+		grants[n].Delta = delta
+	}
+	return grants, releases.release, nil
 }

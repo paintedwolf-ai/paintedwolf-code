@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -84,8 +83,8 @@ type Store interface {
 	prepareApprovalOperation(context.Context, string, string, approvedAuthority) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error
-	preparedApprovalOperations(context.Context, toolcontract.ReviewStateAdmission) ([]preparedApprovalOperation, func(), error)
-	chatGrants(context.Context, time.Time, toolcontract.ReviewStateAdmission) ([]ChatGrant, func(), error)
+	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
+	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
 	forgetChatGrant(context.Context, string) (bool, error)
-	checkpointAuthority(context.Context, toolcontract.ReviewStateAdmission, string) (NativeAuthorityProjection, func(), error)
+	nativeAuthority() nativeAuthorityReader
 }

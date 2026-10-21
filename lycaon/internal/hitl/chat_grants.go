@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // ChatGrant is one approval delta whose authority lasts for its chat.
@@ -22,6 +21,8 @@ type ChatGrant struct {
 	Delta         ApprovalAuthorityDelta
 	// ExpiresAt is fixed when the approval commits; nil lasts for the chat.
 	ExpiresAt *time.Time
+	// authorityFormat marks Delta as the display of native authority.
+	authorityFormat string
 }
 
 // ChatLifetime reports the chat a delta's authority lasts for and the id
@@ -124,53 +125,40 @@ func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, op
 	return nil
 }
 
-func (s *SQLStore) chatGrants(ctx context.Context, now time.Time, state toolcontract.ReviewStateAdmission) ([]ChatGrant, func(), error) {
+func (s *SQLStore) chatGrants(ctx context.Context, now time.Time) ([]ChatGrant, error) {
 	if err := s.queries.DeleteExpiredChatGrants(ctx, db.NullString(db.FormatTime(now))); err != nil {
-		return nil, nil, fmt.Errorf("prune expired chat grants: %w", err)
+		return nil, fmt.Errorf("prune expired chat grants: %w", err)
 	}
 	rows, err := s.queries.ListChatGrants(ctx)
 	if err != nil {
-		return nil, nil, err
-	}
-	var releases releaseList
-	fail := func(err error) ([]ChatGrant, func(), error) {
-		releases.release()
-		return nil, nil, err
+		return nil, err
 	}
 	out := make([]ChatGrant, 0, len(rows))
 	for _, row := range rows {
-		grant := ChatGrant{ChatSessionID: row.ChatSessionID, ID: row.ID, CheckpointID: row.CheckpointID}
+		grant := ChatGrant{ChatSessionID: row.ChatSessionID, ID: row.ID, CheckpointID: row.CheckpointID, authorityFormat: row.AuthorityFormat}
 		if err := json.Unmarshal([]byte(row.DeltaJson), &grant.Delta); err != nil {
-			return fail(fmt.Errorf("decode chat grant %s: %w", row.ID, err))
-		}
-		if row.AuthorityFormat != "" {
-			delta, release, err := s.nativeAuthority().chatGrant(ctx, state, row.ChatSessionID, row.ID, grant.Delta)
-			if err != nil {
-				return fail(err)
-			}
-			releases = append(releases, release)
-			grant.Delta = delta
+			return nil, fmt.Errorf("decode chat grant %s: %w", row.ID, err)
 		}
 		if grant.Delta.Grant != nil {
 			if err := ValidateElevatedEffects(grant.Delta.Grant.ElevatedEffects); err != nil {
-				return fail(fmt.Errorf("decode chat grant %s: %w", row.ID, err))
+				return nil, fmt.Errorf("decode chat grant %s: %w", row.ID, err)
 			}
 		}
 		if grant.Delta.AskQuiet != nil {
 			if err := ValidateElevatedEffects(grant.Delta.AskQuiet.ElevatedEffects); err != nil {
-				return fail(fmt.Errorf("decode chat quiet %s: %w", row.ID, err))
+				return nil, fmt.Errorf("decode chat quiet %s: %w", row.ID, err)
 			}
 		}
 		if row.ExpiresAt.Valid {
 			expires, err := db.ParseTime(row.ExpiresAt.String)
 			if err != nil {
-				return fail(fmt.Errorf("decode chat grant %s expiry: %w", row.ID, err))
+				return nil, fmt.Errorf("decode chat grant %s expiry: %w", row.ID, err)
 			}
 			grant.ExpiresAt = &expires
 		}
 		out = append(out, grant)
 	}
-	return out, releases.release, nil
+	return out, nil
 }
 
 func (s *SQLStore) forgetChatGrant(ctx context.Context, id string) (bool, error) {
@@ -185,7 +173,7 @@ func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
 	now := time.Now().UTC()
-	grants, releaseGrants, err := m.store.chatGrants(ctx, now, m.nativeAdmission)
+	grants, releaseGrants, err := restoredChatGrants(ctx, m.store, m.nativeAdmission, now)
 	if err != nil {
 		return err
 	}
