@@ -72,6 +72,7 @@ func TestNativeChmodBundledPoliciesKeepActualToolAttribution(t *testing.T) {
 				} else {
 					gc.ObserveToolCall("chmod", map[string]any{"paths": []string{"input"}, "mode": "0644"})
 				}
+				gc.ObservedRejectCode = code
 				gc.PutRejectData(code, map[string]any{"path": "input", "mode": "0644", "requested": 9, "max_paths": 8, "bulk_denied": true, "mode_denied": true, "chmod_allowed_modes": []string{"0600", "0644"}})
 				result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
 				testutil.FailErr(t, "evaluate bundled chmod policy", err)
@@ -86,6 +87,7 @@ func TestNativeChmodBundledPoliciesKeepActualToolAttribution(t *testing.T) {
 			// operation, and the right operation cannot override another code.
 			gc := NewGuardContext()
 			gc.ObserveToolCall("command", map[string]any{"command": "chmod 0644 input"})
+			gc.ObservedRejectCode = code
 			gc.PutRejectData(code, map[string]any{"native_operation": "chmod"})
 			result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate unbound command", err)
@@ -93,6 +95,7 @@ func TestNativeChmodBundledPoliciesKeepActualToolAttribution(t *testing.T) {
 				t.Fatal("command text or diagnostic data selected chmod policy")
 			}
 			testutil.FailErr(t, "observe actual chmod", gc.ObserveNativeOperation(operation))
+			gc.ObservedRejectCode = "OTHER_OWNER_FAILURE"
 			gc.PutRejectData("OTHER_OWNER_FAILURE", nil)
 			result, err = pipeline.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate different owner code", err)
