@@ -4,14 +4,14 @@
   "kind": "runtime_service",
   "workstream": "portable-command-streams",
   "disposition": "retain",
-  "reason": "Retain the existing blob-store boundary at measured 32 for this stream addition. Context-aware staged writes and the bounded decoder enter the same existing commit, content identity, retention and recovery lifecycle; generic consumers keep their original behavior. Compression and reader profiles are separated at their real codec boundaries without creating a second persistence owner. Splitting authority or retention into forwarding services would hide the shared store lock and claim transaction. Focused cancellation, memory-before-allocation, large-body bounded decoding, duplicate live claims and durable transfer fixtures support this bounded retention decision. Further growth requires a new cohesion review.",
-  "reviewed_commit": "641d819b28fbe9bdee91279d4a654850983a4e3c",
-  "ceiling": 32,
+  "reason": "Retain the existing blob-store boundary at measured 688 lines and 33 methods after reviewing the exact-claim recovery addition. HasRetentionClaim observes the same store retention marker using the existing claim identity algorithm; it neither manufactures a replacement claim nor introduces another persistence owner. Durable-reference refusal or an ambiguous lookup preserves the original marker, body and quota until the actual durable reference is removed. The store lock, staged commit, content identity, retention and recovery remain one cohesive lifecycle; codec profiles retain their existing boundaries. Passing actual-store durable-reference, lookup-error, close/refusal and eventual collection fixtures support this bounded decision alongside cancellation, bounded decoding, duplicate live claims and transfer contracts. Further growth or structural change requires renewed review.",
+  "reviewed_commit": "363f53abc78f376fc8041047d6e115cc2ec27e0f",
+  "ceiling": 33,
   "boundaries": {
     "lycaon/internal/blobstore/stage_compression_test.go": "0c37d5ca6decc20be6d1200154becee67948fc666f68e71a338fd2949c100257",
     "lycaon/internal/blobstore/stream_reader_test.go": "75456a9c8f6ec28bd4de649c4e3943fe8fa6508a44d7ea45567143b9c136ff2d",
     "lycaon/internal/tooloutput/stream_spill_test.go": "32917b7ab686f78f61379ac56bb76b8d1bd5854ac254063e4a8a63beb1e10ef1",
-    "lycaon/internal/tooloutput/stream_reference_test.go": "513650ba91d7d67a2b0fda09706094fe054c4f6108d2b991228749e51ce73d57"
+    "lycaon/internal/tooloutput/stream_reference_test.go": "683bcce6c3d228eea0618b3db4807e4bcf11acef41026546373c9851eb05012d"
   },
-  "reviewed_shape": "115dc28e42b60eeaf404235cb9993a6462b5a80e48eb8130f1dba8c4ecc5252a"
+  "reviewed_shape": "c800835e82b0e5267bd76d16a5461b20f49019bce8aa497b8170004f13499630"
 }
