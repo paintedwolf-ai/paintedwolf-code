@@ -82,6 +82,23 @@ func (m *ProgramMemory) ReserveProgramState(ctx context.Context, n int64) (func(
 	return m.reserve(ctx, n, true)
 }
 
+// ReserveBytes admits secret-screening working bytes, which the detector
+// returns by count with ReleaseBytes rather than through a lease.
+func (m *ProgramMemory) ReserveBytes(ctx context.Context, n int64) error {
+	_, err := m.reserve(ctx, n, false)
+	return err
+}
+
+// ReleaseBytes returns working bytes admitted by ReserveBytes.
+func (m *ProgramMemory) ReleaseBytes(n int64) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.working = max(m.working-n, 0)
+}
+
 // InUse reports currently held bytes.
 func (m *ProgramMemory) InUse() ProgramMemoryUsage {
 	m.mu.Lock()
