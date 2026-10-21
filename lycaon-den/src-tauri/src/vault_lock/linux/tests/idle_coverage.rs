@@ -189,3 +189,69 @@ fn an_x11_session_without_its_display_reports_it_unreachable() {
         assert!(!h.allowed());
     });
 }
+
+/// An X server that serves MIT-SCREEN-SAVER; Xvfb ships it.
+struct XServer {
+    child: Child,
+    display: String,
+}
+
+impl XServer {
+    fn start() -> Self {
+        let mut child = Command::new("Xvfb")
+            .args(["-displayfd", "1", "-nolisten", "tcp", "-noreset"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Xvfb is a Den Linux test dependency");
+        let mut number = String::new();
+        BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut number)
+            .unwrap();
+        let display = format!(":{}", number.trim());
+        assert!(display.len() > 1, "Xvfb chose no display");
+        Self { child, display }
+    }
+}
+
+impl Drop for XServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[test]
+fn an_x11_session_is_observed_through_the_screen_saver_extension() {
+    let mut fixture = Fixture::new(
+        Facts {
+            session_type: "x11",
+            ..Facts::default()
+        },
+        false,
+    );
+    let server = XServer::start();
+    fixture.x11 = Some(server.display.clone());
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        let status = h.monitor.status();
+        assert_eq!(
+            status.idle.source,
+            Some(idle::IdleSource::X11ScreenSaver),
+            "{status:?}"
+        );
+        assert!(
+            !status.idle.idle,
+            "a fresh server has had input for less than the period"
+        );
+        assert!(h.allowed());
+        drop(server);
+        h.pump_until("X server loss", |h| {
+            h.monitor.tick();
+            h.monitor.status().idle.error == Some(idle::IdleUnavailable::Lost)
+        });
+        assert!(!h.allowed());
+        assert!(h.locks().contains(&LockReason::ScreenLocked));
+    });
+}

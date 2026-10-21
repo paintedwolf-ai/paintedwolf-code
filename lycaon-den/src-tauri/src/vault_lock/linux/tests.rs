@@ -46,7 +46,7 @@ impl Harness {
             },
             DisplayTargets {
                 wayland: Some(fixture.wayland.clone()),
-                x11: None,
+                x11: fixture.x11.clone(),
             },
             context.clone(),
             Box::new(move |reason| recorded.borrow_mut().push(reason)),
@@ -102,6 +102,7 @@ struct Fixture {
     screensaver: Option<Service>,
     wayland: PathBuf,
     compositor: Option<Compositor>,
+    x11: Option<String>,
 }
 
 impl Fixture {
@@ -121,6 +122,7 @@ impl Fixture {
             screensaver,
             wayland,
             compositor,
+            x11: None,
         }
     }
 
