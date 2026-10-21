@@ -45,6 +45,17 @@ impl LockSources {
         }
     }
 
+    /// The person-facing reason confirmation is refused, or none.
+    pub(crate) fn confirmation_refusal(&self) -> Option<&'static str> {
+        if self.confirmation_allowed() {
+            return None;
+        }
+        if self.idle.source.is_none() {
+            return Some("This desktop's display server does not report when input goes idle, so stepping away cannot be detected.");
+        }
+        Some("The graphical session is locked, inactive, idle, or its lock state is unavailable.")
+    }
+
     pub(super) fn confirmation_allowed(&self) -> bool {
         !self.observed_away() && self.lock_observed() && self.idle.source.is_some()
     }
@@ -147,7 +158,11 @@ mod tests {
             ..LockSources::default()
         };
         assert!(state.confirmation_allowed());
+        assert_eq!(state.confirmation_refusal(), None);
         state.idle.idle = true;
+        assert!(state
+            .confirmation_refusal()
+            .is_some_and(|reason| reason.contains("idle")));
         assert!(state.observed_away() && !state.confirmation_allowed());
         // Lock sources alone never keep confirmation allowed: a locker may
         // report to neither of them.
@@ -163,6 +178,9 @@ mod tests {
                 idle: false,
             };
             assert!(!state.confirmation_allowed());
+            assert!(state
+                .confirmation_refusal()
+                .is_some_and(|reason| reason.contains("display server")));
         }
     }
 }

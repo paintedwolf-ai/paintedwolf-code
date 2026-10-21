@@ -46,10 +46,6 @@ pub(crate) fn status() -> LockSources {
         .unwrap_or_default()
 }
 
-pub(crate) fn confirmation_allowed() -> bool {
-    status().confirmation_allowed()
-}
-
 /// Where the monitor reaches its two buses. Production uses the fixed system
 /// socket, never `DBUS_SYSTEM_BUS_ADDRESS`, and the person's session bus.
 pub(super) struct BusAddresses {

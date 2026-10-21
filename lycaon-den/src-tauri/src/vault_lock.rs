@@ -87,9 +87,10 @@ fn lock_in_background(app: &AppHandle, reason: LockReason) {
     });
 }
 
+/// Why presence cannot be confirmed now, when it cannot.
 #[cfg(target_os = "linux")]
-pub(crate) fn confirmation_allowed() -> bool {
-    linux::confirmation_allowed()
+pub(crate) fn confirmation_refusal() -> Option<&'static str> {
+    linux::status().confirmation_refusal()
 }
 
 #[tauri::command]
