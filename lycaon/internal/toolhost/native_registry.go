@@ -172,7 +172,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		Survey:    &SurveyServices{readTool: read, listDirTool: listDir, grepTool: grep, findTool: find, summarizeTool: summarizeTool, fileAge: deps.fileAge, gitStatusCache: deps.statusCache},
 		Mutations: &MutationServices{writeTool: write, editTool: edit, replaceLinesTool: replaceLines, codeRewriteTool: codeRewrite, restoreVersionTool: restoreVersion, jqEditTool: jqEdit},
 		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool,
-			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, operations: mutation.Operations{Write: write, Delete: deleteTool, Move: moveTool, Copy: copyTool, Mkdir: mkdirTool, Chmod: chmod}}},
+			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, operations: mutation.Operations{Write: write, Delete: deleteTool, Move: moveTool, Copy: copyTool, Mkdir: mkdirTool, Chmod: chmod}, git: deps.git, registry: reg}},
 		Skills: &SkillServices{skillsReadTool: skillsRead},
 	}, nil
 }
