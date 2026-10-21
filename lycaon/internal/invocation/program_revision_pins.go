@@ -17,13 +17,38 @@ const maxExecutionRevisionPins = 1024
 // is unsettled; resubmitting the same pins is idempotent and different pins at
 // a recorded position are refused rather than refreshed.
 func (r *SQLRecorder) RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error {
+	if len(pins) == 0 {
+		return fmt.Errorf("revision pins require an execution and at least one capture")
+	}
+	return r.recordPins(ctx, executionID, func(existing []toolcontract.ExecutionRevision) ([]toolcontract.ExecutionRevision, error) {
+		for i := range min(len(existing), len(pins)) {
+			if existing[i] != pins[i] {
+				return nil, fmt.Errorf("revision pin %d conflicts with the recorded capture", i)
+			}
+		}
+		return pins, nil
+	}, pins)
+}
+
+// AppendRevisionPin records one capture at the execution's next position. An
+// execution's owners capture independently (each redirect destination, the
+// utility's own sources and destinations), so none of them assigns ordinals.
+func (r *SQLRecorder) AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error {
+	return r.recordPins(ctx, executionID, func(existing []toolcontract.ExecutionRevision) ([]toolcontract.ExecutionRevision, error) {
+		return append(existing, pin), nil
+	}, []toolcontract.ExecutionRevision{pin})
+}
+
+// recordPins inserts the positions next adds beyond the recorded captures,
+// in one transaction with the execution's state check.
+func (r *SQLRecorder) recordPins(ctx context.Context, executionID string, next func([]toolcontract.ExecutionRevision) ([]toolcontract.ExecutionRevision, error), submitted []toolcontract.ExecutionRevision) error {
 	if r == nil || r.database == nil {
 		return fmt.Errorf("invocation recorder is not configured")
 	}
-	if executionID == "" || len(pins) == 0 {
+	if executionID == "" {
 		return fmt.Errorf("revision pins require an execution and at least one capture")
 	}
-	for _, pin := range pins {
+	for _, pin := range submitted {
 		if err := pin.Validate(); err != nil {
 			return err
 		}
@@ -44,16 +69,15 @@ func (r *SQLRecorder) RecordRevisionPins(ctx context.Context, executionID string
 	if err != nil {
 		return err
 	}
-	for i, pin := range pins {
-		if i < len(existing) {
-			if existing[i] != pin {
-				return fmt.Errorf("revision pin %d conflicts with the recorded capture", i)
-			}
-			continue
-		}
+	pins, err := next(existing)
+	if err != nil {
+		return err
+	}
+	for i := len(existing); i < len(pins); i++ {
 		if i >= maxExecutionRevisionPins {
 			return fmt.Errorf("execution exceeds %d revision pins", maxExecutionRevisionPins)
 		}
+		pin := pins[i]
 		if _, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_revision_pins(program_id,execution_id,ordinal,role,mode,basis,root_id,path,document_id,document_revision,disk_sha256,representation,content_sha256,content_bytes,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			program, executionID, i, string(pin.Role), string(pin.Mode), string(pin.Basis), pin.RootID, pin.Path, pin.DocumentID, pin.DocumentRevision, pin.DiskSHA256, string(pin.Representation), pin.ContentSHA256, pin.ContentBytes, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return err

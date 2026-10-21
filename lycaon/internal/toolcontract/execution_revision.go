@@ -96,7 +96,8 @@ func (r ExecutionRevision) Validate() error {
 		return fmt.Errorf("unknown execution revision mode %q", r.Mode)
 	}
 	// Literal byte utilities capture exact stream bytes: the published file, or
-	// the accepted document encoded in its recorded encoding and newlines.
+	// the accepted document encoded in its recorded encoding and newlines. A
+	// destination with no text view is captured as its exact disk bytes.
 	representation := r.Representation == LogicalUTF8LF || r.Representation == UTF8SourceBytes ||
 		(r.Representation == OriginalEncodedBytes && (r.Mode == AcceptedDocumentRevision || r.ContentSHA256 == r.DiskSHA256))
 	if r.Basis == DeclaredAtLaunch {
