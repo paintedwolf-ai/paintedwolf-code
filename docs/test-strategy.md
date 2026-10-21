@@ -757,7 +757,9 @@ provisions the pinned browser before the lane goes offline.
 The `nix` lane runs `nix:check` nightly. It informs and gates no merge or
 release. A lane's `arguments` reach its single target. Setup installs the pinned
 Nix release and fetches every locked input with `nix:check -- --prepare` before
-the lane goes offline.
+the lane goes offline. The `nix-confine` lane runs `test:confine:linux -- nix`
+nightly the same way; the leg builds the locked workflow fixture from its own
+checkout.
 
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
