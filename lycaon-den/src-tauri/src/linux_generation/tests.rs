@@ -21,8 +21,9 @@ fn fixture(output: &Path, desktop: &[u8], helper: &[u8]) -> PathBuf {
     let pw_path = root.join("bin/pw");
     let manifest_json = crate::sidecar::manifest::fixture_json(
         &root,
-        "1.0.2",
+        "x86_64",
         &[(&shell_path, desktop), (&pw_path, helper)],
+        &[],
     );
     std::fs::write(
         root.join("manifest.json"),

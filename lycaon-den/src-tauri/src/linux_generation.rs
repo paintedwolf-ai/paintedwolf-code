@@ -80,7 +80,7 @@ fn capture(executable: &Path, mut image: File) -> Result<Option<Generation>, Str
         .map_err(|e| format!("Nix manifest unavailable: {e}"))?;
     let manifest: Manifest = read_json(file, MANIFEST_LIMIT, "manifest")?;
     manifest
-        .validate_for_root(root)
+        .validate(root)
         .map_err(|_| "Nix manifest does not describe the running generation".to_string())?;
     verify(&manifest, executable, &mut image)?;
     Ok(Some(Generation {
@@ -111,17 +111,15 @@ fn read_json<T: serde::de::DeserializeOwned>(
 }
 
 fn verify(manifest: &Manifest, path: &Path, image: &mut File) -> Result<(), String> {
-    let expected = manifest.executable(path).map_err(|err| match err {
-        VerifyError::Invalid => "Nix helper digest invalid".to_string(),
-        _ => "Nix helper missing or duplicated in manifest".to_string(),
-    })?;
+    let expected = manifest
+        .executable(path)
+        .ok_or_else(|| "Nix helper missing or duplicated in manifest".to_string())?;
     image.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
     expected
         .verify_reader(&mut *image)
         .map_err(|err| match err {
-            VerifyError::Invalid => "Nix helper digest invalid".to_string(),
-            VerifyError::Mismatch => "Nix helper identity changed".to_string(),
-            VerifyError::Io => "Nix helper unreadable".to_string(),
+            VerifyError::IdentityMismatch => "Nix helper identity changed".to_string(),
+            VerifyError::ReadFailed => "Nix helper unreadable".to_string(),
         })?;
     image.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
     Ok(())
