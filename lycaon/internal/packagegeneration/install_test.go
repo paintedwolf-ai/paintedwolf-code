@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type installFixture struct {
@@ -34,12 +36,12 @@ func newInstallFixture(t *testing.T) *installFixture {
 	f.layout = l
 	for _, directory := range []string{f.staging, filepath.Join(f.system, "x86_64-linux-gnu")} {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create directory", err)
 		}
 	}
 	for _, path := range []string{f.staging, f.system, filepath.Join(f.system, "x86_64-linux-gnu")} {
 		if err := os.Chmod(path, 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "os.Chmod failed", err)
 		}
 	}
 	f.program("x86_64-linux-gnu/WebKitWebProcess")
@@ -148,9 +150,7 @@ func TestInstallSelectsTheStagedPayloadWithTheCatalogsPresentHelpers(t *testing.
 	f := newInstallFixture(t)
 	policy := &recordedPolicy{}
 	generation, err := f.install(policy, "deb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.install failed", err)
 	if policy.selected != generation.Root || filepath.Dir(generation.Root) != f.layout.store {
 		t.Fatalf("selected %q, generation %q", policy.selected, generation.Root)
 	}
@@ -170,22 +170,16 @@ func TestAnUpgradeReclaimsOnlyUnheldOldGenerations(t *testing.T) {
 	f := newInstallFixture(t)
 	policy := &recordedPolicy{}
 	first, err := f.install(policy, "deb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.install failed", err)
 	held, err := f.layout.openLifetime(first.ManifestSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.layout.openLifetime failed", err)
 	defer func() { _ = held.Close() }()
 	if err := unix.Flock(int(held.Fd()), unix.LOCK_SH); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	f.stage("second")
 	second, err := f.install(policy, "deb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.install failed", err)
 	if second.Root == first.Root || policy.selected != second.Root {
 		t.Fatalf("upgrade selected %q", policy.selected)
 	}
@@ -193,20 +187,18 @@ func TestAnUpgradeReclaimsOnlyUnheldOldGenerations(t *testing.T) {
 		t.Fatalf("a running launch's generation was reclaimed: %v", err)
 	}
 	if err := unix.Flock(int(held.Fd()), unix.LOCK_UN); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	f.stage("third")
 	third, err := f.install(policy, "deb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.install failed", err)
 	for _, gone := range []string{first.Root, second.Root} {
 		if _, err := os.Stat(gone); !os.IsNotExist(err) {
 			t.Fatalf("unheld old generation %s survived: %v", gone, err)
 		}
 	}
 	if _, err := os.Stat(third.Root); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stat path", err)
 	}
 }
 
@@ -214,12 +206,10 @@ func TestRemovalWithdrawsTheSelectionBeforeReclaiming(t *testing.T) {
 	f := newInstallFixture(t)
 	policy := &recordedPolicy{}
 	generation, err := f.install(policy, "deb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "f.install failed", err)
 	withdrawn := false
 	if err := f.layout.remove(func() error { withdrawn = true; policy.selected = ""; return nil }, policy.selection); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "f.layout.remove failed", err)
 	}
 	if !withdrawn {
 		t.Fatal("removal reclaimed without withdrawing the selection")
@@ -261,9 +251,7 @@ func TestCatalogAndHelperRefusalsSelectNothing(t *testing.T) {
 	}
 	f := newInstallFixture(t)
 	staging, err := os.OpenRoot(f.staging)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenRoot failed", err)
 	defer func() { _ = staging.Close() }()
 	policy := &recordedPolicy{}
 	if _, err := f.layout.install(staging, "deb", "riscv64", policy.commit, policy.selection); err == nil || policy.commits != 0 {
@@ -275,13 +263,13 @@ func TestStagingVerificationExcludesOnlyTheStore(t *testing.T) {
 	f := newInstallFixture(t)
 	policy := &recordedPolicy{}
 	if _, err := f.install(policy, "deb"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "f.install failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(f.staging, "stray"), []byte("unlisted"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(filepath.Join(f.staging, "stray"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	f.stage("changed")
 	if _, err := f.install(policy, "deb"); err == nil || !strings.Contains(err.Error(), "unlisted payload object") {
@@ -293,11 +281,11 @@ func TestAForeignStoreEntryIsReportedNotRemoved(t *testing.T) {
 	f := newInstallFixture(t)
 	policy := &recordedPolicy{}
 	if _, err := f.install(policy, "deb"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "f.install failed", err)
 	}
 	foreign := filepath.Join(f.layout.store, "notes")
 	if err := os.Mkdir(foreign, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	if err := f.layout.reclaimUnselected(policy.selection); err == nil || !strings.Contains(err.Error(), "foreign store entry") {
 		t.Fatalf("foreign entry = %v", err)
