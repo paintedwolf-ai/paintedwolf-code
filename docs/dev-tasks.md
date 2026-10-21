@@ -629,10 +629,13 @@ Digest runners write unique captures inside a per-run isolation directory, then 
 
 Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
 directory under its artifact root. `PW_COMPILER_CACHE_DIR` preserves that path
-across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. Cargo's
-own locks serialize compilation, and the decision build holds a publication lock
-until its executable is staged. The decision cache warmer compiles both test and
-release profiles in the verification source slot.
+across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. The scheduler's `rust` resource lock prevents
+concurrent test runs from replacing shared test executables. Cargo serializes
+compilation, and the decision build holds a publication lock until its executable
+is staged. The decision cache warmer compiles both test and
+release profiles in the verification source slot. Prepared benchmarks set this
+cache path inside their run directory, outside the sealed source, so importing
+prepared artifacts omits compiler intermediates.
 
 Hosted frontend lanes install Bun, Node, Rust, ripgrep, and the native document
 core's pinned Cargo inputs. They skip the multi-gigabyte Go compiler cache,

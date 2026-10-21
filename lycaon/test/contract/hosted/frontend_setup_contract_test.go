@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestHostedFrontendSetupSkipsGoCachesAndProvisionsNativeInputs(t *testing.T) {
+func TestFrontendSetupSkipsGoCachesAndProvisionsNativeInputs(t *testing.T) {
 	t.Parallel()
 	var action struct {
 		Runs struct {
