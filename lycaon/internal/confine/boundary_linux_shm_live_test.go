@@ -42,7 +42,7 @@ func runSharedMemoryProbe(mode string) error {
 	if mode == "absent" {
 		_, err := os.Stat(path)
 		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("foreign shared memory visible: %v", err)
+			return fmt.Errorf("foreign shared memory visible: %w", err)
 		}
 		return nil
 	}
