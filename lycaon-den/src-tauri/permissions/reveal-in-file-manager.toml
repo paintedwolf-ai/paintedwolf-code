@@ -7,3 +7,8 @@ commands.allow = ["reveal_in_file_manager"]
 identifier = "allow-reveal-typed-path-in-file-manager"
 description = "Reveal an existing absolute path typed into search in the OS file manager, without opening it."
 commands.allow = ["reveal_typed_path_in_file_manager"]
+
+[[permission]]
+identifier = "allow-file-manager-name"
+description = "Read the name of the desktop's file manager to label reveal actions."
+commands.allow = ["file_manager_name"]

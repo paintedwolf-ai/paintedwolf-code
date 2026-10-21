@@ -21,6 +21,7 @@
     "allow-document-outbox",
     "allow-app-exit",
     "allow-reveal-in-file-manager",
+    "allow-file-manager-name",
     "allow-read-clipboard-text",
     "allow-write-clipboard-text",
     "allow-paste-into-focused-view",
