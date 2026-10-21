@@ -27,6 +27,8 @@ func TestGenerationPolicyRejectsUnboundSelection(t *testing.T) {
 		"uppercase hash":      strings.Replace(valid, strings.Repeat("a", 64), strings.Repeat("A", 64), 1),
 		"short hash":          strings.Replace(valid, strings.Repeat("a", 64), "ab", 1),
 		"future version":      strings.Replace(valid, `"version":1`, `"version":2`, 1),
+		"relative executable": strings.TrimSuffix(valid, "}") + `,"system_executables":["usr/libexec"]}`,
+		"root executable":     strings.TrimSuffix(valid, "}") + `,"system_executables":["/"]}`,
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {

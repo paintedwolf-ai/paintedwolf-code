@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -88,6 +89,11 @@ func EnterDesktop() error {
 		}
 	}
 	unix.CloseOnExec(entryImageFD)
+	// The execution domain belongs to this thread, which executes the desktop.
+	runtime.LockOSThread()
+	if err := restrictExecution(spec.Generation, image); err != nil {
+		return err
+	}
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
 	return syscall.Exec("/proc/self/fd/3", args, spec.Environment)
 }

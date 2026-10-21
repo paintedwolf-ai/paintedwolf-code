@@ -37,6 +37,10 @@ type GenerationPolicy struct {
 	GenerationRoot     string `json:"generation_root"`
 	ManifestSHA256     string `json:"manifest_sha256"`
 	LogicalInstallRoot string `json:"logical_install_root"`
+	// SystemExecutables are root-controlled files or directories outside the
+	// generation the protected namespace may execute, such as WebKit's
+	// helper programs; nothing else outside the generation can execute there.
+	SystemExecutables []string `json:"system_executables,omitempty"`
 }
 
 // Generation retains the directory and executable identities selected once at
@@ -152,6 +156,11 @@ func decodePolicy(raw []byte) (GenerationPolicy, error) {
 	digest, err := hex.DecodeString(policy.ManifestSHA256)
 	if policy.Version != 1 || err != nil || len(digest) != sha256.Size || strings.ToLower(policy.ManifestSHA256) != policy.ManifestSHA256 {
 		return policy, errors.New("invalid launch policy identity")
+	}
+	for _, path := range policy.SystemExecutables {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+			return policy, errors.New("invalid launch policy system executable")
+		}
 	}
 	for _, path := range []string{policy.GenerationRoot, policy.LogicalInstallRoot} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
