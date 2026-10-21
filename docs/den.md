@@ -43,13 +43,15 @@ implementation owns the workflow on every platform. Verification has three tiers
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
 - **Candidate:** the `linux-candidates` release job builds, stages, and audits
-  both package families for both architectures without publishing.
+  deb/rpm for both architectures without publishing. Pacman and Nix candidate
+  builds are owned by #940 and #927/#932; a deb/rpm result does not qualify them.
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).
-  A row is release evidence only from this tier. The support contract stays open
-  under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444)
-  until every row has passed.
+  A row is release evidence only from this tier. The support contract is owned
+  by [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444);
+  completing that contract does not complete installed qualification or release
+  admission under [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457).
 
 | User outcome | Shared owner and Linux adapter | Verification | Issue |
 |--------------|--------------------------------|--------------|-------|
@@ -77,9 +79,24 @@ implementation owns the workflow on every platform. Verification has three tiers
 
 ### Native qualification matrix
 
-The qualification scope covers Linux amd64 and arm64 on the supported families:
-Ubuntu 24.04 and later, Debian 13 and later, Fedora 41 and later, RHEL 10
-compatibles, and Arch. Runtime and protocol compatibility determine admission.
+The authoritative scope is
+[`packaging/linux/support-matrix.json`](../packaging/linux/support-matrix.json).
+It combines user capabilities, installation modes, architectures and named
+representative environments. Its expansion in
+[`scripts/linux_release/support_matrix.py`](../scripts/linux_release/support_matrix.py) assigns
+each required row a stable identity, scenarios, implementing issues and required
+execution tier. Qualification and release admission must consume these same rows;
+they must not maintain independent workflow inventories.
+
+The scope covers Linux amd64 and arm64 on Ubuntu 24.04 and later, Debian 13 and
+later, maintained Fedora releases satisfying the declared floors, RHEL 10
+compatibles, native Arch-family packages, and NixOS. Arch Linux supplies the
+amd64 representative; [Arch Linux ARM](https://archlinuxarm.org/about/downloads)
+supplies the aarch64 representative. Artix/OpenRC with elogind is an amd64 row;
+it does not imply that Artix supplies arm64. NixOS includes
+[26.05 stable](https://nixos.org/manual/nixos/stable/index.html) and a pinned
+nixos-unstable revision. Record exact maintained releases, repositories and
+input revisions when qualifying. Runtime and protocol compatibility determine admission.
 Distro and desktop names identify qualification environments, not runtime
 feature switches.
 
@@ -104,9 +121,30 @@ Cases distinguish:
 - default security policy: AppArmor-restricted user namespaces on Ubuntu, and
   SELinux enforcing on Fedora and RHEL.
 
-The installation mode is always the installed `.deb` or `.rpm` package. Passing
-on one environment does not qualify another architecture, desktop, display
-server, or service provider.
+Installation modes remain separate even when they share the same payload:
+
+| Installation mode | Installation and integration | Updates and qualification |
+|-------------------|------------------------------|---------------------------|
+| deb and rpm | #758 owns package identity; #736 owns launchers | #759/#450 own delivery and notices; #456 qualifies installed workflows |
+| pacman, including packages installed through AUR/yay | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories and AUR recipes; #943 qualifies installed workflows |
+| NixOS system module | #927/#928 own the closure and running layout; #929 owns administrator-selected generation trust | #931 owns pins and generation updates; #932 qualifies installed workflows |
+| Nix package-only, user profile, Home Manager and temporary `nix run` | #927/#928 own four distinct installation modes; system service trust requires separate administrator integration | #931 owns the actual installation owner's update/rollback contract; #932 qualifies each mode |
+
+A package installed through yay is pacman-owned. Nix-on-Arch is an additional
+installation mode and cannot satisfy a native pacman row. Store immutability,
+Nix build sandboxing and application command confinement are distinct: #930
+owns Nix development and daemon authority inside the application boundary.
+Nix generation rollback does not roll back the application's mutable data or
+vault. A profile symlink or store hash does not establish launcher authority.
+
+Passing on one environment does not qualify another architecture, installation
+mode, desktop, display server, or service provider. Installed functional cases
+may run under emulation; native desktop, applied-security and performance rows
+require native execution. Unit fixtures and protocol-class tests establish
+adapter behavior. Protocol equivalence can support the named representative's
+shared cases, but a compositor, portal or session difference retains its own
+native cases and implementing issue. Missing test capacity leaves a required
+row unverified; it does not narrow the support contract.
 
 | Compatibility concern | Contract owner |
 |-----------------------|----------------|
@@ -117,6 +155,9 @@ server, or service provider.
 | Package installation identity and signing | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758) |
 | Package repositories and update notices | [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759) |
 | Package-installed CLI and desktop launchers | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
+| Native pacman packages, systemd/OpenRC integration and delivery | [#940](https://github.com/paintedwolf-ai/paintedwolf-code/issues/940), [#941](https://github.com/paintedwolf-ai/paintedwolf-code/issues/941), [#942](https://github.com/paintedwolf-ai/paintedwolf-code/issues/942), [#943](https://github.com/paintedwolf-ai/paintedwolf-code/issues/943) |
+| Nix closure, layout, system integration, development and updates | [#927](https://github.com/paintedwolf-ai/paintedwolf-code/issues/927), [#928](https://github.com/paintedwolf-ai/paintedwolf-code/issues/928), [#929](https://github.com/paintedwolf-ai/paintedwolf-code/issues/929), [#930](https://github.com/paintedwolf-ai/paintedwolf-code/issues/930), [#931](https://github.com/paintedwolf-ai/paintedwolf-code/issues/931), [#932](https://github.com/paintedwolf-ai/paintedwolf-code/issues/932) |
+| Signed Nix binary-cache delivery and closure retention | [#945](https://github.com/paintedwolf-ai/paintedwolf-code/issues/945) |
 
 Candidates build on `ubuntu-24.04` and `ubuntu-24.04-arm`. The floors in
 [`linux_floor.txt`](../lycaon/internal/platformfloor/linux_floor.txt) are:
