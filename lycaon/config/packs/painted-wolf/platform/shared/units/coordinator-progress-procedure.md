@@ -9,12 +9,12 @@ hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…)`; checklist text in an assistant reply does not update it.
 
-Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`,{% if profile_has_delegate_dispatch %} `task`,{% if profile_has_delegate_decompose %} `delegate_dispatch`, or `delegate_decompose`{% else %} or `delegate_dispatch`{% endif %}{% elif profile_has_delegate_decompose %} `task`, or `delegate_decompose`{% else %} or `task`{% endif %}, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
+Before {% if progress_gated_tools %}{% for tool in progress_gated_tools %}{% if not forloop.First %}{% if forloop.Last %}{% if forloop.Counter > 2 %}, or {% else %} or {% endif %}{% else %}, {% endif %}{% endif %}`{{ tool }}`{% endfor %}{% else %}creating or editing files or dispatching a worker{% endif %}, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
 
-Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update changed scope/status only. `unchanged` means the same checklist was stored; do not repeat it.
+Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update only changed scope/status. `unchanged` reports a no-op; do not repeat it.
 
-Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Partial, failed, and held legs do not latch it. An unchanged checklist does not clear the latch.
+Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Other worker outcomes do not latch it. An unchanged checklist does not clear the latch.
 
-Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
+{% if profile_has_preview_overlay or profile_has_promote_overlay or profile_has_reject_overlay or profile_has_wait or profile_has_answer_decision or profile_has_pack_board %}Lifecycle tools are never gated: {% if profile_has_preview_overlay %}`preview_overlay`{% endif %}{% if profile_has_promote_overlay %}{% if profile_has_preview_overlay %}, {% endif %}`promote_overlay`{% endif %}{% if profile_has_reject_overlay %}{% if profile_has_preview_overlay or profile_has_promote_overlay %}, {% endif %}`reject_overlay`{% endif %}{% if profile_has_wait %}{% if profile_has_preview_overlay or profile_has_promote_overlay or profile_has_reject_overlay %}, {% endif %}`wait`{% endif %}{% if profile_has_answer_decision %}{% if profile_has_preview_overlay or profile_has_promote_overlay or profile_has_reject_overlay or profile_has_wait %}, {% endif %}`answer_decision`{% endif %}{% if profile_has_pack_board %}{% if profile_has_preview_overlay or profile_has_promote_overlay or profile_has_reject_overlay or profile_has_wait or profile_has_answer_decision %}, {% endif %}`pack_board`{% endif %}.
 
-Reconcile an existing checklist before final synthesis.
+{% endif %}For closeout, reconcile progress; await its result, then answer without tool calls.

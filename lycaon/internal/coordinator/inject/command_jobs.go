@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 )
 
-const maxCommandLedgerLineRunes = 512
+const maxCommandLedgerLineRunes = 64
 
 // RenderCommandJobsBlock renders the live host ledger of command jobs and held
 // calls for a turn.
