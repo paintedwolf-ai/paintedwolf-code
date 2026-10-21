@@ -1,7 +1,9 @@
 //! Initial lock facts, native signals and bounded bus reconnection.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -288,12 +290,21 @@ fn screensaver_active(
     reply.child_value(0).get::<bool>()
 }
 
+thread_local! {
+    /// Monitors by key, so the bus close handler, which GObject requires to
+    /// be thread-safe, carries only a key. It runs on the monitor's context.
+    static CLOSE_TARGETS: RefCell<HashMap<u64, Weak<Inner>>> = RefCell::new(HashMap::new());
+}
+
 fn watch_connection(connection: &gio::DBusConnection, monitor: &Weak<Inner>, system: bool) {
-    // Closing is a GObject signal, emitted on the connection's own context,
-    // which is the monitor's.
-    let monitor = glib::thread_guard::ThreadGuard::new(monitor.clone());
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let key = NEXT.fetch_add(1, Ordering::Relaxed);
+    CLOSE_TARGETS.with(|targets| targets.borrow_mut().insert(key, monitor.clone()));
     connection.connect_closed(move |_, _, _| {
-        let Some(inner) = monitor.get_ref().upgrade() else {
+        let Some(inner) = CLOSE_TARGETS
+            .with(|targets| targets.borrow_mut().remove(&key))
+            .and_then(|monitor| monitor.upgrade())
+        else {
             return;
         };
         let mut next = inner.current();
