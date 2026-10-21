@@ -11533,7 +11533,7 @@ export interface components {
         };
         LockVaultRequest: {
             /** @enum {string} */
-            reason: "screen_locked" | "sleep" | "app_quit";
+            reason: "screen_locked" | "sleep" | "away" | "app_quit";
         };
         LockVaultResponse: {
             /** @description Chats whose unlock ended. */

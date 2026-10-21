@@ -110,7 +110,7 @@ func TestSweepClosesOnlyLapsedWindows(t *testing.T) {
 }
 
 func TestOnlyStepAwayReasonsAreClientLocks(t *testing.T) {
-	for _, reason := range []EndReason{EndScreenLocked, EndSleep, EndAppQuit, EndManual} {
+	for _, reason := range []EndReason{EndScreenLocked, EndSleep, EndAway, EndAppQuit, EndManual} {
 		if !IsLockReason(reason) {
 			t.Errorf("%s is not a client lock reason", reason)
 		}

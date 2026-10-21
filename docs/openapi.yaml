@@ -29518,6 +29518,7 @@ components:
           enum:
             - screen_locked
             - sleep
+            - away
             - app_quit
     LockVaultResponse:
       x-go-generate: true
