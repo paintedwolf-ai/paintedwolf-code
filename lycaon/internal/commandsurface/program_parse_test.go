@@ -217,7 +217,7 @@ func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 }
 
 func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T) {
-	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `s\et`} {
+	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `sh\opt`} {
 		source := "printf changed > ./output; " + name + " data"
 		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic

@@ -1,6 +1,6 @@
 // Package hostenv is the command frontend for the invocation environment,
 // command discovery and host identity utilities: env, printenv, which,
-// command, type, pwd, uname, whoami, id, hostname and date. Each binds argv
+// command, type, pwd, uname, nproc, whoami, id, hostname and date. Each binds argv
 // through the catalog and answers from the request's frozen environment, the
 // shared launch lookup, the invocation's logical paths and injected host
 // facts. No utility launches a process or reads ambient shell state.
@@ -40,7 +40,7 @@ type utility func(*invocation) error
 var utilities = map[string]utility{
 	"env": runEnv, "printenv": runPrintenv,
 	"which": runWhich, "command": runCommand, "type": runType,
-	"pwd": runPwd, "uname": runUname, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
+	"pwd": runPwd, "uname": runUname, "nproc": runNproc, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
 }
 
 // NewOwners binds the frozen catalog. Host and Clock are required.
