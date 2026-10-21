@@ -1,6 +1,13 @@
 //go:build linux && installedhelper
 
-package installedconfinement
+// Package confinement qualifies the confinement helper of an installed
+// package: the root-owned native executable the package placed, selected by
+// path and final SHA-256, through its real private profile pipe. It changes no
+// host policy and installs nothing. The installed campaign
+// (test:linux:installed) builds it with -tags installedhelper and runs it on
+// the guest with PW_INSTALLED_CONFINEMENT_HELPER, _SHA256, _OUTCOME (applied
+// or refused) and, for a refusal, _REFUSAL naming the structured code.
+package confinement
 
 import (
 	"crypto/sha256"

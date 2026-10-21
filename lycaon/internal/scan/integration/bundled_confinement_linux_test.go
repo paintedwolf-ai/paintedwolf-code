@@ -13,7 +13,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestLinuxBundledScannerAppliedBoundary(t *testing.T) {
+// The boundary BundledScannerConfinement compiles keeps the project read-only
+// and the output folder writable. A fixture process stands in for the scanner;
+// installed-package qualification covers the shipped scanner's own bytes.
+func TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable(t *testing.T) {
 	if !confine.Available() {
 		caps, _ := confine.LinuxCapabilities()
 		t.Fatalf("required Linux scanner boundary is unavailable: %+v", caps)

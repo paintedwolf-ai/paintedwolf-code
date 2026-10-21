@@ -10,7 +10,6 @@ source "${ROOT}/scripts/artifact-paths.sh"
 BROWSER_CACHE="${PW_BIN_DIR}/confine-browser"
 
 LEGS=(sandbox supervisor browser helpers)
-VALID_LEGS=("${LEGS[@]}" installed)
 # --prepare provisions the pinned browser and runs nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
@@ -19,7 +18,7 @@ if [[ "${1:-}" == "--prepare" ]]; then
 fi
 if (($#)); then
   for leg in "$@"; do
-    [[ " ${VALID_LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${VALID_LEGS[*]}" >&2; exit 2; }
+    [[ " ${LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${LEGS[*]}" >&2; exit 2; }
   done
   LEGS=("$@")
 fi
@@ -50,9 +49,6 @@ fi
 run_leg() {
   local browser
   case "$1" in
-    installed)
-      bash "${ROOT}/scripts/go-test-digest.sh" --full --tags installedhelper --name test:confine:linux-installed -- ./test/security/installedconfinement -count=1
-      ;;
     sandbox)
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-sandbox -- ./internal/confine/... -count=1
       ;;
@@ -60,7 +56,7 @@ run_leg() {
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-supervisor -- ./internal/exec -run '^(TestParseProcStatReadsParentAndStartAfterTheCommandName|TestCommandDescendantsFollowsTheWholeTreeOnly|TestSupervisionSettlesTheTree|TestSupervisorExitPreservesThePrimaryStatus|TestParseSupervisorTargetRequiresDescriptorCountAndCommand|TestSupervisorLaunchReportReachesTheParent|TestAwaitEngineLossFollowsTheLifetimePipe|TestStartSupervisorTargetAppliesTheRequestedPriority|TestSignalSupervisorRefusesAReplacedProcess|TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion|TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon|TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon|TestSupervisorCompanionRequestsOwnedTreeCleanup|TestGuardedPipelinePriorityReachesPrimary|TestSupervisedPTYInteractiveShellOwnsForeground|TestSupervisedCommandSeesOnlyItsIntendedDescriptors|TestTerminationBeforeSupervisorLaunchReportStopsLaunchedCommand|TestHeldTerminationKillsASupervisorThatNeverReportsLaunch)$' -count=1
       ;;
     helpers)
-      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-helpers -- ./internal/mcp ./internal/scan/integration ./internal/documentcore -run '^(TestLinuxStdioMCPAppliedBoundary|TestLinuxBundledScannerAppliedBoundary|TestLinuxDocumentCoreAppliedBoundary|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestRegisterStdioEgressAttributesTheServerLineage|TestBundledScannerConfinementDeniesNetwork)$' -count=1
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-helpers -- ./internal/mcp ./internal/scan/integration ./internal/documentcore -run '^(TestLinuxStdioMCPAppliedBoundary|TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable|TestLinuxDocumentCoreAppliedBoundary|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestRegisterStdioEgressAttributesTheServerLineage|TestBundledScannerConfinementDeniesNetwork)$' -count=1
       ;;
     browser)
       if ! browser="$(browser_path)"; then

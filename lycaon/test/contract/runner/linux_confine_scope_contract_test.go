@@ -86,7 +86,7 @@ func TestLinuxConfineScopeRequiresAppliedHelperAndBrowserAdmissionFixtures(t *te
 	var missing []string
 	for _, fixture := range []struct{ pkg, test string }{
 		{"./internal/mcp", "TestLinuxStdioMCPAppliedBoundary"},
-		{"./internal/scan/integration", "TestLinuxBundledScannerAppliedBoundary"},
+		{"./internal/scan/integration", "TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable"},
 		{"./internal/documentcore", "TestLinuxDocumentCoreAppliedBoundary"},
 		{"./internal/browser", "TestBrowserUnavailableLinuxBoundaryDoesNotLaunch"},
 		{"./internal/browser", "TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt"},
@@ -97,6 +97,50 @@ func TestLinuxConfineScopeRequiresAppliedHelperAndBrowserAdmissionFixtures(t *te
 		}
 	}
 	contractcheck.FailViolations(t, "required applied Linux helper/browser fixtures missing from native qualification", missing)
+}
+
+// Every leg the script accepts runs by default, so no qualification hides
+// behind an argument or environment no lane supplies.
+func TestLinuxConfineScriptHasNoOptInLegs(t *testing.T) {
+	t.Parallel()
+	script := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), linuxConfineScript)
+	defaults := map[string]bool{}
+	var legs []string
+	for _, line := range strings.Split(script, "\n") {
+		if names, ok := strings.CutPrefix(line, "LEGS=("); ok && !strings.HasPrefix(names, `"`) {
+			for _, name := range strings.Fields(strings.TrimSuffix(names, ")")) {
+				defaults[name] = true
+			}
+		}
+		if label, ok := strings.CutSuffix(strings.TrimSpace(line), ")"); ok && strings.HasPrefix(line, "    ") &&
+			!strings.HasPrefix(line, "     ") && label != "" && !strings.ContainsAny(label, " *\"$") {
+			legs = append(legs, label)
+		}
+	}
+	if len(defaults) == 0 || len(legs) == 0 {
+		t.Fatalf("%s: could not read its default legs or its leg cases", linuxConfineScript)
+	}
+	var optIn []string
+	for _, leg := range legs {
+		if !defaults[leg] {
+			optIn = append(optIn, leg)
+		}
+	}
+	contractcheck.FailViolations(t, linuxConfineScript+" runs legs outside its default set", optIn)
+}
+
+// HTTP journeys live in test/security; a suite that qualifies installed bytes
+// does not, so a security digest never selects it or skips around it.
+func TestInstalledHelperSuiteIsNotASecurityJourney(t *testing.T) {
+	t.Parallel()
+	var misplaced []string
+	walkTestFiles(t, contractcheck.RepoRoot(t), func(pkg string, _ *token.FileSet, _ *ast.File, src []byte) {
+		if strings.HasPrefix(pkg, "./test/security") && strings.Contains(string(src), "installedhelper") {
+			misplaced = append(misplaced, pkg)
+		}
+	})
+	slices.Sort(misplaced)
+	contractcheck.FailViolations(t, "installed helper qualification inside the HTTP journey layer", slices.Compact(misplaced))
 }
 
 // amd64 runs the target in platform qualification, and an arm64 lane runs the same target.

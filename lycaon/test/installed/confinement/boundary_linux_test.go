@@ -1,6 +1,6 @@
 //go:build linux && installedhelper
 
-package installedconfinement
+package confinement
 
 import (
 	"bytes"
