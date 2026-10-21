@@ -32,10 +32,13 @@ import (
 // provides; nothing else in the suite is privileged.
 
 const (
-	fixtureModeEnv = "PW_LAUNCH_FIXTURE_MODE"
-	fixtureDirEnv  = "PW_LAUNCH_FIXTURE_DIR"
-	fixtureBinsEnv = "PW_LAUNCH_FIXTURE_BINARIES"
-	fixtureHash    = "PW_LAUNCH_FIXTURE_DIGEST"
+	fixtureModeEnv     = "PW_LAUNCH_FIXTURE_MODE"
+	fixtureDirEnv      = "PW_LAUNCH_FIXTURE_DIR"
+	fixtureBinsEnv     = "PW_LAUNCH_FIXTURE_BINARIES"
+	fixtureHash        = "PW_LAUNCH_FIXTURE_DIGEST"
+	fixtureVaultBinEnv = "PW_LAUNCH_FIXTURE_VAULT_BIN"
+	fixtureUIDEnv      = "PW_LAUNCH_FIXTURE_UID"
+	fixtureGIDEnv      = "PW_LAUNCH_FIXTURE_GID"
 )
 
 // protectedFacts is the fixture desktop's report.
@@ -71,13 +74,15 @@ type launchFixture struct {
 	bootstrap string
 	digest    string
 	install   string
+	binaries  []string
 }
 
 // runningLaunch is a started bootstrap and the facts its desktop reported.
 type runningLaunch struct {
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	facts protectedFacts
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	reader *bufio.Reader
+	facts  protectedFacts
 }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
@@ -88,6 +93,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	testutil.FailErr(t, "desktop input", err)
 	stdout, err := cmd.StdoutPipe()
 	testutil.FailErr(t, "desktop report", err)
+	reader := bufio.NewReader(stdout)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	stopProbe := make(chan struct{})
@@ -106,7 +112,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	})
 	lines := make(chan string, 1)
 	go func() {
-		line, _ := bufio.NewReader(stdout).ReadString('\n')
+		line, _ := reader.ReadString('\n')
 		lines <- line
 	}()
 	var line string
@@ -124,7 +130,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {

@@ -7,10 +7,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/launchverify"
+	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
 // Facts mirrors the test's decoding of this report.
@@ -51,7 +54,16 @@ type Facts struct {
 	ExecGeneration  string                      `json:"exec_generation"`
 }
 
+type vaultCommand struct {
+	Socket  string                `json:"socket"`
+	Request vaultidentity.Request `json:"request"`
+}
+
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--engine-vault" {
+		runEngineVault(os.Args[2])
+		return
+	}
 	var facts Facts
 	facts.PID = os.Getpid()
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()
@@ -96,7 +108,34 @@ func main() {
 	if err := json.NewEncoder(os.Stdout).Encode(facts); err != nil {
 		os.Exit(2)
 	}
-	_, _ = io.Copy(io.Discard, os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		out, err := exec.Command(filepath.Join(install, "bin", "pw"), "--engine-vault", line).Output()
+		if err != nil {
+			_ = json.NewEncoder(os.Stdout).Encode(vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()})
+			continue
+		}
+		_, _ = os.Stdout.Write(out)
+	}
+}
+
+func runEngineVault(raw string) {
+	var cmd vaultCommand
+	if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
+		_ = json.NewEncoder(os.Stdout).Encode(vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()})
+		return
+	}
+	client := vaultidentity.NewClient(cmd.Socket)
+	defer func() { _ = client.Close() }()
+	resp, err := client.Do(cmd.Request)
+	if err != nil && resp.Status == "" {
+		resp = vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()}
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(resp)
 }
 
 // brokerProbe runs one program through the supervisor's broker and reports
