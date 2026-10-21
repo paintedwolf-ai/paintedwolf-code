@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitargv"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -22,8 +23,7 @@ import (
 )
 
 func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
-	remoteURL := p.owners.Git.RemoteURL(ctx, repo.Root, p.command.args)
-	if err := authorizeRemote(ctx, p, tc, dir, remoteURL); err != nil {
+	if err := authorizeRepoNetwork(ctx, p, tc, dir, repo.Root, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
@@ -43,8 +43,7 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 }
 
 func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
-	remoteURL := p.owners.Git.RemoteURL(ctx, repo.Root, p.command.args)
-	if err := authorizeRemote(ctx, p, tc, dir, remoteURL); err != nil {
+	if err := authorizeRepoNetwork(ctx, p, tc, dir, repo.Root, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	fetchArgs := []string{"fetch"}
@@ -83,7 +82,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	ops := p.Argv.Operands().Values()
 	rawURL := ops[0]
-	if err := authorizeRemote(ctx, p, tc, dir, rawURL); err != nil {
+	if err := authorizeRemote(ctx, p, tc, dir, rawURL, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	destTarget := ""
@@ -139,12 +138,35 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
 
-func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string) error {
+func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir, repoRoot string, stderr io.Writer) error {
+	if p.command.spec.Name == "git fetch" && has(p.Argv, "--all") {
+		if remotes, ok := gitexec.ListRemotes(ctx, repoRoot); ok {
+			for _, r := range remotes {
+				if err := authorizeRemote(ctx, p, tc, dir, r.URL, stderr); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	remoteURL := p.owners.Git.RemoteURL(ctx, repoRoot, remoteQueryArgs(p))
+	return authorizeRemote(ctx, p, tc, dir, remoteURL, stderr)
+}
+
+func remoteQueryArgs(p Prepared) []string {
+	sub := firstOrEmpty(p.command.args)
+	if ops := p.Argv.Operands().Values(); len(ops) > 0 {
+		return []string{sub, ops[0]}
+	}
+	return []string{sub}
+}
+
+func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, stderr io.Writer) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return nil
 	}
 	if err := gitargv.ValidateCloneURL(rawURL); err != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: invalid remote '%s' [COMMAND_OPERAND_INVALID]", p.command.spec.Name, rawURL))
 		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "expected": "a safe remote URL"}}
 	}
 	host := remoteNetworkHost(rawURL)
@@ -173,6 +195,7 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
+		writeLine(stderr, fmt.Sprintf("fatal: %s: remote host '%s' denied [GIT_REMOTE_HOST_DENIED]", p.command.spec.Name, host))
 		return &toolrejection.ToolReject{Code: "GIT_REMOTE_HOST_DENIED", Data: map[string]any{"command": p.command.spec.Name, "host": host}}
 	}
 	return nil
@@ -189,6 +212,15 @@ func remoteNetworkHost(rawURL string) string {
 			return rawURL
 		}
 		return strings.TrimSpace(u.Hostname())
+	}
+	hostPart := rawURL
+	if at := strings.IndexByte(hostPart, '@'); at >= 0 && (strings.IndexByte(hostPart, '/') < 0 || at < strings.IndexByte(hostPart, '/')) {
+		hostPart = hostPart[at+1:]
+	}
+	if strings.HasPrefix(hostPart, "[") {
+		if closeIdx := strings.Index(hostPart, "]:"); closeIdx > 1 {
+			return strings.TrimSpace(hostPart[1:closeIdx])
+		}
 	}
 	if colon := strings.IndexByte(rawURL, ':'); colon > 0 && !strings.Contains(rawURL[:colon], "/") && !strings.Contains(rawURL[:colon], `\`) {
 		host := rawURL[:colon]
@@ -213,8 +245,10 @@ func resolveLocalCloneSource(dir, rawURL string) string {
 
 func defaultCloneDirName(rawURL string) string {
 	trimmed := strings.TrimRight(rawURL, "/")
-	if u, err := url.Parse(trimmed); err == nil && u.Path != "" {
-		trimmed = strings.TrimRight(u.Path, "/")
+	if strings.Contains(trimmed, "://") {
+		if u, err := url.Parse(trimmed); err == nil && u.Path != "" {
+			trimmed = strings.TrimRight(u.Path, "/")
+		}
 	} else if colon := strings.LastIndexByte(trimmed, ':'); colon >= 0 {
 		trimmed = trimmed[colon+1:]
 	}

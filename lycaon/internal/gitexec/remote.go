@@ -50,8 +50,12 @@ func remoteNameFromArgs(args []string) string {
 	default:
 		return ""
 	}
-	for _, a := range args[1:] {
+	for i := 1; i < len(args); i++ {
+		a := args[i]
 		if a == "--" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
 			return ""
 		}
 		if strings.HasPrefix(a, "-") {
@@ -79,6 +83,9 @@ func upstreamRemoteName(ctx context.Context, repoDir string) string {
 func looksLikeURL(s string) bool {
 	if strings.Contains(s, "://") {
 		return true
+	}
+	if closeIdx := strings.Index(s, "]:"); closeIdx > 1 {
+		return !strings.Contains(s[:closeIdx], "/")
 	}
 	// SCP-style syntax places the colon before any slash.
 	if i := strings.Index(s, ":"); i > 0 {

@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -150,6 +152,9 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if !ok || paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a Git command", request.OperationID)
 	}
+	if err := validateGitEnvironment(spec, request.Environment); err != nil {
+		return Prepared{}, err
+	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
@@ -220,4 +225,27 @@ func argvRejection(err error, spec toolcontract.CommandSpecification) error {
 		"command": spec.Name, "word": argvErr.Word, "expected": argvErr.Expected, "expected_form": spec.Argv,
 		"source_start_byte": argvErr.Span.StartByte, "source_end_byte": argvErr.Span.EndByte, "source_line": argvErr.Span.Line, "source_column": argvErr.Span.Column,
 	}})
+}
+
+var blockedGitEnvKeys = map[string]bool{
+	"SSH_AUTH_SOCK":       true,
+	"SSH_ASKPASS":         true,
+	"SSH_ASKPASS_REQUIRE": true,
+}
+
+func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []string) error {
+	for _, entry := range entries {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(name)
+		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
+			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
+		}
+		if err := exec.ValidateInlineEnv(map[string]string{trimmed: value}); err != nil {
+			return operandInvalid(spec, entry, "an environment without host-reserved variables")
+		}
+	}
+	return nil
 }
