@@ -53,6 +53,9 @@ type Facts struct {
 }
 
 func main() {
+	if len(os.Args) == 5 && os.Args[1] == "--browser-engine-victim" {
+		os.Exit(runBrowserEngineVictim(os.Args[2], os.Args[3], os.Args[4]))
+	}
 	var facts Facts
 	facts.PID = os.Getpid()
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()

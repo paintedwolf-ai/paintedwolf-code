@@ -88,6 +88,8 @@ type engineProbe struct {
 	TerminalError          string `json:"terminal_error,omitempty"`
 	RelayLossEnded         bool   `json:"relay_loss_ended_session"`
 	RelayLossError         string `json:"relay_loss_error,omitempty"`
+	BrowserEngineLossEnded bool   `json:"browser_engine_loss_ended"`
+	BrowserEngineLossError string `json:"browser_engine_loss_error,omitempty"`
 }
 
 // launchFixture is one installed fixture layout.
@@ -495,6 +497,9 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	}
 	if !probe.RelayLossEnded {
 		t.Fatalf("killing the relay did not end the brokered session: %s", probe.RelayLossError)
+	}
+	if !probe.BrowserEngineLossEnded {
+		t.Fatalf("killing the protected engine did not end the brokered browser: %s", probe.BrowserEngineLossError)
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)

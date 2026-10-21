@@ -43,6 +43,8 @@ type ExecProbe struct {
 	TerminalError          string `json:"terminal_error,omitempty"`
 	RelayLossEnded         bool   `json:"relay_loss_ended_session"`
 	RelayLossError         string `json:"relay_loss_error,omitempty"`
+	BrowserEngineLossEnded bool   `json:"browser_engine_loss_ended"`
+	BrowserEngineLossError string `json:"browser_engine_loss_error,omitempty"`
 }
 
 const namespaceScript = "readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status; exit 7"
@@ -78,6 +80,7 @@ func execProbe(scratch string) ExecProbe {
 	probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError = preparedProbe(ctx, exec.AgentLaunch(exec.LaunchLocalMCP, "protected prepared confined probe", confinement))
 	probe.TerminalSurvive, probe.TerminalError = terminalProbe(ctx)
 	probe.RelayLossEnded, probe.RelayLossError = relayLossProbe(ctx)
+	probe.BrowserEngineLossEnded, probe.BrowserEngineLossError = browserEngineLossProbe(scratch)
 	return probe
 }
 

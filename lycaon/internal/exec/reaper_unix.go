@@ -27,12 +27,37 @@ var reaper struct {
 	pipe *os.File
 }
 
+func init() {
+	if len(os.Args) > 1 && os.Args[1] == ReaperCommand {
+		os.Exit(RunReaper(os.Stdin))
+	}
+}
+
 // StartReaper launches the companion that kills every tracked child once this
 // process exits by any path, SIGKILL included; macOS has no parent-death signal.
 // Only this process holds the pipe's close-on-exec write end, so the kernel
 // closing it at exit is the trigger. The companion leads its own process group,
 // out of reach of signals sent to the engine's group.
 func StartReaper(name string, args ...string) error {
+	reaper.mu.Lock()
+	defer reaper.mu.Unlock()
+	return startReaperLocked(name, args...)
+}
+
+func ensureReaper() error {
+	reaper.mu.Lock()
+	defer reaper.mu.Unlock()
+	if reaper.pipe != nil {
+		return nil
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("reaper executable: %w", err)
+	}
+	return startReaperLocked(self, ReaperCommand)
+}
+
+func startReaperLocked(name string, args ...string) error {
 	read, write, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("reaper pipe: %w", err)
@@ -49,10 +74,8 @@ func StartReaper(name string, args ...string) error {
 	// Collects the companion only if it exits while this process still runs.
 	go func() { _ = cmd.Wait() }()
 
-	reaper.mu.Lock()
 	previous := reaper.pipe
 	reaper.pipe = write
-	reaper.mu.Unlock()
 	if previous != nil {
 		_ = previous.Close()
 	}
