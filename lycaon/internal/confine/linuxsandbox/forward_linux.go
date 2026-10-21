@@ -130,6 +130,9 @@ type supervisor struct {
 	setupDone bool
 	// refusals reports each refused call to the action's feed.
 	refusals *refusalLines
+	// performer creates, links, and moves names inside the sandbox; it
+	// arrives before the seccomp listener.
+	performer *performerClient
 }
 
 func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
@@ -194,6 +197,9 @@ func (s *supervisor) accept(h handoff, fd int) {
 		return
 	}
 	switch h.Kind {
+	case handoffPerformer:
+		s.performer = &performerClient{fd: fd}
+		s.track(fdCloser(fd))
 	case handoffProxy:
 		ap, err := netip.ParseAddrPort(h.Addr)
 		if err != nil || !ap.Addr().IsLoopback() {

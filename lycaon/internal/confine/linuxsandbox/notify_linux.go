@@ -71,6 +71,9 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 	if !examined {
 		s.refusals.report(Refusal{Unexamined: true})
 	}
+	if errno == errAnswered {
+		return
+	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
@@ -87,6 +90,9 @@ func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, b
 		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
+	if isPathCall(n.Nr) {
+		return s.performPath(target, n)
+	}
 	fd := int(int32(n.Args[0]))
 	sock, err := unix.PidfdGetfd(target.pidfd, fd, 0)
 	if err != nil {
