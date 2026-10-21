@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"syscall"
 
@@ -57,6 +58,20 @@ func RunStage() error {
 	if err := rootRegular(entryImage); err != nil {
 		return err
 	}
+	// The entry starts in the module view; the broker agent starts back in the
+	// launch's own mount namespace. Both views live on this thread, which stays
+	// locked: the stage exits once both children start.
+	runtime.LockOSThread()
+	leave, err := enterModuleView(spec.Generation, mounted)
+	if err != nil {
+		return err
+	}
+	viewed, err := reopenImage(spec.Generation, mounted)
+	if err != nil {
+		return err
+	}
+	_ = mounted.Close()
+	mounted = viewed
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -75,6 +90,9 @@ func RunStage() error {
 	}
 	if err := entry.Start(); err != nil {
 		return fmt.Errorf("start protected entry: %w", err)
+	}
+	if err := leave(); err != nil {
+		return fmt.Errorf("leave module view: %w", err)
 	}
 	agent := &exec.Cmd{
 		Path:       "/proc/self/fd/" + strconv.Itoa(agentSelfFD),

@@ -75,6 +75,10 @@ func lockFree(path string) error {
 // installFixture runs as root: a root-owned generation holding the entry and
 // the fixture desktop, its manifest, the policy, a logical install root and a
 // setuid copy of the fixture-linked bootstrap.
+// fixtureLibraryRoot is the fixture policy's one library root. The fixture
+// binaries are static, so the root only has to exist and be root-controlled.
+const fixtureLibraryRoot = "/usr/lib"
+
 func installFixture(dir string, binaries []string) error {
 	if len(binaries) != 3 {
 		return errors.New("fixture needs bootstrap, entry and desktop binaries")
@@ -142,7 +146,7 @@ func installFixture(dir string, binaries []string) error {
 	if err := os.Rename(filepath.Join(dir, "staging"), generation); err != nil {
 		return err
 	}
-	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install})
+	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install, LibraryRoots: []string{fixtureLibraryRoot}})
 	if err != nil {
 		return err
 	}

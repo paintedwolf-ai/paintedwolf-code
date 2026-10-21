@@ -62,6 +62,9 @@ type protectedFacts struct {
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *engineProbe                `json:"exec,omitempty"`
+	ModuleUser      string                      `json:"module_user"`
+	ModuleLibrary   string                      `json:"module_library"`
+	BrokerUserExec  string                      `json:"broker_user_exec,omitempty"`
 }
 
 // engineProbe mirrors the fixture's report on the engine's launch paths.
@@ -205,6 +208,14 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	// can execute inside the namespace; the broker ran sh outside it.
 	if facts.ExecOutside != "EACCES" || facts.ExecGeneration != "started" {
 		t.Fatalf("execution domain: outside %s, generation %s", facts.ExecOutside, facts.ExecGeneration)
+	}
+	// Native code maps executable only from the administrator's closure; the
+	// caller's own files stay executable for programs the broker starts.
+	if facts.ModuleUser != "EPERM" || facts.ModuleLibrary != "ok" {
+		t.Fatalf("module view: caller file %s, library root %s", facts.ModuleUser, facts.ModuleLibrary)
+	}
+	if facts.BrokerUserExec != "brokered-user-program" {
+		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
 	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
