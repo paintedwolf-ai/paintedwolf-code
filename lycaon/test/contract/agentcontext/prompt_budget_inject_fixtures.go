@@ -22,6 +22,11 @@ var (
 // PromptBudgetInjectMatrix is the SSOT for coordinator inject budget fixtures.
 var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 	{
+		ID: "execution_state", Hosts: coordinatorTurns, Template: "guidance/execution-state.md",
+		Fixture: "Current-intent rejected operations and execution verdicts at the row cap",
+		Advice:  "Keep receipt summaries bounded; preserve full results in history.",
+	},
+	{
 		ID:       "tool_procedures",
 		Hosts:    coordinatorTurns,
 		Template: "guidance/tool-procedures.md",
