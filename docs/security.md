@@ -266,6 +266,7 @@ What the Linux adapter cannot express yet, and what it expresses differently, is
 - Loader files named at any depth (`AGENTS.md`) are masked read-only where they exist at launch, found by walking each root up to a bounded number of entries; creating a new one deeper in the tree is not refused.
 - Within the sandbox's private loopback, binding and connecting reach only the command's own processes; they are not grants of host-local reach.
 - The supervisor examines a caller's thread group, opened by pidfd, and refuses a call whose socket it cannot take a descriptor for.
+- A relative Unix-domain socket path is resolved against the caller's working directory; when the supervisor cannot read that directory, the call is refused as unexamined rather than performed.
 - The command's processes end with the command ([Processes a command leaves behind](#processes-a-command-leaves-behind)).
 
 The macOS profile is deny-default: filesystem and network authority is granted by rule. Mach service lookup is the one capability that inverts that shape. It is allowed broadly, because a confined process needs a wide set of system services to start, and a short list of power-management services is then subtracted. That subtraction is an enumeration and therefore incomplete by construction; it is a posture limit, not a boundary. Narrowing it would mean first observing which services confined tools legitimately reach.

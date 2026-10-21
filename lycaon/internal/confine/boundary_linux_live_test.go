@@ -144,6 +144,37 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "longcwd":
+		// A working directory deeper than the kernel names in one page leaves
+		// /proc/<pid>/cwd unreadable, so a relative socket path names nothing
+		// the supervisor can decide.
+		segment := strings.Repeat("d", 200)
+		for depth := 0; depth < 24; depth++ {
+			if err := unix.Mkdir(segment, 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
+				fmt.Println("mkdir:", err)
+				return 2
+			}
+			if err := unix.Chdir(segment); err != nil {
+				fmt.Println("chdir:", err)
+				return 2
+			}
+		}
+		for _, op := range []string{"connect", "bind"} {
+			fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+			if err != nil {
+				fmt.Println("socket:", err)
+				return 2
+			}
+			sa := &unix.SockaddrUnix{Name: "relative.sock"}
+			if op == "connect" {
+				err = unix.Connect(fd, sa)
+			} else {
+				err = unix.Bind(fd, sa)
+			}
+			_ = unix.Close(fd)
+			fmt.Printf("relative %s: %s\n", op, errnoName(err))
+		}
+		return 0
 	case "iouring":
 		params := make([]byte, 120)
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
@@ -490,6 +521,30 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+// A relative socket path whose working directory the supervisor cannot read
+// is refused, never performed relative to the supervisor's own directory.
+func TestLinuxUnresolvableRelativeSocketPathsAreRefused(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	root := t.TempDir()
+	c := denyConfinement(root)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Env = probeEnv("longcwd")
+	cmd.Dir = root
+	out, _ := cmd.CombinedOutput()
+	if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != 0 {
+		t.Fatalf("longcwd probe: %v: %s", cmd.ProcessState, out)
+	}
+	for _, want := range []string{"relative connect: EACCES", "relative bind: EACCES"} {
+		if !strings.Contains(string(out), want) {
+			t.Fatalf("longcwd probe missing %q:\n%s", want, out)
+		}
 	}
 }
 
