@@ -127,7 +127,7 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
                         if let Some(reply) = answer.borrow_mut().take() {
                             let _ = reply.send(Ok(title.to_string()));
                         }
-                        owned_detach(&window);
+                        detach(&owned_window);
                     }
                 });
                 window.show_all();
