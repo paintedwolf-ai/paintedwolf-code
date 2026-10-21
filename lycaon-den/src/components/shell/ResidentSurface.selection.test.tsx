@@ -4,6 +4,7 @@ import { createSignal, Show } from "solid-js";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { createRetainedWebKitSelection } from "../../platform/desktop/webkit-atspi-selection.ts";
 import { ResidentSurface } from "./ResidentSurface.tsx";
 import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 
@@ -22,6 +23,21 @@ afterEach(() => {
 });
 
 describe("retained surface selection", () => {
+  it("holds and restores endpoints at the direct lifecycle boundary", () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    const surface = document.createElement("section");
+    surface.textContent = "Reader text";
+    document.body.append(surface);
+    const selection = select(surface);
+    const lifecycle = createRetainedWebKitSelection(surface);
+    lifecycle.hide();
+    expect(selection.rangeCount).toBe(0);
+    lifecycle.restore();
+    expect(selection.toString()).toBe("Reader text");
+    lifecycle.dispose();
+    surface.remove();
+  });
+
   it.each(["webkitgtk", "wkwebview", null])("releases only inaccessible WebKitGTK ranges: %s", async (engine) => {
     applyWebEngineFact(engine ? { engine, version: "2.54.1" } : null);
     const [presence, setPresence] = createSignal<"active" | "idle">("active");
