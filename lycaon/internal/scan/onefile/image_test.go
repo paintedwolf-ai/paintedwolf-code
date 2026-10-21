@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func fixtureLauncher() []byte {
@@ -23,7 +25,7 @@ func encodedImage(t *testing.T, image *Image) []byte {
 	t.Helper()
 	var output bytes.Buffer
 	if err := Write(&output, image); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "Write failed", err)
 	}
 	return output.Bytes()
 }
@@ -56,18 +58,16 @@ func rawPayload(t *testing.T, plain []byte) []byte {
 	packed.Write(fixtureLauncher())
 	packed.WriteString("KAY")
 	writer, err := zstd.NewWriter(&packed, zstd.WithEncoderConcurrency(1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "zstd.NewWriter failed", err)
 	if _, err := writer.Write(plain); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "writer.Write failed", err)
 	}
 	if err := writer.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "writer.Close failed", err)
 	}
 	size := packed.Len() - 64
 	if err := binary.Write(&packed, binary.LittleEndian, uint64(size)); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "binary.Write failed", err)
 	}
 	return packed.Bytes()
 }
