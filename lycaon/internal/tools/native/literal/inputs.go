@@ -49,7 +49,7 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 		if !whole {
 			return in, nil
 		}
-		data, err := readBounded(in.stream, inv.owners.limit("stream_bytes"), "stream_bytes")
+		data, err := readBounded(in.stream, inv.owners.streamBytes(), "stream_bytes")
 		if err != nil {
 			return nil, err
 		}
@@ -83,6 +83,7 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 }
 
 func (inv *invocation) ordinaryInput(operand string, err error) (*input, error) {
+	err = projectpaths.PathOperationError(operand, err)
 	if reason, ok := ordinary(err); ok {
 		inv.fail(inv.failureStatus(), operand, reason)
 		return nil, nil

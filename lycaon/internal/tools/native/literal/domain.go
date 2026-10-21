@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -52,32 +53,27 @@ func (inv *invocation) structured(value any) error {
 	return inv.out.text(string(raw) + "\n")
 }
 
-// runOutline outlines the pinned accepted text of one file.
+// runOutline outlines the pinned captured text of one file.
 func runOutline(inv *invocation) error {
-	abs, ok, err := inv.domainPath(true)
-	if err != nil || !ok {
+	if _, ok, err := inv.domainPath(true); err != nil || !ok {
 		return err
 	}
-	source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, abs)
+	operand, _ := inv.value("--path")
+	in, err := inv.open(operand, true)
+	if err != nil || in == nil {
+		return err
+	}
+	text, _, err := textfile.Decode(in.data, textfile.LimitsForRaw(max(int64(len(in.data)), 1)))
 	if err != nil {
-		if reason, ok := ordinary(err); ok {
-			value, _ := inv.value("--path")
-			inv.fail(1, value, reason)
-			return nil
-		}
-		return err
+		inv.fail(1, operand, "not a text file")
+		return nil
 	}
-	if err := inv.tc.ObserveCredentialRead(inv.ctx, abs, source.Path, source.Content); err != nil {
-		return fmt.Errorf("record credential file read: %w", err)
-	}
-	if err := inv.recordPin(source.Revision); err != nil {
-		return err
-	}
-	outline, err := fileoutline.BuildContent(inv.ctx, source.Path, []byte(source.Content), int64(len(source.Content)))
+	label := in.bound.Resolved.DisplayPath
+	outline, err := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))
 	if err != nil {
 		return err
 	}
-	return inv.structured(survey.OutlineResponse(source.Path, outline))
+	return inv.structured(survey.OutlineResponse(label, outline))
 }
 
 func runSummarize(inv *invocation) error {
@@ -97,11 +93,11 @@ func runSummarize(inv *invocation) error {
 }
 
 func runRepoMap(inv *invocation) error {
-	if inv.owners.Domain.Repo == nil {
-		return platformUnavailable("repo-map", "survey owner")
-	}
 	if value, ok := inv.value("--depth"); ok {
 		return inv.usage(value, "the survey owner selects its own layout depth")
+	}
+	if inv.owners.Domain.Repo == nil {
+		return platformUnavailable("repo-map", "survey owner")
 	}
 	abs, ok, err := inv.domainPath(false)
 	if err != nil || !ok {

@@ -18,12 +18,16 @@ func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return fseffect.EntryStat{}, pathOperationError(p.Resolved.DisplayPath, err)
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
-	st, err := root.Stat(p.exactRelative, follow, p.admitRead)
+	admit := p.admitRead
+	if !follow {
+		admit = p.admitEntry
+	}
+	st, err := root.Stat(p.exactRelative, follow, admit)
 	if err != nil {
-		return fseffect.EntryStat{}, pathOperationError(p.Resolved.DisplayPath, err)
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	return st, nil
 }
@@ -38,14 +42,14 @@ func (p BoundPath) ReadDir() ([]string, error) {
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if !info.IsDir() {
-		return nil, pathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
+		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
 	}
 	names, err := file.Readdirnames(-1)
 	if err != nil {
-		return nil, pathOperationError(p.Resolved.DisplayPath, err)
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	slices.Sort(names)
 	return names, nil
@@ -76,9 +80,9 @@ func (p BoundPath) Readlink() (string, error) {
 	}
 	root, err := p.openRoot()
 	if err != nil {
-		return "", pathOperationError(p.Resolved.DisplayPath, err)
+		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	target, err := root.Readlink(p.exactRelative, p.admitRead)
-	return target, pathOperationError(p.Resolved.DisplayPath, err)
+	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }

@@ -54,12 +54,12 @@ func decodeSignatures(raw json.RawMessage) (signatures, error) {
 type identification struct{ description, mime string }
 
 var (
-	identifyEmpty  = identification{"empty", "application/x-empty"}
-	identifyText   = identification{"UTF-8 Unicode text", "text/plain"}
-	identifyData   = identification{"data", "application/octet-stream"}
-	identifyTar    = identification{"POSIX tar archive", "application/x-tar"}
-	identifyGIF87  = identification{"GIF image data", "image/gif"}
-	identifyMachO  = identification{"Mach-O executable", "application/x-mach-binary"}
+	identifyEmpty   = identification{"empty", "application/x-empty"}
+	identifyText    = identification{"UTF-8 Unicode text", "text/plain"}
+	identifyData    = identification{"data", "application/octet-stream"}
+	identifyTar     = identification{"POSIX tar archive", "application/x-tar"}
+	identifyGIF87   = identification{"GIF image data", "image/gif"}
+	identifyMachO   = identification{"Mach-O executable", "application/x-mach-binary"}
 	identifyMachO64 = identification{"Mach-O 64-bit executable", "application/x-mach-binary"}
 	identifyMachOU  = identification{"Mach-O universal binary", "application/x-mach-binary"}
 )

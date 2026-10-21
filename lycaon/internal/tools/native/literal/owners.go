@@ -32,6 +32,8 @@ type Owners struct {
 	Domain    DomainOwners
 	// ReadBytes bounds one captured input; zero selects the read door budget.
 	ReadBytes int64
+	// StreamBytes bounds one invocation's stdout; zero selects stream_bytes.
+	StreamBytes int64
 
 	catalog    toolcontract.LanguageCatalog
 	specs      map[string]toolcontract.CommandSpecification
@@ -143,6 +145,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if err == nil {
 		err = ctx.Err()
 	}
+	if err == nil {
+		err = inv.out.flush()
+	}
 	// The utility consumed what it needed; closing stdin is a consumer stop.
 	if streams.Input != nil {
 		_ = streams.Input.Close()
@@ -155,6 +160,13 @@ func (o *Owners) readBytes() int64 {
 		return o.ReadBytes
 	}
 	return readcaps.MaxFileBytes
+}
+
+func (o *Owners) streamBytes() int64 {
+	if o.StreamBytes > 0 {
+		return o.StreamBytes
+	}
+	return o.limit("stream_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

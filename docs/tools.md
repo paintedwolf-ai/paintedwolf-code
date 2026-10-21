@@ -278,6 +278,33 @@ inputs, so a later statement captures newer revisions and sees earlier
 published writes; there is no whole-program snapshot. Program receipts retain
 the pins per execution.
 
+### Literal content and metadata commands
+
+`internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
+wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
+outline, summarize and repo-map built-ins. Argv binds through the catalog
+binder; each command runs under its catalog operation identity (`read`, `wc`,
+`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
+operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+each file as exact stream bytes before any output: the accepted document encoded
+in its recorded encoding, BOM and newline policy, or the published file. The pin
+names that representation separately from disk. An input above the read budget,
+or output above the stream ceiling, refuses; nothing is truncated or summarized
+in its place.
+
+Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
+`base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
+representations itself: wc separates values with one space, `file` answers from
+the versioned signature corpus, and `ls -l` prints numeric owners and UTC
+long-ISO times without a block total. Ordinary operand failures (missing,
+directory, permission) go to stderr with the utility's status and later operands
+still run; authority, budget and platform refusals stop with their typed code.
+Only diff's complete status 1 is a publishable comparison. Literal windows and
+reversible numbering record exact source mappings when the output endpoint
+implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
+record none. The command never delivers a conversational read; only exact mapped
+output that the delivery owner later delivers can qualify an edit base.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.

@@ -41,7 +41,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	if inv.stderr == nil {
 		inv.stderr = io.Discard
 	}
-	inv.out = newOutput(ctx, streams.Output, p.owners.limit("stream_bytes"))
+	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
 	return inv
 }
 
