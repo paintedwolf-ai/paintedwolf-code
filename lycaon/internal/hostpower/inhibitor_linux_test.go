@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -55,7 +56,10 @@ func (d *fixtureDaemon) stop() { _ = d.cmd.Process.Kill(); _ = d.cmd.Wait() }
 func startFixtureBus(t *testing.T) *fixtureDaemon {
 	t.Helper()
 	path := filepath.Join(fixtureSocketDirectory(t), "bus")
-	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
+	config := fmt.Sprintf(`<busconfig><type>session</type><listen>unix:path=%s</listen><auth>EXTERNAL</auth><policy context="default"><allow user="*"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>`, path)
+	configPath := path + ".conf"
+	testutil.FailErr(t, "private bus configuration", os.WriteFile(configPath, []byte(config), 0o600))
+	cmd := exec.Command("dbus-daemon", "--nofork", "--config-file="+configPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	testutil.FailErr(t, "start isolated bus", cmd.Start())

@@ -95,12 +95,12 @@ func TestCurrentLoginSessionReadsTheSessionOwningThisProcess(t *testing.T) {
 		t.Fatalf("connect client: %v", err)
 	}
 	defer func() { _ = client.Close() }()
-	owned, err := NameOwned(t.Context(), client, Login1Name)
-	if err != nil || !owned {
-		t.Fatalf("login manager ownership = %v, %v", owned, err)
+	state, err := DiscoverName(t.Context(), client, Login1Name)
+	if err != nil || state.Owner != server.Names()[0] {
+		t.Fatalf("login manager ownership = %+v, %v", state, err)
 	}
-	if owned, err := NameOwned(t.Context(), client, "org.freedesktop.absent"); err != nil || owned {
-		t.Fatalf("absent name ownership = %v, %v", owned, err)
+	if state, err := DiscoverName(t.Context(), client, "org.freedesktop.absent"); err != nil || state != (NameState{}) {
+		t.Fatalf("absent name ownership = %+v, %v", state, err)
 	}
 	got, err := CurrentLoginSession(t.Context(), client)
 	if err != nil {
@@ -119,7 +119,7 @@ func TestCurrentLoginSessionReadsTheSessionOwningThisProcess(t *testing.T) {
 	if _, err := CurrentLoginSession(t.Context(), client); err == nil {
 		t.Fatal("a session without an identifier was accepted")
 	}
-	if _, err := NameOwned(t.Context(), nil, Login1Name); err == nil {
+	if _, err := DiscoverName(t.Context(), nil, Login1Name); err == nil {
 		t.Fatal("nil bus was accepted")
 	}
 	if _, err := CurrentLoginSession(t.Context(), nil); err == nil {
