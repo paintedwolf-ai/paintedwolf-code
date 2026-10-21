@@ -305,8 +305,10 @@ func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
 	if !strings.Contains(out, `"stdout":""`) || !strings.Contains(out, `"status":1`) {
 		t.Fatalf("unowned port listed %s", out)
 	}
-	if _, err := f.call(t, t.Context(), "lsof -i 8080"); toolrejection.AsToolReject(err) == nil {
-		t.Fatalf("malformed endpoint accepted: %v", err)
+	out, err = f.call(t, t.Context(), "lsof -i 8080")
+	testutil.FailErr(t, "lsof malformed endpoint", err)
+	if decodeOutcome(t, out).Refusal == nil {
+		t.Fatalf("malformed endpoint accepted: %s", out)
 	}
 	if len(asked) != 2 || asked[0] != f.Session || asked[1] != f.Session {
 		t.Fatalf("listener observation scope %v", asked)

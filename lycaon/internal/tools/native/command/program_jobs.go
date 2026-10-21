@@ -144,6 +144,10 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
 	}
+	if outcome.result.Terminal == toolcontract.ProducerInterrupted && errors.Is(outcome.err, context.Canceled) {
+		// A stopped job's own cancellation is its status, not the waiter's failure.
+		return outcome.result, nil
+	}
 	return outcome.result, outcome.err
 }
 
