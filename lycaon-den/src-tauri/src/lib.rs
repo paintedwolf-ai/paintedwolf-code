@@ -95,6 +95,7 @@ pub fn run() {
             clipboard::write_clipboard_text,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,
+            files::reveal_in_file_manager::file_manager_name,
             files::reveal_in_file_manager::reveal_typed_path_in_file_manager,
             files::read_path_bytes::path_kind,
             files::read_path_bytes::import_path_kind,
