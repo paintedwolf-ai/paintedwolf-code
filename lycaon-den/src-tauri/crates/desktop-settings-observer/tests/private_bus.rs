@@ -265,5 +265,6 @@ fn live_titlebar_click_action_reaches_the_shell() {
     assert!(changed
         .settings
         .contains(&desktop_settings_observer::Setting::TitlebarDoubleClick("minimize".into())));
+    drop(observer.stdin.take());
     ended(&mut observer);
 }
