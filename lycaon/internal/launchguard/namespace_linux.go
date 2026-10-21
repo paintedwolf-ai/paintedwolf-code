@@ -54,11 +54,11 @@ func Attributes(caller Identity) (*syscall.SysProcAttr, error) {
 		return nil, errors.New("protected launch requires a privileged bootstrap and a login user")
 	}
 	return &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER,
+		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
 		GidMappingsEnableSetgroups: true,
-		Credential:                 &syscall.Credential{Uid: caller.UID, Gid: caller.GID, Groups: append([]uint32(nil), caller.Groups...)},
+		Credential:                 &syscall.Credential{Uid: 0, Gid: 0},
 		Pdeathsig:                  syscall.SIGKILL,
 	}, nil
 }

@@ -18,12 +18,13 @@ import (
 )
 
 const (
-	entryImageFD  = 3
-	entrySpecFD   = 4
-	entryOriginFD = 5
-	entryBrokerFD = 6
-	maxEntryBytes = 128 << 10
-	entrySeals    = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
+	entryImageFD      = 3
+	entrySpecFD       = 4
+	entryOriginFD     = 5
+	entryBrokerFD     = 6
+	entryGenerationFD = 11
+	maxEntryBytes     = 128 << 10
+	entrySeals        = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
 )
 
 // EntrySpec is carried only by a sealed, root-created descriptor. It never
@@ -33,6 +34,8 @@ type EntrySpec struct {
 	ParentPID   int                    `json:"parent_pid"`
 	UID         uint32                 `json:"uid"`
 	GID         uint32                 `json:"gid"`
+	Groups      []uint32               `json:"groups"`
+	Generation  GenerationPolicy       `json:"generation"`
 	Image       pkgmanifest.Executable `json:"image"`
 	Arguments   []string               `json:"arguments"`
 	Environment []string               `json:"environment"`
@@ -44,17 +47,17 @@ type EntrySpec struct {
 func EnterDesktop() error {
 	origin := os.NewFile(entryOriginFD, "original-user-namespace")
 	defer func() { _ = origin.Close() }()
-	if err := SealEntry(origin); err != nil {
-		return err
-	}
 	frame := os.NewFile(entrySpecFD, "sealed-entry-spec")
 	defer func() { _ = frame.Close() }()
 	spec, err := readEntry(frame)
 	if err != nil {
 		return err
 	}
-	if uint32(os.Getuid()) != spec.UID || uint32(os.Getgid()) != spec.GID || os.Getppid() != spec.ParentPID {
+	if os.Getppid() != spec.ParentPID {
 		return errors.New("entry caller or parent changed")
+	}
+	if err := prepareEntry(spec, origin); err != nil {
+		return err
 	}
 	if err := unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0); err != nil {
 		return err
@@ -92,7 +95,7 @@ func EnterDesktop() error {
 	unix.CloseOnExec(entryImageFD)
 	unix.CloseOnExec(entrySpecFD)
 	unix.CloseOnExec(entryOriginFD)
-	args := append([]string{spec.Image.Path}, spec.Arguments...)
+	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
 	return syscall.Exec("/proc/self/fd/3", args, spec.Environment)
 }
 
@@ -129,6 +132,21 @@ func decodeEntry(raw []byte) (EntrySpec, error) {
 	}
 	if !filepath.IsAbs(spec.Image.Path) || filepath.Clean(spec.Image.Path) != spec.Image.Path || filepath.Base(spec.Image.Path) != "painted-wolf-code" {
 		return spec, errors.New("entry does not name the selected desktop role")
+	}
+	policyRaw, err := json.Marshal(spec.Generation)
+	if err != nil {
+		return spec, err
+	}
+	if _, err := decodePolicy(policyRaw); err != nil {
+		return spec, err
+	}
+	if spec.Image.Path != filepath.Join(spec.Generation.GenerationRoot, "bin/painted-wolf-code") {
+		return spec, errors.New("entry image differs from selected generation")
+	}
+	for _, group := range spec.Groups {
+		if group == ^uint32(0) {
+			return spec, errors.New("invalid supplementary group")
+		}
 	}
 	seen := map[string]bool{}
 	for _, value := range spec.Environment {

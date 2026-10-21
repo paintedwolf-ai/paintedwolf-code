@@ -26,7 +26,7 @@ func CreateEntryFrame(generation *Generation, caller Identity, arguments, enviro
 	if actual.UID != caller.UID || actual.GID != caller.GID || !slices.Equal(actual.Groups, caller.Groups) {
 		return nil, errors.New("entry caller changed")
 	}
-	spec := EntrySpec{Version: 1, ParentPID: os.Getpid(), UID: caller.UID, GID: caller.GID, Image: generation.DesktopImage, Arguments: arguments, Environment: environment, Broker: broker}
+	spec := EntrySpec{Version: 1, ParentPID: os.Getpid(), UID: caller.UID, GID: caller.GID, Groups: caller.Groups, Generation: generation.Policy, Image: generation.DesktopImage, Arguments: arguments, Environment: environment, Broker: broker}
 	raw, err := json.Marshal(spec)
 	if err != nil {
 		return nil, err
