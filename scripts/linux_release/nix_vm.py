@@ -1,9 +1,6 @@
 """Bind nonrelease NixOS VM factories to the exact qualified application closure."""
 from __future__ import annotations
 
-import argparse
-import json
-from pathlib import Path
 import re
 
 from .nix_closure import describe
@@ -51,40 +48,3 @@ def bind(application, factory, *, desktop, source_commit, source_tree, lock_sha2
             "factory": {"store_path": vm_path, "nar_hash": factory["closure"][vm_path]["narHash"],
                         **({"source": factory["factory"]} if factory_source is not None else {})},
             "installed_qualified": False, "scope": "VM factory build; boot and installed interactions require execution"}
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--archive", type=Path, required=True)
-    parser.add_argument("--desktop", choices=("gnome", "plasma"), required=True)
-    for name in ("source-commit", "source-tree", "lock-sha256", "architecture", "controller-commit"):
-        parser.add_argument("--" + name, required=True)
-    parser.add_argument("--factory-source-commit")
-    parser.add_argument("--factory-source-tree")
-    parser.add_argument("--factory-channel", choices=("nixos-26.05", "nixos-unstable"))
-    args = parser.parse_args()
-    if not all((args.factory_source_commit, args.factory_source_tree, args.factory_channel)):
-        raise ValueError("VM consumer requires a separately pinned factory source and channel")
-    reports = [json.loads(path.read_text()) for path in (args.evidence / "nix").glob("build-*.json")]
-    def selected(component):
-        found = [row for row in reports if row.get("component") == component]
-        if len(found) != 1:
-            raise ValueError("expected exactly one build report for " + component)
-        return found[0]
-    factory = selected("nixos-" + args.desktop + "-vm")
-    if (not args.archive.is_dir() or args.archive.is_symlink()
-            or Path(factory.get("archive", {}).get("path", "")).resolve() != args.archive.resolve()):
-        raise ValueError("VM archive differs from its retained factory build")
-    manifest = bind(selected("default"), factory, desktop=args.desktop, source_commit=args.source_commit,
-        source_tree=args.source_tree, lock_sha256=args.lock_sha256, architecture=args.architecture,
-        controller_commit=args.controller_commit, factory_source={"source_commit": args.factory_source_commit,
-            "source_tree": args.factory_source_tree, "channel": args.factory_channel})
-    destination = args.archive / "paintedwolf-vm-qualification.json"
-    with destination.open("x") as stream:
-        stream.write(json.dumps(manifest, indent=2) + "\n")
-    (args.evidence / ("nixos-" + args.desktop + "-qualification.json")).write_text(json.dumps(manifest, indent=2) + "\n")
-
-
-if __name__ == "__main__":
-    main()

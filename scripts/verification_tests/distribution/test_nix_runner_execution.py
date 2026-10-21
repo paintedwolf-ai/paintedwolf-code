@@ -47,12 +47,12 @@ class NixRunnerTests(unittest.TestCase):
         self.commands.append(command)
         return subprocess.CompletedProcess(command, 0)
 
-    def install(self, environment, digest=None):
+    def install(self, environment, digest=None, substituter=None):
         digest = digest or hashlib.sha256(self.installer).hexdigest()
         with patch.dict(nix_runner.INSTALLERS, {"x86_64": digest}), \
                 patch.object(nix_runner.platform, "system", return_value="Linux"), \
                 patch.object(nix_runner.platform, "machine", return_value="x86_64"):
-            return nix_runner.install(environment, fetch=self.fetch, run=self.run_installer)
+            return nix_runner.install(environment, fetch=self.fetch, run=self.run_installer, substituter=substituter)
 
     def test_hosted_runner_installs_the_verified_pinned_daemon_and_exports_its_profile(self):
         path = self.root / "github-path"
@@ -80,6 +80,34 @@ class NixRunnerTests(unittest.TestCase):
                 nix_runner.install(HOSTED, fetch=self.fetch, run=self.run_installer)
         self.assertEqual(self.commands, [])
 
+    def test_an_admitted_closure_cache_is_the_only_extra_trusted_substituter(self):
+        cache = self.root / "application cache"
+        cache.mkdir()
+        self.install(HOSTED, substituter=cache)
+        self.assertEqual(self.configuration, "sandbox = true\ntrusted-users = root\n"
+                         f"extra-substituters = {cache.resolve().as_uri()}?trusted=1\n")
+        self.profile.mkdir()
+        (self.profile / "nix").write_text("")
+        with self.assertRaisesRegex(ValueError, "fresh runner daemon"):
+            self.install(HOSTED, substituter=cache)
+
+    def test_prepare_admits_the_producer_before_trusting_its_cache(self):
+        order = []
+        producer = tuple(self.root / name for name in ("producer", "cache", "run.json", "evidence"))
+
+        def admit(*arguments):
+            order.append(("admit", arguments[:4], arguments[4]))
+            return producer[1]
+
+        def installer(environment, substituter):
+            order.append(("install", substituter))
+            return self.profile
+
+        with patch("scripts.linux_release.nix_vm_producer.admit_retained", admit):
+            nix_runner.prepare(["nix"], self.root, {}, run=lambda *a, **k: subprocess.CompletedProcess(a, 0),
+                               installer=installer, producer=producer)
+        self.assertEqual(order, [("admit", producer, self.root), ("install", producer[1])])
+
     def test_an_existing_installation_is_used_without_downloading(self):
         self.profile.mkdir()
         (self.profile / "nix").write_text("")
@@ -94,7 +122,7 @@ class NixRunnerTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         self.assertEqual(nix_runner.prepare(["nix"], self.root, {"PATH": "/usr/bin"}, run=run,
-                                            installer=lambda environment: self.profile), 0)
+                                            installer=lambda environment, substituter: self.profile), 0)
         self.assertEqual(seen[0][0], ["nix", "flake", "archive", "--no-write-lock-file", f"git+file://{self.root}"])
         self.assertIn(f"import {self.root}/packaging/nix/flake-compat.nix", seen[1][0][-1])
         self.assertTrue(all(first == str(self.profile) for _, first in seen))
@@ -106,7 +134,7 @@ class NixRunnerTests(unittest.TestCase):
             seen.append(command)
             return subprocess.CompletedProcess(command, 3)
 
-        self.assertEqual(nix_runner.prepare(["nix"], self.root, {}, run=run, installer=lambda e: self.profile), 3)
+        self.assertEqual(nix_runner.prepare(["nix"], self.root, {}, run=run, installer=lambda e, substituter: self.profile), 3)
         self.assertEqual(len(seen), 1)
 
 
