@@ -110,6 +110,10 @@ const NAMED_START_FAILURES: Record<
     code: "desktop_restart_required",
     copy: CLIENT_NOTICES.desktop_restart_required,
   },
+  installation_unverified: {
+    code: "installation_unverified",
+    copy: CLIENT_NOTICES.installation_unverified,
+  },
   credential_vault_custodian_unavailable: {
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,

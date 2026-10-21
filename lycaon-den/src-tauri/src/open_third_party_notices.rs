@@ -25,7 +25,7 @@ pub fn open_third_party_notices(app: AppHandle) -> Result<(), String> {
 }
 
 fn resolve_notices_path(app: &AppHandle) -> Result<PathBuf, String> {
-    if crate::linux_install::installed().is_some() {
+    if crate::linux_install::installed().package().is_some() {
         let candidate = Path::new(crate::linux_install::INSTALL_ROOT).join(NOTICES_NAME);
         if candidate.is_file() {
             return Ok(candidate);

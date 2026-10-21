@@ -52,6 +52,7 @@ pub enum SidecarStartError {
     CredentialVaultUnlockFailed(String),
     CredentialVaultCorrupt(String),
     DesktopRestartRequired(String),
+    InstallationUnverified(String),
     CredentialVaultCustodianUnavailable(String),
     CredentialVaultCustodianAbsent(String),
     CredentialVaultLauncherRefused(String),
@@ -76,6 +77,7 @@ impl SidecarStartError {
             | Self::CredentialVaultUnlockFailed(message)
             | Self::CredentialVaultCorrupt(message)
             | Self::DesktopRestartRequired(message)
+            | Self::InstallationUnverified(message)
             | Self::CredentialVaultCustodianUnavailable(message)
             | Self::CredentialVaultCustodianAbsent(message)
             | Self::CredentialVaultLauncherRefused(message)
@@ -317,7 +319,7 @@ where
         return Ok(info);
     }
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     stop_sidecar_locked(state);
 
     launch_sidecar_locked(state, password, emit)
@@ -332,7 +334,7 @@ where
     F: Fn(StartupProgress),
 {
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     state.cancel_start.store(false, Ordering::Release);
     state.starting.store(true, Ordering::Release);
     let _starting = StartingGuard(&state.starting);
@@ -447,7 +449,7 @@ where
         return attach_or_explain(&crate::config_dir::host_config_dir()?);
     }
     installation::ensure_current()
-        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
+        .map_err(installation::RestartReason::start_error)?;
     state.crashes.lock().unwrap().clear();
     stop_sidecar_locked(state);
     launch_sidecar_locked(state, None, &emit)
