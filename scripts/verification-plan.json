@@ -14,6 +14,7 @@
       "test:short",
       "test:contract",
       "coverage:changes",
+      "scripts:coverage:changes",
       "licenses:notices"
     ],
     "oar:verify": [
@@ -34,6 +35,7 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
+      "scripts:coverage:changes",
       "lint:vuln",
       "licenses:notices"
     ],
@@ -209,6 +211,9 @@
     ],
     "den:coverage:changes": [
       "den:coverage:changes"
+    ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
     ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
@@ -492,6 +497,12 @@
       ],
       "workers": 1
     },
+    "scripts:coverage:changes": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
     "go:bundled": {
       "locks": [
         "go",
@@ -760,7 +771,8 @@
       "targets": [
         "budgets",
         "coverage:changes",
-        "den:coverage:changes"
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 45,
       "profiles": [

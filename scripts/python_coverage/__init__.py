@@ -1,0 +1,147 @@
+"""Statement coverage of scripts Python under the declared Python suites.
+
+Suites run under a disposable virtual environment whose startup hook starts
+coverage.py in every interpreter it launches, so a child started as `python3`
+from PATH or as `sys.executable` is measured even with a cleared environment
+or `-I`. A fixture that copies a script into a disposable `scripts/` tree is
+credited to the source it copied: a measured file counts for a changed source
+when its path ends with that source's repository path.
+"""
+
+import hashlib
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import sysconfig
+import venv
+
+from artifact_paths import bin_dir
+
+REQUIREMENTS = Path(__file__).resolve().with_name("requirements.txt")
+# The same test-code rule the maintainability inventory applies.
+TEST_DIRECTORIES = {"test", "tests", "e2e", "testutil", "testcorpus", "testsupport", "testfixture",
+                    "verification_tests", "__tests__"}
+STARTUP = """import os, sys
+sys.path.extend({tools!r})
+os.environ["COVERAGE_PROCESS_START"] = {rc!r}
+try:
+    import coverage
+    coverage.process_startup()
+except Exception:
+    pass
+"""
+
+
+def sources(root, paths):
+    """Changed handwritten scripts Python, without test code."""
+    out = []
+    for path in paths:
+        parts = path.split("/")
+        name = parts[-1]
+        if (parts[0] != "scripts" or not name.endswith(".py") or name.startswith("test_") or name.endswith("_test.py")
+                or TEST_DIRECTORIES.intersection(parts[:-1]) or not (Path(root) / path).is_file()):
+            continue
+        out.append(path)
+    return out
+
+
+def requirement_files(root, suites):
+    return [REQUIREMENTS, *(Path(root) / suite["requirements"] for suite in suites.values() if suite.get("requirements"))]
+
+
+def provision(requirements):
+    """The pinned packages of one requirements file for this interpreter, installed once (the network once)."""
+    identity = hashlib.sha256(requirements.read_bytes() + sys.version.encode() + sysconfig.get_platform().encode())
+    target = bin_dir() / f"python-tools-{identity.hexdigest()[:16]}"
+    if (target / "ready").exists():
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with (target.parent / f"{target.name}.lock").open("a") as lock:
+        if os.name != "nt":
+            import fcntl
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        if not (target / "ready").exists():
+            staging = target.with_name(f"{target.name}.{os.getpid()}")
+            shutil.rmtree(staging, ignore_errors=True)
+            subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
+                            "--no-deps", "--target", str(staging), "-r", str(requirements)], check=True)
+            shutil.rmtree(target, ignore_errors=True)
+            os.replace(staging, target)
+            (target / "ready").write_text(requirements.read_text())
+    return target
+
+
+def environment(work, tools, files):
+    """An interpreter whose every process records `files` into work/data, and its coverage.py configuration."""
+    data = work / "data"
+    data.mkdir(parents=True)
+    rc = work / "coveragerc"
+    include = "".join(f"\n    */{path}" for path in files)
+    # An empty exclusion list: changed code has no way to opt out of measurement.
+    rc.write_text(f"[run]\ndata_file = {data / '.coverage'}\nparallel = True\nsigterm = True\n"
+                  f"patch = _exit, execv, fork\ninclude ={include}\n[report]\nexclude_lines =\n")
+    home = work / "python"
+    venv.EnvBuilder(with_pip=False, symlinks=os.name != "nt", clear=True).create(home)
+    python = home / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
+    purelib = Path(subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+                                  capture_output=True, text=True, check=True).stdout.strip())
+    (purelib / "_pw_coverage_startup.py").write_text(STARTUP.format(tools=[str(t) for t in tools], rc=str(rc)))
+    (purelib / "_pw_coverage_startup.pth").write_text("import _pw_coverage_startup\n")
+    return python, rc
+
+
+class Measurement:
+    """Statements of one source and which of them any measured process executed."""
+
+    def __init__(self, reporter, executed):
+        self.reporter = reporter
+        self.statements = reporter.lines()
+        self.executed = reporter.translate_lines(executed) & self.statements
+
+    def changed(self, lines):
+        """(changed lines, covered) for each statement a changed line belongs to."""
+        grouped = {}
+        for line in lines:
+            for statement in self.reporter.translate_lines({line}) & self.statements:
+                grouped.setdefault(statement, set()).add(line)
+        return [(grouped[statement], statement in self.executed) for statement in sorted(grouped)]
+
+
+def measure(root, files, suites, work):
+    """{path: Measurement, or the error that kept it from being read} under every suite whose tree holds a changed
+    source; None when a suite fails."""
+    root = Path(root)
+    tools = [provision(requirements) for requirements in requirement_files(root, suites)]
+    shutil.rmtree(work, ignore_errors=True)
+    python, rc = environment(work, tools, files)
+    env = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
+    for name, suite in sorted(suites.items()):
+        start = suite["start"].rstrip("/")
+        if not any(path.startswith(start + "/") for path in files):
+            continue
+        print(f"Changed coverage (Python): {name}: unittest discover -s {start} -p '{suite['pattern']}'", flush=True)
+        if subprocess.call([str(python), "-m", "unittest", "discover", "-s", start, "-p", suite["pattern"]],
+                           cwd=root, env=env) != 0:
+            return None
+    sys.path.extend(str(t) for t in tools if str(t) not in sys.path)
+    import coverage
+    from coverage.python import PythonFileReporter
+    cov = coverage.Coverage(config_file=str(rc))
+    if any((work / "data").glob(".coverage.*")):
+        cov.combine()
+    data = cov.get_data()
+    executed = {path: set() for path in files}
+    for measured in data.measured_files():
+        normalized = measured.replace(os.sep, "/")
+        for path in files:
+            if normalized.endswith("/" + path):
+                executed[path].update(data.lines(measured) or ())
+    out = {}
+    for path in files:
+        try:
+            out[path] = Measurement(PythonFileReporter(str(root / path), cov), executed[path])
+        except coverage.exceptions.CoverageException as error:
+            out[path] = error
+    return out

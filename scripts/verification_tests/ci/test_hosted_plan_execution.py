@@ -34,7 +34,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertLessEqual({"lint:fast", "budgets", "den:typecheck", "den:lint"}, set(stages))
         # Anything that runs tests waits for the merge queue.
         self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
-                                         "den:coverage:changes"})
+                                         "den:coverage:changes", "scripts:coverage:changes"})
         self.assertLessEqual(rows[0]["minutes"], 15)
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
