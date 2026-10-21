@@ -8,6 +8,7 @@ import type { DenEditorKeymap } from "../../../../shared/app-state-types.ts";
 import { invokeCommand } from "../../../shortcuts/dispatcher.ts";
 import { defaultEditorKeymap, editorKeymapPref } from "../../../settings/editor/editor-prefs.ts";
 import { editorHistory, stepEditorHistory } from "./editor-history.ts";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 
 const editingStyle = new Compartment();
 const promptContainer = new Compartment();
@@ -70,7 +71,7 @@ const emacsCommands = ViewPlugin.fromClass(class {
   }
 }, { eventHandlers: {
   keydown(event, view) {
-    if (view.state.readOnly || event.isComposing || view.composing || event.keyCode === 229) return false;
+    if (view.state.readOnly || isImeComposition(event) || view.composing) return false;
     if ((event.key === "Enter" || event.key === "Tab") && completionStatus(view.state)) return false;
     return !!this.handler.handleKeyboard(event);
   },

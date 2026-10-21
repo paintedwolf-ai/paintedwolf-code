@@ -101,6 +101,7 @@ pub fn run() {
             clipboard::write_clipboard_text,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,
+            files::reveal_in_file_manager::file_manager_name,
             files::reveal_in_file_manager::reveal_typed_path_in_file_manager,
             files::read_path_bytes::path_kind,
             files::read_path_bytes::import_path_kind,
@@ -160,6 +161,7 @@ pub fn run() {
             app_menu::set_app_menu,
             app_menu::request_quit,
             windows::linux_decorations::linux_decoration_layout,
+            windows::linux_titlebar::linux_titlebar_action,
             windows::linux_frame::linux_window_frame,
         ])
         .on_menu_event(|app, event| {
@@ -202,6 +204,8 @@ pub fn run() {
                 ..
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
+                #[cfg(target_os = "linux")]
+                windows::linux_desktop_settings::portal::shutdown(app);
                 notifications::shutdown(app);
                 if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
                     state.shutdown(app);
