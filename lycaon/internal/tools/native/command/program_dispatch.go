@@ -213,11 +213,15 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 // prepareDefinition retains the expanded inputs and the dynamic child row
 // together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
+	display, err := request.Statement.DisplayText([]byte(d.run.source))
+	if err != nil {
+		return programChild{}, err
+	}
 	review, release, err := toolcontract.NewReviewedOperationInputs(ctx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: request.Invocation, Definition: definition, ExpandedInputs: review, Canonical: d.run.source})
+	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: request.Invocation, Definition: definition, ExpandedInputs: review, Canonical: display})
 	if err != nil {
 		release()
 		return programChild{}, err
