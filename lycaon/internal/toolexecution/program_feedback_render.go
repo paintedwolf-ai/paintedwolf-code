@@ -12,9 +12,9 @@ import (
 // RenderProgramFailure uses the actual submitted model envelope after receipt
 // settlement. The entry keeps both frame and prepared feedback alive through
 // delivery. This function renders guidance; it never executes a suggested action.
-func (e *Executor) RenderProgramFailure(ctx context.Context, frame ProgramFrame, tc tools.ToolContext, prepared *PreparedProgramFailure) (rendered error) {
-	if e == nil || prepared == nil || ctx == nil {
-		return fmt.Errorf("program rejection rendering requires executor, context and prepared feedback")
+func (r *Rejections) RenderProgramFailure(ctx context.Context, frame ProgramFrame, tc tools.ToolContext, prepared *PreparedProgramFailure) (rendered error) {
+	if r == nil || prepared == nil || ctx == nil {
+		return fmt.Errorf("program rejection rendering requires rejection boundary, context and prepared feedback")
 	}
 	prepared.mu.Lock()
 	defer prepared.mu.Unlock()
@@ -37,8 +37,8 @@ func (e *Executor) RenderProgramFailure(ctx context.Context, frame ProgramFrame,
 	defer func() { prepared.rendered, prepared.renderedError = true, rendered }()
 	if prepared.policy != nil {
 		var renderer *oar.Renderer
-		if e.Rejections != nil && e.Rejections.blockPlane != nil {
-			renderer = e.Rejections.blockPlane.Renderer
+		if r.blockPlane != nil {
+			renderer = r.blockPlane.Renderer
 		}
 		return prepared.policy.RenderSettled(ctx, renderer, prepared.Rejection)
 	}
@@ -49,12 +49,12 @@ func (e *Executor) RenderProgramFailure(ctx context.Context, frame ProgramFrame,
 	defer release()
 
 	ctx = invocationContext(ctx, tc)
-	if e.Rejections != nil && e.Rejections.blockPlane != nil {
-		if err := e.Rejections.blockPlane.RejectNativeObservation(ctx, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection); err != nil {
+	if r.blockPlane != nil {
+		if err := r.blockPlane.RejectNativeObservation(ctx, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection); err != nil {
 			return err
 		}
 	}
-	return e.Rejections.renderReject(prepared.Rejection)
+	return r.renderReject(prepared.Rejection)
 }
 
 // Attribution is immutable feedback provenance, not a new execution attempt.

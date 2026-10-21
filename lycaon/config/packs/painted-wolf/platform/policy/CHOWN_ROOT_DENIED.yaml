@@ -18,9 +18,9 @@ copy:
   cause: The requested root identity differs from this host’s user identity.
   why: This host permits only its current user ID {{ paintedwolf.ownership_uid }} and group ID {{ paintedwolf.ownership_gid
     }}.
-  fix: 'Use the exact permitted numeric UID and GID only when that matches the requested ownership change.
-    {% if paintedwolf.native_operation == "chown" %}The native chown form accepts numeric UID[:GID]; it does not resolve account names or accept current as an operand.{% else %}The retained structured form also accepts current for the host identity.{% endif %}
-    Otherwise report the limitation; do not guess another account, elevate the host, or switch tools to bypass it.'
+  fix: Use the exact permitted numeric UID and GID only when that matches the requested ownership change.
+    The native form accepts UID[:GID], without account-name lookup. Otherwise report the limitation;
+    do not guess another account, elevate the host, or switch tools to bypass it.
   instead: Branch on Code CHOWN_ROOT_DENIED; retain the current-identity boundary
   what: The requested root ownership target {{ paintedwolf.ownership_target }} is unavailable for chown.
 x-paintedwolf-category: recoverable

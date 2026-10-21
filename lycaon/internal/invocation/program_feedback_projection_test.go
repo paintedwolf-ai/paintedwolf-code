@@ -85,7 +85,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	// A changed worker execution root can be the cause of refusal. Rendering
 	// settled authoritative facts does not attempt to authorize that root again.
 	tc.Source.WorkerBranchRoot = "changed-worker-tree"
-	rendered := executor.RenderProgramFailure(t.Context(), frame, tc, prepared)
+	rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
 	refusal, ok := guidance.RefusalFromError(rendered)
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Actual command envelope selected") || toolrejection.AsToolReject(rendered) == nil {
 		t.Fatalf("OAR lost actual model identity or typed owner cause: %v", rendered)
@@ -110,7 +110,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	prepared.Close()
 	prepared.Close()
 	frame.Close()
-	if err := executor.RenderProgramFailure(t.Context(), frame, tc, prepared); err == nil {
+	if err := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); err == nil {
 		t.Fatal("closed feedback/frame rendered an uncharged observation")
 	}
 	if memory.active != 0 {
@@ -235,13 +235,13 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	defer prepared.Close()
 	// A later rule set cannot rewrite the already occurred policy guidance.
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: oar.NewGuardPipeline(oar.NewRuleSet(nil), nil, nil), Renderer: oar.NewRenderer(nil, nil)})
-	rendered := executor.RenderProgramFailure(t.Context(), frame, tc, prepared)
+	rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
 	refusal, ok := guidance.RefusalFromError(rendered)
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
 	baseline := memory.calls
-	if repeated := executor.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
+	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
 		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
 	}
 	prepared.Close()
