@@ -113,8 +113,9 @@ func detectProtectedLaunch(read func() (userNamespaceFacts, error), named string
 // relayThroughBroker turns a supervisor command into its broker relay when
 // this engine runs inside the protected launch. The relay receives the
 // broker as its last descriptor; everything else is the supervisor's.
-func relayThroughBroker(cmd *exec.Cmd) error {
-	state := protectedState()
+func relayThroughBroker(cmd *exec.Cmd) error { return relayThrough(cmd, protectedState()) }
+
+func relayThrough(cmd *exec.Cmd, state protectedLaunch) error {
 	if !state.protected {
 		// Outside the protected launch an unreadable namespace changes
 		// nothing: the command runs as it always has.

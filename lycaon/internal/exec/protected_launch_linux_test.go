@@ -86,3 +86,31 @@ func TestOutsideTheProtectedLaunchCommandsAreNotRelayed(t *testing.T) {
 		t.Fatalf("command relayed outside the protected launch: %q", cmd.Args)
 	}
 }
+
+// Inside the protected launch every supervisor becomes a relay, a
+// confinement helper's included; a missing broker refuses instead.
+func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "socket pair", err)
+	broker := os.NewFile(uintptr(pair[0]), "broker")
+	defer func() { _ = broker.Close(); _ = unix.Close(pair[1]) }()
+	state := protectedLaunch{protected: true, broker: broker}
+	for name, target := range map[string][]string{
+		"unconfined":         {"/usr/bin/git", "git", "status"},
+		"confinement helper": {"/opt/painted-wolf-code/bin/pw", "--confine-helper", "--", "/usr/bin/git"},
+	} {
+		lifetime, status, err := os.Pipe()
+		testutil.FailErr(t, "pipe", err)
+		cmd := &exec.Cmd{Path: "/opt/painted-wolf-code/bin/pw", Args: append([]string{"/opt/painted-wolf-code/bin/pw", supervisorCommand, "0", "normal"}, target...), ExtraFiles: []*os.File{lifetime, status}}
+		testutil.FailErr(t, "relay "+name, relayThrough(cmd, state))
+		if !relayedCommand(cmd) || cmd.Args[2] != supervisorCommand || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != broker {
+			t.Fatalf("%s launch not relayed with the broker last: %q", name, cmd.Args)
+		}
+		_ = lifetime.Close()
+		_ = status.Close()
+	}
+	missing := protectedLaunch{protected: true, err: ErrLaunchBrokerUnavailable}
+	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
+		t.Fatalf("a launch without the broker = %v, want refusal", err)
+	}
+}
