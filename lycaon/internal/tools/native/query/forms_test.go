@@ -9,12 +9,13 @@ import (
 )
 
 var queryFiles = map[string]string{
-	"doc.json":   `{"b":{},"a":[1,2],"name":"svc"}` + "\n",
-	"two.json":   "{\"a\":1}\n{\"a\":2}\n",
-	"cfg.yaml":   "# settings\nserver:\n  port: 8080\n  hosts: [a, b]\nname: api\n",
-	"multi.yaml": "kind: A\n---\nkind: B\n",
-	"cfg.toml":   "[package]\nname = \"demo\"\nedition = 2021\n",
-	"bad.json":   "1 {",
+	"doc.json":    `{"b":{},"a":[1,2],"name":"svc"}` + "\n",
+	"two.json":    "{\"a\":1}\n{\"a\":2}\n",
+	"cfg.yaml":    "# settings\nserver:\n  port: 8080\n  hosts: [a, b]\nname: api\n",
+	"multi.yaml":  "kind: A\n---\nkind: B\n",
+	"cfg.toml":    "[package]\nname = \"demo\"\nedition = 2021\n",
+	"bad.json":    "1 {",
+	"sorted.json": `{"a":[1,2],"b":{},"name":"svc"}` + "\n",
 }
 
 type queryCase struct {

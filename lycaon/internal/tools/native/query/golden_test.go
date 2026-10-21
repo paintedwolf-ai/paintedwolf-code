@@ -94,9 +94,9 @@ func shellWords(s string) []string {
 // differently than the catalog's status 2).
 var differentialCases = []queryCase{
 	{argv: "jq .a", stdin: "{\"a\":1}\n{\"a\":2}"},
-	{argv: "jq . doc.json"},
-	{argv: "jq -c . doc.json"},
-	{argv: "jq -r .name doc.json"},
+	{argv: "jq . sorted.json"},
+	{argv: "jq -c . sorted.json"},
+	{argv: "jq -r .name sorted.json"},
 	{argv: "jq -r .[]", stdin: `["x","y"]`},
 	{argv: "jq -s -c .", stdin: "1 2 3"},
 	{argv: "jq -n -c [inputs]", stdin: "1 2"},

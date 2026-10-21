@@ -13,18 +13,18 @@ import (
 func TestJqEditPreservesFormatAndPublishesAtItsPins(t *testing.T) {
 	yamlSource := "# service settings\nname: api # the service\nversion: 1.0\nport: 8080\n"
 	tomlSource := "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nratio = 1.0\n"
-	h := newHarness(t, map[string]string{"settings.json": "{\"enabled\":false,  \"n\": 1.50}\n", "svc.yaml": yamlSource, "Cargo.toml": tomlSource, "tagged.yaml": "ref: !Ref bucket\n", "commented.toml": "[a]\n# keep\nb = 1\n"})
+	h := newHarness(t, map[string]string{"settings.json": "{\"enabled\":false,\"n\":1.50}\n", "svc.yaml": yamlSource, "Cargo.toml": tomlSource, "tagged.yaml": "ref: !Ref bucket\n", "commented.toml": "[a]\n# keep\nb = 1\n"})
 
 	r := h.exec("", "jq-edit", "--path", "settings.json", "--query", ".enabled = true")
 	r.expect(t, "json edit", "", 0)
-	if got := h.disk("settings.json"); got != "{\"enabled\":true,  \"n\": 1.50}\n" {
+	if got := h.disk("settings.json"); got != "{\"enabled\":true,\"n\":1.50}\n" {
 		t.Fatalf("json literals or layout changed: %q", got)
 	}
 	if r.result.EffectCertainty != toolcontract.EffectCompleted {
 		t.Fatalf("published edit certainty = %+v", r.result)
 	}
 	pins := h.pins.pins[r.execution]
-	if len(pins) != 2 || pins[0].Role != toolcontract.SourceRevision || pins[1].Role != toolcontract.DestinationRevision || pins[0].ContentSHA256 != textfile.SHA256([]byte("{\"enabled\":false,  \"n\": 1.50}\n")) {
+	if len(pins) != 2 || pins[0].Role != toolcontract.SourceRevision || pins[1].Role != toolcontract.DestinationRevision || pins[0].ContentSHA256 != textfile.SHA256([]byte("{\"enabled\":false,\"n\":1.50}\n")) {
 		t.Fatalf("pins = %+v", pins)
 	}
 

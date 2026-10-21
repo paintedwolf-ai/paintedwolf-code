@@ -311,6 +311,26 @@ implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
 record none. The command never delivers a conversational read; only exact mapped
 output that the delivery owner later delivers can qualify an edit base.
 
+### Stream queries and format-aware edits
+
+`internal/tools/native/query` runs jq, yq and the jq-edit built-in. jq and yq
+compile one gojq program per execution through `nativejq.CompileProgram`, the
+same compilation the structured jq and jq_edit tools use. Complete input values
+stream through it in operand order, and the same iterator backs `input` and
+`inputs`, so a file is captured and pinned only when the query reaches it. The
+program has no ambient environment, module loader or other file access.
+`query_depth`, `query_outputs`, `query_value_bytes`, `query_cpu_ms` and
+`stream_bytes` refuse rather than truncate. gojq exposes no instruction
+counter, so the evaluation deadline is the work bound.
+
+Output follows gojq: sorted keys, jq string escapes, integers kept exact and
+fractions in shortest form. yq writes YAML documents unless `-c` asks for
+compact JSON. These serializations never preserve source formatting. jq-edit is
+the format-aware edit: it runs `nativejq.Edit` over the pinned accepted text and
+publishes the result through the pinned write door at its captured destination
+revision. A rewrite that would drop comments, tags or literals refuses with
+`JQ_EDIT_LOSSY`.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
