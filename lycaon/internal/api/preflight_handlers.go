@@ -79,7 +79,7 @@ func preflightHostFacts(env preflight.Env) preflight.HostFacts {
 		Build:         buildRevision(),
 		SchemaVersion: db.SchemaVersion,
 		OSName:        runtime.GOOS,
-		OSFloor:       platformfloor.MacOSMin(),
+		OSFloor:       platformfloor.HostOSMin(),
 		Arch:          runtime.GOARCH,
 	}
 	if env.OSProductVer != nil {
