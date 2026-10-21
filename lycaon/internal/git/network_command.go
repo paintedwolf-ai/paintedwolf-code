@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -43,4 +45,47 @@ func (m *Manager) NetworkCommand(ctx context.Context, dir string, args []string,
 		notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	}
 	return diagnostics, code, err
+}
+
+// CloneCommand clones url into destDir with admitted clone flags, holding the
+// source and destination leases and claiming an exclusive destination directory.
+func CloneCommand(ctx context.Context, url, destDir string, flags []string, stdout io.Writer) ([]byte, int, error) {
+	if err := gitargv.ValidateCloneURL(url); err != nil {
+		return nil, -1, err
+	}
+	parent, err := absProjectDir(filepath.Dir(destDir))
+	if err != nil {
+		return nil, -1, err
+	}
+	parent, err = filepath.EvalSymlinks(parent)
+	if err != nil {
+		return nil, -1, fmt.Errorf("resolve clone parent: %w", err)
+	}
+	destDir = filepath.Join(parent, filepath.Base(destDir))
+	releaseSource, err := gitlease.CloneSource(ctx, url)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer releaseSource()
+	release, err := gitlease.Path(ctx, destDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	defer release()
+	owned, err := claimCloneDestination(destDir)
+	if err != nil {
+		return nil, -1, err
+	}
+	args := append(append([]string{"clone"}, flags...), "--", url, destDir)
+	opts := networkOpts(url, NetworkCommandTimeout)
+	opts.ExtraConfig = []string{"color.ui=false", "fetch.recurseSubmodules=false", "submodule.recurse=false"}
+	diagnostics, code, err := gitexec.RunTo(ctx, parent, args, opts, stdout)
+	if err != nil {
+		return diagnostics, code, owned.failed(err)
+	}
+	if code != 0 {
+		_ = owned.failed(fmt.Errorf("git clone failed"))
+		return diagnostics, code, nil
+	}
+	return diagnostics, 0, nil
 }

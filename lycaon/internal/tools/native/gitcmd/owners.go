@@ -1,8 +1,8 @@
 // Package gitcmd is the command frontend for Git. Read commands run the
 // bundled Git through the Git owner's hermetic read door and stream Git's own
-// output and status; their argv is the catalog-bound command, the repository
-// must lie inside the program's roots, and forms that would write (branch
-// NAME, config KEY VALUE, remote add) are refused before Git runs.
+// output and status; mutation and network commands translate catalog-bound
+// argv into shared Git owner requests with host review, confinement, and
+// remote host gating.
 package gitcmd
 
 import (
@@ -10,17 +10,26 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// Reader is the Git owner's read door (git.Manager.ReadCommand).
-type Reader interface {
+// Backend is the Git owner's read, mutation, worktree and network surface.
+type Backend interface {
+	git.GitManager
 	ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error)
+	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)
+	RemoteURL(ctx context.Context, dir string, args []string) string
+	AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error
+	RemoveWorktree(ctx context.Context, toplevel, path string) error
+	PruneWorktrees(ctx context.Context, toplevel string) error
 }
 
 // readForms are the catalog read commands and their operand rules.
@@ -31,37 +40,55 @@ var readForms = map[string]operandRule{
 	"git config": configOperands, "git stash list": noOperands, "git worktree list": noOperands, "git ls-files": anyOperands,
 }
 
-// Owners holds the Git read frontends.
+// Owners holds the Git read, mutation and network frontends.
 type Owners struct {
-	Git Reader
+	Git      Backend
+	Boundary *sandbox.Boundary
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
 	ops     map[string]string
 	// limitOverride narrows catalog limits for bounded fixtures.
 	limitOverride map[string]int64
+
+	mu     sync.Mutex
+	staged map[string]map[string]bool
 }
 
-// NewOwners binds the frozen catalog's Git read specifications. A command
+// NewOwners binds the frozen catalog's Git command specifications. A command
 // whose structured tool row exists keeps that operation identity; the rest
 // have none and run as catalog-attributed host commands.
-func NewOwners(reader Reader) (*Owners, error) {
-	if reader == nil {
-		return nil, errors.New("git command owners require the Git read door")
+func NewOwners(backend Backend) (*Owners, error) {
+	if backend == nil {
+		return nil, errors.New("git command owners require the Git backend")
 	}
 	catalog, err := toolcontract.LanguageV1()
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Git: reader, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
+	o := &Owners{
+		Git:     backend,
+		catalog: catalog,
+		specs:   map[string]toolcontract.CommandSpecification{},
+		ops:     map[string]string{},
+		staged:  map[string]map[string]bool{},
+	}
 	for _, command := range catalog.Commands {
 		if _, ok := readForms[command.Name]; ok {
+			o.specs[command.Name] = command
+		}
+		if _, ok := mutateForms[command.Name]; ok {
 			o.specs[command.Name] = command
 		}
 	}
 	for name := range readForms {
 		if _, ok := o.specs[name]; !ok {
 			return nil, fmt.Errorf("git read command %s has no catalog specification", name)
+		}
+	}
+	for name := range mutateForms {
+		if _, ok := o.specs[name]; !ok {
+			return nil, fmt.Errorf("git mutation command %s has no catalog specification", name)
 		}
 	}
 	for _, disposition := range catalog.Tools {
@@ -105,6 +132,7 @@ type Prepared struct {
 	// Command is the catalog command the argv bound to.
 	Command   string
 	Operation string
+	Mode      string
 	Argv      commandprogram.BoundArgv
 	Review    commandprogram.ArgvReview
 	command   *command
@@ -120,7 +148,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	}
 	spec, ok := o.specs[request.OperationID]
 	if !ok || paths == nil {
-		return Prepared{}, fmt.Errorf("%s is not a Git read command", request.OperationID)
+		return Prepared{}, fmt.Errorf("%s is not a Git command", request.OperationID)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
@@ -130,7 +158,16 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, err
 	}
-	return Prepared{Command: spec.Name, Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(spec.Name), command: parsed, owners: o, paths: paths}, nil
+	return Prepared{
+		Command:   spec.Name,
+		Operation: o.ops[spec.Name],
+		Mode:      effectMode(spec, parsed, bound),
+		Argv:      bound,
+		Review:    bound.Review(spec.Name),
+		command:   parsed,
+		owners:    o,
+		paths:     paths,
+	}, nil
 }
 
 // InvokeOwner runs the bound command once and settles Git's status.
@@ -140,6 +177,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	}
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
+	}
+	if _, ok := mutateForms[p.command.spec.Name]; ok {
+		return invokeMutation(ctx, p, tc, streams)
 	}
 	status, err := p.run(ctx, streams)
 	if err == nil {

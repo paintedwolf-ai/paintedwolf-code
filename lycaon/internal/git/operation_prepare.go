@@ -27,7 +27,7 @@ type preparedOperation struct {
 
 func (p *preparedOperation) close() { _ = os.RemoveAll(p.scratch) }
 
-func (m *Manager) prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
+func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
 	plan, err := planOperation(ctx, repo.Root, req)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (p *preparedOperation) checkState(ctx context.Context, repo gitrepo.Repo) e
 		if inProgress != r.Kind {
 			return operationRefusal("no_" + strings.ReplaceAll(r.Kind, "-", "_") + "_in_progress")
 		}
-	case inProgress != "":
+	case inProgress != "" && r.Kind != "add" && !(r.Kind == "reset" && r.Mode == "hard"):
 		return operationRefusal("operation_in_progress", inProgress)
 	}
 	return nil
@@ -198,8 +198,8 @@ func (p *preparedOperation) prepareScratch(ctx context.Context, repo gitrepo.Rep
 			return err
 		}
 	}
-	// Preserve merge control state only for the named continuation or abort.
-	if p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort") {
+	// Preserve merge control state only for the named continuation, abort, or staging.
+	if (p.request.Kind == "merge" && (p.request.Action == "continue" || p.request.Action == "abort")) || p.request.Kind == "add" {
 		for _, name := range []string{"MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "ORIG_HEAD", "MERGE_AUTOSTASH", "AUTO_MERGE"} {
 			if err := p.copyFile(filepath.Join(repo.GitDir, name), filepath.Join(scratch, ".git", name)); err != nil {
 				return err

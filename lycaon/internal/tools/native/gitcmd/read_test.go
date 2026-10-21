@@ -52,8 +52,10 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "resolve root", err)
 	owners, err := NewOwners(git.NewManager())
 	testutil.FailErr(t, "owners", err)
+	boundary := nativefixture.Boundary(t)
+	owners.Boundary = boundary
 	tc := nativefixture.Context(root)
-	paths, err := projectpaths.NewProgramPaths(t.Context(), nativefixture.Boundary(t), tc, "")
+	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
 	h := &harness{t: t, root: root, bin: bin, owners: owners, paths: paths, tc: tc}
 	h.git("init", "-q", "-b", "main")
@@ -273,7 +275,7 @@ func TestReadFormsRefuseWritesAndUncataloguedForms(t *testing.T) {
 		{[]string{"git", "-c", "diff.external=evil", "diff"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{[]string{"git", "diff", "--no-index", "a.txt", "new.txt"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{[]string{"git", "log", "--output=leak.txt"}, "COMMAND_OPTION_UNSUPPORTED"},
-		{[]string{"git", "push"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+		{[]string{"git", "bisect"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
 		{[]string{"git", "gc"}, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
 		{[]string{"git", "-C", "/etc", "status"}, ""},
 	} {

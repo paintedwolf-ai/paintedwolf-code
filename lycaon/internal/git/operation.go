@@ -87,7 +87,7 @@ func (m *Manager) Operate(ctx context.Context, root string, req OperationRequest
 	if err != nil {
 		return result, err
 	}
-	prepared, err := m.prepareOperation(ctx, repo, req)
+	prepared, err := prepareOperation(ctx, repo, req)
 	release()
 	if err != nil {
 		return result, err

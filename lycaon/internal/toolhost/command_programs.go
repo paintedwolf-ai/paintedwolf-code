@@ -92,6 +92,7 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 	if err != nil {
 		return command.NativeOperation{}, err
 	}
+	owners.Boundary = t.boundary
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {
 			return false
@@ -114,6 +115,6 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 		if !registered(tool) {
 			tool = ""
 		}
-		return command.NativePrepared{Command: prepared.Command, Tool: tool, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+		return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}, nil
 }
