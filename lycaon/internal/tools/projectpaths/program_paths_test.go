@@ -338,9 +338,13 @@ func TestOpenCwdRetainsCheckedDirectoryAcrossReplacement(t *testing.T) {
 	if !os.SameFile(before, after) {
 		t.Fatal("held cwd identity changed")
 	}
-	entries, err := held.ReadDir(-1)
-	testutil.FailErr(t, "read retained directory", err)
-	if len(entries) != 1 || entries[0].Name() != "b.go" {
+	// The held cwd is a search-only metadata handle (O_SEARCH, O_PATH), so it
+	// proves retention by identity rather than by listing entries.
+	moved, err := os.Stat(filepath.Join(root, "moved"))
+	testutil.FailErr(t, "inspect moved directory", err)
+	replaced, err := os.Stat(filepath.Join(root, "pkg"))
+	testutil.FailErr(t, "inspect replacement directory", err)
+	if !os.SameFile(after, moved) || os.SameFile(after, replaced) {
 		t.Fatal("held directory observed replacement")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
