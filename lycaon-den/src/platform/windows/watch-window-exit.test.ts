@@ -94,6 +94,7 @@ describe("durable window exit", () => {
     await installed();
     const done = closeHandler?.({ preventDefault: vi.fn() });
     expect(document.documentElement.inert).toBe(true);
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
     expect(release).not.toHaveBeenCalled();
     finishFlush();
     await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
@@ -202,7 +203,7 @@ describe("durable window exit", () => {
     const preventDefault = vi.fn();
     await closeHandler?.({ preventDefault });
     expect(preventDefault).toHaveBeenCalledOnce();
-    expect(flush).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
     finish();
     await done;
     expect(destroy).toHaveBeenCalledOnce();
