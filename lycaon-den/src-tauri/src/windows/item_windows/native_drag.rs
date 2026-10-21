@@ -438,14 +438,14 @@ fn connect_destination(widget: &gtk::Widget, app: &AppHandle, label: &str) {
         let label = label.to_string();
         widget.connect_drag_motion(move |_, context, x, y, time| {
             if !carries_tab(context) {
-                return Propagation::Proceed;
+                return false;
             }
             let (x, y) = (f64::from(x), f64::from(y));
             let accepts = context.drag_get_source_widget().is_some()
                 && active_token().is_some_and(|(token, _)| strip_accepts(&label, &token, x, y));
             context.drag_status(if accepts { gdk::DragAction::MOVE } else { gdk::DragAction::empty() }, time);
             set_hover(&app, &label, accepts.then_some((x, y)));
-            Propagation::Stop
+            true
         });
     }
     {
@@ -462,7 +462,7 @@ fn connect_destination(widget: &gtk::Widget, app: &AppHandle, label: &str) {
         let atom = atom.clone();
         widget.connect_drag_drop(move |widget, context, x, y, time| {
             if !carries_tab(context) {
-                return Propagation::Proceed;
+                return false;
             }
             let accepts = context.drag_get_source_widget().is_some()
                 && active_token().is_some_and(|(token, _)| strip_accepts(&label, &token, f64::from(x), f64::from(y)));
@@ -471,7 +471,7 @@ fn connect_destination(widget: &gtk::Widget, app: &AppHandle, label: &str) {
             } else {
                 context.drag_finish(false, false, time);
             }
-            Propagation::Stop
+            true
         });
     }
     {
