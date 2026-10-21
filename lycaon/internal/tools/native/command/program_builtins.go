@@ -40,9 +40,24 @@ func (s *sessionOutputResources) ReserveSpill(ctx context.Context, n int64) (fun
 	}, nil
 }
 
-func (r *ProgramRuntime) sessionResources() *sessionOutputResources {
-	r.resourcesOnce.Do(func() { r.resources = newSessionOutputResources() })
-	return r.resources
+// sessionResources is one session's output-lifetime account; sessions never
+// share a quota, so one session's retained output cannot starve another.
+func (r *ProgramRuntime) sessionResources(sessionID string) *sessionOutputResources {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sessionResourcesLocked(sessionID)
+}
+
+func (r *ProgramRuntime) sessionResourcesLocked(sessionID string) *sessionOutputResources {
+	if resources, ok := r.resources[sessionID]; ok {
+		return resources
+	}
+	if r.resources == nil {
+		r.resources = map[string]*sessionOutputResources{}
+	}
+	resources := newSessionOutputResources()
+	r.resources[sessionID] = resources
+	return resources
 }
 
 func newSessionOutputResources() *sessionOutputResources {

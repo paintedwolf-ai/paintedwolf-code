@@ -325,3 +325,15 @@ func TestProgramEntryRefusesDesktopCaptureLaunch(t *testing.T) {
 		}
 	}
 }
+
+// Retained program output holds its stored bytes, not the encoder's worst
+// case, so one session runs many programs without exhausting its quota.
+func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
+	f := newProgramFixture(t)
+	for i := range 150 {
+		out, err := f.call(t, t.Context(), fmt.Sprintf("external -- /bin/echo run-%d | tee out.txt", i))
+		if err != nil || !strings.Contains(out, `"state":"completed"`) {
+			t.Fatalf("program %d: %v %s", i, err, out)
+		}
+	}
+}

@@ -57,8 +57,7 @@ type ProgramRuntime struct {
 
 	mu            sync.Mutex
 	outputs       map[string]*invocation.ProgramOutputRetention
-	resources     *sessionOutputResources
-	resourcesOnce sync.Once
+	resources     map[string]*sessionOutputResources
 	disabled      atomic.Bool
 }
 
@@ -252,7 +251,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	if owners.Builtins != nil {
-		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources()})
+		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
 		if err != nil {
 			return "", err
 		}
@@ -353,7 +352,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, Admission: r.sessionResources(), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
 	})
 	if err != nil {
 		return nil, false, err
@@ -430,7 +429,7 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	if outputs, ok := r.outputs[sessionID]; ok {
 		return outputs, nil
 	}
-	outputs, err := invocation.NewProgramOutputRetention(ctx, r.Recorder, r.Blobs, sessionID, r.sessionResources())
+	outputs, err := invocation.NewProgramOutputRetention(ctx, r.Recorder, r.Blobs, sessionID, r.sessionResourcesLocked(sessionID))
 	if err != nil {
 		return nil, err
 	}
