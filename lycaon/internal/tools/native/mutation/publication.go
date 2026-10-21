@@ -3,6 +3,7 @@ package mutation
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // Publication is one program's redirect owner: commandprogram.OutputPublication
@@ -35,7 +38,7 @@ var (
 func (p *Publication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
 	if err != nil {
-		return nil, err
+		return nil, wrapPathError(destination.Redirect.Operator, err)
 	}
 	if bound.Null {
 		return &nullStage{}, nil
@@ -53,7 +56,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, false)
 	if err != nil {
-		return nil, err
+		return nil, wrapPathError("<", err)
 	}
 	if bound.Null {
 		return commandprogram.NullInput(), nil
@@ -66,6 +69,21 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 		return nil, err
 	}
 	return io.NopCloser(strings.NewReader(source.Content)), nil
+}
+
+func wrapPathError(command string, err error) error {
+	var pathErr *projectpaths.PathError
+	if errors.As(err, &pathErr) && toolrejection.AsToolReject(err) == nil {
+		reason := pathErr.Error()
+		if pathErr.Cause != nil {
+			reason = pathErr.Cause.Error()
+		}
+		return errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: map[string]any{
+			"command": command, "path": pathErr.Operand, "reason": reason,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
+		}})
+	}
+	return err
 }
 
 // pinnedTarget is a destination captured before any bytes are prepared for it.

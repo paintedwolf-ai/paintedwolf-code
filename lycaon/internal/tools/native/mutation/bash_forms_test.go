@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -279,9 +281,9 @@ func TestTarVerboseListingAndMemberSelection(t *testing.T) {
 	when := stamp.Local().Format("2006-01-02 15:04")
 	// GNU pads owner/group and size to a column of 19 that grows with the
 	// widest entry seen so far.
-	want := "drwxr-xr-x dev/staff" + strings.Repeat(" ", 10) + "0 " + when + " top/\n" +
-		"-rwsr-xr-x dev/staff" + strings.Repeat(" ", 10) + "3 " + when + " top/run.sh\n" +
-		"lrwxrwxrwx 501/20" + strings.Repeat(" ", 13) + "0 " + when + " top/link -> run.sh\n" +
+	want := "drwxr-xr-x dev/staff" + strings.Repeat(" ", 9) + "0 " + when + " top/\n" +
+		"-rwsr-xr-x dev/staff" + strings.Repeat(" ", 9) + "3 " + when + " top/run.sh\n" +
+		"lrwxrwxrwx 501/20" + strings.Repeat(" ", 12) + "0 " + when + " top/link -> run.sh\n" +
 		"-rw-r--r-- a-very-long-owner-name/group 2 " + when + " other.txt\n"
 	if r := h.run("", "tar", "-tvf", "listing.tar"); r.err != nil || r.stdout != want {
 		t.Fatalf("tar -tv:\n%s\nwant:\n%s", r.stdout, want)
@@ -330,5 +332,102 @@ func TestSharedBSDSpellings(t *testing.T) {
 	testutil.FailErr(t, "seed corrupt", os.WriteFile(h.path("bad.gz"), []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3, 1, 2, 3}, 0o644))
 	if r := h.run("", "gunzip", "-t", "bad.gz"); r.result.Status != 1 || h.absent("bad.gz") {
 		t.Fatalf("gunzip -t corrupt: %+v %v", r.result, r.err)
+	}
+}
+
+func lookGNU(name string) (string, bool) {
+	for _, candidate := range []string{"/opt/homebrew/bin/" + name, "/usr/local/bin/" + name} {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
+	}
+	path, err := exec.LookPath(name)
+	return path, err == nil
+}
+
+func runExternal(t *testing.T, dir, bin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+	out, err := cmd.Output()
+	testutil.FailErr(t, bin+" "+strings.Join(args, " "), err)
+	return string(out)
+}
+
+func TestTarGzipAndMutationsMatchGNU(t *testing.T) {
+	gtar, ok := lookGNU("gtar")
+	if !ok {
+		t.Skip("no gtar on this host")
+	}
+	h := newHarness(t, map[string]string{"proj/a.txt": "alpha\n", "proj/sub/b.txt": "beta\n"})
+	if r := h.run("", "tar", "-cf", "native.tar", "proj"); r.err != nil {
+		t.Fatalf("tar -cf: %v", r.err)
+	}
+	stamp := time.Date(2026, 10, 20, 12, 30, 0, 0, time.UTC)
+	var listing bytes.Buffer
+	tw := tar.NewWriter(&listing)
+	for _, hdr := range []*tar.Header{
+		{Name: "top/", Typeflag: tar.TypeDir, Mode: 0o755, Uname: "dev", Gname: "staff", ModTime: stamp},
+		{Name: "top/run.sh", Typeflag: tar.TypeReg, Mode: 0o4755, Size: 3, Uname: "dev", Gname: "staff", ModTime: stamp},
+		{Name: "top/link", Typeflag: tar.TypeSymlink, Linkname: "run.sh", Mode: 0o777, Uid: 501, Gid: 20, ModTime: stamp},
+		{Name: "other.txt", Typeflag: tar.TypeReg, Mode: 0o644, Size: 2, Uname: "a-very-long-owner-name", Gname: "group", ModTime: stamp},
+	} {
+		testutil.FailErr(t, "header", tw.WriteHeader(hdr))
+		_, err := tw.Write(make([]byte, hdr.Size))
+		testutil.FailErr(t, "body", err)
+	}
+	testutil.FailErr(t, "close tar", tw.Close())
+	testutil.FailErr(t, "write listing.tar", os.WriteFile(h.path("listing.tar"), listing.Bytes(), 0o644))
+
+	for _, args := range [][]string{
+		{"-tf", "native.tar"},
+		{"-tf", "native.tar", "proj/sub"},
+		{"-tvf", "listing.tar"},
+	} {
+		want := runExternal(t, h.root, gtar, args...)
+		got := h.run("", append([]string{"tar"}, args...)...)
+		if got.err != nil || got.stdout != want {
+			t.Fatalf("tar %v:\n got %q\nwant %q (%v)", args, got.stdout, want, got.err)
+		}
+	}
+	testutil.FailErr(t, "mkdir out-native", os.Mkdir(h.path("out-native"), 0o755))
+	testutil.FailErr(t, "mkdir out-gnu", os.Mkdir(h.path("out-gnu"), 0o755))
+	wantExtract := runExternal(t, h.root, gtar, "-xvf", "native.tar", "-C", "out-gnu", "--strip-components", "1", "proj/sub")
+	gotExtract := h.run("", "tar", "-xvf", "native.tar", "-C", "out-native", "--strip-components", "1", "proj/sub")
+	if gotExtract.err != nil || gotExtract.stdout != wantExtract || h.read("out-native/sub/b.txt") != h.read("out-gnu/sub/b.txt") {
+		t.Fatalf("tar -xvf strip:\n got %q\nwant %q (%v)", gotExtract.stdout, wantExtract, gotExtract.err)
+	}
+	// Archive created by gtar -czf is listed and extracted identically by native tar.
+	runExternal(t, h.root, gtar, "-czf", "gnu.tgz", "proj")
+	if r := h.run("", "tar", "-tf", "gnu.tgz"); r.err != nil || r.stdout != runExternal(t, h.root, gtar, "-tf", "gnu.tgz") {
+		t.Fatalf("tar -tf gnu.tgz: %q %v", r.stdout, r.err)
+	}
+	testutil.FailErr(t, "mkdir from-gnu", os.Mkdir(h.path("from-gnu"), 0o755))
+	if r := h.run("", "tar", "-xzf", "gnu.tgz", "-C", "from-gnu"); r.err != nil || h.read("from-gnu/proj/a.txt") != "alpha\n" {
+		t.Fatalf("tar -xzf gnu.tgz: %v", r.err)
+	}
+	if sysGzip, err := exec.LookPath("/usr/bin/gzip"); err == nil {
+		sysCompressed := runExternal(t, h.root, sysGzip, "-c", "-n", "proj/a.txt")
+		if r := h.run(sysCompressed, "zcat"); r.err != nil || r.stdout != "alpha\n" {
+			t.Fatalf("zcat on system gzip output: %q %v", r.stdout, r.err)
+		}
+	}
+	if gmkdir, ok := lookGNU("gmkdir"); ok {
+		gnuDir := t.TempDir()
+		want := strings.ReplaceAll(runExternal(t, gnuDir, gmkdir, "-pv", "d/e/f"), gmkdir, "mkdir")
+		got := h.run("", "mkdir", "-pv", "d/e/f")
+		if got.err != nil || got.stdout != want {
+			t.Fatalf("mkdir -pv:\n got %q\nwant %q", got.stdout, want)
+		}
+	}
+	if gcp, ok := lookGNU("gcp"); ok {
+		gnuDir := t.TempDir()
+		testutil.FailErr(t, "seed gnu cp", os.WriteFile(filepath.Join(gnuDir, "a.txt"), []byte("a"), 0o644))
+		want := runExternal(t, gnuDir, gcp, "-v", "a.txt", "b.txt")
+		got := h.run("", "cp", "-v", "proj/a.txt", "b.txt")
+		if got.err != nil || strings.ReplaceAll(got.stdout, "proj/a.txt", "a.txt") != want {
+			t.Fatalf("cp -v:\n got %q\nwant %q", got.stdout, want)
+		}
 	}
 }

@@ -215,11 +215,11 @@ func TestCurlCookieJarRoundTrip(t *testing.T) {
 	if !strings.HasPrefix(jar, "# Netscape HTTP Cookie File") || !contains(jar, "#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tabc123") || !contains(jar, "127.0.0.1\tFALSE\t/prefs\tFALSE\t0\ttheme\tdark") {
 		t.Fatalf("jar file %q", jar)
 	}
-	r := h.curl(t.Context(), "-s", "-b", "jar.txt", "-c", "jar.txt", server.URL+"/me")
-	if r.err != nil || r.stdout != "user for abc123\n" {
-		t.Fatalf("cookie round trip %q %v", r.stdout, r.err)
+	r := h.curl(t.Context(), "-s", "-b", "jar.txt", "-c", "jar.txt", "-o", "me.txt", "-D", "me.hdr", server.URL+"/me")
+	if r.err != nil || h.read("me.txt") != "user for abc123\n" {
+		t.Fatalf("cookie round trip %q %v", h.read("me.txt"), r.err)
 	}
-	if pins := h.pins.pins[r.execution]; len(pins) != 2 || pins[0].Role != toolcontract.DestinationRevision || pins[1].Role != toolcontract.SourceRevision {
+	if pins := h.pins.pins[r.execution]; len(pins) != 4 || pins[0].Path != "me.txt" || pins[1].Path != "me.hdr" || pins[2].Path != "jar.txt" || pins[2].Role != toolcontract.DestinationRevision || pins[3].Path != "jar.txt" || pins[3].Role != toolcontract.SourceRevision {
 		t.Fatalf("jar capture and read pins %+v", pins)
 	}
 }
@@ -300,6 +300,15 @@ func TestCurlExitStatusesAndUnknownOutcomes(t *testing.T) {
 	}
 }
 
+func serverPort(t *testing.T, rawURL string) uint16 {
+	t.Helper()
+	_, portText, err := net.SplitHostPort(strings.TrimPrefix(rawURL, "http://"))
+	testutil.FailErr(t, "split server host:port", err)
+	port, err := strconv.ParseUint(portText, 10, 16)
+	testutil.FailErr(t, "parse server port", err)
+	return uint16(port)
+}
+
 func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 	var targetHits atomic.Int32
 	target := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -313,11 +322,23 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 	origin := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.URL+"/next", http.StatusFound)
 	})
+	originPort, targetPort := serverPort(t, origin.URL), serverPort(t, target.URL)
 	h := newHarness(t)
 	h.tc.Local.LoopbackConnectGranted = false
-	if r := h.curl(t.Context(), "-s", origin.URL); r.result.Terminal != toolcontract.ProducerRefused || r.result.EffectCertainty != toolcontract.NoEffect {
-		t.Fatalf("loopback without authority %+v %v", r.result, r.err)
+	r := h.curl(t.Context(), "-s", origin.URL)
+	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || r.result.EffectCertainty != toolcontract.NoEffect || !contains(r.stderr, "SANDBOX_TRY_LOOPBACK_CONNECT") || reject == nil || reject.Data["port"] != originPort {
+		t.Fatalf("loopback without authority %+v %v stderr=%q", r.result, r.err, r.stderr)
 	}
+	// OwnedLoopbackPorts admits only the owned listener port and refuses a redirect to another local port.
+	h.tc.Local.OwnedLoopbackPorts = []uint16{originPort}
+	if r := h.curl(t.Context(), "-s", origin.URL); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("owned loopback origin failed: %+v %v", r.result, r.err)
+	}
+	r = h.curl(t.Context(), "-s", "-L", origin.URL)
+	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || targetHits.Load() != 0 || reject == nil || reject.Data["port"] != targetPort {
+		t.Fatalf("redirect to ungranted loopback port: %+v %v hits=%d", r.result, r.err, targetHits.Load())
+	}
+	h.tc.Local.OwnedLoopbackPorts = nil
 	h.tc.Local.LoopbackConnectGranted = true
 
 	var mu sync.Mutex
@@ -338,7 +359,7 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 	originHost := strings.TrimPrefix(origin.URL, "http://")
 	targetHost := strings.TrimPrefix(target.URL, "http://")
 	allow[originHost] = true
-	r := h.curl(t.Context(), "-s", "-L", "-H", "Authorization: Bearer origin-only", origin.URL)
+	r = h.curl(t.Context(), "-s", "-L", "-H", "Authorization: Bearer origin-only", origin.URL)
 	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || targetHits.Load() != 0 {
 		t.Fatalf("redirect reached a denied host: %+v hits=%d", r.result, targetHits.Load())
 	}
@@ -371,6 +392,19 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 			w.WriteHeader(http.StatusFound)
 			return
 		}
+		if r.URL.Path == "/echo" {
+			body, _ := io.ReadAll(r.Body)
+			accept := r.Header.Get("Accept")
+			if accept == "*/*" {
+				accept = ""
+			}
+			stamp(w, "text/plain")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintf(w, "%s %s\nctype=%s\naccept=%s\nauth=%s\nua=%s\ncustom=%s\nbody=%s\n",
+				r.Method, r.URL.RequestURI(), r.Header.Get("Content-Type"), accept,
+				r.Header.Get("Authorization"), r.Header.Get("User-Agent"), r.Header.Get("X-Custom"), string(body))
+			return
+		}
 		stamp(w, "application/json")
 		w.Header().Set("X-Request", r.Method+" "+r.URL.Path)
 		w.Header().Set("Cache-Control", "no-store")
@@ -387,6 +421,11 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		{"-s", "-L", "-i", server.URL + "/hop/1"},
 		{"-s", "-L", "-I", server.URL + "/hop/2"},
 		{"-s", "-D", "-", server.URL + "/hop/1"},
+		{"-s", "-A", "probe/1", "-d", "alpha=1", "-d", "beta=2", server.URL + "/echo"},
+		{"-s", "-A", "probe/1", "--data-urlencode", "msg=hello world&more", server.URL + "/echo"},
+		{"-s", "-A", "probe/1", "-G", "-d", "k=v", "--data-urlencode", "q=a b", server.URL + "/echo"},
+		{"-s", "-A", "probe/1", "--json", `{"x":1}`, server.URL + "/echo"},
+		{"-s", "-A", "probe/1", "-u", "user:pass", "-H", "X-Custom: val", server.URL + "/echo"},
 	} {
 		cmd := exec.Command(system, append([]string{"--noproxy", "*"}, args...)...)
 		cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*", "CURL_HOME=/nonexistent")

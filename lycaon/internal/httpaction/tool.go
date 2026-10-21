@@ -402,6 +402,9 @@ func send(
 	// no network destination for the egress gate to judge.
 	if spec.socket == "" {
 		req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
+			if reject := checkHopLoopbackAuthority(hopURL, spec.resolve, allowAddress); reject != nil {
+				return reject
+			}
 			return egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method)
 		}
 	}
@@ -539,24 +542,33 @@ func retrievedFrom(spec requestSpec, finalURL string) string {
 	return ""
 }
 
-// firstHop is the loopback address and port the first hop dials; ok is false
-// when it dials a unix socket or a non-loopback destination.
-func (spec requestSpec) firstHop() (addr netip.Addr, port uint16, ok bool) {
-	if spec.socket != "" || spec.unixSocket != "" || spec.target == nil {
+// hopLoopbackTarget is the loopback address and port a hop dials; ok is
+// false when it dials a non-loopback destination.
+func hopLoopbackTarget(target *url.URL, resolve []outboundhttp.ResolveMapping) (addr netip.Addr, port uint16, ok bool) {
+	if target == nil {
 		return netip.Addr{}, 0, false
 	}
-	port, err := outboundhttp.EffectivePort(spec.target)
+	port, err := outboundhttp.EffectivePort(target)
 	if err != nil {
 		return netip.Addr{}, 0, false
 	}
-	if mapped, target, found := outboundhttp.MappedDial(spec.resolve, spec.target.Hostname(), port); found {
+	if mapped, mappedPort, found := outboundhttp.MappedDial(resolve, target.Hostname(), port); found {
 		mapped = mapped.Unmap()
-		return mapped, target, mapped.IsLoopback()
+		return mapped, mappedPort, mapped.IsLoopback()
 	}
-	if !egress.SyntacticLoopback(spec.target.Hostname()) {
+	if !egress.SyntacticLoopback(target.Hostname()) {
 		return netip.Addr{}, 0, false
 	}
 	return netip.MustParseAddr("127.0.0.1"), port, true
+}
+
+// firstHop is the loopback address and port the first hop dials; ok is false
+// when it dials a unix socket or a non-loopback destination.
+func (spec requestSpec) firstHop() (addr netip.Addr, port uint16, ok bool) {
+	if spec.socket != "" || spec.unixSocket != "" {
+		return netip.Addr{}, 0, false
+	}
+	return hopLoopbackTarget(spec.target, spec.resolve)
 }
 
 func (spec requestSpec) dialsLoopback() bool {
@@ -564,15 +576,22 @@ func (spec requestSpec) dialsLoopback() bool {
 	return ok
 }
 
-func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
-	addr, port, ok := spec.firstHop()
+func checkHopLoopbackAuthority(target *url.URL, resolve []outboundhttp.ResolveMapping, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
+	addr, port, ok := hopLoopbackTarget(target, resolve)
 	if !ok || (allowAddress != nil && allowAddress(addr, port)) {
 		return nil
 	}
 	return &toolrejection.ToolReject{
 		Code: isolation.CodeTryLoopbackConnect,
-		Data: map[string]any{"port": port, "url": spec.target.String()},
+		Data: map[string]any{"port": port, "url": target.String()},
 	}
+}
+
+func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
+	if spec.socket != "" || spec.unixSocket != "" {
+		return nil
+	}
+	return checkHopLoopbackAuthority(spec.target, spec.resolve, allowAddress)
 }
 
 func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *toolrejection.ToolReject) {
@@ -586,6 +605,9 @@ func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.Too
 				ports[p] = true
 			}
 		}
+	}
+	for _, p := range tctx.Local.OwnedLoopbackPorts {
+		ports[p] = true
 	}
 	if request != nil && request.LoopbackConnect != nil {
 		if len(request.LoopbackConnect.Ports) == 0 && len(ports) == 0 && !allLoopback {

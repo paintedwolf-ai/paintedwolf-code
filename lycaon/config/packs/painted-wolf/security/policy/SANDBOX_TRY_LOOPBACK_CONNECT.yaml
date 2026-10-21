@@ -9,6 +9,7 @@ selector:
     - measure_page
     - page_open
     - http_request
+    - command
 requires:
   profiles:
     - tool

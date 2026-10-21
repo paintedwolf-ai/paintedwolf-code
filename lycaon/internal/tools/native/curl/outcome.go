@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -125,7 +126,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		}
 	}
 	var dns *net.DNSError
-	if transport != nil && transport.Reject != nil && transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" && !errors.As(err, &dns) {
+	if transport != nil && transport.Reject != nil && (transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" || transport.Reject.Code == isolation.CodeTryLoopbackConnect) && !errors.As(err, &dns) {
 		return inv.refused(err, 7)
 	}
 	code, result := TransportOutcome(err)
@@ -147,10 +148,21 @@ func (inv *invocation) refused(err error, code int) (toolcontract.ProducerResult
 	var pathErr *projectpaths.PathError
 	if errors.As(err, &pathErr) {
 		stop = pathErr.Code
+		if toolrejection.AsToolReject(err) == nil {
+			reason := pathErr.Error()
+			if pathErr.Cause != nil {
+				reason = pathErr.Cause.Error()
+			}
+			err = errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: map[string]any{
+				"command": "curl", "path": pathErr.Operand, "reason": reason,
+				"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
+			}})
+		}
 	}
 	if errors.Is(err, context.Canceled) {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	_, _ = fmt.Fprintf(inv.stderr, "curl: %s [%s]\n", inv.opts.url, stop)
 	return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerRefused, StopCode: stop, EffectCertainty: toolcontract.NoEffect}, err
 }
 

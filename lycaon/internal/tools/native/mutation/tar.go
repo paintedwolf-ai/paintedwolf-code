@@ -253,7 +253,7 @@ func tarLongListing(hdr *tar.Header, name string, width int) (string, int) {
 	if kind == 'c' || kind == 'b' {
 		size = fmt.Sprintf("%d,%d", hdr.Devmajor, hdr.Devminor)
 	}
-	pad := len(user) + 1 + len(group) + len(size)
+	pad := len(user) + 1 + len(group) + 1 + len(size)
 	width = max(width, pad)
 	line := fmt.Sprintf("%s %s/%s %*s %s %s", mode, user, group, width-pad+len(size), size, hdr.ModTime.Local().Format("2006-01-02 15:04"), name)
 	switch kind {

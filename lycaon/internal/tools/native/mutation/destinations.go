@@ -3,7 +3,6 @@ package mutation
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -16,7 +15,6 @@ type Destinations struct {
 	program   Program
 	tools     tools.ToolContext
 	execution string
-	pins      []toolcontract.ExecutionRevision
 }
 
 // Destination is one captured output; a null-device destination publishes
@@ -40,11 +38,10 @@ func (d *Destinations) Capture(ctx context.Context, operand string) (Destination
 	if bound.Null {
 		return Destination{null: true}, nil
 	}
-	target, err := d.owners.captureDestination(ctx, d.tools, d.execution, d.pins, bound.Resolved.Abs)
+	target, err := d.owners.captureDestination(ctx, d.tools, d.execution, bound.Resolved.Abs)
 	if err != nil {
 		return Destination{}, err
 	}
-	d.pins = append(d.pins, target.pin)
 	return Destination{target: target}, nil
 }
 
@@ -69,8 +66,7 @@ func (d *Destinations) ReadSource(ctx context.Context, operand string) (string, 
 	if err != nil {
 		return "", err
 	}
-	d.pins = append(d.pins, source.Revision)
-	if err := d.owners.Pins.RecordRevisionPins(ctx, d.execution, d.pins); err != nil {
+	if err := d.owners.Pins.AppendRevisionPin(ctx, d.execution, source.Revision); err != nil {
 		return "", err
 	}
 	return source.Content, nil

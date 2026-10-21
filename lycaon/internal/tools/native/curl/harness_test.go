@@ -3,10 +3,8 @@ package curl
 import (
 	"bytes"
 	"context"
-	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -36,17 +34,13 @@ type pinLog struct {
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
-		return io.ErrUnexpectedEOF
-	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 
