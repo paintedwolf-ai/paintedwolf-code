@@ -12,6 +12,8 @@ export const CREDENTIAL_VAULT_COPY = {
     development: "This development build keeps the vault key in a local file.",
     restart_required:
       "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.",
+    unavailable:
+      "The vault custodian is unavailable. Your encrypted credentials are preserved. Restore the identity service and open the installed desktop app. An app password requires a previously exported key.",
     refused:
       "The vault identity service refused this copy of the app, so your saved credentials cannot be opened. Start Painted Wolf Code from the installed app.",
   } satisfies Record<VaultCustodyMode, string>,

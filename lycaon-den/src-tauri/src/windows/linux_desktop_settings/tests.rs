@@ -224,3 +224,21 @@ fn a_desktop_without_a_button_layout_keeps_the_default_silently() {
         .setting_changed(WM_PREFERENCES_NS, "theme", SettingValue::Str("Adwaita".into()))
         .is_empty());
 }
+
+#[test]
+fn titlebar_click_actions_are_reported_and_followed() {
+    use crate::windows::linux_decorations::{DecorationLayout, TitlebarAction};
+    let mut bus = gnome_defaults().with(WM_PREFERENCES_NS, "action-double-click-titlebar", SettingValue::Str("minimize".into()));
+    let first = bus.connect();
+    let layout = bus.state.decoration_layout();
+    assert_eq!(layout.actions.double_click, TitlebarAction::Minimize);
+    assert_eq!(layout.actions.right_click, TitlebarAction::Menu);
+    assert!(first.contains(&Emission::DecorationLayout(layout)));
+
+    let lowered = bus.setting_changed(WM_PREFERENCES_NS, "action-middle-click-titlebar", SettingValue::Str("lower".into()));
+    assert!(matches!(&lowered[..], [Emission::DecorationLayout(layout)] if layout.actions.middle_click == TitlebarAction::Lower));
+    let restored = bus.setting_changed(WM_PREFERENCES_NS, "action-double-click-titlebar", SettingValue::Str("toggle-maximize".into()));
+    assert!(matches!(&restored[..], [Emission::DecorationLayout(layout)] if layout.actions.double_click == TitlebarAction::ToggleMaximize));
+    let cleared = bus.setting_changed(WM_PREFERENCES_NS, "action-middle-click-titlebar", SettingValue::Str("none".into()));
+    assert_eq!(cleared, vec![Emission::DecorationLayout(DecorationLayout::default_layout())]);
+}
