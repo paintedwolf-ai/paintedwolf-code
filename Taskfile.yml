@@ -1804,6 +1804,17 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
+  release:candidate:select:
+    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    silent: true
+    cmds:
+      - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
+
+  release:candidate:diagnostics:
+    desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
+    cmds:
+      - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
+
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
