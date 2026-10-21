@@ -107,7 +107,7 @@ func linuxPayloadExecfn() (string, error) {
 		}
 		return "", fmt.Errorf("unterminated native execfn: %w", err)
 	}
-	return "", errors.New("native AT_EXECFN absent")
+	return "", fmt.Errorf("native AT_EXECFN absent")
 }
 
 func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *testing.T) {
