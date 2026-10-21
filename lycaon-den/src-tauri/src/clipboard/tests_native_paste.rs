@@ -13,7 +13,9 @@ document.addEventListener('paste', event => {
   const data = event.clipboardData;
   document.title = JSON.stringify({trusted: event.isTrusted,
     text: data.getData('text/plain'), html: data.getData('text/html'),
-    images: Array.from(data.files).map(file => file.type)});
+    images: Array.from(data.files).map(file => file.type),
+    types: Array.from(data.types),
+    items: Array.from(data.items).map(item => item.kind + ':' + item.type)});
   event.preventDefault();
 });
 window.addEventListener('load', () => {
@@ -67,14 +69,17 @@ pub(super) fn exercise() {
                 let view = webkit2gtk::WebView::new();
                 window.add(&view);
                 let reply = Rc::new(RefCell::new(Some(reply)));
+                let progress = Rc::new(RefCell::new("loading"));
                 let answer = reply.clone();
                 let owned_window = window.clone();
+                let stage = progress.clone();
                 view.connect_title_notify(move |view| {
                     let title = view.title().unwrap_or_default();
                     if title == "ready" {
                         // The compositor activates the window asynchronously; paste
                         // once the view holds keyboard focus, as a menu action would.
-                        let (view, window, answer) = (view.clone(), owned_window.clone(), answer.clone());
+                        let (view, window, answer, stage) = (view.clone(), owned_window.clone(), answer.clone(), stage.clone());
+                        *stage.borrow_mut() = "awaiting focus";
                         gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
                             if !view.has_focus() {
                                 window.present();
@@ -82,6 +87,7 @@ pub(super) fn exercise() {
                                 return gtk::glib::ControlFlow::Continue;
                             }
                             publish(contents);
+                            *stage.borrow_mut() = "pasted";
                             if let Err(error) = paste_into_view(&view) {
                                 if let Some(reply) = answer.borrow_mut().take() {
                                     let _ = reply.send(Err(error));
@@ -103,7 +109,7 @@ pub(super) fn exercise() {
                 // The existing owner child deadline also kills a wedged web process.
                 gtk::glib::timeout_add_local_once(Duration::from_secs(10), move || {
                     if let Some(reply) = reply.borrow_mut().take() {
-                        let _ = reply.send(Err("native paste event deadline".to_string()));
+                        let _ = reply.send(Err(format!("native paste event deadline while {}", progress.borrow())));
                     }
                     window.close();
                 });
@@ -122,7 +128,7 @@ pub(super) fn exercise() {
                     let html = observed["html"].as_str().expect("pasted markup");
                     assert!(html.starts_with("<b") && html.ends_with(">fixture rich</b>"), "pasted markup {html}");
                 }
-                Contents::Image => assert_eq!(observed["images"], serde_json::json!(["image/png"])),
+                Contents::Image => assert_eq!(observed["images"], serde_json::json!(["image/png"]), "pasted {observed}"),
             }
         }
     });
