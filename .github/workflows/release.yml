@@ -236,6 +236,8 @@ jobs:
       - name: Build candidate sidecar
         timeout-minutes: 60
         run: ./task build:lycaon-dev
+      - name: Install the public feed verifier
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
       - name: Rehearse the prior-release upgrade
         timeout-minutes: 90
         env:
@@ -664,8 +666,123 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  prepare-bundle-upgrade:
+    outputs:
+      fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}
+      matrix: ${{ steps.prepare.outputs.matrix }}
+    needs: [classify, ship-gates, aggregate-release, publication-credentials]
+    if: ${{ !cancelled() && needs.aggregate-release.result == 'success' && (needs.publication-credentials.result == 'success' || needs.classify.outputs.publish == 'false') }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          persist-credentials: false
+      - name: Check out the pinned upgrade controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-controller
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: .release-controller/lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .release-controller/.bun-version
+          no-cache: true
+      - name: Install public signature verification and the pinned feed signer
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          cd .release-controller/lycaon-den
+          bun install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-metadata
+          path: release-metadata
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-public-artifacts
+          path: release-public-artifacts
+      - name: Pin upgrade sources and sign isolated channel fixtures
+        id: prepare
+        working-directory: .release-controller
+        env:
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+        run: |
+          ./task upgrade:rehearse -- --prepare-bundle \
+            --manifest "${GITHUB_WORKSPACE}/release-metadata/latest.json" \
+            --archives "${GITHUB_WORKSPACE}/release-public-artifacts" \
+            --source "${GITHUB_WORKSPACE}" --output "${RUNNER_TEMP}/bundle-upgrade-fixtures"
+      - name: Retain source preparation diagnostics
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-upgrade-preparation-evidence-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/bundle-upgrade-fixtures/sources/
+            release-metadata/latest.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain the credential-free upgrade fixtures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-upgrade-fixtures-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bundle-upgrade-fixtures
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  bundle-upgrade:
+    needs: [classify, prepare-bundle-upgrade]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}
+          path: ${{ runner.temp }}/bundle-upgrade-fixtures
+      - name: Exercise automatic desktop upgrades before publication
+        run: |
+          ./task upgrade:rehearse -- --bundle --case "${{ matrix.case_id }}" \
+            --fixtures "${RUNNER_TEMP}/bundle-upgrade-fixtures" \
+            --evidence "${RUNNER_TEMP}/bundle-upgrade-evidence"
+      - name: Retain desktop activation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-upgrade-evidence-${{ matrix.case_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bundle-upgrade-evidence
+          if-no-files-found: error
+          retention-days: 14
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: release-bundle-upgrade-${{ matrix.case_id }}-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
   publish-immutable:
-    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release]
+    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
