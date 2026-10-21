@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -58,6 +57,13 @@ func floorsOp(op string, args []string) error {
 		}
 		return ""
 	}
+	openClose := func(path string, flags int) error {
+		fd, err := unix.Open(path, flags|unix.O_CLOEXEC, 0o644)
+		if err == nil {
+			_ = unix.Close(fd)
+		}
+		return err
+	}
 	switch op {
 	case "create":
 		fd, err := unix.Open(arg(0), unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0o644)
@@ -67,11 +73,7 @@ func floorsOp(op string, args []string) error {
 		}
 		return err
 	case "write":
-		fd, err := unix.Open(arg(0), unix.O_WRONLY|unix.O_TRUNC|unix.O_CLOEXEC, 0)
-		if err == nil {
-			_ = unix.Close(fd)
-		}
-		return err
+		return openClose(arg(0), unix.O_WRONLY|unix.O_TRUNC)
 	case "openat2":
 		fd, err := unix.Openat2(unix.AT_FDCWD, arg(0), &unix.OpenHow{Flags: unix.O_CREAT | unix.O_WRONLY | unix.O_CLOEXEC, Mode: 0o644})
 		if err == nil {
@@ -107,17 +109,10 @@ func floorsOp(op string, args []string) error {
 	case "bulk":
 		// Create many files, as a build or package install does.
 		count, err := strconv.Atoi(arg(1))
-		if err != nil {
-			return err
+		for i := 0; err == nil && i < count; i++ {
+			err = openClose(filepath.Join(arg(0), "f"+strconv.Itoa(i)), unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC)
 		}
-		for i := 0; i < count; i++ {
-			fd, err := unix.Open(filepath.Join(arg(0), "f"+strconv.Itoa(i)), unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC|unix.O_CLOEXEC, 0o644)
-			if err != nil {
-				return err
-			}
-			_ = unix.Close(fd)
-		}
-		return nil
+		return err
 	case "ready":
 		// The boundary is applied; the test may now change the host.
 		return nil
@@ -166,18 +161,23 @@ func floorsRun(t *testing.T, c confine.Confinement, dir string, script ...string
 	return results
 }
 
-func expectFloors(t *testing.T, results map[string]string, want map[string]string) {
+// floorStep is one scripted operation and the result it must give.
+type floorStep struct{ line, want string }
+
+// expectFloorTable runs the steps in order under c from dir and checks each.
+func expectFloorTable(t *testing.T, c confine.Confinement, dir string, steps []floorStep) {
 	t.Helper()
-	for line, result := range want {
-		if results[line] != result {
-			t.Errorf("%s: got %q, want %q", line, results[line], result)
+	script := make([]string, len(steps))
+	for i, step := range steps {
+		script[i] = step.line
+	}
+	results := floorsRun(t, c, dir, script...)
+	for _, step := range steps {
+		if results[step.line] != step.want {
+			t.Errorf("%s: got %q, want %q", step.line, results[step.line], step.want)
 		}
 	}
 }
-
-// projectConfinement confines a command to root as an attached project, whose
-// agent-policy locations the write floor protects.
-func projectConfinement(root string) confine.Confinement { return denyConfinement(root) }
 
 // A protected location that does not exist at launch stays protected: no
 // spelling of a create, link, symlink, or move produces it, while ordinary
@@ -185,83 +185,44 @@ func projectConfinement(root string) confine.Confinement { return denyConfinemen
 func TestLinuxAbsentProtectedPathsCannotBeCreated(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "fixture tree", os.MkdirAll(filepath.Join(root, "deep", "er"), 0o755))
-	results := floorsRun(t, projectConfinement(root), root,
-		"mkdir .paintedwolf",
-		"create .paintedwolf/approvals.yaml",
-		"create .paintedwolf/mcp.yaml",
-		"openat2 .paintedwolf/mcp.yaml",
-		"mkdir .paintedwolf/rules",
-		"mkdir .paintedwolf/skills",
-		"create .paintedwolf/notes.txt",
-		"mkdir .agents",
-		"mkdir .agents/skills",
-		"create AGENTS.md",
-		"create deep/er/AGENTS.md",
-		"create deep/er/agents.md",
-		"openat2 deep/AGENTS.md",
-		"mkfifo deep/AGENTS.md",
-		"mkdir deep/AGENTS.md",
-		"symlink elsewhere deep/AGENTS.md",
-		"symlink AGENTS.md deep/pointer",
-		"create deep/pointer",
-		"create notes.txt",
-		"link notes.txt deep/er/AGENTS.md",
-		"create staged.yaml",
-		"rename staged.yaml .paintedwolf/mcp.yaml",
-		"mkdir stage",
-		"create stage/mcp.yaml",
-		"rename stage .agents",
-		"tmpfile deep deep/AGENTS.md",
-		"mkdir .PaintedWolf",
-		"create .PaintedWolf/MCP.yaml",
-		"create src.go",
-		"read src.go inside",
-		"mkdir newdir",
-		"create newdir/file.txt",
-		"rename src.go renamed.go",
-		"symlink renamed.go alias.go",
-		"link renamed.go hard.go",
-		"tmpfile deep deep/linked.txt",
-		"rename stage stage2",
-	)
-	expectFloors(t, results, map[string]string{
-		"mkdir .paintedwolf":                       "ok",
-		"create .paintedwolf/approvals.yaml":       "EACCES",
-		"create .paintedwolf/mcp.yaml":             "EACCES",
-		"openat2 .paintedwolf/mcp.yaml":            "EACCES",
-		"mkdir .paintedwolf/rules":                 "EACCES",
-		"mkdir .paintedwolf/skills":                "EACCES",
-		"create .paintedwolf/notes.txt":            "ok",
-		"mkdir .agents":                            "ok",
-		"mkdir .agents/skills":                     "EACCES",
-		"create AGENTS.md":                         "EACCES",
-		"create deep/er/AGENTS.md":                 "EACCES",
-		"create deep/er/agents.md":                 "EACCES",
-		"openat2 deep/AGENTS.md":                   "EACCES",
-		"mkfifo deep/AGENTS.md":                    "EACCES",
-		"mkdir deep/AGENTS.md":                     "EACCES",
-		"symlink elsewhere deep/AGENTS.md":         "EACCES",
-		"symlink AGENTS.md deep/pointer":           "ok",
-		"create deep/pointer":                      "EACCES",
-		"create notes.txt":                         "ok",
-		"link notes.txt deep/er/AGENTS.md":         "EACCES",
-		"create staged.yaml":                       "ok",
-		"rename staged.yaml .paintedwolf/mcp.yaml": "EACCES",
-		"mkdir stage":                              "ok",
-		"create stage/mcp.yaml":                    "ok",
-		"rename stage .agents":                     "EACCES",
-		"tmpfile deep deep/AGENTS.md":              "EACCES",
-		"mkdir .PaintedWolf":                       "ok",
-		"create .PaintedWolf/MCP.yaml":             "EACCES",
-		"create src.go":                            "ok",
-		"read src.go inside":                       "ok",
-		"mkdir newdir":                             "ok",
-		"create newdir/file.txt":                   "ok",
-		"rename src.go renamed.go":                 "ok",
-		"symlink renamed.go alias.go":              "ok",
-		"link renamed.go hard.go":                  "ok",
-		"tmpfile deep deep/linked.txt":             "ok",
-		"rename stage stage2":                      "ok",
+	expectFloorTable(t, denyConfinement(root), root, []floorStep{
+		{"mkdir .paintedwolf", "ok"},
+		{"create .paintedwolf/approvals.yaml", "EACCES"},
+		{"create .paintedwolf/mcp.yaml", "EACCES"},
+		{"openat2 .paintedwolf/mcp.yaml", "EACCES"},
+		{"mkdir .paintedwolf/rules", "EACCES"},
+		{"mkdir .paintedwolf/skills", "EACCES"},
+		{"create .paintedwolf/notes.txt", "ok"},
+		{"mkdir .agents", "ok"},
+		{"mkdir .agents/skills", "EACCES"},
+		{"create AGENTS.md", "EACCES"},
+		{"create deep/er/AGENTS.md", "EACCES"},
+		{"create deep/er/agents.md", "EACCES"},
+		{"openat2 deep/AGENTS.md", "EACCES"},
+		{"mkfifo deep/AGENTS.md", "EACCES"},
+		{"mkdir deep/AGENTS.md", "EACCES"},
+		{"symlink elsewhere deep/AGENTS.md", "EACCES"},
+		{"symlink AGENTS.md deep/pointer", "ok"},
+		{"create deep/pointer", "EACCES"},
+		{"create notes.txt", "ok"},
+		{"link notes.txt deep/er/AGENTS.md", "EACCES"},
+		{"create staged.yaml", "ok"},
+		{"rename staged.yaml .paintedwolf/mcp.yaml", "EACCES"},
+		{"mkdir stage", "ok"},
+		{"create stage/mcp.yaml", "ok"},
+		{"rename stage .agents", "EACCES"},
+		{"tmpfile deep deep/AGENTS.md", "EACCES"},
+		{"mkdir .PaintedWolf", "ok"},
+		{"create .PaintedWolf/MCP.yaml", "EACCES"},
+		{"create src.go", "ok"},
+		{"read src.go inside", "ok"},
+		{"mkdir newdir", "ok"},
+		{"create newdir/file.txt", "ok"},
+		{"rename src.go renamed.go", "ok"},
+		{"symlink renamed.go alias.go", "ok"},
+		{"link renamed.go hard.go", "ok"},
+		{"tmpfile deep deep/linked.txt", "ok"},
+		{"rename stage stage2", "ok"},
 	})
 	for _, absent := range []string{".paintedwolf/mcp.yaml", ".paintedwolf/approvals.yaml", ".agents/skills", "AGENTS.md", "deep/er/AGENTS.md", "deep/AGENTS.md", ".PaintedWolf/MCP.yaml"} {
 		if _, err := os.Lstat(filepath.Join(root, absent)); err == nil {
@@ -286,35 +247,20 @@ func TestLinuxExistingProtectedPathsSurviveParentRename(t *testing.T) {
 		testutil.FailErr(t, "fixture dir", os.MkdirAll(filepath.Dir(full), 0o755))
 		testutil.FailErr(t, "fixture "+path, os.WriteFile(full, []byte(content), 0o644))
 	}
-	results := floorsRun(t, projectConfinement(root), root,
-		"write AGENTS.md",
-		"create AGENTS.md",
-		"rename AGENTS.md moved.md",
-		"rename .paintedwolf/mcp.yaml mcp.yaml",
-		"rename sub sub2",
-		"write sub2/AGENTS.md",
-		"read sub2/AGENTS.md sub",
-		"mkdir sub",
-		"create sub/AGENTS.md",
-		"rename .paintedwolf pw-moved",
-		"mkdir .paintedwolf",
-		"create .paintedwolf/mcp.yaml",
-		"exchange sub2 sub",
-	)
-	expectFloors(t, results, map[string]string{
-		"write AGENTS.md":                       "EROFS",
-		"create AGENTS.md":                      "EROFS",
-		"rename AGENTS.md moved.md":             "EROFS",
-		"rename .paintedwolf/mcp.yaml mcp.yaml": "EROFS",
-		"rename sub sub2":                       "ok",
-		"write sub2/AGENTS.md":                  "EROFS",
-		"read sub2/AGENTS.md sub":               "ok",
-		"mkdir sub":                             "ok",
-		"create sub/AGENTS.md":                  "EACCES",
-		"rename .paintedwolf pw-moved":          "ok",
-		"mkdir .paintedwolf":                    "ok",
-		"create .paintedwolf/mcp.yaml":          "EACCES",
-		"exchange sub2 sub":                     "EACCES",
+	expectFloorTable(t, denyConfinement(root), root, []floorStep{
+		{"write AGENTS.md", "EROFS"},
+		{"create AGENTS.md", "EROFS"},
+		{"rename AGENTS.md moved.md", "EROFS"},
+		{"rename .paintedwolf/mcp.yaml mcp.yaml", "EROFS"},
+		{"rename sub sub2", "ok"},
+		{"write sub2/AGENTS.md", "EROFS"},
+		{"read sub2/AGENTS.md sub", "ok"},
+		{"mkdir sub", "ok"},
+		{"create sub/AGENTS.md", "EACCES"},
+		{"rename .paintedwolf pw-moved", "ok"},
+		{"mkdir .paintedwolf", "ok"},
+		{"create .paintedwolf/mcp.yaml", "EACCES"},
+		{"exchange sub2 sub", "EACCES"},
 	})
 	for path, content := range map[string]string{"AGENTS.md": "root instructions", "sub2/AGENTS.md": "sub instructions", "pw-moved/mcp.yaml": "servers: {}"} {
 		if raw, err := os.ReadFile(filepath.Join(root, path)); err != nil || string(raw) != content {
@@ -330,30 +276,21 @@ func TestLinuxExistingProtectedPathsSurviveParentRename(t *testing.T) {
 // grant admits files inside it; the rest of the floor holds.
 func TestLinuxApprovedProtectedWritesCreateAbsentPaths(t *testing.T) {
 	root := t.TempDir()
-	c := projectConfinement(root)
+	c := denyConfinement(root)
 	grants, err := confine.ValidatePolicyWriteGrants([]confine.ProtectedPathGrant{
 		confine.NewProtectedPathGrant(filepath.Join(root, "AGENTS.md")),
 		confine.NewProtectedPathGrant(filepath.Join(root, ".paintedwolf", "rules") + string(filepath.Separator)),
 	}, []string{root})
 	testutil.FailErr(t, "validate grants", err)
 	c.PolicyWriteGrants = grants
-	results := floorsRun(t, c, root,
-		"create AGENTS.md",
-		"mkdir .paintedwolf",
-		"mkdir .paintedwolf/rules",
-		"create .paintedwolf/rules/team.yaml",
-		"create .paintedwolf/mcp.yaml",
-		"mkdir deep",
-		"create deep/AGENTS.md",
-	)
-	expectFloors(t, results, map[string]string{
-		"create AGENTS.md":                    "ok",
-		"mkdir .paintedwolf":                  "ok",
-		"mkdir .paintedwolf/rules":            "ok",
-		"create .paintedwolf/rules/team.yaml": "ok",
-		"create .paintedwolf/mcp.yaml":        "EACCES",
-		"mkdir deep":                          "ok",
-		"create deep/AGENTS.md":               "EACCES",
+	expectFloorTable(t, c, root, []floorStep{
+		{"create AGENTS.md", "ok"},
+		{"mkdir .paintedwolf", "ok"},
+		{"mkdir .paintedwolf/rules", "ok"},
+		{"create .paintedwolf/rules/team.yaml", "ok"},
+		{"create .paintedwolf/mcp.yaml", "EACCES"},
+		{"mkdir deep", "ok"},
+		{"create deep/AGENTS.md", "EACCES"},
 	})
 }
 
@@ -372,7 +309,7 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	secret := filepath.Join(store, "credentials")
 	beside := filepath.Join(base, "beside.txt")
 	testutil.FailErr(t, "fixture beside", os.WriteFile(beside, []byte("readable"), 0o600))
-	c := projectConfinement(t.TempDir())
+	c := denyConfinement(t.TempDir())
 	c.ReadDenyPaths = []string{store}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -400,52 +337,4 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	if !strings.Contains(joined, "read "+beside+" readable: ok") || !strings.Contains(joined, "waitread "+secret+": EACCES") {
 		t.Fatalf("absent read floor:\n%s", joined)
 	}
-}
-
-// benchCreates is how many files one measured command creates.
-const benchCreates = 20000
-
-// BenchmarkLinuxConfinedFileCreates measures a create-heavy command under the
-// boundary; compare BenchmarkLinuxUnconfinedFileCreates for the cost of
-// performing each create through the supervisor.
-func BenchmarkLinuxConfinedFileCreates(b *testing.B) {
-	if caps, _ := confine.LinuxCapabilities(); !caps.Available() {
-		b.Fatalf("linux confinement unavailable: %+v", caps)
-	}
-	self, err := os.Executable()
-	if err != nil {
-		b.Fatalf("test binary: %v", err)
-	}
-	for i := 0; i < b.N; i++ {
-		root := b.TempDir()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, projectConfinement(root))
-		if err != nil {
-			b.Fatalf("confine.Command: %v", err)
-		}
-		cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"=bulk "+root+" "+strconv.Itoa(benchCreates))
-		out, err := cmd.CombinedOutput()
-		cleanup()
-		cancel()
-		if err != nil || !strings.Contains(string(out), ": ok") {
-			b.Fatalf("confined creates: %v\n%s", err, out)
-		}
-	}
-	b.ReportMetric(float64(b.Elapsed().Microseconds())/float64(b.N*benchCreates), "us/create")
-}
-
-func BenchmarkLinuxUnconfinedFileCreates(b *testing.B) {
-	self, err := os.Executable()
-	if err != nil {
-		b.Fatalf("test binary: %v", err)
-	}
-	for i := 0; i < b.N; i++ {
-		root := b.TempDir()
-		cmd := exec.Command(self, probeTestFlag)
-		cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"=bulk "+root+" "+strconv.Itoa(benchCreates))
-		if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), ": ok") {
-			b.Fatalf("host creates: %v\n%s", err, out)
-		}
-	}
-	b.ReportMetric(float64(b.Elapsed().Microseconds())/float64(b.N*benchCreates), "us/create")
 }
