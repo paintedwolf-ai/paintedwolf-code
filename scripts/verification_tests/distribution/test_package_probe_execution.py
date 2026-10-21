@@ -167,15 +167,15 @@ class OperationAuthorityTests(unittest.TestCase):
             with self.subTest(lease=lease, uid=uid), self.assertRaisesRegex(ValueError, 'lease differs'):
                 owner.operation_lease(self.marker, 'b' * 64, lease, self.binding, uid)
 
-    def test_unhosted_probe_requires_the_exact_root_operation_lease_path(self):
-        environment = {k: v for k, v in os.environ.items() if k not in HOSTED}
-        with patch.dict(os.environ, environment, clear=True):
-            for lease in (None, Path('/tmp/paintedwolf-package-stage-' + 'a' * 32 + '.json'),
-                          Path('/run/paintedwolf-package-stage-' + 'A' * 32 + '.json')):
+    def test_runner_environment_never_substitutes_for_the_exact_root_operation_lease(self):
+        with patch.dict(os.environ, HOSTED):
+            for lease in (Path('/tmp/paintedwolf-package-stage-' + 'a' * 32 + '.json'),
+                          Path('/run/paintedwolf-package-stage-' + 'A' * 32 + '.json'),
+                          Path('/run/../run/paintedwolf-package-stage-' + 'a' * 32 + '.json'),
+                          Path('paintedwolf-package-stage-' + 'a' * 32 + '.json')):
                 with self.subTest(lease=lease), self.assertRaisesRegex(ValueError, 'exact root-owned operation lease'):
                     owner.authority(self.binding, lease)
-        with patch.dict(os.environ, HOSTED):
-            self.assertEqual(owner.authority(self.binding, None), {'kind': 'disposable-github-hosted-runner'})
+            self.assertEqual(owner.authority(self.binding, None), {'kind': 'unprofiled-host-policy'})
 
 
 class TransientProfileTests(unittest.TestCase):
@@ -193,11 +193,33 @@ class TransientProfileTests(unittest.TestCase):
         (self.shim / 'profiles').write_text('unrelated-profile (enforce)\n')
         (self.shim / 'policy').write_text('1\n')
         self.name, _ = owner.profile_source(str(self.tree / owner.INSTALL / 'bin/pw'))
+        # The fixture owner stands in for root over a private marker and lease directory.
+        self.leases = root / 'run'
+        self.leases.mkdir()
+        self.marker = root / 'qualification.json'
+        self.marker.write_text(json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': '/' + owner.INSTALL}))
+        self.marker.chmod(0o644)
+        self.lease = self.leases / ('paintedwolf-package-stage-' + 'a' * 32 + '.json')
+        self.write_lease()
+        # Runner identity variables stay set throughout: they must never change what the probe admits.
         environment = {**HOSTED, 'PATH': f"{self.shim}{os.pathsep}{os.environ['PATH']}"}
-        for context in (patch.dict(os.environ, environment), patch.object(owner, 'POLICY', self.shim / 'policy')):
+        for context in (patch.dict(os.environ, environment), patch.object(owner, 'POLICY', self.shim / 'policy'),
+                        patch.object(owner, 'MARKER', self.marker), patch.object(owner, 'LEASES', self.leases),
+                        patch.object(owner, 'ROOT_UID', os.geteuid())):
             context.start()
             self.addCleanup(context.stop)
         self.addCleanup(self.temporary.cleanup)
+
+    def write_lease(self, **change):
+        engine = self.tree / owner.INSTALL / 'bin/pw'
+        lease = {'format_version': 1, 'uid': os.geteuid(), 'tree': str(self.tree), 'engine_path': str(engine),
+                 'engine_sha256': hashlib.sha256(engine.read_bytes()).hexdigest(),
+                 'marker_sha256': hashlib.sha256(self.marker.read_bytes()).hexdigest(), **change}
+        self.lease.write_text(json.dumps(lease))
+        self.lease.chmod(0o644)
+
+    def run_probe(self, **arguments):
+        return owner.run(self.tree, host=HOST, lease=self.lease, **arguments)
 
     def calls(self):
         path = self.shim / 'calls'
@@ -207,7 +229,7 @@ class TransientProfileTests(unittest.TestCase):
         return (self.shim / 'profiles').read_text().splitlines()
 
     def test_failed_diagnostic_removes_only_its_exact_profile(self):
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertEqual(report['status'], 'failed')
         self.assertEqual(report['error']['type'], 'OSError')
         self.assertTrue(report['profile_loaded'])
@@ -219,7 +241,7 @@ class TransientProfileTests(unittest.TestCase):
 
     def test_profile_already_loaded_by_another_operation_is_left_untouched(self):
         (self.shim / 'profiles').write_text(self.name + ' (unconfined)\n')
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertIn('already belongs to another operation', report['error']['message'])
         self.assertFalse(report['profile_loaded'])
         self.assertNotIn('profile_add_attempted', report)
@@ -228,7 +250,7 @@ class TransientProfileTests(unittest.TestCase):
 
     def test_parser_failure_after_load_still_removes_the_attempted_profile(self):
         (self.shim / 'add-fails').touch()
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertEqual(report['error']['type'], 'CalledProcessError')
         self.assertTrue(report['profile_add_attempted'])
         self.assertTrue(report['profile_loaded'])
@@ -237,35 +259,67 @@ class TransientProfileTests(unittest.TestCase):
 
     def test_profile_that_survives_removal_fails_the_operation(self):
         (self.shim / 'remove-ignored').touch()
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertEqual(report['status'], 'failed')
         self.assertFalse(report['profile_removed'])
         self.assertIn('remained loaded', report['cleanup_error'])
 
     def test_changed_global_userns_policy_fails_the_operation(self):
         (self.shim / 'policy-flips').touch()
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertTrue(report['global_policy_changed'])
         self.assertEqual(report['policy_error'], 'global userns restriction changed')
 
     def test_unrestricted_host_loads_no_profile_and_cannot_claim_a_baseline_differential(self):
         (self.shim / 'policy').write_text('0\n')
-        report = owner.run(self.tree, host=HOST)
+        report = self.run_probe()
         self.assertEqual(report['error']['type'], 'OSError')
         self.assertFalse(report['profile_loaded'])
-        baseline = owner.run(self.tree, host=HOST, require_baseline_refusal=True)
+        baseline = self.run_probe(require_baseline_refusal=True)
         self.assertIn('requires the active host restriction', baseline['error']['message'])
         self.assertEqual(self.calls(), [])
+
+    def test_unleased_probe_never_invokes_sudo_or_the_parser_on_a_restricted_runner(self):
+        report = owner.run(self.tree, host=HOST)
+        self.assertEqual(report['authority'], {'kind': 'unprofiled-host-policy'})
+        self.assertEqual(report['global_policy_before'], '1')
+        self.assertEqual(report['error']['type'], 'OSError')
+        self.assertFalse(report['profile_loaded'])
+        self.assertNotIn('profile_add_attempted', report)
+        self.assertEqual(self.calls(), [])
+        with self.assertRaisesRegex(ValueError, 'baseline comparison requires the exact root operation lease'):
+            owner.run(self.tree, host=HOST, require_baseline_refusal=True)
+        self.assertEqual(self.calls(), [])
+
+    def test_lease_refusals_precede_every_parser_invocation(self):
+        refusals = [('lease differs', lambda: self.write_lease(engine_sha256='0' * 64)),
+                    ('lease differs', lambda: self.write_lease(uid=os.geteuid() + 1)),
+                    ('ownership, mode or size', lambda: self.lease.chmod(0o666)),
+                    ('ownership, mode or size', lambda: self.marker.chmod(0o666)),
+                    ('marker does not authorize', lambda: (self.marker.write_text('{"format_version": 1}'), self.write_lease()))]
+        for message, damage in refusals:
+            with self.subTest(message=message):
+                self.marker.write_text(json.dumps({'format_version': 1, 'desktop': 'gnome', 'package': '/' + owner.INSTALL}))
+                self.marker.chmod(0o644)
+                self.write_lease()
+                damage()
+                with self.assertRaisesRegex(ValueError, message):
+                    self.run_probe()
+        with patch.object(owner, 'ROOT_UID', os.geteuid() + 1), self.assertRaisesRegex(ValueError, 'ownership, mode or size'):
+            self.write_lease()
+            self.run_probe()
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.profiles(), ['unrelated-profile (enforce)'])
 
     def test_journal_must_be_a_fresh_file_outside_the_package_and_records_the_outcome(self):
         inside = self.tree / 'journal.json'
         existing = self.shim / 'profiles'
         for output in (inside, existing, Path('relative.json')):
             with self.subTest(output=output), self.assertRaisesRegex(ValueError, 'fresh independent absolute file'):
-                owner.run(self.tree, host=HOST, output=output)
+                self.run_probe(output=output)
         self.assertEqual(self.calls(), [])
         journal = self.shim / 'journal.json'
-        owner.run(self.tree, host=HOST, output=journal)
+        self.run_probe(output=journal)
         self.assertEqual(json.loads(journal.read_text())['status'], 'failed')
         self.assertTrue(json.loads(journal.read_text())['profile_removed'])
         self.assertEqual(journal.stat().st_mode & 0o777, 0o600)

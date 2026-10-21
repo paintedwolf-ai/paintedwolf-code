@@ -1106,6 +1106,7 @@ lints production RPM metadata around a tiny nonapplication payload with rpmlint
 `./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
 sealed tiny fixture with native makepkg in the pinned substrate.
 `./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
-engine diagnostic under an owned transient AppArmor userns profile on a disposable
-GitHub-hosted runner, or on an owned guest with `--lease`; it removes the exact
+engine diagnostic under the host's unchanged userns policy. Only an owned guest's
+root-owned marker and exact `--lease` admit an owned transient AppArmor userns
+profile; runner environment variables never do. The probe removes the exact
 profile it loaded and fails if the global userns restriction changes.

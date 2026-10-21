@@ -1,4 +1,4 @@
-"""Run the fixed extracted-package diagnostic with an owned transient userns profile."""
+"""Run the fixed extracted-package diagnostic; only a leased owned guest gets a transient userns profile."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -16,6 +16,8 @@ import tempfile
 
 POLICY = Path('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')
 MARKER = Path('/etc/paintedwolf-qualification.json')
+LEASES = Path('/run')
+ROOT_UID = 0
 INSTALL = 'opt/painted-wolf-code'
 ELF_MACHINES = {'x86_64': 62, 'aarch64': 183}
 DESKTOPS = {'gnome', 'plasma', 'xfce', 'cinnamon', 'mate', 'lxqt'}
@@ -87,13 +89,13 @@ def selected(tree, host=None):
 
 
 def authority(binding, lease):
-    hosted = os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
-    if hosted:
-        return {'kind': 'disposable-github-hosted-runner'}
-    if lease is None or re.fullmatch(r'/run/paintedwolf-package-stage-[a-f0-9]{32}\.json', str(lease)) is None:
+    """Only the root-owned guest marker and exact operation lease authorize kernel profile changes."""
+    if lease is None:
+        return {'kind': 'unprofiled-host-policy'}
+    if (lease.parent != LEASES or re.fullmatch(r'paintedwolf-package-stage-[a-f0-9]{32}\.json', lease.name) is None):
         raise ValueError('owned guest package probing requires its exact root-owned operation lease')
-    marker_identity = physical(MARKER, owner=0, limit=4096)
-    lease_identity = physical(lease, owner=0, limit=4096)
+    marker_identity = physical(MARKER, owner=ROOT_UID, limit=4096)
+    lease_identity = physical(lease, owner=ROOT_UID, limit=4096)
     operation_lease(json.loads(MARKER.read_bytes()), marker_identity['sha256'], json.loads(lease.read_bytes()),
                     binding, os.geteuid())
     return {'kind': 'owned-disposable-guest', 'marker': marker_identity, 'lease': lease_identity}
@@ -174,6 +176,9 @@ def run(tree, *, lease=None, output=None, require_baseline_refusal=False, host=N
     host = host or native_host()
     binding = selected(tree, host)
     proof = authority(binding, lease)
+    profiled = proof['kind'] == 'owned-disposable-guest'
+    if require_baseline_refusal and not profiled:
+        raise ValueError('controlled baseline comparison requires the exact root operation lease')
     name, source = profile_source(binding['pw']['path'])
     before = POLICY.read_text().strip() if POLICY.exists() else None
     report = {'format_version': 1, 'binding': binding, 'authority': proof, 'global_policy_before': before,
@@ -195,7 +200,7 @@ def run(tree, *, lease=None, output=None, require_baseline_refusal=False, host=N
                                   'stderr': baseline.stderr.decode(errors='replace')}
             if baseline.returncode == 0:
                 raise ValueError('unprofiled baseline already succeeds; no differential qualification claimed')
-        if before == '1':
+        if profiled and before == '1':
             if any(line.startswith(name + ' (') for line in profiles()):
                 raise ValueError('the exact transient profile already belongs to another operation')
             # Retain attempt authority before parser effects: a timeout may follow a load.

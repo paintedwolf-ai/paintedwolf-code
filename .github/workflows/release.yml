@@ -439,8 +439,8 @@ jobs:
           rm -f "${RUNNER_TEMP}/AuthKey.p8"
 
   # Linux candidates exercise the production packaging path without publication:
-  # no signing environment, no feed, no distribution state. Both package
-  # families per architecture are built, audited, and retained with checksums.
+  # no signing environment, no feed, no distribution state. The package families
+  # the catalog row declares are built, audited, and retained with checksums.
   # They follow the gates and the macOS build so the release holds its declared
   # runners, and run whatever those jobs concluded so their own result stays visible.
   linux-candidates:
@@ -505,9 +505,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
-            rpm rpmlint lintian cpio
+            rpm rpmlint lintian cpio libarchive-tools
 
       - name: Verify the catalog row for this candidate
+        id: catalog
         env:
           PLATFORM: ${{ matrix.updater_key }}
           EXPECTED_RUNNER: ${{ matrix.runner }}
@@ -516,8 +517,8 @@ jobs:
           row="$(jq -c --arg key "${PLATFORM}" '.platforms[] | select(.updater_key == $key)' packaging/release-platforms.json)"
           [[ "$(jq -r .publication <<<"${row}")" == candidate ]]
           [[ "$(jq -r .runner <<<"${row}")" == "${EXPECTED_RUNNER}" ]]
-          [[ "$(jq -c .package_extensions <<<"${row}")" == '["deb","rpm"]' ]]
           [[ "$(jq -r .updater_extension <<<"${row}")" == null ]]
+          echo "package_extensions=$(jq -er '.package_extensions | join(",")' <<<"${row}")" >> "${GITHUB_OUTPUT}"
 
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep
@@ -529,19 +530,39 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
-      - name: Build the Linux packages
-        run: ./task den:bundle
+      - name: Build the declared Linux package families
+        env:
+          PACKAGE_EXTENSIONS: ${{ steps.catalog.outputs.package_extensions }}
+        run: |
+          case "${PACKAGE_EXTENSIONS}" in
+            deb,rpm) ./task den:bundle ;;
+            deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;
+            *) echo "Unsupported candidate package-family contract" >&2; exit 1 ;;
+          esac
+
+      # The disposable runner, not the probe, owns this host preparation: the
+      # probe receives no lease here, so it never invokes sudo or apparmor_parser.
+      - name: Allow the staged package diagnostic to create user namespaces
+        run: |
+          if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+            printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+              'profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined) {' \
+              '  userns,' '}' | sudo tee /etc/apparmor.d/paintedwolf-candidate-diagnostic >/dev/null
+            sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-candidate-diagnostic
+          fi
 
       - name: Verify and stage platform artifacts
         env:
           VERSION: ${{ needs.classify.outputs.version }}
           PLATFORM: ${{ matrix.updater_key }}
           ARCH: ${{ matrix.artifact_arch }}
+          PACKAGE_EXTENSIONS: ${{ steps.catalog.outputs.package_extensions }}
+          TMPDIR: /tmp
         run: |
           set -euo pipefail
           bash scripts/release-stage-platform-artifacts.sh \
             --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
-            --version "${VERSION}" --package-extensions deb,rpm \
+            --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
             --output "${RUNNER_TEMP}/candidate"
           ls -l "${RUNNER_TEMP}/candidate"
 

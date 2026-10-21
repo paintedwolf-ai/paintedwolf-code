@@ -55,17 +55,17 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
 			PackageExts: []string{"dmg"}, UpdaterExt: stringPtr("app.tar.gz"),
 		},
-		// Linux installs through the package manager: one .deb and one .rpm per
-		// architecture, and no Tauri updater artifact.
+		// Linux installs through the package manager: one .deb, one .rpm, and one
+		// native pacman package per architecture, and no Tauri updater artifact.
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
+			PackageExts: []string{"deb", "rpm", "pkg.tar.zst"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
@@ -103,12 +103,15 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Linux candidates build both package families natively without publication authority.
+	// Linux candidates build the catalog row's package families natively without publication authority.
 	candidates := extractYAMLJob(workflow, "linux-candidates")
 	for _, needle := range []string{
-		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "./task den:bundle",
-		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90", "Verify the catalog row for this candidate",
+		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "Verify the catalog row for this candidate",
+		`jq -er '.package_extensions | join(",")'`,
+		"PACKAGE_EXTENSIONS: ${{ steps.catalog.outputs.package_extensions }}",
+		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90",
 	} {
 		if !strings.Contains(candidates, needle) {
 			t.Fatalf("linux-candidates job is missing %q", needle)
@@ -118,6 +121,21 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		if strings.Contains(candidates, forbidden) {
 			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
 		}
+	}
+	if strings.Contains(candidates, "--package-extensions deb,rpm") {
+		t.Fatal("linux-candidates must stage the catalog row's package families, not a fixed list")
+	}
+	// The runner prepares the diagnostic's userns attachment itself; the probe gets no lease there.
+	for _, needle := range []string{
+		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
+		"TMPDIR: /tmp",
+	} {
+		if !strings.Contains(candidates, needle) {
+			t.Fatalf("linux-candidates job is missing %q", needle)
+		}
+	}
+	if strings.Contains(candidates, "PW_PACKAGE_PROBE_LEASE") {
+		t.Fatal("hosted Linux candidates must not hand the package probe an operation lease")
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
 		t.Fatal("aggregate-release must collect only signed platform results, never Linux candidates")
