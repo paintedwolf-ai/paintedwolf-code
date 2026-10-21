@@ -16,8 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // Owners serves every program; per-invocation state lives in Prepared.
@@ -143,7 +143,7 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
-		return Prepared{}, argvRejection(err, spec)
+		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
 	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
@@ -174,29 +174,6 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested 
 	return settle(err, inv.status), err
 }
 
-// settle projects a run onto the producer contract.
 func settle(err error, status int) toolcontract.ProducerResult {
-	if err == nil {
-		return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
-	}
-	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
-	if reject := toolrejection.AsToolReject(err); reject != nil {
-		result.Status, result.Terminal, result.StopCode = 2, toolcontract.ProducerRefused, reject.Code
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		result.Status, result.Terminal, result.StopCode = 130, toolcontract.ProducerInterrupted, ""
-	}
-	return result
-}
-
-// argvRejection maps a binder refusal to its catalog code with the word span.
-func argvRejection(err error, spec toolcontract.CommandSpecification) error {
-	var argvErr *commandprogram.ArgvError
-	if !errors.As(err, &argvErr) {
-		return err
-	}
-	return errors.Join(err, toolrejection.RejectInvalidArguments(argvErr.Code, map[string]any{
-		"command": spec.Name, "word": argvErr.Word, "expected": argvErr.Expected, "expected_form": spec.Argv,
-		"source_start_byte": argvErr.Span.StartByte, "source_end_byte": argvErr.Span.EndByte, "source_line": argvErr.Span.Line, "source_column": argvErr.Span.Column,
-	}))
+	return nativeutility.Settle(err, status, false)
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // visibleEnvironment is the request's environment as a child would receive it:
@@ -83,7 +83,7 @@ func runEnv(inv *invocation) error {
 		return inv.list(environment)
 	}
 	if inv.nested == nil {
-		return toolrejection.RejectInvalidArguments("COMMAND_NATIVE_FORM_UNSUPPORTED", map[string]any{"command": "env", "word": operands[next].Value, "expected": "a program runtime that dispatches env COMMAND", "expected_form": inv.spec.Argv})
+		return nativeutility.Unsupported(inv.spec, operands[next], "a program runtime that dispatches env COMMAND")
 	}
 	result, err := inv.nested.RunNested(inv.ctx, inv.request, operands[next:], environment, inv.streams)
 	inv.passthrough = &result
