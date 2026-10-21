@@ -119,19 +119,24 @@ function boundedAccessibleName(el: Element, maxLength: number): string {
 
 function interactiveMap(): { items: Json[]; truncated: boolean } {
   const out: Json[] = [];
+  let truncated = false;
   const selector = "button, a, input, textarea, select, [role=button], [role=link], [contenteditable=true], [data-testid]";
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
   let inspected = 0;
   while (inspected < MAX_INTERACTIVE_NODES_INSPECTED) {
     const node = walker.nextNode();
-    if (!node) return { items: out, truncated: false };
+    if (!node) return { items: out, truncated };
     inspected++;
     if (!(node instanceof Element) || !node.matches(selector)) continue;
     const el = node;
     if (!isVisible(el)) continue;
     const name = boundedAccessibleName(el, 80);
+    if (el.id.length > 160) truncated = true;
     out.push({
       tag: el.tagName.toLowerCase(),
+      id: el.id.length <= 160 ? el.id || undefined : undefined,
+      type: el instanceof HTMLInputElement ? el.type : undefined,
+      checked: el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") ? el.checked : undefined,
       role: el.getAttribute("role") ?? undefined,
       text: boundedText(el, 80) || undefined,
       name: name || undefined,
