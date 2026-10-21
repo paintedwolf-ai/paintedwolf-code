@@ -1,9 +1,12 @@
 """Release halt withdraws halted versions from apt, dnf and pacman channels through their owners."""
 
 import contextlib
+import hashlib
+import http.server
 import io
 import json
 import os
+import threading
 from pathlib import Path
 import tempfile
 import unittest
@@ -277,6 +280,51 @@ class PacmanChannelHalt(Halt):
                                            ORIGIN, None, False, authorize=lambda request: True)
 
 
+class PublicFetch(unittest.TestCase):
+    """Retained objects are read over real HTTP and accepted only as their sealed bytes."""
+
+    def setUp(self):
+        body = self.body = b"sealed repository object\n"
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                payload = body if self.path == "/generations/g/object" else body + b"extra"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.base = f"http://127.0.0.1:{server.server_port}"
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+
+    def expected(self, body):
+        return {"sha256": hashlib.sha256(body).hexdigest(), "bytes": len(body)}
+
+    def test_sealed_bytes_are_written_once(self):
+        fetch = withdrawal.public_fetch(self.base)
+        target = self.work / "object"
+        fetch("generations/g/object", target, self.expected(self.body))
+        self.assertEqual(target.read_bytes(), self.body)
+        with self.assertRaises(FileExistsError):
+            fetch("generations/g/object", target, self.expected(self.body))
+
+    def test_longer_or_different_bytes_are_refused(self):
+        fetch = withdrawal.public_fetch(self.base)
+        with self.assertRaisesRegex(ValueError, "exceeds its recorded size"):
+            fetch("generations/g/other", self.work / "longer", self.expected(self.body))
+        with self.assertRaisesRegex(ValueError, "differs from its generation inventory"):
+            fetch("generations/g/object", self.work / "different", self.expected(b"X" * len(self.body)))
+
+
 class ProtectedEntry(unittest.TestCase):
     def run_main(self, *argv, environment=None):
         output = io.StringIO()
@@ -326,6 +374,28 @@ class ProtectedEntry(unittest.TestCase):
                                      environment={"LINUX_REPOSITORY_ORIGIN": withdrawal.PRODUCTION_ORIGIN})
         self.assertEqual(code, 1)
         self.assertIn("differs from protected production policy", output)
+
+    def test_configured_production_entry_prepares_and_applies_through_the_protected_origin(self):
+        store = Store()
+
+        class Origin:
+            def __init__(self, origin):
+                self.public = origin + "/" + PREFIX
+                self.read = store.read
+
+        plan = self.work / "plan.json"
+        environment = {"LINUX_REPOSITORY_ORIGIN": withdrawal.PRODUCTION_ORIGIN}
+        with patch("scripts.linux_release.publication.delivery.repository_observation.ReadOnlyOrigin", Origin):
+            code, output = self.run_main("prepare", "--distribution", str(self.distribution), "--work",
+                                         str(self.work / "w"), "--output", str(plan), environment=environment)
+            self.assertEqual(code, 0, output)
+            self.assertIn("channels/pacman/stable/aarch64: absent", output)
+            prepared = json.loads(plan.read_text())
+            self.assertEqual((prepared["origin"], prepared["storage_prefix"], prepared["rehearsal"]),
+                             (withdrawal.PRODUCTION_ORIGIN, PREFIX, False))
+            code, output = self.run_main("apply", "--plan", str(plan), environment=environment)
+            self.assertEqual(code, 0, output)
+            self.assertEqual(output.count('"state": "absent"'), 4)
 
 
 if __name__ == "__main__":
