@@ -61,19 +61,7 @@ func (g *Generation) Close() {
 // CaptureGeneration accepts only the installed policy. No caller-controlled
 // path or role can turn this bootstrap into an arbitrary privileged launcher.
 func CaptureGeneration() (*Generation, error) {
-	policyFile, err := openRootControlled(PolicyPath, false)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = policyFile.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(policyFile, 16385))
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) > 16384 {
-		return nil, errors.New("launch policy exceeds its bound")
-	}
-	policy, err := decodePolicy(raw)
+	policy, err := ReadPolicy()
 	if err != nil {
 		return nil, err
 	}
@@ -262,4 +250,22 @@ func retainGeneration(digest string) (*os.File, error) {
 		return nil, fmt.Errorf("generation is being reclaimed: %w", err)
 	}
 	return file, nil
+}
+
+// ReadPolicy reads the administrator-selected launch generation without
+// opening it. The collector rechecks this selection while holding its lock.
+func ReadPolicy() (GenerationPolicy, error) {
+	policyFile, err := openRootControlled(PolicyPath, false)
+	if err != nil {
+		return GenerationPolicy{}, err
+	}
+	defer func() { _ = policyFile.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(policyFile, 16385))
+	if err != nil {
+		return GenerationPolicy{}, err
+	}
+	if len(raw) > 16384 {
+		return GenerationPolicy{}, errors.New("launch policy exceeds its bound")
+	}
+	return decodePolicy(raw)
 }

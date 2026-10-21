@@ -17,14 +17,13 @@ type Snapshot struct {
 	PPID      int
 	StartTime uint64
 	TracerPID int
-	// UID and EUID are the process's real and effective user ids.
-	UID  int
-	EUID int
+	// UIDs are the real, effective, saved and filesystem user identities.
+	UIDs [4]uint32
 }
 
 // Same reports whether other still names the process this snapshot saw.
 func (s Snapshot) Same(other Snapshot) bool {
-	return s.PID == other.PID && s.StartTime == other.StartTime && s.PPID == other.PPID && s.UID == other.UID && s.EUID == other.EUID
+	return s.PID == other.PID && s.StartTime == other.StartTime && s.PPID == other.PPID && s.UIDs == other.UIDs
 }
 
 func (v Verifier) procPath(pid int, name string) string {
@@ -51,7 +50,7 @@ func (v Verifier) snapshot(pid int) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snap.UID, snap.EUID, err = parseStatusUIDs(status)
+	snap.UIDs, err = parseStatusUIDs(status)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -93,24 +92,43 @@ func parseStat(stat []byte) (Snapshot, error) {
 	return Snapshot{PID: pid, PPID: ppid, StartTime: start}, nil
 }
 
-func parseStatusUIDs(status []byte) (uid, euid int, err error) {
+func parseStatusUIDs(status []byte) ([4]uint32, error) {
+	var values [4]uint32
+	found := false
 	for _, line := range strings.Split(string(status), "\n") {
 		if !strings.HasPrefix(line, "Uid:") {
 			continue
 		}
+		if found {
+			return values, errors.New("status has duplicate Uid facts")
+		}
+		found = true
 		fields := strings.Fields(strings.TrimPrefix(line, "Uid:"))
-		if len(fields) < 2 {
-			return 0, 0, errors.New("status Uid line is truncated")
+		if len(fields) != len(values) {
+			return values, errors.New("status Uid fact must contain four identities")
 		}
-		uid, err = strconv.Atoi(fields[0])
-		if err != nil {
-			return 0, 0, fmt.Errorf("status real uid: %w", err)
+		for i, field := range fields {
+			value, err := strconv.ParseUint(field, 10, 32)
+			if err != nil {
+				return values, fmt.Errorf("status uid: %w", err)
+			}
+			values[i] = uint32(value)
 		}
-		euid, err = strconv.Atoi(fields[1])
-		if err != nil {
-			return 0, 0, fmt.Errorf("status effective uid: %w", err)
-		}
-		return uid, euid, nil
 	}
-	return 0, 0, errors.New("status has no Uid line")
+	if !found {
+		return values, errors.New("status has no Uid fact")
+	}
+	return values, nil
+}
+
+func (s Snapshot) matchesUID(uid int) bool {
+	if uid < 0 || uint64(uid) >= uint64(^uint32(0)) {
+		return false
+	}
+	for _, actual := range s.UIDs {
+		if actual != uint32(uid) {
+			return false
+		}
+	}
+	return true
 }

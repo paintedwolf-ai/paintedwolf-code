@@ -91,7 +91,12 @@ func newFixture(t *testing.T) *fixture {
 	f.addProcess(process{pid: 300, ppid: 1, uid: 1000, start: 10, image: desktopImage})
 	f.addProcess(process{pid: 301, ppid: 300, uid: 1000, start: 20, image: engineImage})
 	f.server = &Server{
-		Store: &Store{Root: f.state}, Verifier: launchverify.Verifier{ProcRoot: f.procRoot}, Manifest: f.manifest,
+		Store: &Store{Root: f.state}, Verifier: launchverify.Verifier{ProcRoot: f.procRoot, NamespaceReader: func(_ string, pid int) (launchverify.NamespaceFacts, error) {
+			if pid == 0 {
+				return launchverify.NamespaceFacts{Device: 1, Inode: 10}, nil
+			}
+			return launchverify.NamespaceFacts{Device: 1, Inode: 20, FullUIDMap: true, FullGIDMap: true, NoNewPrivileges: true}, nil
+		}}, Manifest: f.manifest,
 		PeerOf: func(net.Conn) (Peer, error) { return f.peer, nil },
 		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}

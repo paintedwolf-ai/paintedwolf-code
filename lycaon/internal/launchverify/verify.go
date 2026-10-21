@@ -33,6 +33,8 @@ const (
 	CodeProcessChanged Code = "process_changed"
 	// CodeProcessTraced: a debugger already controls a verified process.
 	CodeProcessTraced Code = "process_traced"
+	// CodeNamespaceInvalid: the process did not retain the protected bootstrap boundary.
+	CodeNamespaceInvalid Code = "namespace_invalid"
 )
 
 // Refusal is a structured verification failure.
@@ -67,14 +69,17 @@ func CodeOf(err error) Code {
 type Verifier struct {
 	ProcRoot string
 	Manifest *pkgmanifest.Manifest
+	// NamespaceReader supplies kernel namespace facts; nil uses procfs.
+	NamespaceReader func(string, int) (NamespaceFacts, error)
 	// statFile replaces the filesystem in tests of the mapping check.
 	statFile func(string) (fileFacts, error)
 }
 
 // Chain is a verified engine and the desktop app that started it.
 type Chain struct {
-	Engine   Snapshot
-	Launcher Snapshot
+	Engine    Snapshot
+	Launcher  Snapshot
+	Namespace NamespaceFacts
 }
 
 // VerifyChain proves that pid is the installed engine owned by uid and that
@@ -88,8 +93,8 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if engine.TracerPID != 0 {
 		return Chain{}, refuse(CodeProcessTraced, RoleEngine, pid, "")
 	}
-	if engine.UID != uid || engine.EUID != uid {
-		return Chain{}, refuse(CodeUIDMismatch, RoleEngine, pid, fmt.Sprintf("uid %d/%d, caller %d", engine.UID, engine.EUID, uid))
+	if !engine.matchesUID(uid) {
+		return Chain{}, refuse(CodeUIDMismatch, RoleEngine, pid, fmt.Sprintf("uids %v, caller %d", engine.UIDs, uid))
 	}
 	if engine.PPID <= 1 {
 		return Chain{}, refuse(CodeNoParent, RoleEngine, pid, "")
@@ -101,10 +106,14 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if launcher.TracerPID != 0 {
 		return Chain{}, refuse(CodeProcessTraced, RoleDesktopApp, launcher.PID, "")
 	}
-	if launcher.UID != uid || launcher.EUID != uid {
-		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uid %d/%d, caller %d", launcher.UID, launcher.EUID, uid))
+	if !launcher.matchesUID(uid) {
+		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uids %v, caller %d", launcher.UIDs, uid))
 	}
-	chain := Chain{Engine: engine, Launcher: launcher}
+	namespace, err := v.protectedNamespace(engine.PID, launcher.PID)
+	if err != nil {
+		return Chain{}, err
+	}
+	chain := Chain{Engine: engine, Launcher: launcher, Namespace: namespace}
 	if err := v.Recheck(chain); err != nil {
 		return Chain{}, err
 	}
@@ -115,6 +124,9 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 // ones verified: a pid reused by another process has a new start time, and
 // a parent that exited reparents the engine.
 func (v Verifier) Recheck(chain Chain) error {
+	if err := v.unchangedNamespace(chain); err != nil {
+		return err
+	}
 	for _, process := range []struct {
 		snapshot Snapshot
 		role     string
@@ -135,7 +147,10 @@ func (v Verifier) Recheck(chain Chain) error {
 	if err := v.unchangedUntraced(chain.Engine, RoleEngine); err != nil {
 		return err
 	}
-	return v.unchangedUntraced(chain.Launcher, RoleDesktopApp)
+	if err := v.unchangedUntraced(chain.Launcher, RoleDesktopApp); err != nil {
+		return err
+	}
+	return v.unchangedNamespace(chain)
 }
 
 func (v Verifier) unchangedUntraced(expected Snapshot, role string) error {

@@ -89,7 +89,7 @@ func newFixture(t *testing.T) (fakeProc, Verifier) {
 		"/opt":                   {mode: fs.ModeDir | 0o755},
 		"/opt/painted-wolf-code": {mode: fs.ModeDir | 0o755},
 	}}
-	return proc, Verifier{ProcRoot: root, Manifest: installedManifest(), statFile: proc.stat}
+	return proc, Verifier{ProcRoot: root, Manifest: installedManifest(), statFile: proc.stat, NamespaceReader: fixtureNamespace}
 }
 
 func TestVerifyChainAcceptsTheInstalledEngineUnderTheInstalledApp(t *testing.T) {
@@ -228,7 +228,14 @@ func TestParseStatHandlesCommandNamesWithSpacesAndParentheses(t *testing.T) {
 			t.Fatalf("accepted %q", bad)
 		}
 	}
-	if _, _, err := parseStatusUIDs([]byte("Name:\tpw\n")); err == nil {
+	if _, err := parseStatusUIDs([]byte("Name:\tpw\n")); err == nil {
 		t.Fatal("accepted a status without Uid")
 	}
+}
+
+func fixtureNamespace(_ string, pid int) (NamespaceFacts, error) {
+	if pid == 0 {
+		return NamespaceFacts{Device: 1, Inode: 10}, nil
+	}
+	return NamespaceFacts{Device: 1, Inode: 20, FullUIDMap: true, FullGIDMap: true, NoNewPrivileges: true}, nil
 }
