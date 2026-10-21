@@ -29,7 +29,8 @@ func lifecyclePipe(t *testing.T, ctx context.Context, source io.ReadCloser) *Scr
 	t.Helper()
 	budget, err := NewByteBudget("fixture", 1<<20)
 	testutil.FailErr(t, "admit stream", err)
-	p, err := NewScreenedPipe(ctx, captureprojection.New(secretmatch.NewInertMatcher(), nil), captureprojection.Scope{}, "", source, captureprojection.StreamOptions{WorkingMemory: &streamSharedMemoryFixture{maximum: 32 << 20}, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 20}}, budget)
+	screen := projectorScreen{projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), options: captureprojection.StreamOptions{WorkingMemory: &streamSharedMemoryFixture{maximum: 32 << 20}, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 20}}}
+	p, err := NewScreenedPipe(ctx, screen, source, budget)
 	testutil.FailErr(t, "open screen", err)
 	t.Cleanup(func() { _ = p.Close() })
 	return p
