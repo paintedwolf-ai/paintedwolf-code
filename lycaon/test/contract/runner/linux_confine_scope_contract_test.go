@@ -104,3 +104,18 @@ func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	}
 	t.Error("no release and nightly CI lane runs test:confine:linux on ubuntu-24.04-arm")
 }
+
+func TestLinuxPrivilegeQualificationIsSelectedWithItsNativeTag(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, scope := range linuxConfineScopes(t, root) {
+		if !scope.covers("./internal/exec", "TestLinuxNativePrivilegeQualification") {
+			continue
+		}
+		if !strings.Contains(scope.Command, "--tags nativeprivileges") || !strings.Contains(scope.Command, "PW_NATIVE_PRIVILEGE_QUALIFICATION=ci") {
+			t.Fatal("native privilege qualification is selected without its required fixture build/setup mode")
+		}
+		return
+	}
+	t.Fatal("applied Linux lane omits genuine privilege qualification")
+}

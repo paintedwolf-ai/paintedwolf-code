@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 const privilegePayloadMarker = "PW_NATIVE_PRIVILEGE_PAYLOAD=1"
@@ -38,6 +39,11 @@ func TestNativePrivilegePayload(t *testing.T) {
 	security, err := osprocess.ProcessCredentials(os.Getpid())
 	if err != nil {
 		os.Exit(3)
+	}
+	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	var native [2]unix.CapUserData
+	if unix.Capget(&header, &native[0]) != nil || security.Linux == nil || security.Linux.Effective != (uint64(native[0].Effective)|uint64(native[1].Effective)<<32) {
+		os.Exit(9)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -91,7 +97,9 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 			defer lease.Close(context.Background())
 			plan := AgentLaunch(LaunchAgentCommand, "synthetic native privilege qualification", boundary)
 			plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
-			cmd, cleanup, err := PrepareCommand(t.Context(), entry, privilegeArguments(preparedEffect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(preparedEffect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
 			testutil.FailErr(t, "prepare native privileged invocation", err)
 			defer cleanup()
 			var output bytes.Buffer
@@ -211,7 +219,9 @@ func nativeEffectOwnership(t *testing.T, path string) [2]uint32 {
 func assertRevokedPrivilegeLaunch(t *testing.T, plan LaunchPlan, lease *confine.ActionLease, entry, root string) {
 	t.Helper()
 	effect := filepath.Join(root, "revoked-effect")
-	cmd, cleanup, err := PrepareCommand(t.Context(), entry, privilegeArguments(effect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd, cleanup, err := PrepareCommand(ctx, entry, privilegeArguments(effect), ExecOpts{Launch: plan, Dir: root, Env: privilegeEnvironment()})
 	testutil.FailErr(t, "capture currently admitted privileged image", err)
 	defer cleanup()
 	var output bytes.Buffer
