@@ -23,6 +23,7 @@ function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
       ? "package_update_listed" : undefined;
   }
   if (state.candidate?.rollout_eligibility !== "eligible") return undefined;
+  if (state.install_source === "homebrew_cask") return "update_available";
   if (!state.automatic_updates_enabled && state.capabilities.can_download) return "update_available";
   return undefined;
 }

@@ -61,6 +61,32 @@ describe("semantic-driver core", () => {
     expect(snap).toHaveProperty("tree");
   });
 
+  it("identifies unlabeled controls without exposing their values", () => {
+    document.body.innerHTML = '<input id="task-input" value="private"><input id="done" type="checkbox" checked><button id="add">Add</button>';
+    document.querySelectorAll<HTMLElement>("input, button").forEach(markVisible);
+    const state = installLycaonDriver().state();
+    expect(state).toMatchObject({ interactive: [
+      { id: "task-input", type: "text" },
+      { id: "done", type: "checkbox", checked: true },
+      { id: "add", tag: "button" },
+    ] });
+    expect(JSON.stringify(state)).not.toContain("private");
+    (document.getElementById("done") as HTMLInputElement).checked = false;
+    expect(installLycaonDriver().state()).toMatchObject({ interactive: [
+      { id: "task-input" }, { id: "done", checked: false }, { id: "add" },
+    ] });
+  });
+
+  it("omits oversized control IDs instead of suggesting a different target", () => {
+    const input = document.createElement("input");
+    input.id = "x".repeat(161);
+    markVisible(input);
+    document.body.appendChild(input);
+    const state = installLycaonDriver().state();
+    expect(state).toMatchObject({ interactive: [{ tag: "input", type: "text" }], interactive_truncated: true });
+    expect(JSON.stringify(state)).not.toContain('"id"');
+  });
+
   it("snapshot stops at the global node budget and reports truncation", () => {
 	const root = document.createElement("main");
 	markVisible(root);

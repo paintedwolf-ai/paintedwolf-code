@@ -76,6 +76,13 @@ describe("update notices", () => {
     try {
       await f.send(packageFixture());
       expect(f.rows()).toHaveLength(0);
+      const brew = updateFixture({ install_source: "homebrew_cask", capabilities: { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_managed" } });
+      await f.send(brew);
+      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
+      await f.send({ ...brew, automatic_updates_enabled: false });
+      expect(f.rows().map(row => row.code)).toEqual(["update_available"]);
+      await f.send({ ...brew, candidate: { ...brew.candidate!, rollout_eligibility: "held_back" } });
+      expect(f.rows()).toHaveLength(0);
       await f.send(state);
       expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
       expect(f.rows()[0]!.message).toContain("does not confirm");
