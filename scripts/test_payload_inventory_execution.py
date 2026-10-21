@@ -32,6 +32,9 @@ class CompletePayloadTests(unittest.TestCase):
             resource.chmod(0o644)
             alias = resources / "settings-link"
             alias.symlink_to("settings.json")
+            for directory in payload.rglob("*"):
+                if directory.is_dir() and not directory.is_symlink():
+                    directory.chmod(0o755)
             manifest = {"format_version": OWNER.FORMAT_VERSION, "package": OWNER.PACKAGE_NAME,
                         "version": "1.0.2", "architecture": "x86_64", "install_root": OWNER.INSTALL_ROOT,
                         "executables": [OWNER.entry(name, root / name.lstrip("/")) for name in required],

@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 import stat
 
 
-def record(name: str, source: Path) -> dict:
+def record(name: str, source: Path, canonical_modes: bool) -> dict:
     before = source.lstat()
     row = {"path": name, "kind": None, "mode": stat.S_IMODE(before.st_mode),
            "sha256": None, "size": None, "target": None}
@@ -27,10 +27,15 @@ def record(name: str, source: Path) -> dict:
         row.update(kind="file", sha256=hasher.hexdigest(), size=size)
     else:
         raise ValueError("payload contains an unsupported object: " + name)
+    if row["kind"] != "symlink":
+        if canonical_modes:
+            row["mode"] &= ~0o022
+        if row["mode"] & 0o7022:
+            raise ValueError("unsafe payload mode: " + name)
     return row
 
 
-def collect(sources: dict[str, Path]) -> list[dict]:
+def collect(sources: dict[str, Path], *, canonical_modes=False) -> list[dict]:
     rows = {}
     for name, source in sources.items():
         path = PurePosixPath(name)
@@ -39,7 +44,7 @@ def collect(sources: dict[str, Path]) -> list[dict]:
         pending = [(name, source)]
         while pending:
             relative, physical = pending.pop()
-            row = record(relative, physical)
+            row = record(relative, physical, canonical_modes)
             if relative in rows and rows[relative] != row:
                 raise ValueError("conflicting payload source: " + relative)
             rows[relative] = row

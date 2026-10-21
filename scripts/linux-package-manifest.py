@@ -96,7 +96,7 @@ def generate(args: argparse.Namespace) -> int:
         "architecture": architecture,
         "install_root": INSTALL_ROOT,
         "executables": sorted(executables, key=lambda row: row["path"]),
-        "payload": collect_payload(sources),
+        "payload": collect_payload(sources, canonical_modes=True),
     }
     validate(manifest)
     args.output.parent.mkdir(parents=True, exist_ok=True)
