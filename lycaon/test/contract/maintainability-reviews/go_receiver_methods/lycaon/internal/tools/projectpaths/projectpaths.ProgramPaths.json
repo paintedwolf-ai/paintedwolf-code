@@ -2,16 +2,16 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/tools/projectpaths/projectpaths.ProgramPaths",
   "kind": "runtime_service",
-  "workstream": "portable-command-paths",
+  "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Retain the invocation path frame at 19 methods: initial/current directory identity, exact operand resolution and current read/mutation scope belong to one operation boundary. P06 adds executable-input capture through the same Bind/Open jailed reader and held cwd; it grants no external execution permission. Extracting another path service would hide the identity and admission relationship. Command projection and streaming output remain separate files. The real checked-handle native launch and target-refusal fixtures passed, alongside the inherited exact-name, symlink/dot-dot, cwd, interchange and bounded-output contracts. Future growth requires another cohesion review.",
-  "reviewed_commit": "228fbe29da978ace733ab62e4cf56153f5225164",
+  "reason": "Retain the measured 19 methods without growth. One invocation frame owns initial/current cwd identity, exact operand resolution and current read/mutation scope. Launch metadata now uses the same descriptor walk with explicit executable/cwd purpose, without reading executable content or granting execution authority. The normative checked-handle launch and actual-target refusal fixtures replace the withdrawn stopped-image requirement; native pathname execution and current owner checks remain in the executor. Splitting another path service would duplicate or hide the current-root/held-cwd relationship. Exact-name, symlink/dot-dot, interchange and bounded-output contracts remain separate tests; their current fixtures and the real checked-handle Darwin launch passed. Any structural or measured growth requires renewed review.",
+  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
   "ceiling": 19,
   "boundaries": {
     "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
     "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
     "lycaon/internal/tools/projectpaths/program_interchange_test.go": "a77ec2ad77163bb115a316572f9e27942b9f8c76cfc40d091d51f5fce887b80f",
-    "lycaon/internal/tools/projectpaths/launch_inputs_darwin_test.go": "2b692ea73c87498f951563839934c29fc2d60c12989a6f4902fd1c48980deabf"
+    "lycaon/internal/tools/projectpaths/launch_inputs_darwin_test.go": "52b5a2f8eeabbcc2bef19eb23db5a67fd9058246952c0ff2683e8bce84506f5e"
   },
   "reviewed_shape": "e7385bf620d6a71a08c8d4c18757a1c50dabee71a0974a8da47efe02917202fe"
 }
