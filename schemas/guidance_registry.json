@@ -1222,6 +1222,12 @@
       "emit": "guard:grep",
       "summary": "grep received an invalid regex pattern: {{ paintedwolf.detail }}."
     },
+    "GREP_REGEX_UNSUPPORTED": {
+      "branch_instruction": "Branch on Code; rewrite the pattern within the declared grammar",
+      "category": "recoverable",
+      "emit": "guard:grep",
+      "summary": "The search pattern uses a construct outside its declared regex dialect."
+    },
     "GREP_SCOPE_REQUIRED": {
       "branch_instruction": "Branch on Code; re-emit grep with path or a narrowing path_glob",
       "category": "recoverable",

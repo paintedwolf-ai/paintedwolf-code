@@ -21,10 +21,10 @@ var catalogCommands = sync.OnceValues(func() ([]toolcontract.CommandSpecificatio
 	return catalog.Commands, err
 })
 
-// resolveCommand binds argv to the longest catalog command whose words prefix it
+// ResolveCommand binds argv to the longest catalog command whose words prefix it
 // ("git status" before "git"). Native names bind first, including unsupported
 // option spellings, so a native word never falls back to an installed binary.
-func resolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error) {
+func ResolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error) {
 	commands, err := catalogCommands()
 	if err != nil {
 		return toolcontract.CommandSpecification{}, false, err
@@ -183,7 +183,7 @@ func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name 
 // dispatch hands one bound native operation, or a confined external program,
 // to its owner. Admission and child receipts happen per call inside the owner.
 func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields Fields, assigns []assignment) error {
-	spec, native, err := resolveCommand(fields)
+	spec, native, err := ResolveCommand(fields)
 	if err != nil {
 		return err
 	}

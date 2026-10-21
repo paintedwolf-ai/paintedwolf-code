@@ -204,6 +204,22 @@ It does not select the P13 PCRE grammar or expose additional regex syntax.
 Existing upstream text parser/matcher entry points retain their behavior.
 The patch and exact metering contract are recorded alongside the selected source.
 
+P13 extends the same bounded entry for the command search dialects without
+selecting any wider grammar. `CompileMarkedBounded` compiles a host-validated
+standard tree once, with numbered captures, Unicode simple case folding for
+`FoldCase` literals and host markers: private-use scalars from U+10FF00 that
+lower to back references and ASCII-class word assertions (GNU `\<`, `\>`,
+`\b`, `\B` and grep `-w` edges) the standard tree cannot spell. Without the
+marked lowering every scalar stays literal, so predicate matching is
+unchanged. `CompilePatternTextBounded` compiles text the host has already
+validated against its declared grammar (pcre-common-v1 for `-P`); it is not a
+qualification of the engine's own syntax. A `BoundedSession` meters one
+record's steps, time and allocation across every search of that record, and
+`Find` returns leftmost-first spans or, in longest mode, the POSIX
+leftmost-longest span: `Stop` records the farthest group-0 end and keeps
+backtracking, so each start explores every path. The metered writer emits no
+prefix or atomicity optimizations, which keeps that exploration exhaustive.
+
 The predicate grammar adapter also retains the selected Go1.26.4
 `regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
 under `regexp2/syntax/posix/`. Their exact upstream hashes and tag are recorded
