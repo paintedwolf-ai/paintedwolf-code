@@ -347,6 +347,9 @@
     ],
     "licenses:notices": [
       "licenses:notices"
+    ],
+    "release:rehearse:linux-signing": [
+      "release:rehearse:linux-signing"
     ]
   },
   "private": [
@@ -370,7 +373,8 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "release:rehearse:linux-signing": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -687,6 +691,12 @@
     "licenses:notices": {
       "locks": [
         "notices"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:linux-signing": {
+      "locks": [
+        "linux-signing-fixture"
       ],
       "workers": 1
     }
