@@ -43,13 +43,15 @@ implementation owns the workflow on every platform. Verification has three tiers
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
 - **Candidate:** the `linux-candidates` release job builds, stages, and audits
-  both package families for both architectures without publishing.
+  deb/rpm for both architectures without publishing. Pacman and Nix candidate
+  builds are owned by #940 and #927/#932; a deb/rpm result does not qualify them.
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).
-  A row is release evidence only from this tier. The support contract stays open
-  under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444)
-  until every row has passed.
+  A row is release evidence only from this tier. The support contract is owned
+  by [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444);
+  completing that contract does not complete installed qualification or release
+  admission under [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457).
 
 | User outcome | Shared owner and Linux adapter | Verification | Issue |
 |--------------|--------------------------------|--------------|-------|
@@ -64,7 +66,7 @@ implementation owns the workflow on every platform. Verification has three tiers
 | Route host and desktop networking through system configuration | Host `internal/systemproxy` resolves GNOME `org.gnome.system.proxy` and KDE `kioslaverc` behind explicit `HTTPS_PROXY`/`NO_PROXY`; bundled Git and Git LFS receive the same policy per host; PAC and WPAD are refused with explicit-configuration guidance; `pw diagnostics system-proxy <url>` shows the resolution. The update feed transport uses no proxy | CI: `test:full`. Installed: KDE auto-detect refusal, an authenticated proxy, configuration changes | [#453](https://github.com/paintedwolf-ai/paintedwolf-code/issues/453) |
 | Notify and open the correct chat | Den `platform/desktop/notifications.ts` owns delivery decisions; `src-tauri/src/notifications/linux` is a bounded session-bus adapter with service-owned replacement, clearing, and optional actions and activation tokens | CI: `den:test:rust`, `den:test`. Installed: GNOME, KDE, dunst, and X11 daemons; click-through activation; background chats | [#451](https://github.com/paintedwolf-ai/paintedwolf-code/issues/451) |
 | Keep active work awake | Host `internal/hostpower`: the login manager (systemd-logind or elogind), then the desktop portal attributed to `dev.paintedwolf.code`, then the session power-management service; each unusable provider reports a typed reason | CI: `test:full`. Installed: automatic suspend, explicit-suspend overrides, service loss, and an elogind host | [#46](https://github.com/paintedwolf-ai/paintedwolf-code/issues/46), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
-| Use native window chrome and multiple windows | `src-tauri/src/windows/`: client-side decorations; `linux_decorations.rs` follows the Settings portal button layout; `WindowControls` places the buttons and app menu; `linux_frame.rs` keeps GTK's frame. Under server-side decorations the shell still draws its own strip | CI: `den:test:rust`, `den:test`. Installed: KDE, X11, sway tiling, 150% and 200% scaling, multi-monitor, restored geometry | [#446](https://github.com/paintedwolf-ai/paintedwolf-code/issues/446) |
+| Use native window chrome and multiple windows | `src-tauri/src/windows/`: client-side decorations; `linux_decorations.rs` follows the Settings portal button layout and title bar click actions (`linux_titlebar.rs` lowers the window and opens its window menu); `WindowControls` places the buttons and app menu; `linux_frame.rs` keeps GTK's frame. Under server-side decorations the shell still draws its own strip | CI: `den:test:rust`, `den:test`. Installed: KDE, X11, sway tiling, 150% and 200% scaling, multi-monitor, restored geometry | [#446](https://github.com/paintedwolf-ai/paintedwolf-code/issues/446) |
 | Use keyboard, menus, pointer, clipboard, and text input | Den shortcut and keymap owners; `in-window-app-menu.ts` carries every app menu action, with F10 and Ctrl chords ([keyboard shortcuts](keyboard-shortcuts.md#linux-conventions)); clipboard through the GTK display connection (above) | CI: `den:test`, `den:test:rust` clipboard fixtures. Installed: IME, dead keys, non-US layouts, primary selection, drag and drop, Plasma Wayland clipboard, a window manager without a clipboard manager | [#447](https://github.com/paintedwolf-ai/paintedwolf-code/issues/447), [#751](https://github.com/paintedwolf-ai/paintedwolf-code/issues/751) |
 | Follow appearance and accessibility preferences | Den `platform/desktop/{system-appearance,accessibility-text-size}.ts`; `windows/linux_desktop_settings` reads color scheme, contrast, accent, reduced motion, and text scale from `org.freedesktop.portal.Settings` and follows changes ([Accessibility § Linux desktop preferences](accessibility.md#linux-desktop-preferences)) | CI: `den:test:rust`, `den:webkit:atspi`. Installed: Orca workflows, a KDE portal backend | [#48](https://github.com/paintedwolf-ai/paintedwolf-code/issues/48) |
 | Open files, reveal locations, launch editors, pick folders, and restore trash | Den `platform/files/`; desktop opening and editor discovery through desktop entries; host `internal/desktoptrash` with same-volume files and `.trashinfo` metadata. The GTK folder picker has no parent window and no size bound yet | CI: `test:full`, `den:test:rust`. Installed: external opening, cross-volume trash, restore, multi-window quit with no orphaned engine, small resolutions | [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452), [#790](https://github.com/paintedwolf-ai/paintedwolf-code/issues/790) |
@@ -75,11 +77,39 @@ implementation owns the workflow on every platform. Verification has three tiers
 | Run local decision, scanning, and document helpers | Host `internal/decide`, `internal/scan`, `internal/documentcore`; pinned native executables for both architectures, including OpenGrep | CI: `test:full`, `test:confine:linux`. Candidate: arm64 staging. Installed: scans and documents on both architectures; performance against declared thresholds | [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49), [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
 | Install and consume a complete release | `packaging/release-platforms.json`, the package manifest, signed packages and repositories, and the publication scripts | Candidate: `linux-candidates`. Installed: install, upgrade, removal, and downgrade refusal on every family and architecture; download authenticity | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758), [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759), [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
 
+The Go session transport lives in `internal/linuxbus`; native feature owners select protocol names and authorize operations. Discovery reports the current unique owner or an installed activation contract without starting the service. Power inhibition can request an idle activatable provider, and its actual call still determines whether inhibition succeeds. Permission denial, unsupported operations, service disconnection, and cancellation retain structured causes. Tauri adapters own their separate connections and shell authority; shared protocol discovery does not grant an effect in either process.
+
 ### Native qualification matrix
 
-The qualification scope covers Linux amd64 and arm64 on the supported families:
-Ubuntu 24.04 and later, Debian 13 and later, Fedora 41 and later, RHEL 10
-compatibles, and Arch. Runtime and protocol compatibility determine admission.
+The authoritative scope is
+[`packaging/linux/support-matrix.json`](../packaging/linux/support-matrix.json).
+It combines user capabilities, installation modes, architectures and named
+representative environments. Its expansion in
+[`scripts/linux_release/support_matrix.py`](../scripts/linux_release/support_matrix.py) assigns
+each required row a stable identity, scenarios, implementing issues and required
+execution tier. Qualification and release admission must consume these same rows;
+they must not maintain independent workflow inventories.
+
+The scope covers Linux amd64 and arm64 on Ubuntu 24.04 and later, Debian 13 and
+later, maintained Fedora releases satisfying the declared floors, RHEL 10
+compatibles, native Arch-family packages, and NixOS. Arch Linux supplies the
+amd64 representative; [Arch Linux ARM](https://archlinuxarm.org/about/downloads)
+supplies the aarch64 representative. Artix/OpenRC with elogind has distinct amd64
+rows for current Plasma on Wayland and Xfce on X11; neither implies that Artix
+supplies arm64. Plasma 6.8 removed the X11 session, and the current Artix
+`plasma-workspace` package conflicts with the retained `plasma-x11-session`
+package. Xfce 4.20 retains X11 support, so OpenRC/X11 qualification remains
+explicit rather than relying on an incompatible Plasma combination. See the
+[KDE 6.8 changelog](https://kde.org/announcements/changelogs/plasma/6/6.7.5-6.8.0/),
+[Xfce 4.20 tour](https://www.xfce.org/about/tour420/), and current Artix
+[world](https://pkgpool.artixlinux.org/repos/world/os/x86_64/) and
+[galaxy](https://pkgpool.artixlinux.org/repos/galaxy/os/x86_64/) repository metadata.
+Both rows retain every required installation mode, scenario, scale and OpenRC
+custody obligation. Record the exact package inventory; preparation or an older
+ISO does not qualify a current rolling session. NixOS includes
+[26.05 stable](https://nixos.org/manual/nixos/stable/index.html) and a pinned
+nixos-unstable revision. Record exact maintained releases, repositories and
+input revisions when qualifying. Runtime and protocol compatibility determine admission.
 Distro and desktop names identify qualification environments, not runtime
 feature switches.
 
@@ -104,9 +134,30 @@ Cases distinguish:
 - default security policy: AppArmor-restricted user namespaces on Ubuntu, and
   SELinux enforcing on Fedora and RHEL.
 
-The installation mode is always the installed `.deb` or `.rpm` package. Passing
-on one environment does not qualify another architecture, desktop, display
-server, or service provider.
+Installation modes remain separate even when they share the same payload:
+
+| Installation mode | Installation and integration | Updates and qualification |
+|-------------------|------------------------------|---------------------------|
+| deb and rpm | #758 owns package identity; #736 owns launchers | #759/#450 own delivery and notices; #456 qualifies installed workflows |
+| pacman, including packages installed through AUR/yay | #940 owns packages; #941 owns Arch/systemd and Artix/OpenRC integration | #942 owns signed repositories and AUR recipes; #943 qualifies installed workflows |
+| NixOS system module | #927/#928 own the closure and running layout; #929 owns administrator-selected generation trust | #931 owns pins and generation updates; #932 qualifies installed workflows |
+| Nix package-only, user profile, Home Manager and temporary `nix run` | #927/#928 own four distinct installation modes; system service trust requires separate administrator integration | #931 owns the actual installation owner's update/rollback contract; #932 qualifies each mode |
+
+A package installed through yay is pacman-owned. Nix-on-Arch is an additional
+installation mode and cannot satisfy a native pacman row. Store immutability,
+Nix build sandboxing and application command confinement are distinct: #930
+owns Nix development and daemon authority inside the application boundary.
+Nix generation rollback does not roll back the application's mutable data or
+vault. A profile symlink or store hash does not establish launcher authority.
+
+Passing on one environment does not qualify another architecture, installation
+mode, desktop, display server, or service provider. Installed functional cases
+may run under emulation; native desktop, applied-security and performance rows
+require native execution. Unit fixtures and protocol-class tests establish
+adapter behavior. Protocol equivalence can support the named representative's
+shared cases, but a compositor, portal or session difference retains its own
+native cases and implementing issue. Missing test capacity leaves a required
+row unverified; it does not narrow the support contract.
 
 | Compatibility concern | Contract owner |
 |-----------------------|----------------|
@@ -117,6 +168,9 @@ server, or service provider.
 | Package installation identity and signing | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758) |
 | Package repositories and update notices | [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759) |
 | Package-installed CLI and desktop launchers | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
+| Native pacman packages, systemd/OpenRC integration and delivery | [#940](https://github.com/paintedwolf-ai/paintedwolf-code/issues/940), [#941](https://github.com/paintedwolf-ai/paintedwolf-code/issues/941), [#942](https://github.com/paintedwolf-ai/paintedwolf-code/issues/942), [#943](https://github.com/paintedwolf-ai/paintedwolf-code/issues/943) |
+| Nix closure, layout, system integration, development and updates | [#927](https://github.com/paintedwolf-ai/paintedwolf-code/issues/927), [#928](https://github.com/paintedwolf-ai/paintedwolf-code/issues/928), [#929](https://github.com/paintedwolf-ai/paintedwolf-code/issues/929), [#930](https://github.com/paintedwolf-ai/paintedwolf-code/issues/930), [#931](https://github.com/paintedwolf-ai/paintedwolf-code/issues/931), [#932](https://github.com/paintedwolf-ai/paintedwolf-code/issues/932) |
+| Signed Nix binary-cache delivery and closure retention | [#945](https://github.com/paintedwolf-ai/paintedwolf-code/issues/945) |
 
 Candidates build on `ubuntu-24.04` and `ubuntu-24.04-arm`. The floors in
 [`linux_floor.txt`](../lycaon/internal/platformfloor/linux_floor.txt) are:
@@ -545,7 +599,7 @@ The review workspace may show the Blueprint, plan-review evidence, workflow phas
 
 All approval-shaped interactions use one shell (`components/checkpoint/ApprovalShell.tsx`): reviewed action, origin and destination, consequence/reason, primary option, additional choices, and denial.
 
-The card leads with the one fact the host lifted from the primary gate's citations (first contact with this host; what the chat has already read), then the impact line. The drop-up renders the host's fixed slots in host order with a digit on each row, the row's coverage under its title, and a disabled rung in place with the host's note rather than absent. Each row carries the digit of its rung (1 once, 2 day, 3 chat, 4 project or device); grouped choices such as a second subject or a quiet carry none. Digits 1–4 pick that rung from anywhere on the card, never a grouped choice; Enter approves the face; Escape denies. The face's coverage and expiry sit under the action row. A pending card shows how long it has waited from one minute on, and the dock badge counts the cards waiting on the person device-wide.
+The card leads with the one fact the host lifted from the primary gate's citations (first contact with this host; what the chat has already read), then the impact line. The drop-up renders the host's fixed slots in host order with a digit on each row, the row's coverage under its title, and a disabled rung in place with the host's note rather than absent. Each row carries the digit of its rung (1 once, 2 day, 3 chat, 4 project or device); grouped choices such as a second subject or a quiet carry none. Digits 1–4 pick that rung from anywhere on the card, never a grouped choice; Enter approves the face; Escape denies. The face's coverage and expiry sit under the action row. A pending card shows how long it has waited from one minute on, and the dock badge counts the cards waiting on the person device-wide. On Linux the shell publishes that count over the `com.canonical.Unity.LauncherEntry` protocol for `dev.paintedwolf.code.desktop` (`notifications/linux/launcher.rs`), which Plasma's task manager, Ubuntu Dock and Dash to Dock show. It answers `Query` for launchers that start later. GNOME Shell's own dash shows no counts, so there the waiting cards reach the person through notifications.
 
 A high-risk card is marked with the band and a one-line consequence, but it takes the same single action as every other card: the face is enabled, Enter approves it, and the controls do not change. The label is reserved for actions that affect an account or a credential.
 

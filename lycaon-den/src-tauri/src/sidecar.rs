@@ -53,6 +53,10 @@ pub enum SidecarStartError {
     CredentialVaultCorrupt(String),
     DesktopRestartRequired(String),
     InstallationUnverified(String),
+    CredentialVaultCustodianUnavailable(String),
+    CredentialVaultCustodianAbsent(String),
+    CredentialVaultLauncherRefused(String),
+    CredentialVaultIdentityMissing(String),
     Failed(String),
 }
 
@@ -74,6 +78,10 @@ impl SidecarStartError {
             | Self::CredentialVaultCorrupt(message)
             | Self::DesktopRestartRequired(message)
             | Self::InstallationUnverified(message)
+            | Self::CredentialVaultCustodianUnavailable(message)
+            | Self::CredentialVaultCustodianAbsent(message)
+            | Self::CredentialVaultLauncherRefused(message)
+            | Self::CredentialVaultIdentityMissing(message)
             | Self::Failed(message) => message,
         }
     }
@@ -218,7 +226,8 @@ impl SidecarState {
     /// vault. None when the vault is not on the app-password path.
     pub(crate) fn verify_vault_password(&self, candidate: &[u8]) -> Option<bool> {
         let held = self.vault_password.lock().unwrap();
-        held.as_ref().map(|held| constant_time_eq(&held.0, candidate))
+        held.as_ref()
+            .map(|held| constant_time_eq(&held.0, candidate))
     }
 
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
