@@ -2,10 +2,13 @@
   "commands": [
     {
       "name": "grep",
-      "aliases": [],
+      "aliases": [
+        "egrep",
+        "fgrep"
+      ],
       "family": "search",
       "owner": "filesystem",
-      "argv": "grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "argv": "grep [OPTIONS] [-e PATTERN ...|-f FILE ...|PATTERN] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -91,6 +94,17 @@
           "arity": 0,
           "value_role": "boolean",
           "fixture_id": "grep-option-w-wordregexp",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--line-regexp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-x-lineregexp",
           "consumption": "fixed",
           "sample_values": []
         },
@@ -260,6 +274,19 @@
         },
         {
           "spellings": [
+            "-f",
+            "--file"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "grep-option-f-file",
+          "consumption": "fixed",
+          "sample_values": [
+            "patterns"
+          ]
+        },
+        {
+          "spellings": [
             "--include"
           ],
           "arity": 1,
@@ -295,7 +322,7 @@
           ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|PATTERN] [--] [PATH ...]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|-f FILE ...|PATTERN] [--] [PATH ...]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete matches; publication eligible",
@@ -343,7 +370,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered.",
+      "notes": "grep default BRE; -E ERE; egrep is grep -E and fgrep is grep -F; differing -E/-F/-P/dialect aliases are a conflicting-matchers usage error (status 2). -x anchors each pattern to the whole line; -f FILE reads LF-separated patterns from a pinned file (an empty file selects nothing). rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. A file holding NUL bytes is binary: a selected output line prints 'Binary file PATH matches' once on stdout and the file stops; -c/-l/-L/-q count normally. Recursion visits names in unsigned byte order.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -371,6 +398,7 @@
         "grep-option-E-extendedregexp",
         "grep-option-P-perlregexp",
         "grep-option-w-wordregexp",
+        "grep-option-x-lineregexp",
         "grep-option-v-invertmatch",
         "grep-option-l-fileswithmatches",
         "grep-option-L-fileswithoutmatch",
@@ -385,6 +413,7 @@
         "grep-option-B-beforecontext",
         "grep-option-C-context",
         "grep-option-e-regexp",
+        "grep-option-f-file",
         "grep-option-include",
         "grep-option-exclude",
         "grep-option-excludedir"
@@ -1004,6 +1033,30 @@
         },
         {
           "spellings": [
+            "-mtime"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-mtime",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-newer"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "find-option-newer",
+          "consumption": "fixed",
+          "sample_values": [
+            "input"
+          ]
+        },
+        {
+          "spellings": [
             "-not"
           ],
           "arity": 0,
@@ -1151,7 +1204,7 @@
           }
         }
       },
-      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent.",
+      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -1181,6 +1234,8 @@
         "find-option-mindepth",
         "find-option-size",
         "find-option-empty",
+        "find-option-mtime",
+        "find-option-newer",
         "find-option-not",
         "find-option-a",
         "find-option-o",
