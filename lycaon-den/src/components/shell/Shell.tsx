@@ -360,7 +360,7 @@ export function Shell(props: ShellProps) {
   };
 
   const { detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,
-    openFileInNewWindow, beginFileWindowDrag, closeStageWindows, focusedPeerSubject, ...peerWindows } = createShellPeerWindows({
+    openFileInNewWindow, beginFileWindowDrag, transferFileTab, closeStageWindows, focusedPeerSubject, ...peerWindows } = createShellPeerWindows({
       ...scope, itemSubject, stageColumnStageId, placeableStageId, splitLive, openStage: (stage) => stageOpeners[stage](),
     });
   const { focusedPeerViews } = peerWindows;
@@ -578,7 +578,7 @@ export function Shell(props: ShellProps) {
               homeSummaries={homeSummaries} attentionIndex={attentionIndex} navigation={navigation}
               searchArgs={searchArgs} navigateFromSearch={navigateFromSearch} sessionNavigation={sessionNavigation}
               projectLifecycle={{ toggleStar, renameProject, openMoveDialog }}
-              peerWindows={{ openFileInNewWindow, openFileWindow, beginFileWindowDrag, detachStageToWindow }}
+              peerWindows={{ openFileInNewWindow, openFileWindow, beginFileWindowDrag, transferFileTab, detachStageToWindow }}
               workspaceContext={{ backFor, stageBack }} providerGap={providerGap}
               showConversation={showConversation} focusComposer={() => setPendingRegionFocus("composer")}
               startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}

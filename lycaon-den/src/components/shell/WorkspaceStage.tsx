@@ -23,7 +23,7 @@ import {
   finishItemWindowDrag,
   moveItemWindowDrag,
 } from "../../platform/windows/item-windows.ts";
-import { isTauriRuntime } from "../../platform/runtime.ts";
+import { isTauriRuntime, tauriPlatform } from "../../platform/runtime.ts";
 import { windowSubject } from "../../platform/windows/window-subject.ts";
 import { type ProjectSummary } from "../../project/project-summary.ts";
 import { type ProjectContextSection } from "../../settings/settings-nav-model.ts";
@@ -80,6 +80,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "a
     | "openFileInNewWindow"
     | "openFileWindow"
     | "beginFileWindowDrag"
+    | "transferFileTab"
     | "detachStageToWindow"
   >;
   workspaceContext: Pick<ReturnType<typeof createShellWorkspaceContext>, "backFor" | "stageBack">;
@@ -140,6 +141,7 @@ export function WorkspaceStage(props: Props) {
     openFileInNewWindow,
     openFileWindow,
     beginFileWindowDrag,
+    transferFileTab,
     detachStageToWindow,
   } = props.peerWindows;
   const { backFor, stageBack } = props.workspaceContext;
@@ -220,6 +222,7 @@ export function WorkspaceStage(props: Props) {
                 move: moveItemWindowDrag,
                 finish: finishItemWindowDrag,
                 cancel: cancelItemWindowDrag,
+                transfer: tauriPlatform() === "linux" ? transferFileTab : undefined,
             }
             : undefined,
         restoreFilesHotExit: itemSubject?.kind !== "file",

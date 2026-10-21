@@ -124,6 +124,16 @@ pub fn run() {
             windows::item_windows::drag::ipc_discard_pending_item_window_drags,
             windows::item_windows::drag::ipc_update_file_tab_drop_target,
             windows::item_windows::drag::ipc_clear_file_tab_drop_target,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_begin_native_file_tab_drag,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_ready_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_abandon_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_commit_file_tab_transfer,
+            #[cfg(target_os = "linux")]
+            windows::item_windows::native_drag::ipc_return_file_tab_transfer,
             windows::item_windows::ipc_list_item_window_views,
             windows::item_windows::presentation::ipc_list_workspace_view_presentations,
             windows::item_windows::presentation::ipc_set_workspace_view_contexts,
@@ -165,6 +175,10 @@ pub fn run() {
             sidecar::layout::setup_bundled_engine_layout(app.handle());
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
+            #[cfg(target_os = "linux")]
+            if let Some(main) = app.get_webview_window("main") {
+                windows::item_windows::native_drag::install(&main);
+            }
             windows::window_appearance::setup(app.handle());
             clipboard::setup();
             update_service::startup::start(app.handle().clone());

@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { cancelPointerChatAttachmentDrag, finishPointerChatAttachmentDrag, updatePointerChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
-import { clearFileTabDropTarget, listenFileTabWindowDrag, updateFileTabDropTarget, type FileTabWindowDrag, type FileTabWindowDragEvent, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
+import { clearFileTabDropTarget, commitFileTabTransfer, listenFileTabWindowDrag, returnFileTabTransfer, updateFileTabDropTarget, type FileTabWindowDrag, type FileTabWindowDragEvent, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
+import { createFilesTabTransfers } from "./files-tab-transfer.ts";
 import { isShellLayoutUnstable, onShellLayoutSettled } from "../../shell/shell-layout-busy.ts";
 import { publishEditorDocumentDraft } from "../documents/editor-document.ts";
 import { scheduleSessionFidelityPersist } from "../editor/editor-session-fidelity.ts";
@@ -54,15 +55,14 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
     return last;
   };
 
-  const localClientX = (screenX: number) => screenX - window.screenX;
-
+  /** Opens a tab dropped from another window; false when this window cannot. */
   const acceptExternalTabDrop = (
     event: FileTabWindowDragEvent,
     target: { key: FileBufferKey; after: boolean } | null,
-  ) => {
-    if (event.projectId !== projectId()) return;
+  ): boolean => {
+    if (event.projectId !== projectId()) return false;
     const root = filesRoots().find((candidate) => candidate.id === event.rootId);
-    if (!root) return;
+    if (!root) return false;
     const before = projectFilesState(projectId());
     const targetIndex = target
       ? before.order.indexOf(target.key) + (target.after ? 1 : 0)
@@ -83,7 +83,10 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
     setFilesActiveBuffer(projectId(), key);
     scheduleFilesHotExitPersist(projectId());
     scheduleSessionFidelityPersist();
+    return true;
   };
+
+  const transfers = createFilesTabTransfers({ projectId, closeBuffer, onFileTabMovedOut });
 
   let fileTabDropReady = false;
   let fileTabDropTargetFingerprint: string | null = null;
@@ -299,6 +302,14 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
           ev.clientY < stripRect.top - 24 ||
           ev.clientY > stripRect.bottom + 24),
       );
+      const transfer = fileTabWindowDrag()?.transfer;
+      const dragged = state().byKey[key];
+      if (pulledOff && transfer && dragged && !isComposedBufferKind(dragged.kind)) {
+        // The native drag owns the pointer from here; this gesture ends locally.
+        transfers.start(transfer, key);
+        finish(false);
+        return;
+      }
       if (pulledOff) {
         updateNativePull({ x: ev.screenX, y: ev.screenY });
         if (!nativePull?.label) {
@@ -407,6 +418,10 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
     const tabsScrollerEl = scrollerElement();
     let disposed = false;
     let stopDragEvents: (() => void) | null = null;
+    let stopTransferEvents: (() => void) | null = null;
+    void transfers.observe()
+      .then((stop) => { if (disposed) stop(); else stopTransferEvents = stop; })
+      .catch((err) => console.debug("[item-window] listen for tab transfer failed", err));
     scheduleFileTabDropTargetSync();
     const observer =
       typeof ResizeObserver === "undefined"
@@ -422,13 +437,16 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
           setExternalDrop(null);
         return;
       }
-      const target = dropTargetFromPoint(localClientX(event.positionX));
+      const target = dropTargetFromPoint(event.positionX);
       if (event.phase === "hover") {
         setExternalDrop({ dragLabel: event.dragLabel, target });
         return;
       }
-      acceptExternalTabDrop(event, target);
+      const accepted = acceptExternalTabDrop(event, target);
       if (externalDrop()?.dragLabel === event.dragLabel) setExternalDrop(null);
+      if (!event.transfer) return;
+      const settle = accepted ? commitFileTabTransfer : returnFileTabTransfer;
+      void settle(event.dragLabel).catch((err) => console.debug("[item-window] settle tab transfer failed", err));
     })
       .then((stop) => {
         if (disposed) stop();
@@ -449,6 +467,7 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
       stopLayoutSettle();
       window.removeEventListener("resize", scheduleFileTabDropTargetSync);
       stopDragEvents?.();
+      stopTransferEvents?.();
       setExternalDrop(null);
       void clearFileTabDropTarget().catch((err) =>
         console.debug("[item-window] clear tab drop target failed", err),
