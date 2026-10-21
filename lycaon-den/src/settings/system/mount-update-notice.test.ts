@@ -89,6 +89,16 @@ describe("update notices", () => {
       }
     } finally { f.stop(); }
   });
+  it("stays quiet while package ownership is unknown", async () => {
+    const f = await fixture();
+    const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_ownership_unknown" };
+    try {
+      for (const automatic_updates_enabled of [true, false]) {
+        await f.send(updateFixture({ install_source: "package_ownership_unknown", capabilities, automatic_updates_enabled }));
+        expect(f.rows()).toHaveLength(0);
+      }
+    } finally { f.stop(); }
+  });
   it("keeps held-back and offline checks quiet and uses the existing notice rail for failures", async () => {
     const f = await fixture();
     try {

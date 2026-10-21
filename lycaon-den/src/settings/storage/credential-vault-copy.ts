@@ -12,6 +12,8 @@ export const CREDENTIAL_VAULT_COPY = {
     development: "This development build keeps the vault key in a local file.",
     restart_required:
       "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.",
+    installation_unverified:
+      "Painted Wolf Code could not confirm which package owns this installation, so the vault status was not read. Wait for any package operation to finish, then reopen Settings. Your saved credentials are preserved.",
     refused:
       "The vault identity service refused this copy of the app, so your saved credentials cannot be opened. Start Painted Wolf Code from the installed app.",
   } satisfies Record<VaultCustodyMode, string>,
@@ -42,6 +44,8 @@ export const CREDENTIAL_VAULT_COPY = {
     unchanged: "The key is already there.",
     desktop_restart_required:
       "The installed package changed. Quit Painted Wolf Code and reopen the installed desktop app. Your running engine and credentials are preserved.",
+    installation_unverified:
+      "Painted Wolf Code could not confirm which package owns this installation. Nothing changed. Wait for any package operation to finish, then try again.",
     service_unavailable:
       "The vault identity service is not available to this app. Nothing changed.",
     failed: "The vault key could not be moved.",

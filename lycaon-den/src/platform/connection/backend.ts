@@ -89,7 +89,8 @@ export type SidecarStartFailure =
   | "credential_vault_uninitialized"
   | "credential_vault_unlock_failed"
   | "credential_vault_corrupt"
-  | "desktop_restart_required";
+  | "desktop_restart_required"
+  | "installation_unverified";
 
 /** Mirrors the `SidecarStartError` tag in `sidecar.rs`. */
 type TaggedStartError = { code: string; message?: string };
@@ -146,7 +147,8 @@ function noteStartFailure(err: unknown): void {
     tagged.code === "credential_vault_uninitialized" ||
     tagged.code === "credential_vault_unlock_failed" ||
     tagged.code === "credential_vault_corrupt" ||
-    tagged.code === "desktop_restart_required"
+    tagged.code === "desktop_restart_required" ||
+    tagged.code === "installation_unverified"
   ) {
     lastStartFailure = tagged.code;
   }

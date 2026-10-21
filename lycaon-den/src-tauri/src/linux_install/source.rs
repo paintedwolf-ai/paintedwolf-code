@@ -16,9 +16,15 @@ mod tests;
 mod apt_probe_tests;
 pub use query::refresh;
 
-pub(super) fn read(program: &str, args: &[&str]) -> Result<String, QueryReason> {
-    let mut reader = command::OsReader::new(std::time::Duration::from_secs(2), std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
-    command::success(&mut reader, program, args)
+pub(super) use command::{Output, Reader};
+
+/// Each query gets its own deadline, so one slow package manager cannot spend another's.
+pub(super) struct PerQuery(pub(super) std::time::Duration);
+
+impl Reader for PerQuery {
+    fn read(&mut self, program: &str, args: &[&str]) -> Result<Output, QueryReason> {
+        command::OsReader::new(self.0, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))).read(program, args)
+    }
 }
 
 pub(super) fn valid_package_name(name: &str) -> bool { command::package_name(name) }

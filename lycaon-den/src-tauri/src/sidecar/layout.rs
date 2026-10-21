@@ -64,26 +64,31 @@ pub(super) fn linux_package_engine_layout(install_root: &Path) -> Option<Bundled
 }
 
 pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
-    let layout = if crate::linux_install::installed().is_some() {
-        linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
-    } else {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| {
-                app.path()
-                    .resource_dir()
-                    .ok()
-                    .map(|resources| (exe, resources))
-            })
-            .and_then(|(exe, resources)| {
-                bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
-            })
-    };
+    let layout = std::env::current_exe()
+        .ok()
+        .and_then(|exe| {
+            app.path()
+                .resource_dir()
+                .ok()
+                .map(|resources| (exe, resources))
+        })
+        .and_then(|(exe, resources)| {
+            bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
+        });
     let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
 }
 
+/// Package ownership is resolved per use, so a database that has not answered yet
+/// selects no engine rather than falling back to the bundle-resource layout.
 pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {
-    BUNDLED_ENGINE_LAYOUT.get().cloned().flatten()
+    use crate::linux_install::Ownership;
+    match crate::linux_install::installed() {
+        Ownership::Package(_) => {
+            linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+        }
+        Ownership::Unpackaged => BUNDLED_ENGINE_LAYOUT.get().cloned().flatten(),
+        Ownership::Unknown(_) => None,
+    }
 }
 
 pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {

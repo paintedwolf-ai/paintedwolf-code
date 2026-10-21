@@ -7,7 +7,8 @@ export type VaultCustodyMode =
   | "keychain"
   | "development"
   | "refused"
-  | "restart_required";
+  | "restart_required"
+  | "installation_unverified";
 
 export type VaultCustody = {
   mode: VaultCustodyMode;
