@@ -191,7 +191,7 @@ fn run_fixture(command: &mut Command) -> Output {
         .unwrap();
     assert!(
         status.success(),
-        "clipboard fixture failed: {} {}",
+        "clipboard fixture failed with {status}: {} {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
@@ -355,8 +355,9 @@ fn clipboard_owner_child() {
     let worker = std::thread::spawn(move || {
         let outcome = std::panic::catch_unwind(|| {
             exercise_adapter(peer);
-            super::tests_native_paste::exercise(move || {
+            super::tests_native_paste::exercise(move |title: &str| {
                 if peer == Peer::Wayland {
+                    focus_sway_window(title);
                     peer.send_key_to_owner_window();
                 }
             });
@@ -445,6 +446,27 @@ fn exercise_adapter(peer: Peer) {
         // Shutdown only hands text to a manager; this process still serves it.
         assert_eq!(peer.read().as_deref(), Some("owner again"));
     });
+}
+
+/// Asks the private compositor to focus the window titled `title`; its IPC
+/// socket is the only sway socket in the private runtime directory.
+fn focus_sway_window(title: &str) {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").expect("private Wayland runtime");
+    let socket = std::fs::read_dir(&runtime)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.file_name().is_some_and(|name| name.to_string_lossy().starts_with("sway-ipc.")))
+        .expect("private compositor IPC socket");
+    let status = Command::new("swaymsg")
+        .arg("-s")
+        .arg(&socket)
+        .arg(format!("[title=\"^{title}$\"] focus"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .status()
+        .expect("start swaymsg");
+    assert!(status.success(), "the private compositor could not focus {title}");
 }
 
 /// Repeats the key until the compositor accepts a selection from the window,

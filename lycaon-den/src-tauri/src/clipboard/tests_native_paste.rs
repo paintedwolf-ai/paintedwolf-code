@@ -23,6 +23,8 @@ window.addEventListener('load', () => {
 });
 </script>"#;
 
+const WINDOW_TITLE: &str = "Painted Wolf Code native paste fixture";
+
 #[derive(Clone, Copy)]
 enum Contents {
     Plain,
@@ -59,15 +61,17 @@ fn publish(contents: Contents) {
     }
 }
 
-/// `focus_input` gives the compositor a key event so the fixture window can
-/// receive keyboard focus, as a person's keyboard does.
-pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
+/// `focus_input` asks the compositor to focus the titled fixture window and
+/// gives it a key event, so the view receives keyboard focus as a person's
+/// keyboard would provide.
+pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
     tauri::async_runtime::block_on(async {
         for contents in [Contents::Plain, Contents::Rich, Contents::Image] {
             let (reply, receiver) = tokio::sync::oneshot::channel();
             let focus_input = focus_input.clone();
             GlibMainThread.dispatch(Box::new(move || {
                 let window = gtk::Window::new(gtk::WindowType::Toplevel);
+                window.set_title(WINDOW_TITLE);
                 window.set_default_size(320, 200);
                 let view = webkit2gtk::WebView::new();
                 window.add(&view);
@@ -88,7 +92,7 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
                             if !view.has_focus() {
                                 window.present();
                                 view.grab_focus();
-                                focus_input();
+                                focus_input(WINDOW_TITLE);
                                 return gtk::glib::ControlFlow::Continue;
                             }
                             publish(contents);
