@@ -29,14 +29,27 @@ def snapshot(value: object, variant: dict) -> dict:
     return value
 
 
+def release_version(os_release: dict) -> str | None:
+    version = os_release.get('VERSION_ID')
+    if os_release['ID'] in {'rhel', 'rocky', 'almalinux', 'centos'} and version:
+        version = version.split('.')[0]
+    return version
+
+
+def observed(observations: dict, selected_snapshot: dict, variant_observation: dict) -> dict:
+    """The admission record of what this guest actually ran on."""
+    monitors = variant_observation.get('monitors')
+    return {'os_id': observations['os_release']['ID'], 'version_id': release_version(observations['os_release']),
+            'snapshot': selected_snapshot, 'display_protocol': observations['session']['Type'],
+            'scales_percent': monitors['scales_percent'] if monitors else []}
+
+
 def observe(variant: dict, selected_snapshot: dict, observations: dict, binding: dict) -> dict:
     snapshot(selected_snapshot, variant)
     release, actual = variant['release'], observations['os_release']
     if actual['ID'] not in release['os_ids']:
         raise ValueError('actual distribution differs from the selected qualification variant')
-    version = actual.get('VERSION_ID')
-    if actual['ID'] in {'rhel', 'rocky', 'almalinux', 'centos'} and version:
-        version = version.split('.')[0]
+    version = release_version(actual)
     if release['version_id'] is not None and version != release['version_id']:
         raise ValueError('actual release differs from the selected qualification variant')
     if observations['session']['Type'] != variant['display']['protocol']:
@@ -111,5 +124,6 @@ def aggregate(catalog: dict, observations: dict[str, list[tuple[str, dict]]], kn
                                                'bytes': len(row['environment_facts'][name].encode())}
                                   for identifier, row in sorted(actual.items())}, sort_keys=True)
                  for name in first['environment_facts']}
-        results.append({**first, 'status': status, 'cases': cases, 'environment_facts': facts})
+        results.append({**first, 'status': status, 'cases': cases, 'environment_facts': facts,
+                        'variants': [entry for row in actual.values() for entry in row['variants']]})
     return results

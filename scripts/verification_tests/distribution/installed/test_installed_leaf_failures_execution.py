@@ -27,7 +27,7 @@ class InstalledLeafFailureTests(unittest.TestCase):
         stack.enter_context(patch.object(leaf, 'current_tree', return_value=TREE))
         stack.enter_context(patch.object(leaf, 'require_owned_guest', return_value={}))
         binder = stack.enter_context(patch.object(leaf, 'bind', return_value=binding))
-        stack.enter_context(patch.object(leaf, 'collect', return_value=({'OS': 'fixture'}, {'session': {}})))
+        stack.enter_context(patch.object(leaf, 'collect', return_value=({'OS': 'fixture'}, {'session': {'Type': 'x11'}, 'os_release': {'ID': 'fixture'}})))
         stack.enter_context(patch.object(leaf, 'prepare_monitors', return_value={}))
         stack.enter_context(patch.object(leaf, 'observe', return_value={'variant': variant}))
         module = leaf.__package__ + '.installed_cases.native_workflows'
@@ -61,6 +61,9 @@ class InstalledLeafFailureTests(unittest.TestCase):
                 result = self.invoke(output)
                 case = result['results'][0]['cases'][0]
                 self.assertEqual((case['id'], case['status']), ('chat-and-workflow', 'failed'))
+                self.assertEqual(result['results'][0]['variants'], [{'id': 'baseline', 'status': 'failed', 'observed': {
+                    'os_id': 'fixture', 'version_id': None, 'snapshot': {},
+                    'display_protocol': 'x11', 'scales_percent': []}}])
                 observed = [record for record in case['evidence'] if record['path'].endswith('/execution.json')][0]
                 document = json.loads((output / 'evidence' / observed['path']).read_text())
                 self.assertEqual(document['observations']['launcher_exit_code'], -11)
@@ -124,7 +127,7 @@ class InstalledLeafFailureTests(unittest.TestCase):
                 return {'status': 'passed'}
             stack.enter_context(patch.object(desktop, 'prepare_first_launch', side_effect=first))
             stack.enter_context(patch.object(leaf, 'collect', side_effect=lambda *args:
-                events.append('environment') or ({'OS': 'fixture'}, {'session': {}})))
+                events.append('environment') or ({'OS': 'fixture'}, {'session': {'Type': 'x11'}, 'os_release': {'ID': 'fixture'}})))
             def case(binding, capability, case, root):
                 events.append('case')
                 return retain(binding, capability, case, root, 'unverified', {'fixture': True})
