@@ -72,14 +72,24 @@ pub(super) fn exercise() {
                 view.connect_title_notify(move |view| {
                     let title = view.title().unwrap_or_default();
                     if title == "ready" {
-                        view.grab_focus();
-                        publish(contents);
-                        if let Err(error) = paste_into_view(view) {
-                            if let Some(reply) = answer.borrow_mut().take() {
-                                let _ = reply.send(Err(error));
+                        // The compositor activates the window asynchronously; paste
+                        // once the view holds keyboard focus, as a menu action would.
+                        let (view, window, answer) = (view.clone(), owned_window.clone(), answer.clone());
+                        gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
+                            if !view.has_focus() {
+                                window.present();
+                                view.grab_focus();
+                                return gtk::glib::ControlFlow::Continue;
                             }
-                            owned_window.close();
-                        }
+                            publish(contents);
+                            if let Err(error) = paste_into_view(&view) {
+                                if let Some(reply) = answer.borrow_mut().take() {
+                                    let _ = reply.send(Err(error));
+                                }
+                                window.close();
+                            }
+                            gtk::glib::ControlFlow::Break
+                        });
                     } else if title.starts_with('{') {
                         if let Some(reply) = answer.borrow_mut().take() {
                             let _ = reply.send(Ok(title.to_string()));
@@ -108,7 +118,9 @@ pub(super) fn exercise() {
                 Contents::Plain => assert_eq!(observed["text"], "fixture plain"),
                 Contents::Rich => {
                     assert_eq!(observed["text"], "fixture rich");
-                    assert_eq!(observed["html"], "<b>fixture rich</b>");
+                    // WebKit sanitizes pasted markup, adding computed inline style.
+                    let html = observed["html"].as_str().expect("pasted markup");
+                    assert!(html.starts_with("<b") && html.ends_with(">fixture rich</b>"), "pasted markup {html}");
                 }
                 Contents::Image => assert_eq!(observed["images"], serde_json::json!(["image/png"])),
             }
