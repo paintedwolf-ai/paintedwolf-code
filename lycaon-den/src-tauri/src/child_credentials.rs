@@ -61,9 +61,10 @@ mod tests {
             .env(MARKER, "1");
         prepare(&mut command);
         let result = command.output().unwrap();
-        assert!(result.status.success());
-        assert!(String::from_utf8(result.stdout).unwrap().lines()
-            .any(|line| line == format!("observed-groups={gid},{gid},{gid}")));
+        let (stdout, stderr) = (String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+        assert!(result.status.success(), "child failed: {}\n{stdout}\n{stderr}", result.status);
+        assert!(stdout.lines().any(|line| line == format!("observed-groups={gid},{gid},{gid}")),
+            "child of gid {gid} reported:\n{stdout}\n{stderr}");
     }
 
     #[test]
