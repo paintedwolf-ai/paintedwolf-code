@@ -1,6 +1,9 @@
 // Suppresses the release console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(all(target_os = "linux", not(debug_assertions)))]
+mod linux_module_preinit;
+
 fn main() {
     let mut args = std::env::args().skip(1);
     if args.next().as_deref() == Some("--apply-update") {
