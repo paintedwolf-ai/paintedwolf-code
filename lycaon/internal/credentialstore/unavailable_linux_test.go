@@ -12,9 +12,14 @@ import (
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
+// unavailableCustody probes a socket path nothing serves. The path stays short
+// so the dial fails as an absent socket, not as an overlong address.
 func unavailableCustody(t *testing.T) custody {
 	t.Helper()
-	return probeCustody(vaultidentity.NewClient(filepath.Join(t.TempDir(), "absent.sock")))
+	dir, err := os.MkdirTemp("/tmp", "pw-absent-") //nolint:usetesting // Short socket path.
+	testutil.FailErr(t, "socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return probeCustody(vaultidentity.NewClient(filepath.Join(dir, "absent.sock")))
 }
 
 func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
