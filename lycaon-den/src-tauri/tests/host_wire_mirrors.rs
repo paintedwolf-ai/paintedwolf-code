@@ -48,17 +48,24 @@ struct Entry {
 
 const HOST_WIRE_MIRRORS: &[Entry] = &[
     Entry {
-        file: "src/sidecar/installation.rs",
+        file: "src/sidecar/manifest.rs",
         rust_type: "Manifest",
         binding: Binding::NotHostWire {
-            reason: "reads the package manager's on-disk manifest for restart admission, never engine output",
+            reason: "reads the package manager's on-disk manifest for installation verification, never engine output",
         },
     },
     Entry {
-        file: "src/sidecar/installation.rs",
+        file: "src/sidecar/manifest.rs",
         rust_type: "Executable",
         binding: Binding::NotHostWire {
             reason: "reads an executable entry from the package manager's on-disk manifest, never engine output",
+        },
+    },
+    Entry {
+        file: "src/sidecar/manifest.rs",
+        rust_type: "PayloadEntry",
+        binding: Binding::NotHostWire {
+            reason: "reads a payload seal entry from the package manager's on-disk manifest, never engine output",
         },
     },
     Entry {
