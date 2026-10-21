@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -15,6 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
+
+var _ commandprogram.ProgramRecorder = (*invocation.SQLRecorder)(nil)
 
 type programReceiptFixture struct {
 	recorder                       *invocation.SQLRecorder
