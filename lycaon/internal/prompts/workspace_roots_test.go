@@ -150,6 +150,11 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 	roots := []projectroot.RootRef{
 		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
 	}
+	const (
+		coverage    = "These folders are the project; search indexing, history and undo cover only them."
+		nonStrictLn = "Other paths ask the person first, except temporary and cache folders."
+		strictLn    = "Other paths, including temporary folders, ask the person first."
+	)
 
 	for _, tc := range []struct {
 		name     string
@@ -160,32 +165,43 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 		{
 			name:     "light",
 			posture:  gate.PostureLight,
-			wantLine: "Other paths ask the person first, except temporary and cache folders.",
-			omitLine: "Other paths, including temporary folders, ask the person first.",
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
 		},
 		{
 			name:     "balanced",
 			posture:  gate.PostureBalanced,
-			wantLine: "Other paths ask the person first, except temporary and cache folders.",
-			omitLine: "Other paths, including temporary folders, ask the person first.",
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
 		},
 		{
 			name:     "strict",
 			posture:  gate.PostureStrict,
-			wantLine: "Other paths, including temporary folders, ask the person first.",
-			omitLine: "Other paths ask the person first, except temporary and cache folders.",
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "unset posture fails closed to strict",
+			posture:  "",
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "unknown posture fails closed to strict",
+			posture:  gate.Posture("unknown"),
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
 				SessionScratchDir: "/scratch/s1",
-				Posture:           string(tc.posture),
+				Posture:           tc.posture,
 			})
 			vars["tool_profile"] = "implement"
 			prompts.MergeWorkspaceRootsVars(vars, roots, "/workspace/app")
 			out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
 			testutil.FailErr(t, "render command-surface", err)
-			const coverage = "These folders are the project; search indexing, history and undo cover only them."
 			if !strings.Contains(out, coverage) {
 				t.Fatalf("missing project coverage sentence:\n%s", out)
 			}
@@ -203,9 +219,38 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 		})
 	}
 
+	for _, tc := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{
+			name: "unset template fact fails closed to strict",
+			mutate: func(vars map[string]any) {
+				delete(vars, "reviews_confined_writes")
+			},
+		},
+		{
+			name: "unknown template fact fails closed to strict",
+			mutate: func(vars map[string]any) {
+				vars["reviews_confined_writes"] = "unknown"
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := map[string]any{"tool_profile": "implement", "session_scratch_dir": "/scratch/s1"}
+			prompts.MergeWorkspaceRootsVars(vars, roots, "/workspace/app")
+			tc.mutate(vars)
+			out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+			testutil.FailErr(t, "render command-surface with "+tc.name, err)
+			if !strings.Contains(out, strictLn) || strings.Contains(out, nonStrictLn) {
+				t.Fatalf("expected strict copy for %s:\n%s", tc.name, out)
+			}
+		})
+	}
+
 	t.Run("no folders attached", func(t *testing.T) {
 		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
-			Posture: string(gate.PostureStrict),
+			Posture: gate.PostureStrict,
 		})
 		vars["tool_profile"] = "implement"
 		prompts.MergeWorkspaceRootsVars(vars, nil, "")
@@ -219,10 +264,20 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 
 func TestPostureChangedNoticeCopy(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	strictOut, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(gate.PostureStrict))
-	testutil.FailErr(t, "render strict posture notice", err)
-	if strings.TrimSpace(strictOut) != "The person now wants to approve writes outside the project, including temporary folders." {
-		t.Fatalf("strict notice = %q", strictOut)
+	const strictNotice = "The person now wants to approve writes outside the project, including temporary folders."
+	for _, p := range []gate.Posture{gate.PostureStrict, "", gate.Posture("unknown")} {
+		strictOut, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(p))
+		testutil.FailErr(t, "render strict posture notice", err)
+		if strings.TrimSpace(strictOut) != strictNotice {
+			t.Fatalf("posture %q notice = %q", p, strictOut)
+		}
+	}
+	for _, raw := range []map[string]any{{}, {"reviews_confined_writes": "unknown"}} {
+		out, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", raw)
+		testutil.FailErr(t, "render fallback posture notice", err)
+		if strings.TrimSpace(out) != strictNotice {
+			t.Fatalf("fallback notice (%v) = %q", raw, out)
+		}
 	}
 	for _, p := range []gate.Posture{gate.PostureBalanced, gate.PostureLight} {
 		out, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(p))
@@ -231,7 +286,7 @@ func TestPostureChangedNoticeCopy(t *testing.T) {
 			t.Fatalf("%s notice = %q", p, out)
 		}
 		for _, term := range []string{"posture", "gate", "lease", "grant", "floor"} {
-			if strings.Contains(strings.ToLower(out), term) || strings.Contains(strings.ToLower(strictOut), term) {
+			if strings.Contains(strings.ToLower(out), term) || strings.Contains(strings.ToLower(strictNotice), term) {
 				t.Fatalf("posture notice leaked internal term %q", term)
 			}
 		}

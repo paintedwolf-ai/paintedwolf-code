@@ -3,6 +3,7 @@ package profiles
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -35,6 +36,7 @@ type Service struct {
 	skillsCache        skills.ProjectCache
 	hostResources      *hostresources.Service
 	approvals          *settings.ApprovalStore
+	postureObserver    func(context.Context, string, gate.Posture)
 	coordinatorProfile func(context.Context, string) string
 }
 
@@ -45,6 +47,9 @@ func (m *Service) SetProjects(projects Projects)                { m.projects = p
 func (m *Service) SetAgentRegistry(agents AgentProfileResolver) { m.Agents = agents }
 func (m *Service) SetApprovals(approvals *settings.ApprovalStore) {
 	m.approvals = approvals
+}
+func (m *Service) SetPostureObserver(observer func(context.Context, string, gate.Posture)) {
+	m.postureObserver = observer
 }
 func (m *Service) SetCoordinatorProfile(resolve func(context.Context, string) string) {
 	m.coordinatorProfile = resolve

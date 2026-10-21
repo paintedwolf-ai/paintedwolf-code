@@ -4,7 +4,7 @@
 
 {% if workspace_roots %}Programs start in {{ project_dir }}. `pwd`, `$PWD` and `$OLDPWD` are absolute; `cd` moves between folders by absolute path or `@label`, and relative paths resolve from the current directory for every command, redirect and external program. Unquoted `@label/...` and `@scratch/...` expand to the absolute paths below; quote one to pass it literally. Neither form grants access.
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
-{% endfor %}These folders are the project; search indexing, history and undo cover only them. {% if posture == "strict" %}Other paths, including temporary folders, ask the person first.{% else %}Other paths ask the person first, except temporary and cache folders.{% endif %}
+{% endfor %}These folders are the project; search indexing, history and undo cover only them. {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}
 {% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch, also `$TMPDIR` and where `mktemp` creates. Literal `/tmp` is the system's own.
 {% endif %}
 

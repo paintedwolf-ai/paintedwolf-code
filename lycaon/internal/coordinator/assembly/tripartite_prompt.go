@@ -260,8 +260,8 @@ func rootsFingerprint(vars map[string]any) string {
 	if scratch, ok := vars["session_scratch_dir"].(string); ok {
 		out = append(out, "scratch="+scratch)
 	}
-	if posture, ok := vars["posture"].(string); ok && posture != "" {
-		out = append(out, "posture="+posture)
+	if reviews, ok := vars["reviews_confined_writes"].(bool); ok {
+		out = append(out, fmt.Sprintf("reviews_confined_writes=%t", reviews))
 	}
 	return strings.Join(out, ";")
 }

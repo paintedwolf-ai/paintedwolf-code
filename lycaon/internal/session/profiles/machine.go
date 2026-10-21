@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
@@ -99,7 +101,7 @@ func (m *Service) PromptSurface(
 	surfaces []hostresources.ExecutionSurface,
 	mutationCapable bool,
 ) prompts.AgentPromptSurface {
-	out := prompts.AgentPromptSurface{}
+	out := prompts.AgentPromptSurface{Posture: gate.PostureStrict}
 	if m == nil || sess == nil {
 		return out
 	}
@@ -111,34 +113,75 @@ func (m *Service) PromptSurface(
 	})
 	out.HostResources = hostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
-	out.Posture = string(m.approvalPosture(ctx, sess))
+	out.Posture = m.EffectiveApprovalPosture(ctx, sess)
 	out.Fingerprint = promptSurfaceFingerprint(out)
 	return out
 }
 
-func (m *Service) approvalPosture(ctx context.Context, sess *api.Session) gate.Posture {
-	if m == nil || m.approvals == nil || sess == nil {
-		return gate.DefaultPosture
+// EffectiveApprovalPosture resolves the session's effective approval posture
+// from device policy and any repository .paintedwolf/approvals.yaml overlays,
+// notifying the posture observer when the effective posture changes.
+func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Session) gate.Posture {
+	if m == nil || sess == nil {
+		return gate.PostureStrict
 	}
-	var projectDir string
+	posture := m.resolveApprovalPosture(sess.ProjectID, m.approvalOverlayDirs(ctx, sess))
+	if m.postureObserver != nil && strings.TrimSpace(sess.ID) != "" {
+		m.postureObserver(ctx, sess.ID, posture)
+	}
+	return posture
+}
+
+func (m *Service) resolveApprovalPosture(projectID string, projectDirs []string) gate.Posture {
+	projectID = strings.TrimSpace(projectID)
+	posture := gate.DefaultPosture
+	if m.approvals != nil {
+		posture = m.approvals.Posture()
+	}
+	for _, dir := range projectDirs {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		if m.approvals != nil {
+			posture = gate.Stricter(posture, m.approvals.Get(llm.SettingsScopeProject, settings.ProjectRef{ID: projectID, Dir: dir}).Posture)
+			continue
+		}
+		posture = gate.Stricter(posture, m.approvals.ProjectOverlay(dir).Config.Posture)
+	}
+	return posture
+}
+
+func (m *Service) approvalOverlayDirs(ctx context.Context, sess *api.Session) []string {
+	if sess == nil {
+		return nil
+	}
+	var dirs []string
+	add := func(dir string) {
+		dir = strings.TrimSpace(dir)
+		if dir != "" && !slices.Contains(dirs, dir) {
+			dirs = append(dirs, dir)
+		}
+	}
 	if m.workspace != nil {
-		projectDir, _ = m.workspace.ActivePath(ctx, sess)
+		for _, dir := range m.workspace.OverlayRoots(ctx, sess) {
+			add(dir)
+		}
+		if active, err := m.workspace.ActivePath(ctx, sess); err == nil {
+			add(active)
+		}
 	}
-	if projectDir == "" {
-		projectDir = strings.TrimSpace(sess.WorkspacePath)
+	if len(dirs) == 0 && m.projects != nil && strings.TrimSpace(sess.ProjectID) != "" {
+		if p, err := m.projects.Get(ctx, strings.TrimSpace(sess.ProjectID)); err == nil && p != nil {
+			if res, err := project.ResolveProjectOverlay(p, sess.WorkspaceRootID); err == nil {
+				for _, dir := range res.Paths {
+					add(dir)
+				}
+			}
+		}
 	}
-	scope := llm.SettingsScopeGlobal
-	if strings.TrimSpace(sess.ProjectID) != "" || projectDir != "" {
-		scope = llm.SettingsScopeProject
-	}
-	cfg := m.approvals.Get(scope, settings.ProjectRef{
-		ID:  strings.TrimSpace(sess.ProjectID),
-		Dir: projectDir,
-	})
-	if cfg.Posture != "" {
-		return cfg.Posture
-	}
-	return gate.DefaultPosture
+	add(sess.WorkspacePath)
+	return dirs
 }
 
 func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {

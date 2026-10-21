@@ -179,7 +179,6 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
-		beforePosture := s.Service.Approvals.Get(scope, ref).Posture
 		cfg := settings.ApprovalConfig{
 			Rules:       rules,
 			Posture:     posture,
@@ -192,12 +191,7 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			}
 			return
 		}
-		afterPosture := s.Service.Approvals.Get(scope, ref).Posture
-		if s.Sessions != nil && s.Sessions.ProjectControl != nil {
-			s.Sessions.ProjectControl.EnqueuePostureChangedKick(r.Context(), ref.ID, beforePosture, afterPosture)
-		}
 	default:
-		beforePosture := s.Service.Approvals.Posture()
 		existingRules := s.Service.Approvals.OverlayRules()
 		if !rulesPresent {
 			rules = existingRules
@@ -247,10 +241,6 @@ func (s *Handler) HandleUpdateApprovals(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		confine.SetEgressPosture(s.Service.Approvals.EgressPosture())
-		afterPosture := s.Service.Approvals.Posture()
-		if s.Sessions != nil && s.Sessions.ProjectControl != nil {
-			s.Sessions.ProjectControl.EnqueuePostureChangedKick(r.Context(), "", beforePosture, afterPosture)
-		}
 	}
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaApprovals, string(scope), projectDir, "updated")
 	httpio.WriteJSON(w, http.StatusOK, s.approvalConfigResponse(r.Context(), scope, ref, s.Service.Approvals.Get(scope, ref)))

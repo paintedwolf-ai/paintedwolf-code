@@ -66,6 +66,7 @@ type Service struct {
 	overlayPromoter         OverlayPromoter
 	rootHistory             *projectroot.History
 	pendingRootBaselines    sync.Map
+	lastSessionPosture      sync.Map
 	pendingPostureBaselines sync.Map
 }
 

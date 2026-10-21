@@ -218,6 +218,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Coordinator.Closeout.SetSourceVerification(m.Verification)
 	m.ProjectControl = projectcontrol.New(store, m.Stops, turnStatus, m.Admission, m.Coordinator.Batch, turnInstructions, turnTranscript)
 	m.ProjectControl.SetRootHistory(m.Workspace.RootHistory())
+	m.Profiles.SetPostureObserver(m.ProjectControl.ObserveSessionPosture)
 	m.Coordinator.Guards = turnguards.New(store, m.ToolPolicy, m.Verification, m.Coordinator.Feedback, workerState, m.Workers, m.Workspace, m.Coordinator.Batch, m.Coordinator.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
 	m.Coordinator.Loading.SetPolicy(m.Coordinator.Guards.Policy)
 	m.Resources.State.Settlement = turnSettlement

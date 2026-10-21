@@ -1,1 +1,1 @@
-{% if reviews_confined_writes %}The person now wants to approve writes outside the project, including temporary folders.{% else %}The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first.{% endif %}
+{% if reviews_confined_writes == false %}The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first.{% else %}The person now wants to approve writes outside the project, including temporary folders.{% endif %}

@@ -11,6 +11,9 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 	if vars == nil {
 		return
 	}
+	if _, ok := vars["reviews_confined_writes"].(bool); !ok {
+		vars["reviews_confined_writes"] = true
+	}
 	vars["root_count"] = len(roots)
 	if activePath != "" {
 		vars["project_dir"] = activePath

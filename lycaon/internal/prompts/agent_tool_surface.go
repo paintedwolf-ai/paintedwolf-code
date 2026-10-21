@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -61,7 +62,7 @@ type AgentPromptSurface struct {
 	HostResourcesOmitted int // rows the ambient budget dropped
 	Fingerprint          string
 	SessionScratchDir    string
-	Posture              string
+	Posture              gate.Posture
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -95,7 +96,7 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 		"session_scratch_dir":          surface.SessionScratchDir,
-		"posture":                      surface.Posture,
+		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
 	}
 }
 
