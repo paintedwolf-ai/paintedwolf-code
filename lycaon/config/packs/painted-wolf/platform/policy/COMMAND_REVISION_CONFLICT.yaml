@@ -1,0 +1,27 @@
+oar: '1.0'
+id: COMMAND_REVISION_CONFLICT
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "COMMAND_REVISION_CONFLICT"
+effect: block
+copy:
+  what: '{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish.'
+  cause: A person, editor or other process changed the pinned source or destination between capture and acceptance.
+  why: Publishing now would overwrite or ignore a concurrent change; the host does not refresh, rebase or rerun the transform.
+  fix: Preserve the current file and earlier child outcomes. Run a new program that reads the current content if the change is still wanted.
+  instead: Branch on Code; keep the concurrent change and do not replay the stale transform
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_revision_pin
+x-paintedwolf-message: program operation conflicted with a concurrent change
+x-paintedwolf-scenarios:
+  - id: destination-moved
+    vars:
+      tool: command
+      path: config/app.json
+    expect_contains:
+      - 'Code: COMMAND_REVISION_CONFLICT'
+      - config/app.json changed after the program captured it
+      - do not replay the stale transform

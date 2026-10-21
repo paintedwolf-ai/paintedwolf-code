@@ -13,7 +13,7 @@ import (
 // This does not add a released baseline or weaken production shape recognition.
 func removeProgramReceiptSchemaFixture(t *testing.T, source Handle) {
 	t.Helper()
-	_, err := source.ExecContext(t.Context(), `DROP TABLE invocation_program_deliveries; DROP TABLE invocation_program_outputs; DROP TABLE invocation_program_executions; DROP TABLE invocation_program_progress; DROP TABLE invocation_program_nodes; DROP TABLE invocation_program_sources; DROP TABLE invocation_programs; DROP INDEX idx_evidence_records_source_delivery; PRAGMA user_version=5;`)
+	_, err := source.ExecContext(t.Context(), `DROP TABLE invocation_program_revision_pins; DROP TABLE invocation_program_deliveries; DROP TABLE invocation_program_outputs; DROP TABLE invocation_program_executions; DROP TABLE invocation_program_progress; DROP TABLE invocation_program_nodes; DROP TABLE invocation_program_sources; DROP TABLE invocation_programs; DROP INDEX idx_evidence_records_source_delivery; PRAGMA user_version=5;`)
 	testutil.FailErr(t, "derive actual known schema5 intermediate", err)
 }
 
