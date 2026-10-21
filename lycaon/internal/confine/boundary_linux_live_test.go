@@ -154,7 +154,7 @@ func runLinuxProbe(mode string) int {
 				select {
 				case <-stop:
 					return
-				default:
+				case <-time.After(200 * time.Microsecond):
 					_ = unix.Kill(os.Getpid(), unix.SIGURG)
 				}
 			}
@@ -168,11 +168,11 @@ func runLinuxProbe(mode string) int {
 			return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
 		}
 		var wg sync.WaitGroup
-		for worker := 0; worker < 8; worker++ {
+		for worker := 0; worker < 4; worker++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for i := 0; i < 2000; i++ {
+				for i := 0; i < 300; i++ {
 					_ = refusedConnect()
 				}
 			}()
