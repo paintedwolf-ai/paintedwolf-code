@@ -142,6 +142,17 @@ class PythonChangedCoverageTests(unittest.TestCase):
         self.assertTrue(failed)
         self.assertEqual([f.text for f in findings], ["tests failed, so changed coverage was not measured; fix the tests above"])
 
+    def test_suites_that_never_started_coverage_fail_instead_of_reading_as_uncovered(self):
+        (self.scripts / "sample.py").write_text(BASE + ADDED)
+        self.write_test("self.assertEqual(sample.added(2), 6)")
+        empty = Path(self.temp.name) / "no-tools"
+        empty.mkdir()
+        with patch.object(coverage_changes.python_coverage, "provision", return_value=empty):
+            findings, failed = self.run_gate()
+        self.assertTrue(failed)
+        self.assertEqual([f.text for f in findings],
+                         ["sample.py: statements could not be read: coverage.py did not start in any measured suite process"])
+
     def test_test_code_and_files_outside_scripts_are_not_units(self):
         paths = ["scripts/sample.py", "scripts/test_sample_execution.py", "scripts/verification_tests/support.py",
                  "lycaon/tool.py", "scripts/notes.md", "scripts/gone.py"]

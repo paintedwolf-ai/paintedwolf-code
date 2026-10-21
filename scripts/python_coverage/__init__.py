@@ -30,7 +30,9 @@ os.environ["COVERAGE_PROCESS_START"] = {rc!r}
 os.environ.pop("COVERAGE_PROCESS_CONFIG", None)
 try:
     import coverage
-    coverage.process_startup()
+    if coverage.process_startup() is not None:
+        # The gate refuses a run in which no measured process recorded that coverage started.
+        open(os.path.join({data!r}, "started.%d" % os.getpid()), "a").close()
 except Exception:
     pass
 """
@@ -88,7 +90,8 @@ def environment(work, tools, files):
     python = home / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
     purelib = Path(subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
                                   capture_output=True, text=True, check=True).stdout.strip())
-    (purelib / "_pw_coverage_startup.py").write_text(STARTUP.format(tools=[str(t) for t in tools], rc=str(rc)))
+    startup = STARTUP.format(tools=[str(t) for t in tools], rc=str(rc), data=str(data))
+    (purelib / "_pw_coverage_startup.py").write_text(startup)
     (purelib / "_pw_coverage_startup.pth").write_text("import _pw_coverage_startup\n")
     return python, data
 
@@ -146,6 +149,9 @@ def measure(root, files, suites, work):
         if subprocess.call([str(python), "-m", "unittest", "discover", "-s", start, "-p", suite["pattern"]],
                            cwd=root, env=env) != 0:
             return None
+    if not any(data.glob("started.*")):
+        missing = RuntimeError("coverage.py did not start in any measured suite process")
+        return {path: missing for path in files}
     sys.path.extend(str(t) for t in tools if str(t) not in sys.path)
     from coverage.exceptions import CoverageException
     from coverage.parser import PythonParser
