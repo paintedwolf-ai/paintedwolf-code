@@ -75,13 +75,16 @@ class InstalledVariantAggregationTests(unittest.TestCase):
         import copy
         selected = {'environment': 'fedora', 'capability': 'windowing', 'cases': ['resize']}
         row = {'row_id': 'row', 'status': 'passed', 'environment_facts': {'session': 'actual'},
-               'cases': [{'id': 'resize', 'status': 'passed', 'evidence': [{'path': 'first', 'sha256': 'a' * 64}]}]}
+               'cases': [{'id': 'resize', 'status': 'passed', 'evidence': [{'path': 'first', 'sha256': 'a' * 64}]}],
+               'variants': [{'id': 'floor', 'status': 'passed', 'observed': {}}]}
         with patch.object(owner, 'requirements', return_value=[{'id': 'floor'}, {'id': 'newer'}]):
             missing = owner.aggregate({}, {'row': [('floor', row)]}, {'row': selected})[0]
             self.assertEqual(missing['status'], 'unverified')
             self.assertEqual(missing['cases'][0]['evidence'], row['cases'][0]['evidence'])
-            complete = owner.aggregate({}, {'row': [('floor', row), ('newer', row)]}, {'row': selected})[0]
+            newer = {**copy.deepcopy(row), 'variants': [{'id': 'newer', 'status': 'passed', 'observed': {}}]}
+            complete = owner.aggregate({}, {'row': [('floor', row), ('newer', newer)]}, {'row': selected})[0]
             self.assertEqual(complete['status'], 'passed')
+            self.assertEqual([entry['id'] for entry in complete['variants']], ['floor', 'newer'])
             failed = copy.deepcopy(row)
             failed['cases'][0]['status'] = 'failed'
             self.assertEqual(owner.aggregate({}, {'row': [('floor', row), ('newer', failed)]}, {'row': selected})[0]['status'], 'failed')

@@ -18,7 +18,7 @@ from .installed_cases.records import CaseFailed, CaseUnavailable, retain
 from .installed_environment import collect
 from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
-from .installed_variants import requirements, observe
+from .installed_variants import requirements, observe, observed
 from .installed_monitors import prepare as prepare_monitors
 
 # Each case runs within its own time budget; a driver family may declare a
@@ -212,7 +212,9 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         status = "failed" if any(case["status"] == "failed" for case in cases) else "unverified" if any(case["status"] != "passed" for case in cases) else "passed"
         results.append({"row_id": row["id"], "source_commit": source, "artifact_id": artifact_id,
                         "tier": row["tier"], "execution": "native", "status": status,
-                        "cases": cases, "environment_facts": facts})
+                        "cases": cases, "environment_facts": facts,
+                        "variants": [{"id": variant_id, "status": status,
+                                      "observed": observed(observations, snapshot, variant_observation)}]})
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": results}
     (output / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True) + "\n")
     execution = {"format_version": 1, "execution_nonce": execution_nonce, "source_commit": source,
