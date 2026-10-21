@@ -8,7 +8,7 @@ import (
 // directoryBinding freezes the logical coordinate of the actual held cwd,
 // independently of its original native spelling (which may contain links/..).
 func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (BoundPath, os.FileInfo, error) {
-	file, err := bound.Open()
+	file, err := bound.OpenLaunchMetadata(true)
 	if err != nil {
 		return BoundPath{}, nil, err
 	}
@@ -42,7 +42,7 @@ func (p *ProgramPaths) OpenCwd(ctx context.Context) (*os.File, error) {
 	if p.cwd.Resolved.Abs == "" {
 		return nil, invalidOperand("", "invocation cwd is not bound")
 	}
-	file, err := p.cwd.Open()
+	file, err := p.cwd.OpenLaunchMetadata(true)
 	if err != nil {
 		return nil, err
 	}

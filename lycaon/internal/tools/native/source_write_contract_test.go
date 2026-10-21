@@ -15,7 +15,7 @@ import (
 // bannedMutations require write-door attribution.
 var bannedMutations = map[string][]string{
 	"os":       {"Rename", "Remove", "RemoveAll", "WriteFile", "Create", "OpenFile", "Truncate", "Mkdir", "MkdirAll", "Chmod", "Chown", "Lchown"},
-	"fseffect": {"Replace", "Remove", "Rename", "MkdirAll", "OpenWrite", "Chmod", "Chown"},
+	"fseffect": {"Replace", "Remove", "Rename", "MkdirAll", "OpenWrite", "Chmod", "ChangeOwnership"},
 }
 
 func TestWorkspaceContentReadsUseDescriptorRelativeOpen(t *testing.T) {

@@ -25,7 +25,7 @@ func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
 		}},
 	}
 	confinement := &confine.Confinement{Roots: []string{t.TempDir()}}
-	launch := agentCommandLaunch(tctx, "test-command", confinement)
+	launch := agentCommandLaunch(tctx, "test-command", confinement, nil, "synthetic command")
 
 	if launch.Environment != lycexec.EnvironmentReduced {
 		t.Fatalf("expected EnvironmentReduced, got %q", launch.Environment)

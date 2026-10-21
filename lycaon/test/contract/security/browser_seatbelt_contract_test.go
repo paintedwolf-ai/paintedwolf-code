@@ -16,10 +16,14 @@ func TestBrowserLaunchUsesSeatbelt(t *testing.T) {
 	path := filepath.Join(root, "lycaon", "internal", "browser", "session.go")
 	data, err := os.ReadFile(path)
 	contractcheck.FailErr(t, "read session.go", err)
-	text := string(data)
+	processPath := filepath.Join(root, "lycaon", "internal", "browser", "session_process.go")
+	processData, err := os.ReadFile(processPath)
+	contractcheck.FailErr(t, "read session process", err)
+	text := string(data) + string(processData)
 	for _, marker := range []string{
 		"BrowserConfinement",
-		"launchConfined",
+		"launchBrowserProcess",
+		"execpkg.StartInOwnGroup",
 		"execpkg.PrepareCommand",
 		"LaunchManagedBrowser",
 		// Fails closed like every other spawn seam: a confinement request that
@@ -32,6 +36,9 @@ func TestBrowserLaunchUsesSeatbelt(t *testing.T) {
 		if !strings.Contains(text, marker) {
 			t.Fatalf("%s missing %q", path, marker)
 		}
+	}
+	if strings.Contains(string(data), "l.Launch()") {
+		t.Fatal("browser bypasses prepared process ownership")
 	}
 	confinePath := filepath.Join(root, "lycaon", "internal", "confine", "confine.go")
 	cdata, err := os.ReadFile(confinePath)

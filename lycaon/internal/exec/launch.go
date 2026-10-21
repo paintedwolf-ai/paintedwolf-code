@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -23,11 +24,14 @@ const (
 
 // LaunchPlan carries mandatory process authority and attribution.
 type LaunchPlan struct {
-	Kind        LaunchKind
-	Subject     string
-	Confinement *confine.Confinement
-	Environment EnvironmentMode
-	ExtraEnv    []string
+	Kind             LaunchKind
+	Subject          string
+	Confinement      *confine.Confinement
+	Environment      EnvironmentMode
+	ExtraEnv         []string
+	PathAuthority    confine.LaunchPaths
+	InputLimits      confine.LaunchVectorLimits
+	CurrentAuthority func(context.Context) error
 }
 
 // EnvironmentMode selects the process environment.
@@ -37,6 +41,12 @@ const (
 	EnvironmentInherited EnvironmentMode = ""
 	EnvironmentReduced   EnvironmentMode = "reduced"
 )
+
+// WithPathAuthority binds the current invocation's existing path authority.
+func (p LaunchPlan) WithPathAuthority(paths confine.LaunchPaths) LaunchPlan {
+	p.PathAuthority = paths
+	return p
+}
 
 // WithReducedEnvironment removes ambient credentials.
 func (p LaunchPlan) WithReducedEnvironment() LaunchPlan {

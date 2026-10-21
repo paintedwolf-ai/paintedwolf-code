@@ -179,6 +179,89 @@ A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
 
+### Platform adapter evidence
+
+`fseffect.Replace` reports whether replacement, directory durability and byte
+verification actually occurred, even when a later step fails. Staged byte counts
+alone do not prove publication. Source mutation settlement preserves the same
+journal and reports committed publication separately from a later completion
+error. Ownership changes return an explicit capability and applied result;
+unsupported platforms never claim that metadata changed.
+
+Native TCP observations carry exact endpoints, an opaque socket resource identity
+and the holder's process incarnation. Fresh inherited-descriptor checks establish
+lineage membership. Session pairing additionally requires complete observation
+of every relevant holder: inaccessible process/socket tables produce
+`ErrObservationIncomplete`, not a partial positive. Wildcard listeners retain
+ordinary connection admission. These are observations for mediated admission,
+not grants; mediated admission must recheck current identities at each required
+boundary.
+
+Portable external launch uses one prepared lifecycle through the existing
+`exec.LaunchPlan` boundary for commands, pipelines, PTYs and retained native
+process producers. Final sanitized environment, PATH selection, real cwd and
+literal argv are captured before helper construction. The helper receives the
+selected native executable path and held cwd, and never resolves a prepared
+command through PATH a second time. A current invocation path owner may supply
+its checked metadata handles; a held handle never grants source-read or execution
+authority. Host-managed native producers retain their existing OS authority. Agent command
+launches without an explicit scoped path port require their current initiating
+execution-authority callback: it revalidates the actual live action, actor/root
+identity, confinement and worker branch without consuming once-use permits twice.
+This admits execution metadata only and never grants source-read authority.
+Explicit strict confinement remains strict when the platform cannot apply it.
+
+Selection captures metadata identity without reading executable contents or
+preparsing shebangs. Execution-only files and directories retain their native
+permission semantics. Before start and at the actual helper handoff, the initiating
+owner rechecks current authority and captured entry/cwd identity. Existing process
+or process-tree supervision registers before release. Guard registration only
+establishes ownership; group, pipeline and PTY launch sites then require the
+captured handoff explicitly. Missing or concurrently released capture refuses. The helper then uses
+ordinary native pathname execution with the original literal argv, held cwd and
+frozen environment; scripts keep kernel shebang behavior, `$0` and native argument
+rules. The absolute metadata selection is separate from the native filename sent
+to the kernel: relative slash operands and relative/empty PATH entries preserve
+that spelling under captured cwd. Discovery without cwd facts retains its explicit
+absolute-only lookup policy. Darwin uses O_EXEC for entry and O_SEARCH for cwd;
+Linux uses O_PATH. Native capability availability remains platform qualification. Approved set-user-ID and file-capability behavior is preserved without a
+tracer, descriptor pathname or extra no-new-privileges restriction. Existing
+confinement still applies its own required restrictions.
+
+These are captured selection and current handoff checks. Native pathname lookup
+is not atomic with the final identity check, and mutable executable/interpreter
+contents are not immutable historical bytes. A stopped postexec image, credential,
+cwd or kernel-expanded argv snapshot is not a universal launch requirement.
+Available native process observations remain separate truthful facts, and absent
+observations never become successful enforcement claims. Exec transport EOF is
+not completed output, effects or recovery proof. Changed identity, current
+authority refusal, cancellation and actual native exec failures stop this launch;
+none selects another execution mechanism or automatically retries it.
+
+Synchronous and retained asynchronous groups share `ProcessGroup`: native Wait,
+tree cleanup and guard release settle once, and Stop ignores a settled invocation.
+Both managed browser postures use this lifecycle and the existing executor reaper;
+Chromium keeps its own sandbox when no host boundary is selected. Browser URL
+readiness stays separate from process admission, and both postures use the reduced
+environment. SDK transports retain their own native pipe and Wait lifecycle inside
+the prepared start callback; a failed handoff closes their terminal reader after
+native settlement.
+
+Complete macOS/Linux managed native fixtures, caller lifecycle regressions and
+installed-platform qualification remain required. Component fixtures and native
+helper success do not establish a connected command runtime or installed release.
+
+Windows qualification requires actual filesystem replacement while handles are
+open, reparse-point and exact-name identity checks, journal/error settlement,
+metadata capability results, typed null operands, executable alias resolution
+and launcher-stub refusal, literal argv/environment/cwd handoff, owned Job Object
+cancellation that preserves unrelated processes, and observed confinement and
+network enforcement. Packaging must deliver and verify the required executable,
+helper and security prerequisites on the installed target. Cross-compilation,
+Unix fixtures and unsupported results do not qualify those capabilities. The
+same native macOS/Linux runtime and installed-platform qualification obligations
+remain; individual adapter tests do not qualify the complete command evaluator.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.

@@ -333,7 +333,8 @@ func chmodAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 
 func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, uid, gid int) error {
 	return applyAgentMetadataChange(ctx, tctx, target, fmt.Sprintf("Set file owner to uid %d and gid %d.", uid, gid), func() error {
-		return fseffect.Chown(target.Location, uid, gid)
+		_, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: target.Location, UID: uid, GID: gid})
+		return err
 	})
 }
 

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -9,8 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement) lycexec.LaunchPlan {
+func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement, lease *confine.ActionLease, commandLine string) lycexec.LaunchPlan {
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
+	launch.CurrentAuthority = func(ctx context.Context) error {
+		if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
+			return err
+		}
+		return lease.ValidateLaunch(ctx, confinement, commandEgressIdentity(tctx, subject, commandLine))
+	}
 	if tctx.Files.PackageExecution != nil {
 		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
 	}

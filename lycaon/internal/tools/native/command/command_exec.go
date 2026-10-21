@@ -217,7 +217,7 @@ func runCommandForeground(
 		return RunOutcome{}, fmt.Errorf("background registry not configured")
 	}
 	req := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, confinement, bound.lease, cmdKey),
 		ProjectDir: cwd,
 		ProfileID:  profile,
 		Stages:     stages,

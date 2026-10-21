@@ -127,11 +127,10 @@ func (c SDKConnector) connectStdio(ctx context.Context, entry MCPProviderEntry, 
 	if err != nil {
 		return nil, fmt.Errorf("mcp provider %q: %w", entry.ID, err)
 	}
-	defer spawn.cleanup()
 
 	sdkClient := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "lycaon", Version: version.Version}, clientOptions(opts))
 	advertiseRoots(sdkClient, opts.Roots)
-	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: spawn.cmd}}
+	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: spawn.cmd}, cleanup: spawn.cleanup}
 	session, err := sdkClient.Connect(ctx, transport, nil)
 	if err != nil {
 		// Reap a child created before a failed handshake.
@@ -147,21 +146,28 @@ func (c SDKConnector) connectStdio(ctx context.Context, entry MCPProviderEntry, 
 // starts it, so the group dies with the engine even mid-handshake.
 type trackedTransport struct {
 	*sdkmcp.CommandTransport
-	untrack func()
+	cleanup func()
 }
 
 func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
-	conn, err := t.CommandTransport.Connect(ctx)
-	if cmd := t.Command; cmd != nil && cmd.Process != nil {
-		// hardenSpawn made the server its own group leader.
-		t.untrack = execpkg.TrackProcessGroup(cmd.Process.Pid)
+	var connection sdkmcp.Connection
+	err := execpkg.StartPreparedWith(t.Command, func() error {
+		var err error
+		connection, err = t.CommandTransport.Connect(ctx)
+		return err
+	}, execpkg.TrackProcessGroup)
+	if err != nil && connection != nil {
+		// The common failure path already completed Wait and closed parent pipes.
+		// SDK Close therefore stops its reader without entering a second Wait.
+		_ = connection.Close()
+		return nil, err
 	}
-	return conn, err
+	return connection, err
 }
 
 func (t *trackedTransport) release() {
-	if t.untrack != nil {
-		t.untrack()
+	if t.cleanup != nil {
+		t.cleanup()
 	}
 }
 
@@ -170,8 +176,8 @@ type stdioSpawn struct {
 	cmd *osexec.Cmd
 	// releaseEgress unregisters the process proxy token.
 	releaseEgress func()
-	// cleanup releases spawn-time resources (the sandbox profile pipe) once the
-	// command has been started.
+	// cleanup releases captured launch inputs and process registration after
+	// the retained session has settled its existing native process owner.
 	cleanup func()
 }
 
