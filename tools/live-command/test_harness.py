@@ -17,8 +17,8 @@ if str(HERE) not in sys.path:
 from cli import parse_models_arg
 from engine import CREDENTIAL_FILES, is_dangerous_checkpoint, stage_credentials
 from fixture import build_fixture_template, clone_fixture
-from grading import analyze_store_db, grade_live_task, scrub_text
-from runner import aggregate_model_attempts, record_attempt, render_markdown_report
+from grading import analyze_store_db, extract_case_evidence, grade_live_task, scrub_text
+from runner import aggregate_model_attempts, record_attempt, render_markdown_report, replace_loopback_port
 
 
 def write_case_dump(case_dir: Path, command_str: str, stdout: str, reply: str, stop_code: str = ""):
@@ -252,6 +252,24 @@ class HarnessUnitTest(unittest.TestCase):
                 }
             )
             self.assertIn("100.0%", rep)
+
+        self.assertEqual(
+            replace_loopback_port("GET http://127.0.0.1:PORT/health and http://127.0.0.1:18080/status.json", 54321),
+            "GET http://127.0.0.1:54321/health and http://127.0.0.1:54321/status.json",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp) / "refusal-case"
+            write_case_dump(cdir, "curl -s http://127.0.0.1:54321/status.json", "", "Refused", stop_code="SANDBOX_LOOPBACK_CONNECT_DENIED")
+            ev = extract_case_evidence(cdir)
+            self.assertEqual(ev["refusal_codes"], ["SANDBOX_LOOPBACK_CONNECT_DENIED"])
+            self.assertEqual(ev["envelope_refusal_codes"], [])
+            agg = aggregate_model_attempts(
+                "together-ai-1",
+                "Qwen/Qwen3.5-9B",
+                [{"task": "L10-curl", "attempt": 1, "status": "idle", "elapsed_s": 2.0, "grade": grade_live_task("L10-curl", Path(tmp), cdir)}],
+                {"native_gaps": [], "refused_children": [{"command": "curl -s http://127.0.0.1:54321/status.json", "code": "SANDBOX_LOOPBACK_CONNECT_DENIED", "count": 1}]},
+            )
+            self.assertEqual(sum(r["count"] for r in agg["refusals"]), 1)
 
 
 if __name__ == "__main__":

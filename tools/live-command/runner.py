@@ -19,6 +19,13 @@ from fixture import build_fixture_template, clone_fixture, probe_free_port
 from grading import CMD_JSON_RE, analyze_store_db, grade_live_task, scrub_obj, scrub_text
 
 
+LOOPBACK_URL_RE = re.compile(r"http://127\.0\.0\.1:(?:\d+|PORT)/")
+
+
+def replace_loopback_port(text: str, port: int) -> str:
+    return LOOPBACK_URL_RE.sub(f"http://127.0.0.1:{port}/", text)
+
+
 def model_slug(provider_id: str, model: str) -> str:
     return re.sub(r"[^a-z0-9._-]+", "-", f"{provider_id}--{model}".lower()).strip("-")
 
@@ -79,9 +86,18 @@ def aggregate_model_attempts(provider_id: str, model: str, attempts: list, db_su
         for att in attempts:
             for g in att.get("grade", {}).get("native_gaps", []):
                 gap_counter[(g.get("command", ""), g.get("code", ""), g.get("form", ""))] += 1
+    has_db_refusals = bool(db_summary.get("refused_children"))
     for att in attempts:
-        for code in att.get("grade", {}).get("refusal_codes", []):
-            refusal_counter[("oar_or_stop", code)] += 1
+        grade = att.get("grade", {})
+        if has_db_refusals or "envelope_refusal_codes" in grade:
+            for code in grade.get("envelope_refusal_codes", []):
+                refusal_counter[("oar_or_stop", code)] += 1
+            if not has_db_refusals:
+                for rc in grade.get("refused_children", []):
+                    refusal_counter[(rc.get("command", "command"), rc.get("code", ""))] += 1
+        else:
+            for code in grade.get("refusal_codes", []):
+                refusal_counter[("oar_or_stop", code)] += 1
     return {
         "provider_id": provider_id,
         "model": model,
@@ -105,7 +121,7 @@ def _run_single_model(run_dir: Path, wt: Path, template_dir: Path, httpd_port: i
         eng.start(mode="live", provider_id=provider_id, model=model_id)
         for task in tasks:
             t_label = task["label"]
-            prompt_text = re.sub(r"http://127\.0\.0\.1:\d+/", f"http://127.0.0.1:{httpd_port}/", task["text"])
+            prompt_text = replace_loopback_port(task["text"], httpd_port)
             for att_num in range(1, attempts_per_task + 1):
                 case_label = f"{t_label}--a{att_num}" if attempts_per_task > 1 else t_label
                 proj_dir = clone_fixture(template_dir, eng.instance_dir / "projects" / case_label)
@@ -175,13 +191,15 @@ def run_manual_cases(run_dir: Path, cases: list[dict], worktree: Path | None = N
     wt = worktree or default_worktree()
     proj_dir = clone_fixture(run_dir / "fixture-src", run_dir / "dmanual-project")
     eng = IsolatedEngine(run_dir, "dmanual", worktree=wt)
+    httpd_proc, httpd_port = (start_loopback_httpd(run_dir) if any(LOOPBACK_URL_RE.search(c.get("command", "")) for c in cases) else (None, 0))
     results = []
     try:
         eng.start(mode="manual")
         sid = eng.setup_session(proj_dir)["session_id"]
         eng.req("/harness/llm/auto", {"enabled": False})
         for case in cases:
-            rec = {"label": case["label"], "command": case["command"]}
+            cmd_text = replace_loopback_port(case["command"], httpd_port) if httpd_port else case["command"]
+            rec = {"label": case["label"], "command": cmd_text}
             eng.req(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "case " + case["label"]})
             pend = next((p for _ in range(10) if (p := eng.req(f"/harness/llm/pending?session_id={sid}&wait=20000")).get("pending")), None)
             if not pend:
@@ -191,7 +209,7 @@ def run_manual_cases(run_dir: Path, cases: list[dict], worktree: Path | None = N
             if "command" not in (pend.get("tools") or []):
                 eng.req("/harness/llm/respond", {"id": pend["id"], "content": "", "tool_calls": [{"name": "request_tools", "id": "call_" + uuid.uuid4().hex[:12], "args": {"need": "command"}}]})
                 pend = eng.req(f"/harness/llm/pending?session_id={sid}&wait=30000")
-            args = {k: case[k] for k in ("command", "cwd") if case.get(k)}
+            args = {"command": cmd_text, **({"cwd": case["cwd"]} if case.get("cwd") else {})}
             eng.req("/harness/llm/respond", {"id": pend["id"], "content": "", "tool_calls": [{"name": "command", "id": "call_" + uuid.uuid4().hex[:12], "args": args}]})
             t0, nxt, resolved = time.monotonic(), None, set()
             while time.monotonic() - t0 < 120:
@@ -223,6 +241,8 @@ def run_manual_cases(run_dir: Path, cases: list[dict], worktree: Path | None = N
         db_sum = analyze_store_db(eng.instance_dir / "store.db", [sid])
     finally:
         eng.stop()
+        if httpd_proc is not None:
+            stop_loopback_httpd(run_dir, httpd_proc)
     out = scrub_obj({"cases": results, "db_summary": db_sum})
     (run_dir / "manual-summary.json").write_text(json.dumps(out, indent=2) + "\n")
     return out

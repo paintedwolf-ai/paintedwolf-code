@@ -8,9 +8,9 @@
 
 | Provider | Model | Passed | Total | Pass rate | Native gaps | Refusals |
 |---|---|---:|---:|---:|---:|---:|
-| `together-ai-1` | `zai-org/GLM-5.3-Flash` | 8 | 10 | 80.0% | 10 | 27 |
-| `ollama-2` | `ministral-3:3b` | 1 | 10 | 10.0% | 29 | 98 |
-| `together-ai-1` | `Qwen/Qwen3.5-9B` | 5 | 10 | 50.0% | 12 | 48 |
+| `together-ai-1` | `zai-org/GLM-5.3-Flash` | 8 | 10 | 80.0% | 10 | 9 |
+| `ollama-2` | `ministral-3:3b` | 1 | 10 | 10.0% | 29 | 21 |
+| `together-ai-1` | `Qwen/Qwen3.5-9B` | 5 | 10 | 50.0% | 12 | 14 |
 
 ## `together-ai-1` / `zai-org/GLM-5.3-Flash`
 
@@ -42,15 +42,12 @@
 
 ### Refusals and stop codes
 
-- `COMMAND_OPERAND_INVALID` (`oar_or_stop`) — 12
-- `SANDBOX_LOOPBACK_CONNECT_DENIED` (`oar_or_stop`) — 5
 - `COMMAND_OPERAND_INVALID` (`ps aux | grep '[s]leep 120'`) — 2
 - `COMMAND_OPERAND_INVALID` (`ps aux`) — 2
 - `COMMAND_OPERAND_INVALID` (`find . -name '*.go' -type f -print0 | xargs -0 wc -l | sort -n`) — 1
 - `TOOL_OWNER_INTERRUPTED` (`sleep 120 &`) — 1
 - `SANDBOX_LOOPBACK_CONNECT_DENIED` (`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:57637/`) — 1
 - `TOOL_OWNER_FAILED` (`oar_or_stop`) — 1
-- `TOOL_OWNER_INTERRUPTED` (`oar_or_stop`) — 1
 - `TOOL_ARGS_INVALID` (`oar_or_stop`) — 1
 
 ## `ollama-2` / `ministral-3:3b`
@@ -80,15 +77,9 @@
 
 ### Refusals and stop codes
 
-- `COMMAND_OPERAND_INVALID` (`oar_or_stop`) — 42
-- `COMMAND_JOB_UNKNOWN` (`oar_or_stop`) — 10
-- `SANDBOX_LOOPBACK_CONNECT_DENIED` (`oar_or_stop`) — 10
 - `COMMAND_OPERAND_INVALID` (`ps aux`) — 7
-- `DOOM_LOOP_REPEAT_WARN` (`oar_or_stop`) — 7
 - `COMMAND_OPERAND_INVALID` (`ps aux | grep -i 'sleep'`) — 3
 - `COMMAND_OPERAND_INVALID` (`ps aux | grep -E 'sleep|^4198'`) — 2
-- `SANDBOX_REFUSAL_REPORT_SILENT` (`oar_or_stop`) — 2
-- `COMMAND_NOT_ARGV` (`oar_or_stop`) — 2
 - `COMMAND_OPERAND_INVALID` (`find . -type f -exec grep -l 'TODO' {} \; | xargs -I {} sh -c 'grep -n "TODO" {}`) — 1
 - `TOOL_OWNER_INTERRUPTED` (`xargs -I {} sh -c 'grep -n "TODO" {} >> notes.txt'`) — 1
 - `TOOL_OWNER_FAILED` (`sleep 120 &`) — 1
@@ -98,10 +89,6 @@
 - `COMMAND_OPERAND_INVALID` (`ps aux | grep -E 'sleep'`) — 1
 - `SANDBOX_LOOPBACK_CONNECT_DENIED` (`curl -s http://127.0.0.1:57637/`) — 1
 - `SANDBOX_LOOPBACK_CONNECT_DENIED` (`curl -s http://127.0.0.1:57637/status.json`) — 1
-- `TOOL_NOT_OFFERED` (`oar_or_stop`) — 1
-- `TOOL_OWNER_FAILED` (`oar_or_stop`) — 1
-- `GREP_PATH_NOT_FOUND` (`oar_or_stop`) — 1
-- `TOOL_ARGS_INVALID` (`oar_or_stop`) — 1
 
 ## `together-ai-1` / `Qwen/Qwen3.5-9B`
 
@@ -128,16 +115,13 @@
 
 ### Refusals and stop codes
 
-- `SANDBOX_DIRECT_IP_DENIED` (`oar_or_stop`) — 20
-- `COMMAND_OPERAND_INVALID` (`oar_or_stop`) — 12
 - `COMMAND_OPERAND_INVALID` (`ps aux | grep sleep`) — 2
 - `COMMAND_OPERAND_INVALID` (`ps aux`) — 2
 - `SANDBOX_DIRECT_IP_DENIED` (`curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://127.0.0.1:5763`) — 2
 - `TOOL_ARGS_INVALID` (`oar_or_stop`) — 2
-- `TOOL_OWNER_FAILED` (`oar_or_stop`) — 2
 - `TOOL_OWNER_FAILED` (`sleep 120 &`) — 1
 - `TOOL_OWNER_INTERRUPTED` (`sleep 120 &`) — 1
 - `SANDBOX_DIRECT_IP_DENIED` (`curl -s --connect-timeout 5 http://127.0.0.1:57637/`) — 1
 - `SANDBOX_DIRECT_IP_DENIED` (`curl -s --connect-timeout 5 http://127.0.0.1:57637/status.json`) — 1
-- `TOOL_OWNER_INTERRUPTED` (`oar_or_stop`) — 1
 - `SURFACE_NOTE_UNGROUNDED` (`oar_or_stop`) — 1
+- `TOOL_OWNER_FAILED` (`oar_or_stop`) — 1

@@ -46,7 +46,8 @@ def extract_case_evidence(case_dir: Path) -> dict:
     assistant_texts = []
     tool_calls = []
     command_outputs = []
-    refusal_codes = []
+    envelope_refusal_codes = []
+    msg_codes_by_pid = {}
     native_gaps = []
 
     for msg in messages:
@@ -59,24 +60,34 @@ def extract_case_evidence(case_dir: Path) -> dict:
         elif role == "tool":
             tr = msg.get("tool_result") or {}
             raw = tr.get("content") or msg.get("content") or ""
-            for code in OAR_CODE_RE.findall(raw) + TEXT_CODE_RE.findall(raw):
-                if code != " COMPATIBLE":
-                    refusal_codes.append(code)
+            msg_codes = [
+                code
+                for code in dict.fromkeys(OAR_CODE_RE.findall(raw) + TEXT_CODE_RE.findall(raw))
+                if code != " COMPATIBLE"
+            ]
+            msg_pid = None
             m = CMD_JSON_RE.search(raw)
             if m:
                 try:
                     parsed = json.loads(m.group(0))
                     command_outputs.append(parsed)
-                    if parsed.get("stop_code"):
-                        refusal_codes.append(parsed["stop_code"])
-                    ref = parsed.get("refusal") or {}
-                    if ref.get("code"):
-                        refusal_codes.append(ref["code"])
+                    msg_pid = parsed.get("program_id")
+                    for extra in (parsed.get("stop_code"), (parsed.get("refusal") or {}).get("code")):
+                        if extra and extra not in msg_codes:
+                            msg_codes.append(extra)
                 except Exception:
                     pass
+            if msg_pid:
+                slot = msg_codes_by_pid.setdefault(msg_pid, [])
+                for code in msg_codes:
+                    if code not in slot:
+                        slot.append(code)
+            else:
+                envelope_refusal_codes.extend(msg_codes)
 
     exec_count = 0
     refused_children = []
+    receipt_refusal_codes = []
     program_states = []
     for pid, rdata in receipts.items():
         if not isinstance(rdata, dict) or "program" not in rdata:
@@ -85,8 +96,7 @@ def extract_case_evidence(case_dir: Path) -> dict:
         pstate = prog.get("state", "unknown")
         pstop = prog.get("stop_code") or ""
         program_states.append({"program_id": pid, "state": pstate, "stop_code": pstop})
-        if pstop:
-            refusal_codes.append(pstop)
+        child_codes_for_prog = []
         for ex in rdata.get("executions") or []:
             exec_count += 1
             gap = ex.get("native_gap")
@@ -101,9 +111,22 @@ def extract_case_evidence(case_dir: Path) -> dict:
             estop = ex.get("stop_code") or ex.get("host_stop_code") or ""
             if ex.get("state") in ("refused", "rejected") or estop:
                 cmd_str = scrub_text((ex.get("command") or ex.get("canonical") or "")[:120])
-                refused_children.append({"command": cmd_str, "code": estop or ex.get("state", "")})
-                if estop:
-                    refusal_codes.append(estop)
+                code = estop or ex.get("state", "")
+                refused_children.append({"command": cmd_str, "code": code})
+                if code:
+                    child_codes_for_prog.append(code)
+                    receipt_refusal_codes.append(code)
+        if pstop and pstop not in child_codes_for_prog:
+            receipt_refusal_codes.append(pstop)
+        for code in msg_codes_by_pid.get(pid, []):
+            if code not in child_codes_for_prog and code != pstop:
+                envelope_refusal_codes.append(code)
+
+    for pid, codes in msg_codes_by_pid.items():
+        if pid not in receipts:
+            envelope_refusal_codes.extend(codes)
+
+    refusal_codes = receipt_refusal_codes + envelope_refusal_codes
 
     combined_stdout = "\n".join(c.get("stdout", "") for c in command_outputs)
     assistant_body = "\n".join(assistant_texts)
@@ -121,6 +144,7 @@ def extract_case_evidence(case_dir: Path) -> dict:
         "native_gaps": native_gaps,
         "refused_children": refused_children,
         "refusal_codes": refusal_codes,
+        "envelope_refusal_codes": envelope_refusal_codes,
     }
 
 
@@ -128,8 +152,9 @@ def analyze_store_db(db_path: Path, session_ids: list[str] | None = None) -> dic
     """Read-only SQLite analysis of native_gap_json and refused executions per session."""
     if not db_path.exists():
         return {"per_session": {}, "native_gaps": [], "refused_children": [], "program_states": []}
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(str(db_path))
     try:
+        conn.execute("PRAGMA query_only = ON")
         query = (
             "SELECT p.session_id, e.program_id, e.ordinal, e.canonical, e.state, "
             "e.owner, e.stop_code, e.host_stop_code, e.native_gap_json, e.status_code "
@@ -288,5 +313,6 @@ def grade_live_task(label: str, project_dir: Path, case_dir: Path) -> dict:
         "executions_count": ev["execution_count"],
         "native_gaps": ev["native_gaps"],
         "refusal_codes": ev["refusal_codes"],
+        "envelope_refusal_codes": ev["envelope_refusal_codes"],
         "refused_children": ev["refused_children"],
     }
