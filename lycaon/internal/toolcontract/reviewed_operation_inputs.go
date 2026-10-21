@@ -35,6 +35,14 @@ type ReviewStateAdmission interface {
 	ReserveProgramState(context.Context, int64) (func(), error)
 }
 
+// OperationInspectionProjector is the host's bounded raw-value capture port.
+// It screens original scalar bytes and field labels before encoding, returning
+// a lease held through review/publication. Implementations use existing capture
+// screening and stream/state budgets; this interface creates no allocator.
+type OperationInspectionProjector interface {
+	ProjectOperationInputs(context.Context, ReviewStateAdmission, map[string]any) (map[string]any, func(), error)
+}
+
 type reviewLeases struct{ releases []func() }
 
 func (l *reviewLeases) reserve(ctx context.Context, admission ReviewStateAdmission, payload int64) error {

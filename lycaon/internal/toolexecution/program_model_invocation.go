@@ -32,6 +32,7 @@ type programFrameLifetime struct {
 	closed    bool
 	active    int
 	facts     programFrameFacts
+	admission ProgramStateAdmission
 	model     ProgramModelObservation
 	arguments *nativeArguments
 	releases  []func()
@@ -82,7 +83,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 	if release == nil {
 		return nil, fmt.Errorf("program frame admission returned no lease")
 	}
-	lifetime := &programFrameLifetime{releases: []func(){release}}
+	lifetime := &programFrameLifetime{releases: []func(){release}, admission: admission}
 	snapshot, err := prepareNativeArguments(ctx, admission, model.Arguments)
 	if err != nil {
 		lifetime.close()
@@ -159,6 +160,7 @@ func (l *programFrameLifetime) close() {
 // clear runs under the lifetime lock after all admitted uses have finished.
 func (l *programFrameLifetime) clear() {
 	l.facts = programFrameFacts{}
+	l.admission = nil
 	l.model = ProgramModelObservation{}
 	if l.arguments != nil {
 		l.arguments.close()
@@ -224,4 +226,35 @@ func (f ProgramFrame) beginUse() (func(), error) {
 			}
 		})
 	}, nil
+}
+
+// retainProgramFacts charges frozen supplemental facts to the exact ledger
+// captured with the frame. Callers hold a frame use while allocating/copying;
+// the facts then remain borrowed until feedback delivery and frame Close.
+// There is no early per-decision release or substitute allocation authority.
+func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
+	if ctx == nil || n < 0 {
+		return fmt.Errorf("retained program facts require context and a checked byte bound")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if f.lifetime == nil {
+		return fmt.Errorf("uncaptured program frame")
+	}
+	l := f.lifetime
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed || l.admission == nil {
+		return fmt.Errorf("program frame is closed")
+	}
+	release, err := l.admission.ReserveProgramState(ctx, n)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return fmt.Errorf("program fact admission returned no retained lease")
+	}
+	l.releases = append(l.releases, release)
+	return nil
 }

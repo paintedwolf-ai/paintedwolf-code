@@ -15,6 +15,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// This is a bounded-input port fixture for identity and retained floor tests.
+// Actual bounded matcher/work qualification uses the real capture producer at
+// source convergence, not this legacy redactor composition fixture.
+type nativeInspectionFixture struct{}
+
+func (nativeInspectionFixture) ProjectOperationInputs(ctx context.Context, state toolcontract.ReviewStateAdmission, args map[string]any) (map[string]any, func(), error) {
+	release, err := state.ReserveProgramState(ctx, 8192)
+	if err != nil {
+		return nil, nil, err
+	}
+	return observability.RedactCaptureValue(args).(map[string]any), release, nil
+}
+
 type nativeReviewMemory struct {
 	held   int64
 	refuse bool
@@ -30,7 +43,7 @@ func (m *nativeReviewMemory) ReserveProgramState(_ context.Context, n int64) (fu
 
 func TestNativeActionGrantIdentityAndInspectionPreserveRawBytes(t *testing.T) {
 	memory := &nativeReviewMemory{}
-	review := hitl.NewNativeActionReview(t.Context(), memory)
+	review := hitl.NewNativeActionReview(t.Context(), memory, nativeInspectionFixture{})
 	defer review.Close()
 	keys := map[string]bool{}
 	for _, path := range []string{"fixture\xff", "fixture\xfe", "fixture\ufffd"} {
@@ -72,7 +85,7 @@ func TestNativeActionGrantIdentityAndInspectionPreserveRawBytes(t *testing.T) {
 
 func TestNativeActionReviewScreensOriginalValuesBeforeEncoding(t *testing.T) {
 	memory := &nativeReviewMemory{}
-	review := hitl.NewNativeActionReview(t.Context(), memory)
+	review := hitl.NewNativeActionReview(t.Context(), memory, nativeInspectionFixture{})
 	defer review.Close()
 	_, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": "sensitive\xff", "password": "hidden\xfe"})
 	if err != nil {
@@ -101,7 +114,7 @@ func TestNativeActionReviewScreensOriginalValuesBeforeEncoding(t *testing.T) {
 
 func TestNativeActionReviewRetainsExistingSemanticGrantRules(t *testing.T) {
 	memory := &nativeReviewMemory{}
-	review := hitl.NewNativeActionReview(t.Context(), memory)
+	review := hitl.NewNativeActionReview(t.Context(), memory, nativeInspectionFixture{})
 	var actions []hitl.ProposedAction
 	var full []string
 	for _, limit := range []int{10, 20} {
@@ -140,7 +153,7 @@ func TestNativeActionCheckpointPersistsExplicitInspectionAndDistinctIdentity(t *
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
 	insertSession(t, database, sessionID)
 	memory := &nativeReviewMemory{}
-	review := hitl.NewNativeActionReview(ctx, memory)
+	review := hitl.NewNativeActionReview(ctx, memory, nativeInspectionFixture{})
 	defer review.Close()
 	ids := map[string]bool{}
 	keys := map[string]bool{}
@@ -167,5 +180,21 @@ func TestNativeActionCheckpointPersistsExplicitInspectionAndDistinctIdentity(t *
 		if !strings.Contains(rawArgs, "operation_arguments_v1") || !strings.Contains(rawPayload, "native_arguments_representation") || !strings.Contains(rawPayload, key) {
 			t.Fatal("checkpoint omitted explicit native inspection/correlation format")
 		}
+	}
+}
+
+func TestNativeActionInspectionRefusesMissingBoundedProducer(t *testing.T) {
+	memory := &nativeReviewMemory{}
+	review := hitl.NewNativeActionReview(t.Context(), memory, nil)
+	_, input, err := review.Freeze(t.Context(), "read", map[string]any{"path": "fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := input.Inspection(); err == nil {
+		t.Fatal("native inspection fell back to legacy unbounded screening")
+	}
+	review.Close()
+	if memory.held != 0 {
+		t.Fatal("failed inspection retained native state")
 	}
 }
