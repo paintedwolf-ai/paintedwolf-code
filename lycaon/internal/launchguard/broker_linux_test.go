@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestBrokerLooksProgramsUpOnTheRequestPath(t *testing.T) {
@@ -28,6 +29,7 @@ func TestBrokerLooksProgramsUpOnTheRequestPath(t *testing.T) {
 // and 3.., and a path naming a descriptor executes that very file: the desktop
 // runs a manifest-verified image as "/proc/self/fd/3" with no path lookup.
 func TestBrokeredProgramsExecutePassedDescriptorsInPlace(t *testing.T) {
+	testutil.FailErr(t, "close-on-exec inherited descriptors", unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC))
 	sh, err := lookPath("sh", []string{"PATH=/usr/bin:/bin"})
 	testutil.FailErr(t, "resolve sh", err)
 	image, err := os.Open(sh)
@@ -63,4 +65,24 @@ func TestBrokeredProgramsExecutePassedDescriptorsInPlace(t *testing.T) {
 	if fds := strings.Fields(lines[1]); len(fds) > 6 || fds[0] != "0" || fds[4] != "4" {
 		t.Fatalf("brokered program saw descriptors %v, want 0..4 and ls's own", fds)
 	}
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "call channel", err)
+	channel := os.NewFile(uintptr(pair[0]), "call-channel")
+	defer channel.Close()
+	inNull, err := os.Open("/dev/null")
+	testutil.FailErr(t, "open null", err)
+	agent := &brokerAgent{calls: map[int]*brokerCall{}}
+	agent.start(launchbroker.Request{
+		Version:     1,
+		Argv:        []string{sh, "-c", "exit 0"},
+		Dir:         "/",
+		Environment: []string{"PATH=/usr/bin:/bin"},
+	}, []int{pair[1], int(inNull.Fd()), int(inNull.Fd()), int(inNull.Fd())})
+	started, err := launchbroker.ReadEvent(channel)
+	testutil.FailErr(t, "read started event", err)
+	if started.Started <= 0 {
+		t.Fatalf("started event = %+v", started)
+	}
+	_, _ = syscall.Wait4(started.Started, &status, 0, nil)
+	agent.finished(started.Started, unix.WaitStatus(status))
 }

@@ -50,3 +50,13 @@ func TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
+	t.Setenv("LYCAON_SANDBOX", "off")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	l := newHeadlessLauncher(ctx, "/nonexistent/chrome", t.TempDir(), true, false)
+	if _, _, err := launchConfined(ctx, l, "/nonexistent/chrome", nil); err == nil {
+		t.Fatal("launchConfined with missing binary succeeded")
+	}
+}

@@ -138,6 +138,7 @@ func (s *brokerAgent) start(request launchbroker.Request, fds []int) {
 	pid, err := startBrokered(request, fds)
 	if err == nil {
 		s.calls[pid] = &brokerCall{channel: channel, pid: pid}
+		launchbroker.SendEvent(channel, launchbroker.Event{Started: pid})
 	}
 	s.mu.Unlock()
 	if err != nil {
@@ -145,7 +146,6 @@ func (s *brokerAgent) start(request launchbroker.Request, fds []int) {
 		_ = unix.Close(channel)
 		return
 	}
-	launchbroker.SendEvent(channel, launchbroker.Event{Started: pid})
 	go s.endWhenAbandoned(channel, pid)
 }
 

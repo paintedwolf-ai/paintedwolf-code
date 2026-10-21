@@ -87,8 +87,10 @@ func TestOutsideTheProtectedLaunchCommandsAreNotRelayed(t *testing.T) {
 	}
 }
 
-// Inside the protected launch every supervisor becomes a relay, a
-// confinement helper's included; a missing broker refuses instead.
+// Inside the protected launch every supervisor and every prepared command
+// becomes a relay, a confinement helper's included; a missing broker refuses
+// instead, and supervising a prepared command replaces its relay rather than
+// nesting two.
 func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	testutil.FailErr(t, "socket pair", err)
@@ -106,8 +108,54 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 		if !relayedCommand(cmd) || cmd.Args[2] != supervisorCommand || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != broker {
 			t.Fatalf("%s launch not relayed with the broker last: %q", name, cmd.Args)
 		}
+		extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", cmd.Args[2:])
+		if !ok || extras != 2 || len(argv) < 2 || argv[1] != supervisorCommand {
+			t.Fatalf("%s supervisor relay target = (%d, %q, %v)", name, extras, argv, ok)
+		}
 		_ = lifetime.Close()
 		_ = status.Close()
+	}
+	profileRead, profileWrite, err := os.Pipe()
+	testutil.FailErr(t, "profile pipe", err)
+	defer func() { _ = profileRead.Close(); _ = profileWrite.Close() }()
+	prepared := &exec.Cmd{
+		Path:       "/opt/painted-wolf-code/bin/pw",
+		Args:       []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"},
+		ExtraFiles: []*os.File{profileRead},
+	}
+	testutil.FailErr(t, "relay prepared command", relayThrough(prepared, state))
+	if !relayedCommand(prepared) || commandSupervisor(prepared) || prepared.ExtraFiles[len(prepared.ExtraFiles)-1] != broker {
+		t.Fatalf("prepared command not relayed with broker last: %q", prepared.Args)
+	}
+	extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", prepared.Args[2:])
+	if !ok || extras != 1 || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
+		t.Fatalf("prepared relay target = (%d, %q, %v)", extras, argv, ok)
+	}
+	unrelayCommand(prepared)
+	if relayedCommand(prepared) || prepared.Path != "/opt/painted-wolf-code/bin/pw" || len(prepared.ExtraFiles) != 1 || prepared.ExtraFiles[0] != profileRead {
+		t.Fatalf("unrelayCommand did not restore prepared command: path=%q args=%q extra=%d", prepared.Path, prepared.Args, len(prepared.ExtraFiles))
+	}
+	unrelayCommand(prepared)
+	unrelayCommand(&exec.Cmd{Args: []string{"pw", relayCommand, "bad", "/bin/sh", "sh"}})
+	events := make(chan os.Signal, 4)
+	notifySupervisorSignals(events, true)()
+	notifySupervisorSignals(events, false)()
+	if code := runBrokerRelay(nil); code != 125 {
+		t.Fatalf("runBrokerRelay(nil) = %d, want 125", code)
+	}
+	if code := runBrokerRelay([]string{"0", "/bin/true", "true"}); code != 125 {
+		t.Fatalf("runBrokerRelay without broker socket = %d, want 125", code)
+	}
+	for _, invalid := range [][]string{
+		nil,
+		{supervisorCommand, "bad"},
+		{"-1", "/usr/bin/git", "git"},
+		{"x", "/usr/bin/git", "git"},
+		{"0", "", "git"},
+	} {
+		if _, _, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", invalid); ok {
+			t.Fatalf("parseRelayTarget(%q) succeeded", invalid)
+		}
 	}
 	missing := protectedLaunch{protected: true, err: ErrLaunchBrokerUnavailable}
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {

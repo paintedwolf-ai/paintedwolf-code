@@ -68,6 +68,7 @@ func init() {
 
 // superviseCommand preserves the target's descriptors and adds an engine-lifetime pipe.
 func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (*exec.Cmd, func(), error) {
+	unrelayCommand(cmd)
 	self, err := os.Executable()
 	if err != nil {
 		cleanup()
@@ -204,6 +205,23 @@ func awaitEngineLoss(monitor *os.File) <-chan struct{} {
 	return gone
 }
 
+func notifySupervisorSignals(events chan<- os.Signal, terminal bool) func() {
+	signal.Notify(events, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGUSR2)
+	if !terminal {
+		signal.Notify(events, syscall.SIGINT)
+		return func() { signal.Stop(events) }
+	}
+	// On a terminal, Ctrl-C signals the foreground group directly; catching
+	// SIGINT separately keeps the supervisor alive without settling the
+	// session, while execve resets the child's disposition to default.
+	ignored := make(chan os.Signal, 1)
+	signal.Notify(ignored, syscall.SIGINT)
+	return func() {
+		signal.Stop(ignored)
+		signal.Stop(events)
+	}
+}
+
 // runCommandSupervisor retains orphaned descendants inside one command's lineage.
 func runCommandSupervisor(args []string) int {
 	target, ok := parseSupervisorTarget(args)
@@ -219,9 +237,9 @@ func runCommandSupervisor(args []string) int {
 	}
 	_ = unix.Close(fd)
 	beforeSupervisorSignals()
+	_, termErr := unix.IoctlGetTermios(0, unix.TCGETS)
 	events := make(chan os.Signal, 4)
-	signal.Notify(events, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR2)
-	defer signal.Stop(events)
+	defer notifySupervisorSignals(events, termErr == nil)()
 	lifetime, status := 3+target.extraFiles, 4+target.extraFiles
 	// Exec cleared close-on-exec on the supervisor's own pipes; keep them from the target.
 	syscall.CloseOnExec(lifetime)

@@ -66,20 +66,26 @@ type protectedFacts struct {
 
 // engineProbe mirrors the fixture's report on the engine's launch paths.
 type engineProbe struct {
-	HostOutput      string `json:"host_output"`
-	HostCode        int    `json:"host_code"`
-	HostError       string `json:"host_error,omitempty"`
-	HostExecOutput  string `json:"host_execution_output"`
-	HostExecCode    int    `json:"host_execution_code"`
-	HostExecError   string `json:"host_execution_error,omitempty"`
-	ConfinedOutput  string `json:"confined_output"`
-	ConfinedError   string `json:"confined_error,omitempty"`
-	ConfinedCode    int    `json:"confined_code"`
-	ConfinedStderr  string `json:"confined_stderr,omitempty"`
-	TerminalSurvive bool   `json:"terminal_survived_interrupt"`
-	TerminalError   string `json:"terminal_error,omitempty"`
-	RelayLossEnded  bool   `json:"relay_loss_ended_session"`
-	RelayLossError  string `json:"relay_loss_error,omitempty"`
+	HostOutput             string `json:"host_output"`
+	HostCode               int    `json:"host_code"`
+	HostError              string `json:"host_error,omitempty"`
+	HostExecOutput         string `json:"host_execution_output"`
+	HostExecCode           int    `json:"host_execution_code"`
+	HostExecError          string `json:"host_execution_error,omitempty"`
+	ConfinedOutput         string `json:"confined_output"`
+	ConfinedError          string `json:"confined_error,omitempty"`
+	ConfinedCode           int    `json:"confined_code"`
+	ConfinedStderr         string `json:"confined_stderr,omitempty"`
+	PreparedOutput         string `json:"prepared_output"`
+	PreparedCode           int    `json:"prepared_code"`
+	PreparedError          string `json:"prepared_error,omitempty"`
+	PreparedConfinedOutput string `json:"prepared_confined_output"`
+	PreparedConfinedCode   int    `json:"prepared_confined_code"`
+	PreparedConfinedError  string `json:"prepared_confined_error,omitempty"`
+	TerminalSurvive        bool   `json:"terminal_survived_interrupt"`
+	TerminalError          string `json:"terminal_error,omitempty"`
+	RelayLossEnded         bool   `json:"relay_loss_ended_session"`
+	RelayLossError         string `json:"relay_loss_error,omitempty"`
 }
 
 // launchFixture is one installed fixture layout.
@@ -348,6 +354,12 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	}
 	if probe.ConfinedError != "" && !strings.Contains(probe.ConfinedError, "exit status") || strings.Contains(probe.ConfinedOutput, initial) || strings.Contains(probe.ConfinedOutput, protected) || !strings.Contains(probe.ConfinedOutput, "NoNewPrivs:\t1") {
 		t.Fatalf("confined launch did not run in its own nested namespace: %q code %d error %q stderr %q", probe.ConfinedOutput, probe.ConfinedCode, probe.ConfinedError, probe.ConfinedStderr)
+	}
+	if probe.PreparedError != "" || probe.PreparedCode != 7 || !strings.Contains(probe.PreparedOutput, "streamed-over-stdin") || !strings.Contains(probe.PreparedOutput, initial) || !strings.Contains(probe.PreparedOutput, "NoNewPrivs:\t0") {
+		t.Fatalf("prepared launch did not stream through the broker outside the protected namespace: %q code %d error %q (want %s)", probe.PreparedOutput, probe.PreparedCode, probe.PreparedError, initial)
+	}
+	if probe.PreparedConfinedError != "" || probe.PreparedConfinedCode != 7 || !strings.Contains(probe.PreparedConfinedOutput, "streamed-over-stdin") || strings.Contains(probe.PreparedConfinedOutput, initial) || strings.Contains(probe.PreparedConfinedOutput, protected) || !strings.Contains(probe.PreparedConfinedOutput, "NoNewPrivs:\t1") {
+		t.Fatalf("prepared confined launch did not run in its own nested namespace through the broker: %q code %d error %q", probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError)
 	}
 	if !probe.TerminalSurvive {
 		t.Fatalf("a brokered terminal program did not survive Ctrl-C: %s", probe.TerminalError)
