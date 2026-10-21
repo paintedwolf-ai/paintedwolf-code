@@ -33,6 +33,7 @@ pub fn setup(app: &AppHandle) {
 pub fn prepare(window: &WebviewWindow) {
     #[cfg(target_os = "linux")]
     crate::windows::linux_frame::install(window);
+    crate::windows::linux_titlebar::install(window);
     apply_backdrop(
         window,
         window_backdrop::backdrop_for_os_theme(resolved_theme(window)),
