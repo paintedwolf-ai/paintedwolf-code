@@ -20,11 +20,7 @@ use std::time::Instant;
 
 use gtk::glib::variant::ObjectPath;
 
-const SESSION_PATH: &str = "/org/freedesktop/login1/session/fixture";
-const LOGIN_PATH: &str = "/org/freedesktop/login1";
-const MANAGER: &str = "org.freedesktop.login1.Manager";
-const SCREENSAVER: &str = "org.freedesktop.ScreenSaver";
-const SCREENSAVER_PATH: &str = "/org/freedesktop/ScreenSaver";
+mod buses;
 
 fn uid() -> u32 {
     // SAFETY: getuid has no preconditions and cannot fail.
