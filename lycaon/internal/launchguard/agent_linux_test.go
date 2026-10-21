@@ -151,6 +151,9 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 		return fmt.Errorf("live module-view watchers in %s = %v, want 1", desktopMnt, watchers)
 	}
 	watcherPID := watchers[0]
+	if err := verifyMountNamespaceOwner(desktopPID, initUser); err != nil {
+		return err
+	}
 	userNS, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/user", watcherPID))
 	if err != nil || userNS != initUser {
 		return fmt.Errorf("watcher user namespace = %q (%v), want %q", userNS, err, initUser)
@@ -216,12 +219,63 @@ func readProcStatusFields(path string) (map[string]string, error) {
 	return fields, nil
 }
 
+func verifyMountNamespaceOwner(desktopPID int, initUser string) error {
+	mntFile, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", desktopPID))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = mntFile.Close() }()
+	ownerUserFD, err := unix.IoctlRetInt(int(mntFile.Fd()), unix.NS_GET_USERNS)
+	if err != nil {
+		return fmt.Errorf("NS_GET_USERNS on desktop mnt namespace: %w", err)
+	}
+	defer func() { _ = unix.Close(ownerUserFD) }()
+	if kind, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_NSTYPE); err != nil || kind != unix.CLONE_NEWUSER {
+		return fmt.Errorf("M_view owning namespace type = %#x (%v), want CLONE_NEWUSER", kind, err)
+	}
+	if ownerUID, err := unix.IoctlGetInt(ownerUserFD, unix.NS_GET_OWNER_UID); err != nil || ownerUID != 0 {
+		return fmt.Errorf("M_view owning user namespace owner UID = %d (%v), want 0", ownerUID, err)
+	}
+	if parentFD, err := unix.IoctlRetInt(ownerUserFD, unix.NS_GET_PARENT); !errors.Is(err, unix.EPERM) {
+		if err == nil {
+			_ = unix.Close(parentFD)
+		}
+		return fmt.Errorf("M_view owning user namespace NS_GET_PARENT = %v, want EPERM (initial user namespace)", err)
+	}
+	var ownerStat, desktopUserStat unix.Stat_t
+	if err := unix.Fstat(ownerUserFD, &ownerStat); err != nil {
+		return err
+	}
+	desktopUserFile, err := os.Open(fmt.Sprintf("/proc/%d/ns/user", desktopPID))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = desktopUserFile.Close() }()
+	if err := unix.Fstat(int(desktopUserFile.Fd()), &desktopUserStat); err != nil {
+		return err
+	}
+	ownerLink := fmt.Sprintf("user:[%d]", ownerStat.Ino)
+	if ownerStat.Ino != 0xEFFFFFFD || ownerLink != initUser || ownerStat.Ino == desktopUserStat.Ino {
+		return fmt.Errorf("M_view owning userns = %s (desktop userns ino=%d), want initial %s", ownerLink, desktopUserStat.Ino, initUser)
+	}
+	return nil
+}
+
 func checkModuleWatcherSeal() error {
 	uid, _ := strconv.Atoi(os.Getenv("SUDO_UID"))
 	gid, _ := strconv.Atoi(os.Getenv("SUDO_GID"))
 	if uid <= 0 || gid <= 0 {
 		uid, gid = 1000, 1000
 	}
+	probeDir, err := os.MkdirTemp("", "pw-watcher-seal-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(probeDir) }()
+	if err := unix.Mount("tmpfs", probeDir, "tmpfs", 0, "mode=0755"); err != nil {
+		return err
+	}
+	defer func() { _ = unix.Unmount(probeDir, unix.MNT_DETACH) }()
 	stopWorkers := startLockedWorkerThreads(2)
 	defer stopWorkers()
 	caller := Identity{UID: uint32(uid), GID: uint32(gid), Groups: []uint32{uint32(gid)}}
@@ -233,10 +287,51 @@ func checkModuleWatcherSeal() error {
 	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
 		return fmt.Errorf("sealed watcher dumpable = %d (%v), want 0", dumpable, err)
 	}
+	if err := scrubSingleMount(probeDir); err != nil {
+		return fmt.Errorf("sealed watcher scrubSingleMount in initial user namespace: %w", err)
+	}
+	var st unix.Statfs_t
+	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
+	if err := unix.Statfs(probeDir, &st); err != nil || st.Flags&wantFlags != wantFlags {
+		return fmt.Errorf("sealed watcher statfs flags = %#x (%v), want %#x", st.Flags, err, wantFlags)
+	}
 	wantUID := fmt.Sprintf("%d %d %d %d", uid, uid, uid, uid)
 	wantGID := fmt.Sprintf("%d %d %d %d", gid, gid, gid, gid)
 	wantGroups := strconv.Itoa(gid)
 	return verifyWatcherThreads(os.Getpid(), wantUID, wantGID, wantGroups)
+}
+
+func checkChildUserNamespaceMountSetattrRefused(mountPoint string) error {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestChildUserNamespaceMountSetattrRefused$")
+	cmd.Env = append(os.Environ(), "PW_WATCHER_CHILD_USERNS_MOUNT="+mountPoint)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:                 unix.CLONE_NEWUSER,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappingsEnableSetgroups: true,
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("child userns mount_setattr probe failed: %w: %s", err, out)
+	}
+	return nil
+}
+
+func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
+	mountPoint := os.Getenv("PW_WATCHER_CHILD_USERNS_MOUNT")
+	if mountPoint == "" {
+		return
+	}
+	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("scrubSingleMount(%q) as uid 0 in root-owned child user namespace = %v, want EPERM", mountPoint, err)
+	}
+	caller := Identity{UID: 1000, GID: 1000, Groups: []uint32{1000}}
+	if err := sealModuleWatcher(caller); err != nil {
+		t.Fatalf("sealModuleWatcher in root-owned child user namespace: %v", err)
+	}
+	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("scrubSingleMount(%q) as sealed watcher in root-owned child user namespace = %v, want EPERM", mountPoint, err)
+	}
 }
 
 func startLockedWorkerThreads(count int) func() {

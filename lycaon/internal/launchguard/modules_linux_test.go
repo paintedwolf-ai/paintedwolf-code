@@ -147,6 +147,9 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	if err := canMapExecutable(lateFile); err != nil {
 		return fmt.Errorf("host mount is not executable: %w", err)
 	}
+	if err := checkChildUserNamespaceMountSetattrRefused(lateDir); err != nil {
+		return err
+	}
 	hostNS, err := os.Open("/proc/thread-self/ns/mnt")
 	if err != nil {
 		return err
