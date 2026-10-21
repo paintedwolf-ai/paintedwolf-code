@@ -155,6 +155,17 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err = insertProgramChild(ctx, tx, in); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+	var err error
 	if err = validateChildParent(ctx, tx, in); err != nil {
 		return err
 	}
@@ -172,7 +183,7 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return err
 }
 
 func validateChildParent(ctx context.Context, tx *sql.Tx, in ChildStart) error {
