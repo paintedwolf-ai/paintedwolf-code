@@ -40,6 +40,7 @@ import { setupScrollActivity } from "./platform/scrolling/scroll-activity.ts";
 import { TooltipHost } from "./components/primitives/TooltipHost.tsx";
 import { HelpMenuHost } from "./help/HelpMenuHost.tsx";
 import { Announcer } from "./platform/interaction/announcer.tsx";
+import { loadFileManagerName } from "./platform/navigation/open-local-path.ts";
 
 installTranscriptSpacing(document.documentElement);
 // Installed before render so every live region is silenced as it mounts.
@@ -58,6 +59,7 @@ setupScrollActivity();
 // Active only when main-thread performance debugging is enabled.
 installMainThreadPerfObserver();
 void setupWindowChrome();
+void loadFileManagerName();
 void setupAccessibilityTextSize();
 void setupSystemAppearance();
 void setupWebKitAtspiWorkaround();
