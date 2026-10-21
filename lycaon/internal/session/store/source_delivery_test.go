@@ -101,8 +101,8 @@ func (q *deliveryQuota) Reserve(context.Context, int64) (func(), error) {
 func (q *deliveryQuota) ReserveParserScratch(ctx context.Context, n int64) (func(), error) {
 	return q.Reserve(ctx, n)
 }
-func (q *deliveryQuota) ReserveBytes(_ context.Context, n int64) error { q.scratch++; return nil }
-func (q *deliveryQuota) ReleaseBytes(int64)                            { q.scratch-- }
+func (q *deliveryQuota) ReserveBytes(_ context.Context, n int64) error { q.detector += n; return nil }
+func (q *deliveryQuota) ReleaseBytes(n int64)                          { q.detector -= n }
 
 type retainedDeliveryFixture struct {
 	owner                                  *SQL
