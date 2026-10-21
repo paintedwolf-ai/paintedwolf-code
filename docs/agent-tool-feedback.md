@@ -46,11 +46,18 @@ Successful native content, symbol, and range reads retain their structured resul
 for history and evidence. The shared transcript projection sends each source
 block as unescaped text, labeled as file contents with its path, line range,
 and evidence handle beside that block. The read receipt remains in explicitly
-labeled tool result metadata. Indentation and blank lines remain source bytes; display line labels
-are not part of an edit string. Evidence handles and source coordinates remain
-available for citations. `summarize` source windows follow the same
-presentation: each window's text follows the result metadata in window order,
-and its path, line range, and handle also identify the corresponding source block.
+labeled tool result metadata. Indentation and blank lines remain source bytes.
+
+Source lines carry no line labels, so any span copies directly into `edit`
+arguments. Line identity comes from the block label: the first source line is
+the range's start and each following line is the next number. A read whose
+`offset` is a known line number (from a stack trace, rejection, grep hit, or
+outline) returns a block that starts at that line, which gives `replace_lines`
+and citations exact coordinates without counting. `summarize` source windows
+follow the same presentation: each window's text follows the result metadata in
+window order, and its path, line range, and handle also identify the
+corresponding source block. `source_history` version reads do too, and their
+label also names the version.
 
 Projection accepts only complete host-written source blocks with consistent line
 coordinates. Unsupported or incomplete results keep their original presentation.
