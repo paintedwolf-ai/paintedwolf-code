@@ -204,6 +204,24 @@ It does not select the P13 PCRE grammar or expose additional regex syntax.
 Existing upstream text parser/matcher entry points retain their behavior.
 The patch and exact metering contract are recorded alongside the selected source.
 
+P13 extends the same bounded entry for the command search dialects without
+selecting any wider grammar. `CompileMarkedBounded` compiles a host-validated
+standard tree once, with numbered captures, Unicode simple case folding for
+`FoldCase` literals and host markers: private-use scalars from U+10FF00 that
+lower to back references and ASCII-class word assertions (GNU `\<`, `\>`,
+`\b`, `\B` and grep `-w` edges) the standard tree cannot spell. Without the
+marked lowering every scalar stays literal, so predicate matching is
+unchanged. `CompilePatternTextBounded` compiles text the host has already
+validated against its declared grammar (pcre-common-v1 for `-P`); it is not a
+qualification of the engine's own syntax. A `BoundedSession` meters one
+record's steps, time and allocation across every search of that record, and
+`Find` returns leftmost-first spans or, in longest mode, the POSIX
+leftmost-longest match with POSIX subexpression offsets: `Stop` keeps the
+preferred capture vector (farthest group-0 end, then per group in order a set
+group, the earliest start and the farthest end) and keeps backtracking, so
+each start explores every path. The metered writer emits no
+prefix or atomicity optimizations, which keeps that exploration exhaustive.
+
 The predicate grammar adapter also retains the selected Go1.26.4
 `regexp/syntax/parse.go` and generated `perl_groups.go`, with the Go BSD license,
 under `regexp2/syntax/posix/`. Their exact upstream hashes and tag are recorded
@@ -233,3 +251,47 @@ consumers retain their prior behavior unless they select this mode. The
 translator's range checks use the actual normalized endpoints. The opt-in change
 is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
 are recorded in `go-posix.patch`.
+
+## AWK interpreter
+
+`goawk/` contains the runtime source subset of `github.com/benhoyt/goawk`
+v1.32.0, commit `f59bf0db58a7dd3bebcdd64c9bd75ae2ea10932e`, the version the
+command language catalog pins for `awk`. The release archive was verified
+against its Go module checksum before extraction:
+`h1:CK/mnBxGsNqX8hdghPIctl2aGIcwfnhT6sv+9M/bY7w=`. The module metadata
+checksum is `h1:jXTQxBxtQ0VsjFqc8dw7tIJj3SDzQN8kcdMq7r83/ZA=`. The upstream
+license remains in the module directory. The snapshot omits the command-line
+entry point (`goawk.go`), upstream tests, `testdata/`, `docs/` and `scripts/`;
+the runtime packages `interp`, `parser`, `lexer` and `internal/...` are complete.
+
+The host embeds the interpreter through `interp.New` and `ExecuteContext` with
+no environment, no command execution, no file writes and a file system that
+serves only pinned operand captures. [goawk.patch](goawk.patch) adds two
+host-facing entry points:
+
+- `parser.(*Program).Constructs` lists `system()` calls, command pipes in either
+  direction, `getline` from a file, output redirection and regex literals with
+  their statement positions, so the host refuses them before execution.
+- `interp.Config.Budget` meters work and allocation. `Step` runs before every
+  backward jump, `for`-`in` iteration and user function call, which bounds every
+  unbounded execution path; loops test their condition at the bottom, so `n`
+  iterations take `n-1` steps. `Allocate` runs before concatenation,
+  `sprintf`/`printf` (bounded by literal bytes, widths, precisions and argument
+  sizes before formatting), `sub`/`gsub` results, `toupper`/`tolower`, `split`
+  and new array elements. The meter is cumulative created bytes, not live heap.
+
+GoAWK regexes use Go's RE2 syntax with leftmost-longest matching (`Longest()`
+on every compiled regex, upstream). That is not POSIX ERE: the host refuses
+regex literals that use RE2-only syntax (Perl classes and assertions, `(?`
+groups and flags, lazy quantifiers, `\Q`/`\E`, `\C`, `\x`), and dynamic regex
+strings follow the same RE2 grammar. Submatch choice within a leftmost-longest
+match follows Go, not POSIX subexpression rules; `awk` exposes only `RSTART`
+and `RLENGTH`, which are whole-match facts.
+
+To update this copy, verify the release archive against the module checksum,
+extract the same runtime subset into a clean directory and apply `goawk.patch`
+with `patch -p1`. The patch carries every modified file and the added budget,
+inspection and test files; regenerate it against the verified subset whenever
+owned files change. Review the pin, `lycaon/go.mod` replacement and this record
+together, then run `./task test:digest -- github.com/benhoyt/goawk/interp
+github.com/benhoyt/goawk/parser ./internal/tools/native/textutil/`.

@@ -1,8 +1,13 @@
 package native
 
 import (
+	"errors"
+	"time"
+
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -86,4 +91,38 @@ func (t *ChmodTool) Chmod(ctx context.Context, paths []string, modeSpec string, 
 		afterSuccessfulMutation(ctx, tctx, relSlash)
 	}
 	return results, nil
+}
+
+// TimesTool sets access and modification times within write scope.
+type TimesTool struct {
+	Boundary *sandbox.Boundary
+}
+
+// SetTimes applies the times to each existing path under scope, review and
+// the source journal; a nil time is left unchanged. It returns the paths
+// already changed when one fails. Unsupported platforms refuse honestly.
+func (t *TimesTool) SetTimes(ctx context.Context, paths []string, access, modify *time.Time, tctx tools.ToolContext) ([]string, error) {
+	var changed []string
+	prof := tctx.ProfileID()
+	for _, path := range paths {
+		if err := ctx.Err(); err != nil {
+			return changed, err
+		}
+		resolved, err := assertWritePath(ctx, t.Boundary, tctx, path, prof, "write", func(p string) error {
+			return &toolrejection.ToolReject{Code: "WRITE_PATH_DENIED", Data: map[string]any{"path": p}}
+		})
+		if err != nil {
+			return changed, err
+		}
+		if err := timesAgentPath(ctx, tctx, resolvedMutationTarget(resolved), access, modify); err != nil {
+			if errors.Is(err, fseffect.ErrUnsupported) {
+				return changed, &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"path": filepath.ToSlash(path), "capability": "timestamps"}}
+			}
+			return changed, fmt.Errorf("set times %s: %w", path, err)
+		}
+		rel := filepath.ToSlash(resolved.ScopeRel)
+		changed = append(changed, rel)
+		afterSuccessfulMutation(ctx, tctx, rel)
+	}
+	return changed, nil
 }

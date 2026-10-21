@@ -16,6 +16,8 @@ import (
 // DeleteTool removes files and empty directories within write scope.
 type DeleteTool struct {
 	Boundary *sandbox.Boundary
+	// Caps overrides the catalog recursive mutation ceilings; zero uses them.
+	Caps RecursiveCaps
 }
 
 func (t *DeleteTool) Name() string { return "delete" }
@@ -96,7 +98,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 			if in.FilesOnly {
 				return result, &toolrejection.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
 			}
-			if entries, err = deletionOrder(resolved.Abs, relSlash, in.Recursive); err != nil {
+			if entries, err = deletionOrder(t.Caps, resolved.Abs, relSlash, in.Recursive); err != nil {
 				return result, err
 			}
 		}
@@ -124,7 +126,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 
 // deletionOrder lists a directory's entries children first. Without recursion
 // only an empty directory is removable. Links are entries, never descended.
-func deletionOrder(dir, relSlash string, recursive bool) ([]string, error) {
+func deletionOrder(caps RecursiveCaps, dir, relSlash string, recursive bool) ([]string, error) {
 	children, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("delete %s: %w", relSlash, err)
@@ -133,7 +135,7 @@ func deletionOrder(dir, relSlash string, recursive bool) ([]string, error) {
 		return nil, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": len(children)}}
 	}
 	var order []string
-	err = walkRecursiveTree(dir, relSlash, func(path string, isDir bool) error {
+	err = walkRecursiveTree(caps, dir, relSlash, func(path string, isDir bool) error {
 		order = append(order, path)
 		return nil
 	})
@@ -143,11 +145,12 @@ func deletionOrder(dir, relSlash string, recursive bool) ([]string, error) {
 // walkRecursiveTree visits a tree children first after measuring it against
 // the catalog's recursive mutation caps, so no visit runs for a tree that
 // recovery could not hold. Links are entries and are never followed.
-func walkRecursiveTree(dir, relSlash string, visit func(path string, isDir bool) error) error {
-	maxFiles, maxBytes, err := recursiveMutationCaps()
+func walkRecursiveTree(caps RecursiveCaps, dir, relSlash string, visit func(path string, isDir bool) error) error {
+	caps, err := caps.resolve()
 	if err != nil {
 		return err
 	}
+	maxFiles, maxBytes := caps.Files, caps.Bytes
 	type entry struct {
 		path  string
 		isDir bool
@@ -198,25 +201,39 @@ func walkRecursiveTree(dir, relSlash string, visit func(path string, isDir bool)
 	return nil
 }
 
-// recursiveMutationCaps are the catalog ceilings that keep a recursive
-// mutation's every entry within source-ledger recovery.
-func recursiveMutationCaps() (files, bytes int64, err error) {
+// RecursiveCaps bound one recursive mutation's files and regular-file bytes so
+// every entry stays within source-ledger recovery.
+type RecursiveCaps struct {
+	Files, Bytes int64
+}
+
+// CatalogRecursiveCaps are the frozen catalog's recursive_mutation_files and
+// recursive_mutation_bytes ceilings.
+func CatalogRecursiveCaps() (RecursiveCaps, error) {
 	catalog, err := toolcontract.LanguageV1()
 	if err != nil {
-		return 0, 0, err
+		return RecursiveCaps{}, err
 	}
+	var caps RecursiveCaps
 	for _, limit := range catalog.Language.Limits {
 		switch limit.ID {
 		case "recursive_mutation_files":
-			files = limit.Maximum
+			caps.Files = limit.Maximum
 		case "recursive_mutation_bytes":
-			bytes = limit.Maximum
+			caps.Bytes = limit.Maximum
 		}
 	}
-	if files < 1 || bytes < 1 {
-		return 0, 0, fmt.Errorf("compiled language is missing recursive mutation ceilings")
+	if caps.Files < 1 || caps.Bytes < 1 {
+		return RecursiveCaps{}, fmt.Errorf("compiled language is missing recursive mutation ceilings")
 	}
-	return files, bytes, nil
+	return caps, nil
+}
+
+func (c RecursiveCaps) resolve() (RecursiveCaps, error) {
+	if c.Files > 0 && c.Bytes > 0 {
+		return c, nil
+	}
+	return CatalogRecursiveCaps()
 }
 
 func recursiveCapRefusal(limit, unit string, maximum, observed int64, path string) error {
