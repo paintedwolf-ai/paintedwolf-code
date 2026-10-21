@@ -15,7 +15,8 @@ const (
 	CustodyDevelopment     CustodyMode = "development"
 	// CustodyRefused: the identity service holds this user's identities but
 	// refused this engine.
-	CustodyRefused CustodyMode = "refused"
+	CustodyRefused     CustodyMode = "refused"
+	CustodyUnavailable CustodyMode = "unavailable"
 )
 
 // CustodyReport says which custodian holds one vault's identity.
@@ -35,8 +36,11 @@ type CustodyOutcome struct {
 }
 
 var (
-	// ErrLauncherRefused: the identity service holds this user's identities
-	// but refused this engine, so the vault cannot open on either path.
+	// ErrCustodianUnavailable: access to the identity custodian could not be established.
+	ErrCustodianUnavailable = errors.New("the credential vault custodian is unavailable")
+	// ErrIdentityMissing: the selected custodian has no key for this vault.
+	ErrIdentityMissing = errors.New("the credential vault identity is missing")
+	// ErrLauncherRefused: the identity service refused this engine.
 	ErrLauncherRefused = errors.New("the vault identity service refused this engine")
 	// ErrCustodyUnsupported: this platform keeps the identity with one custodian.
 	ErrCustodyUnsupported = errors.New("this platform keeps the vault identity with one custodian")
@@ -89,7 +93,7 @@ func CustodyErrorCode(err error) string {
 		return "password_invalid"
 	case errors.Is(err, ErrCustodyUnchanged):
 		return "unchanged"
-	case errors.Is(err, ErrServiceUnverified), errors.Is(err, ErrLauncherRefused), errors.Is(err, ErrCustodyUnsupported):
+	case errors.Is(err, ErrCustodianUnavailable), errors.Is(err, ErrServiceUnverified), errors.Is(err, ErrLauncherRefused), errors.Is(err, ErrCustodyUnsupported):
 		return "service_unavailable"
 	default:
 		return "failed"

@@ -748,3 +748,25 @@ fn a_package_replacement_stops_automatic_recovery_with_restart_required() {
     wait_until("the restart requirement", || matches!(state.engine_state(), supervisor::EngineState::Stopped { restart_required: true, .. }));
     assert!(state.cached_info().is_none());
 }
+#[test]
+fn custody_failures_keep_distinct_startup_tags() {
+    for (failure, code) in [
+        (
+            SidecarStartError::CredentialVaultCustodianUnavailable("preserved".into()),
+            "credential_vault_custodian_unavailable",
+        ),
+        (
+            SidecarStartError::CredentialVaultLauncherRefused("preserved".into()),
+            "credential_vault_launcher_refused",
+        ),
+        (
+            SidecarStartError::CredentialVaultIdentityMissing("preserved".into()),
+            "credential_vault_identity_missing",
+        ),
+    ] {
+        assert_eq!(failure.message(), "preserved");
+        let serialized = serde_json::to_value(failure).expect("startup failure");
+        assert_eq!(serialized["code"], code);
+        assert_eq!(serialized["message"], "preserved");
+    }
+}
