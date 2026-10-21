@@ -1,10 +1,9 @@
 """Bound normal desktop actions to the captured installed application's live windows."""
 from __future__ import annotations
 
-from contextlib import contextmanager
-import os
 import time
 
+from .. import scripts_module
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
@@ -47,27 +46,14 @@ def owned_process(pid: int, app) -> bool:
     return False
 
 
-@contextmanager
 def accessibility_bus(session):
-    environment = session_environment(session)
-    names = ('DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR')
-    previous = {name: os.environ.get(name) for name in names}
-    try:
-        os.environ.update({name: environment[name] for name in names})
-        yield
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
+    return scripts_module('harness.atspi_client').session_bus(session_environment(session))
 
 
 def load_api():
     try:
+        scripts_module('harness.atspi_client').load_atspi(1000, 5000)
         import pyatspi
-        from gi.repository import Atspi
-        Atspi.set_timeout(1000, 5000)
         return pyatspi
     except (ImportError, AttributeError):
         raise CaseUnavailable('normal-native-accessibility-client-unavailable') from None

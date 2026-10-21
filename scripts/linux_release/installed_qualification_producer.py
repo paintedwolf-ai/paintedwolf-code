@@ -1,12 +1,15 @@
-"""Prepare independently selected controls, then retain an actually executed guest campaign."""
+"""Prepare independently selected controls, then retain an actually executed guest campaign.
+
+Runs locally on the native qualification host through ./task test:linux:installed
+(--prepare-qualification, --execute-plan, --retain-qualification)."""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -36,12 +39,14 @@ def api(path):
     return json.loads(result.stdout)
 
 
-def context():
-    selected = controller_context(os.environ)
-    expected_tree = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", selected["controller_commit"] + "^{tree}"], text=True).strip()
+def context(repository: str):
+    commit = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True, timeout=15).strip()
+    identity = api(f"repos/{repository}").get("id")
+    selected = controller_context(commit, identity, socket.gethostname())
+    expected_tree = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", commit + "^{tree}"], text=True, timeout=15).strip()
     tree = current_tree(ROOT)
     if tree != expected_tree:
-        raise ValueError("qualification must execute its immutable protected controller source tree")
+        raise ValueError("qualification must execute its immutable controller source tree")
     catalog = read(CATALOG)
     drivers = {"format_version": 1, "installations": {item["id"]: registry(catalog, item["id"]) for item in catalog["installations"]}}
     return selected, tree, catalog, canonical(drivers)
@@ -63,14 +68,14 @@ def validate_inputs(root, selections, source, tree):
 
 
 def prepare(args):
-    producer, tree, _, drivers = context()
-    repository = os.environ["GITHUB_REPOSITORY"]
+    producer, tree, _, drivers = context(args.repository)
+    repository = args.repository
     selections = {
         "controls": select_control(api, repository, producer["repository_id"], args.control_run_id, args.control_artifact_id),
         "plan": select_plan(api, repository, producer["repository_id"], args.qualification_plan_run_id, args.qualification_plan_artifact_id)}
+    if selections["plan"]["controller_commit"] != producer["controller_commit"]:
+        raise ValueError("local qualification must run the release controller commit that produced its plan")
     source = {"source_commit": args.source_commit, "source_tree": args.source_tree}
-    capacity = campaign_limits(catalog, final)
-    bounds = Limits(**{key: capacity[key] for key in ("max_files", "max_bytes", "max_file")})
     args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         download(selections["controls"], args.output / "controls")
@@ -86,7 +91,7 @@ def prepare(args):
 
 
 def retain(args):
-    producer, tree, catalog, drivers = context()
+    producer, tree, catalog, drivers = context(args.repository)
     preparation = read(args.prepared / "preparation.json")
     expected = {"format_version", "producer", "driver_tree", "source_commit", "source_tree", "selections", "catalog_sha256", "driver_registry_sha256"}
     if (not isinstance(preparation, dict) or set(preparation) != expected or type(preparation["format_version"]) is not int
@@ -94,7 +99,7 @@ def retain(args):
             or preparation["catalog_sha256"] != hashlib.sha256(CATALOG.read_bytes()).hexdigest()
             or preparation["driver_registry_sha256"] != hashlib.sha256(drivers).hexdigest()):
         raise ValueError("qualification preparation changed from its protected controller attempt")
-    repository = os.environ["GITHUB_REPOSITORY"]
+    repository = args.repository
     controls, plan = preparation["selections"]["controls"], preparation["selections"]["plan"]
     selected = {
         "controls": select_control(api, repository, producer["repository_id"], controls["run_id"], controls["artifact_id"]),
@@ -159,6 +164,7 @@ def main(arguments=None):
     retain_parser.add_argument("--prepared", type=Path, required=True)
     retain_parser.add_argument("--execution", type=Path, required=True)
     for command in (prepare_parser, retain_parser):
+        command.add_argument("--repository", default="paintedwolf-ai/paintedwolf-code")
         command.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(arguments)
     try:

@@ -207,6 +207,9 @@ def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
 
 
 def main(arguments=None) -> int:
+    if arguments and arguments[0] == 'desktop':
+        from .hosted_desktop import main as prepare_desktop
+        return prepare_desktop(arguments[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('prepare', 'bootstrap', 'freeze', 'retain', 'prepare-diagnostic', 'retain-diagnostic'))
     parser.add_argument('--selection', type=Path, required=True)
@@ -222,7 +225,10 @@ def main(arguments=None) -> int:
             if args.mode == 'prepare-diagnostic' and args.candidate is not None:
                 diagnostic_prepare(selected, args.checkout, args.candidate, facts)
             elif args.mode == 'retain-diagnostic' and args.output is not None:
-                diagnostic_retain(selected, args.checkout, facts, args.output)
+                status = diagnostic_retain(selected, args.checkout, facts, args.output)['status']
+                if status != 'passed':
+                    print(f'Hosted installed diagnostic retained with status {status}')
+                    return 2
             else:
                 raise ValueError('diagnostic mode requires its explicit input or output path')
         elif args.mode == 'prepare' and args.candidate is not None:
@@ -235,7 +241,10 @@ def main(arguments=None) -> int:
         elif args.mode == 'freeze':
             freeze(selected, args.checkout, facts)
         elif args.mode == 'retain' and args.output is not None:
-            retain(selected, args.checkout, facts, args.output)
+            report = retain(selected, args.checkout, facts, args.output)
+            if not report['complete_matrix_accepted']:
+                print('Hosted installed campaign retained but not accepted: ' + json.dumps(report['case_counts'], sort_keys=True))
+                return 2
         else:
             raise ValueError('hosted runtime mode requires its explicit input or output path')
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:

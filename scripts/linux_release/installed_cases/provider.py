@@ -8,11 +8,16 @@ import threading
 
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
-GUI_PORT = 50179
 GUI_LABEL = 'Installed UI qualification'
 GUI_KIND = 'litellm-proxy'
 GUI_API_KEY = 'installed-local-fixture-key'
-GUI_ENDPOINT = f'http://127.0.0.1:{GUI_PORT}/v1'
+
+
+def gui_endpoint(port: int) -> str:
+    """The loopback endpoint a GUI-purpose fixture serves on its bound port."""
+    if type(port) is not int or not 1024 <= port <= 65535:
+        raise ValueError('GUI provider fixture port is outside the unprivileged range')
+    return f'http://127.0.0.1:{port}/v1'
 
 
 class ProviderFixture:
@@ -135,15 +140,11 @@ class ProviderFixture:
                 except (ValueError, TypeError, OSError):
                     self.respond(400, {'error': 'fixture-request-refused'})
 
-        try:
-            self.server = ThreadingHTTPServer(('127.0.0.1', GUI_PORT if self.gui_purpose else 0), Handler)
-        except OSError:
-            if self.gui_purpose:
-                from .records import CaseUnavailable
-                raise CaseUnavailable('fixed-GUI-provider-port-unavailable') from None
-            raise
+        # The kernel picks a free loopback port; the GUI case types the bound
+        # endpoint, so no fixed port can collide with another listener.
+        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         self.server.daemon_threads = True
-        self.base_url = f'http://127.0.0.1:{self.server.server_port}/v1'
+        self.base_url = gui_endpoint(self.server.server_port)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         return self

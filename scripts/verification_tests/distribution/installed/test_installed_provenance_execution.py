@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from linux_release.installed_provenance import select_final, select_qualification, select_control, select_plan, verify_producer
+from linux_release.installed_provenance import select_control, select_plan, verify_producer
 
 
 class PublicationProvenanceTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class PublicationProvenanceTests(unittest.TestCase):
                "head_repository": {"id": 42}, "head_sha": "a" * 40, "run_attempt": 2,
                "path": ".github/workflows/release.yml", "head_branch": "main",
                "event": "workflow_dispatch", "status": "completed", "conclusion": "success"}
-        artifact = {"id": 456, "name": "linux-final-admission-inputs", "expired": False,
+        artifact = {"id": 456, "name": "linux-installed-control-inputs", "expired": False,
                     "size_in_bytes": 100, "digest": "sha256:" + "b" * 64,
                     "workflow_run": {"id": 123, "repository_id": 42,
                                      "head_repository_id": 42, "head_sha": "a" * 40}}
@@ -23,7 +23,7 @@ class PublicationProvenanceTests(unittest.TestCase):
         def api(path):
             calls.append(path)
             return run if path.endswith("/runs/123") else {"artifacts": rows}
-        return select_final(api, "owner/repo", 42, 123), calls
+        return select_control(api, "owner/repo", 42, 123, 456), calls
 
     def test_selects_exact_server_artifact_then_binds_download_to_source_and_attempt(self):
         run, artifact = self.fixture()
@@ -67,19 +67,7 @@ class PublicationProvenanceTests(unittest.TestCase):
                 return run
             return {"artifacts": first if path.endswith("page=1") else [copy.deepcopy(artifact)]}
         with self.assertRaisesRegex(ValueError, "exactly one"):
-            select_final(api, "owner/repo", 42, 123)
-
-    def test_raw_qualification_and_retained_campaign_are_independent_artifact_roles(self):
-        run, final = self.fixture()
-        raw = {**final, "id": 789, "name": "linux-installed-raw-campaign"}
-        def api(path):
-            return run if path.endswith("/runs/123") else {"artifacts": [final, raw]}
-        self.assertEqual(select_final(api, "owner/repo", 42, 123)["artifact_id"], 456)
-        self.assertEqual(select_qualification(api, "owner/repo", 42, 123)["artifact_id"], 789)
-        def missing(path):
-            return run if path.endswith("/runs/123") else {"artifacts": [final]}
-        with self.assertRaises(ValueError):
-            select_qualification(missing, "owner/repo", 42, 123)
+            select_control(api, "owner/repo", 42, 123, 456)
 
     def test_control_and_plan_roles_require_the_exact_server_artifact_ids(self):
         run, final = self.fixture()

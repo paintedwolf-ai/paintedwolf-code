@@ -216,14 +216,11 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     return result
 
 
-def main():
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--checkout', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--controller-commit')
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
     prepare(arguments.checkout, arguments.output, arguments.controller_commit)
-
-
-if __name__ == '__main__':
-    main()
+    return 0

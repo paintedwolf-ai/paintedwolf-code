@@ -9,7 +9,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import profile_observer, profile_providers as observer
-from linux_release.installed_cases.provider import ProviderFixture, GUI_ENDPOINT, GUI_LABEL, GUI_PORT, GUI_KIND, MODEL
+from linux_release.installed_cases.provider import ProviderFixture, GUI_LABEL, GUI_KIND, MODEL, gui_endpoint
+
+ENDPOINT = gui_endpoint(41234)
 from linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -30,19 +32,19 @@ class ProfileProviderTests(unittest.TestCase):
         self.stack.enter_context(patch.object(profile_observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(profile_observer, 'engine_image', return_value=(1, 2, 3)))
         self.row = {'id': 'owned-fixture-1', 'kind': GUI_KIND, 'label': GUI_LABEL,
-            'base_url': GUI_ENDPOINT, 'requires_api_key': True, 'api_key_env': '', 'models': [{'id': MODEL}]}
+            'base_url': ENDPOINT, 'requires_api_key': True, 'api_key_env': '', 'models': [{'id': MODEL}]}
 
     def write(self, rows):
         self.path.write_text(json.dumps({'providers': rows}))
         self.path.chmod(0o600)
 
     def test_missing_catalog_is_not_created_and_fixed_projection_retains_no_other_provider_data(self):
-        self.assertIsNone(observer.find_gui_provider(self.app))
+        self.assertIsNone(observer.find_gui_provider(self.app, ENDPOINT))
         self.assertFalse(self.path.exists())
         self.write([{'id': 'other', 'label': 'SECRET OTHER PROVIDER', 'api_key_env': 'SECRET_ENV'}, self.row])
         before = self.path.read_bytes()
         with patch.object(observer.os, 'open', wraps=os.open) as opened:
-            observed = observer.find_gui_provider(self.app)
+            observed = observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
             'requires_api_key': True, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
@@ -62,7 +64,7 @@ class ProfileProviderTests(unittest.TestCase):
                    {'requires_api_key': 0}, {'api_key_env': 'SECRET_ENV'}, {'ambient_auth': 'ambient'}]
         for changed in changes:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
-                observer.selected([{**self.row, **changed}])
+                observer.selected([{**self.row, **changed}], ENDPOINT)
         for rows in [[self.row, self.row], [self.row, {**self.row, 'id': 'other-fixture'}]]:
             with self.assertRaises(ValueError):
                 observer.selected(rows)
@@ -72,41 +74,50 @@ class ProfileProviderTests(unittest.TestCase):
         before = self.path.read_bytes()
         self.path.chmod(0o644)
         with self.assertRaises(ValueError):
-            observer.find_gui_provider(self.app)
+            observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(self.path.read_bytes(), before)
         self.path.chmod(0o600)
         actual = self.path.with_suffix('.original')
         self.path.rename(actual)
         self.path.symlink_to(actual)
         with self.assertRaises(OSError):
-            observer.find_gui_provider(self.app)
+            observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(actual.read_bytes(), before)
 
     def test_engine_exec_or_identity_change_refuses_even_valid_catalog(self):
         self.write([self.row])
         with patch.object(profile_observer, 'engine_image', side_effect=[(1, 2, 3), (1, 2, 9)]):
             with self.assertRaises(ValueError):
-                observer.find_gui_provider(self.app)
+                observer.find_gui_provider(self.app, ENDPOINT)
         selected = observer.selected
         def changed(rows):
             self.app.observations['engine_identity'] = {'pid': 456, 'start_time_ticks': 10}
             return selected(rows)
         with patch.object(observer, 'selected', side_effect=changed):
             with self.assertRaises(ValueError):
-                observer.find_gui_provider(self.app)
+                observer.find_gui_provider(self.app, ENDPOINT)
 
     def test_foreign_model_or_unbounded_inventory_never_returns_user_payload(self):
         for models in [[{'id': 'SECRET UNKNOWN MODEL'}], [{'id': MODEL}, {'id': MODEL}], 'SECRET']:
             with self.assertRaises(ValueError):
-                observer.selected([{**self.row, 'models': models}])
+                observer.selected([{**self.row, 'models': models}], ENDPOINT)
         with self.assertRaises(ValueError):
             observer.document(json.dumps({'providers': [self.row] * 257}).encode())
 
-    def test_gui_provider_fixed_port_refuses_busy_port_without_fallback(self):
+    def test_gui_provider_binds_a_free_port_and_serves_that_endpoint(self):
         fixture = ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}])
-        with patch('linux_release.installed_cases.provider.ThreadingHTTPServer', side_effect=OSError) as server:
-            with self.assertRaises(CaseUnavailable):
-                fixture.__enter__()
-        self.assertEqual(server.call_count, 1)
-        self.assertEqual(server.call_args.args[0], ('127.0.0.1', GUI_PORT))
-        self.assertEqual(GUI_ENDPOINT, 'http://127.0.0.1:50179/v1')
+        with fixture:
+            port = fixture.server.server_port
+            self.assertNotEqual(port, 0)
+            self.assertEqual(fixture.base_url, gui_endpoint(port))
+            from urllib.request import Request, urlopen
+            request = Request(fixture.base_url + '/model/info', headers={'Authorization': 'Bearer installed-local-fixture-key'})
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(json.loads(response.read())['data'][0]['model_name'], MODEL)
+        for port in (0, 80, 1023, 65536, True):
+            with self.subTest(port=port), self.assertRaises(ValueError):
+                gui_endpoint(port)
+
+    def test_a_registration_for_another_endpoint_is_refused(self):
+        with self.assertRaisesRegex(ValueError, 'fixed local credential transport'):
+            observer.selected([self.row], gui_endpoint(41235))

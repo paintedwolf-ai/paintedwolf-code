@@ -4,38 +4,18 @@ from __future__ import annotations
 
 import re
 
-ARTIFACT = "linux-final-admission-inputs"
-RAW_ARTIFACT = "linux-installed-raw-campaign"
 WORKFLOW = ".github/workflows/release.yml"
 
 
-def controller_context(environment) -> dict:
-    """Bind current execution to the immutable protected main workflow revision."""
-    repository = environment.get("GITHUB_REPOSITORY", "")
-    commit = environment.get("GITHUB_SHA", "")
-    if (not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
-            or environment.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
-            or environment.get("GITHUB_REF") != "refs/heads/main"
-            or environment.get("GITHUB_WORKFLOW_REF") != f"{repository}/{WORKFLOW}@refs/heads/main"
-            or not re.fullmatch("[0-9a-f]{40}", commit)
-            or environment.get("GITHUB_WORKFLOW_SHA") != commit):
-        raise ValueError("campaign authority requires the protected main release controller")
-    identities = {key: int(environment[name]) for key, name in
-                  [("repository_id", "GITHUB_REPOSITORY_ID"), ("run_id", "GITHUB_RUN_ID"),
-                   ("run_attempt", "GITHUB_RUN_ATTEMPT")]}
-    if any(value < 1 for value in identities.values()):
-        raise ValueError("campaign controller IDs must be positive")
-    return {**identities, "controller_commit": commit}
-
-
-def select_final(api, repository: str, repository_id: int, run_id: int) -> dict:
-    """Select the retained final campaign from its independently completed controller."""
-    return _select(api, repository, repository_id, run_id, ARTIFACT)
-
-
-def select_qualification(api, repository: str, repository_id: int, run_id: int) -> dict:
-    """Select actual guest observations separately from the retained final campaign."""
-    return _select(api, repository, repository_id, run_id, RAW_ARTIFACT)
+def controller_context(commit: str, repository_id: int, host: str) -> dict:
+    """The local qualification controller: a clean checkout on the native
+    qualification host. Its commit must be the protected release controller
+    commit that produced the selected plan (checked when the plan is selected)."""
+    if (not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit)
+            or type(repository_id) is not int or repository_id < 1
+            or not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,253}", host)):
+        raise ValueError("local qualification requires an exact controller commit, repository and host")
+    return {"execution": "local", "repository_id": repository_id, "controller_commit": commit, "host": host}
 
 
 def select_control(api, repository: str, repository_id: int, run_id: int, artifact_id: int) -> dict:

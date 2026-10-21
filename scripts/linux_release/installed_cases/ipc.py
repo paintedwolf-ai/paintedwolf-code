@@ -1,4 +1,4 @@
-"""Compare owned host System V objects with the installed command's private IPC namespace."""
+"""Installed smoke for the System V IPC boundary: host objects stay invisible to the installed command. The confinement contract itself is proven by ./task test:confine:linux."""
 from __future__ import annotations
 
 import ctypes
