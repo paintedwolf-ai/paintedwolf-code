@@ -1,0 +1,74 @@
+{
+  "architecture": "x86_64",
+  "channel": "preview",
+  "family": "pacman",
+  "format_version": 1,
+  "inventory_sha256": "9660d9a9c814ad374af51a2550936e02d6d2e6802fdf4d25367ea60a6516d2fb",
+  "key_fingerprint": "3729420A69CF032A69BB70A5126876A859C4B37F",
+  "objects": [
+    {
+      "path": "painted-wolf-code-preview.db",
+      "sha256": "0340b4ca1ef2f138ccd31e3ab4f7c33feca75ea0165a1b80ce5e75d434b4e31a",
+      "size": 877
+    },
+    {
+      "path": "painted-wolf-code-preview.db.sig",
+      "sha256": "389b30ec37bcc91f7b9bf5afd577524d39b34297bf0337d067b8ed122d7b48ff",
+      "size": 438
+    },
+    {
+      "path": "painted-wolf-code-preview.db.tar.gz",
+      "sha256": "0340b4ca1ef2f138ccd31e3ab4f7c33feca75ea0165a1b80ce5e75d434b4e31a",
+      "size": 877
+    },
+    {
+      "path": "painted-wolf-code-preview.db.tar.gz.sig",
+      "sha256": "389b30ec37bcc91f7b9bf5afd577524d39b34297bf0337d067b8ed122d7b48ff",
+      "size": 438
+    },
+    {
+      "path": "painted-wolf-code-preview.files",
+      "sha256": "b3a9c622e2bee3b92441af87ff6cf94d9e3ff1ec163b37e550fce65216655d6e",
+      "size": 933
+    },
+    {
+      "path": "painted-wolf-code-preview.files.sig",
+      "sha256": "7297dfb987b92bdc4cd4a2fd31eba949c03154183e5a4b6cd5823840d62d9089",
+      "size": 438
+    },
+    {
+      "path": "painted-wolf-code-preview.files.tar.gz",
+      "sha256": "b3a9c622e2bee3b92441af87ff6cf94d9e3ff1ec163b37e550fce65216655d6e",
+      "size": 933
+    },
+    {
+      "path": "painted-wolf-code-preview.files.tar.gz.sig",
+      "sha256": "7297dfb987b92bdc4cd4a2fd31eba949c03154183e5a4b6cd5823840d62d9089",
+      "size": 438
+    },
+    {
+      "path": "paintedwolf-repository-fixture-0.0.2-1-x86_64.pkg.tar.zst",
+      "sha256": "99270be6c07d2c23f8b6b8964d6cbfca9f1a411ec0ed7f4eb7da933f61ab485c",
+      "size": 2477
+    },
+    {
+      "path": "paintedwolf-repository-fixture-0.0.2-1-x86_64.pkg.tar.zst.sig",
+      "sha256": "68e7a6b854fe946d996bc62adb2849daa45cd08778e24454ce26b0f85745d2a3",
+      "size": 438
+    }
+  ],
+  "packages": [
+    {
+      "architecture": "x86_64",
+      "file": "paintedwolf-repository-fixture-0.0.2-1-x86_64.pkg.tar.zst",
+      "native_version": "0.0.2-1",
+      "sha256": "99270be6c07d2c23f8b6b8964d6cbfca9f1a411ec0ed7f4eb7da933f61ab485c"
+    }
+  ],
+  "reader_consistency": "required-signature-fail-closed-retry",
+  "rehearsal": true,
+  "repository": "painted-wolf-code-preview",
+  "signing_generation": 1,
+  "source_commit": "ffffffffffffffffffffffffffffffffffffffff",
+  "version": "0.0.2"
+}

@@ -350,6 +350,15 @@
     ],
     "release:live-test": [
       "release:live-test"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
     ]
   },
   "private": [
@@ -374,7 +383,10 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
-    "release:live-test": "passthrough"
+    "release:live-test": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -697,6 +709,31 @@
     "release:live-test": {
       "locks": [
         "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:publish:aur-recipe": {
+      "locks": [
+        "aur-delivery"
       ],
       "workers": 1
     }

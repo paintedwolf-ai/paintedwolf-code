@@ -1013,17 +1013,22 @@ a separate invocation. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
 **Pacman repositories and AUR recipe rehearsal.**
-`./task release:live-test -- --local-pacman-repositories --receipt /absolute/path/result.json`
+`./task release:rehearse:pacman-repositories -- --receipt /absolute/path/result.json`
 runs on an Arch-family environment with `makepkg`, `repo-add`, `bsdtar`, `gpg`,
 `fakeroot`, `git`, `yay`, and passwordless sudo for disposable installation roots. It builds three
 tiny native fixtures, checks signed databases and embedded package signatures, then
 generates and builds release-pinned AUR recipes and checks actual pacman ownership
 and N-to-N+1 upgrades in separate native, AUR and yay roots. Yay consumes a clean local
 Git recipe origin with isolated configuration, signing trust and package database. It neither installs the
-application on the desktop nor publishes to AUR or R2.
+application on the desktop nor publishes to AUR or R2. Assembly, database and signature
+admission, publication, recovery/withdrawal, recipe generation and AUR Git delivery
+refusals are exercised directly by `./task test:runner` against committed signed
+fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
+tests require `bsdtar`, `makepkg` and `gpg` and fail rather than skip when one is
+missing. Assembly needs `repo-add --include-sigs` (pacman 6.1 or later), so the
+committed generations are regenerated on Arch and the rehearsal qualifies assembly.
 
-For an owned SSH VM, the same managed target accepts `--vm-pacman-repositories`
-with `--ssh-host`, `--ssh-port`, `--ssh-identity`, `--ssh-known-hosts`, and `--receipt`.
+For an owned SSH VM, `./task release:rehearse:pacman-vm` takes `--ssh-host`, `--ssh-port`, `--ssh-identity`, `--ssh-known-hosts`, and `--receipt`.
 It requires strict known-host verification, transfers only the admitted Python
 release modules into a new temporary directory, and removes that directory afterward.
 The VM needs the native tools above; update it with a complete `pacman -Syu` before
@@ -1092,15 +1097,17 @@ R2 object transport. It currently requires `--rehearsal` and an isolated
 `release-system-tests/<run>/...` prefix. Production refuses until the final release
 controller supplies exact source/final-artifact admission. Protected workflow
 serialization owns cross-host publishers; expected-generation checks before and after
-upload refuse stale competing plans. The VM rehearsal also runs local R2 publication
-contracts for ordering, interrupted pairs and retries. Real CDN convergence remains a
-separate credentialed qualification. Neither the generated recipe nor these tools
+upload refuse stale competing plans. `test:runner` covers ordering, interrupted pairs
+and retries against a real local generation and an in-memory object store. Real CDN
+convergence remains a separate credentialed qualification. Neither the generated recipe nor these tools
 publish an AUR Git repository. AUR availability has a separate delivery owner and never becomes atomic with binary
 publication. The separate `release-aur-delivery` workflow consumes the fixed
 `linux-aur-delivery-inputs` artifact from a successful main `release.yml` dispatch.
 Its `delivery.json` selects source, HTTPS base URL and relative generation directories;
 `final-artifacts.json` retains the independently selected final input inventory. The
-managed `release:live-test -- --prepare-aur-delivery` mode validates native generations
+workflow calls `./task release:publish:aur-recipe -- request` to check the run identity,
+source commit and operation before reading anything, `-- provenance` to admit the
+downloaded controller run record, and `-- prepare`, which validates native generations
 and emits exact recipe/source/signer/generation bindings. It stages only generated
 `PKGBUILD`, `.SRCINFO` and the native lifecycle declaration; it never includes binary
 packages or private key material in an AUR Git commit.
@@ -1142,12 +1149,12 @@ facts; an ordinary release campaign cannot authorize another operation. Retained
 catalog fields never enter the origin. Existing installations and mutable data are
 outside this publication owner's mutation scope.
 
-The existing protected `release-system-live-test` workflow accepts explicit dispatch
-modes `native-repositories` and `pacman-repositories`; the scheduled/default updater
-rehearsal remains unchanged. Native mode uses amd64 and arm64 Ubuntu runners; pacman
-uses an official digest-pinned Arch base-devel container and an unprivileged fixture
-owner. Both use only the existing `release-rehearsal` test environment. No secret
-values need to be loaded locally. The `--r2` fixture mode stages immutable objects,
+The existing protected `release-system-live-test` workflow accepts the explicit dispatch
+mode `pacman-repositories`; the scheduled/default updater rehearsal remains
+`release:live-test`. Pacman mode runs `./task release:rehearse:pacman-repositories-r2`
+in an official digest-pinned Arch base-devel container as an unprivileged fixture
+owner, with only the existing `release-rehearsal` test environment. No secret
+values need to be loaded locally. The R2 target stages immutable objects,
 exercises a warmed missing authority, a deliberately corrupted test object and its
 restoration, retries, rotation, withdrawal and retained recovery under a unique
 `release-system-tests/` prefix. `--phase stage` supports interruption before activation;

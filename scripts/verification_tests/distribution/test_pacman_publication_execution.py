@@ -1,44 +1,41 @@
-"""Pacman R2 publication binds signatures before databases and retains package bytes."""
+"""Local and R2 pacman origins bind signatures before databases and own recovery and withdrawal."""
 
-import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.pacman_r2 import publish_r2
-from linux_release.repository_objects import encoded
+from scripts.linux_release.pacman_publication import publish
+from scripts.linux_release.pacman_r2 import publish_r2
+from scripts.linux_release.repository_objects import encoded
+from scripts.linux_release.repository_operations import identity
+from scripts.verification_tests.distribution.pacman_repository_fixtures import generation, trust
+
+PACKAGE_FILE = "paintedwolf-repository-fixture-0.0.1-1-x86_64.pkg.tar.zst"
+ORIGIN = "https://repository.example.invalid"
+DATABASE = "painted-wolf-code-preview"
 
 
 class PacmanPublicationTests(unittest.TestCase):
+    """The real local origin assembles each upload; only the object store is in memory."""
+
     def setUp(self):
-        self.receipt = {"format_version": 1, "channel": "preview", "architecture": "x86_64",
-                        "version": "0.0.1", "source_commit": "f" * 40, "rehearsal": True,
-                        "repository": "painted-wolf-code-preview", "family": "pacman",
-                        "signing_generation": 1, "key_fingerprint": "A" * 40, "inventory_sha256": "b" * 64,
-                        "packages": [{"native_version": "0.0.1-1"}],
-                        "objects": [{"path": "application.pkg.tar.zst"}, {"path": "application.pkg.tar.zst.sig"}]}
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        work = Path(temporary.name)
+        self.catalog = trust(work / "trust")
+        self.production_catalog = trust(work / "production", rehearsal=False)
+        self.generations = {version: generation(f"pacman-{version}-x86_64", work) for version in ["0.0.1", "0.0.2"]}
+        self.version, self.production = "0.0.1", False
         self.objects, self.events = {}, []
         self.crash_after = None
         self.fail_suffix, self.race, self.reads = None, False, 0
 
-    def local(self, receipt, directory, store, origin, catalog, expected, rehearsal):
-        identity = hashlib.sha256(encoded(receipt)).hexdigest()
-        generation = store / "generations" / identity
-        generation.mkdir(parents=True)
-        (generation / "generation.json").write_bytes(encoded(receipt))
-        channel = store / "channels/pacman/preview/x86_64"
-        channel.mkdir(parents=True)
-        names = [row["path"] for row in receipt["objects"]]
-        for suffix in ["db", "files"]:
-            names += [receipt["repository"] + ending for ending in
-                      [f".{suffix}.sig", f".{suffix}.tar.gz.sig", f".{suffix}", f".{suffix}.tar.gz"]]
-        for name in names:
-            (generation / name).write_bytes(name.encode())
-            (channel / name).write_bytes(name.encode())
-        return {"generation": identity, "version": receipt["version"], "packages": receipt["packages"],
-                "rehearsal": True}
+    @property
+    def receipt(self):
+        receipt = self.generations[self.version][0]
+        return {**receipt, "rehearsal": False} if self.production else receipt
 
     def current(self, key, directory):
         if key.endswith("current.json"):
@@ -63,15 +60,13 @@ class PacmanPublicationTests(unittest.TestCase):
             raise ValueError("public bytes differ")
 
     def publish(self, expected=None, rehearsal=True, authorize=None):
-        with tempfile.TemporaryDirectory() as temporary:
-            with patch("linux_release.pacman_r2.publish", side_effect=self.local), \
-                    patch("linux_release.pacman_r2.current", side_effect=self.current), \
-                    patch("linux_release.pacman_r2.put", side_effect=self.put), \
-                    patch("linux_release.pacman_r2.public_bytes", side_effect=self.public), \
-                    patch("linux_release.pacman_r2.subprocess.check_output", return_value="0"):
-                return publish_r2(self.receipt, Path(temporary), Path(temporary) / "keys.json",
-                                  "release-system-tests/pacman-contract", "https://repository.example.invalid",
-                                  expected, rehearsal, authorize=authorize)
+        catalog = self.production_catalog if self.production else self.catalog
+        with patch("scripts.linux_release.pacman_r2.current", side_effect=self.current), \
+                patch("scripts.linux_release.pacman_r2.put", side_effect=self.put), \
+                patch("scripts.linux_release.pacman_r2.public_bytes", side_effect=self.public):
+            return publish_r2(self.receipt, self.generations[self.version][1], catalog,
+                              "release-system-tests/pacman-contract", "https://repository.example.invalid",
+                              expected, rehearsal, authorize=authorize)
 
     def test_packages_and_signatures_precede_database_alias_and_state_is_last(self):
         result = self.publish()
@@ -89,7 +84,7 @@ class PacmanPublicationTests(unittest.TestCase):
         self.fail_suffix = "/painted-wolf-code-preview.db.sig"
         with self.assertRaises(OSError):
             self.publish()
-        self.assertTrue(any(key.endswith("application.pkg.tar.zst") for key in self.objects if "/channels/" in key))
+        self.assertTrue(any(key.endswith(PACKAGE_FILE) for key in self.objects if "/channels/" in key))
         self.assertFalse(any(key.endswith(("/painted-wolf-code-preview.db", "/current.json")) for key in self.objects if "/channels/" in key))
         self.fail_suffix = None
         self.assertTrue(self.publish()["public_verified"])
@@ -109,7 +104,7 @@ class PacmanPublicationTests(unittest.TestCase):
         self.assertFalse(self.events)
 
     def test_production_denial_precedes_every_transport_read_or_write(self):
-        self.receipt["rehearsal"] = False
+        self.production = True
         for value in [False, None, 1, {"accepted": True}]:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.publish(rehearsal=False, authorize=lambda request: value)
@@ -117,7 +112,7 @@ class PacmanPublicationTests(unittest.TestCase):
             self.assertEqual(self.reads, 0)
 
     def test_production_authority_is_freshly_checked_before_activation(self):
-        self.receipt["rehearsal"] = False
+        self.production = True
         requests = []
 
         def authorize(request):
@@ -129,8 +124,8 @@ class PacmanPublicationTests(unittest.TestCase):
             self.assertEqual(request["operation"], "publish")
             self.assertEqual(request["phase"], "activate")
             self.assertIsNone(request["expected"])
-            self.assertTrue(request["directory"].is_dir())
-            self.assertEqual(request["catalog"], request["directory"] / "keys.json")
+            self.assertEqual(request["directory"], self.generations["0.0.1"][1])
+            self.assertEqual(request["catalog"], self.production_catalog)
             requests.append(self.reads)
             return len(requests) == 1
 
@@ -141,7 +136,7 @@ class PacmanPublicationTests(unittest.TestCase):
         self.assertFalse(any(key.endswith(("/current.json", "/painted-wolf-code-preview.db")) for key in self.objects if "/channels/" in key))
 
     def test_production_authority_can_admit_both_bound_checkpoints(self):
-        self.receipt["rehearsal"] = False
+        self.production = True
         requests = []
 
         def authorize(request):
@@ -154,7 +149,7 @@ class PacmanPublicationTests(unittest.TestCase):
         self.assertEqual(result["publication_phase"], "activated")
 
     def test_changed_predecessor_refuses_before_activation_authorization(self):
-        self.receipt["rehearsal"] = False
+        self.production = True
         self.race = True
         calls = []
 
@@ -171,8 +166,8 @@ class PacmanPublicationTests(unittest.TestCase):
         for crash in ["/painted-wolf-code-preview.db", "/current.json"]:
             with self.subTest(crash=crash):
                 self.objects, self.events, self.reads = {}, [], 0
-                self.receipt["version"] = "0.0.1"
-                original = hashlib.sha256(encoded(self.receipt)).hexdigest()
+                self.version = "0.0.1"
+                original = identity(self.receipt)
                 self.crash_after = crash
                 with self.assertRaisesRegex(OSError, "crash after"):
                     self.publish()
@@ -181,14 +176,110 @@ class PacmanPublicationTests(unittest.TestCase):
                 retained = {key: value for key, value in self.objects.items() if "/generations/" in key}
                 before = dict(self.objects)
                 self.crash_after = None
-                self.receipt["version"] = "0.0.2"
+                self.version = "0.0.2"
                 predecessor = original if crash == "/current.json" else None
                 with self.assertRaisesRegex(ValueError, "pending activation"):
                     self.publish(expected=predecessor)
                 self.assertEqual(self.objects, before)
-                self.receipt["version"] = "0.0.1"
+                self.version = "0.0.1"
                 self.assertEqual(self.publish()["generation"], original)
                 self.assertEqual(json.loads(self.objects[pending_key])["state"], "completed")
-                self.receipt["version"] = "0.0.2"
+                self.version = "0.0.2"
                 self.assertEqual(self.publish(expected=original)["version"], "0.0.2")
                 self.assertTrue(all(self.objects[key] == value for key, value in retained.items()))
+
+
+class PacmanOriginTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+        self.catalog = trust(self.work / "trust")
+        self.store = self.work / "origin"
+        self.first = generation("pacman-0.0.1-x86_64", self.work)
+        self.second = generation("pacman-0.0.2-x86_64", self.work)
+        self.channel = self.store / "channels/pacman/preview/x86_64"
+
+    def publish(self, selected, expected=None, operation="publish", base_url=ORIGIN, rehearsal=True):
+        receipt, directory = selected
+        return publish(receipt, directory, self.store, base_url, self.catalog, expected, rehearsal, operation)
+
+    def state(self):
+        return json.loads((self.channel / "current.json").read_text())
+
+    def test_database_pairs_activate_and_old_packages_remain_available(self):
+        first = self.publish(self.first)
+        self.assertEqual((first["generation"], self.state()), (identity(self.first[0]), first))
+        retained = self.store / "generations" / first["generation"]
+        self.assertEqual((retained / "generation.json").read_bytes(), encoded(self.first[0]))
+        configuration = (retained / "client.conf").read_text()
+        self.assertIn("SigLevel = Required DatabaseRequired", configuration)
+        self.assertIn(f"Server = {ORIGIN}/channels/pacman/preview/x86_64/", configuration)
+        for suffix in [".db", ".db.sig", ".files", ".files.sig"]:
+            self.assertEqual((self.channel / (DATABASE + suffix)).read_bytes(),
+                             (self.first[1] / (DATABASE + suffix)).read_bytes())
+        self.assertEqual(self.publish(self.first), first)
+        second = self.publish(self.second, first["generation"])
+        self.assertEqual((second["previous"], second["version"]), (first["generation"], "0.0.2"))
+        for receipt, _ in [self.first, self.second]:
+            for row in receipt["packages"]:
+                self.assertTrue((self.channel / row["file"]).is_file())
+                self.assertTrue((self.channel / (row["file"] + ".sig")).is_file())
+        self.assertEqual((self.channel / (DATABASE + ".db")).read_bytes(),
+                         (self.second[1] / (DATABASE + ".db")).read_bytes())
+
+    def test_stale_regressing_and_reoffered_plans_leave_the_active_state_unchanged(self):
+        first = self.publish(self.first)
+        second = self.publish(self.second, first["generation"])
+        before = self.state()
+        for selected, expected, operation, reason in [
+                (self.second, "0" * 64, "publish", "generation operation must select"),
+                (self.first, second["generation"], "publish", "must advance"),
+                (self.first, None, "recover", "changed since the reviewed"),
+                (self.first, second["generation"], "rotate", "newer signing generation")]:
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                self.publish(selected, expected, operation)
+            self.assertEqual(self.state(), before)
+
+    def test_withdrawal_restores_last_good_and_permanently_refuses_the_bad_generation(self):
+        good = self.publish(self.first)
+        bad = self.publish(self.second, good["generation"])
+        withdrawn = self.publish(self.first, bad["generation"], "withdraw")
+        self.assertEqual((withdrawn["operation"], withdrawn["withdrawn_version"]), ("withdraw", "0.0.2"))
+        self.assertEqual((self.channel / (DATABASE + ".db")).read_bytes(),
+                         (self.first[1] / (DATABASE + ".db")).read_bytes())
+        self.assertTrue((self.store / "withdrawn" / (bad["generation"] + ".json")).is_file())
+        self.assertTrue((self.store / "withdrawn-versions/pacman/preview/x86_64/0.0.2.json").is_file())
+        for operation in ["publish", "recover"]:
+            with self.subTest(operation=operation), self.assertRaisesRegex(ValueError, "cannot be offered again"):
+                self.publish(self.second, withdrawn["generation"], operation)
+        self.assertTrue((self.channel / self.second[0]["packages"][0]["file"]).is_file())
+        self.assertEqual(self.state(), withdrawn)
+
+    def test_recovery_requires_the_exact_retained_generation(self):
+        good = self.publish(self.first)
+        self.publish(self.second, good["generation"])
+        (self.store / "generations" / good["generation"] / "generation.json").unlink()
+        with self.assertRaisesRegex(ValueError, "exact retained healthy generation"):
+            self.publish(self.first, self.state()["generation"], "recover")
+
+    def test_admission_and_origin_refuse_before_activation(self):
+        receipt, directory = self.first
+        package = directory / receipt["packages"][0]["file"]
+        original = package.read_bytes()
+        package.write_bytes(original + b"changed")
+        with self.assertRaisesRegex(ValueError, "selected final bytes"):
+            self.publish(self.first)
+        package.write_bytes(original)
+        with self.assertRaisesRegex(ValueError, "cross-trust"):
+            self.publish(self.first, rehearsal=False)
+        self.assertFalse(self.store.exists())
+        for url in ["http://repository.example.invalid", "https://user@repository.example.invalid",
+                    "https://repository.example.invalid/?q=1"]:
+            with self.subTest(url=url), self.assertRaisesRegex(ValueError, "HTTPS URL"):
+                self.publish(self.first, base_url=url)
+            self.assertFalse((self.channel / "current.json").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

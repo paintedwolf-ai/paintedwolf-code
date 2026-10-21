@@ -54,21 +54,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           SOURCE_COMMIT: ${{ inputs.source_commit }}
+          OPERATION: ${{ inputs.operation }}
           WORKSPACE: ${{ github.workspace }}
         run: |
-          python3 - <<'PY'
-          import os, re
-          if not re.fullmatch(r'[1-9][0-9]*', os.environ['RELEASE_RUN_ID']):
-              raise SystemExit('select a numeric controller run')
-          if not re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_COMMIT']):
-              raise SystemExit('select an exact source commit')
-          PY
+          ./task release:publish:aur-recipe -- request \
+            --release-run-id "$RELEASE_RUN_ID" --source-commit "$SOURCE_COMMIT" --operation "$OPERATION"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > /tmp/controller-run.json
-          python3 - <<'PY'
-          import json, os
-          from scripts.linux_release.aur_delivery_workflow import verify_provenance
-          verify_provenance(json.load(open('/tmp/controller-run.json')), int(os.environ['GITHUB_REPOSITORY_ID']))
-          PY
+          ./task release:publish:aur-recipe -- provenance --run /tmp/controller-run.json \
+            --repository-id "$GITHUB_REPOSITORY_ID" --release-run-id "$RELEASE_RUN_ID"
           mkdir /tmp/aur-inputs /tmp/aur-output
           gh run download "$RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name linux-aur-delivery-inputs --dir /tmp/aur-inputs
@@ -79,9 +72,8 @@ jobs:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
           OPERATION: ${{ inputs.operation }}
         run: |
-          case "$OPERATION" in prepare|publish-aur) ;; *) exit 1 ;; esac
-          sudo -H --preserve-env=PATH -u pw-aur ./task release:live-test -- \
-            --prepare-aur-delivery --input-root /tmp/aur-inputs --source-commit "$SOURCE_COMMIT" \
+          sudo -H --preserve-env=PATH -u pw-aur ./task release:publish:aur-recipe -- prepare \
+            --input-root /tmp/aur-inputs --source-commit "$SOURCE_COMMIT" \
             --operation "$OPERATION" --receipt /tmp/aur-output/delivery.json
           # Public transport remains closed until the controller reevaluates the retained
           # campaign and files and authorizes publish-aur separately from binary activation.

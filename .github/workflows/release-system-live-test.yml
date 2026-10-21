@@ -12,7 +12,6 @@ on:
         default: updater
         options:
           - updater
-          - native-repositories
           - pacman-repositories
 
 permissions:
@@ -25,11 +24,8 @@ concurrency:
 
 jobs:
   r2-release-controls:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'pacman-repositories' }}
-    strategy:
-      matrix:
-        runner: ${{ fromJSON(inputs.mode == 'native-repositories' && '["ubuntu-24.04","ubuntu-24.04-arm"]' || '["ubuntu-latest"]') }}
-    runs-on: ${{ matrix.runner }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'updater' }}
+    runs-on: ubuntu-latest
     environment: release-rehearsal
     timeout-minutes: 30
     steps:
@@ -48,47 +44,18 @@ jobs:
           no-cache: true
 
       - name: Install the pinned Tauri CLI for pointer signing
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'updater' }}
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
-      - name: Prepare the selected native verification tools
-        env:
-          MODE: ${{ inputs.mode || 'updater' }}
-        run: |
-          case "$MODE" in
-            updater) packages=(minisign) ;;
-            native-repositories) packages=(apt-utils rpm createrepo-c dnf libarchive-tools gnupg openssl) ;;
-            *) echo 'Unsupported release rehearsal mode' >&2; exit 2 ;;
-          esac
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends "${packages[@]}"
+      - name: Install minisign for cryptographic feed verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
 
       - name: Exercise isolated R2 release system
         env:
-          MODE: ${{ inputs.mode || 'updater' }}
-          RECEIPT: ${{ runner.temp }}/native-repositories.json
-          RELEASE_TEST_R2_ENDPOINT_URL: ${{ vars.RELEASE_TEST_R2_ENDPOINT_URL }}
-          RELEASE_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_TEST_R2_ACCESS_KEY_ID }}
-          RELEASE_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY }}
-          RELEASE_TEST_R2_SESSION_TOKEN: ${{ secrets.RELEASE_TEST_R2_SESSION_TOKEN }}
+          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
+          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
           RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
-        run: |
-          case "$MODE" in
-            updater) ./task release:live-test ;;
-            native-repositories)
-              ./task release:live-test -- --local-native-repositories --r2 --receipt "$RECEIPT"
-              ;;
-            *) echo 'Unsupported release rehearsal mode' >&2; exit 2 ;;
-          esac
-
-      - name: Retain the native repository rehearsal receipt
-        if: ${{ always() && inputs.mode == 'native-repositories' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: native-repository-rehearsal-${{ matrix.runner }}
-          path: ${{ runner.temp }}/native-repositories.json
-          if-no-files-found: warn
+        run: ./task release:live-test
 
   r2-pacman-repositories:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'pacman-repositories' }}
@@ -142,7 +109,7 @@ jobs:
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
         run: |
           sudo -H --preserve-env=PATH,RELEASE_TEST_R2_ENDPOINT_URL,RELEASE_TEST_R2_ACCESS_KEY_ID,RELEASE_TEST_R2_SECRET_ACCESS_KEY,RELEASE_TEST_R2_SESSION_TOKEN,RELEASE_TEST_R2_BUCKET,RELEASE_TEST_DOWNLOAD_BASE_URL \
-            -u pw-repository ./task release:live-test -- --local-pacman-repositories --r2 --receipt /tmp/pacman-repositories.json
+            -u pw-repository ./task release:rehearse:pacman-repositories-r2 -- --receipt /tmp/pacman-repositories.json
 
       - name: Retain the pacman repository rehearsal receipt
         if: ${{ always() }}

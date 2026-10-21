@@ -20,6 +20,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  repository-tools:
+    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -195,6 +198,13 @@ runs:
     - name: Set up WebKitGTK accessibility images
       if: inputs.containers == 'true'
       uses: ./.github/actions/setup-webkit-atspi-images
+
+    - name: Install native repository tools
+      if: runner.os == 'Linux' && inputs.repository-tools == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends gnupg libarchive-tools makepkg
 
     - name: Provision pinned browser
       if: inputs.browser == 'true'

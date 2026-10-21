@@ -1752,6 +1752,26 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
+  release:rehearse:pacman-repositories:
+    desc: 'Signed pacman repository and AUR recipe fixtures through isolated pacman, makepkg and yay roots on an Arch-family host. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.pacman_rehearsal fixtures {{.CLI_ARGS}}
+
+  release:rehearse:pacman-repositories-r2:
+    desc: 'The pacman fixtures also published under an isolated release-system-tests/ R2 prefix with test credentials. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.pacman_rehearsal r2 {{.CLI_ARGS}}
+
+  release:rehearse:pacman-vm:
+    desc: 'The pacman fixtures inside one owned SSH VM. Pass --ssh-host, --ssh-port, --ssh-identity, --ssh-known-hosts and --receipt after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_remote {{.CLI_ARGS}}
+
+  release:publish:aur-recipe:
+    desc: 'Admit a release-aur-delivery request and prepare its separately bound AUR recipe. Pass request, provenance or prepare and its options after --'
+    cmds:
+      - python3 -m scripts.linux_release.aur_delivery_workflow {{.CLI_ARGS}}
+
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
     cmds:

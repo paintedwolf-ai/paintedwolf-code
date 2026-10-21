@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import shlex
 import re
@@ -21,7 +20,6 @@ def main():
     parser.add_argument("--ssh-port", type=int, required=True)
     parser.add_argument("--ssh-identity", type=Path, required=True)
     parser.add_argument("--ssh-known-hosts", type=Path, required=True)
-    parser.add_argument("--r2", action="store_true")
     args = parser.parse_args()
     if args.ssh_host.startswith("-") or not 1 <= args.ssh_port <= 65535:
         parser.error("select an explicit SSH host and port")
@@ -44,27 +42,13 @@ def main():
             bundle_sha256 = hashlib.sha256(archive.read()).hexdigest()
             archive.seek(0)
             subprocess.run([*ssh, "tar -xzf - -C " + shlex.quote(remote)], stdin=archive, check=True)
-        if args.r2:
-            names = ["RELEASE_TEST_R2_ACCOUNT_ID", "RELEASE_TEST_R2_API_TOKEN", "RELEASE_TEST_R2_BUCKET",
-                     "RELEASE_TEST_DOWNLOAD_BASE_URL"]
-            if any(not os.environ.get(name) for name in names):
-                raise ValueError("explicit protected RELEASE_TEST_R2_* test environment is required")
-            runner = ("import json,os,runpy,sys;os.environ.update(json.load(sys.stdin));"
-                      "sys.argv=['pacman_rehearsal','--r2','--receipt','result.json'];"
-                      "runpy.run_module('scripts.linux_release.pacman_rehearsal',run_name='__main__')")
-            subprocess.run([*ssh, "cd " + shlex.quote(remote) + " && python3 -c " + shlex.quote(runner)],
-                           input=json.dumps({name: os.environ[name] for name in names}).encode(), check=True)
-        else:
-            subprocess.run([*ssh, "cd " + shlex.quote(remote)
-                            + " && python3 -m scripts.linux_release.pacman_rehearsal --receipt result.json"],
-                           check=True)
+        subprocess.run([*ssh, "cd " + shlex.quote(remote)
+                        + " && python3 -m scripts.linux_release.pacman_rehearsal fixtures --receipt result.json"],
+                       check=True)
         raw = subprocess.check_output([*ssh, "cat " + shlex.quote(remote + "/result.json")], timeout=60)
-        for pattern in ["test_pacman_publication_execution.py", "test_repository_operations_execution.py", "test_aur_delivery_execution.py"]:
-            subprocess.run(["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", pattern], cwd=root, check=True)
         result = json.loads(raw)
         if result.get("rehearsal") is not True or result.get("application_qualified") is not False:
             raise ValueError("remote receipt differs from the selected fixture scope")
-        result["cases"].append("r2-pacman-publication-contracts")
         result["module_bundle_sha256"] = bundle_sha256
         result["verification_source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
         result["verification_source_dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root))

@@ -3,29 +3,24 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import tempfile
 import uuid
 
-from .openpgp import ephemeral, keyring, selection, run
-from .pacman_repository import assemble, package_info, binary_signature
-from .aur_recipe import generate
-from .aur_delivery import FixturePublisher, plan as aur_delivery_plan
+from .aur_rehearsal import rehearse as rehearse_recipe
+from .openpgp import ephemeral
+from .pacman_installation import PACKAGE, install
+from .pacman_repository import assemble
 from .pacman_validation import admit
 from .pacman_publication import publish
 from .pacman_r2 import publish_r2
 from .r2_objects import rehearsal_environment, warm_absence, tamper_fixture_object, delete_fixture_object, put, public_bytes
-from .repository_objects import replace, encoded
+from .repository_objects import replace
 from .signing import digest
-from .yay_rehearsal import install as install_yay
-
-PACKAGE = "paintedwolf-repository-fixture"
 
 
 def rejected(action):
@@ -34,42 +29,6 @@ def rejected(action):
     except (ValueError, OSError, KeyError):
         return
     raise ValueError("invalid pacman generation was admitted")
-
-
-def install(package: Path, root: Path, catalog: Path, expected: str, repository: Path | str | None = None):
-    root.mkdir(exist_ok=True)
-    for name in ["db", "cache", "hooks"]:
-        (root / name).mkdir(exist_ok=True)
-    config = root / "pacman.conf"
-    config.write_text("[options]\nArchitecture = " + platform.machine()
-                      + "\nSigLevel = Required DatabaseRequired\nLocalFileSigLevel = Required\n")
-    if repository is not None:
-        with config.open("a") as output:
-            url = repository.as_uri() if isinstance(repository, Path) else repository
-            output.write("\n[painted-wolf-code-preview]\nServer = " + url + "\n")
-    selected, public = selection(catalog, True)
-    with keyring(public, selected["fingerprint"]) as home:
-        run(["gpg", "--batch", "--import-ownertrust"], home,
-            (selected["fingerprint"] + ":6:\n").encode())
-        run(["gpg", "--batch", "--check-trustdb"], home)
-        action = ["-U", "--noconfirm", str(package)]
-        if repository is not None:
-            action = ["-Syu", "--noconfirm"]
-            if not (root / "usr/share" / PACKAGE / "value").exists():
-                action.append(expected)
-        try:
-            subprocess.run(["sudo", "-n", "pacman", "--config", str(config), "--root", str(root),
-                            "--dbpath", str(root / "db"), "--cachedir", str(root / "cache"),
-                            "--hookdir", str(root / "hooks"), "--gpgdir", str(home),
-                            "--logfile", str(root / "pacman.log"), *action], check=True)
-        finally:
-            subprocess.run(["sudo", "-n", "chown", "-R", f"{os.getuid()}:{os.getgid()}", "--", str(root)], check=True)
-    query = root / "query.conf"
-    query.write_text("[options]\nArchitecture = " + platform.machine() + "\n")
-    owned = subprocess.check_output(["pacman", "--config", str(query), "--root", str(root), "--dbpath", str(root / "db"),
-                                     "-Qoq", "--", str(root / "usr/share" / PACKAGE / "value")], text=True).strip()
-    if owned != expected:
-        raise ValueError("installed fixture file has the wrong package owner")
 
 
 def rehearse(work: Path, r2_origin: str | None = None):
@@ -83,10 +42,6 @@ def rehearse(work: Path, r2_origin: str | None = None):
     trust["signing_generation"] = trust["generations"][0]["generation"] = 2
     rotation.write_text(json.dumps(trust))
     results = []
-    delivery_root = work / "aur-delivery"
-    delivery_root.mkdir()
-    delivery = FixturePublisher(delivery_root)
-    aur_head = None
     active = None
     retained = None
     remote_active = None
@@ -167,58 +122,7 @@ package() {{
         install(destination / package.name, work / "native-root", catalog, PACKAGE, channel)
         if (work / "native-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
             raise ValueError("native pacman upgrade did not install the selected payload")
-        recipe = work / ("aur-" + version)
-        generated = generate([(receipt, destination)], recipe, "https://repository.example.invalid", catalog,
-                             True, PACKAGE)
-        for row in receipt["objects"]:
-            if row["path"].endswith((".pkg.tar.zst", ".pkg.tar.zst.sig")):
-                shutil.copyfile(destination / row["path"], recipe / row["path"])
-        selected_delivery = aur_delivery_plan(generated, [receipt], recipe,
-                                             hashlib.sha256(encoded(manifest)).hexdigest())
-        rejected(lambda: delivery.publish(selected_delivery, recipe, "0" * 40))
-        pkgbuild = recipe / "PKGBUILD"
-        original_recipe = pkgbuild.read_bytes()
-        pkgbuild.write_bytes(original_recipe + b"# changed after selection\n")
-        rejected(lambda: delivery.publish(selected_delivery, recipe, aur_head))
-        pkgbuild.write_bytes(original_recipe)
-        delivered = delivery.publish(selected_delivery, recipe, aur_head)
-        if delivery.publish(selected_delivery, recipe, aur_head)["commit"] != delivered["commit"]:
-            raise ValueError("AUR delivery retry did not retain its exact selected recipe commit")
-        aur_head = delivered["commit"]
-        selected_key, public = selection(catalog, True)
-        with keyring(public, selected_key["fingerprint"]) as home:
-            subprocess.run(["makepkg", "--nodeps", "--noconfirm", "--cleanbuild", "--force", "--nosign"],
-                           cwd=recipe, env={**os.environ, "GNUPGHOME": str(home)}, check=True)
-            altered = recipe / package.name
-            original = altered.read_bytes()
-            altered.write_bytes(original + b"changed")
-            invalid = subprocess.run(["makepkg", "--verifysource", "--force", "--noconfirm"], cwd=recipe,
-                                     env={**os.environ, "GNUPGHOME": str(home)})
-            altered.write_bytes(original)
-            if invalid.returncode == 0:
-                raise ValueError("AUR makepkg accepted changed upstream package bytes")
-        wrong_key, wrong_public = selection(wrong, True)
-        with keyring(wrong_public, wrong_key["fingerprint"]) as home:
-            invalid = subprocess.run(["makepkg", "--verifysource", "--force", "--noconfirm"], cwd=recipe,
-                                     env={**os.environ, "GNUPGHOME": str(home)})
-            if invalid.returncode == 0:
-                raise ValueError("AUR makepkg accepted an unavailable upstream signing key")
-        rebuilt = list(recipe.glob(PACKAGE + "-preview-bin-*.pkg.tar.zst"))
-        if len(rebuilt) != 1 or package_info(rebuilt[0]) != {
-                "pkgname": generated["package"], "pkgver": version + "-1", "arch": architecture}:
-            raise ValueError("AUR recipe did not preserve the selected release identity")
-        binary_signature(rebuilt[0], rebuilt[0].with_name(rebuilt[0].name + ".sig"), catalog,
-                         catalog.parent / "rehearsal-secret.asc", True)
-        install_yay(recipe, work / "yay-root", catalog, generated["package"], version)
-        install(rebuilt[0], work / "aur-root", catalog, generated["package"])
-        if (work / "aur-root/usr/share" / PACKAGE / "value").read_text() != version + "\n":
-            raise ValueError("AUR pacman upgrade did not install the selected payload")
-        content = subprocess.check_output(["bsdtar", "-xOf", str(rebuilt[0]),
-                                           f"usr/share/{PACKAGE}/value"], timeout=60)
-        if content != (version + "\n").encode():
-            raise ValueError("AUR recipe changed the authenticated upstream payload")
-        if "pkgname = " + generated["package"] not in (recipe / ".SRCINFO").read_text():
-            raise ValueError("generated SRCINFO differs from the selected AUR package")
+        rehearse_recipe(work, receipt, destination, package, catalog, wrong, version, architecture)
         if version == "0.0.2":
             old_receipt, old_directory = retained
             restored = publish(old_receipt, old_directory, origin, "https://repository.example.invalid", original_catalog,
@@ -292,8 +196,7 @@ package() {{
             "cases": ["native-makepkg", "signed-database-and-files", "embedded-package-signature",
                       "wrong-key", "production-refuses-fixture", "changed-package", "missing-object",
                       "channel-mismatch", "retained-generations", "pinned-aur-makepkg",
-                      "aur-input-signature-and-checksum", "aur-srcinfo", "aur-fixture-Git-delivery", "aur-stale-delivery-refused",
-                      "aur-selected-recipe-tamper-refused", "aur-delivery-independent-availability", "aur-payload-identity",
+                      "aur-input-signature-and-checksum", "aur-srcinfo", "aur-payload-identity",
                       "native-repository-Syu-upgrade", "aur-installed-upgrade", "yay-local-recipe-installed-upgrade", "actual-pacman-file-ownership",
                       "pacman-database-signature-mismatch-refused", "stale-publisher-refused",
                       "retained-repository-recovery", "withdrawal-preserves-installed-package",
@@ -306,14 +209,14 @@ package() {{
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=["fixtures", "r2"])
     parser.add_argument("--receipt", type=Path, required=True)
-    parser.add_argument("--r2", action="store_true")
     args = parser.parse_args()
     try:
-        r2_origin = rehearsal_environment() if args.r2 else None
+        r2_origin = rehearsal_environment() if args.mode == "r2" else None
         with tempfile.TemporaryDirectory(prefix="paintedwolf-pacman-rehearsal-") as temporary:
             result = rehearse(Path(temporary), r2_origin)
-        if args.r2:
+        if r2_origin is not None:
             result["cases"] += ["r2-negative-cache-recovery", "r2-staged-publication-resume",
                                 "r2-tampered-object-refused", "r2-missing-object-restored"]
         root = Path(__file__).resolve().parents[2]
