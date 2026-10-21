@@ -1,5 +1,6 @@
-# $1 is 1 on first install; the install root belongs to the package.
-if [ "$1" -eq 1 ] && [ -d /opt/painted-wolf-code ] && [ -n "$(ls -A /opt/painted-wolf-code 2>/dev/null)" ]; then
+# $1 is 1 on first install; the install root belongs to the package. Generations a
+# previous installation's running launch still held may remain.
+if [ "$1" -eq 1 ] && [ -d /opt/painted-wolf-code ] && [ -n "$(ls -A /opt/painted-wolf-code 2>/dev/null | grep -vx generations)" ]; then
   echo "painted-wolf-code: /opt/painted-wolf-code already exists and is not owned by this package" >&2
   exit 1
 fi

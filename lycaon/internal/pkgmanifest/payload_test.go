@@ -2,6 +2,7 @@ package pkgmanifest_test
 
 import (
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 )
 
@@ -40,7 +41,7 @@ func TestPayloadLinksStayInsideOneCompleteGeneration(t *testing.T) {
 				m["payload"] = append(payload(m), map[string]any{"path": "bin/alias", "kind": "symlink", "mode": 0777, "sha256": nil, "size": nil, "target": target})
 			})
 			if _, err := pkgmanifest.Load(file); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "pkgmanifest.Load failed", err)
 			}
 		})
 	}

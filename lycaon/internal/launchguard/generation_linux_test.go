@@ -14,7 +14,7 @@ import (
 )
 
 func TestGenerationPolicyRejectsUnboundSelection(t *testing.T) {
-	valid := `{"version":1,"generation_root":"/opt/painted-wolf-code/generations/abc","manifest_sha256":"` + strings.Repeat("a", 64) + `","logical_install_root":"/opt/painted-wolf-code"}`
+	valid := `{"version":1,"generation_root":"/opt/painted-wolf-code/generations/abc","manifest_sha256":"` + strings.Repeat("a", 64) + `","logical_install_root":"/opt/painted-wolf-code","library_roots":["/usr/lib"]}`
 	if _, err := decodePolicy([]byte(valid)); err != nil {
 		t.Fatalf("decode bound generation: %v", err)
 	}
@@ -29,6 +29,11 @@ func TestGenerationPolicyRejectsUnboundSelection(t *testing.T) {
 		"future version":      strings.Replace(valid, `"version":1`, `"version":2`, 1),
 		"relative executable": strings.TrimSuffix(valid, "}") + `,"system_executables":["usr/libexec"]}`,
 		"root executable":     strings.TrimSuffix(valid, "}") + `,"system_executables":["/"]}`,
+		"no library roots":    strings.Replace(valid, `,"library_roots":["/usr/lib"]`, "", 1),
+		"empty library roots": strings.Replace(valid, `["/usr/lib"]`, `[]`, 1),
+		"relative library":    strings.Replace(valid, `["/usr/lib"]`, `["usr/lib"]`, 1),
+		"root library":        strings.Replace(valid, `["/usr/lib"]`, `["/"]`, 1),
+		"unclean library":     strings.Replace(valid, `["/usr/lib"]`, `["/usr/../home"]`, 1),
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
@@ -112,5 +113,38 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	missing := protectedLaunch{protected: true, err: ErrLaunchBrokerUnavailable}
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
 		t.Fatalf("a launch without the broker = %v, want refusal", err)
+	}
+}
+
+// Inside the module view the caller's programs are not executable by the
+// engine itself, so a bare name resolves by its execute bits and the broker
+// starts it outside.
+func TestRelayedProgramsResolveWithoutAskingTheModuleView(t *testing.T) {
+	dir := t.TempDir()
+	program := filepath.Join(dir, "tool")
+	testutil.FailErr(t, "write program", os.WriteFile(program, []byte("#!/bin/sh\n"), 0o755))
+	data := filepath.Join(dir, "notes")
+	testutil.FailErr(t, "write data", os.WriteFile(data, []byte("x"), 0o644))
+	if found, err := relayedExecutable(program); err != nil || found != program {
+		t.Fatalf("program with execute bits: %q %v", found, err)
+	}
+	for _, path := range []string{data, dir, filepath.Join(dir, "missing")} {
+		if _, err := relayedExecutable(path); err == nil {
+			t.Fatalf("%s resolved as a program", path)
+		}
+	}
+	t.Setenv("PATH", dir)
+	unresolved := func() *exec.Cmd {
+		return &exec.Cmd{Path: "tool", Err: &exec.Error{Name: "tool", Err: exec.ErrNotFound}}
+	}
+	cmd := unresolved()
+	resolveRelayedProgram(cmd, protectedLaunch{protected: true})
+	if cmd.Path != program || cmd.Err != nil {
+		t.Fatalf("relayed program resolved to %q, %v", cmd.Path, cmd.Err)
+	}
+	cmd = unresolved()
+	resolveRelayedProgram(cmd, protectedLaunch{})
+	if cmd.Path != "tool" || cmd.Err == nil {
+		t.Fatal("a program was resolved outside the protected launch")
 	}
 }
