@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolcontract/toolcontract.LanguageSpecification",
+  "kind": "data_record",
+  "workstream": "portable-command-operations",
+  "disposition": "retain",
+  "reason": "One versioned language specification serializes syntax, encoding, resource rules and catalog closure as a coherent declaration. It has no effect authority or mutable execution lifetime. Retain the measured17 fields with no growth; strict missing/unknown-source tests, budget-boundary fixtures and detached language snapshots support this shape. P03 moves the unchanged pure fact shape into toolcontract so guidance and execution consume one declaration without importing the parser.",
+  "reviewed_commit": "423ad2d202b635ed40dcbf7f4786d2748a8c1372",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/cmd/codegen-tool-command-equivalence/language_generate_test.go": "d77c2dfde2d5bf37c2d53aecfde2ead6bdd1b6915aa285208c1a7091f1a3512f",
+    "lycaon/internal/toolcontract/language_catalog_test.go": "cff5a59a1cf300ae8b0ba9cb49ab084b476d224b6ffb581af4764753f70f3f2a"
+  },
+  "reviewed_shape": "77e84bb6f290c05143c68b61d1487f9a3f0d7ef051a36a81e87ba3987c2cd7cc"
+}

@@ -124,7 +124,7 @@ func (t *CodeRewriteTool) buildWalkRequest(ctx context.Context, tctx tools.ToolC
 }
 
 func (t *CodeRewriteTool) runMultiApply(ctx context.Context, args map[string]any, tctx tools.ToolContext, paths []string, pattern, rewrite, lang string, dryRun bool) (string, error) {
-	return retryEditorDocument(ctx, strings.Join(paths, ", "), func() (string, error) {
+	return retryEditorOperation(ctx, strings.Join(paths, ", "), func() (string, error) {
 		return t.prepareMultiApply(ctx, args, tctx, paths, pattern, rewrite, lang, dryRun)
 	})
 }

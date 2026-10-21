@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolcontract/toolcontract.Contract",
+  "kind": "data_record",
+  "workstream": "portable-command-operations",
+  "disposition": "retain",
+  "reason": "Retain the unchanged 17-field compiled tool contract as one immutable owner/lifecycle/capability declaration. P03 adds defensive copying, not authority or fields; dividing it would separate the facts registry publication must validate atomically. Detached schema/contract and registry tests passed. No growth is admitted beyond this measured ceiling.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/internal/toolcontract/operation_test.go": "9800bea0ae4a2f271f385ed8022c247ea1fc31e35119679e24496f9f82d78826",
+    "lycaon/internal/tools/registry_contract_test.go": "34865f3ee9d32298398b6c298b9f25f8f087f08394465d07d4e493797e5e44b1"
+  },
+  "reviewed_shape": "97732bc2a0a1f41b001ddc0987c69e6d40eae2ed2372f9c7d281624266b44674"
+}

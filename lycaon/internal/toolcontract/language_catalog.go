@@ -1,4 +1,4 @@
-package commandsurface
+package toolcontract
 
 import (
 	"bytes"
@@ -104,6 +104,7 @@ type ReuseReference struct {
 
 // ToolDisposition closes the cutover inventory over the stock manifest.
 type ToolDisposition struct {
+	CommandForms               []string `json:"command_forms"`
 	Tool                       string   `json:"tool"`
 	Owner                      string   `json:"owner"`
 	Disposition                string   `json:"disposition"`

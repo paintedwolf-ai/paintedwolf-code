@@ -64,7 +64,7 @@ func TestApprovalBoundaryAcrossSerialAndParallelBatches(t *testing.T) {
 						batch = toolcontract.BatchShared
 					}
 					testutil.FailErr(t, "register boundary tool", reg.RegisterDefinition(tools.Definition{
-						Meta:     tools.ToolMeta{Name: "observe"},
+						Meta:     tools.ToolMeta{Name: "observe", ArgsSchema: map[string]any{"type": "object"}},
 						Contract: toolcontract.Contract{Owner: "test", Batch: batch},
 						Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 							callsRun.Add(1)

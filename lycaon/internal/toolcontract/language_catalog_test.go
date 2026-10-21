@@ -1,20 +1,20 @@
-package commandsurface_test
+package toolcontract_test
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLanguageV1SnapshotsAreDetached(t *testing.T) {
-	first, err := commandsurface.LanguageV1()
+	first, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "first catalog", err)
 	first.Commands[0].Name = "changed"
 	first.Language.Limits[0].Maximum = 0
-	second, err := commandsurface.LanguageV1()
+	second, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "second catalog", err)
 	if second.Commands[0].Name == "changed" || second.Language.Limits[0].Maximum == 0 {
 		t.Fatal("catalog snapshots share mutable facts")
@@ -25,7 +25,7 @@ func TestLanguageV1SnapshotsAreDetached(t *testing.T) {
 }
 
 func TestLanguageV1PreservesDialectAndPublicationChoices(t *testing.T) {
-	c, err := commandsurface.LanguageV1()
+	c, err := toolcontract.LanguageV1()
 	testutil.FailErr(t, "catalog", err)
 	for _, expected := range []struct {
 		name, flag, role string
@@ -78,7 +78,7 @@ func TestLanguageV1PreservesDialectAndPublicationChoices(t *testing.T) {
 
 func TestLanguageCatalogDecoderRejectsUnknownAndFutureShapes(t *testing.T) {
 	for _, data := range []string{`{"version":2,"language":{"version":2}}`, `{"version":1,"typo":true}`, `{} {}`} {
-		if _, err := commandsurface.DecodeLanguageCatalog([]byte(data)); err == nil {
+		if _, err := toolcontract.DecodeLanguageCatalog([]byte(data)); err == nil {
 			t.Fatalf("admitted unknown shape %s", data)
 		}
 	}

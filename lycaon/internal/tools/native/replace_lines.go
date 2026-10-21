@@ -49,7 +49,7 @@ func (t *ReplaceLinesTool) Run(ctx context.Context, args map[string]any, tctx to
 	}
 	fullPath := resolved.Abs
 	path = resolved.DisplayPath
-	return retryEditorDocument(ctx, path, func() (string, error) {
+	return retryEditorOperation(ctx, path, func() (string, error) {
 		st, err := loadAgentSourceText(ctx, "replace_lines", tctx, resolved)
 		if err != nil {
 			if os.IsNotExist(err) {

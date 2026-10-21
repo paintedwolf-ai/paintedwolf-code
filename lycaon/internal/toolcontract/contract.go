@@ -366,7 +366,7 @@ func (c Contract) MutatesWorld() bool {
 // Lookup returns the compiled contract when name is declared.
 func Lookup(name string) (Contract, bool) {
 	contract, ok := compiledContracts[name]
-	return contract, ok
+	return contract.Clone(), ok
 }
 
 // Concurrent reports whether the contract admits sibling execution.

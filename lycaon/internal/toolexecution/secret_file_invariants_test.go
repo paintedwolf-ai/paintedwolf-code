@@ -66,15 +66,11 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				}), nil
 			}
 
-			reg := tools.NewDefaultRegistry()
+			reg := catalogRegistry(t)
 			var handledArgs map[string]any
-			testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{
-				Meta:     tools.ToolMeta{Name: "write"},
-				Contract: catalogContract(t, "write"),
-				Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-					handledArgs = args
-					return "ok", nil
-				},
+			testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+				handledArgs = args
+				return "ok", nil
 			}))
 			exec.Metadata.registry = reg
 
@@ -153,15 +149,11 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 					}), nil
 				}
 
-				reg := tools.NewDefaultRegistry()
+				reg := catalogRegistry(t)
 				var handledArgs map[string]any
-				testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{
-					Meta:     tools.ToolMeta{Name: "write"},
-					Contract: catalogContract(t, "write"),
-					Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-						handledArgs = args
-						return "ok", nil
-					},
+				testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+					handledArgs = args
+					return "ok", nil
 				}))
 				exec.Metadata.registry = reg
 
@@ -219,14 +211,10 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				}
 
 				var writeCalled bool
-				reg := tools.NewDefaultRegistry()
-				testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{
-					Meta:     tools.ToolMeta{Name: "write"},
-					Contract: catalogContract(t, "write"),
-					Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-						writeCalled = true
-						return "ok", nil
-					},
+				reg := catalogRegistry(t)
+				testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+					writeCalled = true
+					return "ok", nil
 				}))
 				exec.Metadata.registry = reg
 
@@ -277,15 +265,11 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 			return res, nil
 		}
 
-		reg := tools.NewDefaultRegistry()
+		reg := catalogRegistry(t)
 		var handledArgs map[string]any
-		testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{
-			Meta:     tools.ToolMeta{Name: "write"},
-			Contract: catalogContract(t, "write"),
-			Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
-				handledArgs = args
-				return "ok", nil
-			},
+		testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			handledArgs = args
+			return "ok", nil
 		}))
 		exec.Metadata.registry = reg
 
