@@ -82,19 +82,36 @@ describe("update notices", () => {
       f.notices.dismiss(f.rows()[0]!.id);
       await f.send({ ...state, candidate: updateFixture().candidate });
       expect(f.rows()).toHaveLength(0);
-      state.package!.source = { ...source, candidate: { ...source.candidate!, version: "1.0.4-1" } };
-      await f.send(state);
-      expect(f.rows()).toHaveLength(1);
-      for (const availability of ["blocked", "unknown", "failed", "no_newer_candidate", "not_checked"] as const) {
-        state.package!.source = { ...source, availability };
+      const next = { ...source, candidate: { ...source.candidate!, version: "1.0.4-1" } };
+      for (const inactive of [
+        { ...next, availability: "blocked" as const, reason: "held" as const, held: true },
+        { ...next, availability: "blocked" as const, reason: "untrusted_source" as const },
+        { ...next, availability: "blocked" as const, reason: "owner_changed" as const, candidate: null },
+        { ...next, availability: "unknown" as const, reason: "no_cached_candidate" as const, candidate: null },
+        { ...next, availability: "unknown" as const, reason: "policy_unobserved" as const, held: null },
+        { ...next, availability: "unknown" as const, reason: "unsupported_owner" as const, owner: null, candidate: null },
+        { ...next, availability: "failed" as const, reason: "query_failed" as const, candidate: null },
+        { ...next, availability: "failed" as const, reason: "timed_out" as const, candidate: null },
+        { ...next, availability: "no_newer_candidate" as const, candidate: { ...next.candidate, newer_than_installed: false } },
+        { ...next, availability: "not_checked" as const, candidate: null, held: null },
+        { ...next, held: true },
+        { ...next, held: null },
+        { ...next, owner: null },
+        { ...next, candidate: null },
+        { ...next, candidate: { ...next.candidate, newer_than_installed: false } },
+      ]) {
+        state.package!.source = next;
+        await f.send(state);
+        expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
+        state.package!.source = inactive;
         await f.send(state);
         expect(f.rows()).toHaveLength(0);
       }
-      for (const policy of [{ held: true }, { held: null }, { owner: null }] as const) {
-        state.package!.source = { ...source, ...policy };
-        await f.send(state);
-        expect(f.rows()).toHaveLength(0);
-      }
+      state.package!.source = next;
+      await f.send({ ...state, discovery: "failed", last_error: { code: "check_failed" } });
+      expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
+      await f.send({ ...state, discovery: "failed", last_error: { code: "feed_rejected" } });
+      expect(f.rows().map(row => row.code)).toEqual(["update_feed_rejected"]);
     } finally { f.stop(); }
   });
   it("announces the package candidates that APT and pacman report", async () => {
@@ -108,10 +125,11 @@ describe("update notices", () => {
       } finally { f.stop(); }
     }
   });
-  it("stays quiet for reported holds, ignore rules and unobserved versionlock policy", async () => {
-    for (const [family, facts] of [["deb", aptHeld], ["pacman", pacmanIgnored], ["rpm", dnfCandidate]] as const) {
+  it("stays quiet for reported holds, ignore rules, unobserved versionlock policy and Nix builds", async () => {
+    const nixSource = packageSourceFixture({ availability: "unknown", owner: null, reason: "unsupported_owner" });
+    for (const [family, facts] of [["deb", aptHeld], ["pacman", pacmanIgnored], ["rpm", dnfCandidate], ["nix", nixSource]] as const) {
       const f = await fixture();
-      const state = packageFixture({ candidate: null, discovery: "up_to_date" });
+      const state = packageFixture({ candidate: updateFixture().candidate, discovery: "available" });
       state.package = { ...state.package!, family, source: produced(facts) };
       try {
         await f.send(state);

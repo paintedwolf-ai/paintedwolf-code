@@ -118,9 +118,16 @@ fn apt_hold_untrusted_and_missing_cache_are_explicit_outcomes() {
     let facts = apt_facts(report);
     assert_eq!((facts.availability, facts.reason), (SourceAvailability::Blocked, Some(QueryReason::UntrustedSource)));
     let mut report = apt_report(); report["candidate"]["origins"] = serde_json::json!([]);
-    assert_eq!(apt_facts(report).reason, Some(QueryReason::NoCachedCandidate));
+    let facts = apt_facts(report);
+    assert_eq!((facts.availability, facts.reason), (SourceAvailability::Unknown, Some(QueryReason::NoCachedCandidate)));
+    assert!(facts.candidate.is_none() && facts.selection_priority.is_none());
     let mut report = apt_report(); report["candidate"] = serde_json::Value::Null;
-    assert_eq!(apt_facts(report).reason, Some(QueryReason::NoCachedCandidate));
+    let facts = apt_facts(report);
+    assert_eq!(facts.reason, Some(QueryReason::NoCachedCandidate));
+    assert!(facts.candidate.is_none() && facts.selection_priority.is_none());
+    let mut report = apt_report(); report["held"] = true.into(); report["candidate"] = serde_json::Value::Null;
+    let facts = apt_facts(report);
+    assert_eq!((facts.availability, facts.reason, facts.candidate), (SourceAvailability::Blocked, Some(QueryReason::Held), None));
 }
 
 #[test]

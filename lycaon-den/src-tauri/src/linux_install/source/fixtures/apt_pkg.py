@@ -51,8 +51,8 @@ class Version:
     def __init__(self, fields):
         self.ver_str = fields["version"]
         self.arch = fields["arch"]
-        self.file_list = [(PackageFile(item), index) for index, item in enumerate(fields.get("files", []))]
-        self._priority = fields.get("priority", 0)
+        self.file_list = [(PackageFile(item), index) for index, item in enumerate(fields.get("files", [{"archive": "now"}]))]
+        self._priority = fields.get("priority", 100)
 
 
 class Package:
@@ -61,7 +61,7 @@ class Package:
         self.has_versions = fields.get("has_versions", True)
         self.current_ver = Version(fields["installed"]) if fields.get("installed") else None
         self.selected_state = SELSTATE_HOLD if fields.get("held") else SELSTATE_INSTALL
-        self._candidate = Version(fields["candidate"]) if fields.get("candidate") else None
+        self._candidate = Version(fields["candidate"]) if fields.get("candidate") else (self.current_ver if self.has_versions else None)
         self._upgradable = fields.get("upgradable", False)
 
 
