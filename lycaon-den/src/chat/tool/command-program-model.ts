@@ -16,6 +16,16 @@ export type CommandStageRow = {
   provenance: string;
   source?: string;
   facts: ToolFact[];
+  /** Retained stdout/stderr previews; the body stays behind its handle. */
+  outputs: CommandStageOutput[];
+};
+
+export type CommandStageOutput = {
+  stream: "stdout" | "stderr";
+  label: string;
+  preview: string;
+  truncated: boolean;
+  complete: boolean;
 };
 
 export type CommandProgramPresentation = {
@@ -78,6 +88,7 @@ function stageFacts(row: CommandExecutionReceipt): ToolFact[] {
   if (row.host_stop_code && row.host_stop_code !== row.stop_code) facts.push({ label: "Host stop", value: row.host_stop_code });
   if (row.owner_started && !row.owner_invoked && row.state !== "completed") facts.push({ label: "Owner", value: "Started, invocation unknown" });
   if (row.approval_ref) facts.push({ label: "Approval", value: row.approval_ref });
+  if (row.job_handle) facts.push({ label: "Background job", value: row.job_handle });
   return facts;
 }
 
@@ -88,6 +99,12 @@ function revisionFacts(row: CommandExecutionReceipt): ToolFact[] {
     facts.push({ label: "Published revision", value: row.published_revision });
   } else if (row.accepted_revision) {
     facts.push({ label: "Publication", value: row.publication_eligible ? "Accepted, not yet published" : "Accepted, not published" });
+  }
+  const conflict = row.revision_conflict;
+  if (conflict) {
+    facts.push({ label: "Conflict", value: conflict.path, wide: true });
+    facts.push({ label: "Expected revision", value: conflict.expected_revision });
+    facts.push({ label: "Observed revision", value: conflict.observed_revision });
   }
   if (row.held_version_id) facts.push({ label: "Held version", value: row.held_version_id });
   if (row.recovery_ref) facts.push({ label: "Recovery", value: row.recovery_ref });
@@ -122,6 +139,13 @@ export function buildCommandProgramPresentation(
     provenance: provenance(row),
     source: span(nodes.get(row.node_id)),
     facts: stageFacts(row),
+    outputs: (row.outputs ?? []).map((output) => ({
+      stream: output.stream,
+      label: output.stream === "stdout" ? "Output" : "Errors",
+      preview: output.preview,
+      truncated: output.preview_truncated,
+      complete: output.complete,
+    })),
   }));
   const completed = executions.filter((row) => row.effect_certainty === "completed").length;
   const uncertain = executions.filter((row) => row.effect_certainty === "attempted" || row.effect_certainty === "unknown").length;
@@ -141,7 +165,7 @@ export function buildCommandProgramPresentation(
 
   const changes: ToolFact[] = [];
   for (const row of executions) {
-    if (row.effect_certainty === "none" && !row.accepted_revision && !row.held_version_id) continue;
+    if (row.effect_certainty === "none" && !row.accepted_revision && !row.held_version_id && !row.revision_conflict) continue;
     changes.push({ label: row.command, value: EFFECT[row.effect_certainty], wide: true });
     changes.push(...revisionFacts(row));
   }

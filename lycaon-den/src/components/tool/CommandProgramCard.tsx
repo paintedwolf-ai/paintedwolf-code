@@ -111,6 +111,18 @@ function CommandProgramBody(props: Props & { program: CommandProgramReceipt }) {
                     <Show when={stage.source}>{(where) => <span>{where()}</span>}</Show>
                   </p>
                   <Facts facts={stage.facts} />
+                  <For each={stage.outputs}>
+                    {(output) => (
+                      <div class="den-tool-part-card-section" data-testid="command-program-stage-output" data-stream={output.stream}>
+                        <pre class="den-command-program-output-preview">{output.preview}</pre>
+                        <p class="den-command-program-stage-head">
+                          <ToolContentLink pane="output" label={`${output.label} preview`} content={{ kind: "inline", text: output.preview }} projectId={props.projectId} />
+                          <Show when={output.truncated}><span>Preview of retained output</span></Show>
+                          <Show when={!output.complete}><span>Stream ended early</span></Show>
+                        </p>
+                      </div>
+                    )}
+                  </For>
                 </li>
               )}
             </For>

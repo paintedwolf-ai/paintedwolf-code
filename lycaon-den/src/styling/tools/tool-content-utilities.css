@@ -380,3 +380,14 @@ font-size: var(--text-den-compact);
   flex-wrap: wrap;
   gap: 12px;
 }
+
+
+@utility den-command-program-output-preview {
+  margin: 0;
+  max-height: 12rem;
+  overflow: hidden;
+  font-size: var(--text-den-hint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--den-text);
+}

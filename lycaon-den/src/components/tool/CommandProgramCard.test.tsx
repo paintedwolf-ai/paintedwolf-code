@@ -187,6 +187,36 @@ describe("CommandProgramCard", () => {
     await waitFor(() => expect(container.querySelector('[data-testid="command-program-stage"]')?.getAttribute("data-execution-id")).toBe("loop-0"));
   });
 
+  it("shows per-child output previews, background jobs and revision conflicts", async () => {
+    const long = "row\n".repeat(400);
+    const { container } = renderCard(commandPart(program({ state: "failed", status_code: 1, stop_code: "TEXT_WRITE_CONFLICT" })), () => page({
+      program: program({ state: "failed", status_code: 1, stop_code: "TEXT_WRITE_CONFLICT" }),
+      executions: [
+        execution("bg", { command: "npm run watch &", effect_classes: ["external_exec"], native_command: undefined, job_handle: "job:watch-7", outputs: [
+          { stream: "stderr", ref: "output:stderr", size_bytes: 13, complete: true, redacted: false, preview: "warning: slow", preview_truncated: false },
+          { stream: "stdout", ref: "output:stdout", size_bytes: 9000, complete: false, redacted: false, preview: long, preview_truncated: true },
+        ] }),
+        execution("w", { node_id: "n2", native_command: "write", command: "printf x > src/report.txt", effect_classes: ["mutation"], state: "refused", status_code: 1, stop_code: "TEXT_WRITE_CONFLICT", accepted_revision: "editor:4", revision_conflict: { path: "src/report.txt", expected_revision: "rev:3", observed_revision: "rev:5" } }),
+      ],
+    }));
+    await waitFor(() => expect(container.querySelectorAll('[data-testid="command-program-stage-output"]')).toHaveLength(2));
+    const stages = section(container, "stages")?.textContent ?? "";
+    expect(stages).toContain("External process");
+    expect(stages).toContain("Background jobjob:watch-7");
+    const [stderr, stdout] = [...container.querySelectorAll('[data-testid="command-program-stage-output"]')];
+    if (!stderr || !stdout) throw new Error("stage output previews missing");
+    expect(stderr.getAttribute("data-stream")).toBe("stderr");
+    expect(stderr.textContent).toContain("warning: slow");
+    expect(stderr.textContent).toContain("Errors preview in Files");
+    expect(stdout.textContent).toContain("Preview of retained output");
+    expect(stdout.textContent).toContain("Stream ended early");
+    const changes = section(container, "changes")?.textContent ?? "";
+    expect(changes).toContain("Conflictsrc/report.txt");
+    expect(changes).toContain("Expected revisionrev:3");
+    expect(changes).toContain("Observed revisionrev:5");
+    expect(changes).toContain("PublicationAccepted, not yet published");
+  });
+
   it("keeps long output in the existing output viewer", async () => {
     const long = "line\n".repeat(5000);
     const { container } = renderCard(commandPart(program(), { output: long }), () => page());
