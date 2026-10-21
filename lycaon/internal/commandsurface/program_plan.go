@@ -12,6 +12,8 @@ type SyntaxLocation struct {
 	Span toolcontract.SourceSpan
 }
 
+func (l SyntaxLocation) syntaxLocation() SyntaxLocation { return l }
+
 // ProgramSnapshot is a detached typed syntax tree. It carries no capabilities
 // and contains no executable upstream interpreter objects.
 type ProgramSnapshot struct {
@@ -32,7 +34,10 @@ type Statement struct {
 }
 
 // CommandNode is the closed command grammar accepted by version 1.
-type CommandNode interface{ commandNode() }
+type CommandNode interface {
+	commandNode()
+	syntaxLocation() SyntaxLocation
+}
 
 // SimpleCommand preserves assignments separately from deferred argument words.
 type SimpleCommand struct {

@@ -9,14 +9,17 @@ import (
 )
 
 type ApprovalOperations struct {
-	CheckpointID string         `json:"checkpoint_id"`
-	SessionID    string         `json:"session_id"`
-	OptionID     string         `json:"option_id"`
-	OptionJson   string         `json:"option_json"`
-	Status       string         `json:"status"`
-	CreatedAt    string         `json:"created_at"`
-	CommittedAt  sql.NullString `json:"committed_at"`
-	RolledBackAt sql.NullString `json:"rolled_back_at"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	SessionID       string         `json:"session_id"`
+	OptionID        string         `json:"option_id"`
+	OptionJson      string         `json:"option_json"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	CommittedAt     sql.NullString `json:"committed_at"`
+	RolledBackAt    sql.NullString `json:"rolled_back_at"`
+	AuthorityFormat string         `json:"authority_format"`
+	AuthorityDigest string         `json:"authority_digest"`
+	AuthorityBody   string         `json:"authority_body"`
 }
 
 type ArtifactGcQueue struct {
@@ -151,12 +154,15 @@ type CallReservations struct {
 }
 
 type ChatGrants struct {
-	ChatSessionID string         `json:"chat_session_id"`
-	ID            string         `json:"id"`
-	CheckpointID  string         `json:"checkpoint_id"`
-	DeltaJson     string         `json:"delta_json"`
-	CreatedAt     string         `json:"created_at"`
-	ExpiresAt     sql.NullString `json:"expires_at"`
+	ChatSessionID   string         `json:"chat_session_id"`
+	ID              string         `json:"id"`
+	CheckpointID    string         `json:"checkpoint_id"`
+	DeltaJson       string         `json:"delta_json"`
+	CreatedAt       string         `json:"created_at"`
+	ExpiresAt       sql.NullString `json:"expires_at"`
+	AuthorityFormat string         `json:"authority_format"`
+	AuthorityDigest string         `json:"authority_digest"`
+	AuthorityBody   string         `json:"authority_body"`
 }
 
 type CheckpointAnchors struct {
@@ -211,6 +217,9 @@ type Checkpoints struct {
 	ResolvedBy         sql.NullString `json:"resolved_by"`
 	ResolvedByPersonID sql.NullString `json:"resolved_by_person_id"`
 	ProjectID          string         `json:"project_id"`
+	AuthorityFormat    string         `json:"authority_format"`
+	AuthorityDigest    string         `json:"authority_digest"`
+	AuthorityBody      string         `json:"authority_body"`
 }
 
 type ChunkProjections struct {
@@ -774,6 +783,24 @@ type InvocationProgramProgress struct {
 	DetailRef               string         `json:"detail_ref"`
 	StartedAt               string         `json:"started_at"`
 	SettledAt               sql.NullString `json:"settled_at"`
+}
+
+type InvocationProgramRevisionPins struct {
+	ProgramID        string `json:"program_id"`
+	ExecutionID      string `json:"execution_id"`
+	Ordinal          int64  `json:"ordinal"`
+	Role             string `json:"role"`
+	Mode             string `json:"mode"`
+	Basis            string `json:"basis"`
+	RootID           string `json:"root_id"`
+	Path             string `json:"path"`
+	DocumentID       string `json:"document_id"`
+	DocumentRevision int64  `json:"document_revision"`
+	DiskSha256       string `json:"disk_sha256"`
+	Representation   string `json:"representation"`
+	ContentSha256    string `json:"content_sha256"`
+	ContentBytes     int64  `json:"content_bytes"`
+	CapturedAt       string `json:"captured_at"`
 }
 
 type InvocationProgramSources struct {

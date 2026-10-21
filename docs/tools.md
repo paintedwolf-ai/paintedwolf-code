@@ -107,8 +107,9 @@ because the new parser accepts a form, or remove a recognizer while one of these
 consumers still uses it. Their replacement and obsolete-path cleanup accompany
 the introducing runtime integration.
 
-The syntax adapter reserves parser scratch before parsing and meters the selected
-upstream parser's allocations and recursive frames. Brace classification and
+The syntax adapter charges parser scratch to the enclosing program before each
+allocation and meters the selected upstream parser's allocations and recursive
+frames. Brace classification and
 static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
@@ -118,9 +119,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `NewProgramParser` with working and retained
-state admission. Retained source/plan storage is charged to `program_state_bytes`
-before host-plan insertion; closing parser scratch does not release that state.
+materialization. Execution uses `ParseAdmitted` with working and retained state
+admission. Parser scratch grows the program's working account in 64 KiB chunks
+up to the per-unit `evaluation_memory_bytes` ceiling and is released when
+lowering returns, so a `source` parse shares the account with background job
+streams rather than holding the whole ceiling. Retained source/plan storage is
+charged to `program_state_bytes` before host-plan insertion; releasing scratch
+does not release that state.
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
@@ -277,6 +282,33 @@ state stays held and no other draft is saved. Each operation pins its own
 inputs, so a later statement captures newer revisions and sees earlier
 published writes; there is no whole-program snapshot. Program receipts retain
 the pins per execution.
+
+### Literal content and metadata commands
+
+`internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
+wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
+outline, summarize and repo-map built-ins. Argv binds through the catalog
+binder; each command runs under its catalog operation identity (`read`, `wc`,
+`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
+operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+each file as exact stream bytes before any output: the accepted document encoded
+in its recorded encoding, BOM and newline policy, or the published file. The pin
+names that representation separately from disk. An input above the read budget,
+or output above the stream ceiling, refuses; nothing is truncated or summarized
+in its place.
+
+Formatting follows GNU coreutils and diffutils, with BSD `stat -f` and
+`base64 -D`/`-b` beside their GNU forms. The catalog fixes a few
+representations itself: wc separates values with one space, `file` answers from
+the versioned signature corpus, and `ls -l` prints numeric owners and UTC
+long-ISO times without a block total. Ordinary operand failures (missing,
+directory, permission) go to stderr with the utility's status and later operands
+still run; authority, budget and platform refusals stop with their typed code.
+Only diff's complete status 1 is a publishable comparison. Literal windows and
+reversible numbering record exact source mappings when the output endpoint
+implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
+record none. The command never delivers a conversational read; only exact mapped
+output that the delivery owner later delivers can qualify an edit base.
 
 ## Altitude
 

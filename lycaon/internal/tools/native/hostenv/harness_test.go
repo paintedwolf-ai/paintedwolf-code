@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -128,11 +127,7 @@ func (h *harness) run(source string) run {
 	}
 	entries, err := frame.Environment(nil)
 	testutil.FailErr(h.t, "environment", err)
-	environment := map[string]string{}
-	for _, entry := range entries {
-		name, value, _ := strings.Cut(entry, "=")
-		environment[name] = value
-	}
+	environment := entries
 	request := commandprogram.OperationRequest{
 		Invocation: toolcontract.OperationInvocation{
 			Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: string(statement.ID), ExecutionID: "child"},

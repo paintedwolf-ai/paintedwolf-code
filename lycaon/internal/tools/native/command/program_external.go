@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // ExternalStages launches one confined external stage per request through the
@@ -19,6 +19,7 @@ import (
 // stays literal: no shell, no PATH re-resolution by the host, no fallback.
 type ExternalStages struct {
 	ToolContext     tools.ToolContext
+	Dir             string
 	ExtraWriteRoots []string
 }
 
@@ -32,9 +33,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
 	tctx := l.ToolContext
-	cwd, _, err := projectpaths.CommandCwd(ctx, tctx, request.Invocation.Scope.Directory)
-	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	cwd := l.Dir
+	if cwd == "" {
+		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
 	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
@@ -45,15 +46,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts := lycexec.ExecOpts{
-		Launch:         agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine),
-		Dir:            cwd,
-		NoTimeout:      true,
-		InlineEnv:      request.Environment,
-		PathExtra:      append([]string(nil), tctx.Host.HostResourcePathExtra...),
-		SeparateStderr: true,
-		Stdout:         nonNilWriter(streams.Output),
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
+	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	if streams.Input != nil {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
@@ -81,7 +78,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		status = 255
 	}
 	// An external process may have done anything it was confined to do.
-	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}, waitErr
+	result := toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}
+	if len(run.Stages) == 1 && run.Stages[0].ExpectedConsumerClosure() {
+		// The executor's own SIGPIPE classification travels to pipeline settlement.
+		return result, errors.Join(waitErr, launchClosure{run.Stages[0]})
+	}
+	return result, waitErr
 }
 
 // externalArgv drops the explicit "external --" selector.
@@ -102,3 +104,9 @@ func nonNilWriter(w io.Writer) io.Writer {
 func refusedResult(code string) toolcontract.ProducerResult {
 	return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: strings.TrimSpace(code), EffectCertainty: toolcontract.NoEffect}
 }
+
+// launchClosure reports the executor's classification that an external
+// producer ended by SIGPIPE after its host consumer stopped reading.
+type launchClosure struct{ lycexec.StageRun }
+
+func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }

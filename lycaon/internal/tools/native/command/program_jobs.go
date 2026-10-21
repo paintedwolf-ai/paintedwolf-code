@@ -33,14 +33,18 @@ type jobOutcome struct {
 	err    error
 }
 
-var _ commandprogram.ProgramJobs = (*SessionJobs)(nil)
+// jobStatus is the registry's observation; a stop request is not an exit.
+type jobStatus struct {
+	Handle      string
+	CommandLine string
+}
 
-// Start runs the job body detached from the launching statement's context.
-func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch) (string, error) {
-	if j == nil || j.Registry == nil || launch.Run == nil {
+// start runs the job body detached from the launching statement's context.
+func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+	if j == nil || j.Registry == nil || run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
 	}
-	jobCtx, release, err := j.Supervisor.Hold(ctx)
+	jobCtx, setStop, release, err := j.Supervisor.Hold(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -48,7 +52,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 	ready := make(chan struct{})
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
-		CommandLine: launch.CommandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
+		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
 		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
 			defer release()
 			<-ready
@@ -56,7 +60,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 			defer cancel()
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
-			result, err := launch.Run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
+			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
 			if ctx.Err() != nil && result.Terminal == "" {
 				result = toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
 			}
@@ -69,6 +73,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 		close(ready)
 		return "", err
 	}
+	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
 	close(ready)
 	return handle, nil
 }
@@ -111,14 +116,14 @@ func (j *SessionJobs) Signal(_ context.Context, handle, signal string) error {
 }
 
 // List reports this session's live jobs, never host-global processes.
-func (j *SessionJobs) List(context.Context) ([]commandprogram.JobStatus, error) {
-	var out []commandprogram.JobStatus
+func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
+	var out []jobStatus
 	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
 		line := ""
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command
 		}
-		out = append(out, commandprogram.JobStatus{Handle: job.Handle, CommandLine: line, Running: true})
+		out = append(out, jobStatus{Handle: job.Handle, CommandLine: line})
 	}
 	return out, nil
 }

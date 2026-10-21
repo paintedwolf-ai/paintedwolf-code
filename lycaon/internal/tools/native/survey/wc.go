@@ -138,19 +138,18 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 	if err != nil {
 		return wcResult{}, fmt.Errorf("wc %s: %w", relSlash, err)
 	}
-	entry := wcResult{
-		// Bytes reports the on-disk size.
-		Path:      relSlash,
-		Bytes:     info.Size(),
-		Truncated: bytesTruncated,
-		InEditor:  fromEditor,
+	counts := CountBytes(content)
+	// Editor counts describe the editor text alone; file counts pair the
+	// decoded lines with the file's own bytes, never an editor view with disk.
+	entry := wcResult{Path: relSlash, Bytes: info.Size(), Truncated: bytesTruncated, InEditor: fromEditor}
+	if fromEditor {
+		entry.Bytes = counts.Bytes
 	}
 	if !binary {
-		text := string(content)
-		lines := toolkit.CountLines(text)
+		lines := int(counts.Lines)
 		entry.Lines = &lines
 		if includeWords {
-			words := countWords(text)
+			words := int(counts.Words)
 			entry.Words = &words
 		}
 	}
@@ -224,11 +223,11 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 				if statErr != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 					continue
 				}
-				content, binary, bytesTruncated, _, readErr := loadWcFile(ctx, reads, drafts, job.abs, info)
+				content, binary, bytesTruncated, fromEditor, readErr := loadWcFile(ctx, reads, drafts, job.abs, info)
 				if readErr != nil {
 					continue
 				}
-				results[workerID].add(info.Size(), content, binary, bytesTruncated, includeWords)
+				results[workerID].add(info.Size(), content, binary, bytesTruncated, fromEditor, includeWords)
 			}
 		}(w, start, end)
 	}
@@ -263,7 +262,7 @@ func (t *WcTool) wcRecursiveDirSurvey(ctx context.Context, reads *projectpaths.R
 			if err != nil {
 				return sandbox.SurveyContinue, nil
 			}
-			totals.add(info.Size(), content, binary, bytesTruncated, includeWords)
+			totals.add(info.Size(), content, binary, bytesTruncated, false, includeWords)
 			return sandbox.SurveyContinue, nil
 		})
 	if walkErr != nil {
@@ -294,19 +293,23 @@ func (t *wcDirTotals) merge(other wcDirTotals) {
 	}
 }
 
-func (t *wcDirTotals) add(size int64, content []byte, binary, bytesTruncated, includeWords bool) {
+func (t *wcDirTotals) add(size int64, content []byte, binary, bytesTruncated, fromEditor, includeWords bool) {
 	t.files++
-	t.bytes += size
 	if bytesTruncated {
 		t.truncated = true
 	}
 	if binary {
+		t.bytes += size
 		return
 	}
-	text := string(content)
-	t.lines += toolkit.CountLines(text)
+	counts := CountBytes(content)
+	if fromEditor {
+		size = counts.Bytes
+	}
+	t.bytes += size
+	t.lines += int(counts.Lines)
 	if includeWords {
-		t.words += countWords(text)
+		t.words += int(counts.Words)
 	}
 	t.hasText = true
 }
@@ -325,12 +328,4 @@ func (t wcDirTotals) result(relRoot string, includeWords bool) wcResult {
 		}
 	}
 	return entry
-}
-
-func countWords(text string) int {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return 0
-	}
-	return len(strings.Fields(text))
 }

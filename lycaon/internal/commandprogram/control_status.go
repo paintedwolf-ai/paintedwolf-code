@@ -92,6 +92,19 @@ func (s *StatusControl) Record(executionID string, result toolcontract.ProducerR
 	return nil
 }
 
+// Negate applies a statement-level ! to a compound command's ordinary status.
+// Host stops and explicit exit are never inverted.
+func (s *StatusControl) Negate() {
+	if _, stopped := s.latch.Stop(); stopped || s.exited {
+		return
+	}
+	if s.status == 0 {
+		s.status = 1
+	} else {
+		s.status = 0
+	}
+}
+
 // Exit changes this frame only after ordinary status validation and admission.
 // Its caller records the admitted builtin through the existing child receipt.
 func (s *StatusControl) Exit(status int) error {

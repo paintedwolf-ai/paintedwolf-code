@@ -13,13 +13,9 @@ import (
 // visibleEnvironment is the request's environment as a child would receive it:
 // host-internal keys a launch strips never appear. Values stay opaque text,
 // so a secret reference is listed as its reference, never resolved.
-func visibleEnvironment(environment map[string]string) map[string]string {
-	entries := make([]string, 0, len(environment))
-	for name, value := range environment {
-		entries = append(entries, name+"="+value)
-	}
-	visible := make(map[string]string, len(entries))
-	for _, entry := range exec.SanitizeEnviron(entries) {
+func visibleEnvironment(environment []string) map[string]string {
+	visible := make(map[string]string, len(environment))
+	for _, entry := range exec.SanitizeEnviron(environment) {
 		name, value, _ := strings.Cut(entry, "=")
 		visible[name] = value
 	}

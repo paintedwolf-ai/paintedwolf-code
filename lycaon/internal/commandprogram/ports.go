@@ -23,14 +23,16 @@ type Streams struct {
 // OperationRequest is one reached simple command after expansion and before
 // per-child admission. Statement is the typed plan node; its span is the
 // invocation span. Argv is the complete expanded argv, command words included.
-// Environment holds the frame's exported and dispatch-scoped NAME=value
-// entries; the working directory is Invocation.Scope.Directory.
+// Environment is the frame's exported NAME=value list, including assignments
+// scoped to this one dispatch, sorted by name; it carries no ambient host state.
 type OperationRequest struct {
-	Invocation  toolcontract.OperationInvocation
+	Invocation toolcontract.OperationInvocation
+	// OperationID is the catalog command name ("external" for launches); the
+	// typed owner's operation identity is the owner's own fact.
 	OperationID string
 	Statement   commandsurface.Statement
 	Argv        Fields
-	Environment map[string]string
+	Environment []string
 	EffectMode  string
 }
 
@@ -100,6 +102,13 @@ type Substitution interface {
 // dispatches through the same admission as any reached command.
 type NestedCommand interface {
 	RunNested(ctx context.Context, parent OperationRequest, argv Fields, environment map[string]string, streams Streams) (toolcontract.ProducerResult, error)
+}
+
+// ExecutionRecorder records an execution the evaluator runs itself before any
+// descendant is dispatched, and settles it with its record once.
+type ExecutionRecorder interface {
+	BeginExecution(context.Context, toolcontract.OperationInvocation, string) error
+	SettleExecution(context.Context, toolcontract.OperationInvocation, ChildRecord) error
 }
 
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one
@@ -175,8 +184,36 @@ type ProgressAdmission interface {
 
 // ProgramSupervision is implemented at the existing process supervision boundary.
 // It settles one aggregate and preserves already-settled child owner facts.
+// StartJob supervises a statement-trailing & job: run receives the job's own
+// lifetime context and the bounded output streams the supervisor owns for it;
+// cwd and environment are already captured. The returned handle is the
+// session-scoped job identity that $! and wait/kill address.
 type ProgramSupervision interface {
 	RunProgram(context.Context, toolcontract.OperationInvocation, func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
+	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error)
+}
+
+// Dispatch reaches operation owners and confined launch from one directory
+// frame. Fork captures the frame's current directory for an isolated frame
+// (parentheses, substitutions, pipeline stages, background jobs); cd inside the
+// fork never reaches the parent. Release returns the fork's capture.
+type Dispatch interface {
+	OperationDispatcher
+	ExternalLauncher
+	Fork(context.Context) (Dispatch, func(), error)
+}
+
+// InputDestination is one reached `<` redirection after target expansion.
+type InputDestination struct {
+	Invocation toolcontract.OperationInvocation
+	Redirect   commandsurface.ProgramRedirect
+	Target     Field
+}
+
+// InputRedirection opens a `<` operand through the read owner. The returned
+// stream is stdin for one statement; closing it is a consumer stop.
+type InputRedirection interface {
+	OpenInput(context.Context, InputDestination) (io.ReadCloser, error)
 }
 
 // ResultProjection delegates remaining obligations to workflow/grounding
@@ -184,53 +221,3 @@ type ProgramSupervision interface {
 type ResultProjection interface {
 	ProjectResult(context.Context, toolcontract.OperationInvocation, toolcontract.ProducerResult) error
 }
-
-// ProgramJobs keeps statement-trailing & jobs in the host's single session
-// registry. Handles are session-scoped; a job keeps the state captured at launch.
-type ProgramJobs interface {
-	Start(context.Context, JobLaunch) (string, error)
-	Wait(context.Context, string) (toolcontract.ProducerResult, error)
-	Signal(context.Context, string, string) error
-	List(context.Context) ([]JobStatus, error)
-}
-
-// JobLaunch is one background statement; Run executes it under the job's context.
-type JobLaunch struct {
-	Invocation  toolcontract.OperationInvocation
-	CommandLine string
-	Run         func(context.Context, Streams) (toolcontract.ProducerResult, error)
-}
-
-// JobStatus is the registry's observation; a stop request is not an exit.
-type JobStatus struct {
-	Handle        string
-	CommandLine   string
-	Running       bool
-	StopRequested bool
-	Status        *int
-}
-
-// EvaluationPorts are every host port one program evaluation is built against.
-type EvaluationPorts struct {
-	Dispatch OperationDispatcher
-	Expand   Expander
-	Record   ProgramRecorder
-	Publish  OutputPublication
-	Held     HeldEffects
-	Jobs     ProgramJobs
-	Progress ProgressAdmission
-	Memory   *toolcontract.ProgramMemory
-}
-
-// Evaluation is one wholly validated program with its frozen plan and root.
-// Streams are the program's own stdin, stdout and stderr.
-type Evaluation struct {
-	Root    toolcontract.OperationInvocation
-	Plan    commandsurface.ProgramSnapshot
-	Streams Streams
-	Ports   EvaluationPorts
-}
-
-// Evaluator schedules statements; it returns the aggregate utility outcome and
-// leaves child settlement to the dispatched owners.
-type Evaluator func(context.Context, Evaluation) (toolcontract.ProducerResult, error)

@@ -32,11 +32,9 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	if capture == nil {
 		return nil, CapturedSource{}, fmt.Errorf("source capture binding unavailable")
 	}
-	parser, err := commandsurface.NewProgramParser(ctx, memory)
-	if err != nil {
-		return nil, CapturedSource{}, err
+	if memory == nil {
+		return nil, CapturedSource{}, fmt.Errorf("source unit requires program memory admission")
 	}
-	defer parser.Close()
 	maximum := commandsurface.SyntaxUnitByteLimit(true)
 	source, err := capture.Capture(ctx, invocation, SourceCaptureRequest{Path: path, MaximumBytes: maximum, Representation: toolcontract.UTF8SourceBytes})
 	if err != nil {
@@ -54,7 +52,7 @@ func LoadSourceUnit(ctx context.Context, capture SourceCapture, invocation toolc
 	if pin.SourceID == "" || pin.Revision == "" || pin.StartByte != 0 || pin.EndByte != int64(len(source.Bytes)) || pin.SHA256 != hex.EncodeToString(sum[:]) {
 		return nil, CapturedSource{}, &SourceIntegrityError{SourceID: pin.SourceID}
 	}
-	parsed, err := parser.Parse(source.Bytes, commandsurface.ParseOptions{SourceName: pin.SourceID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: invocation.CatalogDigest})
+	parsed, err := commandsurface.ParseAdmitted(ctx, memory, source.Bytes, commandsurface.ParseOptions{SourceName: pin.SourceID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: invocation.CatalogDigest})
 	if err != nil {
 		return nil, source, err
 	}

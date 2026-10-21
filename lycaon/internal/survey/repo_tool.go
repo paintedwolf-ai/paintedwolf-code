@@ -42,7 +42,8 @@ type snapshotEntry struct {
 	Body   string `json:"body,omitempty"`
 }
 
-type repoResponse struct {
+// RepoResponse is one bundle digest.
+type RepoResponse struct {
 	Bundle           string          `json:"bundle"`
 	Path             string          `json:"path"`
 	View             string          `json:"view,omitempty"`
@@ -63,31 +64,43 @@ type repoResponse struct {
 
 // Run executes survey_repo with bundle and optional path args.
 func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	resp, err := t.Survey(ctx, strings.TrimSpace(argString(args, "bundle")), strings.TrimSpace(argString(args, "path")), tctx)
+	if err != nil {
+		return "", err
+	}
+	out, err := capRepoResponse(&resp)
+	if err == nil {
+		recordRepoSources(tctx, resp)
+	}
+	return out, err
+}
+
+// Survey runs one catalog bundle under path ("." when empty): the typed
+// operation behind survey_repo and the repo-map command built-in.
+func (t *RepoTool) Survey(ctx context.Context, bundleID, relPath string, tctx tools.ToolContext) (RepoResponse, error) {
 	if t == nil || t.Boundary == nil || t.BaseCatalog == nil {
-		return "", fmt.Errorf("survey_repo: not configured")
+		return RepoResponse{}, fmt.Errorf("survey_repo: not configured")
 	}
-	bundleID := strings.TrimSpace(argString(args, "bundle"))
 	if bundleID == "" {
-		return "", &toolrejection.ToolReject{Code: "SURVEY_BUNDLE_REQUIRED", Data: map[string]any{}}
+		return RepoResponse{}, &toolrejection.ToolReject{Code: "SURVEY_BUNDLE_REQUIRED", Data: map[string]any{}}
 	}
-	relPath := strings.TrimSpace(argString(args, "path"))
 	if relPath == "" {
 		relPath = "."
 	}
 	resolved, err := projectpaths.ResolveRead(ctx, t.Boundary, tctx, relPath)
 	if err != nil {
-		return "", err
+		return RepoResponse{}, err
 	}
 	cat := t.BaseCatalog.Clone()
 	projectRoot := strings.TrimSpace(tctx.ActiveRootPath())
 	if projectRoot != "" {
 		overlayDir := filepath.Join(projectRoot, settingsoverlay.DirName(), "survey")
 		if err := MergeOverlay(cat, extpacks.OnDisk(overlayDir)); err != nil {
-			return "", err
+			return RepoResponse{}, err
 		}
 	}
 	if _, ok := cat.Bundles[bundleID]; !ok {
-		return "", &toolrejection.ToolReject{
+		return RepoResponse{}, &toolrejection.ToolReject{
 			Code: "SURVEY_BUNDLE_UNKNOWN",
 			Data: map[string]any{"bundle": bundleID, "available": cat.BundleIDs()},
 		}
@@ -100,29 +113,25 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	readFilter, err := t.Boundary.CompileReadFilter(ctx, resolved.Root.Path, profileID)
 	if err != nil {
-		return "", err
+		return RepoResponse{}, err
 	}
 	result, err := runner.Run(ctx, bundleID, relPath, Scope{
 		Boundary: t.Boundary, ToolCtx: tctx, SourceCatalog: t.SourceCatalog, ReadFilter: readFilter,
 	})
 	if err != nil {
 		if errors.Is(err, ErrSurveyPathEscape) {
-			return "", &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": relPath}}
+			return RepoResponse{}, &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": relPath}}
 		}
-		return "", err
+		return RepoResponse{}, err
 	}
 	resp := buildRepoResponse(result)
 	LogSurveyRepoCall(ctx, bundleID, resp.ProbesRun, resp.Total, result.Coverage, time.Since(started))
-	out, err := capRepoResponse(&resp)
-	if err == nil {
-		recordRepoSources(tctx, resp)
-	}
-	return out, err
+	return resp, nil
 }
 
-func buildRepoResponse(result *RunResult) repoResponse {
+func buildRepoResponse(result *RunResult) RepoResponse {
 	total := len(result.Ledger.Handles)
-	return repoResponse{
+	return RepoResponse{
 		Bundle:           result.BundleID,
 		Path:             result.Path,
 		View:             repoViewDigest,
@@ -162,7 +171,7 @@ func snapshotEntries(ledger evidence.Ledger) []snapshotEntry {
 	return out
 }
 
-func capRepoResponse(resp *repoResponse) (string, error) {
+func capRepoResponse(resp *RepoResponse) (string, error) {
 	raw, err := surveyjson.Marshal(resp)
 	if err != nil {
 		return "", err
@@ -205,7 +214,7 @@ func argString(args map[string]any, key string) string {
 	return v
 }
 
-func recordRepoSources(tctx tools.ToolContext, resp repoResponse) {
+func recordRepoSources(tctx tools.ToolContext, resp RepoResponse) {
 	for _, entry := range resp.Snapshot {
 		switch entry.Kind {
 		case "file", "grep", "read":

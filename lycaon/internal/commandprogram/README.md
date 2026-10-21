@@ -73,6 +73,52 @@ Every refusal is an `ExpansionError` with the catalog code and the word or part
 span. Here-documents with a quoted delimiter are literal; `<<-` strips leading
 tabs from body lines, not from expanded values.
 
+## Evaluator
+
+`Evaluate(ctx, plan, EvaluationPorts)` is the host statement scheduler over a
+frozen `commandsurface.ProgramSnapshot`. It walks `;`, `&&`, `||`, `!`,
+pipelines, braces and isolated `( )` frames, `if`/`elif`/`else`, `for`,
+`while`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
+`exit`/`return`/`break`/`continue`, assignments, `export`/`unset`,
+redirections, here-documents and statement-trailing `&`. Every simple command
+is expanded through `Expander` when reached and dispatched through `Dispatch`:
+catalog names bind first through `ArgvBinder` and `Invoke`; other programs and
+`external --` use `Launch`. Unsupported option spellings refuse with the
+binder's code and never fall back to an installed binary.
+
+Status follows `StatusControl` and `OutcomeLatch`: the last executed status or
+explicit exit, ordinary failures stay handleable, and refusal, interruption,
+owner stops, invalid results and exhausted ceilings latch. There is no implicit
+`set -e`. Pipelines run each stage concurrently in an isolated frame joined by
+metered `BytePipe`s; each stage closes its own endpoints, every pipe is closed
+before return, and `SettlePipeline` settles all stages. The native byte-endpoint
+closure exception applies only to native producers. Functions share variables
+and exit control with their caller and keep positional arguments local.
+`( )`, `$( )`, pipeline stages and background jobs copy variables and functions
+and fork the directory through `Dispatch.Fork`; a job also gets its own latch
+and the streams `ProgramSupervision.StartJob` owns for it. The evaluator is the
+`Substitution` port of the `WordExpander` it builds over `EvaluationPorts.Files`:
+each reached unit runs in an isolated frame with its stdout going to the
+expander's bounded writer. A nonzero unit status is retained, prevents the
+containing dispatch (P08 `AdmitSubstitution`) and becomes that command's status;
+an `ExpansionError` latches as a refusal with its own code. `source` captures through `LoadSourceUnit`, preflights the
+unit and runs it in the current frame; its pin is recorded in the outcome.
+
+Before the first statement, preflight refuses reserved function names and any
+construct whose owner port is absent, with `COMMAND_SYNTAX_UNSUPPORTED`. Every
+reached statement is one `statement_visits` unit, each `while` test and `for`
+item one `loop_iterations` unit, and function, source and substitution nesting
+are bounded by depth ceilings. Operations, in-process native builtins, function
+calls, substitutions, redirections, source units, isolated groups, pipelines
+and jobs are child executions: each charges `child_executions` and holds the
+catalog's per-execution trace settlement reservation until it settles.
+Evaluator bookkeeping (assignments, declarations, branch and loop results) is
+not a child execution. Frames keep their variables in `Variables`; a function's
+`NAME=value` prefixes overlay its frame without mutating the caller. Child receipts belong to the
+dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
+captured sources and job handles, and `Settlement` projects it onto the
+receipt owner's aggregate record.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv

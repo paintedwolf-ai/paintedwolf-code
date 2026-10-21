@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -16,8 +15,14 @@ type ConsumerClosure struct {
 	external           bool
 }
 
+// ExecutorClosure is the external executor's classified pipe settlement for
+// one stage (exec.StageRun), separate from its raw signal status.
+type ExecutorClosure interface {
+	ExpectedConsumerClosure() bool
+}
+
 // ExternalConsumerClosure carries the existing executor's signal classification.
-func ExternalConsumerClosure(stage lyexec.StageRun, producerID, consumerID string) ConsumerClosure {
+func ExternalConsumerClosure(stage ExecutorClosure, producerID, consumerID string) ConsumerClosure {
 	return ConsumerClosure{producer: producerID, consumer: consumerID, recognized: stage.ExpectedConsumerClosure(), external: true}
 }
 
