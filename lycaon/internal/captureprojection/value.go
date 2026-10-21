@@ -55,7 +55,8 @@ type valueWalk struct {
 	screen    func(string, string) (string, error)
 	admit     func(context.Context, int64) error
 	node      func(context.Context, int) error
-	scalar    func(string) (string, error)
+	scalar    func(any) (any, error)
+	children  func(int, int) error
 	generated func(int64) error
 }
 
@@ -79,6 +80,11 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 	case string:
 		return w.screen(label, typed)
 	case []any:
+		if w.children != nil {
+			if err := w.children(len(typed), 1); err != nil {
+				return nil, err
+			}
+		}
 		if err := w.reserve(ctx, int64(len(typed))*32+4096); err != nil {
 			return nil, err
 		}
@@ -91,7 +97,35 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 			out[i] = child
 		}
 		return out, nil
+	case []string:
+		if w.children != nil {
+			if err := w.children(len(typed), 1); err != nil {
+				return nil, err
+			}
+		}
+		if err := w.reserve(ctx, int64(len(typed))*32+4096); err != nil {
+			return nil, err
+		}
+		out := make([]string, len(typed))
+		for i, value := range typed {
+			if w.node != nil {
+				if err := w.node(ctx, depth+1); err != nil {
+					return nil, err
+				}
+			}
+			screened, err := w.screen(label, value)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = screened
+		}
+		return out, nil
 	case map[string]any:
+		if w.children != nil {
+			if err := w.children(len(typed), 2); err != nil {
+				return nil, err
+			}
+		}
 		if err := w.reserve(ctx, int64(len(typed))*256+4096); err != nil {
 			return nil, err
 		}
@@ -129,10 +163,9 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 			out[safeKey] = child
 		}
 		return out, nil
-	case json.Number:
+	case json.Number, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		if w.scalar != nil {
-			copied, err := w.scalar(string(typed))
-			return json.Number(copied), err
+			return w.scalar(typed)
 		}
 		return typed, nil
 	case nil, bool:

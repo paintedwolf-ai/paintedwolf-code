@@ -27,7 +27,10 @@ type ValueOptions struct {
 	MaximumNodes, MaximumDepth int
 }
 
-// Value screens original scalar bytes before encoding. Its release must remain
+// Value screens original string and key bytes before encoding. Numeric, bool
+// and null primitives retain the existing JSON capture semantics and do not pass
+// through text matching. Finite native numeric types and exact json.Number are
+// preserved without converting the argument tree through JSON. Its release must remain
 // held through consumption/publication; an error returns no partial projection
 // and releases all retained storage. It never mutates the input or reconstructs
 // executable arguments from an inspection representation.
@@ -52,6 +55,13 @@ func (p *Projector) Value(ctx context.Context, scope Scope, label string, value 
 		generated: func(n int64) error { return screener.count(0, n) },
 	}
 	nodes := 0
+	walk.children = func(length, multiplier int) error {
+		remaining := options.MaximumNodes - nodes
+		if length > remaining/multiplier {
+			return &secretmatch.StreamLimitError{Resource: "capture_value_nodes", Maximum: int64(options.MaximumNodes), Observed: int64(nodes) + int64(length)*int64(multiplier)}
+		}
+		return nil
+	}
 	walk.node = func(ctx context.Context, depth int) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -145,17 +155,27 @@ func (s *valueScreen) count(input, output int64) error {
 	s.output += output
 	return nil
 }
-func (s *valueScreen) number(value string) (string, error) {
-	if err := s.count(int64(len(value)), int64(len(value))); err != nil {
-		return "", err
+func (s *valueScreen) number(value any) (any, error) {
+	// Standard JSON validates numeric spellings/finite values. Admission covers
+	// its bounded encoding buffer and the detached exact-number copy first.
+	size := int64(64)
+	if number, ok := value.(json.Number); ok {
+		size = int64(len(number))
 	}
-	if _, err := s.storage.reserve(int64(len(value))*2 + 4096); err != nil {
-		return "", err
+	if _, err := s.storage.reserve(size*4 + 4096); err != nil {
+		return nil, err
 	}
-	if _, err := json.Marshal(json.Number(value)); err != nil {
-		return "", err
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
 	}
-	return strings.Clone(value), nil
+	if err = s.count(int64(len(encoded)), int64(len(encoded))); err != nil {
+		return nil, err
+	}
+	if number, ok := value.(json.Number); ok {
+		return json.Number(strings.Clone(string(number))), nil
+	}
+	return value, nil
 }
 func (s *valueScreen) text(label, value string) (string, error) {
 	if err := s.count(int64(len(value)), 0); err != nil {

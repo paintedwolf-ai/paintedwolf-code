@@ -114,3 +114,31 @@ func TestValueAggregateScalarLimitsAndLease(t *testing.T) {
 		t.Fatalf("aggregate +1: %v state=%d", err, state.outstanding)
 	}
 }
+
+func TestValueContainerArityRefusesBeforeContainerAdmission(t *testing.T) {
+	for _, value := range []any{[]any{"a", "b"}, []string{"a", "b"}, map[string]any{"a": "b"}} {
+		options, state, _ := valueOptionsFixture()
+		options.MaximumNodes = 1
+		_, _, _, err := testProjector(t, nil).Value(t.Context(), Scope{}, "capture.arguments", value, options)
+		var limit *secretmatch.StreamLimitError
+		if !errors.As(err, &limit) || limit.Resource != "capture_value_nodes" || state.calls != 4 || state.outstanding != 0 {
+			t.Fatalf("container exceeded node bound before refusal: %T %v calls=%d held=%d", value, err, state.calls, state.outstanding)
+		}
+	}
+}
+
+func TestValuePreservesNativePrimitiveTypesAndScreensStringArrays(t *testing.T) {
+	options, _, _ := valueOptionsFixture()
+	original := map[string]any{"signed": int64(-123), "unsigned": uint64(9007199254740993), "float": float64(1.25), "strings": []string{testSecret, "raw\xff"}, "bool": true, "null": nil}
+	projected, _, release, err := testProjector(t, nil).Value(t.Context(), Scope{}, "capture.arguments", original, options)
+	testutil.FailErr(t, "screen actual native primitive argument types", err)
+	defer release()
+	result := projected.(map[string]any)
+	if result["signed"] != original["signed"] || result["unsigned"] != original["unsigned"] || result["float"] != original["float"] || result["bool"] != true || result["null"] != nil {
+		t.Fatalf("primitive identity lost: %#v", result)
+	}
+	stringsResult := result["strings"].([]string)
+	if strings.Contains(stringsResult[0], testSecret) || stringsResult[1] != "raw\xff" {
+		t.Fatal("native string-array screening lost exact bytes")
+	}
+}
