@@ -17,7 +17,7 @@ function mountNavigation() {
   appStore.actions.setCurrentSession({ id: "session", project_id: "project", status: "idle", title: "Original" } as never);
   appStore.actions.installTranscriptBaseline("session", [], 0);
   const recents = { state: { recents: [] }, registerSession: vi.fn(async () => undefined) };
-  const projectSessions = { state: { projectId: "project", rows: [], sort: "recent" }, setProject: vi.fn(), setSort: vi.fn(), refresh: vi.fn(async () => undefined) };
+  const projectSessions = { state: { projectId: "project", rows: [] as Array<{ id: string }>, sort: "recent" }, setProject: vi.fn(), setSort: vi.fn(), refresh: vi.fn(async () => undefined) };
   const calls = { showProjects: vi.fn(), closeSearch: vi.fn(), closeCrossbar: vi.fn(), closeLauncher: vi.fn(),
     revealConversation: vi.fn(async () => true), focusComposer: vi.fn() };
   const navigation = createRoot((dispose) => {
