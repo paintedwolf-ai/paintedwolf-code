@@ -234,7 +234,8 @@
         "orca-navigation",
         "atspi-text-attributes",
         "contrast-and-reduced-motion",
-        "overflow-and-large-text"
+        "overflow-and-large-text",
+        "protected-desktop-appearance"
       ]
     },
     {
