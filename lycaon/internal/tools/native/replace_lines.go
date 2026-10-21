@@ -55,6 +55,9 @@ func (t *ReplaceLinesTool) Run(ctx context.Context, args map[string]any, tctx to
 			if os.IsNotExist(err) {
 				return "", sourceview.PathNotFound("replace_lines", path, fullPath)
 			}
+			if toolrejection.AsToolReject(err) != nil {
+				return "", err
+			}
 			return "", fmt.Errorf("read failed: %w", err)
 		}
 		old := st.Content

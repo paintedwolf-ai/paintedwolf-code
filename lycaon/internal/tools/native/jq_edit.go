@@ -107,6 +107,9 @@ func loadWriteBase(ctx context.Context, tctx tools.ToolContext, target projectpa
 		return sourceview.Text{}, nil, nil
 	}
 	if err != nil {
+		if toolrejection.AsToolReject(err) != nil {
+			return sourceview.Text{}, nil, err
+		}
 		return sourceview.Text{}, nil, fmt.Errorf("read failed: %w", err)
 	}
 	return st, &st.Content, nil

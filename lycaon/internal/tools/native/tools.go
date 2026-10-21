@@ -65,6 +65,9 @@ func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 			beforeText := st.Content
 			before = &beforeText
 		} else if !os.IsNotExist(err) {
+			if toolrejection.AsToolReject(err) != nil {
+				return "", err
+			}
 			return "", fmt.Errorf("read failed: %w", err)
 		}
 		proposed := content
