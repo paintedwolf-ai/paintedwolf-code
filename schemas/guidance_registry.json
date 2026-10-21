@@ -590,6 +590,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "This native command operation is unavailable on the current platform."
     },
+    "COMMAND_PUBLICATION_PENDING": {
+      "branch_instruction": "Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit",
+      "category": "recoverable",
+      "emit": "guard:command_publication_barrier",
+      "summary": "The dependent process did not start: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
+    },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",
       "category": "recoverable",
@@ -601,6 +607,12 @@
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
+    },
+    "COMMAND_REVISION_CONFLICT": {
+      "branch_instruction": "Branch on Code; keep the concurrent change and do not replay the stale transform",
+      "category": "recoverable",
+      "emit": "guard:command_revision_pin",
+      "summary": "{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish."
     },
     "COMMAND_SYNTAX_INVALID": {
       "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
