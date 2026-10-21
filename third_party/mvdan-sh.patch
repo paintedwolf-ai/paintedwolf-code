@@ -43,10 +43,36 @@
 +			})
 --- /dev/null
 +++ b/expand/literal_text.go
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,54 @@
 +package expand
 +
 +import "unicode/utf8"
++
++// QuoteContext selects the backslash rules that apply to literal word text.
++type QuoteContext uint8
++
++const (
++	// UnquotedText removes a backslash before any character.
++	UnquotedText QuoteContext = iota
++	// DoubleQuotedText removes a backslash only before $, `, " or \.
++	DoubleQuotedText
++	// HereDocumentText removes a backslash only before $, ` or \.
++	HereDocumentText
++)
++
++// RemoveQuotes walks literal text under the selected quote-removal rules, in
++// order, without allocating. escaped reports text quoted by a backslash. It
++// performs no parameter, substitution, tilde, brace or pathname expansion.
++func RemoveQuotes(text string, context QuoteContext, visit func(text string, escaped bool)) {
++	quote := quoteNone
++	switch context {
++	case DoubleQuotedText:
++		quote = quoteDouble
++	case HereDocumentText:
++		quote = quoteHeredoc
++	}
++	literalText(text, quote, visit)
++}
 +
 +// literalText walks the selected quote-removal rules without allocating one
 +// field fragment per escape. The flag identifies text quoted by a backslash.
@@ -71,6 +97,52 @@
 +		start = i + 1
 +	}
 +	visit(value[start:], false)
++}
+--- /dev/null
++++ b/expand/remove_quotes_test.go
+@@ -0,0 +1,43 @@
++package expand_test
++
++import (
++	"testing"
++
++	"mvdan.cc/sh/v3/expand"
++)
++
++type quotedPiece struct {
++	text    string
++	escaped bool
++}
++
++func TestRemoveQuotesSelectsBackslashRules(t *testing.T) {
++	for _, fixture := range []struct {
++		name    string
++		text    string
++		context expand.QuoteContext
++		want    []quotedPiece
++	}{
++		{"unquoted escapes any character", `a\*b\ c`, expand.UnquotedText, []quotedPiece{{"a", false}, {"*", true}, {"b", false}, {" ", true}, {"c", false}}},
++		{"unquoted escapes a whole scalar", `\世x`, expand.UnquotedText, []quotedPiece{{"", false}, {"世", true}, {"x", false}}},
++		{"unquoted keeps a trailing backslash", `a\`, expand.UnquotedText, []quotedPiece{{`a\`, false}}},
++		{"double quotes escape only specials", `\"\$\\\n\*`, expand.DoubleQuotedText, []quotedPiece{{"", false}, {`"`, true}, {"", false}, {"$", true}, {"", false}, {`\`, true}, {`\n\*`, false}}},
++		{"here-documents keep a quoted double quote", `\"\$x`, expand.HereDocumentText, []quotedPiece{{`\"`, false}, {"$", true}, {"x", false}}},
++		{"plain text is one visit", "plain", expand.DoubleQuotedText, []quotedPiece{{"plain", false}}},
++	} {
++		t.Run(fixture.name, func(t *testing.T) {
++			var got []quotedPiece
++			expand.RemoveQuotes(fixture.text, fixture.context, func(text string, escaped bool) {
++				got = append(got, quotedPiece{text, escaped})
++			})
++			if len(got) != len(fixture.want) {
++				t.Fatalf("pieces = %+v, want %+v", got, fixture.want)
++			}
++			for i := range got {
++				if got[i] != fixture.want[i] {
++					t.Fatalf("pieces = %+v, want %+v", got, fixture.want)
++				}
++			}
++		})
++	}
 +}
 --- /dev/null
 +++ b/expand/static_literal.go

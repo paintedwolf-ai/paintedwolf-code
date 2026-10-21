@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -44,6 +42,62 @@ func (e *GlobBudgetError) Error() string {
 // Is lets errors.Is match ErrGlobBudget.
 func (e *GlobBudgetError) Is(target error) bool { return target == ErrGlobBudget }
 
+// GlobEntry is one directory entry a walk examines. Dir reports an entry that
+// may prefix a later component; Link marks a symbolic link, which globstar
+// never descends.
+type GlobEntry struct {
+	Name string
+	Dir  bool
+	Link bool
+}
+
+// GlobFiles is the filesystem view of one walk. Paths keep the pattern's own
+// spelling: "" is the working directory and components join with "/". A
+// missing or unreadable directory lists nothing; errors are reserved for
+// cancellation and resource refusals.
+type GlobFiles interface {
+	// ListDir returns at most maximum+1 entries, so a walk can refuse past its
+	// visit budget without listing the remainder.
+	ListDir(ctx context.Context, dir string, maximum int) ([]GlobEntry, error)
+	// Entry reports a component the pattern names literally.
+	Entry(ctx context.Context, path string) (GlobEntry, bool, error)
+	// Admit reports whether a candidate is visible to the operation; a match it
+	// could not read is not a match.
+	Admit(ctx context.Context, path string) (bool, error)
+}
+
+// GlobBudget is the capacity a walk may still consume. MatchGlob deducts the
+// entries it listed and the matches it returned.
+type GlobBudget struct {
+	Matches int
+	Visits  int
+}
+
+// MatchGlob returns the sorted matches of one pattern, as a shell with globstar
+// and without dotglob does: hidden names match only a component that starts
+// with a dot, and ** matches zero or more nonhidden directories. A pattern with
+// no match returns none. Exceeding the budget returns a GlobBudgetError whose
+// Max is the remaining capacity the walk was given.
+func MatchGlob(ctx context.Context, files GlobFiles, pattern string, budget *GlobBudget) ([]string, error) {
+	g := globber{ctx: ctx, files: files, maxMatches: budget.Matches, visitsLeft: budget.Visits}
+	matches, err := g.expand(pattern)
+	if errors.Is(err, errVisitBudget) {
+		return nil, &GlobBudgetError{Pattern: pattern, Limit: GlobLimitEntries, Max: budget.Visits}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) > g.maxMatches {
+		return nil, &GlobBudgetError{Pattern: pattern, Limit: GlobLimitMatches, Max: budget.Matches}
+	}
+	budget.Visits = g.visitsLeft
+	budget.Matches -= len(matches)
+	return matches, nil
+}
+
+// GlobActive reports an unescaped `*`, `?`, or `[` anywhere in a pattern.
+func GlobActive(pattern string) bool { return hasActiveGlob(pattern) }
+
 // GlobScope is the filesystem view one plan's patterns expand against.
 type GlobScope struct {
 	// Dir is the absolute process directory relative patterns resolve under.
@@ -61,14 +115,15 @@ type GlobScope struct {
 // expands. The result carries no remaining patterns, so it runs as rendered,
 // and keeps each surviving argument's address mark.
 func ExpandGlobs(ctx context.Context, stages []exec.Stage, scope GlobScope) ([]exec.Stage, bool, error) {
-	g := globber{ctx: ctx, scope: scope, maxMatches: scope.MaxMatches, visitsLeft: scope.MaxVisits}
-	if g.maxMatches <= 0 {
-		g.maxMatches = MaxGlobMatches
+	maxMatches, maxVisits := scope.MaxMatches, scope.MaxVisits
+	if maxMatches <= 0 {
+		maxMatches = MaxGlobMatches
 	}
-	if g.visitsLeft <= 0 {
-		g.visitsLeft = MaxGlobVisits
+	if maxVisits <= 0 {
+		maxVisits = MaxGlobVisits
 	}
-	maxVisits := g.visitsLeft
+	files := OSGlobFiles{Dir: scope.Dir, Readable: scope.Readable}
+	visitsLeft := maxVisits
 	out := make([]exec.Stage, len(stages))
 	changed := false
 	for i, stage := range stages {
@@ -88,16 +143,20 @@ func ExpandGlobs(ctx context.Context, stages []exec.Stage, scope GlobScope) ([]e
 				keep(j, arg)
 				continue
 			}
-			matches, err := g.expand(pattern)
-			if errors.Is(err, errVisitBudget) {
-				return nil, false, &GlobBudgetError{Pattern: arg, Limit: GlobLimitEntries, Max: maxVisits}
+			budget := GlobBudget{Matches: maxMatches, Visits: visitsLeft}
+			matches, err := MatchGlob(ctx, files, pattern, &budget)
+			var exceeded *GlobBudgetError
+			if errors.As(err, &exceeded) {
+				exceeded.Pattern = arg
+				if exceeded.Limit == GlobLimitEntries {
+					exceeded.Max = maxVisits
+				}
+				return nil, false, exceeded
 			}
 			if err != nil {
 				return nil, false, err
 			}
-			if len(matches) > g.maxMatches {
-				return nil, false, &GlobBudgetError{Pattern: arg, Limit: GlobLimitMatches, Max: g.maxMatches}
-			}
+			visitsLeft = budget.Visits
 			if len(matches) == 0 {
 				keep(j, arg)
 				continue
@@ -120,13 +179,12 @@ var errVisitBudget = errors.New("glob visit budget exhausted")
 
 type globber struct {
 	ctx        context.Context
-	scope      GlobScope
+	files      GlobFiles
 	maxMatches int
 	visitsLeft int
 }
 
-// expand matches one pattern component by component, as a shell with
-// globstar and without dotglob does.
+// expand matches one pattern component by component.
 func (g *globber) expand(pattern string) ([]string, error) {
 	dirOnly := strings.HasSuffix(pattern, "/")
 	pattern = strings.TrimSuffix(pattern, "/")
@@ -170,13 +228,12 @@ func (g *globber) component(base, component string, last bool) ([]string, error)
 	case component == "**":
 		return g.globstar(base, last)
 	case !hasActiveGlob(component):
-		name := unescapeGlob(component)
-		candidate := joinGlob(base, name)
-		abs := g.abs(candidate)
-		if !g.readable(abs) || !entryMatches(abs, last) {
-			return nil, nil
+		candidate := joinGlob(base, unescapeGlob(component))
+		entry, found, err := g.files.Entry(g.ctx, candidate)
+		if err != nil || !found || (!last && !entry.Dir) {
+			return nil, err
 		}
-		return []string{candidate}, nil
+		return g.admitted(nil, candidate)
 	}
 	component = bashBracketNegation(component)
 	entries, err := g.readDir(base)
@@ -185,27 +242,34 @@ func (g *globber) component(base, component string, last bool) ([]string, error)
 	}
 	var out []string
 	for _, entry := range entries {
-		name := entry.Name()
+		name := entry.Name
 		if strings.HasPrefix(name, ".") && !strings.HasPrefix(component, ".") && !strings.HasPrefix(component, `\.`) {
 			continue
 		}
 		if ok, err := path.Match(component, name); err != nil || !ok {
 			continue
 		}
-		candidate := joinGlob(base, name)
-		if !g.readable(g.abs(candidate)) {
+		if !last && !entry.Dir {
 			continue
 		}
-		if !last && !g.isDir(candidate, entry) {
-			continue
+		if out, err = g.admitted(out, joinGlob(base, name)); err != nil {
+			return nil, err
 		}
-		out = append(out, candidate)
 	}
 	return out, nil
 }
 
-// globstar matches base and every non-hidden directory under it; as the last
-// component it matches every non-hidden entry under base instead.
+func (g *globber) admitted(out []string, candidate string) ([]string, error) {
+	ok, err := g.files.Admit(g.ctx, candidate)
+	if err != nil || !ok {
+		return out, err
+	}
+	return append(out, candidate), nil
+}
+
+// globstar matches base and every nonhidden directory under it; as the last
+// component it matches every nonhidden entry under base instead. Symbolic
+// links are never descended.
 func (g *globber) globstar(base string, last bool) ([]string, error) {
 	var out []string
 	if !last {
@@ -218,23 +282,25 @@ func (g *globber) globstar(base string, last bool) ([]string, error) {
 			return err
 		}
 		for _, entry := range entries {
-			name := entry.Name()
-			if strings.HasPrefix(name, ".") {
+			if strings.HasPrefix(entry.Name, ".") {
 				continue
 			}
-			candidate := joinGlob(dir, name)
-			if !g.readable(g.abs(candidate)) {
+			candidate := joinGlob(dir, entry.Name)
+			ok, err := g.files.Admit(g.ctx, candidate)
+			if err != nil {
+				return err
+			}
+			if !ok {
 				continue
 			}
-			// Symlinked directories are not descended, as in a shell's globstar.
-			isDir := entry.IsDir()
-			if last || isDir {
+			descend := entry.Dir && !entry.Link
+			if last || descend {
 				out = append(out, candidate)
 			}
 			if last && len(out) > g.maxMatches {
 				return nil
 			}
-			if isDir {
+			if descend {
 				if err := walk(candidate); err != nil {
 					return err
 				}
@@ -248,48 +314,19 @@ func (g *globber) globstar(base string, last bool) ([]string, error) {
 	return out, nil
 }
 
-func (g *globber) readDir(rel string) ([]os.DirEntry, error) {
+func (g *globber) readDir(dir string) ([]GlobEntry, error) {
 	if err := g.ctx.Err(); err != nil {
 		return nil, err
 	}
-	abs := g.abs(rel)
-	if !g.readable(abs) {
-		return nil, nil
-	}
-	entries, listed := listDir(abs)
-	if !listed {
-		return nil, nil
+	entries, err := g.files.ListDir(g.ctx, dir, max(g.visitsLeft, 0))
+	if err != nil {
+		return nil, err
 	}
 	g.visitsLeft -= len(entries)
 	if g.visitsLeft < 0 {
 		return nil, errVisitBudget
 	}
 	return entries, nil
-}
-
-func (g *globber) isDir(rel string, entry os.DirEntry) bool {
-	if entry.IsDir() {
-		return true
-	}
-	if entry.Type()&os.ModeSymlink == 0 {
-		return false
-	}
-	info, err := os.Stat(g.abs(rel))
-	return err == nil && info.IsDir()
-}
-
-func (g *globber) abs(rel string) string {
-	if strings.HasPrefix(rel, "/") {
-		return filepath.FromSlash(rel)
-	}
-	if rel == "" {
-		return g.scope.Dir
-	}
-	return filepath.Join(g.scope.Dir, filepath.FromSlash(rel))
-}
-
-func (g *globber) readable(abs string) bool {
-	return g.scope.Readable == nil || g.scope.Readable(abs)
 }
 
 func joinGlob(base, name string) string {
@@ -303,7 +340,7 @@ func joinGlob(base, name string) string {
 	}
 }
 
-// hasActiveGlob reports an unescaped `*`, `?`, or `[` in a pattern component.
+// hasActiveGlob reports an unescaped `*`, `?`, or `[` in a pattern.
 func hasActiveGlob(component string) bool {
 	for i := 0; i < len(component); i++ {
 		switch component[i] {
@@ -347,19 +384,4 @@ func bashBracketNegation(component string) string {
 		}
 	}
 	return b.String()
-}
-
-// entryMatches reports whether a literal component names an entry: a missing
-// or unreadable entry matches nothing, as in a shell, and only the last
-// component may be a non-directory.
-func entryMatches(abs string, last bool) bool {
-	info, err := os.Stat(abs)
-	return err == nil && (last || info.IsDir())
-}
-
-// listDir reads a directory; one the process cannot list contributes no
-// matches, as in a shell.
-func listDir(abs string) ([]os.DirEntry, bool) {
-	entries, err := os.ReadDir(abs)
-	return entries, err == nil
 }

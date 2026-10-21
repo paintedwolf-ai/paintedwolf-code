@@ -112,6 +112,12 @@ the host does not implement a second quote grammar. The new fixtures cover a
 1 MiB escaped word, malformed brace amplification, detached output, parser reuse,
 and a shared parse/quote/lowering allocation at its exact ceiling and one byte over.
 
+`RemoveQuotes` exports that walker for unquoted, double-quoted and here-document
+text, reporting which pieces a backslash quoted. The host's program expansion
+uses it for quote removal over detached plan words, so escaped glob characters
+stay literal; it has no environment, account, filesystem or substitution access.
+The general `Config` expander and its pathname expansion remain unused by the host.
+
 To reproduce or update this copy, verify the complete release archive against the
 module checksum above, extract it into a clean directory, and apply
 `mvdan-sh.patch` with `patch -p1`. The patch includes every modified upstream file

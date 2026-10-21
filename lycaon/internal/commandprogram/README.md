@@ -11,8 +11,9 @@ authority. The command catalog remains the source of syntax and numeric bounds.
 `ports.go` holds the seams the evaluator is built against. `OperationRequest`
 carries the typed plan statement and the complete expanded argv as `Fields`
 (value plus source-word span); `Streams` reach the owner through native dispatch.
-`Expander` performs field, scalar and pattern expansion under the evaluator's
-`ExpansionScope`. `ProgramRecorder` is the receipt owner's port over the
+`Expander` performs field, scalar, pattern and here-document expansion under the
+evaluator's `ExpansionScope`; `Substitution` is the evaluator's callback for a
+reached `$()` or backtick unit. `ProgramRecorder` is the receipt owner's port over the
 `toolcontract` program receipt records, so this package stays free of storage.
 `OutputPublication` opens a redirect destination, stages bytes and publishes or
 abandons them through the destination owner. `toolcontract.ProgramMemory` is the
@@ -25,6 +26,52 @@ values, the catalog's `shorthand` (`-N` or `-SIGNAL`), `--`, and permutation
 unless `operands_end_options` is declared. Find-style primaries bind whole words.
 The bound record keeps each form's typed values; approval review presents that
 record with the operation identity rather than a legacy tool schema.
+
+## Variables and expansion
+
+`Variables` is one invocation frame: variables, export marks, positional
+parameters, `$?`, `$!` and `$0`. The captured child environment seeds exported
+entries; `Environment` applies one dispatch's `NAME=value` prefix without
+changing the frame, and `Clone` gives an isolated group or substitution unit its
+own copy. Entries are charged to `program_state_bytes` with old/new overlap and
+bounded by `variable_count`, `variable_value_bytes` and `environment_bytes`.
+Names follow the shell identifier grammar, NUL is refused and `IFS` cannot be
+assigned; an `IFS` inherited from the environment is inert data.
+
+`WordExpander` expands the detached plan's words, never upstream syntax objects.
+Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
+`$name`, `${name}`, `${#name}` (Unicode scalars), `$0`, `$1`..`${10}`, `$#`, `$?`,
+`$!`, `$@` and `$*`; unset values expand empty. Quoted `"$@"` keeps each operand
+and expands to no field for no operands, `"$*"` joins with single spaces. Only
+`~` and `~/` expand, from `HOME`; without it the tilde stays literal. Unquoted
+expansion output splits on space, tab and LF; quoted output and literal text
+never split. Values are data: metacharacters, substitution syntax and secret
+reference tokens in a value remain argument text.
+
+A field whose unquoted text has an active `*`, `?` or `[` is a pathname pattern.
+Quoted and escaped characters are escaped in the pattern, so they match
+literally. `commandsurface.MatchGlob` walks a `GlobFiles` view: matches are
+sorted by bytes, hidden names need a leading dot in the component, `**` matches
+nonhidden directories, and an unmatched pattern stays literal. The production
+view is `projectpaths.GlobFiles`, which lists through the held-root confined walk
+and admits a match only when the invocation's read authority admits that path.
+Links are entries but never directories, so no walk traverses one. Matches and
+directory visits are charged cumulatively to the program's `glob_matches` and
+`traversal_visits`.
+
+`Substitution` runs one reached unit through the evaluator's admission, dispatch
+and receipts. Its stdout is bounded by `substitution_bytes`; trailing LF bytes
+are stripped and NUL is refused. The context carries the nesting depth, bounded by
+`substitution_depth`. An ordinary nonzero status is data the evaluator retains;
+a port error or a refused, interrupted or failed unit returns `SubstitutionError`
+with the unit's span and producer result, and no later part of the word expands.
+Scalars are bounded by `variable_value_bytes`, here-documents by
+`here_document_bytes`, fields by `argument_bytes`, `argv_bytes` and
+`expanded_fields`. Live intermediate buffers are charged to the program's working
+memory and `expansion_memory_bytes` and released when the word completes.
+Every refusal is an `ExpansionError` with the catalog code and the word or part
+span. Here-documents with a quoted delimiter are literal; `<<-` strips leading
+tabs from body lines, not from expanded values.
 
 ## Native predicates
 
