@@ -664,9 +664,17 @@ allocation before claiming an end-to-end speedup.
 | `./task check:coverage` | Go aggregate statement coverage floor |
 | `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
+| `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
 | `./task perf:sidecar` | Sidecar service-level objectives and integrity invariants |
 | `./task perf:soak` | Steady-state resource growth and restart/replay recovery |
+
+The [desktop self-upgrade gate](dev-tasks.md#desktop-self-upgrade-release-gate)
+runs after signed packaging and before immutable publication. Harness tests prove
+fixture verification, isolation, and failure evidence; an actual released-app
+upgrade requires the protected run with the exact signed candidate. The separate
+sidecar/store rehearsal retains migration and backup-restore coverage, including
+clients that require manual installation.
 
 ### Hosted admission and qualification
 
@@ -903,7 +911,7 @@ not run is planned at its budget, so it starts early.
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |
+| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |

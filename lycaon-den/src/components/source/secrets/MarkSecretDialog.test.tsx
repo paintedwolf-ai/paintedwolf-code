@@ -120,8 +120,9 @@ describe("MarkSecretDialog layout", () => {
     expect(occurrences).toHaveLength(1);
   });
 
-  it("requires a name and purpose", async () => {
-    open();
+  it("requires a name and purpose and leaves composition Enter to the input method", async () => {
+    const mark = vi.fn(async () => "Registry key");
+    open({ mark });
     const submit = screen.getByTestId("mark-secret-submit");
     await waitFor(() =>
       expect(screen.getByTestId("mark-secret-receipt").textContent).toContain("36 characters"),
@@ -131,5 +132,12 @@ describe("MarkSecretDialog layout", () => {
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.input(screen.getByTestId("mark-secret-purpose"), { target: { value: "Publish packages" } });
     expect((submit as HTMLButtonElement).disabled).toBe(false);
+    const input = screen.getByTestId("mark-secret-name");
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(mark).not.toHaveBeenCalled();
+    }
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mark).toHaveBeenCalledOnce());
   });
 });
