@@ -74,6 +74,15 @@ fn value(namespace: &str, key: &str, boxed: &Variant) -> Option<Setting> {
         ("org.gnome.desktop.wm.preferences", "button-layout") => {
             Setting::ButtonLayout(text(&v, 256)?)
         }
+        ("org.gnome.desktop.wm.preferences", "action-double-click-titlebar") => {
+            Setting::TitlebarDoubleClick(text(&v, 32)?)
+        }
+        ("org.gnome.desktop.wm.preferences", "action-middle-click-titlebar") => {
+            Setting::TitlebarMiddleClick(text(&v, 32)?)
+        }
+        ("org.gnome.desktop.wm.preferences", "action-right-click-titlebar") => {
+            Setting::TitlebarRightClick(text(&v, 32)?)
+        }
         _ => return None,
     };
     setting.valid().then_some(setting)
@@ -155,7 +164,13 @@ fn known(namespace: &str, key: &str) -> bool {
             | ("org.gnome.desktop.interface", "text-scaling-factor")
             | ("org.gnome.desktop.a11y.interface", "high-contrast")
             | ("org.kde.kdeglobals.General", "AccentColor")
-            | ("org.gnome.desktop.wm.preferences", "button-layout")
+            | (
+                "org.gnome.desktop.wm.preferences",
+                "button-layout"
+                    | "action-double-click-titlebar"
+                    | "action-middle-click-titlebar"
+                    | "action-right-click-titlebar"
+            )
     )
 }
 pub fn run() -> io::Result<()> {

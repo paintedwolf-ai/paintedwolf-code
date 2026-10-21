@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { reconcileOsColorScheme, osColorSchemeIsDark } from "../../theme.ts";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
 import { drawsWindowControls, trackWindowChromeLayout } from "./window-chrome-layout.ts";
+import { followTitlebarClicks } from "./titlebar-clicks.ts";
 import { readWindowFrame, trackWindowFrame } from "./window-frame.ts";
 import { trackWindowMaximized } from "./window-maximized.ts";
 
@@ -154,6 +155,7 @@ export async function setupWindowChrome(): Promise<void> {
   if (drawsWindowControls()) {
     // Drawn controls need the desktop's layout, the maximized state, and the frame.
     void trackWindowChromeLayout();
+    followTitlebarClicks();
     void trackWindowMaximized();
     void trackWindowFrame();
   }

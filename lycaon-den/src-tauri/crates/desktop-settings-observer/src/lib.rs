@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Read, Write};
 
 pub const MAX_FRAME: usize = 16 * 1024;
-pub const MAX_SETTINGS: usize = 6;
+pub const MAX_SETTINGS: usize = 9;
 pub const NAMESPACES: [&str; 5] = [
     "org.freedesktop.appearance",
     "org.gnome.desktop.interface",
@@ -26,6 +26,9 @@ pub enum Setting {
     Accent([f64; 3]),
     KdeAccent(String),
     ButtonLayout(String),
+    TitlebarDoubleClick(String),
+    TitlebarMiddleClick(String),
+    TitlebarRightClick(String),
 }
 impl Setting {
     pub fn identity(&self) -> (&'static str, &'static str) {
@@ -36,6 +39,9 @@ impl Setting {
             Self::HighContrast(_) => (NAMESPACES[2], "high-contrast"),
             Self::KdeAccent(_) => (NAMESPACES[3], "AccentColor"),
             Self::ButtonLayout(_) => (NAMESPACES[4], "button-layout"),
+            Self::TitlebarDoubleClick(_) => (NAMESPACES[4], "action-double-click-titlebar"),
+            Self::TitlebarMiddleClick(_) => (NAMESPACES[4], "action-middle-click-titlebar"),
+            Self::TitlebarRightClick(_) => (NAMESPACES[4], "action-right-click-titlebar"),
         }
     }
     pub fn valid(&self) -> bool {
@@ -44,6 +50,9 @@ impl Setting {
             Self::Accent(v) => v.iter().all(|c| c.is_finite() && (0.0..=1.0).contains(c)),
             Self::KdeAccent(v) => v.len() <= 32 && !v.contains('\0'),
             Self::ButtonLayout(v) => v.len() <= 256 && !v.contains('\0'),
+            Self::TitlebarDoubleClick(v) | Self::TitlebarMiddleClick(v) | Self::TitlebarRightClick(v) => {
+                v.len() <= 32 && !v.contains('\0')
+            }
             _ => true,
         }
     }

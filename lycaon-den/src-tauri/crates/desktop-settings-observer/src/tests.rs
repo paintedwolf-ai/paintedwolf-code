@@ -24,6 +24,8 @@ fn bounds_types_and_duplicate_keys_refuse() {
         vec![Setting::TextScale(0.0)],
         vec![Setting::Accent([2.0, 0.0, 0.0])],
         vec![Setting::ButtonLayout("x".repeat(257))],
+        vec![Setting::TitlebarDoubleClick("x".repeat(33))],
+        vec![Setting::TitlebarRightClick("menu\0".into())],
         vec![Setting::Contrast(0), Setting::Contrast(1)],
     ] {
         let mut value = frame();
@@ -47,4 +49,24 @@ fn status_vocabulary_cannot_convert_denial_to_missing() {
         read(&mut Cursor::new(raw), 0).unwrap().unwrap().status,
         Status::Denied
     );
+}
+#[test]
+fn titlebar_click_actions_are_distinct_wm_preferences() {
+    let actions = [
+        Setting::TitlebarDoubleClick("minimize".into()),
+        Setting::TitlebarMiddleClick("lower".into()),
+        Setting::TitlebarRightClick("menu".into()),
+    ];
+    let keys: Vec<_> = actions.iter().map(Setting::identity).collect();
+    assert_eq!(keys, [
+        (NAMESPACES[4], "action-double-click-titlebar"),
+        (NAMESPACES[4], "action-middle-click-titlebar"),
+        (NAMESPACES[4], "action-right-click-titlebar"),
+    ]);
+    let mut value = frame();
+    value.settings = actions.to_vec();
+    assert!(value.validate().is_ok());
+    let mut raw = Vec::new();
+    value.write(&mut raw).unwrap();
+    assert_eq!(read(&mut Cursor::new(raw), 0).unwrap(), Some(value));
 }

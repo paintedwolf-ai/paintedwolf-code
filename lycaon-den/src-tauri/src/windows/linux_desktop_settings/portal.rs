@@ -131,7 +131,11 @@ fn apply(app: &AppHandle, frame: Frame) {
             Setting::TextScale(value) => SettingValue::F64(value),
             Setting::HighContrast(value) => SettingValue::Bool(value),
             Setting::Accent([red, green, blue]) => SettingValue::Rgb(red, green, blue),
-            Setting::KdeAccent(value) | Setting::ButtonLayout(value) => SettingValue::Str(value),
+            Setting::KdeAccent(value)
+            | Setting::ButtonLayout(value)
+            | Setting::TitlebarDoubleClick(value)
+            | Setting::TitlebarMiddleClick(value)
+            | Setting::TitlebarRightClick(value) => SettingValue::Str(value),
         };
         snapshot
             .entry(namespace.into())

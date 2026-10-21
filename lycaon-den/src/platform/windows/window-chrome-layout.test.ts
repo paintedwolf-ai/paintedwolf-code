@@ -24,6 +24,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 const {
+  DEFAULT_TITLEBAR_ACTIONS,
   DEFAULT_WINDOW_CHROME_LAYOUT,
   drawsWindowControls,
   normalizeWindowChromeLayout,
@@ -49,25 +50,32 @@ afterEach(() => {
 describe("normalizeWindowChromeLayout", () => {
   it("keeps the desktop's order and sides", () => {
     expect(normalizeWindowChromeLayout({ left: ["close"], right: ["appmenu", "minimize"], source: "portal" }))
-      .toEqual({ left: ["close"], right: ["appmenu", "minimize"], source: "portal" });
+      .toEqual({ left: ["close"], right: ["appmenu", "minimize"], source: "portal", actions: DEFAULT_TITLEBAR_ACTIONS });
   });
 
   it("gives a layout without an app menu one at the start of the right cluster", () => {
     expect(normalizeWindowChromeLayout({ left: [], right: ["close"], source: "portal" }))
-      .toEqual({ left: [], right: ["appmenu", "close"], source: "portal" });
+      .toEqual({ left: [], right: ["appmenu", "close"], source: "portal", actions: DEFAULT_TITLEBAR_ACTIONS });
     expect(normalizeWindowChromeLayout({ left: ["minimize"], right: [], source: "portal" }))
-      .toEqual({ left: ["minimize"], right: ["appmenu"], source: "portal" });
+      .toEqual({ left: ["minimize"], right: ["appmenu"], source: "portal", actions: DEFAULT_TITLEBAR_ACTIONS });
   });
 
   it("drops tokens the shell does not draw", () => {
     expect(normalizeWindowChromeLayout({ left: ["icon", "appmenu"], right: ["spacer", 7, "close"], source: "portal" }))
-      .toEqual({ left: ["appmenu"], right: ["close"], source: "portal" });
+      .toEqual({ left: ["appmenu"], right: ["close"], source: "portal", actions: DEFAULT_TITLEBAR_ACTIONS });
+  });
+
+  it("keeps the desktop's title bar click actions, even beside the default buttons", () => {
+    const actions = { double_click: "minimize", middle_click: "lower", right_click: "none" };
+    expect(normalizeWindowChromeLayout({ left: [], right: [], source: "default", actions }).actions).toEqual(actions);
+    expect(normalizeWindowChromeLayout({ left: [], right: ["close"], source: "portal",
+      actions: { double_click: "toggle-shade", middle_click: 3 } }).actions).toEqual(DEFAULT_TITLEBAR_ACTIONS);
   });
 
   it("falls back to the default for an empty or malformed fact", () => {
     expect(normalizeWindowChromeLayout(null)).toBe(DEFAULT_WINDOW_CHROME_LAYOUT);
     expect(normalizeWindowChromeLayout("appmenu:close")).toBe(DEFAULT_WINDOW_CHROME_LAYOUT);
-    expect(normalizeWindowChromeLayout({ left: ["icon"], right: [], source: "portal" })).toBe(DEFAULT_WINDOW_CHROME_LAYOUT);
+    expect(normalizeWindowChromeLayout({ left: ["icon"], right: [], source: "portal" })).toEqual(DEFAULT_WINDOW_CHROME_LAYOUT);
     expect(normalizeWindowChromeLayout({ left: [], right: ["close"], source: "guess" }).source).toBe("default");
   });
 
@@ -76,6 +84,7 @@ describe("normalizeWindowChromeLayout", () => {
       left: [],
       right: ["appmenu", "minimize", "maximize", "close"],
       source: "default",
+      actions: { double_click: "toggle-maximize", middle_click: "none", right_click: "menu" },
     });
   });
 });
@@ -85,7 +94,7 @@ describe("trackWindowChromeLayout", () => {
     invoke.mockResolvedValueOnce({ left: ["appmenu"], right: ["close"], source: "portal" });
     await trackWindowChromeLayout();
     expect(invoke).toHaveBeenCalledWith("linux_decoration_layout");
-    expect(windowChromeLayout()).toEqual({ left: ["appmenu"], right: ["close"], source: "portal" });
+    expect(windowChromeLayout()).toEqual({ left: ["appmenu"], right: ["close"], source: "portal", actions: DEFAULT_TITLEBAR_ACTIONS });
     expect(windowChromeControls("left")).toEqual(["appmenu"]);
     expect(windowChromeControls("right")).toEqual(["close"]);
   });
