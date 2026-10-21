@@ -54,6 +54,7 @@ func TestScanLinesContextAndLimits(t *testing.T) {
 		{"no input", "", ScanOptions{MaxSelected: -1}, "", 0},
 		{"carriage return kept", "m\r\n", ScanOptions{MaxSelected: -1}, "1:m\r\n", 1},
 		{"carriage return trimmed", "m\r\n", ScanOptions{MaxSelected: -1, TrimCR: true}, "1:m\n", 1},
+		{"null data", "a\x00m\nx\x00m", ScanOptions{MaxSelected: -1, NullData: true}, "2:m\nx\n3:m\n", 2},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got, n := render(t, c.content, m, c.opts)

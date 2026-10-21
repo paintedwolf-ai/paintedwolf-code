@@ -23,7 +23,8 @@ var errBinaryStop = errors.New("binary file matched")
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
-	binary := bytes.IndexByte(content, 0) >= 0
+	r.numberWidth = len(strconv.Itoa(len(content)))
+	binary := !r.scan.NullData && bytes.IndexByte(content, 0) >= 0
 	listing := r.mode != modeLines
 	separator := false
 	emitted := false
@@ -82,16 +83,16 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 			return nil
 		}
 		if names {
-			return inv.out.text(label, ":", strconv.Itoa(n), "\n")
+			return inv.out.text(label, r.nameEnd(":"), strconv.Itoa(n), "\n")
 		}
 		return inv.out.text(strconv.Itoa(n), "\n")
 	case modeFilesWith:
 		if n > 0 {
-			return inv.out.text(label, "\n")
+			return inv.out.text(label, r.nameEnd("\n"))
 		}
 	case modeFilesWithout:
 		if n == 0 {
-			return inv.out.text(label, "\n")
+			return inv.out.text(label, r.nameEnd("\n"))
 		}
 	}
 	return nil
@@ -120,12 +121,21 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 	if line.Kind == textsearch.ContextLine {
 		sep = "-"
 	}
-	var prefix strings.Builder
-	if names {
-		prefix.WriteString(label + sep)
-	}
-	if r.numbers {
-		prefix.WriteString(strconv.Itoa(line.Number) + sep)
+	prefix := func(offset int) string {
+		var b strings.Builder
+		if names {
+			b.WriteString(label + r.nameEnd(sep))
+		}
+		if r.numbers {
+			b.WriteString(r.number(line.Number) + sep)
+		}
+		if r.offsets {
+			b.WriteString(r.number(offset) + sep)
+		}
+		if r.tabs && b.Len() > 0 {
+			b.WriteByte('\t')
+		}
+		return b.String()
 	}
 	if !r.only {
 		if r.replace != nil && line.Kind == textsearch.SelectedLine && !r.scan.Invert {
@@ -133,9 +143,9 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 			if err != nil {
 				return false, err
 			}
-			return true, r.writeRecord(prefix.String(), replaced, nil, 0)
+			return true, r.writeRecord(prefix(line.Start), replaced, nil, 0)
 		}
-		return true, r.writeRecord(prefix.String(), record, pin, line.Start)
+		return true, r.writeRecord(prefix(line.Start), record, pin, line.Start)
 	}
 	if r.scan.Invert {
 		return false, nil
@@ -144,9 +154,9 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 	err := r.matcher.Groups(r.inv.ctx, record, func(groups []int) error {
 		wrote = true
 		if r.replace != nil {
-			return r.writeRecord(prefix.String(), expandReplacement(*r.replace, record, groups), nil, 0)
+			return r.writeRecord(prefix(line.Start+groups[0]), expandReplacement(*r.replace, record, groups), nil, 0)
 		}
-		return r.writeRecord(prefix.String(), record[groups[0]:groups[1]], pin, line.Start+groups[0])
+		return r.writeRecord(prefix(line.Start+groups[0]), record[groups[0]:groups[1]], pin, line.Start+groups[0])
 	})
 	return wrote, err
 }
@@ -160,7 +170,27 @@ func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.Sour
 	if err := r.inv.out.literal(pin, text, int64(offset)); err != nil {
 		return err
 	}
+	if r.scan.NullData {
+		return r.inv.out.text("\x00")
+	}
 	return r.inv.out.text("\n")
+}
+
+// nameEnd is what follows a file name: NUL under -Z, otherwise sep.
+func (r *grepRun) nameEnd(sep string) string {
+	if r.nullNames {
+		return "\x00"
+	}
+	return sep
+}
+
+// number renders a line number or byte offset; under -T GNU grep
+// right-aligns it to the digit count of the input's size.
+func (r *grepRun) number(n int) string {
+	if r.tabs {
+		return fmt.Sprintf("%*d", r.numberWidth, n)
+	}
+	return strconv.Itoa(n)
 }
 
 func (r *grepRun) replaceAll(record []byte) ([]byte, error) {

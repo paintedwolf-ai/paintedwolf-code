@@ -34,6 +34,9 @@ type grepRun struct {
 	mode    grepMode
 	only    bool
 	numbers bool
+	// offsets (-b), tabs (-T) and nullNames (-Z) shape record prefixes.
+	offsets, tabs, nullNames bool
+	numberWidth              int
 	// names is the forced -H/-h choice; nil decides per file.
 	names        *bool
 	quietErrors  bool
@@ -91,6 +94,9 @@ func runRg(inv *invocation) error {
 	}
 	r.follow = inv.flag("-L")
 	r.quietErrors = inv.flag("--no-messages")
+	if err := r.color(); err != nil {
+		return err
+	}
 	if inv.flag("--no-filename") {
 		no := false
 		r.names = &no
@@ -290,6 +296,12 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	r.scan.Invert = inv.flag("-v")
 	r.only = inv.flag("-o")
 	r.numbers = inv.flag("-n")
+	if !r.rg {
+		r.offsets, r.tabs, r.nullNames, r.scan.NullData = inv.flag("-b"), inv.flag("-T"), inv.flag("-Z"), inv.flag("-z")
+	}
+	if err := r.color(); err != nil {
+		return err
+	}
 	switch {
 	case inv.flag("-q"):
 		r.mode = modeQuiet
@@ -555,4 +567,19 @@ func (r *grepRun) indexProvesNoMatch(e entry) bool {
 	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{
 		Path: e.bound.Resolved.ScopeRel, Name: e.name, Size: e.stat.Size, Mode: uint32(e.stat.Mode), Modified: e.stat.ModTime.UTC(),
 	})
+}
+
+// color accepts --color=never and auto (stdout is never a terminal, so both
+// print plain text); always would need escape sequences this frontend does
+// not produce.
+func (r *grepRun) color() error {
+	option, ok := r.inv.argv.Last("--color")
+	if !ok || len(option.Values) == 0 {
+		return nil
+	}
+	switch option.Values[0].Value {
+	case "never", "auto", "no", "none", "tty", "if-tty":
+		return nil
+	}
+	return r.inv.usage(option.Values[0].Value, "--color=never or --color=auto")
 }

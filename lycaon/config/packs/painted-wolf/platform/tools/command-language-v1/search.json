@@ -320,6 +320,71 @@
           "sample_values": [
             "*.go"
           ]
+        },
+        {
+          "spellings": [
+            "-b",
+            "--byte-offset"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-b-byteoffset",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-Z",
+            "--null"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-Z-null",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-z",
+            "--null-data"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-z-nulldata",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-T",
+            "--initial-tab"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-T-initialtab",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--line-buffered"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "grep-option-linebuffered",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--color",
+            "--colour"
+          ],
+          "arity": -1,
+          "value_role": "color-when",
+          "fixture_id": "grep-option-color",
+          "consumption": "optional-attached-value",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. grep [OPTIONS] [-e PATTERN ...|-f FILE ...|PATTERN] [--] [PATH ...]",
@@ -370,7 +435,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; egrep is grep -E and fgrep is grep -F; differing -E/-F/-P/dialect aliases are a conflicting-matchers usage error (status 2). -x anchors each pattern to the whole line; -f FILE reads LF-separated patterns from a pinned file (an empty file selects nothing). rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. A file holding NUL bytes is binary (GNU 3.5+ form): a selected output line prints 'grep: PATH: binary file matches' once on stderr and the file stops; -c/-l/-L/-q count normally. Recursion visits names in unsigned byte order.",
+      "notes": "grep default BRE; -E ERE; egrep is grep -E and fgrep is grep -F; differing -E/-F/-P/dialect aliases are a conflicting-matchers usage error (status 2). -x anchors each pattern to the whole line; -f FILE reads LF-separated patterns from a pinned file (an empty file selects nothing). rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. A file holding NUL bytes is binary (GNU 3.5+ form): a selected output line prints 'grep: PATH: binary file matches' once on stderr and the file stops; -c/-l/-L/-q count normally. Recursion visits names in unsigned byte order. -b prefixes the byte offset of each line (of each match with -o); -Z ends file names with NUL instead of ':' or LF; -z reads and writes NUL-terminated records; -T right-aligns numbers to the digit count of the input's size and puts a TAB before content; --line-buffered is accepted (output is already exact); --color=never|auto prints plain text (stdout is never a terminal) and --color=always refuses.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -416,7 +481,13 @@
         "grep-option-f-file",
         "grep-option-include",
         "grep-option-exclude",
-        "grep-option-excludedir"
+        "grep-option-excludedir",
+        "grep-option-b-byteoffset",
+        "grep-option-Z-null",
+        "grep-option-z-nulldata",
+        "grep-option-T-initialtab",
+        "grep-option-linebuffered",
+        "grep-option-color"
       ]
     },
     {
@@ -687,6 +758,19 @@
         },
         {
           "spellings": [
+            "-T",
+            "--type-not"
+          ],
+          "arity": 1,
+          "value_role": "file-type",
+          "fixture_id": "rg-option-T-typenot",
+          "consumption": "fixed",
+          "sample_values": [
+            "md"
+          ]
+        },
+        {
+          "spellings": [
             "-S",
             "--smart-case"
           ],
@@ -714,6 +798,26 @@
           "value_role": "boolean",
           "fixture_id": "rg-option-hidden",
           "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-ignore"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-no-ignore",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--color"
+          ],
+          "arity": -1,
+          "value_role": "color-when",
+          "fixture_id": "rg-option-color",
+          "consumption": "optional-attached-value",
           "sample_values": []
         },
         {
@@ -851,7 +955,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases.",
+      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases. rg honours .gitignore, .ignore and the project's ignore rules by default; --no-ignore drops them (as -u does) while still skipping hidden entries; -T excludes a catalogued file type; --color=never|auto prints plain text and --color=always refuses.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -903,7 +1007,10 @@
         "rg-option-help",
         "rg-option-no-filename",
         "rg-option-no-messages",
-        "rg-option-case-sensitive"
+        "rg-option-case-sensitive",
+        "rg-option-T-typenot",
+        "rg-option-no-ignore",
+        "rg-option-color"
       ]
     },
     {
@@ -968,6 +1075,18 @@
           "arity": 1,
           "value_role": "pattern",
           "fixture_id": "find-option-regex",
+          "consumption": "fixed",
+          "sample_values": [
+            "a"
+          ]
+        },
+        {
+          "spellings": [
+            "-iregex"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "find-option-iregex",
           "consumption": "fixed",
           "sample_values": [
             "a"
@@ -1057,6 +1176,42 @@
         },
         {
           "spellings": [
+            "-mmin"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "find-option-mmin",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-perm"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "find-option-perm",
+          "consumption": "fixed",
+          "sample_values": [
+            "644"
+          ]
+        },
+        {
+          "spellings": [
+            "-user"
+          ],
+          "arity": 1,
+          "value_role": "uid",
+          "fixture_id": "find-option-user",
+          "consumption": "fixed",
+          "sample_values": [
+            "0"
+          ]
+        },
+        {
+          "spellings": [
             "-not"
           ],
           "arity": 0,
@@ -1114,6 +1269,18 @@
           "fixture_id": "find-option-print0",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-printf"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "find-option-printf",
+          "consumption": "fixed",
+          "sample_values": [
+            "%p\\n"
+          ]
         },
         {
           "spellings": [
@@ -1204,7 +1371,7 @@
           }
         }
       },
-      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent.",
+      "notes": "Default . and implicit -print if no action. Boolean !/-not > implicit/-a > -o; parenthesis group; short-circuit. -type f|d|l, -size signed count in c bytes/k KiB/M MiB/default512-byte blocks; -mtime N compares whole days since modification (truncated) against N, +N greater, -N less; -newer FILE is a strictly later modification time than FILE's; name/path shell patterns, regex ERE whole path. -prune stops descend, -delete depth-first recoverable P16 rm. -exec CMD ... {} ; exact single or {} + serial batched argv through normal binder; delimiters are AST words, no reparsing. -R symlink recursion absent. -iregex is -regex with Unicode simple case folding; -mmin is -mtime in minutes; -perm MODE matches exact octal permission bits, -MODE all of them and /MODE any of them; -user takes a numeric uid (names are not resolved) and refuses where the platform has no POSIX owners; -printf supports %p %f %h %P %s %d %y %m %U %G %T@ %% and the escapes \\n \\t \\0 \\\\, refusing other directives.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -1243,7 +1410,12 @@
         "find-option-print",
         "find-option-print0",
         "find-option-exec",
-        "find-option-delete"
+        "find-option-delete",
+        "find-option-iregex",
+        "find-option-mmin",
+        "find-option-perm",
+        "find-option-user",
+        "find-option-printf"
       ]
     }
   ]
