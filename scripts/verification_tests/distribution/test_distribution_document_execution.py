@@ -1,7 +1,9 @@
 """Distribution facts bind freshly admitted bytes and keep source-only Nix explicit."""
 from copy import deepcopy
+import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,7 +14,19 @@ from scripts.release_distribution_contract import document_signing
 from scripts.release_distribution_contract.document_schema import canonical, decode, validate
 
 
-class DistributionDocumentTests(unittest.TestCase):
+def feed_public_key(number):
+    key = b'Ed' + number.to_bytes(8, 'little') + bytes([number]) * 32
+    return base64.b64encode(b'untrusted comment: test\n' + base64.b64encode(key) + b'\n').decode()
+
+
+def feed_signature(number, file, version):
+    body = b'ED' + number.to_bytes(8, 'little') + bytes(64)
+    document = ('untrusted comment: test\n' + base64.b64encode(body).decode()
+                + f'\ntrusted comment: timestamp:1800000000\tfile:{file}\tversion:{version}\nunused\n')
+    return base64.b64encode(document.encode()).decode()
+
+
+class DocumentFixture(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -39,6 +53,9 @@ class DistributionDocumentTests(unittest.TestCase):
 
     def construct(self, authorize=lambda binding: True):
         return construct(self.request, self.catalog, self.updater, self.artifacts, authorize=authorize)
+
+
+class DistributionDocumentTests(DocumentFixture):
 
     def test_constructor_retains_actual_final_bytes_and_separate_updater_identity(self):
         observed = []
@@ -108,39 +125,80 @@ class DistributionDocumentTests(unittest.TestCase):
                 document['aur']['git_url'] = url
                 with self.assertRaises(ValueError):
                     validate(document)
-    def prepare(self, name, signer=None):
+
+
+class DistributionSigningTests(DocumentFixture):
+    """Real signature-document and registry checks; a minisign shim stands in for the absent tool."""
+
+    def setUp(self):
+        super().setUp()
+        self.registry = {'generations': [{'generation': 1, 'feed_public_key': feed_public_key(1)},
+                                         {'generation': 2, 'feed_public_key': feed_public_key(2)}]}
+        tools = self.root / 'tools'
+        tools.mkdir()
+        self.verification = tools / 'status'
+        self.verification.write_text('0')
+        minisign = tools / 'minisign'
+        minisign.write_text(f"#!/bin/sh\necho \"$*\" >> '{tools}/calls'\nexit $(cat '{self.verification}')\n")
+        minisign.chmod(0o755)
+        self.calls = tools / 'calls'
+        context = patch.dict(os.environ, {'PATH': f"{tools}{os.pathsep}{os.environ['PATH']}"})
+        context.start()
+        self.addCleanup(context.stop)
+
+    def prepare(self, name, signer=None, authorize=lambda binding: True):
+        def signed(path, number, registry):
+            return feed_signature(number, path.name, '1.2.3')
         return document_signing.prepare(self.root / name, self.request, self.catalog, self.updater, self.artifacts,
-            authorize=lambda binding: True, registry={}, signer=signer or (lambda path, number, registry: 'fixture signature'))
+                                        authorize=authorize, registry=self.registry, signer=signer or signed)
 
     def test_signing_repeats_fresh_fact_admission_and_retains_nonpublishing_identity(self):
         observed = []
-        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'maintained public key'}), \
-                patch.object(document_signing, 'check') as metadata, patch.object(document_signing, 'verify') as crypto:
-            result = document_signing.prepare(self.root / 'signed', self.request, self.catalog, self.updater, self.artifacts,
-                authorize=lambda binding: observed.append(binding) or True, registry={},
-                signer=lambda path, number, registry: 'fixture signature')
+        result = self.prepare('signed', authorize=lambda binding: observed.append(binding) or True)
         self.assertEqual(len(observed), 2)
         raw = (self.root / 'signed/distribution.v1.json').read_bytes()
         self.assertEqual(result['distribution_sha256'], hashlib.sha256(raw).hexdigest())
         self.assertEqual(result['publication'], 'nonrelease')
-        metadata.assert_called_once()
-        crypto.assert_called_once_with(self.root / 'signed/distribution.v1.json', 'fixture signature', 'maintained public key')
-        self.assertEqual((self.root / 'signed/distribution.v1.json.sig').read_text(), 'fixture signature')
+        self.assertEqual((self.root / 'signed/distribution.v1.json.sig').read_text(),
+                         feed_signature(1, 'distribution.v1.json', '1.2.3'))
+        self.assertEqual(len(self.calls.read_text().splitlines()), 1)
+        self.assertIn('distribution.v1.json', self.calls.read_text())
 
-    def test_after_signing_package_changes_and_crypto_failure_refuse_identity(self):
+    def test_signature_bound_to_another_file_version_or_key_is_refused(self):
+        for index, document in enumerate([feed_signature(1, 'other.json', '1.2.3'), feed_signature(1, 'distribution.v1.json', '1.2.4'),
+                                          feed_signature(2, 'distribution.v1.json', '1.2.3'), 'not a signature']):
+            with self.subTest(document=document), self.assertRaises(ValueError):
+                self.prepare(f'bound-{index}', lambda path, number, registry, document=document: document)
+            self.assertFalse((self.root / f'bound-{index}/distribution-identity.json').exists())
+            self.assertFalse((self.root / f'bound-{index}/distribution.v1.json.sig').exists())
+        self.assertFalse(self.calls.exists())
+
+    def test_cryptographic_verification_failure_refuses_identity(self):
+        self.verification.write_text('1')
+        with self.assertRaisesRegex(ValueError, 'feed signature verification failed'):
+            self.prepare('invalid')
+        self.assertFalse((self.root / 'invalid/distribution-identity.json').exists())
+
+    def test_package_change_after_signing_refuses_identity(self):
         def mutate(path, number, registry):
             next(self.artifacts.iterdir()).write_bytes(b'changed after signing')
-            return 'fixture signature'
-        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'fixture'}), \
-                patch.object(document_signing, 'check'), patch.object(document_signing, 'verify'):
-            with self.assertRaises(ValueError):
-                self.prepare('mutated', mutate)
+            return feed_signature(number, path.name, '1.2.3')
+        with self.assertRaisesRegex(ValueError, 'changed while signing'):
+            self.prepare('mutated', mutate)
         self.assertFalse((self.root / 'mutated/distribution-identity.json').exists())
-        with patch.object(document_signing, 'generation', return_value={'feed_public_key': 'fixture'}), \
-                patch.object(document_signing, 'check'), patch.object(document_signing, 'verify', side_effect=ValueError('bad signature')):
-            with self.assertRaises(ValueError):
-                self.prepare('invalid')
-        self.assertFalse((self.root / 'invalid/distribution-identity.json').exists())
+
+    def test_unregistered_generation_and_reused_destination_are_refused(self):
+        self.request['signing_generation'] = 3
+        with self.assertRaisesRegex(ValueError, 'unknown signing key generation'):
+            self.prepare('unknown')
+        self.assertFalse((self.root / 'unknown').exists())
+        self.request['signing_generation'] = 1
+        (self.root / 'existing').mkdir()
+        with self.assertRaisesRegex(ValueError, 'fresh absolute directory'):
+            self.prepare('existing')
+        with self.assertRaisesRegex(ValueError, 'fresh absolute directory'):
+            document_signing.prepare(Path('relative'), self.request, self.catalog, self.updater, self.artifacts,
+                                     authorize=lambda binding: True, registry=self.registry, signer=lambda *args: '')
 
     def test_production_cannot_replace_the_maintained_signing_registry(self):
         self.request['mode'] = 'production'
