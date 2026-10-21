@@ -286,11 +286,6 @@ func mapResolveErr(err error, modelPath string) error {
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
-	case errors.Is(err, projectroot.ErrUnknownRootLabel):
-		return &toolrejection.ToolReject{
-			Code: "UNKNOWN_ROOT_LABEL",
-			Data: map[string]any{"path": modelPath, "reason": err.Error()},
-		}
 	case errors.Is(err, projectroot.ErrPathEscape):
 		return &toolrejection.ToolReject{
 			Code: "SURVEY_PATH_ESCAPE",

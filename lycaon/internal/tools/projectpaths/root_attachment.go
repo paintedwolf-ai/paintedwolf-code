@@ -43,6 +43,15 @@ func declinedRootReject(tctx tools.ToolContext, modelPath string, cause error) e
 	return nil
 }
 
+// rootResolveErr maps a root resolution failure: retired and unknown labels
+// through declinedRootReject, everything else through mapResolveErr.
+func rootResolveErr(tctx tools.ToolContext, err error, modelPath string) error {
+	if reject := declinedRootReject(tctx, modelPath, err); reject != nil {
+		return reject
+	}
+	return mapResolveErr(err, modelPath)
+}
+
 // currentRootReject refuses an effect under a root removed or moved after
 // the invocation's context was captured; settled effects keep their facts.
 func currentRootReject(tctx tools.ToolContext, root projectroot.RootRef, path string) error {
