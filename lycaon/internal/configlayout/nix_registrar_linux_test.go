@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,11 +100,26 @@ ln -s "$7" "$4"
 	retention.Close()
 }
 
-func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing.T) {
-	tool := os.Getenv("PW_NIX_RETENTION_TEST_TOOL")
-	if tool == "" {
-		t.Skip("requires an explicitly selected native Nix client")
+// envNixRegistrarRequired makes a host without a native Nix client fail the
+// registrar test instead of skipping it; the Nix verification leg sets it.
+const envNixRegistrarRequired = "PW_NIX_REGISTRAR_REQUIRED"
+
+// nativeNixClient returns the host's installed nix-store, whose own store
+// output is the generation the test retains.
+func nativeNixClient(t *testing.T) string {
+	t.Helper()
+	tool, err := exec.LookPath("nix-store")
+	if err != nil {
+		if os.Getenv(envNixRegistrarRequired) == "1" {
+			t.Fatalf("%s=1 but no native nix-store is on PATH: %v", envNixRegistrarRequired, err)
+		}
+		t.Skipf("no native Nix client on this host: %v", err)
 	}
+	return tool
+}
+
+func TestNixRegistrarNativePhysicalRegistrationIgnoresCallerOverrides(t *testing.T) {
+	tool := nativeNixClient(t)
 	resolved, err := filepath.EvalSymlinks(tool)
 	testutil.FailErr(t, "resolve selected native client", err)
 	layout := &NixLayout{Output: filepath.Dir(filepath.Dir(resolved)), NixStore: tool}
