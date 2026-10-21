@@ -1658,7 +1658,7 @@ paths:
       operationId: lockVault
       x-person-action: none
       summary: Lock every chat when the person steps away
-      description: The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+      description: The desktop shell calls this when the screen locks, the computer sleeps, the person's input stays idle for the step-away period (`away`), or the app quits. Locking can only take authority away, so any authenticated caller may request it.
       requestBody:
         required: true
         content:
