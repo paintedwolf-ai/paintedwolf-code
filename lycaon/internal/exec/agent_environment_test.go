@@ -72,3 +72,12 @@ func TestAgentLaunchOptionsReduceAndRefuseReservedExports(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentCommandPlanStatesItsReducedEnvironment(t *testing.T) {
+	if plan := AgentLaunch(LaunchAgentCommand, "fixture", nil); plan.Environment != EnvironmentReduced {
+		t.Fatalf("agent command plan environment %q", plan.Environment)
+	}
+	if plan := AgentLaunch(LaunchLocalMCP, "fixture", nil); plan.Environment != EnvironmentInherited {
+		t.Fatalf("local MCP plan gained a reduced environment it builds itself: %q", plan.Environment)
+	}
+}
