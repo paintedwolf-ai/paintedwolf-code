@@ -92,7 +92,8 @@ echo "$PWD" "$OLDPWD"
 cd other | echo "$PWD"
 echo "$PWD"
 external -- fail 0
-PWD=/typed; echo "$PWD"`)
+PWD=/typed; echo "$PWD"
+cd web; echo "$PWD" "$OLDPWD"`)
 	testutil.FailErr(t, "run directory program", err)
 	var echoes []string
 	for _, line := range f.log.argv() {
@@ -100,7 +101,7 @@ PWD=/typed; echo "$PWD"`)
 			echoes = append(echoes, line)
 		}
 	}
-	want := []string{"echo /abs/api ", "echo /web /abs/api", "echo /sub", "echo /web", "echo /web", "echo /typed"}
+	want := []string{"echo /abs/api ", "echo /web /abs/api", "echo /sub", "echo /web", "echo /web", "echo /typed", "echo /web /web"}
 	if !slices.Equal(echoes, want) {
 		t.Fatalf("echoes = %q want %q", echoes, want)
 	}

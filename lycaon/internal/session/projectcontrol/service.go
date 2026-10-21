@@ -2,9 +2,10 @@ package projectcontrol
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -62,8 +63,9 @@ type Service struct {
 	instructions    Instructions
 	transcript      Transcript
 	anchors         Anchors
-	overlayPromoter OverlayPromoter
-	rootHistory     *projectroot.History
+	overlayPromoter      OverlayPromoter
+	rootHistory          *projectroot.History
+	pendingRootBaselines sync.Map
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {

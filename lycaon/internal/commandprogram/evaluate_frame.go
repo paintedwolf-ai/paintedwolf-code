@@ -155,13 +155,13 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 // syncDirectory records a directory change of the frame's dispatch the way
 // cd does in a shell: OLDPWD takes the old directory and PWD the new one,
 // both exported. An assignment to PWD stays until the next change.
-func (f *frame) syncDirectory(ctx context.Context) error {
+func (f *frame) syncDirectory(ctx context.Context, moved bool) error {
 	dir, ok := f.state.dispatch.(DirectoryFrame)
 	if !ok {
 		return nil
 	}
 	current := dir.Directory()
-	if current == f.state.directory {
+	if !moved && current == f.state.directory {
 		return nil
 	}
 	previous := f.state.directory

@@ -99,6 +99,7 @@ type programRun struct {
 	source         string
 	catalog        toolcontract.LanguageCatalog
 	commands       map[string]toolcontract.CommandSpecification
+	nativeDefs     map[string]toolcontract.OperationDefinition
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -223,17 +224,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	selected := map[string]bool{}
-	for _, operation := range owners.Natives {
-		if selected[operation.Tool] {
-			continue
-		}
-		if definition, ok := r.Registry.Definition(operation.Tool); ok {
-			selected[operation.Tool] = true
-			active = append(active, definition.Operation)
-		}
+	active, nativeDefs, err := r.nativeSurfaceDefinitions(external, catalog, owners.Natives)
+	if err != nil {
+		return "", err
 	}
+	run.nativeDefs = nativeDefs
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
 	if err != nil {
 		return "", err
@@ -604,6 +599,47 @@ func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, err
 		})
 	})
 	return r.external, r.externalErr
+}
+
+// nativeSurfaceDefinitions collects one operation definition per native tool,
+// attaching catalog commands (such as touch and mktemp) that share a tool's
+// owner without their own structured-tool disposition row.
+func (r *ProgramRuntime) nativeSurfaceDefinitions(external toolcontract.OperationDefinition, catalog toolcontract.LanguageCatalog, natives map[string]NativeOperation) ([]toolcontract.OperationDefinition, map[string]toolcontract.OperationDefinition, error) {
+	active := []toolcontract.OperationDefinition{external}
+	defs := map[string]toolcontract.OperationDefinition{}
+	for _, spec := range catalog.Commands {
+		op, ok := natives[spec.Name]
+		if !ok || defs[op.Tool].Digest() != "" {
+			continue
+		}
+		reg, ok := r.Registry.Definition(op.Tool)
+		if !ok {
+			continue
+		}
+		def := reg.Operation
+		facts := def.Facts()
+		have := map[string]bool{}
+		for _, declared := range facts.Commands {
+			have[declared.Name] = true
+		}
+		changed := false
+		for _, candidate := range catalog.Commands {
+			if natives[candidate.Name].Tool == op.Tool && !have[candidate.Name] {
+				facts.Commands = append(facts.Commands, candidate)
+				have[candidate.Name] = true
+				changed = true
+			}
+		}
+		if changed {
+			var err error
+			if def, err = toolcontract.NewOperationDefinition(facts); err != nil {
+				return nil, nil, err
+			}
+		}
+		defs[op.Tool] = def
+		active = append(active, def)
+	}
+	return active, defs, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

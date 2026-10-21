@@ -84,8 +84,6 @@ type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	Injects                 *prompts.InjectRenderer
 	WorkspaceRoots          WorkspaceRootsLoader
-	// SessionScratchDir is the session's scratch folder the command guidance names.
-	SessionScratchDir func(ctx context.Context, sess *api.Session) string
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	SessionView             SessionView
 	AgentsMDIndex           AgentsMDIndexInjector
@@ -218,9 +216,6 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		if activePath != "" {
 			vars["project_dir"] = activePath
 		}
-	}
-	if scratch := prompt.sessionScratchDir(ctx, sess); scratch != "" {
-		vars["session_scratch_dir"] = scratch
 	}
 
 	coordinator := surface.IsCoordinatorSession(sess)

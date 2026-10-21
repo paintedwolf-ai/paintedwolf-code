@@ -138,7 +138,8 @@ func (p *ProgramPaths) Chdir(ctx context.Context, operand string, physical bool)
 		return directoryError(operand, err)
 	}
 	if physical {
-		bound.Resolved.Abs = fspath.CanonicalPath(bound.Resolved.Abs)
+		bound.exactRelative = readRelative(bound.Resolved.ScopeRel)
+		bound.Resolved.Abs = fspath.CanonicalPath(filepath.Join(bound.Resolved.Root.Path, bound.Resolved.ScopeRel))
 	}
 	p.moveTo(bound, info)
 	return nil

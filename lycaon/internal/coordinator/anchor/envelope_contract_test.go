@@ -207,6 +207,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"folder": true, "roots": true, "active_root": true, "canceled": true, "root_id": true, "root_label": true,
 		"path": true, "paths": true, "sessions": true, "overlays": true, "workers": true,
 		"before_count": true, "after_count": true, "after_omitted_count": true, "added_count": true, "removed_count": true,
+		"changes": true, "changes_omitted": true, "generation": true, "primary_changed": true,
 		"attempt": true, "max_attempts": true, "drafted_synthesis": true, "reason_text": true,
 		"repair_observations": true, "retained_citations": true,
 		"offenders_sample": true, "observed_handles_sample": true, "observed_paths_sample": true, "observed_urls_sample": true,
