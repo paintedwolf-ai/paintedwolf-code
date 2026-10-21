@@ -18,7 +18,8 @@ import (
 
 // LaunchCatalog is the sealed payload file naming, per package family and CPU,
 // the system programs the protected namespace may execute (WebKit's helper
-// processes). Its source is packaging/linux/protected-launch.json.
+// processes) and the library roots whose native code it may map. Its source is
+// packaging/linux/protected-launch.json.
 const LaunchCatalog = "protected-launch.json"
 
 const logicalInstallRoot = "/opt/painted-wolf-code"
@@ -32,13 +33,21 @@ type launchCatalog struct {
 	} `json:"architectures"`
 	Families map[string]struct {
 		SystemExecutables []string `json:"system_executables"`
+		LibraryRoots      []string `json:"library_roots"`
 	} `json:"families"`
+}
+
+// SystemAccess is what the launch policy grants outside the generation, resolved
+// for the installing family and CPU from what the system has.
+type SystemAccess struct {
+	Executables  []string
+	LibraryRoots []string
 }
 
 // Install materializes the package's staged payload as an immutable generation,
 // selects it for new launches through commit, and reclaims every generation that
 // is neither selected nor in use. family is the installing package family.
-func Install(family string, commit func(Generation, []string) error, selection func() (string, error)) (Generation, error) {
+func Install(family string, commit func(Generation, SystemAccess) error, selection func() (string, error)) (Generation, error) {
 	if os.Geteuid() != 0 {
 		return Generation{}, errors.New("native generation: installation requires root")
 	}
@@ -60,7 +69,7 @@ func Remove(removePolicy func() error, selection func() (string, error)) error {
 	return native.remove(removePolicy, selection)
 }
 
-func (l layout) install(staging *os.Root, family, arch string, commit func(Generation, []string) error, selection func() (string, error)) (Generation, error) {
+func (l layout) install(staging *os.Root, family, arch string, commit func(Generation, SystemAccess) error, selection func() (string, error)) (Generation, error) {
 	if commit == nil || selection == nil {
 		return Generation{}, errors.New("native generation: missing protected policy owner")
 	}
@@ -84,12 +93,12 @@ func (l layout) install(staging *os.Root, family, arch string, commit func(Gener
 		return Generation{}, err
 	}
 	defer func() { _ = root.Close() }()
-	executables, err := l.systemExecutables(root, family, arch)
+	access, err := l.systemAccess(root, family, arch)
 	if err != nil {
 		return Generation{}, err
 	}
 	if err := l.selectGeneration(generation.ManifestSHA256, func(selected Generation) error {
-		return commit(selected, executables)
+		return commit(selected, access)
 	}); err != nil {
 		return Generation{}, err
 	}
@@ -130,41 +139,62 @@ func (l layout) reclaimUnselected(selection func() (string, error)) error {
 	return errors.Join(failures...)
 }
 
-// systemExecutables resolves the sealed catalog for this family and CPU to the
-// programs present now. A program the distribution does not ship is left out;
-// one that is present but not controlled by root refuses the installation.
-func (l layout) systemExecutables(generation *os.Root, family, arch string) ([]string, error) {
+// systemAccess resolves the sealed catalog for this family and CPU to what the
+// system has now. A program or library root the distribution does not ship is
+// left out; one that is present but not controlled by root refuses the
+// installation, as does a family with no helper program or library root.
+func (l layout) systemAccess(generation *os.Root, family, arch string) (SystemAccess, error) {
 	file, err := generation.Open(LaunchCatalog)
 	if err != nil {
-		return nil, fmt.Errorf("native generation: sealed launch catalog: %w", err)
+		return SystemAccess{}, fmt.Errorf("native generation: sealed launch catalog: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, 1<<20+1))
 	if err != nil {
-		return nil, err
+		return SystemAccess{}, err
 	}
 	if len(raw) > 1<<20 {
-		return nil, errors.New("native generation: launch catalog exceeds its bound")
+		return SystemAccess{}, errors.New("native generation: launch catalog exceeds its bound")
 	}
 	var catalog launchCatalog
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&catalog); err != nil || catalog.FormatVersion != 1 {
-		return nil, fmt.Errorf("native generation: unsupported launch catalog (%v)", err)
+		return SystemAccess{}, fmt.Errorf("native generation: unsupported launch catalog (%v)", err)
 	}
 	selected, ok := catalog.Families[family]
-	if !ok || len(selected.SystemExecutables) == 0 {
-		return nil, fmt.Errorf("native generation: launch catalog has no %q family", family)
+	if !ok {
+		return SystemAccess{}, fmt.Errorf("native generation: launch catalog has no %q family", family)
 	}
 	cpu, ok := catalog.Architectures[arch]
 	if !ok || cpu.Multiarch == "" {
-		return nil, fmt.Errorf("native generation: launch catalog has no %q architecture", arch)
+		return SystemAccess{}, fmt.Errorf("native generation: launch catalog has no %q architecture", arch)
 	}
-	var present []string
-	for _, template := range selected.SystemExecutables {
-		path := strings.ReplaceAll(template, "{multiarch}", cpu.Multiarch)
-		if strings.ContainsAny(path, "{}") || !filepath.IsAbs(path) || filepath.Clean(path) != path {
-			return nil, fmt.Errorf("native generation: invalid system executable %q", template)
+	executables, err := l.present(selected.SystemExecutables, cpu.Multiarch, false)
+	if err != nil {
+		return SystemAccess{}, err
+	}
+	if len(executables) == 0 {
+		return SystemAccess{}, fmt.Errorf("native generation: no WebKitGTK helper program for %s is installed", family)
+	}
+	roots, err := l.present(selected.LibraryRoots, cpu.Multiarch, true)
+	if err != nil {
+		return SystemAccess{}, err
+	}
+	if len(roots) == 0 {
+		return SystemAccess{}, fmt.Errorf("native generation: no library root for %s is present", family)
+	}
+	return SystemAccess{Executables: executables, LibraryRoots: roots}, nil
+}
+
+// present resolves templates and keeps the root-controlled programs (or, with
+// directories, physical directories) that exist.
+func (l layout) present(templates []string, multiarch string, directories bool) ([]string, error) {
+	var kept []string
+	for _, template := range templates {
+		path := strings.ReplaceAll(template, "{multiarch}", multiarch)
+		if strings.ContainsAny(path, "{}") || !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+			return nil, fmt.Errorf("native generation: invalid launch catalog path %q", template)
 		}
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
@@ -174,13 +204,14 @@ func (l layout) systemExecutables(generation *os.Root, family, arch string) ([]s
 			return nil, err
 		}
 		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !info.Mode().IsRegular() || !ok || stat.Uid != 0 && stat.Uid != l.owner || info.Mode().Perm()&0o022 != 0 || info.Mode().Perm()&0o111 == 0 {
-			return nil, fmt.Errorf("native generation: system executable %s is not a root-controlled program", path)
+		kind := info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+		if directories {
+			kind = info.IsDir()
 		}
-		present = append(present, path)
+		if !kind || !ok || stat.Uid != 0 && stat.Uid != l.owner || info.Mode().Perm()&0o022 != 0 {
+			return nil, fmt.Errorf("native generation: %s is not root-controlled system code", path)
+		}
+		kept = append(kept, path)
 	}
-	if len(present) == 0 {
-		return nil, fmt.Errorf("native generation: no WebKitGTK helper program for %s is installed", family)
-	}
-	return present, nil
+	return kept, nil
 }

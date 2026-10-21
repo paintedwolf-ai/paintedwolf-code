@@ -46,10 +46,11 @@ func run(args []string) error {
 	return errors.New("usage: pw-generations install --family deb|rpm|pacman | remove")
 }
 
-func writePolicy(generation packagegeneration.Generation, executables []string) error {
+func writePolicy(generation packagegeneration.Generation, access packagegeneration.SystemAccess) error {
 	return launchguard.WritePolicy(launchguard.GenerationPolicy{
 		Version: 1, GenerationRoot: generation.Root, ManifestSHA256: generation.ManifestSHA256,
-		LogicalInstallRoot: generation.LogicalInstallRoot, SystemExecutables: executables,
+		LogicalInstallRoot: generation.LogicalInstallRoot, SystemExecutables: access.Executables,
+		LibraryRoots: access.LibraryRoots,
 	})
 }
 

@@ -69,8 +69,12 @@ func (f *installFixture) stage(resource string) {
 		"families": map[string]any{
 			"deb": map[string][]string{"system_executables": {
 				f.system + "/{multiarch}/WebKitWebProcess", f.system + "/{multiarch}/WebKitNetworkProcess",
-				f.system + "/{multiarch}/WebKitGPUProcess"}},
-			"rpm": map[string][]string{"system_executables": {f.system + "/absent/WebKitWebProcess"}},
+				f.system + "/{multiarch}/WebKitGPUProcess"},
+				"library_roots": {f.system + "/{multiarch}", f.system + "/lib64"}},
+			"rpm": map[string][]string{"system_executables": {f.system + "/absent/WebKitWebProcess"},
+				"library_roots": {f.system + "/{multiarch}"}},
+			"pacman": map[string][]string{"system_executables": {f.system + "/{multiarch}/WebKitWebProcess"},
+				"library_roots": {f.system + "/absent"}},
 		},
 	})
 	if err != nil {
@@ -117,13 +121,13 @@ func (f *installFixture) stage(resource string) {
 }
 
 type recordedPolicy struct {
-	selected    string
-	executables []string
-	commits     int
+	selected string
+	access   SystemAccess
+	commits  int
 }
 
-func (p *recordedPolicy) commit(g Generation, executables []string) error {
-	p.selected, p.executables = g.Root, executables
+func (p *recordedPolicy) commit(g Generation, access SystemAccess) error {
+	p.selected, p.access = g.Root, access
 	p.commits++
 	return nil
 }
@@ -151,8 +155,11 @@ func TestInstallSelectsTheStagedPayloadWithTheCatalogsPresentHelpers(t *testing.
 		t.Fatalf("selected %q, generation %q", policy.selected, generation.Root)
 	}
 	want := []string{filepath.Join(f.system, "x86_64-linux-gnu/WebKitWebProcess"), filepath.Join(f.system, "x86_64-linux-gnu/WebKitNetworkProcess")}
-	if strings.Join(policy.executables, ",") != strings.Join(want, ",") {
-		t.Fatalf("system executables = %v, want %v (absent GPU process left out)", policy.executables, want)
+	if strings.Join(policy.access.Executables, ",") != strings.Join(want, ",") {
+		t.Fatalf("system executables = %v, want %v (absent GPU process left out)", policy.access.Executables, want)
+	}
+	if roots := policy.access.LibraryRoots; len(roots) != 1 || roots[0] != filepath.Join(f.system, "x86_64-linux-gnu") {
+		t.Fatalf("library roots = %v, want the present multiarch root only", roots)
 	}
 	if _, err := os.Stat(filepath.Join(generation.Root, LaunchCatalog)); err != nil {
 		t.Fatal("the sealed catalog is not part of the generation")
@@ -228,7 +235,12 @@ func TestRemovalWithdrawsTheSelectionBeforeReclaiming(t *testing.T) {
 
 func TestCatalogAndHelperRefusalsSelectNothing(t *testing.T) {
 	for name, change := range map[string]func(f *installFixture) string{
-		"unknown family":    func(*installFixture) string { return "pacman" },
+		"unknown family":  func(*installFixture) string { return "nix" },
+		"no library root": func(*installFixture) string { return "pacman" },
+		"writable library root": func(f *installFixture) string {
+			_ = os.Chmod(filepath.Join(f.system, "x86_64-linux-gnu"), 0o775)
+			return "deb"
+		},
 		"no helper present": func(*installFixture) string { return "rpm" },
 		"writable helper": func(f *installFixture) string {
 			_ = os.Chmod(filepath.Join(f.system, "x86_64-linux-gnu/WebKitWebProcess"), 0o775)

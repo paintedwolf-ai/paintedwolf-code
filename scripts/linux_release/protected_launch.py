@@ -1,10 +1,12 @@
-"""The protected launch's per-family system executables, sealed into the payload.
+"""The protected launch's per-family system access, sealed into the payload.
 
 `packaging/linux/protected-launch.json` names, for each package family, the
-programs outside the generation that the protected namespace may execute:
-WebKitGTK's helper processes, at the path that family's WebKitGTK package
-installs them. The installer resolves `{multiarch}` for the running CPU and keeps
-the programs present on the system (`pw-generations install`).
+programs outside the generation that the protected namespace may execute
+(WebKitGTK's helper processes, at the path that family's WebKitGTK package
+installs them) and the library roots whose native code it may map: the
+directories the system's WebKitGTK and GTK stack loads from. The installer
+resolves `{multiarch}` for the running CPU and keeps what the system has
+(`pw-generations install`).
 """
 
 import json
@@ -32,10 +34,13 @@ def load(path=CATALOG):
     if not isinstance(families, dict) or set(families) != FAMILIES:
         raise ValueError("protected launch catalog must name every package family")
     for family, row in families.items():
-        programs = row.get("system_executables") if isinstance(row, dict) and set(row) == {"system_executables"} else None
-        if not isinstance(programs, list) or not programs or len(set(programs)) != len(programs):
-            raise ValueError(f"protected launch catalog lists no {family} system executables")
-        for template in programs:
+        if not isinstance(row, dict) or set(row) != {"system_executables", "library_roots"}:
+            raise ValueError(f"protected launch catalog has an invalid {family} row")
+        for field in ("system_executables", "library_roots"):
+            values = row[field]
+            if not isinstance(values, list) or not values or len(set(values)) != len(values):
+                raise ValueError(f"protected launch catalog lists no {family} {field}")
+        for template in (*row["system_executables"], *row["library_roots"]):
             resolved = template.replace("{multiarch}", "x86_64-linux-gnu") if isinstance(template, str) else ""
             path = PurePosixPath(resolved)
             if (not path.is_absolute() or str(path) != resolved or ".." in path.parts or "{" in resolved or "}" in resolved

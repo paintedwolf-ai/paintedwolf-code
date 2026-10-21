@@ -34,6 +34,8 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(catalog["architectures"]["arm64"]["multiarch"], "aarch64-linux-gnu")
         for family, row in catalog["families"].items():
             self.assertTrue(all(path.rsplit("/", 1)[1].startswith("WebKit") for path in row["system_executables"]), family)
+        self.assertEqual({family: row["library_roots"] for family, row in catalog["families"].items()},
+                         {"deb": ["/usr/lib/{multiarch}"], "rpm": ["/usr/lib64"], "pacman": ["/usr/lib"]})
         self.assertEqual(payload.load()["setuid_bootstrap"], {"name": "pw-launch", "path": "/usr/libexec/painted-wolf-code/pw-launch"})
         self.assertIn("pw-launch-entry", payload.load()["helpers"])
         self.assertIn("pw-generations", payload.load()["helpers"])
@@ -48,6 +50,9 @@ class Catalogs(unittest.TestCase):
             "outside usr": lambda c: c["families"]["deb"].update(system_executables=["/opt/WebKitWebProcess"]),
             "unknown template": lambda c: c["families"]["rpm"].update(system_executables=["/usr/{lib}/WebKitWebProcess"]),
             "empty family": lambda c: c["families"]["pacman"].update(system_executables=[]),
+            "no library roots": lambda c: c["families"]["deb"].pop("library_roots"),
+            "empty library roots": lambda c: c["families"]["rpm"].update(library_roots=[]),
+            "library root outside usr": lambda c: c["families"]["pacman"].update(library_roots=["/home/lib"]),
             "extra key": lambda c: c.update(notes="x"),
         }
         for name, change in changes.items():
