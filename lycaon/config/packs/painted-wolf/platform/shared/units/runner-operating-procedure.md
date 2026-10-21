@@ -1,7 +1,7 @@
 ---
 description: >-
   Operating the host command runner: mediated egress and proxies, attributing
-  network failures, capability requests, argv sequences, and verifying the
+  network failures, capability requests, bash programs, and verifying the
   exercised behavior.
 slot: procedures
 order: 10
@@ -16,6 +16,6 @@ For local daemons, put `capability_request.host_resources` with the listed id on
 
 {% include "partials/capability-request-grammar.md" %}
 
-{% if profile_has_command %}Runs as an argv sequence without a shell; pipelines (`|`), redirections (`2>&1`, `> /dev/null`), and leading `NAME=value` scope to their stage; pass shared variables in `env`. For behavioral checks, set `command(verification: true)`. Report scope and outcome; do not rerun a passing check.{% endif %}
+{% if profile_has_command %}Runs ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, and redirects) with native GNU/BSD utilities and confined external toolchains. For behavioral checks, set `command(verification: true)`. Report scope and outcome; do not rerun a passing check.{% endif %}
 
 **Verify the exercised behavior.** Find and run existing entry points from project docs or source. Substitute scripts cover only their own path; check others separately. Preserve product behavior when selecting a supported execution route. Unless asked, keep transport mechanics internal and describe outcomes and untested behavior in product terms, in both progress updates and closeout. Do not predict a different result on a "normal" machine from source inspection alone.

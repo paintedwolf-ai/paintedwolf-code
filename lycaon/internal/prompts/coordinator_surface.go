@@ -226,6 +226,7 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
 		into[k] = v
 	}
+	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
 	roster, err := RequestableTools(requestable, turn.Schemas)
 	if err != nil {
 		return err

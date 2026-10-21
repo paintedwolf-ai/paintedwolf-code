@@ -193,6 +193,12 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if !slices.Contains(concurrent, "summarize") {
 		t.Fatalf("summarize should be concurrent: %v", concurrent)
 	}
+	canRequest, _ := vars["profile_can_request"].(map[string]bool)
+	for _, loadable := range []string{"jq_edit", "read", "grep", "find", "list_dir", "jq"} {
+		if !canRequest[loadable] {
+			t.Fatalf("implement profile_can_request missing %q: %v", loadable, canRequest)
+		}
+	}
 	serial, _ := vars["profile_serial_tools"].([]string)
 	if !slices.Contains(serial, "edit") || !slices.Contains(serial, "command") {
 		t.Fatalf("serial tools missing edit/command: %v", serial)
@@ -245,9 +251,20 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if slices.Contains(surveyTools, "write") || slices.Contains(surveyTools, "edit") {
 		t.Fatalf("survey tools must be read-only: %v", surveyTools)
 	}
-	for _, want := range []string{"summarize", "survey_repo", "read", "grep", "find", "list_dir"} {
+	for _, want := range []string{"summarize", "survey_repo", "command", "git_status", "git_diff"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("explore_readonly survey tools missing %q: %v", want, surveyTools)
+		}
+	}
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if slices.Contains(surveyTools, retired) {
+			t.Fatalf("explore_readonly survey tools still load retired routine schema %q up front: %v", retired, surveyTools)
+		}
+	}
+	canRequest, _ := vars["profile_can_request"].(map[string]bool)
+	for _, loadable := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if !canRequest[loadable] {
+			t.Fatalf("explore_readonly profile_can_request missing %q: %v", loadable, canRequest)
 		}
 	}
 	verifyTools, _ := vars["tool_check_verify_tools"].([]string)

@@ -45,8 +45,6 @@ implement_synthesis:
   exit: report
   prose_finish: true
   floor: [recall, command, survey_repo, summarize, scan_pack, web_search, fetch_url, render_view, view_image, view_video, update_progress, scan_query, scan_summary, scan_list, scan_compare]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, find, list_dir, jq]
 
 orchestrate_plan:
   command_effects: [read_only]
@@ -64,8 +62,6 @@ recon_reconcile:
   mode_ref: workflow-orchestrate
   exit: none
   floor: [recall, command, summarize, pack_board, workflow_transition, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir, jq]
 
 # Pending overlays block new overlapping writes.
 implement_overlay_promote:
@@ -212,8 +208,6 @@ plan_stub:
   mode_ref: plan-stub
   exit: plan
   floor: [recall, command, write, edit, replace_lines, restore_version, update_progress, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep]
 
 # Research tracks worker and checklist progress.
 plan_research:
@@ -222,8 +216,6 @@ plan_research:
   mode_ref: plan-research
   exit: none
   floor: [recall, command, write, edit, replace_lines, restore_version, update_progress, survey_repo, summarize, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, workflow_advance, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir]
 
 # workflow_transition enters critique.
 plan_approve:
@@ -232,8 +224,6 @@ plan_approve:
   mode_ref: workflow-orchestrate
   exit: plan
   floor: [recall, command, write, edit, replace_lines, restore_version, update_progress, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, workflow_transition, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep]
 
 # submit_verdict leaves review; ask_user parks it.
 plan_review:
@@ -242,8 +232,6 @@ plan_review:
   mode_ref: review-adjudicate
   exit: verdict
   floor: [recall, command, survey_repo, summarize, skills_read, write, edit, replace_lines, restore_version, secret_generate, secret_list, secret_revoke, update_progress, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir]
 
 # Survey dispatch surface.
 survey_execute:
@@ -252,8 +240,6 @@ survey_execute:
   mode_ref: workflow-orchestrate
   exit: none
   floor: [recall, command, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, update_progress, pack_board, wait, scan_query, scan_summary, scan_list, scan_compare, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [list_dir]
 
 # Review loop surface.
 review_adjudicate:
@@ -262,8 +248,6 @@ review_adjudicate:
   mode_ref: review-adjudicate
   exit: verdict
   floor: [recall, command, survey_repo, summarize, scan_query, scan_summary, scan_list, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, update_progress, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir]
 
 # Decision review may write its blueprint.
 decision_adjudicate:
@@ -272,8 +256,6 @@ decision_adjudicate:
   mode_ref: review-adjudicate
   exit: verdict
   floor: [recall, command, write, edit, replace_lines, restore_version, secret_generate, secret_list, secret_revoke, survey_repo, summarize, skills_read, pack_board, task, worker_cancel, extend_worker_budget, decline_worker_budget, answer_decision, wait, submit_verdict, update_progress, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir]
 
 # Waiting surface permits questions and workflow resumption.
 await_user:
@@ -284,8 +266,6 @@ await_user:
     label: waiting for your answer
   exit: none
   floor: [recall, command, ask_user, wait, workflow_advance, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, list_dir]
 
 # Host-held phase surface. The host owns the phase's work and advances it; a
 # turn here answers the person, reading that work's status when asked.
@@ -298,8 +278,6 @@ await_host:
     rule: Answer the person; the host moves the phase on.
   exit: none
   floor: [recall, command, scan_query, scan_summary, scan_list, scan_compare, pack_board, answer_decision, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, find, list_dir]
 
 plan_execute:
   command_effects: [read_only]
@@ -307,8 +285,6 @@ plan_execute:
   mode_ref: plan-execute
   exit: none
   floor: [recall, command, write, edit, replace_lines, update_progress, skills_read, web_search, fetch_url, secret_generate, secret_list, secret_revoke, pack_board, task, worker_cancel, wait, extend_worker_budget, decline_worker_budget, answer_decision, delegate_dispatch, ask_user, surface_note]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep]
 
 # Read-only coordinator surfaces. A read-only posture reaches these instead of
 # their implement_/orchestrate_ counterparts, so no mutating tool is on the turn
@@ -389,8 +365,6 @@ observe_synthesis:
   exit: report
   prose_finish: true
   floor: [recall, command, survey_repo, summarize, scan_pack, web_search, view_image, view_video, update_progress, scan_query, scan_summary, scan_list, scan_compare]
-  # Retired routine schemas stay loadable by exact name.
-  loadable: [read, grep, find, list_dir, jq]
 
 # Rootless turns intersect this floor with their surface.
 no_folder_allowlist:

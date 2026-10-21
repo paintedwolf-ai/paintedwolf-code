@@ -37,10 +37,11 @@ func TestIdentityAndSystemUtilities(t *testing.T) {
 	}
 	for source, code := range map[string]string{
 		"id -n": "COMMAND_OPERAND_INVALID", "id -u -g": "COMMAND_OPERAND_INVALID", "uname -p": "COMMAND_OPTION_UNSUPPORTED",
-		"whoami --help": "COMMAND_OPTION_UNSUPPORTED", "hostname -f": "COMMAND_OPTION_UNSUPPORTED",
+		"whoami -x": "COMMAND_OPTION_UNSUPPORTED", "hostname -f": "COMMAND_OPTION_UNSUPPORTED",
 	} {
 		h.run(source).expectRefusal(t, source, code)
 	}
+	h.run("whoami --help").expectOutput(t, "whoami --help", h.owners.specs["whoami"].Help()+"\n", "", 0)
 }
 
 func TestMissingHostFactsRefuseWithoutSubstitutes(t *testing.T) {

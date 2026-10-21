@@ -146,6 +146,11 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	if resolved, ok, err := commandprogram.ResolveCommand(request.Argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, request.Argv); err == nil && bound.Help {
+			return d.invokeBuiltin(ctx, resolved, commandprogram.HelpDispatcher(resolved), request, streams)
+		}
+	}
 	spec, native := d.run.commands[request.Argv[0].Value]
 	switch {
 	case !native || spec.Name == "external":
@@ -349,7 +354,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 		return programChild{}, err
 	}
 	if len(spec.Effects) > 0 {
-		child.bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, nil)
+		child.bound, err = bindCatalogOperation(definition, request.Invocation, spec)
 	}
 	if err != nil {
 		child.release()
@@ -446,15 +451,27 @@ func ownerFailure(err error) toolcontract.ProducerResult {
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {
+		index[spec.Name] = spec
 		if strings.Contains(spec.Name, " ") {
 			continue
 		}
-		index[spec.Name] = spec
 		for _, alias := range spec.Aliases {
 			index[alias] = spec
 		}
 	}
 	return index
+}
+
+func bindCatalogOperation(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, spec toolcontract.CommandSpecification) (toolcontract.BoundOperation, error) {
+	var child *toolcontract.CommandEffects
+	for _, req := range spec.Effects[0].Requires {
+		if req == "bound-child-effect-set" {
+			readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+			child = &readOnly
+			break
+		}
+	}
+	return toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, child)
 }
 
 var _ commandprogram.NestedCommand = (*ProgramDispatcher)(nil)
@@ -474,6 +491,12 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
 	child.Scope = parent.Invocation.Scope
 	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
+	if resolved, ok, err := commandprogram.ResolveCommand(argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, argv); err == nil && bound.Help {
+			request.OperationID = resolved.Name
+			return d.Invoke(ctx, request, streams)
+		}
+	}
 	spec, native := d.run.commands[argv[0].Value]
 	if !native || spec.Name == "external" {
 		request.OperationID = "external"
@@ -515,7 +538,7 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	}
 	invoked := false
 	if native && len(spec.Effects) > 0 {
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil); err == nil {
+		if child.bound, err = bindCatalogOperation(definition, invocation, spec); err == nil {
 			err = d.start(ctx, child)
 		}
 		if err != nil {

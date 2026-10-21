@@ -195,11 +195,14 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	serialTools := profileSerialTools(data.Tools)
 	preferNative := orderedEnabledTools(PreferNativeFileToolOrder(), enabled)
 	hostRunner := orderedEnabledTools(HostRunnerToolOrder(), enabled)
+	mutationCapable := ProfileMutationCapable(data)
+	commandMutates := enabled["command"] && mutationCapable
 	out := map[string]any{
 		"profile_has_write_tools":         len(writeTools) > 0,
 		"profile_has_read_tools":          len(readTools) > 0,
-		"profile_mutation_capable":        ProfileMutationCapable(data),
+		"profile_mutation_capable":        mutationCapable,
 		"profile_has_command":             enabled["command"],
+		"profile_command_mutation":        commandMutates,
 		"profile_has_task":                enabled["task"],
 		"profile_has_wait":                enabled["wait"],
 		"profile_has_verify":              enabled["verify"],
@@ -225,10 +228,10 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_terminal_open":       enabled["terminal_open"],
 		"profile_has_terminal_send":       enabled["terminal_send"],
 		"profile_has_terminal_snapshot":   enabled["terminal_snapshot"],
-		"profile_has_terminal_capture":    enabled["command"],
+		"profile_has_terminal_capture":    commandMutates,
 		"tool_check_write_tools":          writeTools,
 		"tool_check_survey_tools":         surveyTools,
-		"tool_check_verify_tools":         verifyToolsForCheck(enabled),
+		"tool_check_verify_tools":         verifyToolsForCheck(enabled, commandMutates),
 		"tool_check_scan_drilldown_tools": scanDrilldownToolsForCheck(enabled),
 		"profile_concurrent_tools":        concurrentTools,
 		"profile_serial_tools":            serialTools,
@@ -272,6 +275,67 @@ func ToolNamesMutationCapable(names []string) bool {
 		enabled[strings.TrimSpace(name)] = true
 	}
 	return toolSetMutationCapable(enabled)
+}
+
+// CoordinatorSurfaceMutationCapable reports whether a coordinator surface can mutate the tree.
+func CoordinatorSurfaceMutationCapable(surfaceID string) bool {
+	row, err := loadCoordinatorSurfaceRow(surfaceID)
+	if err != nil {
+		return false
+	}
+	enabled := make(map[string]bool, len(row.Floor)+len(row.LoadableTools()))
+	for _, name := range row.Floor {
+		enabled[strings.TrimSpace(name)] = true
+	}
+	for _, name := range row.LoadableTools() {
+		enabled[strings.TrimSpace(name)] = true
+	}
+	effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+	if err == nil && effects != 0 {
+		if mutation, mErr := toolcontract.NewCommandEffects(toolcontract.CommandMutation); mErr == nil && !effects.Allows(mutation) {
+			delete(enabled, "command")
+		}
+	}
+	return toolSetMutationCapable(enabled)
+}
+
+// CoordinatorSurfaceAllowsCommandMutation reports whether a coordinator surface
+// allows command to perform mutations or terminal capture.
+func CoordinatorSurfaceAllowsCommandMutation(surfaceID string) bool {
+	row, err := loadCoordinatorSurfaceRow(surfaceID)
+	if err != nil {
+		return false
+	}
+	effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+	if err != nil || effects == 0 {
+		return true
+	}
+	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	return err == nil && effects.Allows(mutation)
+}
+
+// ApplyCoordinatorSurfaceCommandEffects bounds mutation capability flags when a
+// coordinator surface restricts command_effects to read_only.
+func ApplyCoordinatorSurfaceCommandEffects(surfaceID string, offered, requestable []string, into map[string]any) {
+	if into == nil || CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
+		return
+	}
+	enabled := make(map[string]bool, len(offered)+len(requestable))
+	for _, name := range offered {
+		enabled[strings.TrimSpace(name)] = true
+	}
+	for _, name := range requestable {
+		enabled[strings.TrimSpace(name)] = true
+	}
+	delete(enabled, "command")
+	into["profile_mutation_capable"] = toolSetMutationCapable(enabled)
+	into["profile_command_mutation"] = false
+	into["profile_has_terminal_capture"] = false
+	offeredSet := make(map[string]bool, len(offered))
+	for _, name := range offered {
+		offeredSet[strings.TrimSpace(name)] = true
+	}
+	into["tool_check_verify_tools"] = verifyToolsForCheck(offeredSet, false)
 }
 
 func toolSetMutationCapable(enabled map[string]bool) bool {
@@ -375,9 +439,9 @@ func KeepSpawnAgentOnEmptyRepo(agentType string) bool {
 	return !surveys
 }
 
-func verifyToolsForCheck(enabled map[string]bool) []string {
+func verifyToolsForCheck(enabled map[string]bool, commandMutates bool) []string {
 	var out []string
-	if enabled["command"] {
+	if commandMutates {
 		out = append(out, "command")
 	}
 	if enabled["verify"] {

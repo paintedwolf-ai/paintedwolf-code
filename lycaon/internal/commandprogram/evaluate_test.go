@@ -318,3 +318,20 @@ func TestDynamicSelectorBindsOneOperationAsData(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogHelpPrintsWithoutDispatchingOwner(t *testing.T) {
+	f := newEvalFixture(t)
+	out, err := f.run(t, t.Context(), "grep --help; git status --help; export --help")
+	if err != nil || out.Stop != nil || out.Status != 0 {
+		t.Fatalf("evaluate --help: err=%v stop=%+v status=%d", err, out.Stop, out.Status)
+	}
+	if len(f.log.argv()) != 0 {
+		t.Fatalf("--help dispatched to owner: %q", f.log.argv())
+	}
+	wantGrep := catalogCommand(t, "grep").Help() + "\n"
+	wantGitStatus := catalogCommand(t, "git status").Help() + "\n"
+	wantExport := catalogCommand(t, "export").Help() + "\n"
+	if got, want := f.stdout.String(), wantGrep+wantGitStatus+wantExport; got != want {
+		t.Fatalf("help output %q, want %q", got, want)
+	}
+}

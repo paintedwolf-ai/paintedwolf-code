@@ -164,6 +164,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested 
 	if err := ctx.Err(); err != nil {
 		return settle(err, 0), err
 	}
+	if p.Argv.Help {
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, bound: bound, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
 	err := p.run(inv)
 	if inv.passthrough != nil {

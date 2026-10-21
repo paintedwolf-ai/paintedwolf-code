@@ -63,6 +63,10 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv comm
 	if err != nil {
 		return err
 	}
+	if bound.Help {
+		_, err := commandprogram.WriteCatalogHelp(spec, output)
+		return err
+	}
 	args := bound.Operands().Values()
 	usage := func(reason string) error {
 		return &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: name, Command: name, ExpectedForm: spec.Argv, Cause: errors.New(reason)}

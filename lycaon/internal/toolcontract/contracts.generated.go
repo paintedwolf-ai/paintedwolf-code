@@ -167,7 +167,6 @@ var compiledGrantIdentityNeutralArgs = map[string][]string{
 	"command": {
 		"terminal_capture",
 		"timeout_ms",
-		"wait_ms",
 	},
 	"fetch_url": {
 		"parallel",

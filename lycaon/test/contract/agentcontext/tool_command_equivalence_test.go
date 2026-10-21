@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -100,6 +102,74 @@ func TestRetiredCommandRedirectsAreGone(t *testing.T) {
 	for _, unit := range []string{"native-read-tool", "native-grep-tool", "native-find-tool", "native-list-dir-tool", "native-jq-tool"} {
 		if _, err := os.Stat(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "units", unit+".md")); !os.IsNotExist(err) {
 			t.Errorf("retired routine tutorial %s remains", unit)
+		}
+	}
+}
+
+func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+
+	stalePhrases := []string{
+		"Runs as an argv sequence without a shell",
+		"COMMAND_NOT_ARGV",
+		"here-documents (`<<`) reject",
+		"`$()`/backticks reject",
+		"external --",
+		`list_dir({"path":"."})`,
+		"call `read`/`list_dir`/`grep` with them",
+		"Use bounded `read`/`grep` for more detail",
+	}
+
+	for _, surfaceID := range []string{"implement_investigate", "implement_routing", "implement_synthesis", "observe_investigate"} {
+		corpus := renderCoordinatorTripartiteForRunContext(
+			t, root, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
+			"Inspect the project", nil, surfaceID,
+		)
+		for _, stale := range stalePhrases {
+			if strings.Contains(corpus, stale) {
+				t.Errorf("rendered coordinator surface %s still contains stale guidance %q", surfaceID, stale)
+			}
+		}
+	}
+
+	runnerUnit, err := engine.Render(context.Background(), "units/runner-operating-procedure.md", map[string]any{
+		"profile_has_command": true,
+	})
+	contractcheck.FailErr(t, "render runner-operating-procedure", err)
+	for _, stale := range stalePhrases {
+		if strings.Contains(runnerUnit, stale) {
+			t.Errorf("runner-operating-procedure still contains stale guidance %q", stale)
+		}
+	}
+	if !strings.Contains(runnerUnit, "ordinary bash programs") {
+		t.Errorf("runner-operating-procedure missing bash program guidance: %s", runnerUnit)
+	}
+
+	cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", map[string]any{
+		"tool_profile":          "implement",
+		"profile_has_command":   true,
+		"command_roots_listing": "Roots: @main=/workspace (scratch: @scratch)",
+	})
+	contractcheck.FailErr(t, "render command-surface", err)
+	for _, stale := range stalePhrases {
+		if strings.Contains(cmdSurface, stale) {
+			t.Errorf("command-surface still contains stale guidance %q", stale)
+		}
+	}
+	for _, want := range []string{"GNU and BSD", "CMD --help", "$(...)", "Roots: @main=/workspace (scratch: @scratch)"} {
+		if !strings.Contains(cmdSurface, want) {
+			t.Errorf("command-surface missing %q: %s", want, cmdSurface)
+		}
+	}
+
+	langCatalog, err := toolcontract.LanguageV1()
+	contractcheck.FailErr(t, "load language v1 catalog", err)
+	for _, cmd := range []string{"grep", "sed", "find", "jq", "git status"} {
+		help, ok := langCatalog.CommandHelp(cmd)
+		if !ok || !strings.HasPrefix(help, cmd+"\n") || !strings.Contains(help, "\n-") {
+			t.Errorf("CommandHelp(%q) = (%q, %v), want catalog help with options", cmd, help, ok)
 		}
 	}
 }

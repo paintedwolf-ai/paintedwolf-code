@@ -51,10 +51,14 @@ func MergeCoordinatorPromptVars(
 	if err != nil {
 		return err
 	}
-	for k, v := range CoordinatorSurfaceCardVars(cardLabel, cardRule, offered, requestable).TemplateVars() {
+	runOffered := offered
+	if !CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
+		runOffered = filterToolName(offered, "command")
+	}
+	for k, v := range CoordinatorSurfaceCardVars(cardLabel, cardRule, runOffered, requestable).TemplateVars() {
 		into[k] = v
 	}
-	MergeVisualShowVars(offered, requestable, into)
+	MergeVisualShowVars(runOffered, requestable, into)
 	into["more_tools_loadable"] = len(requestable) > 0
 	into["progress_missing"] = gates.ProgressMissing
 	into["verify_required"] = gates.VerifyRequired
