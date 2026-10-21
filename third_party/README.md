@@ -231,3 +231,47 @@ consumers retain their prior behavior unless they select this mode. The
 translator's range checks use the actual normalized endpoints. The opt-in change
 is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
 are recorded in `go-posix.patch`.
+
+## AWK interpreter
+
+`goawk/` contains the runtime source subset of `github.com/benhoyt/goawk`
+v1.32.0, commit `f59bf0db58a7dd3bebcdd64c9bd75ae2ea10932e`, the version the
+command language catalog pins for `awk`. The release archive was verified
+against its Go module checksum before extraction:
+`h1:CK/mnBxGsNqX8hdghPIctl2aGIcwfnhT6sv+9M/bY7w=`. The module metadata
+checksum is `h1:jXTQxBxtQ0VsjFqc8dw7tIJj3SDzQN8kcdMq7r83/ZA=`. The upstream
+license remains in the module directory. The snapshot omits the command-line
+entry point (`goawk.go`), upstream tests, `testdata/`, `docs/` and `scripts/`;
+the runtime packages `interp`, `parser`, `lexer` and `internal/...` are complete.
+
+The host embeds the interpreter through `interp.New` and `ExecuteContext` with
+no environment, no command execution, no file writes and a file system that
+serves only pinned operand captures. [goawk.patch](goawk.patch) adds two
+host-facing entry points:
+
+- `parser.(*Program).Constructs` lists `system()` calls, command pipes in either
+  direction, `getline` from a file, output redirection and regex literals with
+  their statement positions, so the host refuses them before execution.
+- `interp.Config.Budget` meters work and allocation. `Step` runs before every
+  backward jump, `for`-`in` iteration and user function call, which bounds every
+  unbounded execution path; loops test their condition at the bottom, so `n`
+  iterations take `n-1` steps. `Allocate` runs before concatenation,
+  `sprintf`/`printf` (bounded by literal bytes, widths, precisions and argument
+  sizes before formatting), `sub`/`gsub` results, `toupper`/`tolower`, `split`
+  and new array elements. The meter is cumulative created bytes, not live heap.
+
+GoAWK regexes use Go's RE2 syntax with leftmost-longest matching (`Longest()`
+on every compiled regex, upstream). That is not POSIX ERE: the host refuses
+regex literals that use RE2-only syntax (Perl classes and assertions, `(?`
+groups and flags, lazy quantifiers, `\Q`/`\E`, `\C`, `\x`), and dynamic regex
+strings follow the same RE2 grammar. Submatch choice within a leftmost-longest
+match follows Go, not POSIX subexpression rules; `awk` exposes only `RSTART`
+and `RLENGTH`, which are whole-match facts.
+
+To update this copy, verify the release archive against the module checksum,
+extract the same runtime subset into a clean directory and apply `goawk.patch`
+with `patch -p1`. The patch carries every modified file and the added budget,
+inspection and test files; regenerate it against the verified subset whenever
+owned files change. Review the pin, `lycaon/go.mod` replacement and this record
+together, then run `./task test:digest -- github.com/benhoyt/goawk/interp
+github.com/benhoyt/goawk/parser ./internal/tools/native/textutil/`.

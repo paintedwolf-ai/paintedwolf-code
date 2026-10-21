@@ -6,23 +6,6 @@ import (
 	"strings"
 )
 
-// PosixRegex is one compiled BRE or ERE with POSIX leftmost-longest matching
-// and POSIX subexpression offsets.
-type PosixRegex interface {
-	// Find returns the leftmost-longest match starting at or after from as
-	// [start, end, group1 start, group1 end, ...] (-1 when a group is unset),
-	// or nil. Anchors and assertions see the whole subject.
-	Find(ctx context.Context, subject []byte, from int) ([]int, error)
-	// Groups is the number of capture groups a replacement may name.
-	Groups() int
-}
-
-// PosixRegexEngine compiles sed's regular expressions. It must be the shared
-// POSIX BRE/ERE engine; sed never runs on RE2.
-type PosixRegexEngine interface {
-	Compile(ctx context.Context, pattern string, extended bool) (PosixRegex, error)
-}
-
 // sedAddress is a line number, the last line ($) or a regex.
 type sedAddress struct {
 	line  int
@@ -246,15 +229,6 @@ func (p *sedParser) compile(pattern string) (PosixRegex, error) {
 	return regex, nil
 }
 
-// sedRegexError is the shared engine's refusal of one script regex.
-type sedRegexError struct {
-	offset int
-	cause  error
-}
-
-func (e *sedRegexError) Error() string { return e.cause.Error() }
-func (e *sedRegexError) Unwrap() error { return e.cause }
-
 // delimited reads up to an unescaped delimiter; an escaped delimiter is the
 // literal delimiter, other escapes are kept for the regex grammar.
 func (p *sedParser) delimited(delimiter byte) (string, error) {
@@ -307,87 +281,4 @@ func (p *sedParser) text() string {
 		}
 	}
 	return out.String()
-}
-
-func (p *sedParser) substitution() (*sedSubstitution, error) {
-	delimiter := p.peek()
-	if delimiter == 0 || delimiter == '\n' || delimiter == '\\' {
-		return nil, p.fail("an s delimiter other than newline or backslash")
-	}
-	p.pos++
-	pattern, err := p.delimited(delimiter)
-	if err != nil {
-		return nil, err
-	}
-	regex, err := p.compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	sub := &sedSubstitution{regex: regex}
-	if sub.replacement, err = p.replacement(delimiter, regex.Groups()); err != nil {
-		return nil, err
-	}
-	for p.pos < len(p.src) {
-		switch c := p.src[p.pos]; {
-		case c == 'g' && !sub.global:
-			sub.global = true
-		case c == 'p' && !sub.print:
-			sub.print = true
-		case c >= '1' && c <= '9' && sub.ordinal == 0:
-			start := p.pos
-			for p.pos+1 < len(p.src) && p.src[p.pos+1] >= '0' && p.src[p.pos+1] <= '9' {
-				p.pos++
-			}
-			sub.ordinal, _ = strconv.Atoi(p.src[start : p.pos+1])
-		case c == 'w' || c == 'W' || c == 'e' || c == 'I' || c == 'i' || c == 'M' || c == 'm':
-			return nil, p.unsupported("s flags g, p and a match ordinal")
-		default:
-			return sub, nil
-		}
-		p.pos++
-	}
-	return sub, nil
-}
-
-// replacement reads & (the match), \1..\9, \n (newline), escaped bytes and
-// literal text up to the delimiter. A group beyond the regex refuses.
-func (p *sedParser) replacement(delimiter byte, groups int) ([]sedPiece, error) {
-	var pieces []sedPiece
-	var literal strings.Builder
-	flush := func() {
-		if literal.Len() > 0 {
-			pieces = append(pieces, sedPiece{literal: literal.String(), group: -1})
-			literal.Reset()
-		}
-	}
-	for p.pos < len(p.src) {
-		c := p.src[p.pos]
-		p.pos++
-		switch {
-		case c == delimiter:
-			flush()
-			return pieces, nil
-		case c == '&':
-			flush()
-			pieces = append(pieces, sedPiece{group: 0})
-		case c == '\\' && p.pos < len(p.src):
-			e := p.src[p.pos]
-			p.pos++
-			switch {
-			case e >= '1' && e <= '9':
-				if int(e-'0') > groups {
-					return nil, p.fail("a capture group the regex defines")
-				}
-				flush()
-				pieces = append(pieces, sedPiece{group: int(e - '0')})
-			case e == 'n':
-				literal.WriteByte('\n')
-			default:
-				literal.WriteByte(e)
-			}
-		default:
-			literal.WriteByte(c)
-		}
-	}
-	return nil, p.fail("a terminating " + string(delimiter))
 }

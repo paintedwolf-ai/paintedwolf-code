@@ -6,11 +6,9 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // runSed parses the complete script before any input is read, then runs one
@@ -262,76 +260,4 @@ func (r *sedRun) matches(a *sedAddress, space []byte) (bool, error) {
 		return match != nil, err
 	}
 	return r.line == a.line, nil
-}
-
-// substitute replaces the selected matches: the ordinal-th only, or with g
-// every match from the ordinal-th (default first). An empty match directly
-// after a previous match is skipped, as POSIX requires, and the search then
-// advances one scalar so it always terminates.
-func (r *sedRun) substitute(s *sedSubstitution, space []byte) ([]byte, bool, error) {
-	ordinal := max(s.ordinal, 1)
-	var out []byte
-	copied, from, count, previousEnd := 0, 0, 0, -1
-	replaced := false
-	for from <= len(space) {
-		match, err := s.regex.Find(r.inv.ctx, space, from)
-		if err != nil {
-			return nil, false, err
-		}
-		if match == nil {
-			break
-		}
-		start, end := match[0], match[1]
-		if start == end && start == previousEnd {
-			from = start + scalarWidth(space, start)
-			continue
-		}
-		count++
-		if count >= ordinal && (s.global || count == ordinal) {
-			out = append(out, space[copied:start]...)
-			out = appendReplacement(out, s.replacement, space, match)
-			copied, replaced = end, true
-			if limit := r.inv.limit("record_bytes"); int64(len(out)) > limit {
-				return nil, false, nativeutility.LimitExceeded("record_bytes", limit, int64(len(out)))
-			}
-			if !s.global {
-				break
-			}
-		}
-		previousEnd = end
-		if end > start {
-			from = end
-		} else {
-			from = end + scalarWidth(space, end)
-		}
-	}
-	if !replaced {
-		return space, false, nil
-	}
-	out = append(out, space[copied:]...)
-	if err := r.inv.reserve(int64(len(out))); err != nil {
-		return nil, false, err
-	}
-	return out, s.print, nil
-}
-
-func appendReplacement(out []byte, pieces []sedPiece, space []byte, match []int) []byte {
-	for _, piece := range pieces {
-		if piece.group < 0 {
-			out = append(out, piece.literal...)
-			continue
-		}
-		if start, end := match[2*piece.group], match[2*piece.group+1]; start >= 0 && end >= start {
-			out = append(out, space[start:end]...)
-		}
-	}
-	return out
-}
-
-func scalarWidth(b []byte, at int) int {
-	if at >= len(b) {
-		return 1
-	}
-	_, size := utf8.DecodeRune(b[at:])
-	return size
 }
