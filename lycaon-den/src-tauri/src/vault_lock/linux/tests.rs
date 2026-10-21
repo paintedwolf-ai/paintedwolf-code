@@ -19,6 +19,7 @@ use std::thread;
 use std::time::Instant;
 
 use gtk::glib::variant::ObjectPath;
+use gtk::glib::ToVariant;
 
 mod buses;
 mod idle_coverage;
