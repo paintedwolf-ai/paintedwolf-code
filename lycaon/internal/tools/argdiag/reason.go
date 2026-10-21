@@ -79,6 +79,3 @@ func sortedArgKeys(args map[string]any) []string {
 	sort.Strings(out)
 	return out
 }
-
-// mutationRecoveryTool suggests write when a span or structural edit fails
-// schema validation and write is addressable this turn.

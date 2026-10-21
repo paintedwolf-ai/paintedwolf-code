@@ -246,13 +246,16 @@ func (v *vaultFile) commit(doc vaultDocument) error {
 
 func (v *vaultFile) purge() error {
 	return v.withExclusiveLock(func() error {
+		// The custodian confirms first: an identity it cannot be reached to
+		// forget would outlive the vault, and a vault whose custodian is merely
+		// unreachable is never destroyed.
+		if err := v.provider.Purge(); err != nil {
+			return err
+		}
 		for _, path := range []string{v.path, identityPath(v.path), developmentIdentityPath(v.path)} {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
-		}
-		if err := v.provider.Purge(); err != nil {
-			return err
 		}
 		v.identity, v.vaultID = nil, ""
 		return nil
