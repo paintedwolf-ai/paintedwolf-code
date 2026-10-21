@@ -51,22 +51,15 @@ pub(crate) enum VerifyError {
 }
 
 pub(crate) fn valid_digest(digest: &str) -> bool {
-    digest.len() == 64
-        && digest
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn clean_absolute(path: &Path) -> bool {
-    let Some(raw) = path.to_str() else {
-        return false;
-    };
+    let Some(raw) = path.to_str() else { return false };
     path.is_absolute()
         && !raw.ends_with('/')
         && !raw.contains("//")
-        && path
-            .components()
-            .all(|part| matches!(part, Component::RootDir | Component::Normal(_)))
+        && path.components().all(|part| matches!(part, Component::RootDir | Component::Normal(_)))
 }
 
 fn clean_relative(path: &str) -> bool {
@@ -76,26 +69,18 @@ fn clean_relative(path: &str) -> bool {
         && !path.starts_with('/')
         && !path.ends_with('/')
         && !path.contains("//")
-        && Path::new(path)
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
+        && Path::new(path).components().all(|part| matches!(part, Component::Normal(_)))
 }
 
 fn resolve_relative(base_dir: &str, target: &str) -> Option<String> {
     if target.is_empty() || target.starts_with('/') || target.contains("//") {
         return None;
     }
-    let mut parts: Vec<&str> = if base_dir.is_empty() {
-        Vec::new()
-    } else {
-        base_dir.split('/').collect()
-    };
+    let mut parts: Vec<&str> = if base_dir.is_empty() { Vec::new() } else { base_dir.split('/').collect() };
     for part in target.split('/') {
         match part {
             "" | "." => {}
-            ".." => {
-                parts.pop()?;
-            }
+            ".." => { parts.pop()?; }
             normal => parts.push(normal),
         }
     }
@@ -103,16 +88,9 @@ fn resolve_relative(base_dir: &str, target: &str) -> Option<String> {
 }
 
 impl Manifest {
-    pub(crate) fn from_reader(
-        reader: impl Read,
-        max: u64,
-        root: &Path,
-    ) -> Result<Self, String> {
+    pub(crate) fn from_reader(reader: impl Read, max: u64, root: &Path) -> Result<Self, String> {
         let mut raw = Vec::new();
-        reader
-            .take(max + 1)
-            .read_to_end(&mut raw)
-            .map_err(|e| e.to_string())?;
+        reader.take(max + 1).read_to_end(&mut raw).map_err(|e| e.to_string())?;
         if raw.len() as u64 > max {
             return Err("manifest exceeds size limit".into());
         }
@@ -139,10 +117,7 @@ impl Manifest {
         }
         let mut seen_execs = BTreeSet::new();
         for exe in &self.executables {
-            if !clean_absolute(&exe.path)
-                || !seen_execs.insert(&exe.path)
-                || !valid_digest(&exe.sha256)
-            {
+            if !clean_absolute(&exe.path) || !seen_execs.insert(&exe.path) || !valid_digest(&exe.sha256) {
                 return Err("manifest executable entry is invalid".into());
             }
         }
@@ -163,25 +138,13 @@ impl Manifest {
                 return Err("manifest payload path or mode is invalid".into());
             }
             let valid = match item.kind.as_str() {
-                "file" => {
-                    item.sha256.as_deref().is_some_and(valid_digest)
-                        && item.size.is_some()
-                        && item.target.is_none()
-                }
-                "directory" => {
-                    item.mode & 0o500 == 0o500
-                        && item.sha256.is_none()
-                        && item.size.is_none()
-                        && item.target.is_none()
-                }
+                "file" => item.sha256.as_deref().is_some_and(valid_digest) && item.size.is_some() && item.target.is_none(),
+                "directory" => item.mode & 0o500 == 0o500 && item.sha256.is_none() && item.size.is_none() && item.target.is_none(),
                 "symlink" => {
                     item.mode == 0o777
                         && item.sha256.is_none()
                         && item.size.is_none()
-                        && item
-                            .target
-                            .as_deref()
-                            .is_some_and(|t| !t.is_empty() && !t.starts_with('/'))
+                        && item.target.as_deref().is_some_and(|t| !t.is_empty() && !t.starts_with('/'))
                 }
                 _ => false,
             };
@@ -206,8 +169,7 @@ impl Manifest {
             if item.kind != "symlink" {
                 continue;
             }
-            let mut current = name.to_string();
-            let mut visited = BTreeSet::new();
+            let (mut current, mut visited) = (name.to_string(), BTreeSet::new());
             while let Some(entry) = entries.get(current.as_str()) {
                 if entry.kind != "symlink" {
                     break;
@@ -215,10 +177,7 @@ impl Manifest {
                 if !visited.insert(current.clone()) {
                     return Err("manifest payload symlink is cyclic".into());
                 }
-                let base = Path::new(&current)
-                    .parent()
-                    .and_then(Path::to_str)
-                    .unwrap_or("");
+                let base = Path::new(&current).parent().and_then(Path::to_str).unwrap_or("");
                 let next = resolve_relative(base, entry.target.as_deref().unwrap_or(""))
                     .ok_or_else(|| "manifest payload symlink escapes root".to_string())?;
                 if next.is_empty() {
@@ -231,9 +190,7 @@ impl Manifest {
             }
         }
         for exe in &self.executables {
-            let Ok(rel) = exe.path.strip_prefix(&self.install_root) else {
-                continue;
-            };
+            let Ok(rel) = exe.path.strip_prefix(&self.install_root) else { continue };
             let Some(rel_str) = rel.to_str() else {
                 return Err("manifest executable path is not valid UTF-8".into());
             };
@@ -260,9 +217,7 @@ impl Manifest {
 
 impl Executable {
     pub(crate) fn verify_reader(&self, mut reader: impl Read) -> Result<(), VerifyError> {
-        let mut digest = Sha256::new();
-        let mut size = 0u64;
-        let mut buffer = [0u8; 65536];
+        let (mut digest, mut size, mut buffer) = (Sha256::new(), 0u64, [0u8; 65536]);
         loop {
             let count = reader.read(&mut buffer).map_err(|_| VerifyError::ReadFailed)?;
             if count == 0 {
@@ -298,77 +253,40 @@ pub(crate) fn fixture_json(
                 break;
             }
             map.entry(s.to_string()).or_insert_with(|| {
-                serde_json::json!({
-                    "path": s,
-                    "kind": "directory",
-                    "mode": 0o755,
-                    "sha256": null,
-                    "size": null,
-                    "target": null
-                })
+                serde_json::json!({"path": s, "kind": "directory", "mode": 0o755, "sha256": null, "size": null, "target": null})
             });
             parent = dir.parent();
         }
     };
     for (path, bytes) in executables {
-        let sha256 = hex::encode(Sha256::digest(bytes));
-        let size = bytes.len() as u64;
-        exec_rows.push(serde_json::json!({
-            "path": path,
-            "sha256": sha256,
-            "size": size
-        }));
+        let (sha256, size) = (hex::encode(Sha256::digest(bytes)), bytes.len() as u64);
+        exec_rows.push(serde_json::json!({"path": path, "sha256": sha256, "size": size}));
         if let Ok(rel) = path.strip_prefix(root) {
             let rel_str = rel.to_str().unwrap().replace('\\', "/");
             add_parents(&rel_str, &mut payload_rows);
             payload_rows.insert(
                 rel_str.clone(),
-                serde_json::json!({
-                    "path": rel_str,
-                    "kind": "file",
-                    "mode": 0o755,
-                    "sha256": sha256,
-                    "size": size,
-                    "target": null
-                }),
+                serde_json::json!({"path": rel_str, "kind": "file", "mode": 0o755, "sha256": sha256, "size": size, "target": null}),
             );
         }
     }
     for (rel_str, bytes, mode) in extra_files {
         add_parents(rel_str, &mut payload_rows);
+        let sha256 = hex::encode(Sha256::digest(bytes));
         payload_rows.insert(
             (*rel_str).to_string(),
-            serde_json::json!({
-                "path": rel_str,
-                "kind": "file",
-                "mode": mode,
-                "sha256": hex::encode(Sha256::digest(bytes)),
-                "size": bytes.len() as u64,
-                "target": null
-            }),
+            serde_json::json!({"path": rel_str, "kind": "file", "mode": mode, "sha256": sha256, "size": bytes.len() as u64, "target": null}),
         );
     }
     if payload_rows.is_empty() {
         payload_rows.insert(
             "bin".to_string(),
-            serde_json::json!({
-                "path": "bin",
-                "kind": "directory",
-                "mode": 0o755,
-                "sha256": null,
-                "size": null,
-                "target": null
-            }),
+            serde_json::json!({"path": "bin", "kind": "directory", "mode": 0o755, "sha256": null, "size": null, "target": null}),
         );
     }
     let payload: Vec<_> = payload_rows.into_values().collect();
     serde_json::json!({
-        "format_version": FORMAT_VERSION,
-        "package": PACKAGE_NAME,
-        "version": "1.0.2",
-        "architecture": architecture,
-        "install_root": root,
-        "executables": exec_rows,
-        "payload": payload
+        "format_version": FORMAT_VERSION, "package": PACKAGE_NAME, "version": "1.0.2",
+        "architecture": architecture, "install_root": root, "executables": exec_rows, "payload": payload
     })
 }
