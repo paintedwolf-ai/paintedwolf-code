@@ -1,0 +1,28 @@
+{
+  "aur": {
+    "enabled": false
+  },
+  "controller_commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "mode": "production",
+  "nix": {
+    "cache": {
+      "enabled": false
+    },
+    "source": {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "flake_lock_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "git_url": "github:paintedwolf-ai/paintedwolf-code/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "origin": "https://downloads.paintedwolf.dev",
+  "package_content_types": {
+    "painted-wolf-code_v1.2.3_linux-x86_64.deb": "application/vnd.debian.binary-package",
+    "painted-wolf-code_v1.2.3_linux-x86_64.pkg.tar.zst": "application/zstd",
+    "painted-wolf-code_v1.2.3_linux-x86_64.rpm": "application/x-rpm"
+  },
+  "repositories": [],
+  "signing_generation": 1,
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "version": "1.2.3"
+}

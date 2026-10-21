@@ -918,6 +918,12 @@ Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution
 
 `./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
 
+The final release admission consumer also requires a separate publication file root. A file artifact ID is its basename in that root; the consumer hashes its actual final bytes through a stable regular-file descriptor, refuses symlinks or replacement during verification, and records the verified sizes and hashes. The receipt cannot replace a package or retained evidence. Repository signing changes package bytes, so qualification and publication must use the final signed package identity. Closure admission remains a separate Nix store/NAR contract.
+
+The release consumer requires `--repositories` with a generation plan (`format_version: 1`, `generations` containing paired `manifest` and `operation` objects), plus independently selected `--version`, `--release-build`, `--channel`, `--signing-generation` and `--key-fingerprint`. Select the build number from the immutable artifact source’s `RELEASE_BUILD`, not an unrelated controller checkout. Native package versions must match the shared Debian/RPM and Pacman conversion contracts; Pacman also binds that source build number. Every admitted deb, RPM and Pacman artifact must appear exactly once with the same final signed hash, family and architecture. The consumer recomputes the immutable inventory and generation identities and requires an explicit `publish` operation matching those facts. Recovery, rotation and withdrawal require their separate operation paths and cannot stand in for ordinary publication. Format semantics, signatures and object storage remain owned by the repository assembler and publisher. The protected release controller must select these inputs from its exact qualified artifacts; a submitted JSON plan is not publication authority.
+
+The protected controller adapter selects exactly one `linux-final-admission-inputs` artifact by server-owned ID and SHA-256 from a successful `workflow_dispatch` run of the main release workflow in this repository. It refuses ambiguous, expired, fork, branch and mismatched producer artifacts, verifies the downloaded ZIP digest, and extracts bounded regular files into a fresh private directory. The bundle contains `producer.json`, `final-artifacts.json`, `campaign.json`, `repositories.json`, `packages/`, `evidence/` and raw `generations/<generation-sha256>/` inventories. Each raw generation directory contains only its declared immutable objects plus `generation.json`; published trust/setup archives are separate artifacts. The controller rechecks APT, RPM and Pacman metadata/package signatures through their format owners using its own public signing catalog, never a trust catalog supplied by the bundle. Producer facts bind repository ID, run ID and attempt, controller commit, selected source commit and source tree. Version, channel, build number and lock digest come from the immutable source objects, independent of checkout changes or local replacement refs. `SelectedCampaign.authorize()` reloads the retained inputs and reevaluates actual files and evidence each time; an earlier accepted report grants no publication authority. Publisher adapters must call this protected selection and fresh authorization before obtaining write credentials. `publish-immutable` invokes the protected admission action before object-write credentials whenever the selected source catalog declares public Linux. Candidate-only Linux keeps its independent release workflow. The successful selected controller run supplies the completed candidate and installed campaign inputs; its final package bytes must match the imminent release files. A qualified-bundle producer and repository/cache/AUR activation integration remain required; the admission action alone does not activate those delivery surfaces. The protected entry point is `./task release:publish:linux-admission -- --campaign-run-id RUN --source-commit SHA --source-repository CHECKOUT --retained-dir FRESH_DIRECTORY --publication-files DIRECTORY --receipt FRESH_FILE`, invoked by the protected GitHub controller with its server repository identity. It also hashes the actual files selected for the imminent publication, so a later rebuild must match the admitted final bytes exactly. Cache inputs live under `nix-cache/<nix-system>/{report.json,cache/}`; actual NAR contents, references and signatures are reverified, then bound to the installed closure artifacts. The dedicated controller-owned `packaging/linux/nix-cache-trust.json` explicitly declares public cache activation. Its default `{ "schema_version": 1, "enabled": false }` permits pinned Git and lock source delivery with verified native Nix closure identities, and declares no cache URL, key or availability. Enabling the cache requires `enabled: true` and a `trust_policy` containing `schema_version: 1`, `mode: "production"` and nonempty protected `public_keys`; the bundle cannot choose its own trust. Source-only delivery retains the same architecture, closure and actual installed behavior gates.
+
 The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
 
 ### Updates
@@ -1204,3 +1210,117 @@ engine diagnostics without API tokens. An empty automatic-source matrix records
 and activation depend on successful completion of the desktop gate. PR tests
 exercise preparation failures, TLS routing, runner admission, and receipt rules;
 only the protected signed release run qualifies a real old-to-new app upgrade.
+
+The protected main release controller can retain a complete campaign through `./task release:publish:linux-campaign -- --qualification-run-id RUN --output FRESH_DIR --source-repository CHECKOUT --source-commit SHA`. It copies bounded regular inputs into a private independent directory, rejects links and special files, and reevaluates the copied installed campaign, repository signatures and Nix closure before adding the run/attempt/source binding. Failed admission removes its own incomplete output. The input root contains only `final-artifacts.json`, `campaign.json`, `repositories.json`, and the applicable `packages/`, `evidence/`, `generations/`, `nix-cache/` and `repository-setup/` directories. This preparation neither publishes objects nor constructs an R2 client; upload remains a controller step after successful admission.
+
+Final campaign retention and admission require the protected `LINUX_REPOSITORY_ORIGIN` variable (an HTTPS origin without a path). The controller appends its fixed `linux/repositories` namespace and independently admits every selected DEB/RPM setup bundle from `repository-setup/<generation>/`. Each bundle retains its setup package, `setup.json`, `package-key.asc`, `SHA256SUMS` and `SHA256SUMS.asc`; setup is separate from the application package inventory. The public key must match protected controller trust, and native package payload/signature admission runs before comparing the producer record. Setup identities include signing generation and channel, allowing explicit trust upgrades without changing application version projection.
+
+
+The nonpublishing control assembler rehearses through `./task release:rehearse:linux-controls`. It takes an exact native artifact manifest and package directory, immutable source checkout and commit, explicit repository predecessors, signing catalog/private key, HTTPS repository base, and Nix input document. It writes a fresh control bundle containing `control-producer.json`, `final-artifacts.json`, `repositories.json`, `packages/`, `generations/`, `repository-setup/` and `nix-cache/`. RPM signatures change final package bytes, so the retained final artifact hashes are computed after signing. Pacman database aliases are retained as regular copies of their already verified signed bytes. No repository pointer or public object is written by this command. The rehearsal uses explicit disposable signing identities and emits a rehearsal proof that protected production selection refuses; protected production assembly runs only through `release:publish:linux-controls`.
+
+Nix input documents have `{ "format_version": 1, "systems": [...] }`. With public caching disabled, each system contains only `request`, whose exact fields are `schema_version`, `version`, `application_commit`, `flake_lock_sha256`, `system` and a single `outputs` entry. The source verifier independently evaluates the immutable selected Git revision and verifies actual recursive NAR contents and native derivation metadata. Enabled-cache system entries also contain `policy` and `private_key`, and their request follows the signed-cache producer contract. Private signing keys remain outside the retained bundle.
+
+
+### Linux release publication entries
+
+Production publication never runs through a verification target. The protected
+release workflow calls each tested module through its own `release:publish:<scope>`
+task from the protected controller checkout; these tasks are not queued and
+require the protected main controller identity:
+
+| Task | Module | Role |
+|---|---|---|
+| `release:publish:linux-collection` | `publication.campaign.native_artifacts` | Collect admitted installed package bytes without rebuilding |
+| `release:publish:release-inputs` | `publication.release.release_producer` | Retain signed non-Linux release results |
+| `release:publish:linux-controls` | `publication.control.control_pipeline` | Sign nonpublishing controls and the qualification plan |
+| `release:publish:linux-campaign` | `publication.campaign.producer` | Retain a freshly admitted installed campaign |
+| `release:publish:linux-admission` | `publication.campaign.controller` | Reevaluate the campaign and imminent publication bytes |
+| `release:publish:linux-document` | `publication.document.document_pipeline` | Prepare, publish or notify the signed distribution document |
+| `release:publish:website` | `publication.document.website` | Build the dispatch body (`dispatch-body`) or confirm the published state (`confirm`) |
+
+Rehearsals are declared verification targets with scoped locks.
+`./task release:rehearse:linux-controls -- ...` assembles controls with disposable
+identities under the `linux-control-fixture` lock.
+`./task release:rehearse:distribution-document -- --output /absolute/fresh-report.json`
+publishes, verifies and cleans a signed document under one disposable R2 prefix,
+holding the `r2-rehearsal` lock. `release:live-test` remains the credentialed R2
+pointer rehearsal.
+
+### Nonpublishing Linux control preparation
+
+The protected main release workflow's `linux_operation: controls` prepares the
+`linux-installed-control-inputs` and `linux-installed-qualification-plan` artifact
+roles. Select the exact successful native candidate run, its controller commit,
+both architecture artifact IDs, and the immutable application commit/tree. Partial
+diagnostic artifacts cannot enter this path. The producer rechecks server-owned
+attempts and artifact digests after signing and closure verification.
+
+The qualification runner needs the native repository tooling, both actual Nix
+application closures and their derivations in its local daemon store, the selected
+private signing key outside the checkout, and an operator-owned policy file.
+`LINUX_QUALIFICATION_CONTROL_POLICY` identifies that physical file; group/world
+writable files and symlinks are refused. No key contents belong in the policy.
+Its exact JSON fields are:
+
+```json
+{
+  "format_version": 1,
+  "private_key": "/absolute/private/signing-key.asc",
+  "repository_base_url": "https://downloads.example.invalid/linux-repositories",
+  "predecessors": {},
+  "nix_inputs": [],
+  "fleet_template": {"format_version": 1, "targets": []}
+}
+```
+
+The empty objects above describe the shape, not an executable qualification plan.
+Production preparation requires every package family and native CPU, explicit
+independently selected predecessor states, actual source-bound Nix output requests,
+and every required support variant. Source-only Nix delivery uses the protected
+cache-disabled policy and advertises no cache URL or key. Enabling cache delivery
+also requires the protected trust policy and real signing identity.
+
+Each fleet template target uses the fixed installed controller target contract,
+with `artifact_selector: {"installation": "deb", "architecture": "amd64"}` in
+place of `artifact_id`. The producer resolves that selector from freshly signed
+final bytes, binds the actual application source and controller driver tree, and
+asks the installed controller owner to validate the complete version2 plan.
+Guest paths, SSH identities, known hosts and snapshots must describe provisioned
+disposable guests. The producer does not create or reset guest state.
+
+The resulting artifacts can be selected by the separate `qualify` operation;
+`retain` freshly admits the executed observations. Preparing controls grants no
+installed qualification or publication authority, and performs no upload to a
+package repository, cache activation or public release.
+
+
+The separate `linux_operation: document` selects an exact completed Linux campaign
+and an independently produced `release-distribution-inputs` artifact. It reruns
+Linux admission, preserves the source catalog's publication flags, copies exact
+installed/native release package bytes into canonical names, and calls the
+maintained distribution document signer. Feed and package signing generations
+remain separate. Its signed metadata explicitly keeps repositories, cache and AUR
+delivery inactive; it does not upload public objects or change channel pointers.
+A catalog whose Linux entries remain candidates cannot produce a public Linux
+document through this operation. Enabled delivery still requires an independent
+fresh transport observer and publication integration.
+
+The protected `linux_operation=document` path defaults to preparation only.
+`linux_document_observe_delivery=true` requires a public Linux source catalog and
+fresh repository/cache transport observations; it does not activate delivery.
+`linux_document_publish=true` explicitly enables immutable document upload and the
+website notification after public byte verification. Both switches default to false.
+An optional `LINUX_DELIVERY_POLICY` physical owner-controlled file additionally
+selects native delivery publication. Its exact format is
+`{"format_version":1,"expected":{"<admitted-generation-sha256>":null}}`, with
+each value the independently selected predecessor SHA-256 or null for an absent
+channel. It must cover every admitted generation. With this policy, all native
+generations stage before opt-in setup/cache publication and channel activation.
+This mode requires both explicit switches and never enables AUR availability.
+Failed external writes retain `publication-failure.json` and the selected inputs;
+immutable partial objects may remain, and no notification is dispatched.
+Notifications carry independent updater and distribution digests. Website
+acknowledgement verifies schema-2 receipts and every package link from the signed
+distribution document, including newer Preview state after Stable promotion.
+These controls are implementation interfaces; defining them does not authorize a
+production run, release, or activation during a nonpublishing rehearsal.

@@ -353,6 +353,12 @@
     ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
+    ],
+    "release:rehearse:linux-controls": [
+      "release:rehearse:linux-controls"
+    ],
+    "release:rehearse:distribution-document": [
+      "release:rehearse:distribution-document"
     ]
   },
   "private": [
@@ -379,7 +385,9 @@
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "den:test:rust": "fixed:desktop-settings-observer",
-    "test:linux:installed": "passthrough"
+    "test:linux:installed": "passthrough",
+    "release:rehearse:linux-controls": "passthrough",
+    "release:rehearse:distribution-document": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -706,6 +714,18 @@
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:linux-controls": {
+      "locks": [
+        "linux-control-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:distribution-document": {
+      "locks": [
+        "r2-rehearsal"
       ],
       "workers": 1
     }

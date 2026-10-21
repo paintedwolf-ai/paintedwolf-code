@@ -15,6 +15,11 @@ on:
         description: Optional reviewed JSON plan for key-rotation recovery
         required: false
         type: string
+      distribution_documents:
+        description: Require signed distribution documents and independent good/bad document digests
+        required: true
+        type: boolean
+        default: false
       dry_run:
         description: Validate the complete withdrawal without changing distribution
         required: true
@@ -91,9 +96,15 @@ jobs:
             --distribution-output "${RUNNER_TEMP}/halt-distribution.json"
       - name: Prepare package and website withdrawal
         id: distribution_plan
+        env:
+          DISTRIBUTION_DOCUMENTS: ${{ inputs.distribution_documents }}
         run: |
+          set -euo pipefail
+          args=()
+          [[ "$DISTRIBUTION_DOCUMENTS" == false || "$DISTRIBUTION_DOCUMENTS" == true ]]
+          if [[ "$DISTRIBUTION_DOCUMENTS" == true ]]; then args+=(--distribution-documents); fi
           python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
-            --output "${RUNNER_TEMP}/withdrawal.json"
+            --output "${RUNNER_TEMP}/withdrawal.json" "${args[@]}"
       - name: Halt all affected updater feeds
         if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
         run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"

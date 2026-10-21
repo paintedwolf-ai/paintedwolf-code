@@ -6,8 +6,94 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      linux_operation:
+        description: 'Release publication or a nonpublishing Linux qualification operation'
+        type: choice
+        options: [release, controls, qualify, retain, document]
+        required: true
+        default: release
+      linux_document_observe_delivery:
+        description: 'Require fresh advertised Linux repository and cache delivery observations'
+        type: boolean
+        required: false
+        default: false
+      linux_document_publish:
+        description: 'Publish admitted immutable document bytes and notify the website'
+        type: boolean
+        required: false
+        default: false
+      linux_candidate_run_id:
+        description: 'Successful complete native candidate producer run'
+        type: string
+        required: false
+        default: ''
+      linux_candidate_controller:
+        description: 'Exact native candidate workflow controller commit'
+        type: string
+        required: false
+        default: ''
+      linux_candidate_amd64_artifact_id:
+        description: 'Exact complete x86_64 native candidate artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_candidate_arm64_artifact_id:
+        description: 'Exact complete aarch64 native candidate artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_release_inputs_run_id:
+        description: 'Successful protected signed non-Linux release input producer run'
+        type: string
+        required: false
+        default: ''
+      linux_release_inputs_artifact_id:
+        description: 'Exact independently retained non-Linux release input artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_source_commit:
+        description: 'Immutable application commit for qualification or retention'
+        type: string
+        required: false
+        default: ''
+      linux_source_tree:
+        description: 'Immutable application tree for qualification'
+        type: string
+        required: false
+        default: ''
+      linux_control_run_id:
+        description: 'Successful protected control producer run'
+        type: string
+        required: false
+        default: ''
+      linux_control_artifact_id:
+        description: 'Exact retained control artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_plan_run_id:
+        description: 'Successful protected qualification plan producer run'
+        type: string
+        required: false
+        default: ''
+      linux_plan_artifact_id:
+        description: 'Exact retained qualification plan artifact ID'
+        type: string
+        required: false
+        default: ''
+      linux_qualification_run_id:
+        description: 'Successful actual installed qualification run to retain'
+        type: string
+        required: false
+        default: ''
       release_tag:
         description: 'Existing qualified release tag to publish; leave empty for a dry run'
+        type: string
+        required: false
+        default: ''
+      linux_campaign_run_id:
+        description: 'Successful main controller run retaining the final installed Linux campaign; required for public Linux'
         type: string
         required: false
         default: ''
@@ -25,6 +111,7 @@ env:
 
 jobs:
   classify:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.linux_operation == 'release' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,6 +128,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       cask_token: ${{ steps.release.outputs.cask_token }}
       matrix: ${{ steps.release.outputs.matrix }}
+      linux_public: ${{ steps.release.outputs.linux_public }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -117,7 +205,8 @@ jobs:
           echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
           echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
-          echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
+          echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
+          echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public" and .goos != "linux")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
     needs: [classify, ship-gates, aggregate-release]
@@ -268,6 +357,7 @@ jobs:
 
   # Packaging follows static compatibility; publication requires ship-gates.
   build-release:
+    name: native-signing-${{ matrix.updater_key }}
     needs: [classify, compatibility]
     strategy:
       fail-fast: false
@@ -482,7 +572,7 @@ jobs:
   # runners, and run whatever those jobs concluded so their own result stays visible.
   linux-candidates:
     needs: [classify, ship-gates, aggregate-release]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.classify.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -598,6 +688,11 @@ jobs:
           retention-days: 90
 
   aggregate-release:
+    outputs:
+      release_inputs_artifact_id: ${{ steps.release-inputs.outputs.artifact-id }}
+    permissions:
+      contents: read
+      actions: read
     needs: [classify, build-release]
     runs-on: ubuntu-latest
     steps:
@@ -611,6 +706,38 @@ jobs:
           pattern: platform-release-*
           path: release-artifacts
           merge-multiple: true
+
+      - name: Select the protected release controller
+        if: ${{ needs.classify.outputs.linux_public == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .linux-publication-controller
+          fetch-depth: 0
+          persist-credentials: false
+      - if: needs.classify.outputs.linux_public == 'true'
+        uses: ./.linux-publication-controller/.github/actions/setup-linux-publication
+        with:
+          controller_root: ${{ github.workspace }}/.linux-publication-controller
+      - name: Collect independently qualified native packages without rebuilding
+        if: needs.classify.outputs.linux_public == 'true'
+        working-directory: .linux-publication-controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ needs.classify.outputs.source_sha }}
+          CAMPAIGN_RUN_ID: ${{ inputs.linux_campaign_run_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+        run: |
+          set -euo pipefail
+          ./task release:publish:linux-collection -- \
+            --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
+            --campaign-run-id "$CAMPAIGN_RUN_ID" --retained-dir "$RUNNER_TEMP/linux-collection-inputs" \
+            --output "$RUNNER_TEMP/qualified-linux"
+          for file in "$RUNNER_TEMP/qualified-linux/"*; do
+            target="$GITHUB_WORKSPACE/release-artifacts/$(basename "$file")"
+            test ! -e "$target"
+            cp "$file" "$target"
+          done
 
       - name: Assemble complete updater manifest and cask
         env:
@@ -656,6 +783,34 @@ jobs:
           if [[ "${CHANNEL}" == stable ]]; then
             render_cask painted-wolf-code@preview preview
           fi
+
+      - if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.classify.outputs.linux_public != 'true' }}
+        uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: .linux-publication-controller/lycaon/go.mod
+          cache: false
+      - name: Retain the actual signed non-Linux results under an independent producer role
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+        working-directory: .linux-publication-controller
+        env:
+          SOURCE_COMMIT: ${{ needs.classify.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          ./task release:publish:release-inputs -- \
+            --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
+            --catalog "$GITHUB_WORKSPACE/packaging/release-platforms.json" \
+            --updater "$GITHUB_WORKSPACE/aggregate/latest.json" \
+            --artifacts "$GITHUB_WORKSPACE/release-artifacts" --output "$RUNNER_TEMP/release-distribution-inputs"
+      - id: release-inputs
+        name: Retain protected release document inputs without publication
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-distribution-inputs
+          path: ${{ runner.temp }}/release-distribution-inputs
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload aggregate release metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -789,9 +944,14 @@ jobs:
           status: ${{ job.status }}
 
   publish-immutable:
+    outputs:
+      distribution_artifact_id: ${{ steps.signed-document.outputs.artifact-id }}
     needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     environment: release-publication
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -812,6 +972,30 @@ jobs:
         with:
           name: release-metadata
           path: release-metadata
+
+      - id: linux-policy
+        name: Check out protected Linux publication policy
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .linux-publication-controller
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: linux-admission
+        name: Admit the exact Linux publication inputs before production writes
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: ./.linux-publication-controller/.github/actions/admit-linux-publication
+        with:
+          controller_root: ${{ github.workspace }}/.linux-publication-controller
+          signing: 'true'
+          source_commit: ${{ needs.classify.outputs.source_sha }}
+          campaign_run_id: ${{ inputs.linux_campaign_run_id }}
+          publication_files: ${{ github.workspace }}/release-artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
 
       - name: Validate channel monotonicity
         env:
@@ -887,6 +1071,45 @@ jobs:
             verify_public "upgrade-corpus/${VERSION}/${rel}" "${corpus}"
           done < <(find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f -print0)
 
+      - name: Publish the qualified Linux distribution document
+        if: needs.classify.outputs.linux_public == 'true'
+        working-directory: .linux-publication-controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ needs.classify.outputs.source_sha }}
+          CAMPAIGN_RUN_ID: ${{ inputs.linux_campaign_run_id }}
+          RELEASE_ARTIFACT_ID: ${{ needs.aggregate-release.outputs.release_inputs_artifact_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+          LINUX_DELIVERY_POLICY: ${{ vars.LINUX_DELIVERY_POLICY }}
+        run: |
+          set -euo pipefail
+          extra=()
+          if [[ -n "$LINUX_DELIVERY_POLICY" ]]; then
+            policy="$RUNNER_TEMP/linux-delivery-policy.json"
+            (umask 077; printf '%s\n' "$LINUX_DELIVERY_POLICY" > "$policy")
+            extra+=(--delivery-policy "$policy")
+          fi
+          ./task release:publish:linux-document -- \
+            --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
+            --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$GITHUB_RUN_ID" \
+            --release-artifact-id "$RELEASE_ARTIFACT_ID" --current-release-producer \
+            --observe-enabled-delivery --publish-immutable \
+            --output "$RUNNER_TEMP/distribution-preparation" "${extra[@]}"
+      - id: signed-document
+        name: Retain the published signed distribution document
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-signed-distribution-document
+          path: ${{ runner.temp }}/distribution-preparation/document/*
+          if-no-files-found: error
+          retention-days: 90
+
   update-cask:
     needs: [classify, publish-immutable]
     runs-on: ubuntu-latest
@@ -927,8 +1150,11 @@ jobs:
           git push
 
   notify-website:
-    needs: [classify, publish-immutable, update-cask]
+    needs: [classify, aggregate-release, publish-immutable, update-cask]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     environment: release-publication
     timeout-minutes: 65
     steps:
@@ -940,7 +1166,57 @@ jobs:
         with:
           name: release-metadata
           path: release-metadata
+      - name: Select the protected document notification controller
+        if: needs.classify.outputs.linux_public == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .linux-publication-controller
+          fetch-depth: 0
+          persist-credentials: false
+      - if: needs.classify.outputs.linux_public == 'true'
+        uses: ./.linux-publication-controller/.github/actions/setup-linux-publication
+        with:
+          controller_root: ${{ github.workspace }}/.linux-publication-controller
+      - name: Freshly verify the Linux distribution notification
+        if: needs.classify.outputs.linux_public == 'true'
+        working-directory: .linux-publication-controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ needs.classify.outputs.source_sha }}
+          CAMPAIGN_RUN_ID: ${{ inputs.linux_campaign_run_id }}
+          RELEASE_ARTIFACT_ID: ${{ needs.aggregate-release.outputs.release_inputs_artifact_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DOCUMENT_ARTIFACT_ID: ${{ needs.publish-immutable.outputs.distribution_artifact_id }}
+        run: |
+          set -euo pipefail
+          ./task release:publish:linux-document -- \
+            --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
+            --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$GITHUB_RUN_ID" \
+            --release-artifact-id "$RELEASE_ARTIFACT_ID" --current-release-producer \
+            --observe-enabled-delivery \
+            --current-document-artifact-id "$DOCUMENT_ARTIFACT_ID" \
+            --output "$RUNNER_TEMP/distribution-notification"
+      - name: Dispatch the freshly verified Linux distribution notification
+        if: needs.classify.outputs.linux_public == 'true'
+        working-directory: .linux-publication-controller
+        env:
+          GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          payload="$RUNNER_TEMP/distribution-notification/notification.json"
+          ./task release:publish:website -- dispatch-body --notification "$payload" --output "$RUNNER_TEMP/www-notification.json"
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/www-notification.json"
+          ./task release:publish:website -- confirm --notification "$payload"
       - name: Dispatch channel release to paintedwolf-www
+        if: needs.classify.outputs.linux_public != 'true'
         env:
           GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
           VERSION: ${{ needs.classify.outputs.version }}
@@ -1065,3 +1341,203 @@ jobs:
             gh release create "v${VERSION}" release-artifacts/painted-wolf-code_v${VERSION}_* \
               "${flags[@]}" --title "Painted Wolf Code v${VERSION}" --notes-file "${NOTES}"
           fi
+
+
+  linux-qualification:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'qualify' && inputs.release_tag == '' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/linux-installed-qualification.yml
+    with:
+      source_commit: ${{ inputs.linux_source_commit }}
+      source_tree: ${{ inputs.linux_source_tree }}
+      control_run_id: ${{ inputs.linux_control_run_id }}
+      control_artifact_id: ${{ inputs.linux_control_artifact_id }}
+      qualification_plan_run_id: ${{ inputs.linux_plan_run_id }}
+      qualification_plan_artifact_id: ${{ inputs.linux_plan_artifact_id }}
+
+  linux-retain:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'retain' && inputs.release_tag == '' }}
+    runs-on: [self-hosted, linux, paintedwolf-qualification]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Retain a freshly admitted actual Linux campaign without publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.linux_source_commit }}
+          QUALIFICATION_RUN_ID: ${{ inputs.linux_qualification_run_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          git fetch --no-tags origin "$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          ./task release:publish:linux-campaign -- \
+            --qualification-run-id "$QUALIFICATION_RUN_ID" --source-commit "$SOURCE_COMMIT" \
+            --source-repository "$PWD" --output "$RUNNER_TEMP/linux-final-admission-inputs"
+      - name: Retain final admission inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-final-admission-inputs
+          path: ${{ runner.temp }}/linux-final-admission-inputs
+          if-no-files-found: error
+          retention-days: 90
+
+
+  linux-controls:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'controls' && inputs.release_tag == '' }}
+    runs-on: [self-hosted, linux, paintedwolf-qualification]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Assemble signed controls and an exact qualification plan without publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.linux_source_commit }}
+          SOURCE_TREE: ${{ inputs.linux_source_tree }}
+          CANDIDATE_RUN_ID: ${{ inputs.linux_candidate_run_id }}
+          CANDIDATE_CONTROLLER: ${{ inputs.linux_candidate_controller }}
+          AMD64_ARTIFACT_ID: ${{ inputs.linux_candidate_amd64_artifact_id }}
+          ARM64_ARTIFACT_ID: ${{ inputs.linux_candidate_arm64_artifact_id }}
+          CONTROL_POLICY: ${{ vars.LINUX_QUALIFICATION_CONTROL_POLICY }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$SOURCE_TREE" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CANDIDATE_CONTROLLER" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ && "$AMD64_ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARM64_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          git fetch --no-tags origin "$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          [[ "$(git rev-parse 'FETCH_HEAD^{tree}')" == "$SOURCE_TREE" ]]
+          ./task release:publish:linux-controls -- \
+            --source-repository "$PWD" --source-commit "$SOURCE_COMMIT" --source-tree "$SOURCE_TREE" \
+            --candidate-run-id "$CANDIDATE_RUN_ID" --candidate-controller-commit "$CANDIDATE_CONTROLLER" \
+            --candidate-amd64-artifact-id "$AMD64_ARTIFACT_ID" --candidate-arm64-artifact-id "$ARM64_ARTIFACT_ID" \
+            --policy "$CONTROL_POLICY" --output "$RUNNER_TEMP/linux-qualification-controls" \
+            --receipt "$RUNNER_TEMP/linux-qualification-controls.json"
+      - name: Retain exact nonpublishing controls
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-installed-control-inputs
+          path: ${{ runner.temp }}/linux-qualification-controls/controls
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain the independently selected qualification plan
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-installed-qualification-plan
+          path: ${{ runner.temp }}/linux-qualification-controls/plan
+          if-no-files-found: error
+          retention-days: 90
+
+
+  linux-document:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.linux_operation == 'document' && inputs.release_tag == '' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-linux-publication
+        with:
+          controller_root: ${{ github.workspace }}
+          signing: 'true'
+      - name: Prepare the explicitly selected signed distribution document
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.linux_source_commit }}
+          CAMPAIGN_RUN_ID: ${{ inputs.linux_campaign_run_id }}
+          RELEASE_RUN_ID: ${{ inputs.linux_release_inputs_run_id }}
+          RELEASE_ARTIFACT_ID: ${{ inputs.linux_release_inputs_artifact_id }}
+          LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+          LINUX_DELIVERY_POLICY: ${{ vars.LINUX_DELIVERY_POLICY }}
+          OBSERVE_DELIVERY: ${{ inputs.linux_document_observe_delivery }}
+          PUBLISH_DOCUMENT: ${{ inputs.linux_document_publish }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          extra=()
+          [[ "$OBSERVE_DELIVERY" == false || "$OBSERVE_DELIVERY" == true ]]
+          [[ "$PUBLISH_DOCUMENT" == false || "$PUBLISH_DOCUMENT" == true ]]
+          if [[ "$OBSERVE_DELIVERY" == true ]]; then extra+=(--observe-enabled-delivery); fi
+          if [[ "$PUBLISH_DOCUMENT" == true ]]; then
+            extra+=(--publish-immutable)
+            if [[ -n "$LINUX_DELIVERY_POLICY" ]]; then
+              policy="$RUNNER_TEMP/linux-delivery-policy.json"
+              (umask 077; printf '%s\n' "$LINUX_DELIVERY_POLICY" > "$policy")
+              extra+=(--delivery-policy "$policy")
+            fi
+          fi
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CAMPAIGN_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          git fetch --no-tags origin "$SOURCE_COMMIT"
+          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
+          ./task release:publish:linux-document -- \
+            --source-repository "$PWD" --source-commit "$SOURCE_COMMIT" \
+            --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$RELEASE_RUN_ID" \
+            --release-artifact-id "$RELEASE_ARTIFACT_ID" --output "$RUNNER_TEMP/distribution-preparation" "${extra[@]}"
+      - name: Notify the website only after immutable public verification
+        if: ${{ inputs.linux_document_publish }}
+        env:
+          GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          payload="$RUNNER_TEMP/distribution-preparation/notification.json"
+          ./task release:publish:website -- dispatch-body --notification "$payload" --output "$RUNNER_TEMP/distribution-notification.json"
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/distribution-notification.json"
+          ./task release:publish:website -- confirm --notification "$payload"
+      - name: Retain signed distribution metadata and publication diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-distribution-document
+          path: |
+            ${{ runner.temp }}/distribution-preparation/document/*
+            ${{ runner.temp }}/distribution-preparation/preparation.json
+            ${{ runner.temp }}/distribution-preparation/notification.json
+            ${{ runner.temp }}/distribution-preparation/publication-failure.json
+          if-no-files-found: error
+          retention-days: 90

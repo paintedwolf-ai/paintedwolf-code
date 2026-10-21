@@ -1,0 +1,7 @@
+{
+  "channel": "stable",
+  "distribution_sha256": "454eb4d4ccb9fe1a5dfc13502cab9a05c96c431bb6379e62d2adec1b8e8ff2ab",
+  "manifest_sha256": "c2a19dac7e0f40338582b386c6323d9551483c244360a99d21fdc55c7621a789",
+  "tag": "v1.2.4",
+  "version": "1.2.3"
+}

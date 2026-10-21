@@ -53,7 +53,10 @@ def main() -> int:
                 fail(f"release platform {key} has an invalid updater extension")
             if row.get("publication") not in {"public", "candidate"}:
                 fail(f"release platform {key} has an invalid publication state")
-            if row["publication"] == "public" and extension is None:
+            native_linux = key in {"linux-x86_64", "linux-aarch64"} and row.get("goos") == "linux"
+            if native_linux and extension is not None:
+                fail("native Linux publication cannot offer an in-app updater")
+            if row["publication"] == "public" and extension is None and not native_linux:
                 fail(f"public release platform {key} has no updater artifact")
         binding = release_binding(load_registry(), version)
         platforms: dict[str, dict[str, str]] = {}
@@ -84,7 +87,7 @@ def main() -> int:
                     "signature": fragment["signature"],
                     "url": f"{args.base_url}/releases/v{version}/{wanted_artifact}",
                 }
-        missing = sorted({key for key, row in expected.items() if row["publication"] == "public"} - landed)
+        missing = sorted({key for key, row in expected.items() if row["publication"] == "public" and row["updater_extension"] is not None} - landed)
         if missing:
             fail(f"missing release fragments: {', '.join(missing)}")
         if not platforms:

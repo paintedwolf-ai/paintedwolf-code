@@ -1,0 +1,42 @@
+name: Admit Linux publication
+description: Reevaluate the protected final campaign and exact files before release writes
+inputs:
+  controller_root:
+    description: Checkout of the protected main controller
+    required: true
+  source_commit:
+    description: Independently selected immutable release source
+    required: true
+  campaign_run_id:
+    description: Successful main controller run retaining final installed campaign inputs
+    required: true
+  publication_files:
+    description: Actual final files selected for the impending publication
+    required: true
+  signing:
+    description: Prepare feed signing dependencies for immutable document publication
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    # Local nested actions resolve from the workspace. The protected controller
+    # always occupies this fixed checkout, independently of the application source.
+    - uses: ./.linux-publication-controller/.github/actions/setup-linux-publication
+      with:
+        controller_root: ${{ inputs.controller_root }}
+        signing: ${{ inputs.signing }}
+    - id: admit-final-linux
+      name: Reevaluate the installed campaign and imminent publication bytes
+      shell: bash
+      working-directory: ${{ inputs.controller_root }}
+      env:
+        SOURCE_COMMIT: ${{ inputs.source_commit }}
+        CAMPAIGN_RUN_ID: ${{ inputs.campaign_run_id }}
+        PUBLICATION_FILES: ${{ inputs.publication_files }}
+      run: |
+        set -euo pipefail
+        ./task release:publish:linux-admission -- \
+          --campaign-run-id "$CAMPAIGN_RUN_ID" --source-commit "$SOURCE_COMMIT" \
+          --source-repository "$PWD" --retained-dir "$RUNNER_TEMP/linux-final-campaign" \
+          --publication-files "$PUBLICATION_FILES" --receipt "$RUNNER_TEMP/linux-publication-admission.json"
