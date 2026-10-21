@@ -41,6 +41,7 @@ def package_tree(root, machine=62):
     tree = root / 'package'
     binaries = tree / owner.INSTALL / 'bin'
     binaries.mkdir(parents=True)
+    tree.chmod(0o755)  # independent of the caller's umask
     rows = []
     for name in ('pw', 'pw-document-core'):
         path = binaries / name
