@@ -69,6 +69,9 @@ class HostedExecutionTests(unittest.TestCase):
             record = json.loads((Path(directory) / "ci/run.json").read_text())
             self.assertEqual(record["status"], "running")
             self.assertNotIn("exit_code", record)
+            self.assertEqual(record["preflight"]["command"],
+                             ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
+            self.assertNotIn("exit_code", record["preflight"])
 
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \

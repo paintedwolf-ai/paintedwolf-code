@@ -110,6 +110,7 @@ def run_lane(name, shard=""):
         if lane.get("preflight"):
             preflight = ["./task", *lane["preflight"]]
             record["preflight"] = {"command": preflight, "started_at": time.time()}
+            path.write_text(json.dumps(record, indent=2) + "\n")
             code = subprocess.call(preflight, cwd=ROOT, env=environment)
             record["preflight"].update(exit_code=code, finished_at=time.time())
         if code == 0:
