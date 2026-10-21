@@ -115,4 +115,11 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	if !errors.Is(err, denial) || result.OwnerInvoked || invoked {
 		t.Fatalf("owner dispatched without start record: %+v %v", result, err)
 	}
+	result, err = executor.InvokeNative(t.Context(), frame, surface, &stageAdmissionFixture{}, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+		frame.Close()
+		return nil
+	}), effect, tc)
+	if err == nil || result.OwnerInvoked || invoked {
+		t.Fatalf("owner dispatched after frame closed at marker: %+v %v", result, err)
+	}
 }
