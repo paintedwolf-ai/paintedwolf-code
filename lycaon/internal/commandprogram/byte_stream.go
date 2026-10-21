@@ -33,6 +33,13 @@ type StreamCompletion struct {
 	Mappings       []toolcontract.StreamSourceMapping
 }
 
+// SourceMappingRecorder is implemented by an output endpoint that retains
+// candidate source mappings beside its bytes. A producer records a mapping
+// only after writing exactly those source bytes at the given output offsets.
+type SourceMappingRecorder interface {
+	RecordSourceMapping(toolcontract.StreamSourceMapping) error
+}
+
 // StreamLimitError reports attempted ingress before its bytes enter the pipe.
 type StreamLimitError struct {
 	Limit             string
