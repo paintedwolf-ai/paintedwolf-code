@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptattach"
@@ -23,6 +24,7 @@ import (
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -201,10 +203,6 @@ func (s *Submission) preparePromptAdmission(
 		s.WriteAttachmentError(w, err)
 		return promptAdmission{}, false
 	}
-	if len(ingested.Images) > caps.Counts.MaxImages {
-		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
-		return promptAdmission{}, false
-	}
 	text = promptattach.JoinUserText(text, ingested.Fences())
 	refResult, err := promptattach.IngestReferences(s.References.ReferenceDeps(r.Context(), sess), previewBudget, req.References)
 	if err != nil {
@@ -220,15 +218,20 @@ func (s *Submission) preparePromptAdmission(
 	if secretFence != "" {
 		text = promptattach.JoinUserText(text, []string{secretFence})
 	}
-	if len(ingested.Images)+len(refResult.ArtifactIDs) > caps.Counts.MaxImages {
+	allImages := append(append([]promptattach.InlineImage(nil), ingested.Images...), refResult.Images...)
+	if len(allImages) > caps.Counts.MaxImages {
 		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
 		return promptAdmission{}, false
 	}
-	if text == "" && len(ingested.Images) == 0 && len(refResult.ArtifactIDs) == 0 && !allowEmpty {
+	if len(allImages)+len(refResult.ArtifactIDs) > caps.Counts.MaxImages {
+		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
+		return promptAdmission{}, false
+	}
+	if text == "" && len(allImages) == 0 && len(refResult.ArtifactIDs) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, or references required")
 		return promptAdmission{}, false
 	}
-	createdArtifactIDs, err := s.ingestPromptImages(r.Context(), sessionID, req.OperationID, "attached", ingested.Images)
+	createdArtifactIDs, err := s.ingestPromptImages(r.Context(), sessionID, req.OperationID, "attached", allImages)
 	if err != nil {
 		s.discardPromptImages(r.Context(), sess.ProjectID, createdArtifactIDs)
 		s.WriteAttachmentError(w, err)
@@ -242,6 +245,27 @@ func (s *Submission) preparePromptAdmission(
 			retainedBlobIDs = append(retainedBlobIDs, part.BlobID)
 		}
 	}
+
+	rootSession := sessiontree.RootID(r.Context(), s.Store, sessionID)
+	if rootSession == "" {
+		rootSession = sessionID
+	}
+	if s.GrantedPaths != nil {
+		for _, part := range refResult.Parts {
+			if part.ReferenceKind == wire.MessageReferenceKindExternalFile ||
+				part.ReferenceKind == wire.MessageReferenceKindExternalFolder {
+				isTree := part.ReferenceKind == wire.MessageReferenceKindExternalFolder
+				grantID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("prompt-drop:"+rootSession+":"+part.Path)).String()
+				_, _ = s.GrantedPaths.Grant(rootSession, grantedpath.Grant{
+					ID:   grantID,
+					Path: part.Path,
+					Mode: grantedpath.ModeWrite,
+					Tree: isTree,
+				})
+			}
+		}
+	}
+
 	return promptAdmission{
 		input: promptinput.Input{
 			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery,
@@ -250,7 +274,7 @@ func (s *Submission) preparePromptAdmission(
 		},
 		createdArtifactIDs: createdArtifactIDs,
 		retainedBlobIDs:    retainedBlobIDs,
-		hasImages:          len(ingested.Images) > 0 || len(refResult.ArtifactIDs) > 0,
+		hasImages:          len(allImages) > 0 || len(refResult.ArtifactIDs) > 0,
 		scannedNoText:      ingested.ScannedNoText,
 	}, true
 }
