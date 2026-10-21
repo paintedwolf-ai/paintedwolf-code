@@ -273,9 +273,11 @@ func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
 }
 
 type fixturePortal struct {
-	mu       sync.Mutex
-	server   *dbus.Conn
-	deny     bool
+	mu     sync.Mutex
+	server *dbus.Conn
+	deny   bool
+	// grant is the Response code the portal sends once the backend answers.
+	grant    uint32
 	flags    uint32
 	options  map[string]dbus.Variant
 	request  dbus.ObjectPath
@@ -283,7 +285,7 @@ type fixturePortal struct {
 	exported bool
 }
 
-func (f *fixturePortal) Inhibit(window string, flags uint32, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.deny {
@@ -291,8 +293,12 @@ func (f *fixturePortal) Inhibit(window string, flags uint32, options map[string]
 	}
 	f.flags, f.options = flags, options
 	token, _ := options["handle_token"].Value().(string)
-	sender := strings.TrimPrefix(strings.ReplaceAll(f.server.Names()[0], ".", "_"), ":")
+	sender := strings.TrimPrefix(strings.ReplaceAll(string(caller), ".", "_"), ":")
 	f.request = dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
+	request, grant := f.request, f.grant
+	// Like the portal, answer as soon as the backend does, which can precede
+	// the method reply.
+	go func() { _ = f.server.Emit(request, portalRequest+".Response", grant, map[string]dbus.Variant{}) }()
 	if !f.exported {
 		f.exported = true
 		if err := f.server.Export(f, f.request, portalRequest); err != nil {
@@ -397,6 +403,23 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("portal response did not end the lease")
+	}
+}
+
+func TestPortalGrantDecidesTheInhibition(t *testing.T) {
+	path := fixtureBus(t)
+	fixture := servePortal(t, path, false)
+	fixture.mu.Lock()
+	fixture.grant = 2
+	fixture.mu.Unlock()
+	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}
+	if held, err := subject.Acquire(t.Context()); held != nil || err == nil || !strings.Contains(err.Error(), "refused the inhibitor (response 2)") {
+		t.Fatalf("refused grant lease=%v error=%v", held, err)
+	}
+	select {
+	case <-fixture.closed:
+	case <-time.After(time.Second):
+		t.Fatal("refused request was not closed")
 	}
 }
 

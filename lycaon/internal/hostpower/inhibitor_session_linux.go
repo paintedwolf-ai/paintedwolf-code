@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/godbus/dbus/v5"
@@ -62,14 +63,11 @@ func (l *sessionLease) watch() {
 				l.done <- errors.New("sleep inhibitor service disconnected")
 				return
 			}
-			// Every signal on the connection arrives here; only the request's
-			// own Response ends the lease.
-			if response.Path != l.request || response.Name != portalRequest+".Response" {
+			// Every signal on the connection arrives here; only a later
+			// Response on the request ends the granted inhibition.
+			code, isResponse := responseCode(response, l.request)
+			if !isResponse || code == 0 {
 				continue
-			}
-			code := uint32(0)
-			if len(response.Body) > 0 {
-				code, _ = response.Body[0].(uint32)
 			}
 			l.done <- fmt.Errorf("sleep inhibitor ended by the desktop portal (response %d)", code)
 			return
@@ -133,6 +131,13 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 	}
 	responses := make(chan *dbus.Signal, 4)
 	bus.Signal(responses)
+	// The portal answers on the request object it is about to create, often
+	// before Inhibit returns, so observe that path before asking.
+	predicted := requestPath(bus, token)
+	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(predicted), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+		_ = bus.Close()
+		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
+	}
 	options := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(token),
 		"reason":       dbus.MakeVariant("Painted Wolf Code: active work"),
@@ -143,10 +148,10 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
-	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(request), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+	if err := awaitGrant(ctx, responses, request); err != nil {
 		_ = bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
 		_ = bus.Close()
-		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
+		return nil, err
 	}
 	release := func(ctx context.Context) error {
 		if err := bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
@@ -155,6 +160,49 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		return nil
 	}
 	return newSessionLease(bus, p.Name(), release, responses, request), nil
+}
+
+// requestPath is the request object the portal creates for token on bus.
+func requestPath(bus *dbus.Conn, token string) dbus.ObjectPath {
+	sender := strings.ReplaceAll(strings.TrimPrefix(bus.Names()[0], ":"), ".", "_")
+	return dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
+}
+
+// awaitGrant waits for the request's first Response: 0 grants the inhibition,
+// which then lasts until the request is closed; any other code refuses it.
+func awaitGrant(ctx context.Context, responses <-chan *dbus.Signal, request dbus.ObjectPath) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("desktop portal did not answer the inhibitor request: %w", ctx.Err())
+		case response, ok := <-responses:
+			if !ok {
+				return errors.New("desktop portal disconnected before answering the inhibitor request")
+			}
+			code, isResponse := responseCode(response, request)
+			if !isResponse {
+				continue
+			}
+			if code != 0 {
+				return fmt.Errorf("desktop portal refused the inhibitor (response %d)", code)
+			}
+			return nil
+		}
+	}
+}
+
+// responseCode is the code of request's Response signal.
+func responseCode(signal *dbus.Signal, request dbus.ObjectPath) (uint32, bool) {
+	if signal.Path != request || signal.Name != portalRequest+".Response" {
+		return 0, false
+	}
+	code := uint32(2)
+	if len(signal.Body) > 0 {
+		if value, ok := signal.Body[0].(uint32); ok {
+			code = value
+		}
+	}
+	return code, true
 }
 
 func requestToken() (string, error) {
