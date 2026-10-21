@@ -233,14 +233,16 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
 	active := []toolcontract.OperationDefinition{external}
-	selected := map[string]bool{}
+	seen := map[string]bool{}
 	for _, operation := range owners.Natives {
-		if selected[operation.Tool] {
-			continue
-		}
-		if definition, ok := r.Registry.Definition(operation.Tool); ok {
-			selected[operation.Tool] = true
-			active = append(active, definition.Operation)
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, definition.Operation)
+			}
 		}
 	}
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)

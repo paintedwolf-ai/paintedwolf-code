@@ -28,6 +28,9 @@ type NativeOperation struct {
 	// Prepare binds a reached request in its directory frame; dispatch is that
 	// frame, through which owners such as find -exec run their children.
 	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
+	// Tools are further identities Prepare may select per bound form (one
+	// umbrella command whose subcommands have their own tools).
+	Tools []string
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -38,6 +41,13 @@ type NativePrepared struct {
 	Mode   string
 	Review commandprogram.ArgvReview
 	Invoke func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	// Command is the catalog command the bound form resolved to (git status
+	// for git -C DIR status); empty keeps the dispatched command.
+	Command string
+	// Tool is the operation identity the bound form selected; empty keeps
+	// NativeOperation.Tool. With neither, the owner runs as the catalog
+	// command's own host execution, as builtins do.
+	Tool string
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -269,10 +279,6 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	definition, ok := d.run.registry.Definition(operation.Tool)
-	if !ok {
-		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", operation.Tool)
-	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, request)
 	if err != nil {
 		if gap := unsupportedForm(spec, err); gap != nil && d.GapLaunchable(request) {
@@ -280,6 +286,24 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 			return d.invokeExternal(ctx, request, streams)
 		}
 		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
+	if prepared.Command != "" {
+		resolved, ok := d.run.catalogCommand(prepared.Command)
+		if !ok {
+			return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native command %s is not catalogued", prepared.Command)
+		}
+		spec = resolved
+	}
+	tool := prepared.Tool
+	if tool == "" {
+		tool = operation.Tool
+	}
+	if tool == "" {
+		return d.invokeHosted(ctx, spec, prepared, request, streams)
+	}
+	definition, ok := d.run.registry.Definition(tool)
+	if !ok {
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", tool)
 	}
 	mode := prepared.Mode
 	if mode == "" {
@@ -315,6 +339,33 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		d.shared.mu.Unlock()
 	}
 	return native.Producer, errors.Join(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
+}
+
+// invokeHosted runs an owner whose bound form has no structured tool as the
+// catalog command's own execution: recorded, started and settled like a
+// builtin, on this frame.
+func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	child, err := d.prepare(ctx, spec, request, prepared.Review.Arguments())
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
+	defer child.release()
+	if err := d.start(ctx, child); err != nil {
+		result := refusedResult("TOOL_OWNER_FAILED")
+		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	}
+	result, runErr := prepared.Invoke(ctx, d.run.tc, streams)
+	if result.Terminal == "" {
+		result = ownerFailure(runErr)
+	}
+	if toolrejection.AsToolReject(runErr) != nil {
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: child.bound, cause: runErr}
+		}
+		d.shared.mu.Unlock()
+	}
+	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -454,6 +505,17 @@ func ownerFailure(err error) toolcontract.ProducerResult {
 }
 
 // commandIndex maps every catalog name and alias to its specification.
+// catalogCommand finds any catalog command by its full name, including
+// multi-word subcommand forms the dispatch index leaves out.
+func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecification, bool) {
+	for _, spec := range r.catalog.Commands {
+		if spec.Name == name {
+			return spec, true
+		}
+	}
+	return toolcontract.CommandSpecification{}, false
+}
+
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {

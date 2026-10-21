@@ -1079,6 +1079,7 @@
     "git diff",
     "git fetch",
     "git log",
+    "git ls-files",
     "git ls-remote",
     "git merge",
     "git merge-base",
