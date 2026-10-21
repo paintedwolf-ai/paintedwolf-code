@@ -1801,6 +1801,11 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
 
+  release:rehearse:linux-signing:
+    desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
+    cmds:
+      - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
+
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
     cmds:
