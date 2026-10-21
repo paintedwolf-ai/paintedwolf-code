@@ -11,7 +11,9 @@ import (
 func TestHostedFrontendSetupSkipsGoCachesAndProvisionsNativeInputs(t *testing.T) {
 	t.Parallel()
 	var action struct {
-		Runs struct{ Steps []hostedStep }
+		Runs struct {
+			Steps []struct{ Name, If, Run, Uses string }
+		}
 	}
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/actions/setup-verification/action.yml")
 	contractcheck.FailErr(t, "decode verification setup", yaml.Unmarshal([]byte(data), &action))
