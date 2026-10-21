@@ -35,6 +35,14 @@ type Options struct {
 	Session    string
 	Background *bgprocess.Registry
 	Natives    func(dir string) map[string]command.NativeOperation
+	// Owners composes the program owners over the fixture's boundary and
+	// receipt recorder (toolhost's composition); it replaces Natives.
+	Owners func(*sandbox.Boundary, *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error)
+	// Tools are structured tool identities the owners name; each registers
+	// as an unexercised stub so operation definitions resolve.
+	Tools []string
+	// Scratch gives every call a session scratch directory (spills, mktemp).
+	Scratch bool
 }
 
 // Fixture is one composed program entry rooted at Dir.
@@ -45,6 +53,8 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	Background *bgprocess.Registry
+	Boundary   *sandbox.Boundary
+	scratch    string
 	calls      int
 }
 
@@ -61,7 +71,7 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 }
 
 // New composes the entry. Structured tools exist only as owner identities.
-func New(t *testing.T, options Options) *Fixture {
+func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
 	dir := t.TempDir()
 	database := testdbfixture.Open(t, "programs.db")
@@ -72,7 +82,10 @@ func New(t *testing.T, options Options) *Fixture {
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
-	for _, name := range []string{"write", "read"} {
+	for _, name := range append([]string{"write", "read"}, options.Tools...) {
+		if _, exists := registry.Definition(name); exists {
+			continue
+		}
 		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 			return "", errors.New("structured tool is not exercised")
 		}))
@@ -92,20 +105,29 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	owners := func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		return command.ProgramOwners{Natives: natives}, nil
+	}
+	if options.Owners != nil {
+		owners, err = options.Owners(boundary, recorder)
+		testutil.FailErr(t, "compose program owners", err)
+	}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{},
-		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: natives}, nil
-		},
+		Owners:   owners,
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}
+	fixture := &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background, Boundary: boundary}
+	if options.Scratch {
+		fixture.scratch = t.TempDir()
+	}
+	return fixture
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
-func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string, error) {
+func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {
 	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
@@ -116,6 +138,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir = f.scratch
 	return f.Runtime.Run(ctx, args, tc)
 }
 
