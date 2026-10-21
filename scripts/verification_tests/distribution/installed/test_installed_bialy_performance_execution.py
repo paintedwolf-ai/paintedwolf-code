@@ -95,34 +95,50 @@ class BialyLatencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 bialy_data.physical(file, directory=False)
 
-    def test_reference_uses_fixed_shipped_probe_and_never_qualifies_quality_or_selected_device(self):
+    def test_reference_is_the_applications_gpu_choice_under_its_requirement(self):
         data = {'model': '/sealed/model', 'files': {}}
-        result = {'stdout': b'{"probe_ms": 1200}', 'stderr': b'', 'launch_identity': {'pid': 42},
+        identity = b'{"device": "vulkan:0", "adapter": "AMD Radeon RX 7900 XT", "probe_ms": 35.5}'
+        result = {'stdout': identity, 'stderr': b'', 'launch_identity': {'pid': 42},
                   'timed_out': False, 'output_limit': False, 'exit_code': 0}
-        with patch.object(bialy_performance, 'unchanged', return_value=data) as identity, \
+        with patch.object(bialy_performance, 'unchanged', return_value=data) as unchanged, \
                 patch.object(bialy_performance, 'limits', return_value={'reference_ms': 1000, 'turn_ms': 10000}), \
                 patch.object(bialy_performance, 'run', return_value=result) as run:
             report, streams = bialy_performance.reference({})
-            self.assertFalse(report['reference_within_existing_budget'])
+            self.assertEqual((report['status'], report['device'], report['reference_ms']), ('observed', 'vulkan:0', 35.5))
+            self.assertTrue(report['reference_within_existing_budget'])
+            self.assertTrue(report['selected_application_device_qualified'])
             self.assertFalse(report['quality_baseline_qualified'])
-            self.assertFalse(report['selected_application_device_qualified'])
-            self.assertEqual(identity.call_count, 2)
-            run.assert_called_once_with({}, 'bialy', ['probe', '--model', '/sealed/model', '--device', 'cpu'], timeout=120)
-            self.assertEqual(streams['bialy-stdout'], result['stdout'])
-            for raw in [b'{"probe_ms": true}', b'{"probe_ms": -1}', b'{"probe_ms": NaN}',
-                        b'{"probe_ms": 1, "unexpected": 2}', b'[]']:
+            self.assertEqual(unchanged.call_count, 2)
+            run.assert_called_once_with({}, 'bialy', ['check', '--model', '/sealed/model', '--device', 'auto',
+                                                      '--qualify-ms', '1000'], timeout=600)
+            self.assertEqual(streams['bialy-stdout'], identity)
+            for raw in [b'{"device": "cpu", "probe_ms": 900}', b'{"device": "vulkan:0", "probe_ms": true}',
+                        b'{"device": "vulkan:0", "probe_ms": NaN}', b'{"probe_ms": 1}', b'[]']:
                 result['stdout'] = raw
                 with self.subTest(raw=raw):
                     failed, retained = bialy_performance.reference({})
-                    self.assertEqual(failed['failure']['code'], 'invalid-probe-response')
+                    self.assertEqual(failed['failure']['code'], 'invalid-engine-identity')
                     self.assertEqual(retained['bialy-stdout'], raw)
-            result['stdout'] = b'{"probe_ms": 1}'
-            result['timed_out'] = True
-            failed, retained = bialy_performance.reference({})
-            self.assertEqual(failed['status'], 'failed')
-            self.assertTrue(failed['failure']['timed_out'])
-            self.assertNotIn('reference_ms', failed)
-            self.assertEqual(retained['bialy-stdout'], result['stdout'])
+
+    def test_a_guest_without_a_gpu_proves_the_typed_disabled_state(self):
+        data = {'model': '/sealed/model', 'files': {}}
+        result = {'stdout': b'', 'stderr': b'bialy: no GPU the engine runs on', 'launch_identity': {'pid': 42},
+                  'timed_out': False, 'output_limit': False, 'exit_code': 4}
+        with patch.object(bialy_performance, 'unchanged', return_value=data), \
+                patch.object(bialy_performance, 'limits', return_value={'reference_ms': 1000, 'turn_ms': 10000}), \
+                patch.object(bialy_performance, 'run', return_value=result):
+            report, streams = bialy_performance.reference({})
+            self.assertEqual((report['status'], report['reason']), ('disabled', 'no_gpu'))
+            self.assertNotIn('reference_ms', report)
+            self.assertEqual(streams['bialy-stderr'], result['stderr'])
+            result['exit_code'] = 3
+            self.assertEqual(bialy_performance.reference({})[0]['reason'], 'no_capable_device')
+            for change in ({'exit_code': 1}, {'exit_code': 4, 'timed_out': True}):
+                with self.subTest(change=change):
+                    result.update(change)
+                    failed, _ = bialy_performance.reference({})
+                    self.assertEqual(failed['status'], 'failed')
+                    self.assertEqual(failed['failure']['code'], 'check-process-failed')
 
     def test_turn_latency_excludes_hello_and_warmup_without_a_quality_claim(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -138,18 +154,19 @@ class BialyLatencyTests(unittest.TestCase):
             with patch.object(bialy_performance, 'unchanged', return_value=data), \
                     patch.object(bialy_performance, 'policy', return_value=policy), \
                     patch.object(bialy_performance, 'exchange', return_value=result) as calls:
-                report, _ = bialy_performance.turn_latency({})
+                report, _ = bialy_performance.turn_latency({}, 'vulkan:0')
+                self.assertEqual(report['device'], 'vulkan:0')
+                self.assertIn('vulkan:0', calls.call_args.args[1])
                 self.assertEqual(report['measurements_ms']['p95'], 25)
                 self.assertEqual(report['measurements_ms']['samples'], 20)
                 self.assertFalse(report['quality_baseline_qualified'])
-                self.assertFalse(report['selected_application_device_qualified'])
                 requests = calls.call_args.args[2]
                 self.assertEqual(len(requests), 22)
                 self.assertTrue(requests[1]['questions']['tools']['independent'])
                 self.assertEqual(requests[1], requests[7])
                 result['responses'][-1] = {'answers': {}}
                 with self.assertRaisesRegex(ValueError, 'fixed reference'):
-                    bialy_performance.turn_latency({})
+                    bialy_performance.turn_latency({}, 'vulkan:0')
 
     def test_interactive_input_cannot_expand_to_other_native_roles(self):
         with self.assertRaisesRegex(ValueError, 'restricted'):
@@ -202,7 +219,7 @@ class BialyLatencyTests(unittest.TestCase):
             with patch.object(bialy_performance, 'unchanged', return_value=data), \
                     patch.object(bialy_performance, 'policy', return_value={'turn': {'tools': {'question': 'fixed'}}}), \
                     patch.object(bialy_performance, 'exchange', side_effect=failure):
-                report, streams = bialy_performance.turn_latency({})
+                report, streams = bialy_performance.turn_latency({}, 'vulkan:0')
             self.assertEqual(report['status'], 'failed')
             self.assertEqual(report['failure']['request_id'], 3)
             self.assertNotIn('measurements_ms', report)
@@ -210,15 +227,16 @@ class BialyLatencyTests(unittest.TestCase):
             self.assertEqual(streams['bialy-turn-stderr'], b'diagnostic')
 
     def test_missing_turn_fixture_retains_completed_reference_and_its_streams(self):
-        report = {'status': 'observed', 'reference_ms': 3352}
+        report = {'status': 'observed', 'device': 'vulkan:0', 'reference_ms': 35.5}
         with patch.object(bialy_performance, 'reference', return_value=(report, {'bialy-stdout': b'reference'})), \
                 patch.object(bialy_performance, 'turn_latency', side_effect=CaseUnavailable('missing head')):
             observed, streams = bialy_performance.measure({})
-        self.assertEqual(observed['reference_ms'], 3352)
+        self.assertEqual(observed['reference_ms'], 35.5)
         self.assertEqual(observed['turn_latency']['status'], 'unverified')
         self.assertEqual(streams, {'bialy-stdout': b'reference'})
-        with patch.object(bialy_performance, 'reference', return_value=({'status': 'failed'}, {})), \
-                patch.object(bialy_performance, 'turn_latency') as turn:
-            observed, _ = bialy_performance.measure({})
-            self.assertEqual(observed['status'], 'failed')
-            turn.assert_not_called()
+        for status in ({'status': 'failed'}, {'status': 'disabled', 'reason': 'no_gpu'}):
+            with self.subTest(status=status), patch.object(bialy_performance, 'reference', return_value=(status, {})), \
+                    patch.object(bialy_performance, 'turn_latency') as turn:
+                observed, _ = bialy_performance.measure({})
+                self.assertEqual(observed, status)
+                turn.assert_not_called()
