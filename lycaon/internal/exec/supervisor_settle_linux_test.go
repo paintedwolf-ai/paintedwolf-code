@@ -225,6 +225,27 @@ func TestParseSupervisorTargetRequiresDescriptorCountAndCommand(t *testing.T) {
 	}
 }
 
+func TestForegroundTerminalClaimsOnlyControllingSessionTerminal(t *testing.T) {
+	read, write, err := os.Pipe()
+	testutil.FailErr(t, "open non-terminal pipe", err)
+	defer func() { _ = read.Close(); _ = write.Close() }()
+	if attr := foregroundTerminal(int(read.Fd()), 0); attr != nil {
+		t.Fatalf("non-terminal fd produced %+v", attr)
+	}
+	holder := exec.Command("sleep", "30")
+	main, err := startWithPTY(holder, WinSize{Cols: 80, Rows: 24})
+	testutil.FailErr(t, "start pty session leader", err)
+	defer func() { _ = main.Close(); _ = holder.Process.Kill(); _ = holder.Wait() }()
+	fd := int(main.Fd())
+	if attr := foregroundTerminal(fd, os.Getpid()); attr != nil {
+		t.Fatalf("foreign session terminal produced %+v", attr)
+	}
+	attr := foregroundTerminal(fd, holder.Process.Pid)
+	if attr == nil || !attr.Foreground || attr.Ctty != fd {
+		t.Fatalf("controlling session terminal attr = %+v, want Foreground with Ctty %d", attr, fd)
+	}
+}
+
 func TestSupervisorLaunchReportReachesTheParent(t *testing.T) {
 	const missing = "/nonexistent/supervised-target"
 	launch := func(t *testing.T, started error, report bool) error {
