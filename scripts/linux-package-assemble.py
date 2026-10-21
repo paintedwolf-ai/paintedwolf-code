@@ -39,6 +39,7 @@ from linux_release.payload import load as load_payload
 
 PACKAGE_NAME = "painted-wolf-code"
 BOOTSTRAP = load_payload()["setuid_bootstrap"]
+BOOTSTRAP_DIR = Path(BOOTSTRAP["path"].lstrip("/")).parent.as_posix()
 OWNED_ROOT = "opt/painted-wolf-code"
 DEB_ARCHES = {"x86_64": "amd64", "aarch64": "arm64"}
 DEB_COMPRESSION = ("xz", "6")
@@ -203,18 +204,19 @@ def rpm_quote(relative: str) -> str:
 
 
 def rpm_file_list(tree: Path) -> list[str]:
-    """Own every file and link, and the directories under the install root only."""
+    """Own every file and link, and the package-owned directories."""
     lines = []
     for dirpath, dirnames, filenames in os.walk(tree):
         dirnames.sort()
         relative_dir = Path(dirpath).relative_to(tree).as_posix()
-        if relative_dir == OWNED_ROOT or relative_dir.startswith(f"{OWNED_ROOT}/"):
+        if relative_dir == OWNED_ROOT or relative_dir.startswith(f"{OWNED_ROOT}/") or relative_dir == BOOTSTRAP_DIR:
             lines.append(f"%dir {rpm_quote(relative_dir)}")
         for name in sorted(filenames + [d for d in dirnames if (Path(dirpath) / d).is_symlink()]):
             relative = (Path(dirpath) / name).relative_to(tree).as_posix()
             lines.append(rpm_quote(relative))
-    if not any(line == f'%dir "/{OWNED_ROOT}"' for line in lines):
-        raise ValueError(f"the staged tree has no /{OWNED_ROOT}")
+    for owned in (OWNED_ROOT, BOOTSTRAP_DIR):
+        if f'%dir "/{owned}"' not in lines:
+            raise ValueError(f"the staged tree has no /{owned}")
     return lines
 
 

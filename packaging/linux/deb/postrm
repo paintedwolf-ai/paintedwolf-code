@@ -16,9 +16,13 @@ if [ "$1" = "purge" ]; then
   rm -f /etc/paintedwolf/launch.json
   rmdir /etc/paintedwolf 2>/dev/null || true
   for generation in /opt/painted-wolf-code/generations/* /opt/painted-wolf-code/generations/.install-*; do
-    [ -d "$generation" ] || continue
+    [ -d "$generation" ] && [ ! -L "$generation" ] || continue
     identity=${generation##*/}
     identity=${identity#.install-}
+    case "$identity" in
+      *[!0123456789abcdef]*|"") continue ;;
+    esac
+    [ "${#identity}" -eq 64 ] || continue
     lock="/run/paintedwolf/generation-locks/${identity}.lock"
     # Lifetime locks are root 0600; never let flock create one with another mode.
     mkdir -p /run/paintedwolf/generation-locks

@@ -126,15 +126,33 @@ class PackagePlacement(unittest.TestCase):
         self.assertIn("Exec=/usr/libexec/painted-wolf-code/pw-launch %U", entry)
         self.assertIn("TryExec=/usr/libexec/painted-wolf-code/pw-launch", entry)
 
+    def test_the_rpm_file_list_owns_the_install_root_and_the_bootstrap_directory(self):
+        assemble = load("linux-package-assemble")
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = Path(temporary)
+            for relative in ("opt/painted-wolf-code/bin/painted-wolf-code",
+                             "usr/libexec/painted-wolf-code/pw-launch",
+                             "usr/bin/pw"):
+                path = tree / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+            entries = assemble.rpm_file_list(tree)
+            self.assertIn('%dir "/opt/painted-wolf-code"', entries)
+            self.assertIn('%dir "/opt/painted-wolf-code/bin"', entries)
+            self.assertIn('%dir "/usr/libexec/painted-wolf-code"', entries)
+            self.assertIn('"/usr/libexec/painted-wolf-code/pw-launch"', entries)
+            for shared in ('%dir "/usr"', '%dir "/usr/libexec"', '%dir "/usr/bin"'):
+                self.assertNotIn(shared, entries)
+            shutil.rmtree(tree / "usr/libexec/painted-wolf-code")
+            with self.assertRaisesRegex(ValueError, "/usr/libexec/painted-wolf-code"):
+                assemble.rpm_file_list(tree)
+
 
 class MaintainerScripts(unittest.TestCase):
     """The real scripts run with their fixed system paths moved under a scratch root."""
 
     def setUp(self):
-        # Maintainer scripts run on Linux hosts, where util-linux supplies flock.
-        if sys.platform != "linux":
-            raise unittest.SkipTest("maintainer scripts run on Linux")
-        if shutil.which("flock") is None:
+        if sys.platform == "linux" and shutil.which("flock") is None:
             raise AssertionError("Linux maintainer script tests require flock")
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -147,6 +165,20 @@ class MaintainerScripts(unittest.TestCase):
         self.shims.mkdir()
         for name in ("systemctl", "update-desktop-database", "gtk-update-icon-cache", "apparmor_parser"):
             self.shim(name, "exit 0")
+        if shutil.which("flock") is None:
+            flock = self.shims / "flock"
+            flock.write_text(
+                f"#!{sys.executable}\n"
+                "import fcntl, os, sys\n"
+                "assert sys.argv[1:3] == ['-n', '-x']\n"
+                "fd = os.open(sys.argv[3], os.O_RDWR | os.O_CREAT, 0o600)\n"
+                "try:\n"
+                "    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+                "except BlockingIOError:\n"
+                "    raise SystemExit(1)\n"
+                "os.execvp(sys.argv[4], sys.argv[4:])\n"
+            )
+            flock.chmod(0o755)
         self.installer = self.root / "pw-generations"
         self.installer_status(0)
 
@@ -214,6 +246,14 @@ class MaintainerScripts(unittest.TestCase):
             with self.subTest(family):
                 held, free = self.generation("a" * 64), self.generation("b" * 64)
                 interrupted = self.generation(".install-" + "c" * 64)
+                invalid = [
+                    self.generation("not-a-digest"),
+                    self.generation("F" * 64),
+                    self.generation("d" * 63),
+                    self.generation("d" * 65),
+                    self.generation(".install-not-hex"),
+                    self.generation(".install-.install-" + "e" * 64),
+                ]
                 self.policy.mkdir(parents=True, exist_ok=True)
                 (self.policy / "launch.json").write_text("{}")
                 self.locks.mkdir(parents=True, exist_ok=True)
@@ -225,7 +265,9 @@ class MaintainerScripts(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue((held / "empty-resource-directory").is_dir(), "a running launch's generation was changed")
                 self.assertFalse(free.exists() or interrupted.exists())
+                self.assertTrue(all(path.is_dir() for path in invalid))
                 self.assertFalse(self.policy.exists())
+                self.assertEqual({created.name for created in self.locks.iterdir()}, {f"{ch * 64}.lock" for ch in "abc"})
                 for created in self.locks.iterdir():
                     self.assertEqual(created.stat().st_mode & 0o777, 0o600, created.name)
                 subprocess.run(["rm", "-rf", str(self.install), str(self.locks)], check=True)
