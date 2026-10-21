@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,23 +39,60 @@ type jqRun struct {
 	ret, last  int
 }
 
+// jqDialect is what a jq-language command reads and prints by default: jq
+// itself, or python yq (jq over YAML input, JSON output unless -y).
+type jqDialect struct {
+	yamlInput bool
+	// pythonYAML prints -y output as PyYAML does: scalar documents end
+	// with "...".
+	pythonYAML bool
+	// files replaces the operand files (python yq -i runs one at a time).
+	files []string
+}
+
 // runJq compiles QUERY once and evaluates it over the input stream
 // (-n: one null input, -s: one array of every input, -R: lines as strings).
-func runJq(inv *invocation) error {
-	operands := inv.argv.Operands().Values()
-	if len(operands) == 0 {
-		return inv.usage(inv.name(), "QUERY")
+func runJq(inv *invocation) error { return runJqLanguage(inv, jqDialect{}) }
+
+// usageFailure is a jq command-line error: jq's message, its help pointer
+// and status 2, as the utility reports it.
+type usageFailure struct{ message string }
+
+func (e *usageFailure) Error() string { return e.message }
+
+func runJqLanguage(inv *invocation, dialect jqDialect) error {
+	err := runJqProgram(inv, dialect)
+	var usage *usageFailure
+	if errors.As(err, &usage) {
+		_, _ = fmt.Fprintf(inv.stderr, "jq: %s\nUse jq --help for help with command-line options,\nor see the jq manpage, or online docs  at https://jqlang.org\n", usage.message)
+		inv.status = jqUsage
+		return nil
 	}
-	query, paths := operands[0], operands[1:]
-	if len(paths) == 0 {
-		paths = []string{"-"}
+	return err
+}
+
+func runJqProgram(inv *invocation, dialect jqDialect) error {
+	args, err := inv.jqArguments()
+	if err != nil || args == nil {
+		return err
+	}
+	if dialect.files != nil {
+		args.files = dialect.files
 	}
 	layout, err := inv.layout()
+	layout.pythonYAML = dialect.pythonYAML
 	if err != nil {
 		return err
 	}
-	stream := &inputs{inv: inv, operands: paths, raw: inv.flag("-R"), limit: safecmd.JQCaps().InputBytes}
-	variables, err := inv.variables(stream)
+	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes}
+	if inv.flag("--stream") {
+		events, err := nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
+		if err != nil {
+			return err
+		}
+		stream.events = events
+	}
+	variables, err := inv.variables(stream, args.positional)
 	if err != nil || stream.stop != nil {
 		return errors.Join(err, stream.stop)
 	}
@@ -62,7 +100,7 @@ func runJq(inv *invocation) error {
 		inv.status = jqUsage
 		return nil
 	}
-	program, err := nativejq.CompileProgram(query, nativejq.ProgramOptions{Variables: variables, Inputs: stream, Environ: inv.request.Environment, Stderr: inv.stderr, Position: stream.current})
+	program, err := nativejq.CompileProgram(args.query, nativejq.ProgramOptions{Variables: variables, Inputs: stream, Environ: inv.request.Environment, Stderr: inv.stderr, Position: stream.current})
 	if err != nil {
 		_, _ = fmt.Fprintf(inv.stderr, "jq: error: %s\njq: 1 compile error\n", err)
 		inv.status = jqCompile
@@ -208,10 +246,70 @@ func (r *jqRun) reportError(err error, positioned bool) {
 	_, _ = fmt.Fprintf(r.inv.stderr, "jq: error (at %s): %s\n", where, err)
 }
 
+// jqArguments is jq's operand rule: the first operand is the filter unless
+// -f names a filter file; operands after --args or --jsonargs are
+// positional values; the rest are input files (stdin when none). With no
+// filter jq runs ".".
+type jqArgs struct {
+	query      string
+	files      []string
+	positional []any
+}
+
+func (inv *invocation) jqArguments() (*jqArgs, error) {
+	args := &jqArgs{}
+	haveQuery := false
+	if file, ok := inv.value("-f"); ok {
+		captured, err := inv.captureSource(file)
+		var failure *unreadable
+		if errors.As(err, &failure) {
+			_, _ = fmt.Fprintf(inv.stderr, "jq: Could not open %s: %s\n", file, failure.reason)
+			inv.status = jqUsage
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		args.query, haveQuery = captured.text, true
+	}
+	positional := ""
+	for _, item := range inv.argv.Items {
+		if item.Option != nil {
+			if item.Option.Key == "--args" || item.Option.Key == "--jsonargs" {
+				positional = item.Option.Key
+			}
+			continue
+		}
+		word := item.Operand.Value
+		switch {
+		case !haveQuery:
+			args.query, haveQuery = word, true
+		case positional == "--args":
+			args.positional = append(args.positional, word)
+		case positional == "--jsonargs":
+			decoded, _, err := nativejq.DecodeDocuments([]byte(word), "json")
+			if err != nil || len(decoded) != 1 {
+				return nil, &usageFailure{"Invalid JSON text passed to --jsonargs"}
+			}
+			args.positional = append(args.positional, decoded[0])
+		default:
+			args.files = append(args.files, word)
+		}
+	}
+	if !haveQuery {
+		args.query = "."
+	}
+	if len(args.files) == 0 {
+		args.files = []string{"-"}
+	}
+	return args, nil
+}
+
 // layout reads the output options in argv order: the last of -c, --tab and
 // --indent sets the indentation, as jq applies them.
 func (inv *invocation) layout() (outputLayout, error) {
-	layout := outputLayout{pretty: true, indent: "  ", raw: inv.flag("-r"), join: inv.flag("-j"), ascii: inv.flag("-a"), sortKeys: inv.flag("-S")}
+	layout := outputLayout{pretty: true, indent: "  ", raw: inv.flag("-r"), join: inv.flag("-j"), ascii: inv.flag("-a"), sortKeys: inv.flag("-S"),
+		nul: inv.flag("--raw-output0"), yaml: inv.flag("--yaml-output") || inv.flag("-y") || inv.flag("-Y")}
 	for _, item := range inv.argv.Items {
 		option := item.Option
 		if option == nil {
@@ -222,10 +320,10 @@ func (inv *invocation) layout() (outputLayout, error) {
 			layout.pretty = false
 		case "--tab":
 			layout.pretty, layout.indent = true, "\t"
-		case "--indent":
+		case "--indent", "-I":
 			n, err := strconv.Atoi(option.Values[0].Value)
 			if err != nil || n < -1 || n > 7 {
-				return outputLayout{}, inv.usage(option.Values[0].Value, "--indent takes a number between -1 and 7")
+				return outputLayout{}, &usageFailure{"--indent takes a number between -1 and 7"}
 			}
 			layout.pretty, layout.indent = n >= 0, strings.Repeat(" ", max(n, 0))
 		}
@@ -236,9 +334,18 @@ func (inv *invocation) layout() (outputLayout, error) {
 // variables reads --arg (string), --argjson (JSON), --slurpfile (a file's
 // values as an array) and --rawfile (a file's text) in argv order; the first
 // definition of a name wins, as in jq.
-func (inv *invocation) variables(stream *inputs) ([]nativejq.Variable, error) {
-	var out []nativejq.Variable
+// $ARGS presents the positional values and every named one.
+func (inv *invocation) variables(stream *inputs, positional []any) (out []nativejq.Variable, err error) {
 	index := map[string]int{}
+	named := gojq.NewObject(0)
+	defer func() {
+		if positional == nil {
+			positional = []any{}
+		}
+		if err == nil {
+			out = append(out, nativejq.Variable{Name: "ARGS", Value: gojq.ObjectOf("positional", positional, "named", named)})
+		}
+	}()
 	for _, item := range inv.argv.Items {
 		option := item.Option
 		if option == nil || len(option.Values) != 2 {
@@ -252,7 +359,7 @@ func (inv *invocation) variables(stream *inputs) ([]nativejq.Variable, error) {
 		case "--argjson":
 			decoded, _, err := nativejq.DecodeDocuments([]byte(text), "json")
 			if err != nil || len(decoded) != 1 {
-				return nil, inv.usage(text, "one JSON value for --argjson "+name)
+				return nil, &usageFailure{"invalid JSON text passed to --argjson"}
 			}
 			value = decoded[0]
 		case "--slurpfile", "--rawfile":
@@ -272,7 +379,9 @@ func (inv *invocation) variables(stream *inputs) ([]nativejq.Variable, error) {
 				if strings.TrimSpace(captured.text) != "" {
 					decoded, _, err := nativejq.DecodeDocuments([]byte(captured.text), "json")
 					if err != nil {
-						return nil, inv.usage(text, "JSON values for --slurpfile "+name)
+						_, _ = fmt.Fprintf(inv.stderr, "jq: Bad JSON in --slurpfile %s %s: %s\n", name, text, parseMessage(err, []byte(captured.text)))
+						stream.openErrors = true
+						return nil, nil
 					}
 					values = decoded
 				}
@@ -285,6 +394,7 @@ func (inv *invocation) variables(stream *inputs) ([]nativejq.Variable, error) {
 			continue
 		}
 		index[name] = len(out)
+		named.Set(name, gojq.FromGo(value))
 		out = append(out, nativejq.Variable{Name: name, Value: value})
 	}
 	return out, nil
@@ -313,6 +423,8 @@ type outputLayout struct {
 	pretty                     bool
 	indent                     string
 	raw, join, ascii, sortKeys bool
+	// nul is --raw-output0; yaml is gojq --yaml-output and python yq -y.
+	nul, yaml, pythonYAML bool
 }
 
 // emitter writes each result in jq's encoding within the output budgets.
@@ -346,15 +458,49 @@ func (e *emitter) emit(v any) error {
 // escapes, -j omits the newline, and values are JSON in the chosen layout.
 func (e *emitter) encode(v any) ([]byte, error) {
 	newline := "\n"
-	if e.layout.join {
+	switch {
+	case e.layout.nul:
+		newline = "\x00"
+	case e.layout.join:
 		newline = ""
 	}
-	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join) && !e.layout.ascii {
+	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
 		return []byte(s + newline), nil
+	}
+	if e.layout.yaml {
+		out, err := nativejq.EncodeYAML(v)
+		if err != nil {
+			return nil, err
+		}
+		_, array := v.([]any)
+		_, object := v.(*gojq.OrderedObject)
+		if e.layout.pythonYAML && !array && !object {
+			out = append(out, "...\n"...)
+		}
+		if e.count > 1 {
+			out = append([]byte("---\n"), out...)
+		}
+		return out, nil
 	}
 	out, err := gojq.MarshalWith(v, gojq.MarshalOptions{Pretty: e.layout.pretty, Indent: e.layout.indent, SortKeys: e.layout.sortKeys, ASCII: e.layout.ascii})
 	if err != nil {
 		return nil, err
 	}
 	return append(out, newline...), nil
+}
+
+// parseMessage words a JSON syntax error as jq's parser does where the two
+// agree on the cause, with jq's line and column.
+func parseMessage(err error, data []byte) string {
+	offset := int64(len(data))
+	message := err.Error()
+	var syntax *json.SyntaxError
+	switch {
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		message = "Unfinished JSON term at EOF"
+	case errors.As(err, &syntax):
+		offset = syntax.Offset
+	}
+	line, column := lineColumn(data, offset)
+	return fmt.Sprintf("%s at line %d, column %d", message, line, column)
 }

@@ -20,10 +20,15 @@ import (
 type inputs struct {
 	inv      *invocation
 	operands []string
-	// raw yields each line as a string (-R) instead of JSON values.
-	raw     bool
-	pending []any
-	stream  *nativejq.ValueStream
+	// raw yields each line as a string (-R) instead of JSON values; yaml
+	// decodes each operand's YAML documents (gojq --yaml-input, python yq).
+	raw  bool
+	yaml bool
+	// events turns each value into its --stream events; nil passes values.
+	events        *nativejq.Program
+	pendingEvents []any
+	pending       []any
+	stream        *nativejq.ValueStream
 	// data holds the current operand's bytes read so far, for positions.
 	data   *bytes.Buffer
 	label  string
@@ -34,7 +39,30 @@ type inputs struct {
 	openErrors bool
 }
 
+// Next yields the next input, or with --stream the next event of it.
 func (in *inputs) Next() (any, bool) {
+	if in.events == nil {
+		return in.nextValue()
+	}
+	for len(in.pendingEvents) == 0 {
+		v, ok := in.nextValue()
+		if !ok {
+			return nil, false
+		}
+		if _, err := in.events.Run(in.inv.ctx, v, func(event any) error {
+			in.pendingEvents = append(in.pendingEvents, event)
+			return nil
+		}); err != nil {
+			in.stop = err
+			return nil, false
+		}
+	}
+	event := in.pendingEvents[0]
+	in.pendingEvents = in.pendingEvents[1:]
+	return event, true
+}
+
+func (in *inputs) nextValue() (any, bool) {
 	for !in.broken && in.stop == nil {
 		if len(in.pending) > 0 {
 			v := in.pending[0]
@@ -91,7 +119,7 @@ func (in *inputs) open(operand string) {
 		in.data.WriteString(captured.text)
 		data = strings.NewReader(captured.text)
 	}
-	if !in.raw {
+	if !in.raw && !in.yaml {
 		in.stream = nativejq.NewValueStream(data)
 		return
 	}
@@ -100,7 +128,25 @@ func (in *inputs) open(operand string) {
 		in.stop = err
 		return
 	}
-	in.pending = append(in.pending, rawLines(text)...)
+	if in.raw {
+		in.pending = append(in.pending, rawLines(text)...)
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	values, _, err := nativejq.DecodeDocuments([]byte(text), "yaml")
+	if err != nil {
+		_, _ = fmt.Fprintf(in.inv.stderr, "%s: error: %s (while parsing %s)\n", in.inv.name(), err, in.label)
+		in.broken = true
+		return
+	}
+	for _, v := range values {
+		if !in.admit(v) {
+			return
+		}
+	}
+	in.pending = append(in.pending, values...)
 }
 
 // readAll reads one operand whole within the input bound.

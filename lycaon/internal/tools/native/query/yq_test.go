@@ -131,6 +131,42 @@ func TestYqInPlacePublishesAtCapturedRevisions(t *testing.T) {
 	missing.expect(t, "missing -i", "", 1)
 }
 
+// pythonYqCases are python yq spellings: jq programs over YAML documents,
+// jq's JSON output unless -y, and jq's statuses. Outputs are the jq 1.8.1
+// result over the same documents as JSON, with PyYAML's scalar end marker
+// for -y; runtime error positions name the YAML file.
+var pythonYqCases = []queryCase{
+	{argv: "yq -c .server cfg.yaml", stdout: "{\"port\":8080,\"hosts\":[\"a\",\"b\"]}\n"},
+	{argv: "yq -c keys_unsorted cfg.yaml", stdout: "[\"server\",\"name\"]\n"},
+	{argv: "yq -y .server cfg.yaml", stdout: "port: 8080\nhosts:\n  - a\n  - b\n"},
+	{argv: "yq -y .name cfg.yaml", stdout: "api\n...\n"},
+	{argv: "yq --yaml-output .server.hosts[] cfg.yaml", stdout: "a\n...\n---\nb\n...\n"},
+	{argv: "yq -s -c [.[].kind] multi.yaml", stdout: "[\"A\",\"B\"]\n"},
+	{argv: "yq -c --arg x v {x:$x,n:.name} cfg.yaml", stdout: "{\"x\":\"v\",\"n\":\"api\"}\n"},
+	{argv: "yq -S -c . three.yaml", stdout: "{\"a\":2,\"b\":[\"x\"]}\n"},
+	{argv: "yq -c .a.b three.yaml", stdout: "", stderr: "jq: error (at three.yaml:2): Cannot index number with string \"b\"\n", status: 5},
+	{argv: "yq -c .a", stdin: "a: [1, 2]\n", stdout: "[1,2]\n"},
+}
+
+// TestPythonYqSpellingsRunJqOverYAML: a python yq flag selects that dialect.
+func TestPythonYqSpellingsRunJqOverYAML(t *testing.T) {
+	h := newHarness(t, yqFiles)
+	for _, c := range pythonYqCases {
+		t.Run(c.argv, func(t *testing.T) {
+			r := h.exec(c.stdin, splitWords(c.argv)...)
+			r.expect(t, c.argv, c.stdout, c.status)
+			if r.stderr != c.stderr {
+				t.Fatalf("stderr %q\nwant   %q", r.stderr, c.stderr)
+			}
+		})
+	}
+	r := h.exec("", "yq", "-i", "-y", ".name = \"web\"", "cfg.yaml")
+	r.expect(t, "python yq -i", "", 0)
+	if got, want := h.disk("cfg.yaml"), "server:\n  port: 8080\n  hosts:\n    - a\n    - b\nname: web\n"; got != want || r.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("disk %q want %q result %+v", got, want, r.result)
+	}
+}
+
 // TestYqRefusesOutsideTheProject: a file outside the confinement is a typed
 // refusal, never an ordinary yq error.
 func TestYqRefusesOutsideTheProject(t *testing.T) {
@@ -139,5 +175,5 @@ func TestYqRefusesOutsideTheProject(t *testing.T) {
 	if toolrejection.AsToolReject(outside.err) == nil || outside.result.Terminal != toolcontract.ProducerRefused || outside.stdout != "" || len(h.pins.pins[outside.execution]) != 0 {
 		t.Fatalf("outside read: %+v err %v stdout %q", outside.result, outside.err, outside.stdout)
 	}
-	h.exec("", "yq", "-s", ".a", "two.yaml").refused(t, "split files", "COMMAND_OPTION_UNSUPPORTED")
+	h.exec("", "yq", "-o", "json", "--split-exp", ".a", "two.yaml").refused(t, "split files", "COMMAND_OPTION_UNSUPPORTED")
 }

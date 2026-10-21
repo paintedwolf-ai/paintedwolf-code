@@ -16,6 +16,7 @@ var queryFiles = map[string]string{
 	"lines.txt":  "alpha\nbeta\n\ngamma",
 	"vals.json":  "1 [2] {\"c\":3}\n",
 	"uni.json":   "{\"é\":\"😀\",\"b\":[]}\n",
+	"prog.jq":    ".a\n",
 	"cfg.yaml":   "# settings\nserver:\n  port: 8080 # the port\n  hosts: [a, b]\nname: api\n",
 	"multi.yaml": "kind: A\n---\nkind: B\n",
 	"cfg.toml":   "[package]\nname = \"demo\"\nedition = 2021\n",
@@ -29,6 +30,20 @@ type queryCase struct {
 // jqCases are jq 1.8.1's own stdout, stderr and status for each form,
 // recorded from the jq binary over the same files and stdin.
 var jqCases = []queryCase{
+	{argv: "jq", stdin: "{\"x\":1}", stdout: "{\n  \"x\": 1\n}\n"},
+	{argv: "jq -c", stdin: "{\"b\":1,\"a\":2}", stdout: "{\"b\":1,\"a\":2}\n"},
+	{argv: "jq -n -c $ARGS --args a b", stdout: "{\"positional\":[\"a\",\"b\"],\"named\":{}}\n"},
+	{argv: "jq -n -c $ARGS --jsonargs 1 {\"a\":2}", stdout: "{\"positional\":[1,{\"a\":2}],\"named\":{}}\n"},
+	{argv: "jq -n -c --arg k v --argjson j [1] $ARGS", stdout: "{\"positional\":[],\"named\":{\"k\":\"v\",\"j\":[1]}}\n"},
+	{argv: "jq -f prog.jq two.json", stdout: "1\n2\n"},
+	{argv: "jq --from-file prog.jq", stdin: "{\"a\":5}", stdout: "5\n"},
+	{argv: "jq -f missing.jq", stdin: "1", stdout: "", status: 2, stderr: "jq: Could not open missing.jq: No such file or directory\n"},
+	{argv: "jq --raw-output0 .[]", stdin: "[\"a\",\"b\"]", stdout: "a\u0000b\u0000"},
+	{argv: "jq -c --stream .", stdin: "[1,{\"a\":2}]", stdout: "[[0],1]\n[[1,\"a\"],2]\n[[1,\"a\"]]\n[[1]]\n"},
+	{argv: "jq -n --argjson x {bad $x", stdout: "", status: 2, stderr: "jq: invalid JSON text passed to --argjson\nUse jq --help for help with command-line options,\nor see the jq manpage, or online docs  at https://jqlang.org\n"},
+	{argv: "jq --indent 9 .", stdin: "1", stdout: "", status: 2, stderr: "jq: --indent takes a number between -1 and 7\nUse jq --help for help with command-line options,\nor see the jq manpage, or online docs  at https://jqlang.org\n"},
+	{argv: "jq -c . --args x", stdin: "{\"a\":1}", stdout: "{\"a\":1}\n"},
+	{argv: "jq -n -c --slurpfile v bad.json $v", stdout: "", status: 2, stderr: "jq: Bad JSON in --slurpfile v bad.json: Unfinished JSON term at EOF at line 1, column 3\n"},
 	{argv: "jq .x", stdin: "{\"x\":1}\n", stdout: "1\n"},
 	{argv: "jq -r .x", stdin: "{\"x\":1}\n", stdout: "1\n"},
 	{argv: "jq .a", stdin: "{\"a\":1}\n{\"a\":2}", stdout: "1\n2\n"},
@@ -175,9 +190,6 @@ func TestQueryBudgetsRefuse(t *testing.T) {
 	h.exec("", "jq", "-n", "range(10001)").refused(t, "too many outputs", "COMMAND_LIMIT_EXCEEDED")
 	h.exec("", "jq", "-n", "[range(3000000)]|tostring").refused(t, "oversized value", "COMMAND_LIMIT_EXCEEDED")
 	h.exec("", "jq", "-n", "last(range(1e15))").refused(t, "evaluation time", "COMMAND_LIMIT_EXCEEDED")
-	h.exec("", "jq").refused(t, "missing query", "COMMAND_OPERAND_INVALID")
-	h.exec("", "jq", "-n", "--argjson", "x", "{bad", "$x").refused(t, "bad argjson", "COMMAND_OPERAND_INVALID")
-	h.exec("", "jq", "--indent", "9", ".").refused(t, "indent range", "COMMAND_OPERAND_INVALID")
 	h.exec("", "jq", "--seq", ".").refused(t, "unsupported option", "COMMAND_OPTION_UNSUPPORTED")
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 4}
 	h.exec("", "jq", "-n", "\"long string\"").refused(t, "stream bound", "COMMAND_LIMIT_EXCEEDED")

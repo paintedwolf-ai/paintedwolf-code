@@ -50,6 +50,9 @@ type yqRun struct {
 // "Error: ..." and exit 1, as yq does; -i publishes the first file's result
 // at its captured revisions.
 func runYq(inv *invocation) error {
+	if inv.pythonYq() {
+		return runPythonYq(inv)
+	}
 	yqSetup.Do(setupYq)
 	run, err := newYqRun(inv)
 	if err != nil {

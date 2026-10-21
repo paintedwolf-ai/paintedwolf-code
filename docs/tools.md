@@ -341,6 +341,15 @@ evaluations run one at a time because the library keeps process-wide state.
 YAML alias expansion and the expression evaluator have no work counter; input
 size and `stream_bytes` bound them.
 
+Spellings are not dialect-exclusive. jq also accepts gojq's and jq's newer
+forms (`--args`, `--jsonargs`, `$ARGS`, `-f`, `--raw-output0`, `--stream`,
+`--yaml-input`, `--yaml-output`), runs `.` without a filter, and reports
+command-line errors with jq's message and status 2. A python yq spelling
+(`-y`, `-c`, `-s`, `-S`, `--arg` and the rest of jq's options) selects python
+yq: the jq program over each file's YAML documents, JSON output unless `-y`,
+and `-i` rewriting each file through the write door. Every other yq command
+is mikefarah yq; spellings the two share mean the same in both.
+
 A jq redirect re-serializes the document. jq-edit is the format-aware edit for
 JSON, YAML and TOML: it runs `nativejq.Edit` over the pinned accepted text and
 publishes the result through the pinned write door at its captured destination
