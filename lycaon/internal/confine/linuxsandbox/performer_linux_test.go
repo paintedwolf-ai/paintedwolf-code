@@ -36,7 +36,7 @@ func startTestPerformer(t *testing.T, fs Filesystem) *performerClient {
 		_ = unix.Close(pair[1])
 	}()
 	t.Cleanup(func() { _ = unix.Close(pair[0]); <-done })
-	return &performerClient{fd: pair[0]}
+	return newPerformerClient(pair[0])
 }
 
 func openDirFD(t *testing.T, path string) int {
@@ -221,12 +221,14 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	runtime.KeepAlive(long)
 	old := unix.Umask(0o027)
 	defer unix.Umask(old)
-	if mask := target.umask(); mask != 0o027 {
-		t.Fatalf("umask = %o", mask)
+	runtime.LockOSThread()
+	facts := callerFactsOf(unix.Gettid())
+	runtime.UnlockOSThread()
+	if facts.umask != 0o027 || facts.nsPid != os.Getpid() || facts.nsTid <= 0 {
+		t.Fatalf("caller facts %+v, want umask 027 and pid %d", facts, os.Getpid())
 	}
-	pid, tid := target.namespacePids(unix.Gettid())
-	if pid != os.Getpid() || tid != unix.Gettid() {
-		t.Fatalf("namespace ids %d %d, want %d %d", pid, tid, os.Getpid(), unix.Gettid())
+	if gone := callerFactsOf(-1); gone.umask != 0o777 {
+		t.Fatalf("unreadable caller %+v, want the most restrictive mask", gone)
 	}
 	cwd, err := target.openDir(unix.AT_FDCWD)
 	testutil.FailErr(t, "open working directory", err)

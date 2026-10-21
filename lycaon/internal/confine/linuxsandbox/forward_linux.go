@@ -198,7 +198,7 @@ func (s *supervisor) accept(h handoff, fd int) {
 	}
 	switch h.Kind {
 	case handoffPerformer:
-		s.performer = &performerClient{fd: fd}
+		s.performer = newPerformerClient(fd)
 		s.track(fdCloser(fd))
 	case handoffProxy:
 		ap, err := netip.ParseAddrPort(h.Addr)

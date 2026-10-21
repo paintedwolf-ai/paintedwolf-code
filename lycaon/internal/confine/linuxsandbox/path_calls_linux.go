@@ -31,6 +31,13 @@ type performerClient struct {
 	broken bool
 }
 
+// newPerformerClient bounds the wait for each answer on fd.
+func newPerformerClient(fd int) *performerClient {
+	tv := unix.NsecToTimeval(pathCallTimeout.Nanoseconds())
+	_ = unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv)
+	return &performerClient{fd: fd}
+}
+
 func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -49,8 +56,6 @@ func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, erro
 		c.broken = true
 		return pathResult{}, -1, err
 	}
-	tv := unix.NsecToTimeval(pathCallTimeout.Nanoseconds())
-	_ = unix.SetsockoptTimeval(c.fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv)
 	buf := make([]byte, 4096)
 	oob := make([]byte, unix.CmsgSpace(4))
 	n, oobn, _, _, err := unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
@@ -224,10 +229,10 @@ func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathA
 		call.Mode = uint32(binary.NativeEndian.Uint64(how[8:]))
 		call.Resolve = binary.NativeEndian.Uint64(how[16:])
 	}
-	nsPid, nsTid := target.namespacePids(int(n.PID))
-	call.Path = selfRelative(call.Path, nsPid, nsTid)
-	call.NewPath = selfRelative(call.NewPath, nsPid, nsTid)
-	call.Umask = target.umask()
+	caller := callerFactsOf(int(n.PID))
+	call.Path = selfRelative(call.Path, caller.nsPid, caller.nsTid)
+	call.NewPath = selfRelative(call.NewPath, caller.nsPid, caller.nsTid)
+	call.Umask = caller.umask
 	// Each name resolves from the directory the caller named, its working
 	// directory when it named none; the kernel ignores it for an absolute path.
 	dirArgs := []int{a.dir}
@@ -292,53 +297,47 @@ func (t *targetProcess) readPath(addr uint64) (string, error) {
 	return "", unix.ENAMETOOLONG
 }
 
-// umask is the caller's file creation mask; the most restrictive on failure.
-func (t *targetProcess) umask() uint32 {
-	value, ok := t.statusField("Umask:")
-	if !ok {
-		return 0o777
-	}
-	mask, err := strconv.ParseUint(value, 8, 32)
-	if err != nil {
-		return 0o777
-	}
-	return uint32(mask)
+// callerFacts are what one calling thread's status says about it: its process
+// and thread ids as the sandbox's PID namespace numbers them, where the
+// performer lives, and its file creation mask.
+type callerFacts struct {
+	nsPid, nsTid int
+	umask        uint32
 }
 
-// namespacePids are the caller's process and thread ids as the sandbox's PID
-// namespace numbers them; the performer lives there.
-func (t *targetProcess) namespacePids(tid int) (int, int) {
-	last := func(path string) int {
-		raw, err := os.ReadFile(path)
-		if err != nil {
+// callerFactsOf reads the calling thread's status once; a mask it cannot read
+// is the most restrictive one.
+func callerFactsOf(tid int) callerFacts {
+	facts := callerFacts{umask: 0o777}
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		return facts
+	}
+	lastID := func(v string) int {
+		fields := strings.Fields(v)
+		if len(fields) == 0 {
 			return 0
 		}
-		for _, line := range strings.Split(string(raw), "\n") {
-			if v, ok := strings.CutPrefix(line, "NSpid:"); ok {
-				fields := strings.Fields(v)
-				if len(fields) > 0 {
-					id, _ := strconv.Atoi(fields[len(fields)-1])
-					return id
-				}
-			}
-		}
-		return 0
-	}
-	pid := last("/proc/" + strconv.Itoa(t.pid) + "/status")
-	return pid, last("/proc/" + strconv.Itoa(t.pid) + "/task/" + strconv.Itoa(tid) + "/status")
-}
-
-func (t *targetProcess) statusField(name string) (string, bool) {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(t.pid) + "/status")
-	if err != nil {
-		return "", false
+		id, _ := strconv.Atoi(fields[len(fields)-1])
+		return id
 	}
 	for _, line := range strings.Split(string(raw), "\n") {
-		if v, ok := strings.CutPrefix(line, name); ok {
-			return strings.TrimSpace(v), true
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "Umask":
+			if mask, err := strconv.ParseUint(strings.TrimSpace(value), 8, 32); err == nil {
+				facts.umask = uint32(mask)
+			}
+		case "NStgid":
+			facts.nsPid = lastID(value)
+		case "NSpid":
+			facts.nsTid = lastID(value)
 		}
 	}
-	return "", false
+	return facts
 }
 
 // selfRelative rewrites the caller's own process links, which would name the
