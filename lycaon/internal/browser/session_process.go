@@ -15,8 +15,10 @@ import (
 // newHeadlessLauncher selects Chromium's own sandbox flags before this point.
 func launchBrowserProcess(ctx context.Context, l *launcher.Launcher, chromePath string, boundary *confine.Confinement) (string, func(), error) {
 	l = l.Delete(flags.Leakless)
+	plan := execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", boundary).WithReducedEnvironment()
+	plan.CurrentAuthority = func(context.Context) error { return ctx.Err() }
 	cmd, cleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), chromePath, l.FormatArgs(), execpkg.ExecOpts{
-		Launch: execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", boundary).WithReducedEnvironment(),
+		Launch: plan,
 	})
 	if err != nil {
 		return "", nil, err
