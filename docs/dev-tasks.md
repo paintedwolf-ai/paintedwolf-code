@@ -684,8 +684,13 @@ and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
 descendant CPU counters, process trees, and captured output are `suspected_stall`;
 samples more than 90 seconds apart reset the inactivity window, and Go raw event
-files count as output even when the digest's console log is quiet. Queued
-reservations are not stalled operations. A healthy long-running command can
+files count as output even when the digest's console log is quiet. Targets whose
+work runs inside an external daemon (such as `nix-daemon` or container builds)
+declare `"progress": "log"` or `"progress": "heartbeat"` in their
+`scripts/verification-plan.json` resource recipe; the scheduler exports
+`PW_TEST_STAGE_PROGRESS` and samples that file's inode, size, and modification
+time alongside descendant processes and stage logs, without parsing output prose.
+Queued reservations are not stalled operations. A healthy long-running command can
 remain active indefinitely, and a quiet external wait may still trigger an
 advisory. These signals never kill processes, release leases, or change test
 results. Missing process identity or unsupported telemetry reports `unknown`;

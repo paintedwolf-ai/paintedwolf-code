@@ -660,6 +660,7 @@
       "locks": [
         "harness"
       ],
+      "progress": "log",
       "workers": 1
     },
     "test:confine:linux": {
