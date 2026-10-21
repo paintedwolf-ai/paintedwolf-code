@@ -49,16 +49,16 @@ type ProgramRuntime struct {
 	// Sessions names the person who started the session; the program acts for them.
 	Sessions SessionOwners
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
-	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
+	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
 	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 
-	mu            sync.Mutex
-	outputs       map[string]*invocation.ProgramOutputRetention
-	resources     map[string]*sessionOutputResources
-	disabled      atomic.Bool
+	mu        sync.Mutex
+	outputs   map[string]*invocation.ProgramOutputRetention
+	resources map[string]*sessionOutputResources
+	disabled  atomic.Bool
 }
 
 // SetDisabled turns the command program control off or on. Turning it off
@@ -117,6 +117,16 @@ type ProgramOutcome struct {
 	CompletedEffects int    `json:"completed_effects"`
 	UncertainEffects int    `json:"uncertain_effects"`
 	ReplayAvailable  bool   `json:"replay_available"`
+	// Refusal is the host decision that stopped the program; the output and
+	// status of every child that ran before it stay in this outcome.
+	Refusal *ProgramRefusal `json:"refusal,omitempty"`
+}
+
+// ProgramRefusal is a typed host refusal at the program's stop point with its
+// rendered feedback.
+type ProgramRefusal struct {
+	Code     string `json:"code"`
+	Feedback string `json:"feedback"`
 }
 
 const programOutputBytes = 64 << 10
@@ -242,9 +252,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		listeners = lineage.SessionListeners
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	builtins["sleep"] = sleepBuiltin()
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
 	if r.Builtins != nil {
-		for name, builtin := range r.Builtins(tc, dispatcher) {
+		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
 			if _, taken := builtins[name]; !taken {
 				builtins[name] = builtin
 			}
@@ -291,15 +302,17 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	if feedback := r.feedback(ctx, run, dispatcher, evalErr); feedback != nil {
+	feedback := r.feedback(ctx, run, dispatcher, evalErr)
+	refusal := toolrejection.AsToolReject(feedback)
+	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
-	}
-	if settleErr != nil {
-		return "", settleErr
 	}
 	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
 	if err != nil {
-		return "", err
+		return "", errors.Join(feedback, err)
+	}
+	if refusal != nil {
+		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {

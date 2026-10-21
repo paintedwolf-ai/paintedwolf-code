@@ -15,12 +15,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -316,9 +316,10 @@ func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
 func TestProgramEntryRefusesDesktopCaptureLaunch(t *testing.T) {
 	for _, program := range []string{"screencapture -x out.png", "/usr/sbin/screencapture -x out.png", "scrot shot.png", "xwd -root"} {
 		f := newProgramFixture(t)
-		_, err := f.call(t, t.Context(), program)
-		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "DESKTOP_CAPTURE_DISALLOWED" {
-			t.Fatalf("%q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", program, err)
+		out, err := f.call(t, t.Context(), program)
+		testutil.FailErr(t, "run refused capture", err)
+		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "DESKTOP_CAPTURE_DISALLOWED" {
+			t.Fatalf("%q: expected DESKTOP_CAPTURE_DISALLOWED, got %s", program, out)
 		}
 		if executions := f.executions(t); executions["command"] != "refused;" {
 			t.Fatalf("%q: child receipts %v", program, executions)
@@ -335,5 +336,51 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 		if err != nil || !strings.Contains(out, `"state":"completed"`) {
 			t.Fatalf("program %d: %v %s", i, err, out)
 		}
+	}
+}
+
+// A native name without a native owner runs as its installed program, marked
+// external in its receipt with a native_gap fact; without one it refuses in
+// shell voice naming the command.
+func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), "external -- /bin/echo gap-line | grep gap")
+	testutil.FailErr(t, "run native gap", err)
+	if !strings.Contains(out, `"stdout":"gap-line\n"`) {
+		t.Fatalf("gap launch outcome %s", out)
+	}
+	var operation, gap string
+	testutil.FailErr(t, "read gap receipt", f.Database.QueryRowContext(t.Context(), `SELECT operation_id, native_gap_json FROM invocation_program_executions WHERE native_gap_json != ''`).Scan(&operation, &gap))
+	if operation != "command" || !strings.Contains(gap, `"command":"grep"`) || !strings.Contains(gap, `"code":"COMMAND_NATIVE_FORM_UNSUPPORTED"`) {
+		t.Fatalf("gap receipt %s %s", operation, gap)
+	}
+	out, err = f.call(t, t.Context(), "external -- /bin/echo before; repo-map; external -- /bin/echo never")
+	testutil.FailErr(t, "run refused native name", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || !strings.Contains(outcome.Refusal.Feedback, "COMMAND_NATIVE_FORM_UNSUPPORTED") {
+		t.Fatalf("uninstalled native name: %s", out)
+	}
+	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: not supported here [COMMAND_NATIVE_FORM_UNSUPPORTED]") {
+		t.Fatalf("refusal replaced the partial result: %+v", outcome)
+	}
+}
+
+func decodeOutcome(t *testing.T, out string) command.ProgramOutcome {
+	t.Helper()
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
+	return outcome
+}
+
+// File predicates read the program's files from the statement's directory.
+func TestProgramEntryFilePredicatesReadRealFilesFromTheFrame(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "seed dir", os.MkdirAll(filepath.Join(f.Dir, "sub"), 0o755))
+	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("a"), 0o644))
+	testutil.FailErr(t, "seed nested file", os.WriteFile(filepath.Join(f.Dir, "sub", "b.txt"), []byte("b"), 0o644))
+	out, err := f.call(t, t.Context(), `test -f a.txt && [ -d sub ] && [[ -f sub/b.txt ]] && [ -s a.txt ] && ! test -f missing && ! [ -d a.txt ] && cd sub && test -f b.txt; external -- /bin/echo "status=$?"`)
+	testutil.FailErr(t, "run predicates", err)
+	if outcome := decodeOutcome(t, out); outcome.Stdout != "status=0\n" {
+		t.Fatalf("predicates outcome %s", out)
 	}
 }

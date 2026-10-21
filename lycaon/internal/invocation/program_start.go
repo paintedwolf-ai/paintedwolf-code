@@ -151,7 +151,15 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	gap := ""
+	if in.NativeGap != nil {
+		encoded, err := json.Marshal(in.NativeGap)
+		if err != nil {
+			return err
+		}
+		gap = string(encoded)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("prepare program child: %w", err)
 	}

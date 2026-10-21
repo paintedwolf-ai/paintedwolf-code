@@ -3,6 +3,7 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,6 +12,16 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
+
+// EvaluatorBuiltin reports names the evaluator runs itself, before any
+// dispatch: control, status, test, variable and source built-ins.
+func EvaluatorBuiltin(name string) bool {
+	switch name {
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export":
+		return true
+	}
+	return controlBuiltins[name]
+}
 
 // controlBuiltins change evaluator state rather than invoking an owner. They are
 // reserved: a function cannot shadow them.
@@ -157,6 +168,9 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 func (f *frame) predicates() PredicateRuntime {
 	runtime := f.e.ports.Predicates
 	runtime.Expansion, runtime.Scope = f.e.expander, f
+	if frame, ok := f.state.dispatch.(FramePredicates); ok {
+		runtime.Files = frame.PredicateFiles()
+	}
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
 	}
@@ -197,15 +211,20 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	if err != nil {
 		return err
 	}
+	var gap *toolcontract.NativeGap
 	if native {
 		if _, err := f.e.ports.Binder.Bind(spec, fields); err != nil {
 			var argv *ArgvError
-			if errors.As(err, &argv) {
+			if !errors.As(err, &argv) {
+				child.close()
+				return err
+			}
+			gap = f.nativeGap(spec, argv, fields, assigns)
+			if gap == nil {
+				f.hostRefusal(spec.Name, argv.Word, argv.Code)
 				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
 				return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
 			}
-			child.close()
-			return err
 		}
 	}
 	environment, err := f.environment(assigns)
@@ -213,9 +232,9 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		child.close()
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
-	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native)}
+	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap}
 	var result toolcontract.ProducerResult
-	if native && spec.Name != "external" {
+	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
@@ -442,4 +461,37 @@ func (f *frame) setOptions(s commandsurface.Statement, fields Fields) error {
 	}
 	f.state.options = options
 	return f.builtinStatus(s.SyntaxLocation, "set", 0)
+}
+
+// nativeGap is the gap an unsupported native form becomes when dispatch can
+// run the installed program instead; nil keeps the refusal.
+func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
+	if argv.Code != argvOptionUnsupported && argv.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" {
+		return nil
+	}
+	gaps, ok := f.state.dispatch.(NativeGaps)
+	if !ok {
+		return nil
+	}
+	environment, err := f.environment(assigns)
+	if err != nil {
+		return nil
+	}
+	gap := &toolcontract.NativeGap{Command: spec.Name, Code: argv.Code, Form: argv.Word}
+	if !gaps.GapLaunchable(OperationRequest{OperationID: "external", Argv: fields, Environment: environment, Gap: gap}) {
+		return nil
+	}
+	return gap
+}
+
+// hostRefusal writes a host refusal to the statement's stderr in shell voice.
+func (f *frame) hostRefusal(command, form, code string) {
+	if f.streams.Error == nil {
+		return
+	}
+	subject := command
+	if form != "" {
+		subject += ": " + form
+	}
+	_, _ = fmt.Fprintf(f.streams.Error, "%s: not supported here [%s]\n", subject, code)
 }
