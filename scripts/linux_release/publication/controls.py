@@ -1,4 +1,7 @@
-"""Assemble signed Linux qualification controls without publishing any repository."""
+"""Assemble signed Linux qualification controls without publishing any repository.
+
+The command line is the disposable-identity rehearsal; protected production assembly
+runs through control_pipeline, which supplies its current controller identity."""
 from __future__ import annotations
 
 import argparse
@@ -68,7 +71,6 @@ def main(arguments=None):
     parser.add_argument("--nix-inputs",type=Path,required=True)
     parser.add_argument("--output",type=Path,required=True)
     parser.add_argument("--receipt",type=Path,required=True)
-    parser.add_argument("--rehearsal",action="store_true")
     parser.add_argument("--family",action="append",choices=sorted(FAMILIES))
     parser.add_argument("--architecture",action="append",choices=sorted(ARCHITECTURES))
     args=parser.parse_args(arguments)
@@ -90,7 +92,7 @@ def main(arguments=None):
         if not isinstance(nix,dict) or set(nix)!={"format_version","systems"} or type(nix["format_version"]) is not int or nix["format_version"]!=1:
             raise ValueError("Nix control inputs require format_version1 and explicit systems")
         report=build(native,args.inputs,args.output,source,args.signing_catalog,args.private_key,args.repository_base_url,previous,nix["systems"],
-                     producer=None if args.rehearsal else controller_context(os.environ),source_repository=args.source_repository,rehearsal=args.rehearsal,
+                     producer=None,source_repository=args.source_repository,rehearsal=True,
                      families=tuple(args.family or sorted(FAMILIES)),architectures=tuple(args.architecture or ARCHITECTURES))
         args.receipt.parent.mkdir(parents=True,exist_ok=True)
         with args.receipt.open("x") as stream:

@@ -174,7 +174,7 @@ def main(arguments=None):
     try:
         producer = controller_context(os.environ)
         from scripts.ci_policy.github import api
-        from update_keys import load_registry
+        from scripts.update_keys import load_registry
         from ..openpgp import selection
         from .generations import CATALOG as signing_catalog
         from .authority import repository_origin, PREFIX

@@ -663,8 +663,8 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Select the protected native package collector
-        if: needs.classify.outputs.linux_public == 'true'
+      - name: Select the protected release controller
+        if: ${{ needs.classify.outputs.linux_public == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -685,7 +685,7 @@ jobs:
           LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}
         run: |
           set -euo pipefail
-          ./task release:live-test -- --collect-linux-publication \
+          ./task release:publish:linux-collection -- \
             --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
             --campaign-run-id "$CAMPAIGN_RUN_ID" --retained-dir "$RUNNER_TEMP/linux-collection-inputs" \
             --output "$RUNNER_TEMP/qualified-linux"
@@ -740,33 +740,20 @@ jobs:
             render_cask painted-wolf-code@preview preview
           fi
 
-      - name: Select the protected non-Linux input retention controller
-        if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.workflow_sha }}
-          path: .release-document-controller
-          fetch-depth: 0
-          persist-credentials: false
-      - if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+      - if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.classify.outputs.linux_public != 'true' }}
         uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
-          go-version-file: .release-document-controller/lycaon/go.mod
+          go-version-file: .linux-publication-controller/lycaon/go.mod
           cache: false
-      - if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .release-document-controller/.bun-version
-          no-cache: true
       - name: Retain the actual signed non-Linux results under an independent producer role
         if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-        working-directory: .release-document-controller
+        working-directory: .linux-publication-controller
         env:
           SOURCE_COMMIT: ${{ needs.classify.outputs.source_sha }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
-          ./task release:live-test -- --retain-release-inputs \
+          ./task release:publish:release-inputs -- \
             --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
             --catalog "$GITHUB_WORKSPACE/packaging/release-platforms.json" \
             --updater "$GITHUB_WORKSPACE/aggregate/latest.json" \
@@ -948,7 +935,7 @@ jobs:
             (umask 077; printf '%s\n' "$LINUX_DELIVERY_POLICY" > "$policy")
             extra+=(--delivery-policy "$policy")
           fi
-          ./task release:live-test -- --prepare-distribution-document \
+          ./task release:publish:linux-document -- \
             --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
             --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$GITHUB_RUN_ID" \
             --release-artifact-id "$RELEASE_ARTIFACT_ID" --current-release-producer \
@@ -1048,7 +1035,7 @@ jobs:
           DOCUMENT_ARTIFACT_ID: ${{ needs.publish-immutable.outputs.distribution_artifact_id }}
         run: |
           set -euo pipefail
-          ./task release:live-test -- --prepare-distribution-document \
+          ./task release:publish:linux-document -- \
             --source-repository "$GITHUB_WORKSPACE" --source-commit "$SOURCE_COMMIT" \
             --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$GITHUB_RUN_ID" \
             --release-artifact-id "$RELEASE_ARTIFACT_ID" --current-release-producer \
@@ -1057,6 +1044,7 @@ jobs:
             --output "$RUNNER_TEMP/distribution-notification"
       - name: Dispatch the freshly verified Linux distribution notification
         if: needs.classify.outputs.linux_public == 'true'
+        working-directory: .linux-publication-controller
         env:
           GH_TOKEN: ${{ secrets.WWW_DISPATCH_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1065,13 +1053,9 @@ jobs:
         run: |
           set -euo pipefail
           payload="$RUNNER_TEMP/distribution-notification/notification.json"
-          jq '{event_type:"painted-wolf-release",client_payload:.}' "$payload" > "$RUNNER_TEMP/www-notification.json"
+          ./task release:publish:website -- dispatch-body --notification "$payload" --output "$RUNNER_TEMP/www-notification.json"
           gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/www-notification.json"
-          python3 .linux-publication-controller/scripts/release_distribution.py website \
-            --channel "$(jq -r .channel "$payload")" --version "$(jq -r .version "$payload")" \
-            --manifest-sha256 "$(jq -r .manifest_sha256 "$payload")" \
-            --distribution-sha256 "$(jq -r .distribution_sha256 "$payload")" --verify-promotion \
-            --generation "$(jq -r .signing_generation packaging/update-keys.json)"
+          ./task release:publish:website -- confirm --notification "$payload"
       - name: Dispatch channel release to paintedwolf-www
         if: needs.classify.outputs.linux_public != 'true'
         env:
@@ -1246,7 +1230,7 @@ jobs:
           [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           git fetch --no-tags origin "$SOURCE_COMMIT"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
-          ./task release:live-test -- --retain-linux-campaign \
+          ./task release:publish:linux-campaign -- \
             --qualification-run-id "$QUALIFICATION_RUN_ID" --source-commit "$SOURCE_COMMIT" \
             --source-repository "$PWD" --output "$RUNNER_TEMP/linux-final-admission-inputs"
       - name: Retain final admission inputs
@@ -1296,7 +1280,7 @@ jobs:
           git fetch --no-tags origin "$SOURCE_COMMIT"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
           [[ "$(git rev-parse 'FETCH_HEAD^{tree}')" == "$SOURCE_TREE" ]]
-          ./task release:live-test -- --produce-linux-controls \
+          ./task release:publish:linux-controls -- \
             --source-repository "$PWD" --source-commit "$SOURCE_COMMIT" --source-tree "$SOURCE_TREE" \
             --candidate-run-id "$CANDIDATE_RUN_ID" --candidate-controller-commit "$CANDIDATE_CONTROLLER" \
             --candidate-amd64-artifact-id "$AMD64_ARTIFACT_ID" --candidate-arm64-artifact-id "$ARM64_ARTIFACT_ID" \
@@ -1369,7 +1353,7 @@ jobs:
           [[ "$CAMPAIGN_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ && "$RELEASE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           git fetch --no-tags origin "$SOURCE_COMMIT"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
-          ./task release:live-test -- --prepare-distribution-document \
+          ./task release:publish:linux-document -- \
             --source-repository "$PWD" --source-commit "$SOURCE_COMMIT" \
             --campaign-run-id "$CAMPAIGN_RUN_ID" --release-run-id "$RELEASE_RUN_ID" \
             --release-artifact-id "$RELEASE_ARTIFACT_ID" --output "$RUNNER_TEMP/distribution-preparation" "${extra[@]}"
@@ -1382,19 +1366,10 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/distribution-preparation/notification.json" "$RUNNER_TEMP/distribution-notification.json" <<'PYTHON'
-          import json,sys
-          with open(sys.argv[1]) as source:
-              payload = json.load(source)
-          with open(sys.argv[2], "x") as output:
-              json.dump({"event_type": "painted-wolf-release", "client_payload": payload}, output)
-          PYTHON
-          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/distribution-notification.json"
           payload="$RUNNER_TEMP/distribution-preparation/notification.json"
-          python3 scripts/release_distribution.py website --channel "$(jq -r .channel "$payload")" \
-            --version "$(jq -r .version "$payload")" --manifest-sha256 "$(jq -r .manifest_sha256 "$payload")" \
-            --distribution-sha256 "$(jq -r .distribution_sha256 "$payload")" --verify-promotion \
-            --generation "$(jq -r .signing_generation packaging/update-keys.json)"
+          ./task release:publish:website -- dispatch-body --notification "$payload" --output "$RUNNER_TEMP/distribution-notification.json"
+          gh api repos/paintedwolf-ai/paintedwolf-www/dispatches --input "$RUNNER_TEMP/distribution-notification.json"
+          ./task release:publish:website -- confirm --notification "$payload"
       - name: Retain signed distribution metadata and publication diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
