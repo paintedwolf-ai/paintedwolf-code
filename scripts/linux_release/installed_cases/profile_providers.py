@@ -62,9 +62,9 @@ def selected(rows):
         return None
     row = matches[0]
     if (row.get('kind') != GUI_KIND or row.get('base_url') != GUI_ENDPOINT
-            or row.get('requires_api_key') is not False or row.get('api_key_env', '') != ''
+            or row.get('requires_api_key') is not True or row.get('api_key_env', '') not in {'', 'LITELLM_MASTER_KEY'}
             or row.get('ambient_auth', '') != ''):
-        raise ValueError('owned GUI provider differs from its fixed keyless transport')
+        raise ValueError('owned GUI provider differs from its fixed local credential transport')
     models = row.get('models', [])
     if (not isinstance(models, list) or len(models) > 256 or any(not isinstance(model, dict)
             or not isinstance(model.get('id'), str) or not 1 <= len(model['id']) <= 128 for model in models)):
@@ -72,7 +72,7 @@ def selected(rows):
     identifiers = [model['id'] for model in models]
     if len(set(identifiers)) != len(identifiers) or any(value != MODEL for value in identifiers):
         raise ValueError('owned GUI provider model identities are ambiguous')
-    return {'provider_id': row['id'], 'kind': GUI_KIND, 'requires_api_key': False,
+    return {'provider_id': row['id'], 'kind': GUI_KIND, 'requires_api_key': True,
             'models': identifiers, 'observer': 'owned-provider-YAML'}
 
 

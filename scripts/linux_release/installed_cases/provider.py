@@ -11,6 +11,7 @@ LIMIT = 2 << 20
 GUI_PORT = 50179
 GUI_LABEL = 'Installed UI qualification'
 GUI_KIND = 'litellm-proxy'
+GUI_API_KEY = 'installed-local-fixture-key'
 GUI_ENDPOINT = f'http://127.0.0.1:{GUI_PORT}/v1'
 
 
@@ -88,11 +89,13 @@ class ProviderFixture:
 
             def do_GET(self):
                 if fixture.gui_purpose and self.path == '/v1/model/info':
+                    if self.headers.get('Authorization') != 'Bearer ' + GUI_API_KEY:
+                        return self.respond(401, {'error': 'fixture-credential-required'})
                     with fixture.lock:
                         if len(fixture.discovery_observations) >= 64:
                             return self.respond(429, {'error': 'fixture-discovery-bound'})
                         fixture.discovery_observations.append({'kind': GUI_KIND, 'model': MODEL,
-                            'path': '/v1/model/info', 'structured_tools': True})
+                            'path': '/v1/model/info', 'structured_tools': True, 'fixture_credential_observed': True})
                     return self.respond(200, {'data': [{'model_name': MODEL, 'model_info': {
                         'mode': 'chat', 'max_input_tokens': 131072, 'supports_function_calling': True,
                         'supports_vision': False, 'supports_reasoning': False,
@@ -108,6 +111,8 @@ class ProviderFixture:
                     length = int(self.headers.get('Content-Length', '0'))
                     if self.path != '/v1/chat/completions' or not 0 < length <= LIMIT:
                         raise ValueError('fixture request boundary refused')
+                    if fixture.gui_purpose and self.headers.get('Authorization') != 'Bearer ' + GUI_API_KEY:
+                        return self.respond(401, {'error': 'fixture-credential-required'})
                     raw = self.rfile.read(length)
                     if len(raw) != length:
                         raise ValueError('fixture request was truncated')

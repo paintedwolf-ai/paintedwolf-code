@@ -4,7 +4,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from linux_release.installed_cases.provider import MODEL, ProviderFixture
+from linux_release.installed_cases.provider import MODEL, GUI_API_KEY, ProviderFixture
 
 
 class InstalledProviderTests(unittest.TestCase):
@@ -66,7 +66,9 @@ class InstalledProviderTests(unittest.TestCase):
                 opener.open(fixture.base_url + '/model/info', timeout=5)
             self.assertEqual(refused.exception.code, 404)
             fixture.gui_purpose = True
-            with opener.open(fixture.base_url + '/model/info', timeout=5) as response:
+            request = urllib.request.Request(fixture.base_url + '/model/info',
+                headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+            with opener.open(request, timeout=5) as response:
                 row = json.load(response)['data'][0]
             self.assertEqual(row['model_name'], MODEL)
             self.assertIs(row['model_info']['supports_function_calling'], True)
@@ -74,8 +76,9 @@ class InstalledProviderTests(unittest.TestCase):
             self.assertEqual(row['model_info']['max_input_tokens'], 131072)
             self.assertIs(row['model_info']['supports_vision'], False)
             self.assertEqual(fixture.discovery_observations, [{'kind': 'litellm-proxy',
-                'model': MODEL, 'path': '/v1/model/info', 'structured_tools': True}])
+                'model': MODEL, 'path': '/v1/model/info', 'structured_tools': True,
+                'fixture_credential_observed': True}])
             fixture.discovery_observations *= 64
             with self.assertRaises(urllib.error.HTTPError) as flooded:
-                opener.open(fixture.base_url + '/model/info', timeout=5)
+                opener.open(request, timeout=5)
             self.assertEqual(flooded.exception.code, 429)

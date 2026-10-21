@@ -6,6 +6,7 @@ import json
 import re
 
 from ..installed_evidence import IDENTIFIER
+from ..installed_cases.provider import GUI_LABEL, GUI_ENDPOINT, GUI_API_KEY
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -27,6 +28,18 @@ def _editor_steps() -> tuple[tuple[str, ...], ...]:
     return tuple([*rows, ('ctrl', 's')])
 
 
+def _literal_steps(value: str) -> tuple[tuple[str, ...], ...]:
+    punctuation = {' ': ('spc',), '.': ('dot',), ':': ('shift', 'semicolon'),
+                   '/': ('slash',), '-': ('minus',)}
+    return (('ctrl', 'a'), *(('shift', char.lower()) if 'A' <= char <= 'Z' else
+        (char,) if char.isascii() and char.isalnum() else punctuation[char] for char in value))
+
+
+_PROVIDER_STEPS = {'provider-name-v1': _literal_steps(GUI_LABEL),
+                   'provider-endpoint-v1': _literal_steps(GUI_ENDPOINT),
+                   'provider-fixture-credential-v1': _literal_steps(GUI_API_KEY)}
+
+
 _EDITOR_STEPS = _editor_steps()
 _SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
                   for char in 'qualification needle'), ('ret',))
@@ -35,6 +48,8 @@ _SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
 def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     if not isinstance(operation, str):
         raise ValueError('native input requires a fixed declared operation')
+    if operation in _PROVIDER_STEPS:
+        return _PROVIDER_STEPS[operation]
     if operation == 'editor-replace-save-v1':
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':

@@ -13,10 +13,13 @@ class _FocusUnavailable(CaseUnavailable):
 
 
 class EntryFocus:
-    def __init__(self, app, ui, label: str):
+    def __init__(self, app, ui, label: str, *, password: bool = False):
+        if type(password) is not bool:
+            raise ValueError('native input entry kind must be fixed')
+        self.role = ui.api.ROLE_PASSWORD_TEXT if password else ui.api.ROLE_ENTRY
         self.app, self.ui, self.label = app, ui, label
         self.deadline = time.monotonic() + 90
-        self.node = ui.find(ui.api.ROLE_ENTRY, label)
+        self.node = ui.find(self.role, label)
         self.entry = process_identity(self.node.get_process_id())
         self.launch = dict(app.observations['launch_identity'])
         if self.node.queryComponent().grabFocus() is not True:
@@ -56,7 +59,7 @@ class EntryFocus:
         if not visible or not focused:
             # WebKit can replace the accessible entry during a normal editor render.
             # Re-observe the exact owned label; never refocus or replay delivered input.
-            replacement = ui.find(ui.api.ROLE_ENTRY, self.label)
+            replacement = ui.find(self.role, self.label)
             replacement_identity = process_identity(replacement.get_process_id())
             if replacement_identity == self.entry:
                 node = replacement
