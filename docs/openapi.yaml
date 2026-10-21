@@ -571,6 +571,7 @@ paths:
       tags:
         - sessions
       operationId: getCommandProgramReceipt
+      x-multi-stream-list: true
       summary: Inspect bounded program and host child receipts
       parameters:
         - $ref: '#/components/parameters/SessionId'
@@ -29149,6 +29150,8 @@ components:
           format: uuid
         node_id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
         parent_execution_id:
           type: string
           format: uuid
@@ -29234,6 +29237,7 @@ components:
           type: string
         held_version_id:
           type: string
+          format: uuid
         accepted_revision:
           type: string
         published_revision:
@@ -29257,8 +29261,12 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Host syntax node identity within its program.
         source_unit_id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Captured syntax unit identity within its program.
         start_byte:
           type: integer
           format: int64

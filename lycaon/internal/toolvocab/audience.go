@@ -80,22 +80,37 @@ func Audience(c *Catalog, s Surfaces, rule *oar.Rule) ([]string, error) {
 	case audienceAnyCaller:
 		candidates = c.ProfileIDs()
 	}
-	selected := rule.Selector["tool"]
-	if len(selected) == 0 {
+	selected, operations := rule.Selector["tool"], rule.Selector["paintedwolf.operation"]
+	if len(selected) == 0 && len(operations) == 0 {
 		sort.Strings(candidates)
 		return candidates, nil
 	}
 	var out []string
 	for _, id := range candidates {
-		for _, tool := range selected {
-			if c.ProfileHolds(id, tool) {
-				out = append(out, id)
-				break
-			}
+		if receives(c, id, selected, operations) {
+			out = append(out, id)
 		}
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// receives reports whether a profile can reach a rule's selected occurrence.
+// An operation is reached through its structured tool or beneath command.
+func receives(c *Catalog, id string, tools, operations []string) bool {
+	if len(tools) > 0 && !holdsAny(c, id, tools) {
+		return false
+	}
+	return len(operations) == 0 || holdsAny(c, id, operations) || c.ProfileHolds(id, "command")
+}
+
+func holdsAny(c *Catalog, id string, tools []string) bool {
+	for _, tool := range tools {
+		if c.ProfileHolds(id, tool) {
+			return true
+		}
+	}
+	return false
 }
 
 // namedTool matches backticked names — how copy tells a reader to call
@@ -134,7 +149,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 	}
 	var problems []string
 	for _, rule := range rules.All() {
-		for _, tool := range rule.Selector["tool"] {
+		for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
 			if !c.KnownPattern(tool) {
 				problems = append(problems, fmt.Sprintf(
 					"rule %q: selector.tool names %q, which resolves to no registered tool — the clause can never match",
@@ -169,7 +184,7 @@ func unreachableRemedies(c *Catalog, rule *oar.Rule, audience []string) (own, ot
 		return nil, nil
 	}
 	selected := map[string]bool{}
-	for _, tool := range rule.Selector["tool"] {
+	for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
 		selected[tool] = true
 	}
 	for _, field := range []struct {

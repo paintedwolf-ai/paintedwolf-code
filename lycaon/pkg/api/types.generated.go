@@ -1276,8 +1276,9 @@ type CodeScanPage struct {
 
 // CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
 type CommandExecutionReceipt struct {
-	ID                              string   `json:"id"`
-	ProgramID                       string   `json:"program_id"`
+	ID        string `json:"id"`
+	ProgramID string `json:"program_id"`
+	// Host syntax node identity within its program.
 	NodeID                          string   `json:"node_id"`
 	ParentExecutionID               string   `json:"parent_execution_id"`
 	Owner                           string   `json:"owner"`
@@ -1364,7 +1365,9 @@ type CommandInvokeResponse struct {
 
 // CommandProgramNode
 type CommandProgramNode struct {
-	ID           string `json:"id"`
+	// Host syntax node identity within its program.
+	ID string `json:"id"`
+	// Captured syntax unit identity within its program.
 	SourceUnitID string `json:"source_unit_id"`
 	StartByte    int64  `json:"start_byte"`
 	EndByte      int64  `json:"end_byte"`
