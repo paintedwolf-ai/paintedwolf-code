@@ -18,7 +18,7 @@ type hiddenFileMask struct {
 }
 
 func newHiddenFileMask() (mask *hiddenFileMask, resultErr error) {
-	fd, err := newTmpfs("0700")
+	fd, err := newTmpfs("0700", maskTmpfsSize)
 	if err != nil {
 		return nil, err
 	}
