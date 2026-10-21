@@ -1,10 +1,7 @@
 name: Linux NixOS factory qualification
-run-name: Linux NixOS factory qualification ${{ inputs.source_commit || github.sha }}
+run-name: Linux NixOS factory qualification ${{ inputs.source_commit }}
 
 on:
-  push:
-    branches: [linux/nix-closure-admission]
-    paths: [packaging/nix/vm-qualification-source.json]
   workflow_dispatch:
     inputs:
       source_commit:
@@ -12,7 +9,7 @@ on:
         type: string
         required: true
       application_run_id:
-        description: Successful same-repository application closure qualification run
+        description: Successful Linux Nix qualification run of that source on this ref
         type: string
         required: true
 
@@ -21,7 +18,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: linux-nixos-qualification-${{ inputs.source_commit || github.sha }}
+  group: linux-nixos-qualification-${{ inputs.source_commit }}
   cancel-in-progress: false
 
 jobs:
@@ -36,11 +33,9 @@ jobs:
           - runner: ubuntu-24.04
             machine: x86_64
             architecture: amd64
-            installer_sha256: 6ce3ce3703fdc241b560cba401c5d338042122fe5b1a81e07bf1a623f259eba0
           - runner: ubuntu-24.04-arm
             machine: aarch64
             architecture: arm64
-            installer_sha256: 4a770896faa4d308806d0b4516575e0581443dc817d634b951a219a280554c09
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     env:
@@ -52,57 +47,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Select the exact native source and successful application producer
+      - name: Select the exact source and its application producer run
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_MACHINE: ${{ matrix.machine }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            python3 - <<'SELECT_PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-          selected = json.loads(Path('packaging/nix/vm-qualification-source.json').read_text())
-          if (set(selected) != {'source_commit', 'source_tree', 'application_run_id'}
-              or any(not isinstance(selected[key], str) or not re.fullmatch('[0-9a-f]{40}', selected[key])
-                     for key in ('source_commit', 'source_tree'))
-              or not isinstance(selected['application_run_id'], str)
-              or not re.fullmatch('[0-9]+', selected['application_run_id'])):
-              raise SystemExit('Invalid exact VM qualification selector')
-          with open(os.environ['GITHUB_ENV'], 'a') as environment:
-              environment.write('SOURCE_COMMIT=' + selected['source_commit'] + '\n')
-              environment.write('APPLICATION_RUN_ID=' + selected['application_run_id'] + '\n')
-          SELECT_PY
-            SOURCE_COMMIT="$(python3 -c 'import json; print(json.load(open("packaging/nix/vm-qualification-source.json"))["source_commit"])')"
-            APPLICATION_RUN_ID="$(python3 -c 'import json; print(json.load(open("packaging/nix/vm-qualification-source.json"))["application_run_id"])')"
-          fi
           [[ "$APPLICATION_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(uname -m)" == "$EXPECTED_MACHINE" ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APPLICATION_RUN_ID" > "$RUNNER_TEMP/application-run.json"
-          python3 - <<'RUN_PY'
-          import json
-          import os
-          from pathlib import Path
-          run = json.loads((Path(os.environ['RUNNER_TEMP'])/'application-run.json').read_text())
-          if (run.get('conclusion') != 'success' or run.get('head_branch') != 'linux/nix-closure-admission'
-              or run.get('path') != '.github/workflows/linux-nix-qualification.yml'
-              or run.get('repository', {}).get('full_name') != os.environ['GITHUB_REPOSITORY']):
-              raise SystemExit('Application producer is not the successful repository qualification workflow')
-          RUN_PY
           git fetch --no-tags origin "refs/qualification/$SOURCE_COMMIT"
           [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$SOURCE_COMMIT" ]]
           source_root="$RUNNER_TEMP/qualification-source"
           git worktree add --detach "$source_root" "$SOURCE_COMMIT"
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            expected_tree="$(python3 -c 'import json; print(json.load(open("packaging/nix/vm-qualification-source.json"))["source_tree"])')"
-            [[ "$(git -C "$source_root" rev-parse 'HEAD^{tree}')" == "$expected_tree" ]]
-          fi
           printf 'path=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
-          printf 'tree=%s\n' "$(git -C "$source_root" rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
 
       - name: Download the exact native application closure
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -120,86 +80,30 @@ jobs:
           run-id: ${{ env.APPLICATION_RUN_ID }}
           github-token: ${{ github.token }}
 
-      - name: Admit the retained application cache before enabling substitution
-        env:
-          EXPECTED_TREE: ${{ steps.source.outputs.tree }}
-          EXPECTED_MACHINE: ${{ matrix.machine }}
-        run: |
-          set -euo pipefail
-          python3 -m scripts.linux_release.nix_vm_producer \
-            --producer "$RUNNER_TEMP/application-producer" --cache "$RUNNER_TEMP/application-cache" \
-            --run "$RUNNER_TEMP/application-run.json" --evidence "$PW_ARTIFACT_ROOT" \
-            --lock "${{ steps.source.outputs.path }}/flake.lock" \
-            --source-commit "$SOURCE_COMMIT" --source-tree "$EXPECTED_TREE" --architecture "$EXPECTED_MACHINE"
-
       - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
           go-version-file: ${{ steps.source.outputs.path }}/lycaon/go.mod
           cache: false
 
-      - name: Install pinned Nix with only the admitted local artifact trusted
-        env:
-          MACHINE: ${{ matrix.machine }}
-          INSTALLER_SHA256: ${{ matrix.installer_sha256 }}
-        run: |
-          set -euo pipefail
-          [[ "$RUNNER_ENVIRONMENT" == github-hosted ]]
-          test ! -e /nix
-          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h /
-          install_root="$RUNNER_TEMP/nix-installer"
-          mkdir "$install_root"
-          archive="nix-2.35.3-$MACHINE-linux.tar.xz"
-          curl --fail --location --connect-timeout 15 --max-time 300 \
-            "https://releases.nixos.org/nix/nix-2.35.3/$archive" --output "$install_root/$archive"
-          printf '%s  %s\n' "$INSTALLER_SHA256" "$install_root/$archive" | sha256sum --check
-          tar -xJf "$install_root/$archive" -C "$install_root"
-          printf 'sandbox = true\ntrusted-users = root\nextra-substituters = file://%s/application-cache?trusted=1\n' \
-            "$RUNNER_TEMP" > "$install_root/nix.conf"
-          "$install_root/nix-2.35.3-$MACHINE-linux/install" --daemon --yes \
-            --daemon-user-count 4 --no-channel-add --no-modify-profile \
-            --nix-extra-conf-file "$install_root/nix.conf"
-          printf '%s\n' /nix/var/nix/profiles/default/bin >> "$GITHUB_PATH"
+      - name: Free disk space for the Nix store
+        run: sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
 
-      - name: Select the independently pinned image factory and managed controller
+      # Admission validates the retained closure before the daemon trusts it as a substituter.
+      - name: Admit the retained application and install pinned Nix
+        working-directory: ${{ steps.source.outputs.path }}
         run: |
-          set -euo pipefail
-          controller=70481454abe7489c8b9fd0747f1872c84168aa1c
-          factory=b8f1b62f596a9ee19adee31aca55a1236d1d4fe3
-          git fetch --no-tags origin "$controller"
-          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$controller" ]]
-          git worktree add --detach "$RUNNER_TEMP/nix-build-controller" "$controller"
-          git fetch --no-tags origin "$factory"
-          [[ "$(git rev-parse 'FETCH_HEAD^{commit}')" == "$factory" ]]
-          git worktree add --detach "$RUNNER_TEMP/nixos-factory-source" "$factory"
-          [[ "$(git -C "$RUNNER_TEMP/nixos-factory-source" rev-parse 'HEAD^{tree}')" == 12efb7589a40a33b121006e1ace69a5a835159aa ]]
+          ./task nix:check -- --prepare --application-producer "$RUNNER_TEMP/application-producer" \
+            --application-cache "$RUNNER_TEMP/application-cache" --application-run "$RUNNER_TEMP/application-run.json"
 
-      - name: Build and archive the native NixOS desktop factory
-        working-directory: ${{ runner.temp }}/nix-build-controller
+      - name: Build, archive and bind the native NixOS desktop factory
+        working-directory: ${{ steps.source.outputs.path }}
         env:
           DESKTOP: ${{ matrix.desktop }}
+          CHANNEL: ${{ matrix.channel }}
         run: |
-          set -euo pipefail
           ./task nix:build -- --component "nixos-$DESKTOP-vm" --archive-dir "$RUNNER_TEMP/nixos-factory" \
-            --factory-source-root "$RUNNER_TEMP/nixos-factory-source" \
-            --factory-source-commit b8f1b62f596a9ee19adee31aca55a1236d1d4fe3 \
-            --factory-channel '${{ matrix.channel }}' 
-
-      - name: Bind the factory to the exact retained application closure
-        env:
-          DESKTOP: ${{ matrix.desktop }}
-          EXPECTED_TREE: ${{ steps.source.outputs.tree }}
-          EXPECTED_MACHINE: ${{ matrix.machine }}
-        run: |
-          set -euo pipefail
-          python3 -m scripts.linux_release.nix_vm \
-            --evidence "$PW_ARTIFACT_ROOT" --archive "$RUNNER_TEMP/nixos-factory" --desktop "$DESKTOP" \
-            --source-commit "$SOURCE_COMMIT" --source-tree "$EXPECTED_TREE" \
-            --lock-sha256 "$(sha256sum '${{ steps.source.outputs.path }}/flake.lock' | cut -d' ' -f1)" \
-            --architecture "$EXPECTED_MACHINE" --controller-commit "$GITHUB_SHA" \
-            --factory-source-commit b8f1b62f596a9ee19adee31aca55a1236d1d4fe3 \
-            --factory-source-tree 12efb7589a40a33b121006e1ace69a5a835159aa \
-            --factory-channel '${{ matrix.channel }}' 
+            --factory-source-root "$GITHUB_WORKSPACE" --factory-source-commit "$GITHUB_SHA" \
+            --factory-channel "$CHANNEL" --qualify
 
       - name: Retain the nonrelease native desktop factory
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -753,6 +753,17 @@ broad change, and its `arguments` reach its single target. Setup installs the
 pinned Nix release and fetches every locked input with `nix:check -- --prepare`
 before the lane goes offline.
 
+Release candidates qualify their Nix closures with the *Linux Nix
+qualification* workflow, dispatched with a frozen `refs/qualification/<commit>`
+source and a fixed component on both native CPUs. Every step is a `./task`
+target in that source: `nix:build -- --qualify` binds a passed hosted build to
+its source, lock and controller, authorizes only the admitted scanner builder,
+and exports the locked workflow fixture. *Linux NixOS factory qualification*
+admits that run's retained closure with `nix:check -- --prepare
+--application-producer …` before the daemon trusts it as a substituter, then
+builds and binds each desktop factory from the dispatching ref's committed
+factory locks.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
