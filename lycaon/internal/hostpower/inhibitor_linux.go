@@ -20,7 +20,7 @@ import (
 const busDeadline = 500 * time.Millisecond
 
 // provider is one named inhibition protocol. Availability comes from the bus
-// name being served; which program serves it is never inspected.
+// name's owner or activation contract; which program serves it is never inspected.
 type provider interface {
 	Name() string
 	// Check is nil when the protocol is served, otherwise why it cannot be used.
@@ -54,6 +54,7 @@ func availabilityOf(providers []provider) error {
 			return nil
 		}
 		unavailable.Reasons = append(unavailable.Reasons, reasonFor(candidate, err))
+		unavailable.causes = append(unavailable.causes, err)
 	}
 	return unavailable
 }
@@ -78,6 +79,22 @@ func reasonFor(candidate provider, err error) ProviderReason {
 	if errors.As(err, &classified) {
 		code = classified.code
 	}
+	var remote dbus.Error
+	if errors.As(err, &remote) {
+		switch remote.Name {
+		case "org.freedesktop.DBus.Error.AccessDenied", "org.freedesktop.DBus.Error.AuthFailed", "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired":
+			code = ReasonPermissionDenied
+		case "org.freedesktop.DBus.Error.UnknownMethod", "org.freedesktop.DBus.Error.UnknownInterface", "org.freedesktop.DBus.Error.NotSupported":
+			code = ReasonUnsupportedOperation
+		case "org.freedesktop.DBus.Error.Disconnected", "org.freedesktop.DBus.Error.NameHasNoOwner", "org.freedesktop.DBus.Error.ServiceUnknown":
+			code = ReasonDisconnected
+		}
+	}
+	if errors.Is(err, dbus.ErrClosed) {
+		code = ReasonDisconnected
+	} else if errors.Is(err, context.Canceled) {
+		code = ReasonCanceled
+	}
 	return ProviderReason{Provider: candidate.Name(), Code: code, Reason: err.Error()}
 }
 
@@ -86,23 +103,21 @@ func reasonFor(candidate provider, err error) ProviderReason {
 func acquireFrom(providers []provider) (lease, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*busDeadline)
 	defer cancel()
-	var failures []error
 	unavailable := &UnavailableError{}
 	for _, candidate := range providers {
 		if err := candidate.Check(ctx); err != nil {
 			unavailable.Reasons = append(unavailable.Reasons, reasonFor(candidate, err))
+			unavailable.causes = append(unavailable.causes, err)
 			continue
 		}
 		held, err := candidate.Acquire(ctx)
 		if err == nil {
 			return held, nil
 		}
-		failures = append(failures, fmt.Errorf("%s: %w", candidate.Name(), err))
+		unavailable.Reasons = append(unavailable.Reasons, reasonFor(candidate, err))
+		unavailable.causes = append(unavailable.causes, err)
 	}
-	if len(failures) == 0 {
-		return nil, unavailable
-	}
-	return nil, errors.Join(failures...)
+	return nil, unavailable
 }
 
 // login1Provider holds a login manager inhibitor descriptor; systemd-logind
@@ -133,17 +148,15 @@ func logindAvailability(ctx context.Context, bus *dbus.Conn) error {
 	if !bus.SupportsUnixFDs() {
 		return unavailable(ReasonNoDescriptorPassing, "the system bus connection cannot pass file descriptors")
 	}
-	return nameOwnedOn(ctx, bus, linuxbus.Login1Name)
+	return nameAvailableOn(ctx, bus, linuxbus.Login1Name)
 }
 
-// nameOwnedOn is nil when name has an owner on bus; an activatable name that
-// is not running is not served.
-func nameOwnedOn(ctx context.Context, bus *dbus.Conn, name string) error {
-	owned, err := linuxbus.NameOwned(ctx, bus, name)
+func nameAvailableOn(ctx context.Context, bus *dbus.Conn, name string) error {
+	state, err := linuxbus.DiscoverName(ctx, bus, name)
 	if err != nil {
 		return unavailable(ReasonQueryFailed, "query %s: %w", name, err)
 	}
-	if !owned {
+	if state.Owner == "" && !state.Activatable {
 		return unavailable(ReasonNotServed, "%s is not served", name)
 	}
 	return nil
