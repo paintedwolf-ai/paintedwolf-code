@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,15 +37,15 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 	}
 	_ = target.Close()
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("make mounts private: %w", err)
 	}
 	source := "/proc/self/fd/" + strconv.Itoa(int(generation.Fd()))
 	if err := unix.Mount(source, policy.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bind generation: %w", err)
 	}
 	attributes := unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY | unix.MOUNT_ATTR_NOSUID | unix.MOUNT_ATTR_NODEV}
 	if err := unix.MountSetattr(unix.AT_FDCWD, policy.LogicalInstallRoot, unix.AT_RECURSIVE, &attributes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("seal generation mount: %w", err)
 	}
 	var previous unix.Stat_t
 	if err := unix.Fstat(int(desktop.Fd()), &previous); err != nil {

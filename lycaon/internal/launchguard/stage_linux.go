@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -66,5 +67,8 @@ func RunStage() error {
 		},
 		SysProcAttr: attributes,
 	}
-	return entry.Start()
+	if err := entry.Start(); err != nil {
+		return fmt.Errorf("start protected entry: %w", err)
+	}
+	return nil
 }
