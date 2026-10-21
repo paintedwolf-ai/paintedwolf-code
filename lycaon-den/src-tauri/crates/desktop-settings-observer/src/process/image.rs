@@ -3,11 +3,8 @@ use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
     io::{self, Read},
-    os::unix::{
-        fs::{MetadataExt, OpenOptionsExt},
-        io::AsRawFd,
-    },
-    path::{Path, PathBuf},
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    path::Path,
 };
 const NAME: &str = "pw-desktop-settings";
 #[derive(Deserialize)]
@@ -151,7 +148,8 @@ impl Image {
         }
         Ok(Self { file })
     }
-    pub(super) fn executable(&self) -> PathBuf {
-        PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
+    /// The verified image, which the launcher executes by descriptor.
+    pub(super) fn file(&self) -> &File {
+        &self.file
     }
 }
