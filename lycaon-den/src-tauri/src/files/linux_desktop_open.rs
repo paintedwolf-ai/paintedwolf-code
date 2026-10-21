@@ -119,8 +119,13 @@ pub fn show_item(path: &Path) -> Result<Via, String> {
             Err(error) => return Err(format!("The file manager did not open the item: {error}")),
         }
     }
-    let parent = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
-    open_file(parent)
+    // Without FileManager1 nothing can select the item, so reveal opens its containing folder.
+    open_file(containing_folder(path))
+}
+
+/// Where revealing `path` lands: the folder that contains it, for files and folders alike.
+fn containing_folder(path: &Path) -> &Path {
+    path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(path)
 }
 
 pub fn open_in_default_browser(uri: &str) -> Result<(), String> {
@@ -145,6 +150,17 @@ mod tests {
             assert!(!unanswered(&remote(name)), "{name}");
         }
         assert!(!unanswered(&glib::Error::new(gio::IOErrorEnum::PermissionDenied, "fixture")));
+    }
+    #[test]
+    fn reveal_falls_back_to_the_containing_folder_for_files_and_folders() {
+        let root = crate::test_support::TempDir::new("reveal-fallback");
+        let folder = root.join("project");
+        std::fs::create_dir(&folder).unwrap();
+        let file = folder.join("notes é.txt");
+        std::fs::write(&file, b"fixture").unwrap();
+        assert_eq!(containing_folder(&file), folder.as_path());
+        assert_eq!(containing_folder(&folder), root.path());
+        assert_eq!(containing_folder(Path::new("/")), Path::new("/"));
     }
     #[test]
     fn local_file_uris_preserve_reserved_and_unicode_bytes() {
