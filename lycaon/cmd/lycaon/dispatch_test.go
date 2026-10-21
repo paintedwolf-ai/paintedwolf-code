@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/version"
 )
 
@@ -60,7 +61,7 @@ func TestVersionFlagPrintsTheStampedProductVersion(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
 	if err := printVersion(&out, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "printVersion failed", err)
 	}
 	if want := "Painted Wolf Code " + version.Version + "\n"; out.String() != want {
 		t.Fatalf("printVersion = %q, want %q", out.String(), want)
