@@ -133,7 +133,8 @@ func (o *ipcObjects) check(private bool) error {
 		return errors.Join(shmErr, semErr, o.sendMessage())
 	}
 	if shmErr == nil || semErr == nil || msgErr == 0 {
-		return fmt.Errorf("foreign IPC reachable: shared memory=%v semaphore=%v message queue=%v", shmErr, semErr, msgErr)
+		return fmt.Errorf("foreign IPC reachable: shared memory denied=%t semaphore denied=%t message queue denied=%t",
+			shmErr != nil, semErr != nil, msgErr != 0)
 	}
 	return nil
 }
