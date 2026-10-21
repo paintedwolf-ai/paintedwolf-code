@@ -36,7 +36,7 @@ type supervisedProgram struct {
 	sessionID  string
 	closed     bool
 	cancel     context.CancelCauseFunc
-	jobs       map[int]context.CancelCauseFunc
+	jobs       map[int]*supervisedJob
 	nextJob    int
 	foreground bool
 	settle     func()
@@ -114,6 +114,11 @@ func (s *ProgramSupervisor) Lost(ctx context.Context, sessionID, detailReference
 	return s.Interrupter.InterruptPrograms(ctx, sessionID, detailReference)
 }
 
+// StopAll stops every session's programs, for the host disable control.
+func (s *ProgramSupervisor) StopAll() []string {
+	return s.end("", ErrProgramStopped)
+}
+
 func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 	if s == nil {
 		return nil
@@ -121,53 +126,82 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 	s.mu.Lock()
 	var ids []string
 	var cancels []context.CancelCauseFunc
+	var jobs []*supervisedJob
 	for id, program := range s.programs {
-		if program.sessionID != sessionID || program.closed {
+		if (sessionID != "" && program.sessionID != sessionID) || program.closed {
 			continue
 		}
 		program.closed = true
 		ids = append(ids, id)
 		cancels = append(cancels, program.cancel)
 		for _, job := range program.jobs {
-			cancels = append(cancels, job)
+			jobs = append(jobs, job)
 		}
 	}
 	s.mu.Unlock()
 	for _, cancel := range cancels {
 		cancel(cause)
 	}
+	for _, job := range jobs {
+		job.end(cause)
+	}
 	return ids
+}
+
+// supervisedJob is one held & job: its context and the registry stop that
+// marks the job's handle stopped when supervision ends it.
+type supervisedJob struct {
+	mu     sync.Mutex
+	cancel context.CancelCauseFunc
+	stop   func()
+}
+
+func (j *supervisedJob) end(cause error) {
+	j.mu.Lock()
+	stop := j.stop
+	j.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
+	j.cancel(cause)
 }
 
 // Hold keeps a program supervised for one & job beyond its foreground. The
 // job context keeps the program's identity, survives the launching call and
-// is canceled by Stop or loss; release ends the hold exactly once.
-func (s *ProgramSupervisor) Hold(ctx context.Context) (context.Context, func(), error) {
+// ends on Stop or loss, which also calls the stop registered with setStop.
+// release ends the hold exactly once.
+func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, setStop func(func()), release func(), err error) {
 	id, _ := ctx.Value(supervisedKey{}).(string)
 	if s == nil || id == "" {
-		return nil, nil, fmt.Errorf("program job is outside supervision")
+		return nil, nil, nil, fmt.Errorf("program job is outside supervision")
 	}
 	jobCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+	job := &supervisedJob{cancel: cancel}
 	s.mu.Lock()
 	program, ok := s.programs[id]
 	if !ok || program.closed {
 		s.mu.Unlock()
 		cancel(ErrProgramStopped)
-		return nil, nil, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": id, "reason": "program admission closed"})
+		return nil, nil, nil, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": id, "reason": "program admission closed"})
 	}
 	if program.jobs == nil {
-		program.jobs = map[int]context.CancelCauseFunc{}
+		program.jobs = map[int]*supervisedJob{}
 	}
 	program.nextJob++
-	job := program.nextJob
-	program.jobs[job] = cancel
+	key := program.nextJob
+	program.jobs[key] = job
 	s.mu.Unlock()
 	var once sync.Once
-	return jobCtx, func() {
+	setStop = func(stop func()) {
+		job.mu.Lock()
+		job.stop = stop
+		job.mu.Unlock()
+	}
+	return jobCtx, setStop, func() {
 		once.Do(func() {
 			cancel(nil)
 			s.mu.Lock()
-			delete(program.jobs, job)
+			delete(program.jobs, key)
 			s.mu.Unlock()
 			s.finishIfIdle(id)
 		})

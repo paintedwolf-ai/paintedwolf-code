@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -15,6 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -39,15 +42,30 @@ type ProgramRuntime struct {
 	Supervisor *ProgramSupervisor
 	Evaluate   commandprogram.Evaluator
 	Expand     commandprogram.Expander
-	// Actor returns the host-attributed person for the invocation.
-	Actor    func(tools.ToolContext) string
-	Builtins func(tools.ToolContext) map[string]commandprogram.OperationDispatcher
+	// Owners names the host owner when no authenticated request started the work.
+	Owners   people.OwnerSource
+	Builtins func(context.Context, tools.ToolContext) (map[string]commandprogram.OperationDispatcher, error)
 	Natives  map[string]NativeOperation
+	// Listeners observes session-owned listeners; nil uses process lineage.
+	Listeners SessionListeners
 
 	mu            sync.Mutex
 	outputs       map[string]*invocation.ProgramOutputRetention
 	resources     *sessionOutputResources
 	resourcesOnce sync.Once
+	disabled      atomic.Bool
+}
+
+// SetDisabled turns the command program control off or on. Turning it off
+// refuses new programs and stops every supervised program and its owned jobs,
+// which settle with their actual outcomes; nothing is rerouted to a shell.
+// It returns the programs whose stop was requested.
+func (r *ProgramRuntime) SetDisabled(disabled bool) []string {
+	r.disabled.Store(disabled)
+	if !disabled || r.Supervisor == nil {
+		return nil
+	}
+	return r.Supervisor.StopAll()
 }
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
@@ -94,7 +112,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
 	}
-	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Actor == nil {
+	if r != nil && r.disabled.Load() {
+		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
+	}
+	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Owners == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
 	catalog, err := toolcontract.LanguageV1()
@@ -109,6 +130,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	actor, err := people.Acting(ctx, r.Owners)
+	if err != nil {
+		return "", err
+	}
 	parsed, snapshot, err := parseProgram(ctx, memory, source)
 	if err != nil {
 		return "", err
@@ -119,7 +144,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	root := toolcontract.OperationInvocation{
 		Kind:         toolcontract.ProgramChildInvocation,
 		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
-		ActorID:      r.Actor(tc),
+		ActorID:      actor.ID,
 		SessionID:    tc.Identity.SessionID,
 		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID},
 		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
@@ -160,11 +185,19 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	builtins := map[string]commandprogram.OperationDispatcher{}
 	if r.Builtins != nil {
-		builtins = r.Builtins(tc)
+		if builtins, err = r.Builtins(ctx, tc); err != nil {
+			return "", err
+		}
 	}
 	jobs := &SessionJobs{Registry: r.Background, Supervisor: r.Supervisor, SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID}
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, external: ExternalStages{ToolContext: tc}, binder: commandprogram.CatalogBinder{}}
-	for name, builtin := range jobBuiltins(jobs, run.commands) {
+	host := jobBuiltins(jobs, run.commands)
+	listeners := r.Listeners
+	if listeners == nil {
+		listeners = lineage.SessionListeners
+	}
+	host["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	for name, builtin := range host {
 		if _, taken := dispatcher.builtins[name]; !taken {
 			dispatcher.builtins[name] = builtin
 		}

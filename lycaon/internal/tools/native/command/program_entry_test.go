@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -32,6 +35,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type programFixture struct {
@@ -41,6 +45,12 @@ type programFixture struct {
 	session  string
 	dir      string
 	calls    int
+}
+
+type fixtureOwner struct{}
+
+func (fixtureOwner) HostOwner(context.Context) (people.Person, error) {
+	return people.Person{ID: "fixture-person", Role: api.PersonRoleOwner}, nil
 }
 
 type progressFacts struct{ store progress.Store }
@@ -74,7 +84,7 @@ func newProgramFixture(t *testing.T, evaluate commandprogram.Evaluator) *program
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Background: background,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder}, Evaluate: evaluate,
-		Actor:   func(tools.ToolContext) string { return "fixture-person" },
+		Owners:  fixtureOwner{},
 		Natives: map[string]command.NativeOperation{"tee": teeOperation(dir)},
 	}
 	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir}
@@ -361,5 +371,61 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 	testutil.FailErr(t, "repeat reconciliation", err)
 	if count != 0 || fmt.Sprint(f.executions(t)) != fmt.Sprint(before) || before["external"] != "interrupted;" {
 		t.Fatalf("loss replayed or rewrote children: before %v after %v count %d", before, f.executions(t), count)
+	}
+}
+
+func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
+	evaluator := &literalEvaluator{}
+	f := newProgramFixture(t, evaluator.evaluate)
+	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
+	testutil.FailErr(t, "launch owned job", err)
+	if stopped := f.runtime.SetDisabled(true); len(stopped) != 1 {
+		t.Fatalf("disable stopped %v", stopped)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if _, stopped, err := f.runtime.Background.Lifecycle.Wait(ctx, f.session, evaluator.handles[0]); err != nil || !stopped {
+		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for f.programRows(t)[0] == "running" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	_, err = f.call(t, t.Context(), "external -- /bin/echo after")
+	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
+		t.Fatalf("disabled entry admitted a program: %v", err)
+	}
+	if programs := f.programRows(t); len(programs) != 1 || programs[0] == "running" {
+		t.Fatalf("programs after disable %v", programs)
+	}
+	f.runtime.SetDisabled(false)
+	if out, err := f.call(t, t.Context(), "external -- /bin/echo again"); err != nil || !strings.Contains(out, `"stdout":"again\n"`) {
+		t.Fatalf("re-enabled entry %s %v", out, err)
+	}
+}
+
+func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
+	evaluator := &literalEvaluator{}
+	f := newProgramFixture(t, evaluator.evaluate)
+	var asked []string
+	f.runtime.Listeners = func(_ context.Context, session string) ([]lineage.SocketObservation, error) {
+		asked = append(asked, session)
+		return []lineage.SocketObservation{{Local: netip.MustParseAddrPort("127.0.0.1:8080"), Listening: true}}, nil
+	}
+	out, err := f.call(t, t.Context(), "lsof -i :8080 -sTCP:LISTEN")
+	testutil.FailErr(t, "lsof owned port", err)
+	if !strings.Contains(out, `"stdout":"8080 127.0.0.1:8080 LISTEN\n"`) || !strings.Contains(out, `"status":0`) {
+		t.Fatalf("lsof output %s", out)
+	}
+	out, err = f.call(t, t.Context(), "lsof -iTCP:9090")
+	testutil.FailErr(t, "lsof unowned port", err)
+	if !strings.Contains(out, `"stdout":""`) || !strings.Contains(out, `"status":1`) {
+		t.Fatalf("unowned port listed %s", out)
+	}
+	if _, err := f.call(t, t.Context(), "lsof -i 8080"); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("malformed endpoint accepted: %v", err)
+	}
+	if len(asked) != 2 || asked[0] != f.session || asked[1] != f.session {
+		t.Fatalf("listener observation scope %v", asked)
 	}
 }

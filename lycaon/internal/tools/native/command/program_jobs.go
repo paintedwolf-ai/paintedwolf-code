@@ -40,7 +40,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 	if j == nil || j.Registry == nil || launch.Run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
 	}
-	jobCtx, release, err := j.Supervisor.Hold(ctx)
+	jobCtx, setStop, release, err := j.Supervisor.Hold(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -69,6 +69,7 @@ func (j *SessionJobs) Start(ctx context.Context, launch commandprogram.JobLaunch
 		close(ready)
 		return "", err
 	}
+	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
 	close(ready)
 	return handle, nil
 }
