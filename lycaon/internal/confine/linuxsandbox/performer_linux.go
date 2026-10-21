@@ -122,8 +122,14 @@ func ServePerformer() error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return fmt.Errorf("performer dumpable: %w", err)
 	}
+	return servePathCalls(performerFD)
+}
+
+// servePathCalls reads the floors, then answers calls on fd until the
+// supervisor closes it.
+func servePathCalls(fd int) error {
 	buf := make([]byte, maxPathMessage)
-	n, _, _, _, err := unix.Recvmsg(performerFD, buf, nil, 0)
+	n, _, _, _, err := unix.Recvmsg(fd, buf, nil, 0)
 	if err != nil {
 		return fmt.Errorf("performer floors: %w", err)
 	}
@@ -134,7 +140,7 @@ func ServePerformer() error {
 	floors := newCreationFloors(fs)
 	oob := make([]byte, unix.CmsgSpace(4*2))
 	for {
-		n, oobn, _, _, err := unix.Recvmsg(performerFD, buf, oob, unix.MSG_CMSG_CLOEXEC)
+		n, oobn, _, _, err := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
@@ -147,15 +153,15 @@ func ServePerformer() error {
 		if json.Unmarshal(buf[:n], &call) == nil && call.Dirs == len(dirs) {
 			result, opened = floors.perform(call, dirs)
 		}
-		for _, fd := range dirs {
-			_ = unix.Close(fd)
+		for _, dir := range dirs {
+			_ = unix.Close(dir)
 		}
 		reply, _ := json.Marshal(result)
 		var rights []byte
 		if opened >= 0 {
 			rights = unix.UnixRights(opened)
 		}
-		err = unix.Sendmsg(performerFD, reply, rights, nil, 0)
+		err = unix.Sendmsg(fd, reply, rights, nil, 0)
 		if opened >= 0 {
 			_ = unix.Close(opened)
 		}

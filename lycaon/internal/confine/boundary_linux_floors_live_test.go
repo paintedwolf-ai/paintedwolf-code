@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -103,6 +104,20 @@ func floorsOp(op string, args []string) error {
 			return fmt.Errorf("content %q", raw)
 		}
 		return unwrapErrno(err)
+	case "bulk":
+		// Create many files, as a build or package install does.
+		count, err := strconv.Atoi(arg(1))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < count; i++ {
+			fd, err := unix.Open(filepath.Join(arg(0), "f"+strconv.Itoa(i)), unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC|unix.O_CLOEXEC, 0o644)
+			if err != nil {
+				return err
+			}
+			_ = unix.Close(fd)
+		}
+		return nil
 	case "ready":
 		// The boundary is applied; the test may now change the host.
 		return nil
@@ -385,4 +400,52 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	if !strings.Contains(joined, "read "+beside+" readable: ok") || !strings.Contains(joined, "waitread "+secret+": EACCES") {
 		t.Fatalf("absent read floor:\n%s", joined)
 	}
+}
+
+// benchCreates is how many files one measured command creates.
+const benchCreates = 20000
+
+// BenchmarkLinuxConfinedFileCreates measures a create-heavy command under the
+// boundary; compare BenchmarkLinuxUnconfinedFileCreates for the cost of
+// performing each create through the supervisor.
+func BenchmarkLinuxConfinedFileCreates(b *testing.B) {
+	if caps, _ := confine.LinuxCapabilities(); !caps.Available() {
+		b.Fatalf("linux confinement unavailable: %+v", caps)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		b.Fatalf("test binary: %v", err)
+	}
+	for i := 0; i < b.N; i++ {
+		root := b.TempDir()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, projectConfinement(root))
+		if err != nil {
+			b.Fatalf("confine.Command: %v", err)
+		}
+		cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"=bulk "+root+" "+strconv.Itoa(benchCreates))
+		out, err := cmd.CombinedOutput()
+		cleanup()
+		cancel()
+		if err != nil || !strings.Contains(string(out), ": ok") {
+			b.Fatalf("confined creates: %v\n%s", err, out)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Microseconds())/float64(b.N*benchCreates), "us/create")
+}
+
+func BenchmarkLinuxUnconfinedFileCreates(b *testing.B) {
+	self, err := os.Executable()
+	if err != nil {
+		b.Fatalf("test binary: %v", err)
+	}
+	for i := 0; i < b.N; i++ {
+		root := b.TempDir()
+		cmd := exec.Command(self, probeTestFlag)
+		cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"=bulk "+root+" "+strconv.Itoa(benchCreates))
+		if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), ": ok") {
+			b.Fatalf("host creates: %v\n%s", err, out)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Microseconds())/float64(b.N*benchCreates), "us/create")
 }
