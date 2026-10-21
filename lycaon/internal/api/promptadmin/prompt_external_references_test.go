@@ -69,6 +69,13 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 		t.Fatalf("preparePromptAdmission failed: code=%d body=%s", response.Code, response.Body.String())
 	}
 
+	if len(grantedRT.List(sess.ID)) != 0 {
+		t.Fatal("preparing a prompt installed access before admission")
+	}
+	installed, err := handler.Submission.grantPromptReferences(t.Context(), sess.ID, req.OperationID, prepared.input.ContentParts)
+	testutil.FailErr(t, "install submission grants", err)
+	defer handler.Submission.revokePromptGrants(installed)
+
 	// Verify grants in GrantedPaths
 	if _, ok := grantedRT.Covers(sess.ID, "", extFile, grantedpath.ModeWrite); !ok {
 		t.Errorf("file %s was not granted write mode", extFile)
@@ -98,5 +105,25 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 	// Verify content parts contains references
 	if len(prepared.input.ContentParts) == 0 {
 		t.Fatalf("expected ContentParts to be populated")
+	}
+}
+
+func TestPromptGrantRollbackPreservesAnotherSubmission(t *testing.T) {
+	handler, _, _, sess := newPromptAttachmentRecoveryFixture(t)
+	handler.Submission.Store = handler.Attachments.Store
+	handler.Submission.GrantedPaths = grantedpath.NewRuntime()
+	path := filepath.Join(canonPath(t, t.TempDir()), "notes.txt")
+	parts := []wire.MessageContentPart{{Path: path, ReferenceKind: wire.MessageReferenceKindExternalFile}}
+	first, err := handler.Submission.grantPromptReferences(t.Context(), sess.ID, uuid.NewString(), parts)
+	testutil.FailErr(t, "first grant", err)
+	second, err := handler.Submission.grantPromptReferences(t.Context(), sess.ID, uuid.NewString(), parts)
+	testutil.FailErr(t, "second grant", err)
+	handler.Submission.revokePromptGrants(second)
+	if _, ok := handler.Submission.GrantedPaths.Covers(sess.ID, "", path, grantedpath.ModeWrite); !ok {
+		t.Fatal("rollback revoked another submission's grant")
+	}
+	handler.Submission.revokePromptGrants(first)
+	if _, ok := handler.Submission.GrantedPaths.Covers(sess.ID, "", path, grantedpath.ModeWrite); ok {
+		t.Fatal("refused submission retained access")
 	}
 }

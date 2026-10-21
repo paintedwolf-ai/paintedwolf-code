@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/blobstore"
-	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptattach"
@@ -24,7 +23,6 @@ import (
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -109,8 +107,16 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	installed, err := s.grantPromptReferences(r.Context(), id, req.OperationID, prepared.input.ContentParts)
+	if err != nil {
+		_ = attachStore.Release(req.OperationID, acquired)
+		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
+		s.responses.InternalError(w, r, err)
+		return
+	}
 	row, _, err := s.Sessions.Submissions.AdmitPrompt(r.Context(), id, req.OperationID, req, prepared.input)
 	if err != nil {
+		s.revokePromptGrants(installed)
 		if releaseErr := attachStore.Release(req.OperationID, acquired); releaseErr != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(r.Context(), "release unadmitted prompt attachments", "operation_id", req.OperationID, "error", releaseErr)
 		}
@@ -243,26 +249,6 @@ func (s *Submission) preparePromptAdmission(
 	for _, part := range ingested.Parts {
 		if part.BlobID != "" {
 			retainedBlobIDs = append(retainedBlobIDs, part.BlobID)
-		}
-	}
-
-	rootSession := sessiontree.RootID(r.Context(), s.Store, sessionID)
-	if rootSession == "" {
-		rootSession = sessionID
-	}
-	if s.GrantedPaths != nil {
-		for _, part := range refResult.Parts {
-			if part.ReferenceKind == wire.MessageReferenceKindExternalFile ||
-				part.ReferenceKind == wire.MessageReferenceKindExternalFolder {
-				isTree := part.ReferenceKind == wire.MessageReferenceKindExternalFolder
-				grantID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("prompt-drop:"+rootSession+":"+part.Path)).String()
-				_, _ = s.GrantedPaths.Grant(rootSession, grantedpath.Grant{
-					ID:   grantID,
-					Path: part.Path,
-					Mode: grantedpath.ModeWrite,
-					Tree: isTree,
-				})
-			}
 		}
 	}
 
