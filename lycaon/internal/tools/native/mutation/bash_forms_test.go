@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -84,15 +85,21 @@ func TestTouchRelativeDatesAndReference(t *testing.T) {
 	if got := accessTime(t, h, "a.txt"); !got.Equal(stamp.Add(time.Hour)) {
 		t.Fatalf("reference atime %v", got)
 	}
-	before := accessTime(t, h, "m.txt")
+	old := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	testutil.FailErr(t, "age m.txt", os.Chtimes(h.path("m.txt"), old, old))
 	if r := h.run("", "touch", "-m", "-d", "2 days ago", "m.txt"); r.err != nil {
 		t.Fatalf("touch -m -d: %v", r.err)
 	}
 	if got := time.Since(modTime(t, h, "m.txt")); got < 47*time.Hour || got > 49*time.Hour {
 		t.Fatalf("relative mtime is %v ago", got)
 	}
-	if got := accessTime(t, h, "m.txt"); !got.Equal(before) {
-		t.Fatal("-m changed the access time")
+	// Reading the file for its revision may refresh the access time; -m must
+	// not set it to the requested time.
+	if got := time.Since(accessTime(t, h, "m.txt")); got > 47*time.Hour && got < 49*time.Hour {
+		t.Fatal("-m set the access time")
+	}
+	if r := h.run("", "touch", "-a", "-t", "202001020304", "m.txt"); r.err != nil || time.Since(modTime(t, h, "m.txt")) < 47*time.Hour {
+		t.Fatalf("touch -a -t changed the modification time: %v", r.err)
 	}
 	if r := h.run("", "touch", "-d", "yesterday", "m.txt"); r.err != nil || time.Since(modTime(t, h, "m.txt")) < 23*time.Hour {
 		t.Fatalf("touch -d yesterday: %v", r.err)
@@ -192,7 +199,7 @@ func TestGzipListMatchesGNUColumns(t *testing.T) {
 }
 
 func TestVerboseMutationMessages(t *testing.T) {
-	h := newHarness(t, map[string]string{"a.txt": "a", "it's.txt": "q", "dir/inner.txt": "i", "gone.txt": "g", "tree/x.txt": "x"})
+	h := newHarness(t, map[string]string{"a.txt": "a", "it's.txt": "q", "dir/inner.txt": "i", "gone.txt": "g", "tree/x.txt": "x", "tree/sub/": ""})
 	cases := []struct {
 		args   []string
 		stdout string
@@ -203,7 +210,6 @@ func TestVerboseMutationMessages(t *testing.T) {
 		{[]string{"mv", "--verbose", "c.txt", "dir/"}, "renamed 'c.txt' -> 'dir/c.txt'\n"},
 		{[]string{"mkdir", "-v", "made"}, "mkdir: created directory 'made'\n"},
 		{[]string{"rm", "-v", "gone.txt"}, "removed 'gone.txt'\n"},
-		{[]string{"rm", "-rv", "tree"}, "removed directory 'tree'\n"},
 	}
 	for _, c := range cases {
 		r := h.run("", c.args...)
@@ -211,11 +217,17 @@ func TestVerboseMutationMessages(t *testing.T) {
 			t.Fatalf("%v: stdout %q status %d err %v", c.args, r.stdout, r.result.Status, r.err)
 		}
 	}
+	tree := h.run("", "rm", "-rv", "tree")
+	lines := strings.Split(strings.TrimSuffix(tree.stdout, "\n"), "\n")
+	slices.Sort(lines)
+	if tree.err != nil || !slices.Equal(lines, []string{"removed 'tree/x.txt'", "removed directory 'tree'", "removed directory 'tree/sub'"}) || !strings.HasSuffix(tree.stdout, "removed directory 'tree'\n") {
+		t.Fatalf("rm -rv: %q %v", tree.stdout, tree.err)
+	}
 	if !h.absent("tree") || h.read("dir/c.txt") != "a" || h.read("dir/it's.txt") != "q" {
 		t.Fatal("verbose mutations did not apply")
 	}
 	pv := h.run("", "mkdir", "-pv", "deep/er/est")
-	if pv.err != nil || !strings.HasSuffix(pv.stdout, "mkdir: created directory 'deep/er/est'\n") || !strings.HasPrefix(pv.stdout, "mkdir: created directory 'deep") {
+	if pv.err != nil || pv.stdout != "mkdir: created directory 'deep'\nmkdir: created directory 'deep/er'\nmkdir: created directory 'deep/er/est'\n" {
 		t.Fatalf("mkdir -pv: %q %v", pv.stdout, pv.err)
 	}
 	if r := h.run("", "cp", "a.txt", "quiet.txt"); r.stdout != "" {

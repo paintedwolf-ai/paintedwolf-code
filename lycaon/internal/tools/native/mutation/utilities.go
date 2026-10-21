@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"crypto/rand"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -48,14 +49,24 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		info, statErr := os.Lstat(bound.Resolved.Abs)
+		directories, err := inv.directoriesUnder(bound.Resolved.Abs)
+		if err != nil {
+			return 0, err
+		}
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
+		// The owner reports the operand as given and the entries beneath it
+		// scope-relative; both map back onto the bound path.
+		scope := filepath.ToSlash(bound.Resolved.ScopeRel) + "/"
 		for _, deleted := range result.Deleted {
-			if deleted == bound.Resolved.Abs && statErr == nil && info.IsDir() {
-				inv.verbose("removed directory %s", quote(operand))
-			} else {
-				inv.verbose("removed %s", quote(displayed(deleted, bound.Resolved.Abs, operand)))
+			abs := bound.Resolved.Abs
+			if rel, ok := strings.CutPrefix(deleted, scope); ok {
+				abs = filepath.Join(abs, filepath.FromSlash(rel))
 			}
+			kind := "removed"
+			if directories[abs] {
+				kind = "removed directory"
+			}
+			inv.verbose("%s %s", kind, quote(displayed(abs, bound.Resolved.Abs, operand)))
 		}
 		return len(result.Deleted), err
 	})
@@ -174,9 +185,20 @@ func runMkdir(inv *invocation) error {
 				return 0, nil
 			}
 		}
+		// The owner reports the requested directory; -pv also names each
+		// missing parent it creates, outermost first.
+		var missing []string
+		for dir := bound.Resolved.Abs; ; dir = filepath.Dir(dir) {
+			if _, err := os.Lstat(dir); err == nil || filepath.Dir(dir) == dir {
+				break
+			}
+			missing = append([]string{dir}, missing...)
+		}
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{bound.Resolved.Abs}, Mode: mode}, inv.tc)
-		for _, dir := range created {
-			inv.verbose("mkdir: created directory %s", quote(ancestorDisplay(dir, bound.Resolved.Abs, operand)))
+		if len(created) > 0 {
+			for _, dir := range missing {
+				inv.verbose("mkdir: created directory %s", quote(ancestorDisplay(dir, bound.Resolved.Abs, operand)))
+			}
 		}
 		return len(created), err
 	})
@@ -194,6 +216,32 @@ func ancestorDisplay(dir, boundAbs, operand string) string {
 		shown = strings.TrimSuffix(path.Dir(shown), "/")
 	}
 	return shown
+}
+
+// directoriesUnder records which paths of a tree rm -v is about to remove
+// are directories, so its messages name them as GNU rm does.
+func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
+	if !inv.flag("-v") {
+		return nil, nil
+	}
+	directories := map[string]bool{}
+	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
+	err := filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if seen++; seen > maximum {
+			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
+		}
+		if entry.IsDir() {
+			directories[walked] = true
+		}
+		return nil
+	})
+	return directories, err
 }
 
 // refuseLinks stops cp -a before copying a tree that holds a symbolic link:
