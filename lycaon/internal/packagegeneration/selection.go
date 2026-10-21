@@ -30,7 +30,7 @@ func (l layout) selectGeneration(identity string, commit func(Generation) error)
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func (l layout) selectGeneration(identity string, commit func(Generation) error)
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	if err := verifyExisting(filepath.Join(l.store, identity), raw, manifest, l.owner); err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (l layout) reclaim(identity string, freshSelection func() (string, error)) 
 	if err != nil {
 		return false, err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		if errors.Is(err, unix.EWOULDBLOCK) {
 			return false, nil
