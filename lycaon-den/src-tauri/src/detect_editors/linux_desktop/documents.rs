@@ -1,23 +1,26 @@
 //! Exact-document grants for an explicitly selected external Flatpak editor.
+//!
+//! The document portal identifies its caller through `/proc/<pid>/root`, which
+//! the non-dumpable release shell does not expose, so the shell never calls it.
+//! The launcher's own `flatpak document-export` runs as a fresh executable,
+//! which the portal can identify, and grants the app exactly one file or
+//! folder for the session.
 
-use std::collections::HashMap;
-use std::os::unix::{ffi::OsStringExt, fs::OpenOptionsExt};
+use std::ffi::OsString;
+use std::io::Read;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
-use glib::variant::Handle;
-use gtk::{gio, glib, prelude::*};
+const TIMEOUT: Duration = Duration::from_secs(5);
+const OUTPUT_LIMIT: usize = 8192;
 
-const SERVICE: &str = "org.freedesktop.portal.Documents";
-const OBJECT: &str = "/org/freedesktop/portal/documents";
-const TIMEOUT_MS: i32 = 5_000;
-
-/// Unique, nonpersistent exports live through the editor's desktop session.
-/// A launch failure removes the unused grant; a successful launch retains it.
+/// A unique, session-only export. A launch failure removes the unused grant;
+/// a successful launch retains it.
 pub(crate) struct Export {
     pub(crate) path: PathBuf,
-    bus: gio::DBusConnection,
-    owner: String,
+    flatpak: PathBuf,
     id: String,
     retained: bool,
 }
@@ -31,160 +34,110 @@ impl Export {
 impl Drop for Export {
     fn drop(&mut self) {
         if !self.retained {
-            let _ = self.bus.call_sync(
-                Some(&self.owner),
-                OBJECT,
-                SERVICE,
-                "Delete",
-                Some(&(self.id.as_str(),).to_variant()),
-                None,
-                gio::DBusCallFlags::NONE,
-                500,
-                gio::Cancellable::NONE,
-            );
+            let mut command = Command::new(&self.flatpak);
+            command.args(["document-unexport", "--doc-id", &self.id]);
+            let _ = run(command, TIMEOUT);
         }
     }
 }
 
-pub(crate) fn export(path: &Path, app: &str) -> Result<Export, String> {
-    let context = glib::MainContext::new();
-    let bus = context
-        .with_thread_default(|| {
-            crate::linux_desktop::bus::connect_session(&context, Duration::from_millis(500))
-        })
-        .map_err(|error| error.to_string())??;
-    export_on(&bus, path, app)
+/// Exports `path` to `app` with the same `flatpak` program the desktop entry runs.
+pub(crate) fn export(flatpak: &Path, path: &Path, app: &str) -> Result<Export, String> {
+    export_within(flatpak, path, app, TIMEOUT)
 }
 
-fn export_on(bus: &gio::DBusConnection, path: &Path, app: &str) -> Result<Export, String> {
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
-        .open(path)
-        .map_err(|error| format!("The editor file is unavailable: {error}"))?;
-    let flags = if file.metadata().map_err(|error| error.to_string())?.is_dir() {
-        8u32
-    } else {
-        0u32
-    };
-    let files = gio::UnixFDList::new();
-    let index = files.append(file).map_err(|error| error.to_string())?;
-    let message =
-        gio::DBusMessage::new_method_call(Some(SERVICE), OBJECT, Some(SERVICE), "AddFull");
-    message.set_body(&(vec![Handle(index)], flags, app, vec!["read", "write"]).to_variant());
-    message.set_unix_fd_list(Some(&files));
-    let (reply, _) = bus
-        .send_message_with_reply_sync(
-            &message,
-            gio::DBusSendMessageFlags::NONE,
-            TIMEOUT_MS,
-            gio::Cancellable::NONE,
-        )
-        .map_err(|error| format!("The document portal is unavailable: {error}"))?;
-    if reply.message_type() == gio::DBusMessageType::Error {
+fn export_within(flatpak: &Path, path: &Path, app: &str, timeout: Duration) -> Result<Export, String> {
+    if !path.is_absolute() || path.file_name().is_none() {
+        return Err("The editor file has no absolute name.".into());
+    }
+    let mut command = Command::new(flatpak);
+    command
+        .args(["document-export", "--unique", "--transient", "--allow-read", "--allow-write"])
+        .arg(format!("--app={app}"))
+        .arg("--")
+        .arg(path);
+    let output = run(command, timeout)?;
+    if !output.success {
         return Err(format!(
             "The document portal refused editor access: {}",
-            reply.error_name().as_deref().unwrap_or("unknown error")
+            String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    let owner = reply
-        .sender()
-        .ok_or("The document portal reply has no owner")?
-        .to_string();
-    let (ids, extra) = reply
-        .body()
-        .and_then(|body| body.get::<(Vec<String>, HashMap<String, glib::Variant>)>())
-        .ok_or("Invalid document portal export response")?;
-    let id = export_id(&ids)?;
-    let mut export = Export {
-        path: PathBuf::new(),
-        bus: bus.clone(),
-        owner,
-        id,
-        retained: false,
+    let (exported, id) = exported_path(output.stdout, path)?;
+    Ok(Export { path: exported, flatpak: flatpak.to_path_buf(), id, retained: false })
+}
+
+struct Output {
+    success: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+/// Runs `command` to completion, stopping the child it started past `timeout`.
+fn run(mut command: Command, timeout: Duration) -> Result<Output, String> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Flatpak is unavailable: {error}"))?;
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            stop(&mut child);
+            return Err("The document portal did not answer in time.".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
     };
-    let mount = if let Some(mount) = extra
-        .get("mountpoint")
-        .and_then(|value| value.get::<Vec<u8>>())
+    Ok(Output {
+        success: status.success(),
+        stdout: bounded(child.stdout.take()),
+        stderr: bounded(child.stderr.take()),
+    })
+}
+
+fn stop(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn bounded(stream: Option<impl Read>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    if let Some(stream) = stream {
+        let _ = stream.take(OUTPUT_LIMIT as u64).read_to_end(&mut bytes);
+    }
+    bytes
+}
+
+/// The export is `<mount>/<id>/<original name>`; anything else is refused.
+fn exported_path(mut stdout: Vec<u8>, original: &Path) -> Result<(PathBuf, String), String> {
+    if stdout.last() == Some(&b'\n') {
+        stdout.pop();
+    }
+    if stdout.is_empty() || stdout.len() >= OUTPUT_LIMIT || stdout.contains(&b'\n') || stdout.contains(&0) {
+        return Err("Invalid document portal export".into());
+    }
+    let exported = PathBuf::from(OsString::from_vec(stdout));
+    let id = exported
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|id| id.to_str())
+        .ok_or("Invalid document portal identifier")?;
+    if !exported.is_absolute()
+        || exported.file_name() != original.file_name()
+        || id.is_empty()
+        || id.len() > 128
+        || !id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        || exported.parent().and_then(Path::parent).is_none_or(|mount| mount == Path::new("/"))
     {
-        mount
-    } else {
-        let reply = bus
-            .call_sync(
-                Some(&export.owner),
-                OBJECT,
-                SERVICE,
-                "GetMountPoint",
-                None,
-                None,
-                gio::DBusCallFlags::NONE,
-                TIMEOUT_MS,
-                gio::Cancellable::NONE,
-            )
-            .map_err(|error| error.to_string())?;
-        reply
-            .get::<(Vec<u8>,)>()
-            .ok_or("Invalid document portal mount point")?
-            .0
-    };
-    export.path = exported_path(mount, &export.id, path)?;
-    Ok(export)
-}
-
-fn export_id(ids: &[String]) -> Result<String, String> {
-    let [id] = ids else {
-        return Err("Invalid document portal export count".into());
-    };
-    if id.is_empty() || id.len() > 128 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-        return Err("Invalid document portal identifier".into());
+        return Err("Invalid document portal export".into());
     }
-    Ok(id.clone())
-}
-
-fn exported_path(mut mount: Vec<u8>, id: &str, original: &Path) -> Result<PathBuf, String> {
-    if mount.last() == Some(&0) {
-        mount.pop();
-    }
-    if mount.is_empty() || mount.len() > 4096 || mount.contains(&0) {
-        return Err("Invalid document portal mount point".into());
-    }
-    let mount = PathBuf::from(std::ffi::OsString::from_vec(mount));
-    if !mount.is_absolute() {
-        return Err("The document portal mount point is not absolute".into());
-    }
-    let name = original.file_name().ok_or("The editor file has no name")?;
-    Ok(mount.join(id).join(name))
+    let id = id.to_string();
+    Ok((exported, id))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn exported_paths_preserve_unicode_and_spaces_without_navigation_suffixes() {
-        assert_eq!(
-            exported_path(
-                b"/run/user/1000/doc\0".to_vec(),
-                "abc123",
-                Path::new("/outside/a é.txt")
-            )
-            .unwrap(),
-            Path::new("/run/user/1000/doc/abc123/a é.txt")
-        );
-        for mount in [b"relative".to_vec(), b"/a\0b".to_vec(), vec![]] {
-            assert!(exported_path(mount, "abc123", Path::new("/a")).is_err());
-        }
-        assert!(exported_path(b"/doc".to_vec(), "abc123", Path::new("/")).is_err());
-        for ids in [
-            vec![],
-            vec!["../escape".into()],
-            vec!["one".into(), "two".into()],
-            vec!["".into()],
-        ] {
-            assert!(export_id(&ids).is_err());
-        }
-    }
-}
-
-#[cfg(test)]
-mod transport_tests;
+mod tests;

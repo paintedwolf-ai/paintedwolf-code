@@ -24,7 +24,7 @@ pub(super) fn spawn(entry: &EditorCatalogEntry, path: &str, line: &str) -> Resul
     let document = desktop
         .command
         .flatpak_app()?
-        .map(|app| linux_desktop::documents::export(Path::new(path), &app))
+        .map(|app| linux_desktop::documents::export(Path::new(&desktop.command.program), Path::new(path), &app))
         .transpose()?;
     let selected_path = document
         .as_ref()
