@@ -1,7 +1,7 @@
 //! Initial lock facts, native signals and bounded bus reconnection.
 
 use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
