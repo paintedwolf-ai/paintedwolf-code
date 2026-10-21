@@ -21,6 +21,11 @@ type Runner struct {
 	code   *syntax.Code
 	debug  bool
 
+	// longest makes Stop record the farthest group-0 end and keep
+	// backtracking, so one attempt explores every path from its start.
+	longest bool
+	bestEnd int
+
 	Runtextstart int // starting point for search
 
 	Runtext    []rune // text to search
@@ -239,6 +244,11 @@ func executeDefault(r *Runner) error {
 
 		switch r.operator {
 		case syntax.Stop:
+			if r.longest && r.runmatch.matchcount[0] > 0 {
+				count := r.runmatch.matchcount[0]
+				r.bestEnd = max(r.bestEnd, r.runmatch.matches[0][2*count-2]+r.runmatch.matches[0][2*count-1])
+				break
+			}
 			return nil
 
 		case syntax.Nothing:
