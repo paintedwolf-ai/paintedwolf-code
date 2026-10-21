@@ -120,7 +120,7 @@ func TestConcurrentRunLimitUsesTightestContract(t *testing.T) {
 	handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
 	for name, limit := range map[string]int{"wide": 8, "narrow": 3, "single": 1} {
 		testutil.FailErr(t, "register "+name, reg.RegisterDefinition(tools.Definition{
-			Meta: tools.ToolMeta{Name: name},
+			Meta: tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}},
 			Contract: toolcontract.Contract{
 				Owner: "test", Batch: toolcontract.BatchShared, BatchConcurrencyLimit: limit,
 			},
