@@ -92,8 +92,19 @@ The scope covers Linux amd64 and arm64 on Ubuntu 24.04 and later, Debian 13 and
 later, maintained Fedora releases satisfying the declared floors, RHEL 10
 compatibles, native Arch-family packages, and NixOS. Arch Linux supplies the
 amd64 representative; [Arch Linux ARM](https://archlinuxarm.org/about/downloads)
-supplies the aarch64 representative. Artix/OpenRC with elogind is an amd64 row;
-it does not imply that Artix supplies arm64. NixOS includes
+supplies the aarch64 representative. Artix/OpenRC with elogind has distinct amd64
+rows for current Plasma on Wayland and Xfce on X11; neither implies that Artix
+supplies arm64. Plasma 6.8 removed the X11 session, and the current Artix
+`plasma-workspace` package conflicts with the retained `plasma-x11-session`
+package. Xfce 4.20 retains X11 support, so OpenRC/X11 qualification remains
+explicit rather than relying on an incompatible Plasma combination. See the
+[KDE 6.8 changelog](https://kde.org/announcements/changelogs/plasma/6/6.7.5-6.8.0/),
+[Xfce 4.20 tour](https://www.xfce.org/about/tour420/), and current Artix
+[world](https://pkgpool.artixlinux.org/repos/world/os/x86_64/) and
+[galaxy](https://pkgpool.artixlinux.org/repos/galaxy/os/x86_64/) repository metadata.
+Both rows retain every required installation mode, scenario, scale and OpenRC
+custody obligation. Record the exact package inventory; preparation or an older
+ISO does not qualify a current rolling session. NixOS includes
 [26.05 stable](https://nixos.org/manual/nixos/stable/index.html) and a pinned
 nixos-unstable revision. Record exact maintained releases, repositories and
 input revisions when qualifying. Runtime and protocol compatibility determine admission.
