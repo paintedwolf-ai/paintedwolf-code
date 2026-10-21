@@ -4,7 +4,7 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
@@ -819,7 +819,7 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
 
 ## Web research sources
 

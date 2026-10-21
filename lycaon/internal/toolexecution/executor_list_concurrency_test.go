@@ -57,8 +57,8 @@ func TestExecutorListConcurrentCommandSchema(t *testing.T) {
 					continue
 				}
 				found = true
-				if !strings.Contains(meta.Description, "`$()` substitutions") {
-					t.Errorf("command description omits substitution guidance at root count %d", rc)
+				if !strings.Contains(meta.Description, "`$(...)`") || !strings.Contains(meta.Description, "Native utilities: ") {
+					t.Errorf("command description omits language or catalog utility guidance at root count %d", rc)
 				}
 				props, _ := meta.ArgsSchema["properties"].(map[string]any)
 				if _, hasRoot := props["root"]; hasRoot {

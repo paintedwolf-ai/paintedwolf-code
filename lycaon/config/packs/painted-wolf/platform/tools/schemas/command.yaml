@@ -1,9 +1,17 @@
 tags: [process, terminal]
 description: >-
-  Runs one command program: pipelines, `&&`/`||`/`;`, if/for/while, functions,
-  variables, `$()` substitutions, globs, here-documents, `<`/`>`/`>>`/`2>`
-  redirects and trailing `&` jobs. Catalog utilities run natively; other
-  programs run confined. The whole program is checked before anything runs.
+  Runs a bash program in the project. Write ordinary shell: pipelines,
+  `&&`/`||`/`;`, if/for/while/case, functions, variables, `$(...)`, globs,
+  here-documents, redirects such as `>`, `>>`, `<` and `2>&1`, and trailing `&`
+  jobs. Common utilities run natively with GNU behaviour and options. Other
+  programs and toolchains, such as python3, go, node, npm, make or cargo, run
+  directly inside the session sandbox. Prefer one coherent program over several
+  calls. The whole program is parsed before anything runs, then each reached
+  command is checked on its own; the result reports each command's output,
+  status and effects in order, including commands that ran before a refusal. A
+  refusal names the command and option and says what to use instead. Writes from
+  redirects and utilities publish when their command finishes. Variables,
+  functions and `cd` last for this program only.
 schema:
   type: object
   properties:
@@ -114,12 +122,13 @@ schema:
     capability_request:
       type: object
       description: >-
-        Declares confinement this invocation needs. UDP, a resolver miss, or a
-        raw socket: {"direct_ip": true} or
+        Declares extra confinement this invocation needs; omit it for ordinary
+        execution. The only keys are direct_ip, host_resources, socket_paths,
+        local_listen, loopback_connect, write_root, read_path, process_control
+        and host_execution; any other key is refused, never ignored. UDP, a
+        resolver miss or a raw socket: {"direct_ip": true} or
         {"direct_ip": {"declared_destinations": ["udp://time.nist.gov:123"]}}.
-        Other fields: host_resources, socket_paths, local_listen,
-        loopback_connect, write_root, read_path, process_control, host_execution. Do not put listen or connect
-        ids in host_resources. Omit for ordinary execution.
+        Do not put listen or connect ids in host_resources.
       properties:
         host_resources:
           type: array

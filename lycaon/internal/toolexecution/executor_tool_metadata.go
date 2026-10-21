@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -87,15 +88,12 @@ func (e *Metadata) enrichToolMeta(meta tools.ToolMeta, filter platform.ToolFilte
 			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
 		}
 	case "command":
+		// Utility help comes from the active catalog; option detail stays on demand.
+		if utilities, err := toolcontract.NativeUtilitiesLine(); err == nil {
+			meta.Description = strings.TrimSpace(meta.Description) + " " + utilities
+		}
 		if !e.externalHidden {
 			meta.Description = strings.TrimSpace(meta.Description) + " " + toolcommand.ExternalSelectorLine
-		}
-		if inverse := toolcommand.CommandInverseSurveyLine(profileID); inverse != "" {
-			meta.Description = strings.TrimSpace(meta.Description) + " " + inverse
-		}
-	default:
-		if suffix := toolcommand.NativeReplacesCommandSuffix(meta.Name, profileID); suffix != "" {
-			meta.Description = toolcommand.AppendReplacesSuffix(meta.Description, suffix)
 		}
 	}
 	return meta

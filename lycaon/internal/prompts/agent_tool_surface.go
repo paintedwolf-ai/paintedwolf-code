@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -17,9 +18,8 @@ const (
 
 // preventiveRejectEmitters surface recoverable codes before tool use.
 var preventiveRejectEmitters = map[string]bool{
-	"guard:command_habit_redirect": true,
-	"guard:write_scope":            true,
-	"guard:command_surface":        true,
+	"guard:write_scope":     true,
+	"guard:command_surface": true,
 }
 
 // PreventiveRejectEmitters returns preflight rejection guards.
@@ -76,6 +76,8 @@ type AgentToolSurfaceData struct {
 	Skills      []AgentSkillView
 	RejectCodes []AgentRejectCodeView
 	WriteGlobs  []string
+	// CommandEffects bounds what command may do on this profile.
+	CommandEffects toolcontract.CommandEffects
 }
 
 // AgentPromptSurfaceTemplateVars maps the prompt surface to template vars.
@@ -176,6 +178,8 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		Requestable: roster,
 		RejectCodes: recoverableRejectCodes(hintCodes, toolNames),
 		WriteGlobs:  append([]string(nil), profile.WriteGlobs...),
+		// Read-only profiles offer command for inspection only.
+		CommandEffects: profile.CommandEffects,
 	}, nil
 }
 

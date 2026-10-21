@@ -14,7 +14,7 @@ import (
 
 var (
 	surveyToolDisplayOrder = []string{
-		"summarize", "survey_repo", "find", "grep", "read", "list_dir", "stat", "wc", "jq",
+		"summarize", "survey_repo", "command", "find", "grep", "read", "list_dir", "stat", "wc", "jq",
 		"git_status", "git_diff", "git_log", "git_show", "git_blame", "git_ref", "git_branches",
 	}
 	writeToolDisplayOrder = []string{
@@ -22,7 +22,7 @@ var (
 	}
 	// Content readers that can pull secret values into the transcript.
 	readContentToolDisplayOrder = []string{
-		"read", "grep", "jq", "summarize",
+		"command", "read", "grep", "jq", "summarize",
 	}
 	mutationToolDisplayOrder = []string{
 		"write", "edit", "replace_lines", "code_rewrite", "chmod", "delete",
@@ -258,6 +258,9 @@ func ProfileMutationCapable(data AgentToolSurfaceData) bool {
 		if name != "" {
 			enabled[name] = true
 		}
+	}
+	if mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation); err == nil && data.CommandEffects != 0 && !data.CommandEffects.Allows(mutation) {
+		delete(enabled, "command")
 	}
 	return toolSetMutationCapable(enabled)
 }

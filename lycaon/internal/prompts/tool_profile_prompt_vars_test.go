@@ -179,15 +179,17 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 		t.Fatalf("write tools missing edit: %v", writeTools)
 	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
-	for _, want := range []string{"summarize", "survey_repo", "read", "grep", "find", "list_dir", "jq"} {
+	for _, want := range []string{"summarize", "survey_repo", "command"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("survey tools missing %q: %v", want, surveyTools)
 		}
 	}
-	concurrent, _ := vars["profile_concurrent_tools"].([]string)
-	if !slices.Contains(concurrent, "grep") {
-		t.Fatalf("grep should be concurrent: %v", concurrent)
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq"} {
+		if slices.Contains(surveyTools, retired) {
+			t.Fatalf("survey tools still require retired routine schema %q: %v", retired, surveyTools)
+		}
 	}
+	concurrent, _ := vars["profile_concurrent_tools"].([]string)
 	if !slices.Contains(concurrent, "summarize") {
 		t.Fatalf("summarize should be concurrent: %v", concurrent)
 	}
@@ -227,8 +229,8 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if vars["profile_mutation_capable"] != false {
 		t.Fatalf("explore_readonly must not be mutation-capable")
 	}
-	if vars["profile_has_command"] != false {
-		t.Fatalf("explore_readonly must not have command")
+	if vars["profile_has_command"] != true {
+		t.Fatalf("explore_readonly must offer read-only command")
 	}
 	if vars["profile_has_http_request"] != false || vars["profile_has_fetch_url"] != false || vars["profile_has_wait"] != true {
 		t.Fatalf("explore_readonly HTTP capability flags are wrong: %#v", vars)

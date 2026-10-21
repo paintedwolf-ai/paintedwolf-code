@@ -118,19 +118,6 @@ func TestProfileToolTier_coordinatorCeilingIncludesInvestigateNativeTools(t *tes
 	}
 }
 
-func TestProfileToolTier_commandEquivalenceProfilesMatchYAML(t *testing.T) {
-	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	for _, entry := range eq.Entries {
-		for _, profileID := range entry.Profiles {
-			prof := loadToolProfileByID(t, profileID)
-			if !prof.Tools[entry.Native] {
-				t.Fatalf("tool-command-equivalence lists %q on %q but profile omits it", entry.Native, profileID)
-			}
-		}
-	}
-}
-
 // repoFacingProfiles lists tool profiles that survey the product repo.
 // web_research is excluded — external URLs only, no repo material.
 var repoFacingProfiles = []string{
