@@ -6,8 +6,12 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
+
+from scripts.artifact_paths import artifact_root
 
 from . import installed_evidence as evidence
+from .installed_coverage import coverage
 from .support_matrix import CATALOG, expand
 
 STATUSES = {"passed", "failed", "unverified", "skipped"}
@@ -46,7 +50,7 @@ def case_results(raw: object, required: list[str], root: Path) -> list[str]:
 
 
 def row_errors(item: dict, row: dict, artifact: dict, source_commit: str,
-               facts: list[str], root: Path) -> list[str]:
+               facts: list[str], root: Path, environment: dict, capabilities: set[str]) -> tuple[list[str], bool]:
     errors = []
     if evidence.source(item["source_commit"]) != source_commit:
         errors.append("source commit differs from the final artifact source")
@@ -68,7 +72,8 @@ def row_errors(item: dict, row: dict, artifact: dict, source_commit: str,
     if any(not isinstance(value, str) or not value.strip() for value in actual.values()):
         raise ValueError("environment facts must contain nonempty recorded values")
     errors.extend(case_results(item["cases"], row["cases"], root))
-    return errors
+    variant_errors, variant_failed = coverage(item["variants"], environment, row["capability"], capabilities)
+    return errors + variant_errors, variant_failed
 
 
 def admit(catalog: dict, campaign: object, final_artifacts: object,
@@ -91,18 +96,23 @@ def admit(catalog: dict, campaign: object, final_artifacts: object,
     if not isinstance(document["results"], list):
         raise ValueError("campaign results must be a list")
     known = {row["id"]: row for row in rows}
+    environments = {item["id"]: item for item in catalog["environments"]}
+    capabilities = {item["id"] for item in catalog["capabilities"]}
     actual, used_artifacts = {}, set()
     for value in document["results"]:
         item = evidence.object_fields(value, {"row_id", "source_commit", "artifact_id", "tier",
-                                             "execution", "status", "cases", "environment_facts"})
+                                             "execution", "status", "cases", "environment_facts", "variants"})
         key, artifact_id = item["row_id"], item["artifact_id"]
         if not isinstance(key, str) or key not in known or key in actual:
             raise ValueError("unknown or duplicate support row")
         if not isinstance(artifact_id, str) or artifact_id not in actual_artifacts:
             raise ValueError("result does not identify a declared final artifact")
         used_artifacts.add(artifact_id)
-        errors = row_errors(item, known[key], actual_artifacts[artifact_id], source_commit, facts, root)
-        failed = item["status"] == "failed" or any(case["status"] == "failed" for case in item["cases"])
+        row = known[key]
+        errors, variant_failed = row_errors(item, row, actual_artifacts[artifact_id], source_commit, facts, root,
+                                            environments[row["environment"]], capabilities)
+        failed = (variant_failed or item["status"] == "failed"
+                  or any(case["status"] == "failed" for case in item["cases"]))
         actual[key] = {"status": "failed" if failed else "unverified" if errors else "passed", "errors": errors}
     results = [{**row, **actual.get(row["id"], {"status": "unverified", "errors": ["required row is missing"]})}
                for row in rows]
@@ -121,13 +131,24 @@ def main() -> int:
     parser.add_argument("--final-artifacts", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
+    output = (args.report or (artifact_root(Path(__file__).resolve().parents[2]) /
+              "linux-installed" / f"campaign-{time.time_ns()}.json")).resolve()
+    if output.is_relative_to(args.evidence_root.resolve()) or output in {
+            args.catalog.resolve(), args.campaign.resolve(), args.final_artifacts.resolve()}:
+        parser.error("campaign report must not replace its inputs or retained evidence")
     try:
         read = lambda path: json.loads(path.read_text(encoding="utf-8"))
         report = admit(read(args.catalog), read(args.campaign), read(args.final_artifacts),
                        args.source_commit, args.evidence_root)
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         report = {"format_version": 1, "accepted": False, "errors": [str(exc)]}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as retained:
+        json.dump(report, retained, indent=2)
+        retained.write("\n")
+    print(f"Installed Linux campaign report: {output}", file=sys.stderr)
     json.dump(report, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0 if report["accepted"] else 1
