@@ -61,6 +61,8 @@ type Engine struct {
 	TessdataDir string
 	// Version is the pinned engine version.
 	Version string
+	// LanguageArgument selects only the verified pinned recognition profile.
+	LanguageArgument string
 }
 
 var (
@@ -126,6 +128,9 @@ func candidateRoots() []string {
 // remembered for the process; an absent or mismatched one is re-examined on
 // the next call, so staging the engine later takes effect without a restart.
 func verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
+	if err := pin.validateLanguages(); err != nil {
+		return Engine{}, err
+	}
 	root = filepath.Clean(root)
 	verifiedMu.Lock()
 	engine, ok := verified[root]
@@ -144,10 +149,11 @@ func verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
 		return Engine{}, &UnavailableError{Reason: ReasonMissing, Path: binary}
 	}
 	engine = Engine{
-		Root:        root,
-		Binary:      binary,
-		TessdataDir: filepath.Join(root, "tessdata"),
-		Version:     pin.EngineVersion,
+		Root:             root,
+		Binary:           binary,
+		TessdataDir:      filepath.Join(root, "tessdata"),
+		Version:          pin.EngineVersion,
+		LanguageArgument: strings.Join(pin.RecognitionLanguages, "+"),
 	}
 	verifiedMu.Lock()
 	verified[root] = engine
