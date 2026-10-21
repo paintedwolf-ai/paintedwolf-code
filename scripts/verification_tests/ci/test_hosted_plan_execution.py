@@ -150,6 +150,13 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
+    def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
+        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
+
     def test_platform_selection_keeps_only_platform_lanes(self):
         for profile in ("integration", "nightly", "release"):
             with self.subTest(profile=profile):

@@ -20,6 +20,8 @@ PLATFORMS = {"linux": {"ubuntu-latest", "ubuntu-24.04-arm"}}
 CONTAINER_TARGET = "den:webkit:atspi"
 # Runs the pinned browser, which an offline lane must find already provisioned.
 BROWSER_TARGET = "test:confine:linux"
+# Drives the native repository tools against committed distribution fixtures.
+REPOSITORY_TOOLS_TARGET = "test:runner"
 
 
 def lanes():
@@ -120,6 +122,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"],
+                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
