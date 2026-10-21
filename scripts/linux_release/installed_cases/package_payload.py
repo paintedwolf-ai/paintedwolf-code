@@ -14,6 +14,7 @@ import threading
 MAX_BYTES = 8 << 30
 MAX_FILES = 200_000
 CHUNK = 1 << 20
+SETUID_LAUNCHER = "usr/libexec/painted-wolf-code/pw-launch"
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,10 @@ def content(stream, size: int) -> tuple[str, int]:
 def add(entries: dict, entry: Entry):
     if entry.name in entries or len(entries) >= MAX_FILES:
         raise ValueError("package payload repeats a path or exceeds its entry bound")
-    if entry.uid != 0 or entry.gid != 0 or entry.mode & 0o7000:
+    setuid = entry.name == SETUID_LAUNCHER
+    if (entry.uid != 0 or entry.gid != 0
+            or (setuid and (entry.kind != "file" or entry.mode != 0o4755))
+            or (not setuid and (entry.mode & 0o7000 or entry.kind == "hardlink" and entry.target == SETUID_LAUNCHER))):
         raise ValueError("package payload has an unexpected owner or privilege mode")
     entries[entry.name] = entry
 
@@ -148,6 +152,8 @@ def cpio_entries(stream) -> dict[str, Entry]:
             digest, checksum = content(stream, size)
             entry = replace(entry, kind="file", size=size, sha256=digest)
             if count > 1:
+                if path == SETUID_LAUNCHER:
+                    raise ValueError("package payload has an unexpected owner or privilege mode")
                 links.setdefault((major, minor, inode), []).append(path)
         elif stat.S_ISLNK(mode):
             if not 0 < size <= 4096:
