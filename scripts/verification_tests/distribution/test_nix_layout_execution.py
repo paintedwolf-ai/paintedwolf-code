@@ -50,10 +50,15 @@ class NixFinalLayoutTests(unittest.TestCase):
                 executable = root / "bin/pw"
                 with executable.open("ab") as target:
                     target.write(b"final ELF fixup bytes")
-                rows = self.seal(output, architecture)["executables"]
+                manifest = self.seal(output, architecture)
+                self.assertEqual(manifest["format_version"], 2)
+                rows = manifest["executables"]
                 row = next(row for row in rows if row["path"] == str(executable))
                 self.assertEqual(row["sha256"], hashlib.sha256(executable.read_bytes()).hexdigest())
                 self.assertEqual(row["size"], executable.stat().st_size)
+                payload_row = next(item for item in manifest["payload"] if item["path"] == "bin/pw")
+                self.assertEqual(payload_row["sha256"], row["sha256"])
+                self.assertEqual(payload_row["size"], row["size"])
                 receipt = json.loads((root / "nix-layout.json").read_text())
                 self.assertEqual(receipt, {"format_version": 1, "output": str(output),
                     "nix_store": "/selected-nix/bin/nix-store"})
