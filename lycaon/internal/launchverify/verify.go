@@ -65,10 +65,17 @@ func CodeOf(err error) Code {
 	return ""
 }
 
-// Verifier checks processes under ProcRoot against Manifest.
+// Verifier checks processes under ProcRoot against the peer's running package generation.
 type Verifier struct {
 	ProcRoot string
 	Manifest *pkgmanifest.Manifest
+	// GenerationsDir, PolicyPath, LocksDir, TrustAnchor and TrustedOwner
+	// configure generation resolution; zero values use the installed layout.
+	GenerationsDir string
+	PolicyPath     string
+	LocksDir       string
+	TrustAnchor    string
+	TrustedOwner   uint32
 	// NamespaceReader supplies kernel namespace facts; nil uses procfs.
 	NamespaceReader func(string, int) (NamespaceFacts, error)
 	// statFile replaces the filesystem in tests of the mapping check.
@@ -77,9 +84,12 @@ type Verifier struct {
 
 // Chain is a verified engine and the desktop app that started it.
 type Chain struct {
-	Engine    Snapshot
-	Launcher  Snapshot
-	Namespace NamespaceFacts
+	Engine     Snapshot
+	Launcher   Snapshot
+	Namespace  NamespaceFacts
+	Generation string
+	Manifest   *pkgmanifest.Manifest
+	roles      map[string]fileFacts
 }
 
 // VerifyChain proves that pid is the installed engine owned by uid and that
@@ -113,7 +123,18 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if err != nil {
 		return Chain{}, err
 	}
-	chain := Chain{Engine: engine, Launcher: launcher, Namespace: namespace}
+	gen, err := v.layout().resolve(engine.PID, launcher.PID)
+	if err != nil {
+		return Chain{}, err
+	}
+	chain := Chain{
+		Engine:     engine,
+		Launcher:   launcher,
+		Namespace:  namespace,
+		Generation: gen.sha,
+		Manifest:   gen.manifest,
+		roles:      gen.roles,
+	}
 	if err := v.Recheck(chain); err != nil {
 		return Chain{}, err
 	}
@@ -127,6 +148,9 @@ func (v Verifier) Recheck(chain Chain) error {
 	if err := v.unchangedNamespace(chain); err != nil {
 		return err
 	}
+	if err := v.layout().unchanged(chain); err != nil {
+		return err
+	}
 	for _, process := range []struct {
 		snapshot Snapshot
 		role     string
@@ -136,7 +160,7 @@ func (v Verifier) Recheck(chain Chain) error {
 		if err := v.unchangedUntraced(process.snapshot, process.role); err != nil {
 			return err
 		}
-		if err := v.VerifyExecutable(process.snapshot.PID, process.role); err != nil {
+		if err := v.verifyChainExecutable(process.snapshot.PID, process.role, chain); err != nil {
 			return err
 		}
 		if err := v.VerifyMappings(process.snapshot.PID, process.role); err != nil {
@@ -167,11 +191,29 @@ func (v Verifier) unchangedUntraced(expected Snapshot, role string) error {
 	return nil
 }
 
+func (v Verifier) verifyChainExecutable(pid int, role string, chain Chain) error {
+	manifest := chain.Manifest
+	if manifest == nil {
+		manifest = v.Manifest
+	}
+	var wantInode *fileFacts
+	if chain.roles != nil {
+		if facts, ok := chain.roles[role]; ok {
+			wantInode = &facts
+		}
+	}
+	return v.verifyExecutableAgainst(pid, role, manifest, wantInode)
+}
+
 // VerifyExecutable hashes the image pid is running, through the exe link
 // opened as a descriptor, and compares it with the manifest's entry for the
 // role's installed path.
 func (v Verifier) VerifyExecutable(pid int, role string) error {
-	want, size, ok := expected(v.Manifest, role)
+	return v.verifyExecutableAgainst(pid, role, v.Manifest, nil)
+}
+
+func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgmanifest.Manifest, wantInode *fileFacts) error {
+	want, size, ok := expected(manifest, role)
 	if !ok {
 		return refuse(CodeManifestUnreadable, role, pid, "the manifest lists no such executable")
 	}
@@ -180,6 +222,19 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 		return refuse(CodeExecutableUnreadable, role, pid, err.Error())
 	}
 	defer func() { _ = file.Close() }()
+	if wantInode != nil {
+		info, err := file.Stat()
+		if err != nil {
+			return refuse(CodeExecutableUnreadable, role, pid, err.Error())
+		}
+		actual, err := factsOf(info)
+		if err != nil {
+			return refuse(CodeExecutableUnreadable, role, pid, err.Error())
+		}
+		if !sameInode(actual, *wantInode) {
+			return refuse(CodeExecutableMismatch, role, pid, "executable is not the generation image")
+		}
+	}
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	if err != nil {

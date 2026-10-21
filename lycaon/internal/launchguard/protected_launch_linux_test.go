@@ -32,10 +32,13 @@ import (
 // provides; nothing else in the suite is privileged.
 
 const (
-	fixtureModeEnv = "PW_LAUNCH_FIXTURE_MODE"
-	fixtureDirEnv  = "PW_LAUNCH_FIXTURE_DIR"
-	fixtureBinsEnv = "PW_LAUNCH_FIXTURE_BINARIES"
-	fixtureHash    = "PW_LAUNCH_FIXTURE_DIGEST"
+	fixtureModeEnv     = "PW_LAUNCH_FIXTURE_MODE"
+	fixtureDirEnv      = "PW_LAUNCH_FIXTURE_DIR"
+	fixtureBinsEnv     = "PW_LAUNCH_FIXTURE_BINARIES"
+	fixtureHash        = "PW_LAUNCH_FIXTURE_DIGEST"
+	fixtureVaultBinEnv = "PW_LAUNCH_FIXTURE_VAULT_BIN"
+	fixtureUIDEnv      = "PW_LAUNCH_FIXTURE_UID"
+	fixtureGIDEnv      = "PW_LAUNCH_FIXTURE_GID"
 )
 
 // protectedFacts is the fixture desktop's report.
@@ -98,13 +101,15 @@ type launchFixture struct {
 	bootstrap string
 	digest    string
 	install   string
+	binaries  []string
 }
 
 // runningLaunch is a started bootstrap and the facts its desktop reported.
 type runningLaunch struct {
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	facts protectedFacts
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	reader *bufio.Reader
+	facts  protectedFacts
 }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
@@ -115,6 +120,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	testutil.FailErr(t, "desktop input", err)
 	stdout, err := cmd.StdoutPipe()
 	testutil.FailErr(t, "desktop report", err)
+	reader := bufio.NewReader(stdout)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	stopProbe := make(chan struct{})
@@ -133,7 +139,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	})
 	lines := make(chan string, 1)
 	go func() {
-		line, _ := bufio.NewReader(stdout).ReadString('\n')
+		line, _ := reader.ReadString('\n')
 		lines <- line
 	}()
 	var line string
@@ -151,7 +157,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
@@ -216,10 +222,11 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
-	assertCallerCredentials(t, launch.cmd.Process.Pid)
+	assertProcessThreadCredentials(t, launch.cmd.Process.Pid, "0", 1)
 	agentPID := findBrokerAgentPID(t)
-	assertCallerCredentials(t, agentPID)
+	assertProcessThreadCredentials(t, agentPID, "0", 1)
 	assertBrokerAgentSealed(t, agentPID)
+	assertProcessThreadCredentials(t, facts.PID, "1", 5)
 	// The broker starts programs outside the protected namespace, with the
 	// caller's ordinary authority, and ends one whose caller abandons it.
 	own, err := os.Readlink("/proc/self/ns/user")
@@ -364,26 +371,14 @@ func assertBrokerAgentSealed(t *testing.T, pid int) {
 	}
 }
 
-// assertCallerCredentials requires the running supervisor to hold only the
-// caller's identity and no capability.
-func assertCallerCredentials(t *testing.T, pid int) {
+// assertProcessThreadCredentials requires every thread of pid in /proc/<pid>/task/*/status
+// to hold only the caller's identity, zero capabilities, and the expected NoNewPrivs flag.
+func assertProcessThreadCredentials(t *testing.T, pid int, wantNoNewPrivs string, minThreads int) {
 	t.Helper()
-	status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	testutil.FailErr(t, "supervisor status", err)
-	uid := fmt.Sprint(os.Getuid())
-	for _, line := range strings.Split(string(status), "\n") {
-		key, value, _ := strings.Cut(line, ":")
-		fields := strings.Fields(value)
-		switch key {
-		case "Uid":
-			if len(fields) != 4 || slices.ContainsFunc(fields, func(f string) bool { return f != uid }) {
-				t.Fatalf("supervisor uids %v, want %s", fields, uid)
-			}
-		case "CapPrm", "CapEff", "CapAmb":
-			if strings.Trim(value, " \t0") != "" {
-				t.Fatalf("supervisor %s %s, want none", key, value)
-			}
-		}
+	threads, err := verifyProcessThreadsStatus(pid, os.Getuid(), os.Getgid(), wantNoNewPrivs)
+	testutil.FailErr(t, "process thread credentials", err)
+	if threads < minThreads {
+		t.Fatalf("process %d checked %d threads, want at least %d", pid, threads, minThreads)
 	}
 }
 

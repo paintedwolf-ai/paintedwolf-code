@@ -80,6 +80,9 @@ func sealBrokerAgentIdentity(spec EntrySpec) error {
 			return err
 		}
 	}
+	if err := clearCapabilities(); err != nil {
+		return err
+	}
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}

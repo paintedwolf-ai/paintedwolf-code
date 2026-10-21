@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -47,7 +48,7 @@ func restrictExecution(policy GenerationPolicy, image *os.File) error {
 			return err
 		}
 	}
-	if _, _, errno := unix.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, ruleset, 0, 0); errno != 0 {
+	if _, _, errno := syscall.AllThreadsSyscall(unix.SYS_LANDLOCK_RESTRICT_SELF, ruleset, 0, 0); errno != 0 {
 		return fmt.Errorf("restrict execution: %w", errno)
 	}
 	return nil
