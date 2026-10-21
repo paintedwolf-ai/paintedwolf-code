@@ -2,19 +2,19 @@
 
 package linuxsandbox
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
 
 func TestPathCallFramesRoundTrip(t *testing.T) {
 	want := pathCall{Op: callRename, Absolute: 2, Dirs: 2, Mode: 0o644, Umask: 0o22, Flags: 1 << 40,
 		Dev: 7, Resolve: 3, Notification: 1<<63 + 5, Caller: 4242, Path: "a", NewPath: "b/c", Content: ""}
 	raw, err := encodePathCall(want)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "encodePathCall failed", err)
 	got, err := decodePathCall(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "decodePathCall failed", err)
 	if got != want {
 		t.Fatalf("decoded %+v, want %+v", got, want)
 	}
@@ -28,9 +28,7 @@ func TestPathCallFramesRefuseMalformedInput(t *testing.T) {
 		t.Fatal("encoded three directories")
 	}
 	raw, err := encodePathCall(pathCall{Op: callSymlink, Dirs: 1, Notification: 9, Path: "name", Content: "target"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "encodePathCall failed", err)
 	bad := map[string][]byte{
 		"short":     raw[:pathCallHeader-1],
 		"truncated": raw[:len(raw)-1],
