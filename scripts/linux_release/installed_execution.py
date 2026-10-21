@@ -82,6 +82,8 @@ def case_family(capability: str, case: str, installation: str) -> str | None:
         return "desktop"
     if capability == "documents" and case in {"redacted-send", "ocr-and-documents"}:
         return "documents"
+    if (capability, case) == ("accessibility", "protected-desktop-appearance"):
+        return "protected_appearance"
     return driver_family(capability, installation)
 
 
