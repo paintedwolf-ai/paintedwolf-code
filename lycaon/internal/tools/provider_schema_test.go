@@ -83,7 +83,12 @@ func TestValidateRegistryProviderArgsSchemas(t *testing.T) {
 	})
 	bad, _ := reg.Definition("bad")
 	bad.Meta = ToolMeta{Name: "bad", Description: "missing schema"}
-	_ = reg.RegisterDefinition(bad)
+	if err := reg.RegisterDefinition(bad); err == nil {
+		t.Fatal("missing schema was published")
+	}
+	// Fault injection keeps the registry-wide audit meaningful even though
+	// normal publication now refuses this malformed metadata.
+	reg.definitions["bad"] = bad
 
 	err := ValidateRegistryProviderArgsSchemas(reg)
 	if err == nil {
@@ -96,7 +101,7 @@ func TestValidateRegistryProviderArgsSchemas(t *testing.T) {
 
 func TestValidateCatalogSchemaParity(t *testing.T) {
 	reg := NewDefaultRegistry()
-	_ = reg.RegisterDerived(ToolMeta{Name: "read", Description: "clobbered"}, func(_ context.Context, _ map[string]any, _ ToolContext) (string, error) {
+	_ = reg.RegisterDerived(ToolMeta{Name: "read", Description: "clobbered", ArgsSchema: map[string]any{"type": "object"}}, func(_ context.Context, _ map[string]any, _ ToolContext) (string, error) {
 		return "", nil
 	})
 
