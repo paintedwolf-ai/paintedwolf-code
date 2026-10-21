@@ -141,7 +141,24 @@ func (t supervisorTarget) command() *exec.Cmd {
 	for i := 0; i < t.extraFiles; i++ {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
 	}
+	if controlsTerminal(0) {
+		// The terminal signals its foreground group. The target's own group
+		// holds the foreground, so Ctrl-C reaches the program on the terminal
+		// and not the supervisor, which would end the whole command.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Foreground: true, Ctty: 0}
+	}
 	return cmd
+}
+
+// controlsTerminal reports whether fd is the controlling terminal of this
+// process's session.
+func controlsTerminal(fd int) bool {
+	sid, err := unix.IoctlGetInt(fd, unix.TIOCGSID)
+	if err != nil {
+		return false
+	}
+	own, err := unix.Getsid(0)
+	return err == nil && sid == own
 }
 
 // launchFailure reports the errno the parent's fork/exec would have seen.
