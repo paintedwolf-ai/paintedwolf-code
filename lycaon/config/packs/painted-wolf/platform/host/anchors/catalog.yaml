@@ -611,6 +611,20 @@ anchors:
         checklist_updated: { type: "bool", required: true }
         declared_command: { type: "string", required: true }
 
+  - id: inject.turn_state
+    title: Turn state inject
+    description: Dynamic coordinator turn-state guidance and gate conditions.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        progress_missing: { type: bool }
+        profile_has_update_progress: { type: bool }
+        verify_required: { type: bool }
+        pending_overlay_jobs: { type: "string[]" }
+        partial_worker_jobs: { type: "string[]" }
+
   - id: inject.command_jobs
     title: Live handles inject
     description: Host-authoritative ledger of live command jobs and held tool calls.
