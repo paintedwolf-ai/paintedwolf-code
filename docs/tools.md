@@ -108,6 +108,10 @@ Execution snapshots use `SnapshotWithMemory` and retain their own leases, includ
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;
 execution callers must retain the applicable leases while values remain reachable.
+`ValidatedProgramIdentity` supplies a zero-copy source/catalog identity only while
+that validated execution lease remains live. Admission can bind a whole-envelope
+progress update to this unit without treating an inspection copy or a caller's
+boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
 
