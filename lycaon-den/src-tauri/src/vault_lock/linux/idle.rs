@@ -24,8 +24,23 @@ mod wayland;
 use wayland::{Wayland, WaylandStart};
 
 /// How long the person's input may stay idle before they count as stepped
-/// away.
-pub(crate) const STEP_AWAY_IDLE: Duration = Duration::from_secs(5 * 60);
+/// away where no lock is observable: the engine's unlock idle period, from
+/// the one file both embed.
+pub(crate) fn unlock_idle() -> Duration {
+    static IDLE: std::sync::LazyLock<Duration> = std::sync::LazyLock::new(|| {
+        let lifetime: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../../lycaon/internal/presence/unlock-lifetime.json"
+        ))
+        .expect("embedded unlock lifetime");
+        Duration::from_secs(
+            lifetime["idle_seconds"]
+                .as_u64()
+                .filter(|seconds| *seconds > 0)
+                .expect("positive unlock idle period"),
+        )
+    });
+    *IDLE
+}
 
 const SETUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CALL_TIMEOUT: Duration = Duration::from_secs(2);
@@ -129,7 +144,7 @@ pub(super) fn start(
                 .wayland
                 .as_ref()
                 .ok_or(IdleUnavailable::WaylandUnreachable)?;
-            match Wayland::start(socket, STEP_AWAY_IDLE) {
+            match Wayland::start(socket, unlock_idle()) {
                 Ok(observer) => Ok(Box::new(observer)),
                 Err(WaylandStart::NoNotifier { compositor }) => {
                     let desktop = desktop.ok_or(IdleUnavailable::MutterNotCompositor)?;
@@ -220,7 +235,7 @@ impl Observer for Mutter {
             Some(milliseconds) => IdleFacts {
                 source: Some(IdleSource::MutterIdleMonitor),
                 error: None,
-                idle: idle_after(milliseconds, STEP_AWAY_IDLE),
+                idle: idle_after(milliseconds, unlock_idle()),
             },
             None => IdleFacts::unavailable(IdleUnavailable::Lost),
         }
@@ -266,7 +281,7 @@ impl Observer for X11 {
             Some(info) => IdleFacts {
                 source: Some(IdleSource::X11ScreenSaver),
                 error: None,
-                idle: idle_after(u64::from(info.ms_since_user_input), STEP_AWAY_IDLE),
+                idle: idle_after(u64::from(info.ms_since_user_input), unlock_idle()),
             },
             None => IdleFacts::unavailable(IdleUnavailable::Lost),
         }
@@ -297,10 +312,12 @@ mod tests {
     }
 
     #[test]
-    fn input_counts_as_idle_from_the_step_away_period() {
-        assert!(!idle_after(299_999, STEP_AWAY_IDLE));
-        assert!(idle_after(300_000, STEP_AWAY_IDLE));
-        assert!(idle_after(u64::MAX, STEP_AWAY_IDLE));
+    fn input_counts_as_idle_from_the_unlock_idle_period() {
+        // The engine's documented unlock idle expiry.
+        assert_eq!(unlock_idle(), Duration::from_secs(15 * 60));
+        assert!(!idle_after(899_999, unlock_idle()));
+        assert!(idle_after(900_000, unlock_idle()));
+        assert!(idle_after(u64::MAX, unlock_idle()));
     }
 
     #[test]

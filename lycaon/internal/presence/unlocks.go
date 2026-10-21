@@ -6,15 +6,7 @@ import (
 	"time"
 )
 
-const (
-	// UnlockIdle closes an unlock when no held value has been used for this long.
-	UnlockIdle = 15 * time.Minute
-	// UnlockCeiling closes an unlock this long after presence opened it,
-	// however busy the chat is.
-	UnlockCeiling = 4 * time.Hour
-
-	sweepInterval = 30 * time.Second
-)
+const sweepInterval = 30 * time.Second
 
 // EndReason says why an unlock ended.
 type EndReason string

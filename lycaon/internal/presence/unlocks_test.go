@@ -121,3 +121,9 @@ func TestOnlyStepAwayReasonsAreClientLocks(t *testing.T) {
 		}
 	}
 }
+
+func TestUnlockLifetimeIsTheDocumentedExpiry(t *testing.T) {
+	if UnlockIdle != 15*time.Minute || UnlockCeiling != 4*time.Hour {
+		t.Fatalf("unlock lifetime = %v idle, %v ceiling", UnlockIdle, UnlockCeiling)
+	}
+}

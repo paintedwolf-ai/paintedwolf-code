@@ -20,6 +20,7 @@ use signals::{
     watch_connection, watch_owner,
 };
 pub(crate) use state::LockSources;
+use state::StepAwayMode;
 
 #[cfg(test)]
 mod tests;
@@ -180,11 +181,16 @@ impl Monitor {
             return;
         }
         let lost = facts.error == Some(IdleUnavailable::Lost);
+        let covering = next.step_away_mode() == StepAwayMode::IdleFallback;
         next.idle = facts;
-        if lost {
-            inner.lose(next);
-        } else {
-            inner.apply(next, LockReason::Away);
+        match (lost, covering) {
+            // The observer was the step-away signal: its loss locks.
+            (true, true) => inner.lose(next),
+            (true, false) => {
+                inner.apply(next, LockReason::ScreenLocked);
+                inner.refresh_requested.set(true);
+            }
+            (false, _) => inner.apply(next, LockReason::Away),
         }
     }
 
@@ -264,7 +270,17 @@ impl Monitor {
         if let Some(system) = buses.system.clone() {
             current.sleeping = preparing_for_sleep(context, &system).unwrap_or(false);
             match session::discover(context, &system) {
-                Ok(session) => current.session = Some(session),
+                Ok(session) => {
+                    // A hint seen true stays proof for the same session.
+                    let previous = inner.current();
+                    current.locked_hint_seen = session.locked
+                        || (previous.locked_hint_seen
+                            && previous
+                                .session
+                                .as_ref()
+                                .is_some_and(|known| known.id == session.id));
+                    current.session = Some(session);
+                }
                 Err(error) => current.session_error = Some(error),
             }
             let path = current.session.as_ref().map(|session| session.path.clone());
@@ -301,7 +317,8 @@ impl Inner {
 
     /// Publishes new observations and locks when confirmation stopped being
     /// allowed or a lock was observed.
-    fn apply(&self, next: LockSources, reason: LockReason) {
+    fn apply(&self, mut next: LockSources, reason: LockReason) {
+        next.mode = next.step_away_mode();
         let mut sources = self.sources.lock().unwrap();
         let was_allowed = sources.confirmation_allowed();
         let now_allowed = next.confirmation_allowed();

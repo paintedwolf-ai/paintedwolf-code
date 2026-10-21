@@ -773,7 +773,7 @@ export interface paths {
         put?: never;
         /**
          * Lock every chat when the person steps away
-         * @description The desktop shell calls this when the screen locks, the computer sleeps, the person's input stays idle for the step-away period (`away`), or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+         * @description The desktop shell calls this when the screen locks, the computer sleeps, the app quits, or, on a Linux desktop whose screen lock cannot be observed, the person's input stays idle for the unlock idle period (`away`). Locking can only take authority away, so any authenticated caller may request it.
          */
         post: operations["lockVault"];
         delete?: never;

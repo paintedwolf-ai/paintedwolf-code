@@ -2,8 +2,9 @@
 //!
 //! The engine ends idle unlocks itself; only the desktop sees the screen
 //! lock, sleep, a user switch, or quit. Locking only removes authority, so
-//! a lost request costs at most the rest of an unlock. On Linux the display
-//! server's input idle also counts as stepping away. Windows lock events are
+//! a lost request costs at most the rest of an unlock. Where a Linux
+//! desktop's screen lock cannot be observed, the display server's input idle
+//! for the unlock idle period counts as stepping away. Windows lock events are
 //! not observed yet.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,8 +32,8 @@ const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
 pub enum LockReason {
     ScreenLocked,
     Sleep,
-    /// The display server reported the person's input idle for the
-    /// step-away period.
+    /// The display server reported the person's input idle for the unlock
+    /// idle period, on a desktop whose screen lock cannot be observed.
     Away,
     AppQuit,
 }

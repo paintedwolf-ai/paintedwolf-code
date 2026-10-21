@@ -146,6 +146,7 @@ fn an_active_unlocked_session_confirms_and_reports_its_sources() {
         let session = status.session.as_ref().expect("fixture session read");
         assert!(session.active && !session.locked && !session.can_lock);
         assert_eq!(status.screensaver_locked, Some(false));
+        assert_eq!(status.mode, StepAwayMode::LockObserved);
         assert!(h.allowed());
         assert!(h.locks().is_empty());
     });
