@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // A copy of this test binary stands in for the desktop: TestMain acts out the
@@ -67,25 +69,21 @@ func newFakeDesktop(t *testing.T, behaviour string) *fakeDesktop {
 	base := t.TempDir()
 	// t.TempDir honors the host umask; the installed launcher's directories are 0755.
 	if err := os.Chmod(base, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	bin := filepath.Join(base, "bin")
 	if err := os.Mkdir(bin, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	if err := os.Chmod(bin, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Executable failed", err)
 	launcher := filepath.Join(bin, "painted-wolf-code")
 	copyFile(t, self, launcher)
 	socketDir, err := os.MkdirTemp("", "pwcli") //nolint:usetesting // Unix socket paths have a short limit.
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.MkdirTemp failed", err)
 	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
 	socket := filepath.Join(socketDir, "s")
 	environment := append(os.Environ(), fakeDesktopEnv+"="+behaviour, "PW_FAKE_SOCKET="+socket,
@@ -97,22 +95,18 @@ func newFakeDesktop(t *testing.T, behaviour string) *fakeDesktop {
 func copyFile(t *testing.T, source, target string) {
 	t.Helper()
 	in, err := os.Open(source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenFile failed", err)
 	if _, err := io.Copy(out, in); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "io.Copy failed", err)
 	}
 	if err := out.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "out.Close failed", err)
 	}
 	if err := os.Chmod(target, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 }
 
@@ -144,9 +138,7 @@ func groupGone(t *testing.T, pid int) {
 func TestColdStartReachesTheStartedDesktopInItsOwnSession(t *testing.T) {
 	fake := newFakeDesktop(t, "listen")
 	conn, started, err := fake.start(context.Background(), 20*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fake.start failed", err)
 	_ = conn.Close()
 	pid := started.cmd.Process.Pid
 	if sid, err := unix.Getsid(pid); err != nil || sid != pid {
@@ -162,9 +154,7 @@ func TestColdStartReachesTheStartedDesktopInItsOwnSession(t *testing.T) {
 func TestARunningAppIsReachedWithoutStartingAnother(t *testing.T) {
 	fake := newFakeDesktop(t, "listen")
 	listener, err := net.Listen("unix", fake.socket)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "net.Listen failed", err)
 	defer func() { _ = listener.Close() }()
 	go func() {
 		if conn, err := listener.Accept(); err == nil {
@@ -175,9 +165,7 @@ func TestARunningAppIsReachedWithoutStartingAnother(t *testing.T) {
 		t.Fatal("started a second app while one was reachable")
 		return nil, nil
 	}, time.Second, 20*time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "dialOrStartAt failed", err)
 	_ = conn.Close()
 }
 
@@ -191,7 +179,7 @@ func TestADesktopThatExitsEarlyReportsItsStatus(t *testing.T) {
 func TestATimedOutStartStopsOnlyTheSessionItStarted(t *testing.T) {
 	bystander := exec.Command("sleep", "60")
 	if err := bystander.Start(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "bystander.Start failed", err)
 	}
 	defer func() { _ = bystander.Process.Kill(); _ = bystander.Wait() }()
 	fake := newFakeDesktop(t, "family")
@@ -201,9 +189,7 @@ func TestATimedOutStartStopsOnlyTheSessionItStarted(t *testing.T) {
 	}
 	groupGone(t, started.cmd.Process.Pid)
 	raw, err := os.ReadFile(filepath.Join(fake.base, "child.pid"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read file", err)
 	child, _ := strconv.Atoi(string(raw))
 	if err := syscall.Kill(child, 0); !errors.Is(err, syscall.ESRCH) {
 		t.Fatalf("launched descendant %d survived: %v", child, err)
@@ -256,7 +242,7 @@ func TestOnlyAnInstallerControlledLauncherStarts(t *testing.T) {
 	}
 	link := filepath.Join(filepath.Dir(fake.launch.path), "link")
 	if err := os.Symlink(fake.launch.path, link); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	if _, err := startDesktop(desktopLaunch{path: link, anchor: fake.base, owner: fake.launch.owner,
 		environment: fake.launch.environment}); err == nil {
