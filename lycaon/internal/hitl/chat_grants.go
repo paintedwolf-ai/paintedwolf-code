@@ -144,7 +144,7 @@ func (s *SQLStore) chatGrants(ctx context.Context, now time.Time, state toolcont
 			return fail(fmt.Errorf("decode chat grant %s: %w", row.ID, err))
 		}
 		if row.AuthorityFormat != "" {
-			delta, release, err := s.nativeChatGrant(ctx, state, row.ChatSessionID, row.ID, grant.Delta)
+			delta, release, err := s.nativeAuthority().chatGrant(ctx, state, row.ChatSessionID, row.ID, grant.Delta)
 			if err != nil {
 				return fail(err)
 			}
@@ -171,46 +171,6 @@ func (s *SQLStore) chatGrants(ctx context.Context, now time.Time, state toolcont
 		out = append(out, grant)
 	}
 	return out, releases.release, nil
-}
-
-// nativeChatGrant restores the one delta of the approved option whose chat
-// lifetime is this row, bound to the row's screened delta copy.
-func (s *SQLStore) nativeChatGrant(ctx context.Context, state toolcontract.ReviewStateAdmission, chatSessionID, id string, display ApprovalAuthorityDelta) (ApprovalAuthorityDelta, func(), error) {
-	source := chatGrantAuthoritySource(chatSessionID, id)
-	projection, releaseProjection, err := s.readNativeAuthority(ctx, state, source)
-	if err != nil {
-		return ApprovalAuthorityDelta{}, nil, err
-	}
-	options, releaseOptions, err := projection.Options(ctx, state)
-	if err != nil {
-		releaseProjection()
-		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
-	}
-	release := func() { releaseOptions(); releaseProjection() }
-	found, matches := -1, 0
-	for n, delta := range options[0].Authority {
-		if chat, grantID, ok := delta.ChatLifetime(); ok && chat == chatSessionID && grantID == id {
-			found, matches = n, matches+1
-		}
-	}
-	if len(options) != 1 || matches != 1 {
-		release()
-		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: native authority does not name exactly this grant", source.name)
-	}
-	derived, releaseDerived, err := nativeAuthorityDisplay(ctx, state, options)
-	if err == nil {
-		var same bool
-		same, err = sameAuthorityDisplay(derived[0].Authority[found], display)
-		releaseDerived()
-		if err == nil && !same {
-			err = fmt.Errorf("native authority does not match its displayed grant")
-		}
-	}
-	if err != nil {
-		release()
-		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
-	}
-	return options[0].Authority[found], release, nil
 }
 
 func (s *SQLStore) forgetChatGrant(ctx context.Context, id string) (bool, error) {

@@ -386,7 +386,6 @@ func (s *SQLStore) mutatePendingPayload(ctx context.Context, checkpointID, op st
 // checkpointFromRow maps a generated checkpoints row onto the store's domain type.
 func checkpointFromRow(r db.GetCheckpointRow) (*StoredCheckpoint, error) {
 	row := StoredCheckpoint{
-		AuthorityFormat: r.AuthorityFormat,
 		ID:          r.ID,
 		SessionID:   r.SessionID,
 		ProjectID:   r.ProjectID,
@@ -399,6 +398,7 @@ func checkpointFromRow(r db.GetCheckpointRow) (*StoredCheckpoint, error) {
 		ToolName:    r.ToolName,
 		Path:        r.Path,
 	}
+	row.AuthorityFormat = r.AuthorityFormat
 	if err := db.UnmarshalJSON(r.ArgsJson, &row.Args); err != nil {
 		return nil, err
 	}

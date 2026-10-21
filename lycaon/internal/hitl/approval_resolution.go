@@ -160,7 +160,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	if err != nil {
 		return nil, err
 	}
-	option, approved, releaseAuthority, err := m.approvedOption(ctx, *row, plan, display, resolution)
+	option, approved, releaseAuthority, err := approvedOption(ctx, m.store, m.nativeAdmission, *row, plan, display, resolution)
 	if err != nil {
 		return nil, err
 	}

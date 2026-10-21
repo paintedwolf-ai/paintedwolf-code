@@ -83,11 +83,20 @@ func chatGrantAuthoritySource(chatSessionID, id string) authoritySource {
 	}
 }
 
-// readNativeAuthority is the one reader of native authority bodies. It
-// measures the body and reserves aggregate state before Scan copies it, reads
+// nativeAuthorityReader is the one reader of native authority bodies. It
+// measures a body and reserves aggregate state before Scan copies it, reads
 // the body from that same snapshot only while its identity still matches, and
 // restores it through the strict versioned codec. Nothing falls back to JSON.
-func (s *SQLStore) readNativeAuthority(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource) (NativeAuthorityProjection, func(), error) {
+type nativeAuthorityReader struct {
+	db      db.Handle
+	queries *db.Queries
+}
+
+func (s *SQLStore) nativeAuthority() nativeAuthorityReader {
+	return nativeAuthorityReader{db: s.db, queries: s.queries}
+}
+
+func (s nativeAuthorityReader) read(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource) (NativeAuthorityProjection, func(), error) {
 	if state == nil {
 		return NativeAuthorityProjection{}, nil, fmt.Errorf("%s: native authority admission is not configured", source.name)
 	}
@@ -137,7 +146,7 @@ func (s *SQLStore) readNativeAuthority(ctx context.Context, state toolcontract.R
 }
 
 func (s *SQLStore) checkpointAuthority(ctx context.Context, state toolcontract.ReviewStateAdmission, checkpointID string) (NativeAuthorityProjection, func(), error) {
-	return s.readNativeAuthority(ctx, state, checkpointAuthoritySource(checkpointID))
+	return s.nativeAuthority().read(ctx, state, checkpointAuthoritySource(checkpointID))
 }
 
 // restoredNativeOptions restores a row's options and binds them to the
@@ -167,13 +176,12 @@ func restoredNativeOptions(ctx context.Context, state toolcontract.ReviewStateAd
 // approvedOption returns the option to install and its durable record. A
 // structured row's payload plan is its authority. A native row's option comes
 // only from the measured reader, bound to the displayed plan it was shown as.
-func (m *ApprovalAuthority) approvedOption(ctx context.Context, row StoredCheckpoint, plan *ApprovalPlan, display ApprovalOption, resolution Resolution) (ApprovalOption, approvedAuthority, func(), error) {
+func approvedOption(ctx context.Context, store approvalAuthorityStore, state toolcontract.ReviewStateAdmission, row StoredCheckpoint, plan *ApprovalPlan, display ApprovalOption, resolution Resolution) (ApprovalOption, approvedAuthority, func(), error) {
 	if row.AuthorityFormat == "" {
 		option := display.grantedBy(resolution)
 		return option, approvedAuthority{display: option}, func() {}, nil
 	}
-	state := m.nativeAdmission
-	projection, releaseProjection, err := m.store.checkpointAuthority(ctx, state, row.ID)
+	projection, releaseProjection, err := store.checkpointAuthority(ctx, state, row.ID)
 	if err != nil {
 		return ApprovalOption{}, approvedAuthority{}, nil, fmt.Errorf("approval authority: %w", err)
 	}
@@ -199,4 +207,68 @@ func (m *ApprovalAuthority) approvedOption(ctx context.Context, row StoredCheckp
 	}
 	releases = append(releases, releaseApproved)
 	return option, approvedAuthority{display: display.grantedBy(resolution), native: approved}, releases.release, nil
+}
+
+// approvedOption restores the single approved option a native
+// operation or chat grant row records, bound to that row's display copy.
+func (s nativeAuthorityReader) approvedOption(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource, display ApprovalOption) (ApprovalOption, func(), error) {
+	projection, releaseProjection, err := s.read(ctx, state, source)
+	if err != nil {
+		return ApprovalOption{}, nil, err
+	}
+	options, releaseOptions, err := restoredNativeOptions(ctx, state, projection, []ApprovalOption{display})
+	if err != nil {
+		releaseProjection()
+		return ApprovalOption{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	return options[0], func() { releaseOptions(); releaseProjection() }, nil
+}
+
+// releaseList releases retained native leases in reverse order.
+type releaseList []func()
+
+func (r releaseList) release() {
+	for n := len(r) - 1; n >= 0; n-- {
+		r[n]()
+	}
+}
+
+// chatGrant restores the one delta of the approved option whose chat
+// lifetime is this row, bound to the row's screened delta copy.
+func (s nativeAuthorityReader) chatGrant(ctx context.Context, state toolcontract.ReviewStateAdmission, chatSessionID, id string, display ApprovalAuthorityDelta) (ApprovalAuthorityDelta, func(), error) {
+	source := chatGrantAuthoritySource(chatSessionID, id)
+	projection, releaseProjection, err := s.read(ctx, state, source)
+	if err != nil {
+		return ApprovalAuthorityDelta{}, nil, err
+	}
+	options, releaseOptions, err := projection.Options(ctx, state)
+	if err != nil {
+		releaseProjection()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	release := func() { releaseOptions(); releaseProjection() }
+	found, matches := -1, 0
+	for n, delta := range options[0].Authority {
+		if chat, grantID, ok := delta.ChatLifetime(); ok && chat == chatSessionID && grantID == id {
+			found, matches = n, matches+1
+		}
+	}
+	if len(options) != 1 || matches != 1 {
+		release()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: native authority does not name exactly this grant", source.name)
+	}
+	derived, releaseDerived, err := nativeAuthorityDisplay(ctx, state, options)
+	if err == nil {
+		var same bool
+		same, err = sameAuthorityDisplay(derived[0].Authority[found], display)
+		releaseDerived()
+		if err == nil && !same {
+			err = fmt.Errorf("native authority does not match its displayed grant")
+		}
+	}
+	if err != nil {
+		release()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	return options[0].Authority[found], release, nil
 }

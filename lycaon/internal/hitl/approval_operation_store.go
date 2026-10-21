@@ -202,7 +202,7 @@ func (s *SQLStore) preparedApprovalOperations(ctx context.Context, state toolcon
 			return nil, nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
 		}
 		if row.AuthorityFormat != "" {
-			option, release, err := s.nativeApprovedOption(ctx, state, operationAuthoritySource(row.CheckpointID), op.Option)
+			option, release, err := s.nativeAuthority().approvedOption(ctx, state, operationAuthoritySource(row.CheckpointID), op.Option)
 			if err != nil {
 				releases.release()
 				return nil, nil, err
@@ -213,28 +213,4 @@ func (s *SQLStore) preparedApprovalOperations(ctx context.Context, state toolcon
 		out = append(out, op)
 	}
 	return out, releases.release, nil
-}
-
-// nativeApprovedOption restores the single approved option a native
-// operation or chat grant row records, bound to that row's display copy.
-func (s *SQLStore) nativeApprovedOption(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource, display ApprovalOption) (ApprovalOption, func(), error) {
-	projection, releaseProjection, err := s.readNativeAuthority(ctx, state, source)
-	if err != nil {
-		return ApprovalOption{}, nil, err
-	}
-	options, releaseOptions, err := restoredNativeOptions(ctx, state, projection, []ApprovalOption{display})
-	if err != nil {
-		releaseProjection()
-		return ApprovalOption{}, nil, fmt.Errorf("%s: %w", source.name, err)
-	}
-	return options[0], func() { releaseOptions(); releaseProjection() }, nil
-}
-
-// releaseList releases retained native leases in reverse order.
-type releaseList []func()
-
-func (r releaseList) release() {
-	for n := len(r) - 1; n >= 0; n-- {
-		r[n]()
-	}
 }
