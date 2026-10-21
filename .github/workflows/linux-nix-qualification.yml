@@ -11,7 +11,7 @@ on:
       component:
         description: Fixed nonpublishing qualification scope
         type: choice
-        options: [default, scanner-finalized, desktop-settings-observer, shell, desktop-shell-check]
+        options: [default, closure-notices, scanner-finalized, desktop-settings-observer, shell, desktop-shell-check]
         default: default
         required: true
 
