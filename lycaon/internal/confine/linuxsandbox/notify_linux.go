@@ -45,18 +45,6 @@ type seccompNotifAddfd struct {
 	NewFDFlags uint32
 }
 
-// seccompIoctlNotifSetFlags is SECCOMP_IOCTL_NOTIF_SET_FLAGS,
-// _IOW('!', 4, __u64), on every architecture the helper builds for.
-const seccompIoctlNotifSetFlags = 0x40082104
-
-// syncWakeUp asks the kernel (6.6 and later) to hand each notification to the
-// waiting supervisor, and each answer back to the caller, on the current CPU,
-// which a synchronous one-at-a-time exchange such as a create benefits from.
-// An older kernel refuses the request and keeps ordinary wake-ups.
-func syncWakeUp(listener int) {
-	_, _, _ = unix.Syscall(unix.SYS_IOCTL, uintptr(listener), seccompIoctlNotifSetFlags, unix.SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
-}
-
 // maxSockaddr bounds the address the supervisor copies from the target.
 const maxSockaddr = 128
 
