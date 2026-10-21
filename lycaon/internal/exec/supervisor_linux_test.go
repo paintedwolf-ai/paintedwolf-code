@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,6 +139,55 @@ func TestSupervisedPTYInteractiveShellOwnsForeground(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("terminal output did not settle")
 	}
+}
+
+// A terminal interrupt reaches the program on the terminal, not the supervisor
+// holding its session: an interpreter run without a job-control shell survives
+// Ctrl-C instead of the whole command being terminated.
+func TestSupervisedPTYInterruptReachesOnlyTheProgram(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interactive interpreter", err)
+	terminal, err := StartPTY(t.Context(), python, []string{"-i", "-q", "-u"}, PTYOpts{Launch: HostLaunch("terminal interrupt regression"), Timeout: 30 * time.Second})
+	testutil.FailErr(t, "start interactive interpreter", err)
+	defer terminal.Close()
+	var mu sync.Mutex
+	var seen strings.Builder
+	go func() {
+		chunk := make([]byte, 4096)
+		for {
+			n, err := terminal.Read(chunk)
+			mu.Lock()
+			seen.Write(chunk[:n])
+			mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	text := func() string { mu.Lock(); defer mu.Unlock(); return seen.String() }
+	await := func(marker string) {
+		t.Helper()
+		deadline := time.Now().Add(15 * time.Second)
+		for !strings.Contains(text(), marker) {
+			if time.Now().After(deadline) {
+				t.Fatalf("terminal never showed %q:\n%q", marker, text())
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	send := func(input string) {
+		t.Helper()
+		_, err := terminal.Write([]byte(input))
+		testutil.FailErr(t, "write terminal input", err)
+	}
+	send("print('ready' + '-for-input')\n")
+	await("ready-for-input")
+	send("\x03")
+	await("KeyboardInterrupt")
+	send("print('interrupt' + '-survived')\n")
+	await("interrupt-survived")
+	send("raise SystemExit(0)\n")
+	testutil.FailErr(t, "interpreter exit after the interrupt", terminal.Wait())
 }
 
 func TestSupervisedCommandSeesOnlyItsIntendedDescriptors(t *testing.T) {

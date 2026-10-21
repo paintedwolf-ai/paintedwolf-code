@@ -241,7 +241,24 @@ func (e *exitStatusError) Sys() any      { return e.status }
 func notifyForwarded() chan os.Signal {
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, forwardedSignals()...)
+	if stdinIsTerminal() {
+		absorbTerminalSignals()
+	}
 	return events
+}
+
+// absorbTerminalSignals keeps the terminal's job-control signals from ending or
+// stopping a helper. The terminal delivers them to the target in the same
+// foreground group itself, and an interpreter that handles Ctrl-C must outlive
+// it. Handling rather than ignoring them leaves the target's dispositions at
+// their defaults across exec.
+func absorbTerminalSignals() {
+	absorbed := make(chan os.Signal, 8)
+	signal.Notify(absorbed, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTSTP)
+	go func() {
+		for range absorbed {
+		}
+	}()
 }
 
 // relay forwards events to the child until wait returns, then maps the
