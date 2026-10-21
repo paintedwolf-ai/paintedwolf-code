@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -187,42 +186,6 @@ type Confinement struct {
 	Browser bool
 }
 
-var (
-	autoConfineMu sync.RWMutex
-	autoConfine   bool
-)
-
-func autoConfineEnabled() bool {
-	autoConfineMu.RLock()
-	defer autoConfineMu.RUnlock()
-	return autoConfine
-}
-
-func setAutoConfine(on bool) {
-	autoConfineMu.Lock()
-	autoConfine = on
-	autoConfineMu.Unlock()
-}
-
-// EnableAutoConfine turns confinement on for this process.
-func EnableAutoConfine() { setAutoConfine(true) }
-
-// TestingSetAutoConfine turns confinement on for this test and restores it.
-func TestingSetAutoConfine(t interface {
-	Helper()
-	Cleanup(func())
-}) {
-	t.Helper()
-	prev := autoConfineEnabled()
-	setAutoConfine(true)
-	t.Cleanup(func() { setAutoConfine(prev) })
-}
-
-// BypassEnabled reports the explicit host-wide bypass.
-func BypassEnabled() bool {
-	return configdir.EnvTruthy(os.Getenv("LYCAON_BYPASS_APPROVALS"))
-}
-
 // DefaultConfinement builds the boundary for a valid rooted request.
 func DefaultConfinement(req Request) (*Confinement, bool) {
 	if req.HostExecution {
@@ -233,7 +196,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		logConfinementPrepareError(err)
 		return nil, false
 	}
-	if !autoConfineEnabled() || BypassEnabled() || SandboxDisabled() || !Available() || len(prepared.Roots) == 0 {
+	if !confinementRequired() || !Available() || len(prepared.Roots) == 0 {
 		return nil, false
 	}
 	c := &Confinement{
@@ -296,35 +259,8 @@ func BrowserConfinement(req Request) (*Confinement, bool) {
 	return &out, true
 }
 
-// Enforcing reports whether the host applies confinement.
-func Enforcing() bool {
-	return autoConfineEnabled() && !BypassEnabled() && !SandboxDisabled() && Available()
-}
-
-// ErrNotConfined rejects a missing active boundary.
-var ErrNotConfined = errors.New("confine: refusing to run unconfined — sandbox is enabled " +
-	"but no confinement could be built for this action (no write-jail roots, or a rejected " +
-	"capability grant)")
-
 // ErrNestedHelper rejects wrapping from a process that is already the confine helper.
 var ErrNestedHelper = errors.New("confine: this process is already applying a sandbox profile")
-
-// RequireApplied rejects a missing boundary while enforcement is active.
-func RequireApplied(applied bool) error {
-	if applied || !Enforcing() {
-		return nil
-	}
-	return ErrNotConfined
-}
-
-// SandboxDisabled reports the explicit confinement off-switch.
-func SandboxDisabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LYCAON_SANDBOX"))) {
-	case "off", "0", "false", "no", "disable", "disabled":
-		return true
-	}
-	return false
-}
 
 // Command builds the process for the selected confinement boundary.
 func Command(
