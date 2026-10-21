@@ -114,6 +114,10 @@ class ObservedDeliveryReleaseAuthority:
         self.selected.authorize()
         return repositories, cache
 
+    def aur_facts(self):
+        from .aur import facts
+        return facts(self.selected)
+
     def __call__(self, binding, inputs, report):
         released = self.released.authorize(binding)
         if (not isinstance(released, dict) or set(released) != {"provenance", "metadata", "non_linux_packages"}
@@ -121,10 +125,11 @@ class ObservedDeliveryReleaseAuthority:
             raise ValueError("delivery document requires fresh independent release inputs")
         document = binding["document"]
         if (document["mode"] != "production" or document["origin"] != ORIGIN
-                or document["controller_commit"] != self.controller_commit
-                or document["aur"] != {"enabled": False}):
-            raise ValueError("delivery document differs from protected policy; AUR availability is not established")
+                or document["controller_commit"] != self.controller_commit):
+            raise ValueError("delivery document differs from protected policy")
         repositories, cache = self.facts()
+        if document["aur"] != self.aur_facts():
+            raise ValueError("advertised AUR differs from fresh independent origin admission")
         actual = document["repositories"]
         if sorted(actual, key=lambda row: row["generation"]) != sorted(repositories, key=lambda row: row["generation"]):
             raise ValueError("advertised repositories differ from fresh delivery observations")
