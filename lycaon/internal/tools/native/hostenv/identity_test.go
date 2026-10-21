@@ -21,6 +21,10 @@ func TestIdentityAndSystemUtilities(t *testing.T) {
 		{"uname -nr", "fixture-host 1.2.3\n"},
 		{"uname -v", "#1 fixture\n"},
 		{"hostname", "fixture-host\n"},
+		{"nproc", "6\n"},
+		{"nproc --all", "8\n"},
+		{"nproc --ignore 2", "4\n"},
+		{"nproc --ignore=9", "1\n"},
 		{"whoami", "fixture-user\n"},
 		{"id", "uid=501 gid=20 groups=20,12\n"},
 		{"id -u", "501\n"},
@@ -116,7 +120,7 @@ func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 		t.Fatal("owners without host facts accepted")
 	}
 	var unprepared Prepared
-	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {
+	if result, err := unprepared.InvokeOwner(t.Context(), h.tc, nil, nil, commandprogram.Streams{}); err == nil || result.Status == 0 {
 		t.Fatalf("unprepared invocation ran: %+v", result)
 	}
 }

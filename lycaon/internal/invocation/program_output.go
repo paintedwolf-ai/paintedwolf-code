@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -88,14 +90,36 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err = insertProgramOutput(ctx, tx, programID, output, reference, string(mappings)); err != nil {
+		if err = insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
 			return err
 		}
 		return tx.Commit()
 	})
 }
 
-func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output RetainedOutput, reference tooloutput.RetainedStreamReference, mappings string) error {
+// maxOutputPreviewBytes bounds the screened leading bytes a receipt page carries.
+const maxOutputPreviewBytes = 2048
+
+// outputPreview keeps whole leading runes of the spill's screened preview;
+// interior invalid bytes become U+FFFD so the wire stays UTF-8.
+func outputPreview(preview []byte, size int64) (string, bool) {
+	cut := preview[:min(len(preview), maxOutputPreviewBytes)]
+	for back := 0; back < utf8.UTFMax && len(cut) > 0 && !utf8.FullRune(cut[lastRuneStart(cut):]); back++ {
+		cut = cut[:lastRuneStart(cut)]
+	}
+	return strings.ToValidUTF8(string(cut), "\uFFFD"), int64(len(cut)) < size
+}
+
+func lastRuneStart(b []byte) int {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(b[i]) {
+			return i
+		}
+	}
+	return len(b)
+}
+
+func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output RetainedOutput, reference tooloutput.RetainedStreamReference, mappings string, screenedPreview []byte) error {
 	blob, err := json.Marshal(reference.Blob)
 	if err != nil {
 		return err
@@ -107,6 +131,7 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	if mappings == "" {
 		mappings = "[]"
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, mappings, time.Now().UTC().Format(time.RFC3339Nano))
+	preview, truncated := outputPreview(screenedPreview, reference.Blob.Size)
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }

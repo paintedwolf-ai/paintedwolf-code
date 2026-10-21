@@ -1,10 +1,9 @@
 tags: [process, terminal]
 description: >-
-  Needs `command` or `pipeline` (not both). Runs as argv without a shell:
-  `&&`/`||`/`;` sequence commands, `pipeline` carries `|`, `>`/`>>`/`2>` redirect,
-  globs and `@scratch/<path>` expand. Here-documents (`<<`) reject; `$()`/backticks reject; pass input with `stdin` or `stdin_from`. Leading `NAME=value` assignments scope to
-  their command; shared variables belong in `env`. Pass cwd; `cd` is rejected.
-  Omit output paths to return output tails.
+  Runs one command program: pipelines, `&&`/`||`/`;`, if/for/while, functions,
+  variables, `$()` substitutions, globs, here-documents, `<`/`>`/`>>`/`2>`
+  redirects and trailing `&` jobs. Catalog utilities run natively; other
+  programs run confined. The whole program is checked before anything runs.
 schema:
   type: object
   properties:
@@ -34,17 +33,8 @@ schema:
     command:
       type: string
       description: >-
-        One argv line, optionally prefixed with stage `NAME=value` assignments.
-        Unquoted globs and `@scratch/<path>` arguments expand; `<`/`>`/`>>`/`2>` redirect per stage. Shell substitutions
-        reject; read the returned stage exit codes. `&&`, `||`, and `;` create
-        gated processes. Use background for long-lived commands.
-    pipeline:
-      type: array
-      description: >-
-        Multi-stage runs: the complete list of argv lines from producer through
-        consumer, Go-wired stdout to stdin. Omit command when using pipeline.
-      items:
-        type: string
+        The program text. Each reached command is reviewed on its own; read the
+        returned status and effect counts.
     cwd:
       type: string
       description: >-
@@ -53,51 +43,12 @@ schema:
         `@scratch/sub/path`) for session scratch. On a write worker,
         workspace paths resolve under the private branch. Empty = branch root
         (or active root when not on a worker). Must be a directory inside a
-        project root or `@scratch`. `cd` is rejected — pass the directory here.
-    stdin:
-      type: string
-      description: >-
-        Bytes on the process stdin — not flags or operands. Put those on
-        command. One program only; rejected on a sequence.
-    stdin_from:
-      type: string
-      description: Read-scope stdin path (supports `@scratch/` paths).
-    env:
-      type: object
-      default: {}
-      additionalProperties:
-        type: string
-      description: >-
-        Environment variables for all stages. Stage-specific prefix assignments
-        on command override these keys. The child also receives `SCRATCH_DIR`.
-    stdout_to:
-      type: string
-      description: Optional write-scope path for stdout (supports `@scratch/` paths). Omit to keep stdout in the tool result tail.
-    stderr_to:
-      type: string
-      description: Optional write-scope path for stderr (supports `@scratch/` paths). Omit to keep stderr in the tool result tail.
-    append:
-      type: boolean
-      default: false
-      description: Append redirects
-    background:
-      type: boolean
-      default: false
-      description: Explicit concurrent job; returns its command handle immediately.
-    wait_ms:
-      type: integer
-      minimum: 1
-      maximum: 30000
-      description: Inline response window before returning a live handle (default/max 30s); not a kill. Ignored with background:true.
+        project root or `@scratch`. `cd` inside the program moves from here.
     timeout_ms:
       type: integer
       minimum: 1000
       maximum: 7200000
-      description: Optional execution deadline. Unlike wait_ms, expiry stops the command tree.
-    allow_concurrent:
-      type: boolean
-      default: false
-      description: Admit this awaited command beside an existing one. Exact live duplicates are still rejected.
+      description: Optional execution deadline; expiry stops the program and its owned work.
     terminal_capture:
       type: object
       description: >-
@@ -305,19 +256,5 @@ schema:
             the declared file.
       additionalProperties: false
       minProperties: 1
-  oneOf:
-    - required: [command]
-    - required: [pipeline]
-  allOf:
-    - if:
-        required: [terminal_capture]
-      then:
-        properties:
-          background:
-            const: false
-          pipeline: false
-          stdin: false
-          stdin_from: false
-          stdout_to: false
-          stderr_to: false
+  required: [command]
   additionalProperties: false

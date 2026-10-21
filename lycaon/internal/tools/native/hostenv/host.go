@@ -3,6 +3,7 @@ package hostenv
 import (
 	"context"
 	"errors"
+	"runtime"
 )
 
 // SystemFacts are the platform's uname fields.
@@ -24,6 +25,9 @@ type IdentityFacts struct {
 type HostFacts interface {
 	System(context.Context) (SystemFacts, error)
 	Identity(context.Context) (IdentityFacts, error)
+	// Processors is the number of processing units available to the host
+	// process (nproc), and with all every unit installed (nproc --all).
+	Processors(ctx context.Context, all bool) (int, error)
 }
 
 // ErrHostFactUnavailable marks a fact this platform cannot report.
@@ -33,3 +37,7 @@ var ErrHostFactUnavailable = errors.New("host fact unavailable on this platform"
 type OSHost struct{}
 
 var _ HostFacts = OSHost{}
+
+// Processors reports the units Go schedules on: the CPU affinity set where
+// the platform has one, which is also the installed count elsewhere.
+func (OSHost) Processors(context.Context, bool) (int, error) { return runtime.NumCPU(), nil }

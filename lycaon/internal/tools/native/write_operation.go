@@ -23,6 +23,10 @@ type WriteInput struct {
 	// the destination revision or absence, and the inputs Content came from.
 	Destination toolcontract.ExecutionRevision
 	Sources     []toolcontract.ExecutionRevision
+	// Exact publishes Bytes verbatim instead of encoding Content: a program's
+	// redirect output, text or not. It requires the execution-pinned admission.
+	Exact bool
+	Bytes []byte
 }
 
 type WriteAdmission uint8
@@ -75,7 +79,13 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 		return WriteResult{}, err
 	}
 	if input.Admission == WriteExecutionPinned {
+		if input.Exact {
+			return t.applyPinnedBytes(ctx, input, tctx, resolved)
+		}
 		return t.applyPinned(ctx, input, tctx, resolved)
+	}
+	if input.Exact {
+		return WriteResult{}, unsupportedWriteAdmission()
 	}
 	return retryEditorOperation(ctx, resolved.DisplayPath, func() (WriteResult, error) {
 		// A missing file is a create; otherwise the base is the served source text.

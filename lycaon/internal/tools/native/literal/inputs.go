@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -101,13 +102,20 @@ func (inv *invocation) failureStatus() int {
 }
 
 // recordPin retains every capture of this execution before its bytes are used.
+// A domain owner may open files concurrently and more than once; one
+// unchanged capture is recorded once.
 func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if inv.owners.Pins == nil || execution == "" {
 		return fmt.Errorf("literal reads require a program execution and pin recorder")
 	}
+	inv.pinMu.Lock()
+	defer inv.pinMu.Unlock()
+	if slices.Contains(inv.pins, revision) {
+		return nil
+	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
 }
 
 // readBounded gathers a stream whole, refusing rather than truncating input
