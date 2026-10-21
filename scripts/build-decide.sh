@@ -26,7 +26,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   fi
 fi
 
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${PW_BUILD_DIR}/decide-target}"
+export CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/decide"
 ARGS=(--locked --release --manifest-path "${CRATE}/Cargo.toml" --bin bialy)
 if [[ -n "${FEATURES}" ]]; then
   ARGS+=(--features "${FEATURES}")
