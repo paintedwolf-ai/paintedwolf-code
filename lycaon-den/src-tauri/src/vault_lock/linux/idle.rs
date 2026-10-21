@@ -79,7 +79,7 @@ pub(crate) enum IdleUnavailable {
 pub(crate) struct IdleFacts {
     pub source: Option<IdleSource>,
     pub error: Option<IdleUnavailable>,
-    /// Input stayed idle for the step-away period.
+    /// Input stayed idle for the unlock idle period.
     pub idle: bool,
 }
 
