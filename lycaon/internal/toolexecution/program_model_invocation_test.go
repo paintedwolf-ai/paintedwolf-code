@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) {
@@ -87,5 +88,35 @@ func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	end()
 	if memory.held != 0 || frame.lifetime.facts.roots != nil || frame.lifetime.facts.parent.ActorID != "" || frame.lifetime.model.CanonicalArguments != "" {
 		t.Fatal("drained frame retained unaccounted facts")
+	}
+}
+
+func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *testing.T) {
+	parent, tc := frameFixture(t)
+	memory := &stageAdmissionFixture{}
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "cat input"}}, memory)
+	testutil.FailErr(t, "freeze actual command", err)
+	defer frame.Close()
+	baseline := memory.held
+	ctx, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
+	testutil.FailErr(t, "admit actual policy observation", err)
+	if observation.submitted["script"] != "cat input" || memory.held <= baseline {
+		t.Fatal("policy observation lost actual envelope or decoded-state admission")
+	}
+	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
+	executor := NewExecutor(nil, nil, "fixture")
+	if got := executor.Rejections.rejectBeforeInvoke(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); got != cause {
+		t.Fatal("native preinvoke rejection was rendered before receipt settlement")
+	}
+	if got := executor.Rejections.settleReject(ctx, "read", "fixture", map[string]any{"path": "input"}, cause); got != cause {
+		t.Fatal("native owner rejection was rendered before receipt settlement")
+	}
+	release()
+	if memory.held != baseline {
+		t.Fatal("decoded observation lease leaked")
+	}
+	tc.Identity.ToolCallID = "another-model-call"
+	if _, _, err := programModelArguments(t.Context(), frame, memory, tc); err == nil || memory.held != baseline {
+		t.Fatal("wrong model call received observation or retained state")
 	}
 }

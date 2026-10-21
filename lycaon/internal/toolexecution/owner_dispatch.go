@@ -34,7 +34,7 @@ func invocationContext(ctx context.Context, tc tools.ToolContext) context.Contex
 // prepareOwnerDispatch shares the complete final screening/review phase between
 // structured and typed native interfaces. Owners receive the resolved arguments
 // that passed the existing boundary, rather than the adapter's earlier input.
-func (e *Executor) prepareOwnerDispatch(ctx context.Context, qualifiedName, profileID string, canonicalArgs map[string]any, tc *tools.ToolContext) (context.Context, map[string]any, error) {
+func (e *Executor) prepareOwnerDispatch(ctx context.Context, qualifiedName, profileID string, canonicalArgs map[string]any, tc *tools.ToolContext, observation *programPolicyObservation) (context.Context, map[string]any, error) {
 	// Handlers execute against resolved arguments and echo against these.
 	tc.Effects.CanonicalArgs = canonicalArgs
 	ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
@@ -54,11 +54,16 @@ func (e *Executor) prepareOwnerDispatch(ctx context.Context, qualifiedName, prof
 	tc.Execution.ProcessReview = e.Process.processReviewer(qualifiedName, canonicalArgs, *tc)
 	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(qualifiedName, canonicalArgs, *tc)
 	if e.Rejections.blockPlane != nil {
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolPreInvoke, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return ctx, nil, err
-		}
-		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolHandler, qualifiedName, profileID, canonicalArgs, nil); err != nil {
-			return ctx, nil, err
+		for _, anchor := range []string{oar.AnchorToolPreInvoke, oar.AnchorToolHandler} {
+			var err error
+			if observation != nil {
+				err = observation.evaluate(ctx, e.Rejections.blockPlane, anchor, profileID)
+			} else {
+				err = e.Rejections.blockPlane.Evaluate(ctx, anchor, qualifiedName, profileID, canonicalArgs, nil)
+			}
+			if err != nil {
+				return ctx, nil, err
+			}
 		}
 	}
 	return ctx, executionArgs, nil

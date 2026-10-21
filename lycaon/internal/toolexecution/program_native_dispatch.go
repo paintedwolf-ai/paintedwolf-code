@@ -113,9 +113,14 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	tc.Invocation.NativeOperation, tc.Invocation.NativeStages = &bound, projection.BoundStages
-	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx,admission)
+	tc.Invocation.NativeReview = hitl.NewNativeActionReview(ctx, admission)
 	defer tc.Invocation.NativeReview.Close()
 	ctx = invocationContext(ctx, tc)
+	ctx, observation, releaseObservation, err := prepareProgramPolicyObservation(ctx, frame, admission, tc, &bound)
+	if err != nil {
+		return result, err
+	}
+	defer releaseObservation()
 	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
 		return result, err
 	}
@@ -160,7 +165,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	canonical = reviewedArguments.values
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
-	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc)
+	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
 	if err != nil {
 		return result, err
 	}

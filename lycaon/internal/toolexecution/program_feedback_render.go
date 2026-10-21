@@ -2,9 +2,7 @@ package toolexecution
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -24,29 +22,17 @@ func (e *Executor) RenderProgramFailure(ctx context.Context, frame ProgramFrame,
 	if _, err := frame.ChildContext(ctx, prepared.operation.Definition(), prepared.operation.Invocation(), tc); err != nil {
 		return err
 	}
-	model, err := frame.ModelInvocation(ctx)
+	end, err := frame.beginUse()
 	if err != nil {
 		return err
 	}
-	if model.ToolName != "command" || model.ToolCallID != tc.Identity.ToolCallID {
-		return fmt.Errorf("program feedback model call changed")
-	}
-	// JSON is an immutable frame snapshot. Charge decoded containers separately;
-	// operation arguments never masquerade as this submitted argument object.
-	release, err := prepared.memory.ReserveProgramState(ctx, int64(len(model.CanonicalArguments))*32+4096)
+	defer end()
+	submitted, release, err := programModelArguments(ctx, frame, prepared.memory, tc)
 	if err != nil {
 		return err
-	}
-	if release == nil {
-		return fmt.Errorf("model feedback observation returned no state lease")
 	}
 	defer release()
-	var submitted map[string]any
-	decoder := json.NewDecoder(strings.NewReader(model.CanonicalArguments))
-	decoder.UseNumber()
-	if err := decoder.Decode(&submitted); err != nil || submitted == nil {
-		return fmt.Errorf("captured model invocation is not an argument object")
-	}
+
 	ctx = invocationContext(ctx, tc)
 	if e.Rejections != nil && e.Rejections.blockPlane != nil {
 		if err := e.Rejections.blockPlane.RejectNativeObservation(ctx, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection); err != nil {
