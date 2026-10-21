@@ -250,7 +250,7 @@ func (p capacityPlan) jobFootprint(t *testing.T, workflow, name, event string, j
 	switch {
 	case strings.HasPrefix(runner, "macos"):
 		return footprint{total: total, macos: total}
-	case runner != "${{ matrix.runner }}":
+	case runner != "${{ matrix.runner }}" || workflow == "linux-candidates.yml":
 		return footprint{total: total}
 	case job.Strategy.MaxParallel == catalogMaxParallel:
 		return footprint{total: total, macos: cappedCount(p.macosLanes(inputs["profile"]), limit)}

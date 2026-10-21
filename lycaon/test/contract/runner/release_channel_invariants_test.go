@@ -103,20 +103,32 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Linux candidates build both package families natively without publication authority.
-	candidates := extractYAMLJob(workflow, "linux-candidates")
-	for _, needle := range []string{
-		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "./task den:bundle",
-		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90", "Verify the catalog row for this candidate",
-	} {
-		if !strings.Contains(candidates, needle) {
-			t.Fatalf("linux-candidates job is missing %q", needle)
+	// Release and independent candidate runs share one non-publishing build path.
+	call := extractYAMLJob(workflow, "linux-candidates")
+	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
+		if !strings.Contains(call, needle) {
+			t.Fatalf("release candidate caller is missing %q", needle)
 		}
 	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-"} {
+	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
+	for _, needle := range []string{
+		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
+		"name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90", "Verify the catalog row for this candidate",
+		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
+		"./task release:candidate:diagnostics --",
+	} {
+		if !strings.Contains(candidates, needle) {
+			t.Fatalf("Linux candidate workflow is missing %q", needle)
+		}
+	}
+	// Candidate runs carry no branch-scoped triggers and use one source checkout.
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
+		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test"} {
 		if strings.Contains(candidates, forbidden) {
-			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
+			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
