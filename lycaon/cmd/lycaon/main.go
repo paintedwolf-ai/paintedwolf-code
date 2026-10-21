@@ -18,6 +18,7 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
@@ -140,6 +141,9 @@ func runServe(signals context.Context, dbPath string) error {
 		if err := osprocess.DisableDumps(); err != nil {
 			return fmt.Errorf("disable process dumps: %w", err)
 		}
+	}
+	if err := httpclient.PinSystemTrust(); err != nil {
+		return fmt.Errorf("load system trust: %w", err)
 	}
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
