@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -157,22 +158,51 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
 }
 
+// invokeExternal admits one confined launch as its own child through the
+// executor's existing approval, detection-pack and policy evaluation, over
+// the literal argv and directory it will run with, then launches it once.
 func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	spec := d.run.commands["external"]
-	child, err := d.prepare(ctx, spec, request, map[string]any{"operation_id": "external", "argv": externalArgv(request.Argv.Values())})
+	argv := externalArgv(request.Argv.Values())
+	if len(argv) == 0 {
+		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": "requires a program"})
+	}
+	definition, err := d.run.externalDefinition()
+	if err != nil {
+		return refusedResult("TOOL_OWNER_FAILED"), err
+	}
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, nil)
+	if err != nil {
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
+	}
+	cwd, display := d.paths.Cwd().Abs, d.paths.Cwd().DisplayPath
+	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
+	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
-	if err := d.start(ctx, child); err != nil {
-		result := refusedResult("TOOL_OWNER_FAILED")
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	effect := toolexecution.NativeEffect{
+		Operation: bound, Streams: streams, Inspection: d.run.capture,
+		// The existing command review, detection and policy read these fields.
+		Arguments: map[string]any{"command": line, "cwd": display},
+		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
+		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				return ExternalStages{ToolContext: admitted, Dir: cwd}.Launch(ctx, request, streams)
+			}}, nil
+		},
 	}
-	result, runErr := ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs}.Launch(ctx, request, streams)
-	if result.Terminal == "" {
-		result = ownerFailure(runErr)
+	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
+	launched, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
+	if toolrejection.AsToolReject(runErr) != nil {
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: runErr}
+		}
+		d.shared.mu.Unlock()
 	}
-	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
+	return launched.Producer, errors.Join(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked, launched.HostStopCode))
 }
 
 // refuseUnimplemented settles a catalogued name with no host owner here. It

@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -93,6 +94,10 @@ type programRun struct {
 	source        string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+
+	externalOnce sync.Once
+	external     toolcontract.OperationDefinition
+	externalErr  error
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -149,8 +154,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	defer parsed.Close()
-	defer snapshot.Close()
+	// The plan and frame stay alive while & jobs still run under supervision;
+	// they are released when the program settles.
+	release := func() { _ = snapshot.Close(); _ = parsed.Close() }
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 
 	root := toolcontract.OperationInvocation{
 		Kind:         toolcontract.ProgramChildInvocation,
@@ -168,7 +180,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	defer frame.Close()
+	releasePlan := release
+	release = func() { frame.Close(); releasePlan() }
 	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
 	if err != nil {
 		return "", err
@@ -179,7 +192,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return "", err
 		}
 	}
-	var active []toolcontract.OperationDefinition
+	run := &programRun{catalog: catalog, commands: commandIndex(catalog)}
+	external, err := run.externalDefinition()
+	if err != nil {
+		return "", err
+	}
+	active := []toolcontract.OperationDefinition{external}
 	for _, operation := range owners.Natives {
 		if definition, ok := r.Registry.Definition(operation.Tool); ok {
 			active = append(active, definition.Operation)
@@ -195,12 +213,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
-	run := &programRun{
-		executor: r.Executor, registry: r.Registry, recorder: r.Recorder, supervisor: r.Supervisor, progress: r.Progress,
-		frame: frame, surface: surface, memory: memory, tc: tc, root: root, parentReceipt: tc.Invocation.ID, source: source,
-		catalog: catalog, commands: commandIndex(catalog),
-		capture: invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64},
-	}
+	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
+	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
@@ -234,7 +249,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return evaluatedResult(evaluated), err
 	})
 	settled := make(chan error, 1)
-	r.Supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) { settled <- r.settleProgram(ctx, run, result, evaluated, stopped) })
+	handedOff = true
+	lifetime := &programLifetime{release: release}
+	defer lifetime.callerDone()
+	r.Supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) {
+		settled <- r.settleProgram(ctx, run, result, evaluated, stopped)
+		lifetime.settled()
+	})
 	var settleErr error
 	select {
 	case settleErr = <-settled:
@@ -493,4 +514,51 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		}
 	}
 	return unique
+}
+
+// externalDefinition is the command tool's operation for confined launches:
+// the existing command review, detection and policy admit each launch.
+func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, error) {
+	r.externalOnce.Do(func() {
+		contract, ok := toolcontract.Lookup("command")
+		if !ok {
+			r.externalErr = fmt.Errorf("command contract missing")
+			return
+		}
+		r.external, r.externalErr = toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
+			Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+			Commands: []toolcontract.CommandSpecification{r.commands["external"]}, Resources: r.catalog.Language.Limits,
+			ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
+			Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
+		})
+	})
+	return r.external, r.externalErr
+}
+
+// programLifetime releases a program's plan and frame once both the tool call
+// has finished with them and the program (with its & jobs) has settled.
+type programLifetime struct {
+	mu                     sync.Mutex
+	callerFinished, isDone bool
+	release                func()
+}
+
+func (l *programLifetime) callerDone() {
+	l.mu.Lock()
+	l.callerFinished = true
+	done := l.isDone
+	l.mu.Unlock()
+	if done {
+		l.release()
+	}
+}
+
+func (l *programLifetime) settled() {
+	l.mu.Lock()
+	l.isDone = true
+	finished := l.callerFinished
+	l.mu.Unlock()
+	if finished {
+		l.release()
+	}
 }

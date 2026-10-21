@@ -75,7 +75,7 @@ func newProgramFixture(t *testing.T) *programFixture {
 			return "", errors.New("structured tool is not exercised")
 		}))
 	}
-	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
@@ -237,7 +237,7 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 		t.Fatalf("native owner effect %q %v", data, err)
 	}
 	executions := f.executions(t)
-	if executions["external"] != "completed;" || executions["write"] != "completed;" {
+	if executions["command"] != "completed;" || executions["write"] != "completed;" {
 		t.Fatalf("child receipts %v", executions)
 	}
 	if programs := f.programRows(t); len(programs) != 1 || programs[0] != "completed" {
@@ -292,7 +292,7 @@ func TestProgramEntryStopCancelsMidPipelineAndSettlesChildren(t *testing.T) {
 		_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 | tee never.txt")
 		done <- err
 	}()
-	f.awaitExecution(t, "external", "running")
+	f.awaitExecution(t, "command", "running")
 	if stopped := f.runtime.Supervisor.Stop(f.session); len(stopped) != 1 {
 		t.Fatalf("stop acknowledged %v", stopped)
 	}
@@ -318,7 +318,7 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 		_, err := f.call(t, t.Context(), "external -- /bin/sleep 30")
 		done <- err
 	}()
-	f.awaitExecution(t, "external", "running")
+	f.awaitExecution(t, "command", "running")
 	interrupted, err := f.runtime.Supervisor.Lost(t.Context(), f.session, "output:supervisor-lost")
 	testutil.FailErr(t, "reconcile supervisor loss", err)
 	if interrupted != 1 {
@@ -335,7 +335,7 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 	before := f.executions(t)
 	count, err := f.runtime.Supervisor.Lost(t.Context(), f.session, "output:supervisor-lost-again")
 	testutil.FailErr(t, "repeat reconciliation", err)
-	if count != 0 || fmt.Sprint(f.executions(t)) != fmt.Sprint(before) || before["external"] != "interrupted;" {
+	if count != 0 || fmt.Sprint(f.executions(t)) != fmt.Sprint(before) || before["command"] != "interrupted;" {
 		t.Fatalf("loss replayed or rewrote children: before %v after %v count %d", before, f.executions(t), count)
 	}
 }
@@ -402,7 +402,7 @@ func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
 	if !strings.Contains(out, `"stdout":"y\n"`) || !strings.Contains(out, `"status":0`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("early consumer outcome %s", out)
 	}
-	if executions := f.executions(t); executions["external"] != "completed;" || executions["read"] != "completed;" {
+	if executions := f.executions(t); executions["command"] != "completed;" || executions["read"] != "completed;" {
 		t.Fatalf("children %v", executions)
 	}
 }
