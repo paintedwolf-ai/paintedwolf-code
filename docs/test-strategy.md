@@ -751,7 +751,9 @@ queue when the Nix package sources, flake lock, non-flake entry or Nix build
 driver change. A lane's `paths` select it by repository prefix even within a
 broad change, and its `arguments` reach its single target. Setup installs the
 pinned Nix release and fetches every locked input with `nix:check -- --prepare`
-before the lane goes offline.
+before the lane goes offline. The `nix-confine` lane runs
+`test:confine:linux -- nix` the same way when Nix, confinement or Nix authority
+sources change; the leg builds the locked workflow fixture from its own checkout.
 
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
