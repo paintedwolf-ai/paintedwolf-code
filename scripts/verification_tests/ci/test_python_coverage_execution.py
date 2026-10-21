@@ -84,8 +84,9 @@ class PythonChangedCoverageTests(unittest.TestCase):
         findings, failed = self.run_gate()
         self.assertTrue(failed)
         errors = [f for f in findings if f.level == "error"]
-        self.assertIn("sample.py: 0 of 4 changed statements covered (0%)", errors[0].text)
-        self.assertEqual([(f.path, f.line, f.end_line) for f in errors[1:]], [("scripts/sample.py", 15, 18)])
+        # Importing the module runs the new `def`; the body never runs.
+        self.assertIn("sample.py: 1 of 4 changed statements covered (25%)", errors[0].text)
+        self.assertEqual([(f.path, f.line, f.end_line) for f in errors[1:]], [("scripts/sample.py", 16, 18)])
 
     def test_a_tested_added_statement_passes(self):
         (self.scripts / "sample.py").write_text(BASE + ADDED)
