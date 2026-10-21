@@ -33,8 +33,8 @@ rust_path_remap() {
     flags="${flags:+${flags}${separator}}--remap-path-prefix=${mapping}"
     # CFLAGS splits on whitespace, so a mapping with spaces cannot be expressed there.
     if [[ "${mapping}" != *[[:space:]]* && " ${CFLAGS:-} " != *" -ffile-prefix-map=${mapping} "* ]]; then
-      CFLAGS="${CFLAGS:+${CFLAGS} }-ffile-prefix-map=${mapping}"
-      CXXFLAGS="${CXXFLAGS:+${CXXFLAGS} }-ffile-prefix-map=${mapping}"
+      CFLAGS="${CFLAGS:-}${CFLAGS:+ }-ffile-prefix-map=${mapping}"
+      CXXFLAGS="${CXXFLAGS:-}${CXXFLAGS:+ }-ffile-prefix-map=${mapping}"
     fi
   done
   export CARGO_ENCODED_RUSTFLAGS="${flags}" CFLAGS CXXFLAGS
