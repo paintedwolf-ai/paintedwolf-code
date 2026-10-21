@@ -130,6 +130,7 @@ impl Monitor {
         self.inner.sources.clone()
     }
 
+    #[cfg(test)]
     pub(super) fn status(&self) -> LockSources {
         self.inner.sources.lock().unwrap().clone()
     }
@@ -200,6 +201,9 @@ impl Monitor {
             }
             let path = current.session.as_ref().map(|session| session.path.clone());
             subscribe_system(buses, &system, &weak, path.as_deref());
+        } else {
+            // An unreachable system bus observes no session, sleep or lock.
+            current.session_error = Some(session::SessionUnavailable::Unreadable);
         }
         if let Some(desktop) = buses.desktop.clone() {
             for (name, path) in SCREENSAVERS {
