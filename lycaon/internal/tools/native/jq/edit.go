@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/itchyny/gojq"
+
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -66,7 +68,7 @@ func Edit(ctx context.Context, req EditRequest) (EditResult, error) {
 	if err != nil {
 		return EditResult{}, editParseReject(req.Path, format, parsedAs, err)
 	}
-	program, err := CompileProgram(req.Query, sortedVariables(req.Vars), nil)
+	program, err := CompileProgram(req.Query, ProgramOptions{Variables: sortedVariables(req.Vars)})
 	if err != nil {
 		return EditResult{}, safecmd.Reject("JQ_QUERY_INVALID", map[string]any{
 			"query": req.Query, "detail": err.Error(),
@@ -162,11 +164,11 @@ func runEditQuery(ctx context.Context, program *Program, inputs []any, req EditR
 	defer cancel()
 	var results []editValue
 	for i, input := range inputs {
-		halt, err := program.Run(runCtx, input, func(v any) error {
+		halt, err := program.Run(runCtx, gojq.FromGo(input), func(v any) error {
 			if len(results) >= safecmd.JQScanCap {
 				return safecmd.Reject("JQ_EDIT_STREAM_CAP", map[string]any{"path": req.Path, "cap": safecmd.JQScanCap})
 			}
-			results = append(results, editValue{value: v, input: i})
+			results = append(results, editValue{value: gojq.ToGo(v), input: i})
 			return nil
 		})
 		if runCtx.Err() != nil && ctx.Err() == nil {

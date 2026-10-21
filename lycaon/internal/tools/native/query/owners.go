@@ -1,7 +1,8 @@
 // Package query is the command frontend for jq, yq and the jq-edit built-in.
-// jq and yq stream complete values through the same compiled gojq program the
-// structured jq tool evaluates; jq-edit runs the structured jq_edit's
-// format-preserving edit and publishes it at captured execution revisions.
+// jq streams complete values through the same compiled gojq program the
+// structured jq tool evaluates; yq runs mikefarah yq v4's library; jq-edit
+// runs the structured jq_edit's format-preserving edit. Edits publish at
+// captured execution revisions.
 package query
 
 import (

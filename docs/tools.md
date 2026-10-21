@@ -313,20 +313,36 @@ output that the delivery owner later delivers can qualify an edit base.
 
 ### Stream queries and format-aware edits
 
-`internal/tools/native/query` runs jq, yq and the jq-edit built-in. jq and yq
-compile one gojq program per execution through `nativejq.CompileProgram`, the
-same compilation the structured jq and jq_edit tools use. Complete input values
-stream through it in operand order, and the same iterator backs `input` and
-`inputs`, so a file is captured and pinned only when the query reaches it. The
-program has no ambient environment, module loader or other file access.
-`query_depth`, `query_outputs`, `query_value_bytes`, `query_cpu_ms` and
-`stream_bytes` refuse rather than truncate. gojq exposes no instruction
-counter, so the evaluation deadline is the work bound.
+`internal/tools/native/query` runs jq, yq and the jq-edit built-in, each with
+the real tool's results.
 
-Output follows gojq: sorted keys, jq string escapes, integers kept exact and
-fractions in shortest form. yq writes YAML documents unless `-c` asks for
-compact JSON. These serializations never preserve source formatting. jq-edit is
-the format-aware edit: it runs `nativejq.Edit` over the pinned accepted text and
+jq compiles one gojq program per execution through `nativejq.CompileProgram`,
+the same compilation the structured jq and jq_edit tools use. The vendored
+gojq ([third_party/README.md](../third_party/README.md#jq-engine)) behaves as
+jq 1.8: objects keep input key order, unmodified number literals print as
+written (`2.0`, `1E+3`), arithmetic is double arithmetic, and runtime errors use
+jq's wording and `jq: error (at FILE:LINE)` positions. Statuses are jq's: 5 for
+a runtime error in the last input or input that is not JSON, 3 for a compile
+error, 2 for an unreadable operand, and `-e`'s 1 and 4. Complete input values
+stream through the program in operand order, and the same iterator backs
+`input` and `inputs`, so a file is captured and pinned only when the query
+reaches it; `--slurpfile` and `--rawfile` files are pinned the same way. `$ENV`
+and `env` present the program's exported environment. No module loader or
+other file access exists. `query_depth`, `query_outputs`, `query_value_bytes`,
+`query_cpu_ms` and `stream_bytes` refuse rather than truncate. gojq exposes no
+instruction counter, so the evaluation deadline is the work bound.
+
+yq is mikefarah yq v4 on its own library: yq expression syntax, `eval` per
+document and `eval-all` over every document, `-p`/`-o` formats, and YAML output
+that keeps comments, key order and styles. `-i` evaluates into the first file
+and publishes the result at the captured revisions through the pinned write
+door. The library's environment, `load` and system operators are disabled, and
+evaluations run one at a time because the library keeps process-wide state.
+YAML alias expansion and the expression evaluator have no work counter; input
+size and `stream_bytes` bound them.
+
+A jq redirect re-serializes the document. jq-edit is the format-aware edit for
+JSON, YAML and TOML: it runs `nativejq.Edit` over the pinned accepted text and
 publishes the result through the pinned write door at its captured destination
 revision. A rewrite that would drop comments, tags or literals refuses with
 `JQ_EDIT_LOSSY`.

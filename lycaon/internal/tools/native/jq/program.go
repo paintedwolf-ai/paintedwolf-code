@@ -3,6 +3,7 @@ package jq
 import (
 	"context"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 
@@ -16,40 +17,97 @@ type Variable struct {
 }
 
 // Program is one compiled gojq query: the single compilation a structured
-// tool call or a command execution evaluates. No environment, module or
-// filesystem loader is available to it; input and inputs read only the
-// supplied iterator.
+// tool call or a command execution evaluates. No module or filesystem
+// loader is available to it; input and inputs read only the supplied
+// iterator, and $ENV and env read only the supplied environment.
 type Program struct {
 	code   *gojq.Code
 	values []any
 	query  string
 }
 
-// CompileProgram parses and compiles query once. inputs backs jq's input and
-// inputs builtins; nil leaves them empty.
-func CompileProgram(query string, variables []Variable, inputs gojq.Iter) (*Program, error) {
+// ProgramOptions are what a compiled query may read beyond its input.
+type ProgramOptions struct {
+	Variables []Variable
+	// Inputs backs input and inputs; nil leaves them empty.
+	Inputs gojq.Iter
+	// Environ is the NAME=value list $ENV presents; nil presents none.
+	Environ []string
+	// Stderr receives debug and stderr messages; nil discards them.
+	Stderr io.Writer
+	// Position names the current input for input_filename and
+	// input_line_number; nil reports null and 0.
+	Position func() (name any, line int)
+}
+
+// CompileProgram parses and compiles query once.
+func CompileProgram(query string, options ProgramOptions) (*Program, error) {
 	q, err := gojq.Parse(query)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, len(variables))
-	values := make([]any, len(variables))
-	for i, v := range variables {
+	names := make([]string, len(options.Variables))
+	values := make([]any, len(options.Variables))
+	for i, v := range options.Variables {
 		names[i] = "$" + strings.TrimPrefix(v.Name, "$")
-		values[i] = v.Value
+		values[i] = gojq.FromGo(v.Value)
 	}
-	options := []gojq.CompilerOption{gojq.WithEnvironLoader(func() []string { return nil })}
+	environ := options.Environ
+	compilerOptions := append([]gojq.CompilerOption{gojq.WithEnvironLoader(func() []string { return environ })}, queryDiagnostics(options)...)
 	if len(names) > 0 {
-		options = append(options, gojq.WithVariables(names))
+		compilerOptions = append(compilerOptions, gojq.WithVariables(names))
 	}
-	if inputs != nil {
-		options = append(options, gojq.WithInputIter(inputs))
+	if options.Inputs != nil {
+		compilerOptions = append(compilerOptions, gojq.WithInputIter(options.Inputs))
 	}
-	code, err := gojq.Compile(q, options...)
+	code, err := gojq.Compile(q, compilerOptions...)
 	if err != nil {
 		return nil, err
 	}
 	return &Program{code: code, values: values, query: query}, nil
+}
+
+// queryDiagnostics are jq's debug, stderr, input_filename and input_line_number.
+func queryDiagnostics(options ProgramOptions) []gojq.CompilerOption {
+	stderr := options.Stderr
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	position := options.Position
+	if position == nil {
+		position = func() (any, int) { return nil, 0 }
+	}
+	debug := func(v any) {
+		raw, _ := gojq.Marshal([]any{"DEBUG:", v})
+		_, _ = stderr.Write(append(raw, '\n'))
+	}
+	return []gojq.CompilerOption{
+		gojq.WithFunction("debug", 0, 1, func(v any, args []any) any {
+			if len(args) == 1 {
+				debug(args[0])
+			} else {
+				debug(v)
+			}
+			return v
+		}),
+		gojq.WithFunction("stderr", 0, 0, func(v any, _ []any) any {
+			if s, ok := v.(string); ok {
+				_, _ = io.WriteString(stderr, s)
+				return v
+			}
+			raw, _ := gojq.Marshal(v)
+			_, _ = stderr.Write(raw)
+			return v
+		}),
+		gojq.WithFunction("input_filename", 0, 0, func(any, []any) any {
+			name, _ := position()
+			return name
+		}),
+		gojq.WithFunction("input_line_number", 0, 0, func(any, []any) any {
+			_, line := position()
+			return line
+		}),
+	}
 }
 
 // sortedVariables orders a variable map by name.

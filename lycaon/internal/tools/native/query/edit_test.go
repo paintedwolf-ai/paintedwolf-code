@@ -64,14 +64,16 @@ func TestJqEditPreservesFormatAndPublishesAtItsPins(t *testing.T) {
 	}
 }
 
-// TestPlainQueryOutputIsNotFormatPreserving: jq's serialization of the same
-// document drops what jq-edit keeps, which is why a redirect is a plain
-// rewrite and jq-edit is the format-aware edit.
+// TestPlainQueryOutputIsNotFormatPreserving: jq's serialization of a
+// document drops what jq-edit keeps, which is why a jq redirect is a plain
+// rewrite and jq-edit is the format-aware edit. yq keeps YAML comments
+// itself, as the yq binary does.
 func TestPlainQueryOutputIsNotFormatPreserving(t *testing.T) {
-	h := newHarness(t, map[string]string{"svc.yaml": "# settings\nport: 8080 # public\n"})
-	h.exec("", "yq", ".port = 9090", "svc.yaml").expect(t, "plain yq", "port: 9090\n", 0)
-	h.exec("", "jq-edit", "--path", "svc.yaml", "--query", ".port = 9090").expect(t, "jq-edit", "", 0)
-	if got := h.disk("svc.yaml"); got != "# settings\nport: 9090 # public\n" {
-		t.Fatalf("jq-edit lost comments: %q", got)
+	h := newHarness(t, map[string]string{"svc.json": "{\"port\":8080,\"n\":1.50}\n", "svc.yaml": "# settings\nport: 8080 # public\n"})
+	h.exec("", "jq", ".port = 9090", "svc.json").expect(t, "plain jq", "{\n  \"port\": 9090,\n  \"n\": 1.50\n}\n", 0)
+	h.exec("", "jq-edit", "--path", "svc.json", "--query", ".port = 9090").expect(t, "jq-edit", "", 0)
+	if got := h.disk("svc.json"); got != "{\"port\":9090,\"n\":1.50}\n" {
+		t.Fatalf("jq-edit lost layout: %q", got)
 	}
+	h.exec("", "yq", ".port = 9090", "svc.yaml").expect(t, "plain yq", "# settings\nport: 9090 # public\n", 0)
 }

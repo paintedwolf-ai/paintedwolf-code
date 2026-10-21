@@ -115,7 +115,7 @@ func (t *Tool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCont
 		})
 	}
 
-	program, err := CompileProgram(query, nil, nil)
+	program, err := CompileProgram(query, ProgramOptions{})
 	if err != nil {
 		return "", safecmd.Reject("JQ_QUERY_INVALID", map[string]any{
 			"query": query, "detail": err.Error(),

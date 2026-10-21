@@ -89,43 +89,40 @@ func shellWords(s string) []string {
 	return out
 }
 
-// differentialCases are forms where jq's own output is gojq's: sorted keys,
-// integers and strings, no error statuses (which jq versions report
-// differently than the catalog's status 2).
-var differentialCases = []queryCase{
-	{argv: "jq .a", stdin: "{\"a\":1}\n{\"a\":2}"},
-	{argv: "jq . sorted.json"},
-	{argv: "jq -c . sorted.json"},
-	{argv: "jq -r .name sorted.json"},
-	{argv: "jq -r .[]", stdin: `["x","y"]`},
-	{argv: "jq -s -c .", stdin: "1 2 3"},
-	{argv: "jq -n -c [inputs]", stdin: "1 2"},
-	{argv: "jq -c [.,input]", stdin: "1 2 3 4"},
-	{argv: "jq -n -c --arg x v --argjson y {\"z\":1} [$x,$y]"},
-	{argv: "jq -e .", stdin: "false"},
-	{argv: "jq -e .", stdin: "null"},
-	{argv: "jq -e .[]", stdin: "[]"},
-	{argv: "jq -c .[]|.*2", stdin: "[0.1,1.25,7]"},
-	{argv: "jq -c keys", stdin: `{"b":1,"a":2}`},
+// versionSpecific are jqCases whose output jq 1.7 prints differently
+// (--indent 0 layout, usage diagnostics naming argv[0]).
+var versionSpecific = map[string]bool{
+	"jq --indent 0 . doc.json":            true,
+	"jq -n --slurpfile v missing.json $v": true,
 }
 
-// TestDifferentialAgainstHostJq compares with an installed jq where one
-// exists. gojq is the compatibility target; these forms are the ones where
-// jq agrees with it.
+// TestDifferentialAgainstHostJq runs every jqCase that jq 1.7 and 1.8 agree
+// on through an installed jq as well, so the recorded goldens are checked
+// against the real binary wherever one is available. Diagnostic wording
+// changed between releases, so stderr is compared only against jq 1.8.
 func TestDifferentialAgainstHostJq(t *testing.T) {
 	binary, err := exec.LookPath("jq")
 	if err != nil {
-		t.Log("no host jq to compare")
+		t.Log("no host jq; the recorded jq 1.8.1 goldens still apply")
 		return
 	}
+	version, err := exec.Command(binary, "--version").Output()
+	testutil.FailErr(t, "host jq version", err)
+	sameRelease := strings.HasPrefix(string(version), "jq-1.8")
 	h := newHarness(t, queryFiles)
-	for _, c := range differentialCases {
+	compared := 0
+	for _, c := range jqCases {
+		if versionSpecific[c.argv] {
+			continue
+		}
 		t.Run(c.argv, func(t *testing.T) {
 			words := splitWords(c.argv)
 			cmd := exec.Command(binary, words[1:]...)
 			cmd.Dir = h.root
 			cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 			cmd.Stdin = strings.NewReader(c.stdin)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
 			out, err := cmd.Output()
 			status := 0
 			if exit, ok := err.(*exec.ExitError); ok {
@@ -133,7 +130,15 @@ func TestDifferentialAgainstHostJq(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			h.exec(c.stdin, words...).expect(t, c.argv, string(out), status)
+			r := h.exec(c.stdin, words...)
+			r.expect(t, c.argv, string(out), status)
+			if sameRelease && r.stderr != stderr.String() {
+				t.Fatalf("stderr %q\nhost   %q", r.stderr, stderr.String())
+			}
 		})
+		compared++
+	}
+	if compared < 60 {
+		t.Fatalf("compared %d forms", compared)
 	}
 }

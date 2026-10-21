@@ -62,6 +62,8 @@ type harness struct {
 	owners  *Owners
 	pins    *pinLog
 	program Program
+	// env is the program environment requests carry.
+	env []string
 }
 
 // newHarness wires the owners to a real attached root with its source
@@ -115,7 +117,7 @@ func (h *harness) exec(stdin string, words ...string) run {
 		h.t.Fatalf("%s has no operation", words[0])
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	request := commandprogram.OperationRequest{Invocation: inv, OperationID: words[0], Statement: statement, Argv: argv}
+	request := commandprogram.OperationRequest{Invocation: inv, OperationID: words[0], Statement: statement, Argv: argv, Environment: h.env}
 	var stdout, stderr bytes.Buffer
 	result, err := h.owners.Invoke(h.t.Context(), h.tc, h.program, request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
 	if invalid := result.Validate(); invalid != nil {

@@ -108,9 +108,27 @@ type source struct {
 	revision         toolcontract.ExecutionRevision
 }
 
-// capture pins one PATH operand's accepted text before the query reads it.
-// It returns nil after reporting an ordinary failure.
+// unreadable is an operand the utility reports as an ordinary failure.
+type unreadable struct {
+	operand, reason string
+}
+
+func (e *unreadable) Error() string { return e.operand + ": " + e.reason }
+
+// capture pins one PATH operand's accepted text for jq. An unreadable
+// operand is reported as jq does and returns nil.
 func (inv *invocation) capture(operand string) (*source, error) {
+	captured, err := inv.captureSource(operand)
+	var failure *unreadable
+	if errors.As(err, &failure) {
+		inv.fail("Could not open file %s: %s", operand, failure.reason)
+		return nil, nil
+	}
+	return captured, err
+}
+
+// captureSource pins one PATH operand's accepted text before it is read.
+func (inv *invocation) captureSource(operand string) (*source, error) {
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
 	if err == nil && bound.Null {
 		return &source{label: operand}, nil
@@ -125,8 +143,7 @@ func (inv *invocation) capture(operand string) (*source, error) {
 	if err != nil {
 		err = projectpaths.PathOperationError(operand, err)
 		if reason, ok := ordinary(err); ok {
-			inv.fail("Could not open %s: %s", operand, reason)
-			return nil, nil
+			return nil, &unreadable{operand: operand, reason: reason}
 		}
 		return nil, err
 	}

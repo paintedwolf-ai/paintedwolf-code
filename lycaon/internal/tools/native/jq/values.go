@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math"
 	"math/big"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -16,90 +14,30 @@ import (
 )
 
 // ValueStream decodes consecutive JSON values from one reader, as jq reads
-// its inputs: each complete value is available before the next is parsed.
+// its inputs: each complete value is available before the next is parsed,
+// objects keep their key order and numbers keep their literal.
 type ValueStream struct {
-	decoder *json.Decoder
+	decoder *gojq.Decoder
 }
 
 func NewValueStream(r io.Reader) *ValueStream {
-	decoder := json.NewDecoder(r)
-	decoder.UseNumber()
-	return &ValueStream{decoder: decoder}
+	return &ValueStream{decoder: gojq.NewDecoder(r)}
 }
 
 // Decode returns the next value, io.EOF at the end, or the syntax error.
-func (s *ValueStream) Decode() (any, error) {
-	var v any
-	if err := s.decoder.Decode(&v); err != nil {
-		return nil, err
-	}
-	return normalizeNumbers(v), nil
-}
+func (s *ValueStream) Decode() (any, error) { return s.decoder.Decode() }
 
 // InputOffset reports how many input bytes the decoded values consumed.
 func (s *ValueStream) InputOffset() int64 { return s.decoder.InputOffset() }
 
 func decodeJSONValue(raw []byte) (any, error) {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var v any
-	if err := decoder.Decode(&v); err != nil {
-		return nil, err
-	}
-	return normalizeNumbers(v), nil
+	return gojq.NewDecoder(bytes.NewReader(raw)).Decode()
 }
 
-// normalizeNumbers gives JSON numbers gojq's identities: int when exact,
-// *big.Int for larger integers, float64 for fractions and exponents.
-func normalizeNumbers(v any) any {
-	switch v := v.(type) {
-	case json.Number:
-		return normalizeNumber(v)
-	case []any:
-		for i, x := range v {
-			v[i] = normalizeNumbers(x)
-		}
-		return v
-	case map[string]any:
-		for k, x := range v {
-			v[k] = normalizeNumbers(x)
-		}
-		return v
-	}
-	return v
-}
-
-func normalizeNumber(v json.Number) any {
-	text := v.String()
-	if i, err := v.Int64(); err == nil && math.MinInt <= i && i <= math.MaxInt {
-		return int(i)
-	}
-	if !strings.ContainsAny(text, ".eE") {
-		if n, ok := new(big.Int).SetString(text, 10); ok {
-			return n
-		}
-	}
-	if f, err := v.Float64(); err == nil {
-		return f
-	}
-	if strings.HasPrefix(text, "-") {
-		return -math.MaxFloat64
-	}
-	return math.MaxFloat64
-}
-
-// EncodeJSON is jq's output encoding: gojq's marshaler (sorted keys, jq
-// string escapes, NaN as null), compact or indented by two spaces.
+// EncodeJSON is jq's default output encoding: insertion-ordered keys, jq
+// string escapes and number literals, compact or indented by two spaces.
 func EncodeJSON(v any, indent bool) ([]byte, error) {
-	raw, err := gojq.Marshal(v)
-	if err != nil || !indent {
-		return raw, err
-	}
-	var out bytes.Buffer
-	if err := json.Indent(&out, raw, "", "  "); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
+	return gojq.MarshalWith(v, gojq.MarshalOptions{Pretty: indent, Indent: "  "})
 }
 
 // ValueDepth is the nesting depth of a value; scalars are depth zero.
@@ -111,16 +49,17 @@ func ValueDepth(v any) int {
 			depth = max(depth, ValueDepth(x))
 		}
 		return depth + 1
-	case map[string]any:
-		for _, x := range v {
+	case *gojq.OrderedObject:
+		v.Range(func(_ string, x any) bool {
 			depth = max(depth, ValueDepth(x))
-		}
+			return true
+		})
 		return depth + 1
 	}
 	return 0
 }
 
-// EncodeYAML renders one value as a YAML document with sorted keys and LF
+// EncodeYAML renders one value as a YAML document in key order with LF
 // line endings. It is a plain serialization, never a format-preserving edit.
 func EncodeYAML(v any) ([]byte, error) {
 	node, err := yamlNode(v)
@@ -158,6 +97,11 @@ func yamlNode(v any) (*yaml.Node, error) {
 			return nil, err
 		}
 		return scalar("!!float", string(raw)), nil
+	case json.Number:
+		if strings.ContainsAny(string(v), ".eE") {
+			return scalar("!!float", string(v)), nil
+		}
+		return scalar("!!int", string(v)), nil
 	case string:
 		return scalar("!!str", v), nil
 	case []any:
@@ -170,15 +114,11 @@ func yamlNode(v any) (*yaml.Node, error) {
 			node.Content = append(node.Content, child)
 		}
 		return node, nil
-	case map[string]any:
+	case *gojq.OrderedObject:
 		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		keys := make([]string, 0, len(v))
-		for k := range v {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		for _, k := range keys {
-			child, err := yamlNode(v[k])
+		for _, k := range v.Keys() {
+			x, _ := v.Get(k)
+			child, err := yamlNode(x)
 			if err != nil {
 				return nil, err
 			}
