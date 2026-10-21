@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	portalName        = "org.freedesktop.portal.Desktop"
-	portalPath        = dbus.ObjectPath("/org/freedesktop/portal/desktop")
-	portalInhibit     = "org.freedesktop.portal.Inhibit"
-	portalRequest     = "org.freedesktop.portal.Request"
+	portalName    = "org.freedesktop.portal.Desktop"
+	portalPath    = dbus.ObjectPath("/org/freedesktop/portal/desktop")
+	portalInhibit = "org.freedesktop.portal.Inhibit"
+	portalRequest = "org.freedesktop.portal.Request"
 	// portalFlagSuspend is the only flag requested; the Idle flag (8) is the
 	// desktop's screen-saver and lock inhibitor.
 	portalFlagSuspend = uint32(4)
