@@ -1,8 +1,8 @@
 //! The immutable package that contains this process. These facts describe
 //! layout; only the identity service's administrator-selected manifest is trust.
 
+use crate::sidecar::manifest::{Manifest, VerifyError, MANIFEST_LIMIT};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -29,25 +29,6 @@ struct LayoutReceipt {
     format_version: u32,
     output: PathBuf,
     nix_store: PathBuf,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Manifest {
-    format_version: u32,
-    package: String,
-    version: String,
-    architecture: String,
-    install_root: PathBuf,
-    executables: Vec<Executable>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Executable {
-    path: PathBuf,
-    sha256: String,
-    size: u64,
 }
 
 pub(crate) struct Generation {
@@ -97,15 +78,10 @@ fn capture(executable: &Path, mut image: File) -> Result<Option<Generation>, Str
     }
     let file = File::open(root.join("manifest.json"))
         .map_err(|e| format!("Nix manifest unavailable: {e}"))?;
-    let manifest: Manifest = read_json(file, 4 << 20, "manifest")?;
-    if manifest.format_version != 1
-        || manifest.package != "painted-wolf-code"
-        || manifest.install_root != root
-        || manifest.version.is_empty()
-        || !matches!(manifest.architecture.as_str(), "x86_64" | "aarch64")
-    {
-        return Err("Nix manifest does not describe the running generation".into());
-    }
+    let manifest: Manifest = read_json(file, MANIFEST_LIMIT, "manifest")?;
+    manifest
+        .validate_for_root(root)
+        .map_err(|_| "Nix manifest does not describe the running generation".to_string())?;
     verify(&manifest, executable, &mut image)?;
     Ok(Some(Generation {
         root: root.to_path_buf(),
@@ -135,40 +111,18 @@ fn read_json<T: serde::de::DeserializeOwned>(
 }
 
 fn verify(manifest: &Manifest, path: &Path, image: &mut File) -> Result<(), String> {
-    let entries: Vec<_> = manifest
-        .executables
-        .iter()
-        .filter(|e| e.path == path)
-        .collect();
-    let [expected] = entries.as_slice() else {
-        return Err("Nix helper missing or duplicated in manifest".into());
-    };
-    if expected.sha256.len() != 64
-        || !expected
-            .sha256
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    {
-        return Err("Nix helper digest invalid".into());
-    }
+    let expected = manifest.executable(path).map_err(|err| match err {
+        VerifyError::Invalid => "Nix helper digest invalid".to_string(),
+        _ => "Nix helper missing or duplicated in manifest".to_string(),
+    })?;
     image.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-    let mut digest = Sha256::new();
-    let mut size = 0u64;
-    let mut buffer = [0u8; 65536];
-    loop {
-        let n = image.read(&mut buffer).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        size = size.saturating_add(n as u64);
-        if size > expected.size {
-            return Err("Nix helper identity changed".into());
-        }
-        digest.update(&buffer[..n]);
-    }
-    if size != expected.size || hex::encode(digest.finalize()) != expected.sha256 {
-        return Err("Nix helper identity changed".into());
-    }
+    expected
+        .verify_reader(&mut *image)
+        .map_err(|err| match err {
+            VerifyError::Invalid => "Nix helper digest invalid".to_string(),
+            VerifyError::Mismatch => "Nix helper identity changed".to_string(),
+            VerifyError::Io => "Nix helper unreadable".to_string(),
+        })?;
     image.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
     Ok(())
 }
