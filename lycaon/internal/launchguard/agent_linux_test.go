@@ -4,11 +4,15 @@ package launchguard
 
 import (
 	"bytes"
+	"debug/buildinfo"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,6 +27,69 @@ const wantZeroCapHex = "0000000000000000"
 func TestIsModuleViewWatcherRequiresRootAndPipe(t *testing.T) {
 	if os.Getuid() != 0 && isModuleViewWatcher() {
 		t.Fatal("isModuleViewWatcher accepted an unprivileged caller")
+	}
+}
+
+func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
+	t.Parallel()
+	stageScript, err := os.ReadFile(filepath.Join("..", "..", "..", "scripts", "stage-engine.sh"))
+	if err != nil {
+		t.Fatalf("read scripts/stage-engine.sh: %v", err)
+	}
+	for _, want := range []string{
+		`if [[ "${HOST_KIND}" == "linux" ]]; then`,
+		"export CGO_ENABLED=0",
+		"assert_static()",
+		"INTERP\\|Requesting program interpreter",
+	} {
+		if !bytes.Contains(stageScript, []byte(want)) {
+			t.Fatalf("scripts/stage-engine.sh missing %q required to keep Linux launch binaries static and cgo-free", want)
+		}
+	}
+	pkgs := []string{
+		"github.com/lycaon/lycaon/cmd/pw-launch",
+		"github.com/lycaon/lycaon/cmd/pw-launch-entry",
+	}
+	cmd := exec.Command("go", append([]string{"list", "-deps"}, pkgs...)...)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list -deps %v: %v\n%s", pkgs, err, out)
+	}
+	if slices.Contains(strings.Fields(string(out)), "runtime/cgo") {
+		t.Fatalf("protected launch packages import runtime/cgo, which makes syscall.AllThreadsSyscall fail with ENOTSUP")
+	}
+	dir := t.TempDir()
+	for _, pkg := range pkgs {
+		bin := filepath.Join(dir, filepath.Base(pkg))
+		goBuild(t, bin, pkg, "")
+		info, err := buildinfo.ReadFile(bin)
+		if err != nil {
+			t.Fatalf("read buildinfo for %s: %v", pkg, err)
+		}
+		var sawCgoDisabled bool
+		for _, setting := range info.Settings {
+			if setting.Key == "CGO_ENABLED" {
+				if setting.Value != "0" {
+					t.Fatalf("%s built with CGO_ENABLED=%s, want 0", pkg, setting.Value)
+				}
+				sawCgoDisabled = true
+			}
+		}
+		if !sawCgoDisabled {
+			t.Fatalf("%s buildinfo did not record CGO_ENABLED=0", pkg)
+		}
+		elfFile, err := elf.Open(bin)
+		if err != nil {
+			t.Fatalf("open ELF %s: %v", pkg, err)
+		}
+		for _, prog := range elfFile.Progs {
+			if prog.Type == elf.PT_INTERP {
+				_ = elfFile.Close()
+				t.Fatalf("%s has PT_INTERP header; protected launch binaries must be static (CGO_ENABLED=0)", pkg)
+			}
+		}
+		_ = elfFile.Close()
 	}
 }
 
