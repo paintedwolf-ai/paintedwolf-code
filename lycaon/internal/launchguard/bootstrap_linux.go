@@ -26,6 +26,7 @@ const (
 	stageOriginFD
 	stageBrokerFD
 	stageLifetimeFD
+	stageSelfFD
 )
 
 // RunBootstrap is the installed setuid program's caller-facing half. It
@@ -71,13 +72,15 @@ func RunBootstrap(arguments []string) (int, error) {
 		return 1, err
 	}
 	stage := &exec.Cmd{
-		Path:       fmt.Sprintf("/proc/self/fd/%d", self.Fd()),
+		// The child executes its own copy of the retained image, at a
+		// descriptor number that survives the remapping below.
+		Path:       fmt.Sprintf("/proc/self/fd/%d", stageSelfFD),
 		Args:       []string{"pw-launch", StageArgument},
 		Env:        []string{},
 		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime},
+		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime, self},
 		SysProcAttr: &syscall.SysProcAttr{
 			Cloneflags: unix.CLONE_NEWNS,
 			Credential: &syscall.Credential{Uid: 0, Gid: 0, Groups: []uint32{}},

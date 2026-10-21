@@ -11,6 +11,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// entrySelfFD is where the entry's own image sits for its execution; the
+// entry marks it close-on-exec with every other bootstrap descriptor.
+const entrySelfFD = entryLifetimeFD + 1
+
 // RunStage is the privileged stage: uid 0 of the initial user namespace,
 // cloned into a fresh mount namespace by the bootstrap. It binds the selected
 // generation, then clones the unprivileged entry into the protected user
@@ -47,7 +51,7 @@ func RunStage() error {
 		return err
 	}
 	entry := &exec.Cmd{
-		Path:   "/proc/self/fd/" + strconv.Itoa(stageEntryFD),
+		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
 		Env:    []string{},
 		Stdin:  os.Stdin,
@@ -58,6 +62,7 @@ func RunStage() error {
 			os.NewFile(stageOriginFD, "original-user-namespace"),
 			os.NewFile(stageBrokerFD, "desktop-broker"),
 			os.NewFile(stageLifetimeFD, "generation-lifetime"),
+			entryImage,
 		},
 		SysProcAttr: attributes,
 	}
