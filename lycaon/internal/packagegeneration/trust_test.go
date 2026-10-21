@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStoreAncestryIsControlledUpToAnchor(t *testing.T) {
@@ -18,17 +20,17 @@ func TestStoreAncestryIsControlledUpToAnchor(t *testing.T) {
 	}
 	shared := filepath.Join(l.anchor, "shared")
 	if err := os.Mkdir(shared, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	if err := os.Chmod(shared, 0775); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	err := l.controlledParents(filepath.Join(shared, "generations"))
 	if err == nil || !strings.Contains(err.Error(), "uncontrolled store ancestor") {
 		t.Fatalf("group-writable ancestor accepted: %v", err)
 	}
 	if err := os.Chmod(l.anchor, 0775); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if err := l.controlledParents(l.store); err == nil {
 		t.Fatal("writable anchor accepted")
@@ -55,20 +57,20 @@ func TestLifetimeSelectionAndMaterializeGuards(t *testing.T) {
 		t.Fatal("invalid identity accepted")
 	}
 	if err := os.MkdirAll(l.locks, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	lockPath := filepath.Join(l.locks, identity+".lock")
 	if err := os.WriteFile(lockPath, nil, 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(lockPath, 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if _, err := l.openLifetime(identity); err == nil || !strings.Contains(err.Error(), "unsafe lifetime lock") {
 		t.Fatalf("unsafe lifetime lock mode accepted: %v", err)
 	}
 	if err := os.Remove(lockPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if _, err := l.materialize(nil, raw); err == nil {
 		t.Fatal("nil staging root accepted")
@@ -96,24 +98,22 @@ func TestLifetimeSelectionAndMaterializeGuards(t *testing.T) {
 		t.Fatal("selection reader error ignored")
 	}
 	if err := os.MkdirAll(l.store, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if removed, err := l.reclaim(identity, func() (string, error) { return "", nil }); removed || err != nil {
 		t.Fatalf("absent generation reclaim=%v,%v", removed, err)
 	}
 	genPath := filepath.Join(l.store, identity)
 	if err := os.WriteFile(genPath, []byte("foreign"), 0600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if _, err := l.reclaim(identity, func() (string, error) { return "", nil }); err == nil {
 		t.Fatal("non-directory generation reclaimed")
 	}
 	generation, err := l.materialize(source, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	if err := os.WriteFile(filepath.Join(generation.Root, "manifest.json"), bytes.Repeat([]byte(" "), len(raw)), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := l.selectGeneration(identity, func(Generation) error { return nil }); err == nil {
 		t.Fatal("corrupt retained seal selected")
