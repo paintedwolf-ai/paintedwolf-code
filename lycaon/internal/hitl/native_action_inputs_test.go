@@ -198,3 +198,63 @@ func TestNativeActionInspectionRefusesMissingBoundedProducer(t *testing.T) {
 		t.Fatal("failed inspection retained native state")
 	}
 }
+
+type nativePresentationFixture struct{ calls int }
+
+// A producer-boundary fixture, not a native capture matcher qualification.
+func (p *nativePresentationFixture) ProjectOperationInputs(ctx context.Context, state toolcontract.ReviewStateAdmission, fields map[string]any) (map[string]any, func(), error) {
+	p.calls++
+	release, err := state.ReserveProgramState(ctx, 8192)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, ok := fields["command"]; ok {
+		fields["command"] = "screened command"
+		changes := fields["file_changes"].([]any)
+		changes[0].(map[string]any)["before"] = "screened preview"
+	}
+	return fields, release, nil
+}
+
+func TestNativeApprovalProjectsDisplayFieldsWithoutChangingAuthority(t *testing.T) {
+	memory := &nativeReviewMemory{}
+	projection := &nativePresentationFixture{}
+	review := hitl.NewNativeActionReview(t.Context(), memory, projection)
+	defer review.Close()
+	args, input, err := review.Freeze(t.Context(), "write", map[string]any{"path": "fixture\xff", "content": "original bytes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := hitl.ProposedAction{
+		Invocation:   hitl.ActionInvocation{Tool: "write", Args: args, NativeInputs: input, Files: []string{"fixture\xff"}},
+		Presentation: hitl.ActionPresentation{Command: "raw command"},
+		Mutations:    hitl.ActionMutations{FileChanges: []api.ApprovalFileChange{{Path: "fixture\xff", Before: "raw preview", BeforeSHA256: "original-hash", BeforeBytes: 11}}},
+	}
+	key := hitl.GrantKey(action)
+	_, decision := gate.Evaluate(gate.Facts{Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest, ApprovalRequest: &gate.ApprovalRequest{Count: 1}}, gate.DefaultPosture)
+	legacyRawCalls := 0
+	releaseRedactor := observability.SetCaptureRedactor(func(value string) string {
+		if value == "raw command" || value == "raw preview" || value == "fixture\xff" {
+			legacyRawCalls++
+		}
+		return value
+	})
+	defer releaseRedactor()
+	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{ProposedAction: &action, Decision: decision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.calls != 2 || legacyRawCalls != 0 || plan.Presentation.Command != "screened command" || plan.Presentation.FileChanges[0].Before != "screened preview" {
+		t.Fatal("native display bypassed the bounded raw-value projections")
+	}
+	if plan.ActionDigest != key || action.Presentation.Command != "raw command" || action.Mutations.FileChanges[0].Before != "raw preview" || plan.Presentation.FileChanges[0].BeforeSHA256 != "original-hash" || plan.Presentation.FileChanges[0].BeforeBytes != 11 {
+		t.Fatal("display projection changed original authority or exact preview evidence")
+	}
+	if !strings.Contains(plan.Presentation.FileChanges[0].Path, `\xff`) {
+		t.Fatal("native raw-byte path display silently substituted bytes")
+	}
+	review.Close()
+	if memory.held != 0 {
+		t.Fatal("native display projection leaked its retained lease")
+	}
+}
