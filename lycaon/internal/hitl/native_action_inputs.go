@@ -134,17 +134,16 @@ func (i *NativeActionInputs) Inspection() (map[string]any, error) {
 	if r.projection == nil {
 		return nil, fmt.Errorf("native review requires bounded raw-value inspection producer")
 	}
-	screened, releaseProjection, err := r.projection.ProjectOperationInputs(r.ctx, r.admission, i.arguments)
+	screened, err := r.projectInspection(i.arguments)
 	if err != nil {
-		if releaseProjection != nil {
-			releaseProjection()
-		}
 		return nil, err
 	}
-	if releaseProjection == nil {
-		return nil, fmt.Errorf("native inspection producer returned no lease")
-	}
-	r.releases = append(r.releases, releaseProjection)
+	return i.encodeInspection(screened)
+}
+
+// encodeInspection runs under the retained review lock, after raw screening.
+func (i *NativeActionInputs) encodeInspection(screened map[string]any) (map[string]any, error) {
+	r := i.lifetime
 	view, release, err := toolcontract.NewReviewedOperationInputs(r.ctx, r.admission, screened)
 	if err != nil {
 		return nil, err

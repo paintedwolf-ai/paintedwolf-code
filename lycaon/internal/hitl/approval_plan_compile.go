@@ -30,14 +30,22 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 	if err != nil {
 		return nil, err
 	}
-	title := observability.RedactCaptureText(req.Title)
+	fileChanges := displayAction.Mutations.FileChanges
+	if action.Invocation.NativeInputs == nil {
+		fileChanges = redactedFileChanges(fileChanges)
+	}
+	text, err := checkpointPresentationText(req)
+	if err != nil {
+		return nil, err
+	}
+	title := text.title
 	stage := ApprovalStagePreSpawn
 	subject := genericApprovalSubject(displayAction, title)
 	primaryGate, cited, reasons := PresentDecision(req.Decision)
 	presentation := ApprovalPresentation{
-		FileChanges: redactedFileChanges(action.Mutations.FileChanges),
+		FileChanges: fileChanges,
 		Action:      actionLabel(displayAction), Tool: firstNonEmpty(displayAction.Presentation.PresentationTool, displayAction.Invocation.Tool), Command: displayAction.Presentation.Command,
-		Impact: firstNonEmpty(observability.RedactCaptureText(action.Presentation.EstimatedImpact), "Allow the agent to perform this exact action."),
+		Impact: firstNonEmpty(displayAction.Presentation.EstimatedImpact, "Allow the agent to perform this exact action."),
 		Lead:   leadFact(primaryGate, cited),
 		Gate:   primaryGate, Cited: cited, GrantDelta: req.GrantDelta,
 		ConsequenceBand: string(req.ConsequenceBand), ConsequenceCode: string(req.ConsequenceCode),
@@ -45,10 +53,10 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 		ApprovalRules: append([]ApprovalRuleMatch(nil), req.ApprovalMatches...),
 	}
 	if req.Explanation != nil {
-		presentation.Impact = observability.RedactCaptureText(req.Explanation.What)
-		presentation.Who = observability.RedactCaptureText(req.Explanation.Who)
-		presentation.IfWrong = observability.RedactCaptureText(req.Explanation.IfWrong)
-		presentation.AllowLine = observability.RedactCaptureText(req.Explanation.AllowLine)
+		presentation.Impact = text.explanation.What
+		presentation.Who = text.explanation.Who
+		presentation.IfWrong = text.explanation.IfWrong
+		presentation.AllowLine = text.explanation.AllowLine
 	}
 
 	options := approvalOptionsFromOffers(req.GrantOffers, true)
@@ -174,6 +182,9 @@ func sentenceCase(s string) string {
 }
 
 func redactedApprovalAction(action ProposedAction) (ProposedAction, error) {
+	if action.Invocation.NativeInputs != nil {
+		return action.Invocation.NativeInputs.inspectAction(action)
+	}
 	action.Invocation.Tool = observability.RedactCaptureText(action.Invocation.Tool)
 	action.Presentation.PresentationTool = observability.RedactCaptureText(action.Presentation.PresentationTool)
 	action.Presentation.Command = observability.RedactCaptureText(action.Presentation.Command)
@@ -189,18 +200,6 @@ func redactedApprovalAction(action ProposedAction) (ProposedAction, error) {
 	}
 	if scrubbed, ok := observability.RedactCaptureValue(action.Invocation.Args).(map[string]any); ok {
 		action.Invocation.Args = scrubbed
-	}
-	if action.Invocation.NativeInputs != nil {
-		inspection, err := action.Invocation.NativeInputs.Inspection()
-		if err != nil {
-			return ProposedAction{}, err
-		}
-		action.Invocation.Args = inspection
-		action.Presentation.Command = reviewDisplayText(action.Presentation.Command)
-		action.Scope.ProjectDir = reviewDisplayText(action.Scope.ProjectDir)
-		for i := range action.Invocation.Files {
-			action.Invocation.Files[i] = reviewDisplayText(action.Invocation.Files[i])
-		}
 	}
 	return action, nil
 }
