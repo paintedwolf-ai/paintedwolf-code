@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/lineage"
@@ -14,8 +15,10 @@ import (
 
 // ActionLease owns one action's lineage, egress lease, and refusal feed.
 type ActionLease struct {
-	line *lineage.Lineage
-	cmd  EgressCommand
+	closed atomic.Bool
+	launch actionLaunchIdentity
+	line   *lineage.Lineage
+	cmd    EgressCommand
 	// mediated records whether this action registered a broker lease.
 	mediated bool
 	once     sync.Once
@@ -29,9 +32,14 @@ type ActionLease struct {
 // BindAction binds a confinement to one action before it runs. Every confined
 // launch gets a lineage; a proxy-only one also registers the broker lease that
 // makes its dials attributable.
-func BindAction(c *Confinement, cmd EgressCommand) (*ActionLease, error) {
-	cmd.OwnedLoopbackPorts = append([]uint16(nil), cmd.OwnedLoopbackPorts...)
-	lease := &ActionLease{cmd: cmd}
+func BindAction(c *Confinement, cmd EgressCommand) (result *ActionLease, failure error) {
+	lease := &ActionLease{cmd: cloneEgressCommand(cmd)}
+	defer func() {
+		if failure == nil {
+			lease.captureLaunch(c)
+		}
+	}()
+
 	if c == nil {
 		return lease, nil
 	}
@@ -197,6 +205,7 @@ func (l *ActionLease) Close(ctx context.Context) []EgressHost {
 		return nil
 	}
 	l.once.Do(func() {
+		l.closed.Store(true)
 		if l.refusals != nil {
 			l.settleRefusals(ctx)
 		}

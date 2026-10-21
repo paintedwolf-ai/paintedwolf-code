@@ -2,15 +2,15 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "verification-contracts",
+  "workstream": "portable-command-platforms",
   "disposition": "retain",
-  "reason": "Confinement tests cover platform implementations and common capability contracts in the same package. Directory breadth reflects the security matrix; moving tests for a count target would require broader production visibility or obscure platform parity.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 51,
+  "reason": "Retain exactly59 immediate test files after reviewing the earlier51-file ceiling rather than carrying it forward. The additional selected-input, vector, native helper and exact action-lease fixtures cover distinct authority/transport failure boundaries introduced by the mandatory native launch lifecycle; they are not duplicated platform implementations. Private policy, current action identity, descriptor capture and per-platform native enforcement need same-package assertions without exporting test-only authority. Platform live fixtures stay separately selected from portable units. Typed action and current-authority/owned-gate native fixtures passed; unavailable native Linux qualification is not represented as passing. This is a bounded decision at59, with no allowance for another test member.",
+  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
+  "ceiling": 59,
   "boundaries": {
-    "lycaon/internal/confine/host_capability_test.go": "9f759c501a7688005b4069ee5430825d0744ba471ca80eee99121a33bc02bec0",
-    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
-    "lycaon/internal/confine/execution_capability_test.go": "7899c0f689c3e6c4433d91e6cc701fc6692789d734a8b80051159771588e802f"
+    "lycaon/internal/confine/action_launch_test.go": "0a39805d9b791e44e0e4b0f271563f1be06006f503470a273cd050adaeff0bb8",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/owned_group_unix_test.go": "a0be3c178f6e19b122e12216e93f3b2a6934cc88931e9bfc15aee0925f78c28c"
   },
-  "reviewed_shape": "2da67d87e901c61c2e55707bbeff29af1bac1218ffca918d6a32b92188ab5041"
+  "reviewed_shape": "7b56fcca8c72a51ba88c7d09bbb7e669241ef0fbd55be2cc2e09cfc4d8bf3274"
 }

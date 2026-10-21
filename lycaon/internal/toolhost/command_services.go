@@ -2,6 +2,10 @@ package toolhost
 
 import (
 	"context"
+
+	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 
@@ -13,6 +17,8 @@ import (
 
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
+	owners            programOwnerTools
+	ownersErr         error
 	bgRegistry        *bgprocess.Registry
 	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
@@ -38,6 +44,9 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	}
 	if r.commandStopTool != nil {
 		r.commandStopTool.Registry = reg
+	}
+	if programs := r.programs(); programs != nil {
+		programs.Supervisor.Background = reg
 	}
 	if r.reviews != nil {
 		r.reviews.SetBackgroundCommandResolver(r.backgroundCommandLine)
@@ -100,4 +109,43 @@ func (r *CommandServices) backgroundCommandLine(sessionID, handle string) string
 		return ""
 	}
 	return command
+}
+
+// ProgramServices are the host owners the command program entry composes.
+type ProgramServices struct {
+	Recorder  *invocation.SQLRecorder
+	Blobs     blobstore.Store
+	Projector *captureprojection.Projector
+	Progress  toolexecution.ProgramProgressFacts
+	Sessions  command.SessionOwners
+}
+
+func (r *CommandServices) programs() *command.ProgramRuntime {
+	if r == nil || r.commandTool == nil {
+		return nil
+	}
+	return r.commandTool.Programs
+}
+
+// SetProgramServices completes the program runtime at host composition.
+func (r *CommandServices) SetProgramServices(services ProgramServices) {
+	programs := r.programs()
+	if programs == nil {
+		return
+	}
+	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
+	programs.Progress, programs.Sessions = services.Progress, services.Sessions
+	programs.Supervisor.Interrupter = services.Recorder
+	if owners, err := r.owners.compose(services.Recorder); err == nil {
+		programs.Owners = owners
+	} else {
+		r.ownersErr = err
+	}
+}
+
+// setProgramExecutor binds the executor that admits each native child.
+func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
+	if programs := r.programs(); programs != nil {
+		programs.Executor = executor
+	}
 }

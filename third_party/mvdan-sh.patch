@@ -43,10 +43,36 @@
 +			})
 --- /dev/null
 +++ b/expand/literal_text.go
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,54 @@
 +package expand
 +
 +import "unicode/utf8"
++
++// QuoteContext selects the backslash rules that apply to literal word text.
++type QuoteContext uint8
++
++const (
++	// UnquotedText removes a backslash before any character.
++	UnquotedText QuoteContext = iota
++	// DoubleQuotedText removes a backslash only before $, `, " or \.
++	DoubleQuotedText
++	// HereDocumentText removes a backslash only before $, ` or \.
++	HereDocumentText
++)
++
++// RemoveQuotes walks literal text under the selected quote-removal rules, in
++// order, without allocating. escaped reports text quoted by a backslash. It
++// performs no parameter, substitution, tilde, brace or pathname expansion.
++func RemoveQuotes(text string, context QuoteContext, visit func(text string, escaped bool)) {
++	quote := quoteNone
++	switch context {
++	case DoubleQuotedText:
++		quote = quoteDouble
++	case HereDocumentText:
++		quote = quoteHeredoc
++	}
++	literalText(text, quote, visit)
++}
 +
 +// literalText walks the selected quote-removal rules without allocating one
 +// field fragment per escape. The flag identifies text quoted by a backslash.
@@ -71,6 +97,52 @@
 +		start = i + 1
 +	}
 +	visit(value[start:], false)
++}
+--- /dev/null
++++ b/expand/remove_quotes_test.go
+@@ -0,0 +1,43 @@
++package expand_test
++
++import (
++	"testing"
++
++	"mvdan.cc/sh/v3/expand"
++)
++
++type quotedPiece struct {
++	text    string
++	escaped bool
++}
++
++func TestRemoveQuotesSelectsBackslashRules(t *testing.T) {
++	for _, fixture := range []struct {
++		name    string
++		text    string
++		context expand.QuoteContext
++		want    []quotedPiece
++	}{
++		{"unquoted escapes any character", `a\*b\ c`, expand.UnquotedText, []quotedPiece{{"a", false}, {"*", true}, {"b", false}, {" ", true}, {"c", false}}},
++		{"unquoted escapes a whole scalar", `\世x`, expand.UnquotedText, []quotedPiece{{"", false}, {"世", true}, {"x", false}}},
++		{"unquoted keeps a trailing backslash", `a\`, expand.UnquotedText, []quotedPiece{{`a\`, false}}},
++		{"double quotes escape only specials", `\"\$\\\n\*`, expand.DoubleQuotedText, []quotedPiece{{"", false}, {`"`, true}, {"", false}, {"$", true}, {"", false}, {`\`, true}, {`\n\*`, false}}},
++		{"here-documents keep a quoted double quote", `\"\$x`, expand.HereDocumentText, []quotedPiece{{`\"`, false}, {"$", true}, {"x", false}}},
++		{"plain text is one visit", "plain", expand.DoubleQuotedText, []quotedPiece{{"plain", false}}},
++	} {
++		t.Run(fixture.name, func(t *testing.T) {
++			var got []quotedPiece
++			expand.RemoveQuotes(fixture.text, fixture.context, func(text string, escaped bool) {
++				got = append(got, quotedPiece{text, escaped})
++			})
++			if len(got) != len(fixture.want) {
++				t.Fatalf("pieces = %+v, want %+v", got, fixture.want)
++			}
++			for i := range got {
++				if got[i] != fixture.want[i] {
++					t.Fatalf("pieces = %+v, want %+v", got, fixture.want)
++				}
++			}
++		})
++	}
 +}
 --- /dev/null
 +++ b/expand/static_literal.go
@@ -333,9 +405,57 @@
 +		t.Fatalf("retained literal changed: %q", value)
 +	}
 +}
+--- a/pattern/pattern.go
++++ b/pattern/pattern.go
+@@ -61,0 +62 @@
++	ScalarCollation                    // locale-independent single-scalar collating/equivalence atoms
+@@ -300,0 +302,2 @@
++		var lastCollation rune
++		hasLastCollation := false
+@@ -301,0 +305,2 @@
++			previousCollation := hasLastCollation
++			hasLastCollation = false
+@@ -335,0 +341,11 @@
++				if mode&ScalarCollation != 0 {
++					if previousCollation {
++						start = lastCollation
++					}
++					rest := sl.peekRest()
++					if len(rest) > 2 && rest[0] == '[' && (rest[1] == '.' || rest[1] == '=') {
++						if n, err := charClass(rest[1:], true); err == nil && n > 0 {
++							end, _ = utf8.DecodeRuneInString(rest[2 : n-1])
++						}
++					}
++				}
+@@ -354 +370 @@
+-				n, err := charClass(rest)
++				n, err := charClass(rest, mode&ScalarCollation != 0)
+@@ -361,0 +378,15 @@
++				}
++				if err == nil && n > 0 && mode&ScalarCollation != 0 && (rest[0] == '.' || rest[0] == '=') {
++					atom := rest[1 : n-2]
++					lastCollation, _ = utf8.DecodeRuneInString(atom)
++					hasLastCollation = true
++					if filenames && atom == "/" {
++						hasSlash = true
++					}
++					if atom == "-" {
++						bsb.WriteString(`\-`)
++					} else {
++						bsb.WriteString(regexp.QuoteMeta(atom))
++					}
++					sl.i += n
++					break
+@@ -393 +424 @@
+-func charClass(s string) (int, error) {
++func charClass(s string, scalarCollation bool) (int, error) {
+@@ -401,0 +433,3 @@
++		}
++		if scalarCollation && utf8.ValidString(name) && utf8.RuneCountInString(name) == 1 {
++			return len(name) + 3, nil
 --- /dev/null
 +++ b/syntax/allocation_budget.go
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,90 @@
 +package syntax
 +
 +import (
@@ -348,9 +468,16 @@
 +// until the unit is discarded, independent of garbage collector timing.
 +// It is invocation-local and must not be shared concurrently.
 +type AllocationBudget struct {
-+	maximum int64
-+	used    int64
++	maximum  int64
++	used     int64
++	admitted int64
++	admit    func(int64) error
 +}
++
++// admissionChunk is the granularity at which an admitted ledger charges its
++// enclosing aggregate. The aggregate holds the ledger's high-water mark rounded
++// up to this size; frame releases stay charged until the caller discards it.
++const admissionChunk int64 = 64 << 10
 +
 +func NewAllocationBudget(maximum int64) (*AllocationBudget, error) {
 +	if maximum <= 0 || maximum > math.MaxInt64-8256 {
@@ -359,8 +486,26 @@
 +	return &AllocationBudget{maximum: maximum}, nil
 +}
 +
++// NewAdmittedAllocationBudget charges growth to an enclosing aggregate before
++// the ledger admits it, so the aggregate never holds unused headroom. The caller
++// releases everything admit accepted once it discards the ledger.
++func NewAdmittedAllocationBudget(maximum int64, admit func(int64) error) (*AllocationBudget, error) {
++	if admit == nil {
++		return nil, fmt.Errorf("admitted allocation budget requires an aggregate")
++	}
++	b, err := NewAllocationBudget(maximum)
++	if err != nil {
++		return nil, err
++	}
++	b.admit = admit
++	return b, nil
++}
++
 +func (b *AllocationBudget) UsedBytes() int64    { return b.used }
 +func (b *AllocationBudget) MaximumBytes() int64 { return b.maximum }
++
++// AdmittedBytes reports what the enclosing aggregate currently holds for this ledger.
++func (b *AllocationBudget) AdmittedBytes() int64 { return b.admitted }
 +
 +// ReserveBytes admits storage before allocation. Refusal leaves the ledger
 +// unchanged, so a caller cannot hide an earlier unit's retained allocations.
@@ -370,7 +515,14 @@
 +		observed = b.used + bytes
 +	}
 +	if observed > b.maximum {
-+		return &BudgetError{"parser_scratch_bytes", b.maximum, observed, pos}
++		return &BudgetError{Kind: "parser_scratch_bytes", Maximum: b.maximum, Observed: observed, Pos: pos}
++	}
++	if b.admit != nil && observed > b.admitted {
++		grow := min(max(observed-b.admitted, admissionChunk), b.maximum-b.admitted)
++		if err := b.admit(grow); err != nil {
++			return &BudgetError{Kind: "aggregate_admission", Maximum: b.maximum, Observed: observed, Pos: pos, Cause: err}
++		}
++		b.admitted += grow
 +	}
 +	b.used = observed
 +	return nil
@@ -380,7 +532,7 @@
 +// the selected parser's accounting. It also bounds pre-GC allocation churn.
 +func (b *AllocationBudget) ReserveHeap(bytes int64, pos Pos) error {
 +	if bytes < 0 || bytes > math.MaxInt64-8256 {
-+		return &BudgetError{"parser_scratch_bytes", b.maximum, math.MaxInt64, pos}
++		return &BudgetError{Kind: "parser_scratch_bytes", Maximum: b.maximum, Observed: math.MaxInt64, Pos: pos}
 +	}
 +	rounded := int64(16)
 +	if bytes <= 32768 {
@@ -396,7 +548,7 @@
 +func (b *AllocationBudget) releaseFrame(bytes int64) { b.used -= bytes }
 --- /dev/null
 +++ b/syntax/allocation_budget_test.go
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,110 @@
 +package syntax_test
 +
 +import (
@@ -469,6 +621,42 @@
 +	var refusal *syntax.BudgetError
 +	if err := pool.ReserveBytes(1, syntax.Pos{}); !errors.As(err, &refusal) || refusal.Observed != 161 || pool.UsedBytes() != 160 {
 +		t.Fatalf("one-byte excess = %v; retained=%d", err, pool.UsedBytes())
++	}
++}
++
++func TestAdmittedLedgerChargesAggregateBeforeGrowth(t *testing.T) {
++	var admitted []int64
++	refuse := errors.New("aggregate exhausted")
++	limit := int64(96 << 10)
++	pool, err := syntax.NewAdmittedAllocationBudget(1<<20, func(n int64) error {
++		var total int64
++		for _, a := range admitted {
++			total += a
++		}
++		if total+n > limit {
++			return refuse
++		}
++		admitted = append(admitted, n)
++		return nil
++	})
++	if err != nil {
++		t.Fatalf("create ledger: %v", err)
++	}
++	if err := pool.ReserveBytes(10, syntax.Pos{}); err != nil || pool.AdmittedBytes() != 64<<10 || len(admitted) != 1 {
++		t.Fatalf("first chunk = %v admitted=%d calls=%v", err, pool.AdmittedBytes(), admitted)
++	}
++	if err := pool.ReserveBytes(64<<10-10, syntax.Pos{}); err != nil || len(admitted) != 1 {
++		t.Fatalf("growth within chunk charged again: %v %v", err, admitted)
++	}
++	var refusal *syntax.BudgetError
++	if err := pool.ReserveBytes(64<<10, syntax.Pos{}); !errors.As(err, &refusal) || !errors.Is(err, refuse) || refusal.Kind != "aggregate_admission" || pool.UsedBytes() != 64<<10 {
++		t.Fatalf("aggregate refusal = %v used=%d", err, pool.UsedBytes())
++	}
++	if _, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader("printf '%s' fixture"), "fixture.pw"); !errors.Is(err, refuse) {
++		t.Fatalf("parser hid aggregate refusal: %v", err)
++	}
++	if _, err := syntax.NewAdmittedAllocationBudget(1, nil); err == nil {
++		t.Fatal("admitted ledger accepted no aggregate")
 +	}
 +}
 --- a/syntax/braces.go
@@ -640,7 +828,7 @@
 +}
 --- /dev/null
 +++ b/syntax/budget.go
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,194 @@
 +package syntax
 +
 +import (
@@ -671,11 +859,18 @@
 +	Kind              string
 +	Maximum, Observed int64
 +	Pos               Pos
++	// Cause is the enclosing aggregate's refusal for an admitted ledger.
++	Cause error
 +}
 +
 +func (e *BudgetError) Error() string {
++	if e.Cause != nil {
++		return fmt.Sprintf("%s refused at %d bytes: %v", e.Kind, e.Observed, e.Cause)
++	}
 +	return fmt.Sprintf("%s exceeded: maximum %d, requested %d", e.Kind, e.Maximum, e.Observed)
 +}
++
++func (e *BudgetError) Unwrap() error { return e.Cause }
 +
 +type budgetAbort struct{ err *BudgetError }
 +

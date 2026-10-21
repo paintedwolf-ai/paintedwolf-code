@@ -577,3 +577,7 @@ func TestCompleteSummarySourceEstablishesReadBasis(t *testing.T) {
 		})
 	}
 }
+
+func (f *fakeEditorDocuments) PublishedThrough(context.Context, string, string, int64) (bool, error) {
+	return false, errors.New("fake documents do not publish")
+}

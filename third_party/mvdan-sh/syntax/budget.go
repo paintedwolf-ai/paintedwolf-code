@@ -28,11 +28,18 @@ type BudgetError struct {
 	Kind              string
 	Maximum, Observed int64
 	Pos               Pos
+	// Cause is the enclosing aggregate's refusal for an admitted ledger.
+	Cause error
 }
 
 func (e *BudgetError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s refused at %d bytes: %v", e.Kind, e.Observed, e.Cause)
+	}
 	return fmt.Sprintf("%s exceeded: maximum %d, requested %d", e.Kind, e.Maximum, e.Observed)
 }
+
+func (e *BudgetError) Unwrap() error { return e.Cause }
 
 type budgetAbort struct{ err *BudgetError }
 

@@ -785,6 +785,24 @@ type InvocationProgramProgress struct {
 	SettledAt               sql.NullString `json:"settled_at"`
 }
 
+type InvocationProgramRevisionPins struct {
+	ProgramID        string `json:"program_id"`
+	ExecutionID      string `json:"execution_id"`
+	Ordinal          int64  `json:"ordinal"`
+	Role             string `json:"role"`
+	Mode             string `json:"mode"`
+	Basis            string `json:"basis"`
+	RootID           string `json:"root_id"`
+	Path             string `json:"path"`
+	DocumentID       string `json:"document_id"`
+	DocumentRevision int64  `json:"document_revision"`
+	DiskSha256       string `json:"disk_sha256"`
+	Representation   string `json:"representation"`
+	ContentSha256    string `json:"content_sha256"`
+	ContentBytes     int64  `json:"content_bytes"`
+	CapturedAt       string `json:"captured_at"`
+}
+
 type InvocationProgramSources struct {
 	ProgramID      string `json:"program_id"`
 	SourceUnitID   string `json:"source_unit_id"`

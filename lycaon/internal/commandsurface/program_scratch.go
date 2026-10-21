@@ -4,59 +4,48 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"mvdan.cc/sh/v3/syntax"
 )
 
-// ProgramMemoryAdmission reserves working and retained storage against the enclosing
-// program's resource ledger. It supplies accounting, never operation authority.
-// Captured source and retained plans additionally consume program_state_bytes.
-type ProgramMemoryAdmission interface {
-	ReserveParserScratch(context.Context, int64) (release func(), err error)
-	ReserveProgramState(context.Context, int64) (release func(), err error)
-}
-
-// ProgramParser holds its reservation through validation and host lowering.
-// Callers acquire it before source capture and close it after parsing. A parser
-// must not be shared concurrently or used after Close.
-type ProgramParser struct {
-	ctx     context.Context
-	release func()
-	once    sync.Once
-	closed  bool
-	memory  ProgramMemoryAdmission
-}
-
-func NewProgramParser(ctx context.Context, admission ProgramMemoryAdmission) (*ProgramParser, error) {
-	if ctx == nil || admission == nil {
+// ParseAdmitted validates one unit with parser scratch charged to the enclosing
+// program's working account as the selected parser grows, up to the per-unit
+// evaluation_memory_bytes ceiling. Scratch is released once lowering returns;
+// the retained plan keeps only its program_state_bytes lease. Concurrent working
+// reservations (stream codecs, predicates, background jobs) therefore share the
+// aggregate with the parser's actual use rather than a whole-ceiling hold.
+func ParseAdmitted(ctx context.Context, memory *toolcontract.ProgramMemory, source []byte, options ParseOptions) (*ParsedProgram, error) {
+	if ctx == nil || memory == nil {
 		return nil, fmt.Errorf("program parser requires context and scratch admission")
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	catalog, err := programLanguage()
-	if err != nil {
-		return nil, err
-	}
-	release, err := admission.ReserveParserScratch(ctx, languageLimit(catalog, "evaluation_memory_bytes"))
-	if err != nil {
-		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("parser scratch admission returned no release")
-	}
-	return &ProgramParser{ctx: ctx, release: release, memory: admission}, nil
+	return parseProgram(ctx, source, options, memory)
 }
 
-func (p *ProgramParser) Close() error {
-	p.once.Do(func() { p.closed = true; p.release() })
-	return nil
-}
-
-func (p *ProgramParser) Parse(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	if p.closed {
-		return nil, fmt.Errorf("program parser reservation is closed")
+// scratchLedger is one parse's upstream allocation ledger. With program memory
+// it admits growth from the working account in bounded chunks; release returns
+// every admitted chunk.
+func scratchLedger(ctx context.Context, maximum int64, memory *toolcontract.ProgramMemory) (*syntax.AllocationBudget, func(), error) {
+	if memory == nil {
+		pool, err := syntax.NewAllocationBudget(maximum)
+		return pool, func() {}, err
 	}
-	return parseProgram(p.ctx, source, options, p.memory)
+	var releases []func()
+	release := func() {
+		for i := len(releases) - 1; i >= 0; i-- {
+			releases[i]()
+		}
+		releases = nil
+	}
+	pool, err := syntax.NewAdmittedAllocationBudget(maximum, func(n int64) error {
+		done, err := memory.Reserve(ctx, n)
+		if err != nil {
+			return err
+		}
+		releases = append(releases, done)
+		return nil
+	})
+	return pool, release, err
 }
 
 type contextSource struct {

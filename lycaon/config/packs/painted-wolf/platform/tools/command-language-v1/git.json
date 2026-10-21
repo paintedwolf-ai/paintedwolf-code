@@ -333,6 +333,7 @@
           "fixture_id": "git log-option-n-maxcount",
           "scope": "subcommand",
           "consumption": "fixed",
+          "shorthand": "numeric",
           "sample_values": [
             "1"
           ]
@@ -3483,6 +3484,7 @@
     },
     {
       "name": "git",
+      "operands_end_options": true,
       "aliases": [],
       "family": "git",
       "owner": "git",
