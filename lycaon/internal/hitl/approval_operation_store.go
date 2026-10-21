@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,17 +18,24 @@ type preparedApprovalOperation struct {
 	Option       ApprovalOption
 }
 
-func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, option ApprovalOption) error {
-	raw, err := json.Marshal(option)
+func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, approved approvedAuthority) error {
+	raw, err := json.Marshal(approved.display)
+	if err != nil {
+		return err
+	}
+	authority, err := approved.columns()
 	if err != nil {
 		return err
 	}
 	rows, err := s.queries.PrepareApprovalOperation(ctx, db.PrepareApprovalOperationParams{
-		CheckpointID: checkpointID,
-		SessionID:    sessionID,
-		OptionID:     option.ID,
-		OptionJson:   string(raw),
-		CreatedAt:    db.FormatTime(time.Now().UTC()),
+		CheckpointID:    checkpointID,
+		SessionID:       sessionID,
+		OptionID:        approved.display.ID,
+		OptionJson:      string(raw),
+		CreatedAt:       db.FormatTime(time.Now().UTC()),
+		AuthorityFormat: authority.format,
+		AuthorityDigest: authority.digest,
+		AuthorityBody:   authority.body,
 	})
 	if err != nil {
 		return err
@@ -178,18 +186,55 @@ func (s *SQLStore) rollbackApprovalOperation(ctx context.Context, checkpointID s
 	})
 }
 
-func (s *SQLStore) preparedApprovalOperations(ctx context.Context) ([]preparedApprovalOperation, error) {
+// preparedApprovalOperations reads interrupted approvals for rollback. A
+// native operation's option comes only from its lossless reader.
+func (s *SQLStore) preparedApprovalOperations(ctx context.Context, state toolcontract.ReviewStateAdmission) ([]preparedApprovalOperation, func(), error) {
 	rows, err := s.queries.ListPreparedApprovalOperations(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var releases releaseList
 	out := make([]preparedApprovalOperation, 0, len(rows))
 	for _, row := range rows {
 		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID}
 		if err := json.Unmarshal([]byte(row.OptionJson), &op.Option); err != nil {
-			return nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
+			releases.release()
+			return nil, nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
+		}
+		if row.AuthorityFormat != "" {
+			option, release, err := s.nativeApprovedOption(ctx, state, operationAuthoritySource(row.CheckpointID), op.Option)
+			if err != nil {
+				releases.release()
+				return nil, nil, err
+			}
+			releases = append(releases, release)
+			op.Option = option
 		}
 		out = append(out, op)
 	}
-	return out, nil
+	return out, releases.release, nil
+}
+
+// nativeApprovedOption restores the single approved option a native
+// operation or chat grant row records, bound to that row's display copy.
+func (s *SQLStore) nativeApprovedOption(ctx context.Context, state toolcontract.ReviewStateAdmission, source authoritySource, display ApprovalOption) (ApprovalOption, func(), error) {
+	projection, releaseProjection, err := s.readNativeAuthority(ctx, state, source)
+	if err != nil {
+		return ApprovalOption{}, nil, err
+	}
+	options, releaseOptions, err := restoredNativeOptions(ctx, state, projection, []ApprovalOption{display})
+	if err != nil {
+		releaseProjection()
+		return ApprovalOption{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	return options[0], func() { releaseOptions(); releaseProjection() }, nil
+}
+
+// releaseList releases retained native leases in reverse order.
+type releaseList []func()
+
+func (r releaseList) release() {
+	for n := len(r) - 1; n >= 0; n-- {
+		r[n]()
+	}
 }

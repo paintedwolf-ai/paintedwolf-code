@@ -165,6 +165,13 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	testutil.FailErr(t, "close source fixture", database.Shutdown(t.Context()))
 	source, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open prior revision", err)
+	// Revision3 predates the native authority columns.
+	for _, table := range []string{"checkpoints", "approval_operations", "chat_grants"} {
+		for _, column := range []string{"authority_body", "authority_digest", "authority_format"} {
+			_, err = source.Exec("ALTER TABLE " + table + " DROP COLUMN " + column)
+			testutil.FailErr(t, "remove revision5 column", err)
+		}
+	}
 	_, err = source.Exec(`PRAGMA user_version=3`)
 	testutil.FailErr(t, "set source revision", err)
 	testutil.FailErr(t, "close prior revision", source.Close())

@@ -4,13 +4,13 @@
 INSERT INTO checkpoints (
     id, session_id, project_dir, kind, status, type, title, description,
     tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-    project_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    project_id, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetCheckpoint :one
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE id = ?;
 
@@ -19,7 +19,7 @@ WHERE id = ?;
 -- name: ListSessionCheckpoints :many
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE session_id = sqlc.arg(session_id)
   AND (sqlc.narg(status) IS NULL OR status = sqlc.narg(status))
@@ -29,7 +29,7 @@ ORDER BY created_at ASC, id ASC;
 -- name: ListPendingCheckpoints :many
 SELECT id, session_id, project_dir, kind, status, type, title, description,
        tool_name, path, args_json, files_json, payload_json, result_json, created_at, resolved_at, resolved_by, resolved_by_person_id,
-       project_id
+       project_id, authority_format
 FROM checkpoints
 WHERE status = 'pending'
 ORDER BY created_at ASC, id ASC;
@@ -52,12 +52,15 @@ WHERE id = sqlc.arg(id) AND session_id = sqlc.arg(session_id)
 
 -- name: PrepareApprovalOperation :execrows
 INSERT INTO approval_operations (
-    checkpoint_id, session_id, option_id, option_json, status, created_at
-) VALUES (?, ?, ?, ?, 'prepared', ?)
+    checkpoint_id, session_id, option_id, option_json, status, created_at, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, 'prepared', ?, ?, ?, ?)
 ON CONFLICT(checkpoint_id) DO UPDATE SET
     session_id = excluded.session_id,
     option_id = excluded.option_id,
     option_json = excluded.option_json,
+    authority_format = excluded.authority_format,
+    authority_digest = excluded.authority_digest,
+    authority_body = excluded.authority_body,
     status = 'prepared',
     created_at = excluded.created_at,
     committed_at = NULL,
@@ -83,7 +86,7 @@ SET status = 'rolled_back', rolled_back_at = sqlc.arg(rolled_back_at)
 WHERE checkpoint_id = sqlc.arg(checkpoint_id) AND status = 'prepared';
 
 -- name: ListPreparedApprovalOperations :many
-SELECT checkpoint_id, session_id, option_json
+SELECT checkpoint_id, session_id, option_json, authority_format
 FROM approval_operations
 WHERE status = 'prepared'
 ORDER BY created_at, checkpoint_id;
@@ -118,7 +121,7 @@ WHERE session_id = ? AND tool_call_id = ?;
 -- name: ListParentPendingCheckpoints :many
 SELECT c.id, c.session_id, c.project_dir, c.kind, c.status, c.type, c.title, c.description,
        c.tool_name, c.path, c.args_json, c.files_json, c.payload_json, c.result_json, c.created_at, c.resolved_at, c.resolved_by, c.resolved_by_person_id,
-       c.project_id
+       c.project_id, c.authority_format
 FROM checkpoints c
 JOIN pending_checkpoint_scopes scope ON scope.checkpoint_id = c.id
 WHERE scope.session_id = sqlc.arg(parent_session_id)
@@ -127,16 +130,19 @@ ORDER BY c.created_at, c.id;
 
 -- name: UpsertChatGrant :exec
 INSERT INTO chat_grants (
-    chat_session_id, id, checkpoint_id, delta_json, created_at, expires_at
-) VALUES (?, ?, ?, ?, ?, ?)
+    chat_session_id, id, checkpoint_id, delta_json, created_at, expires_at, authority_format, authority_digest, authority_body
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(chat_session_id, id) DO UPDATE SET
     checkpoint_id = excluded.checkpoint_id,
     delta_json = excluded.delta_json,
+    authority_format = excluded.authority_format,
+    authority_digest = excluded.authority_digest,
+    authority_body = excluded.authority_body,
     created_at = excluded.created_at,
     expires_at = excluded.expires_at;
 
 -- name: ListChatGrants :many
-SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at
+SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at, authority_format
 FROM chat_grants
 ORDER BY created_at, chat_session_id, id;
 
@@ -146,3 +152,33 @@ DELETE FROM chat_grants WHERE id = sqlc.arg(id);
 -- name: DeleteExpiredChatGrants :exec
 DELETE FROM chat_grants
 WHERE expires_at IS NOT NULL AND expires_at <= sqlc.arg(now);
+
+-- Native authority is read only by its measured reader: the size comes first,
+-- then the body from the same snapshot only when its identity still matches.
+
+-- name: MeasureCheckpointAuthority :one
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM checkpoints WHERE id = ?;
+
+-- name: ReadCheckpointAuthority :one
+SELECT authority_body FROM checkpoints
+WHERE id = sqlc.arg(id) AND authority_format = sqlc.arg(format) AND authority_digest = sqlc.arg(digest)
+  AND length(CAST(authority_body AS BLOB)) = CAST(sqlc.arg(body_bytes) AS INTEGER);
+
+-- name: MeasureApprovalOperationAuthority :one
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM approval_operations WHERE checkpoint_id = ?;
+
+-- name: ReadApprovalOperationAuthority :one
+SELECT authority_body FROM approval_operations
+WHERE checkpoint_id = sqlc.arg(checkpoint_id) AND authority_format = sqlc.arg(format) AND authority_digest = sqlc.arg(digest)
+  AND length(CAST(authority_body AS BLOB)) = CAST(sqlc.arg(body_bytes) AS INTEGER);
+
+-- name: MeasureChatGrantAuthority :one
+SELECT authority_format, authority_digest, CAST(length(CAST(authority_body AS BLOB)) AS INTEGER) AS body_bytes
+FROM chat_grants WHERE chat_session_id = ? AND id = ?;
+
+-- name: ReadChatGrantAuthority :one
+SELECT authority_body FROM chat_grants
+WHERE chat_session_id = sqlc.arg(chat_session_id) AND id = sqlc.arg(id) AND authority_format = sqlc.arg(format)
+  AND authority_digest = sqlc.arg(digest) AND length(CAST(authority_body AS BLOB)) = CAST(sqlc.arg(body_bytes) AS INTEGER);

@@ -399,8 +399,9 @@ func genericApprovalSubject(action ProposedAction, title string) ApprovalSubject
 func socketApprovalSubject(title string, sockets []SocketCapabilityTarget) ApprovalSubject {
 	targets := make([]ApprovalTarget, 0, len(sockets))
 	for _, socket := range sockets {
-		targets = append(targets, ApprovalTarget{Kind: "socket", Label: socket.ApprovedPath, Details: map[string]any{
-			"approved_path": socket.ApprovedPath, "resolved_path": socket.ResolvedPath,
+		// Subject paths are display; the authority deltas keep the exact bytes.
+		targets = append(targets, ApprovalTarget{Kind: "socket", Label: reviewDisplayText(socket.ApprovedPath), Details: map[string]any{
+			"approved_path": reviewDisplayText(socket.ApprovedPath), "resolved_path": reviewDisplayText(socket.ResolvedPath),
 			"already_chat_granted": socket.AlreadyChatGranted,
 		}})
 	}

@@ -88,8 +88,8 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	}
 	var applied int
 	testutil.FailErr(t, "read migration ledger", reader.QueryRowContext(t.Context(), "SELECT count(*) FROM schema_migrations").Scan(&applied))
-	if applied != 3 {
-		t.Fatalf("migration ledger has %d steps, want 3", applied)
+	if applied != 4 {
+		t.Fatalf("migration ledger has %d steps, want 4", applied)
 	}
 }
 

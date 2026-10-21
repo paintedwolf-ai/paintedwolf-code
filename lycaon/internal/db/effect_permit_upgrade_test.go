@@ -1,8 +1,11 @@
 package db
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,10 +13,25 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "store.db")
+// revision4Store builds the exact registered revision4 shape: the current
+// fresh schema without the native authority columns revision5 adds.
+func revision4Store(t *testing.T, path string) *Store {
+	t.Helper()
 	source, err := Open(path)
 	testutil.FailErr(t, "open isolated source fixture", err)
+	for _, table := range []string{"checkpoints", "approval_operations", "chat_grants"} {
+		for _, column := range []string{"authority_body", "authority_digest", "authority_format"} {
+			_, err = source.ExecContext(t.Context(), "ALTER TABLE "+table+" DROP COLUMN "+column)
+			testutil.FailErr(t, "remove revision5 column", err)
+		}
+	}
+	return source
+}
+
+func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	source := revision4Store(t, path)
+	var err error
 	_, err = source.ExecContext(t.Context(), `INSERT INTO projects(id,last_opened_at,created_at) VALUES('fixture-project','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed project", err)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('fixture-session','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
@@ -63,5 +81,34 @@ func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	testutil.FailErr(t, "read migration ledger", upgraded.QueryRow(`SELECT count(*) FROM schema_migrations WHERE id='native-child-once-authority'`).Scan(&count))
 	if count != 1 {
 		t.Fatalf("migration applied %d times", count)
+	}
+	var format, digest, body string
+	testutil.FailErr(t, "read retained authority columns", upgraded.QueryRow(`SELECT authority_format,authority_digest,authority_body FROM checkpoints WHERE id='fixture-checkpoint'`).Scan(&format, &digest, &body))
+	if format != "" || digest != "" || body != "" {
+		t.Fatal("retained structured authority acquired a native format")
+	}
+}
+
+// A store claiming revision5 without its native authority columns is an
+// unknown shape: planning refuses it and leaves its bytes untouched.
+func TestNativeAuthorityColumnlessRevision5IsRefusedWithoutMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	source := revision4Store(t, path)
+	_, err := source.ExecContext(t.Context(), `PRAGMA user_version=5`)
+	testutil.FailErr(t, "claim revision5", err)
+	testutil.FailErr(t, "close source", source.Close())
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "read source bytes", err)
+	var incompatible *StoreIncompatibleError
+	if err := UpgradeStaged(t.Context(), path); !errors.As(err, &incompatible) || incompatible.Reason != RecoveryReasonSchemaMismatch || incompatible.StoreSchemaVersion != 5 {
+		t.Fatalf("columnless revision5 was not refused as a schema mismatch: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read refused bytes", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused store was mutated")
+	}
+	if _, err := PlanSchemaUpgrade(t.Context(), migrations.Baseline{Revision: 5, Shape: migrations.EffectPermitIdentity(migrations.Baseline{}).From.Shape}); !errors.Is(err, migrations.ErrUnsupported) {
+		t.Fatalf("columnless revision5 identity planned: %v", err)
 	}
 }

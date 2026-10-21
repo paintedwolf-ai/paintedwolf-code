@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // ChatGrant is one approval delta whose authority lasts for its chat.
@@ -88,14 +89,23 @@ func (g ChatGrant) rebased(now time.Time) (ApprovalAuthorityDelta, bool) {
 }
 
 // recordChatGrantsTx writes an option's chat grants in the approval's commit.
-func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, option ApprovalOption, approvedAt time.Time) error {
+// A native grant row keeps the whole approved option's lossless projection
+// beside the screened JSON copy of its own delta.
+func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, option ApprovalOption, approved approvedAuthority, approvedAt time.Time) error {
 	queries := db.New(tx)
-	for _, delta := range option.Authority {
+	authority, err := approved.columns()
+	if err != nil {
+		return err
+	}
+	if len(approved.display.Authority) != len(option.Authority) {
+		return fmt.Errorf("approved display does not match its authority")
+	}
+	for n, delta := range option.Authority {
 		chat, id, ok := delta.ChatLifetime()
 		if !ok {
 			continue
 		}
-		raw, err := json.Marshal(delta)
+		raw, err := json.Marshal(approved.display.Authority[n])
 		if err != nil {
 			return fmt.Errorf("encode chat grant %s: %w", id, err)
 		}
@@ -106,6 +116,7 @@ func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, op
 		if err := queries.UpsertChatGrant(ctx, db.UpsertChatGrantParams{
 			ChatSessionID: chat, ID: id, CheckpointID: checkpointID,
 			DeltaJson: string(raw), CreatedAt: db.FormatTime(approvedAt), ExpiresAt: expiresAt,
+			AuthorityFormat: authority.format, AuthorityDigest: authority.digest, AuthorityBody: authority.body,
 		}); err != nil {
 			return fmt.Errorf("record chat grant %s: %w", id, err)
 		}
@@ -113,40 +124,93 @@ func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, op
 	return nil
 }
 
-func (s *SQLStore) chatGrants(ctx context.Context, now time.Time) ([]ChatGrant, error) {
+func (s *SQLStore) chatGrants(ctx context.Context, now time.Time, state toolcontract.ReviewStateAdmission) ([]ChatGrant, func(), error) {
 	if err := s.queries.DeleteExpiredChatGrants(ctx, db.NullString(db.FormatTime(now))); err != nil {
-		return nil, fmt.Errorf("prune expired chat grants: %w", err)
+		return nil, nil, fmt.Errorf("prune expired chat grants: %w", err)
 	}
 	rows, err := s.queries.ListChatGrants(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	var releases releaseList
+	fail := func(err error) ([]ChatGrant, func(), error) {
+		releases.release()
+		return nil, nil, err
 	}
 	out := make([]ChatGrant, 0, len(rows))
 	for _, row := range rows {
 		grant := ChatGrant{ChatSessionID: row.ChatSessionID, ID: row.ID, CheckpointID: row.CheckpointID}
 		if err := json.Unmarshal([]byte(row.DeltaJson), &grant.Delta); err != nil {
-			return nil, fmt.Errorf("decode chat grant %s: %w", row.ID, err)
+			return fail(fmt.Errorf("decode chat grant %s: %w", row.ID, err))
+		}
+		if row.AuthorityFormat != "" {
+			delta, release, err := s.nativeChatGrant(ctx, state, row.ChatSessionID, row.ID, grant.Delta)
+			if err != nil {
+				return fail(err)
+			}
+			releases = append(releases, release)
+			grant.Delta = delta
 		}
 		if grant.Delta.Grant != nil {
 			if err := ValidateElevatedEffects(grant.Delta.Grant.ElevatedEffects); err != nil {
-				return nil, fmt.Errorf("decode chat grant %s: %w", row.ID, err)
+				return fail(fmt.Errorf("decode chat grant %s: %w", row.ID, err))
 			}
 		}
 		if grant.Delta.AskQuiet != nil {
 			if err := ValidateElevatedEffects(grant.Delta.AskQuiet.ElevatedEffects); err != nil {
-				return nil, fmt.Errorf("decode chat quiet %s: %w", row.ID, err)
+				return fail(fmt.Errorf("decode chat quiet %s: %w", row.ID, err))
 			}
 		}
 		if row.ExpiresAt.Valid {
 			expires, err := db.ParseTime(row.ExpiresAt.String)
 			if err != nil {
-				return nil, fmt.Errorf("decode chat grant %s expiry: %w", row.ID, err)
+				return fail(fmt.Errorf("decode chat grant %s expiry: %w", row.ID, err))
 			}
 			grant.ExpiresAt = &expires
 		}
 		out = append(out, grant)
 	}
-	return out, nil
+	return out, releases.release, nil
+}
+
+// nativeChatGrant restores the one delta of the approved option whose chat
+// lifetime is this row, bound to the row's screened delta copy.
+func (s *SQLStore) nativeChatGrant(ctx context.Context, state toolcontract.ReviewStateAdmission, chatSessionID, id string, display ApprovalAuthorityDelta) (ApprovalAuthorityDelta, func(), error) {
+	source := chatGrantAuthoritySource(chatSessionID, id)
+	projection, releaseProjection, err := s.readNativeAuthority(ctx, state, source)
+	if err != nil {
+		return ApprovalAuthorityDelta{}, nil, err
+	}
+	options, releaseOptions, err := projection.Options(ctx, state)
+	if err != nil {
+		releaseProjection()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	release := func() { releaseOptions(); releaseProjection() }
+	found, matches := -1, 0
+	for n, delta := range options[0].Authority {
+		if chat, grantID, ok := delta.ChatLifetime(); ok && chat == chatSessionID && grantID == id {
+			found, matches = n, matches+1
+		}
+	}
+	if len(options) != 1 || matches != 1 {
+		release()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: native authority does not name exactly this grant", source.name)
+	}
+	derived, releaseDerived, err := nativeAuthorityDisplay(ctx, state, options)
+	if err == nil {
+		var same bool
+		same, err = sameAuthorityDisplay(derived[0].Authority[found], display)
+		releaseDerived()
+		if err == nil && !same {
+			err = fmt.Errorf("native authority does not match its displayed grant")
+		}
+	}
+	if err != nil {
+		release()
+		return ApprovalAuthorityDelta{}, nil, fmt.Errorf("%s: %w", source.name, err)
+	}
+	return options[0].Authority[found], release, nil
 }
 
 func (s *SQLStore) forgetChatGrant(ctx context.Context, id string) (bool, error) {
@@ -161,10 +225,11 @@ func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
 	now := time.Now().UTC()
-	grants, err := m.store.chatGrants(ctx, now)
+	grants, releaseGrants, err := m.store.chatGrants(ctx, now, m.nativeAdmission)
 	if err != nil {
 		return err
 	}
+	defer releaseGrants()
 	for _, grant := range grants {
 		delta, live := grant.rebased(now)
 		if !live {
