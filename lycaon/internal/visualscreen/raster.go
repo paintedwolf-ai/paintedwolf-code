@@ -9,6 +9,7 @@ import (
 	"image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"io"
 
 	_ "golang.org/x/image/webp"
 )
@@ -31,17 +32,10 @@ func decodeRaster(raw []byte) (image.Image, error) {
 		}
 		img, err = png.Decode(bytes.NewReader(raw))
 	case "gif":
-		var all *gif.GIF
-		all, err = gif.DecodeAll(bytes.NewReader(raw))
-		if err == nil {
-			if len(all.Image) == 0 {
-				return nil, errors.New("gif has no frames")
-			}
-			if len(all.Image) > 1 {
-				return nil, errAnimatedRaster
-			}
-			img = all.Image[0]
+		if err := singleFrameGIF(raw); err != nil {
+			return nil, err
 		}
+		img, err = gif.Decode(bytes.NewReader(raw))
 	default:
 		img, _, err = image.Decode(bytes.NewReader(raw))
 	}
@@ -49,6 +43,67 @@ func decodeRaster(raw []byte) (image.Image, error) {
 		return nil, err
 	}
 	return orient(img, tiffOrientation(exifBlock(raw))), nil
+}
+
+// singleFrameGIF walks container blocks before any frame pixels are allocated.
+// DecodeAll would allocate every frame before discovering that screening must refuse them.
+func singleFrameGIF(raw []byte) error {
+	if len(raw) < 13 {
+		return io.ErrUnexpectedEOF
+	}
+	offset := 13
+	if raw[10]&0x80 != 0 {
+		offset += 3 * (1 << ((raw[10] & 7) + 1))
+	}
+	frames := 0
+	for offset < len(raw) {
+		switch raw[offset] {
+		case 0x3b:
+			if frames != 1 {
+				return errors.New("gif has no frames")
+			}
+			return nil
+		case 0x21:
+			offset += 2 // Extension introducer and label; its data uses sub-blocks.
+		case 0x2c:
+			frames++
+			if frames > 1 {
+				return errAnimatedRaster
+			}
+			if offset+10 > len(raw) {
+				return io.ErrUnexpectedEOF
+			}
+			packed := raw[offset+9]
+			offset += 10
+			if packed&0x80 != 0 {
+				offset += 3 * (1 << ((packed & 7) + 1))
+			}
+			offset++ // LZW minimum code size.
+		default:
+			return errors.New("invalid gif block")
+		}
+		var err error
+		offset, err = gifSubBlocksEnd(raw, offset)
+		if err != nil {
+			return err
+		}
+	}
+	return io.ErrUnexpectedEOF
+}
+
+func gifSubBlocksEnd(raw []byte, offset int) (int, error) {
+	for offset < len(raw) {
+		n := int(raw[offset])
+		offset++
+		if n == 0 {
+			return offset, nil
+		}
+		if offset+n > len(raw) {
+			break
+		}
+		offset += n
+	}
+	return 0, io.ErrUnexpectedEOF
 }
 
 // pngAnimated reports an acTL chunk, which declares frames a still decoder
