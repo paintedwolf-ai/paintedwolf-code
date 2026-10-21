@@ -1,5 +1,7 @@
 """Changed scripts Python coverage, measured by real suites in a disposable repository."""
 
+from contextlib import redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
@@ -91,9 +93,11 @@ class PythonChangedCoverageTests(unittest.TestCase):
     def test_a_tested_added_statement_passes(self):
         (self.scripts / "sample.py").write_text(BASE + ADDED)
         self.write_test("self.assertEqual(sample.covered(), 1)", "self.assertEqual(sample.added(2), 6)")
-        findings, failed = self.run_gate()
-        self.assertFalse(failed)
-        self.assertEqual(findings, [])
+        out = io.StringIO()
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": ""}), redirect_stdout(out):
+            self.assertEqual(coverage_changes.main(["python"]), 0)
+        self.assertIn("Changed coverage (Python): change base", out.getvalue())
+        self.assertIn("1 changed file(s)", out.getvalue())
 
     def test_statements_run_only_in_subprocesses_count(self):
         (self.scripts / "sample.py").write_text(BASE + ADDED + "\n\nif __name__ == '__main__':\n    added(1)\n")
@@ -145,6 +149,37 @@ class PythonChangedCoverageTests(unittest.TestCase):
         (self.scripts / "verification_tests" / "support.py").write_text("")
         (self.scripts / "notes.md").write_text("")
         self.assertEqual(coverage_changes.python_coverage.sources(self.root, paths), ["scripts/sample.py"])
+
+
+class ProvisionTests(unittest.TestCase):
+    def test_each_requirements_file_installs_once_per_interpreter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            requirements = Path(directory) / "requirements.txt"
+            requirements.write_text("example==1.0\n")
+            calls = []
+
+            def install(command, check):
+                calls.append(command)
+                Path(command[command.index("--target") + 1]).mkdir()
+
+            with patch.dict(os.environ, {"PW_BIN_DIR": str(Path(directory) / "bin")}), \
+                    patch.object(coverage_changes.python_coverage.subprocess, "run", side_effect=install):
+                first = coverage_changes.python_coverage.provision(requirements)
+                second = coverage_changes.python_coverage.provision(requirements)
+            self.assertEqual(first, second)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][-2:], ["-r", str(requirements)])
+            self.assertIn("--no-deps", calls[0])
+            self.assertEqual((first / "ready").read_text(), "example==1.0\n")
+
+    def test_provisioning_installs_the_pin_and_every_suite_requirement(self):
+        with patch.object(coverage_changes.python_coverage, "provision") as provision:
+            self.assertEqual(coverage_changes.main(["python", "--provision"]), 0)
+        installed = [call.args[0] for call in provision.call_args_list]
+        self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,
+                                     ROOT / "scripts/coordinator-benchmark/requirements.txt"])
+        with patch("sys.stderr"), self.assertRaises(SystemExit):
+            coverage_changes.main(["go", "--provision"])
 
 
 class DeclaredSuiteTests(unittest.TestCase):

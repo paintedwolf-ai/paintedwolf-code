@@ -26,6 +26,8 @@ TEST_DIRECTORIES = {"test", "tests", "e2e", "testutil", "testcorpus", "testsuppo
 STARTUP = """import os, sys
 sys.path.extend({tools!r})
 os.environ["COVERAGE_PROCESS_START"] = {rc!r}
+# A parent's coverage.py hands an exec'd child its own configuration this way; this hook decides.
+os.environ.pop("COVERAGE_PROCESS_CONFIG", None)
 try:
     import coverage
     coverage.process_startup()
@@ -74,14 +76,13 @@ def provision(requirements):
 
 
 def environment(work, tools, files):
-    """An interpreter whose every process records `files` into work/data, and its coverage.py configuration."""
+    """An interpreter whose every process records `files` into work/data."""
     data = work / "data"
     data.mkdir(parents=True)
     rc = work / "coveragerc"
     include = "".join(f"\n    */{path}" for path in files)
-    # An empty exclusion list: changed code has no way to opt out of measurement.
     rc.write_text(f"[run]\ndata_file = {data / '.coverage'}\nparallel = True\nsigterm = True\n"
-                  f"patch = _exit, execv, fork\ninclude ={include}\n[report]\nexclude_lines =\n")
+                  f"patch = _exit, execv, fork\ninclude ={include}\n")
     home = work / "python"
     venv.EnvBuilder(with_pip=False, symlinks=os.name != "nt", clear=True).create(home)
     python = home / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
@@ -89,24 +90,44 @@ def environment(work, tools, files):
                                   capture_output=True, text=True, check=True).stdout.strip())
     (purelib / "_pw_coverage_startup.py").write_text(STARTUP.format(tools=[str(t) for t in tools], rc=str(rc)))
     (purelib / "_pw_coverage_startup.pth").write_text("import _pw_coverage_startup\n")
-    return python, rc
+    return python, data
 
 
 class Measurement:
     """Statements of one source and which of them any measured process executed."""
 
-    def __init__(self, reporter, executed):
-        self.reporter = reporter
-        self.statements = reporter.lines()
-        self.executed = reporter.translate_lines(executed) & self.statements
+    def __init__(self, parser, executed):
+        self.parser = parser
+        self.statements = parser.statements
+        self.executed = parser.translate_lines(executed) & self.statements
 
     def changed(self, lines):
         """(changed lines, covered) for each statement a changed line belongs to."""
         grouped = {}
         for line in lines:
-            for statement in self.reporter.translate_lines({line}) & self.statements:
+            for statement in self.parser.translate_lines({line}) & self.statements:
                 grouped.setdefault(statement, set()).add(line)
         return [(grouped[statement], statement in self.executed) for statement in sorted(grouped)]
+
+
+def executed_lines(data, files):
+    """Lines each changed source ran in any measured process, wherever that process found its copy."""
+    # Reading data files leaves a measured gate process alone; a second Coverage object would stop it saving.
+    from coverage import CoverageData
+    from coverage.exceptions import DataError
+    executed = {path: set() for path in files}
+    for file in sorted(data.glob(".coverage.*")):
+        recorded = CoverageData(str(file))
+        try:
+            recorded.read()
+        except DataError:
+            continue  # A process killed while saving leaves a partial file.
+        for measured in recorded.measured_files():
+            normalized = measured.replace(os.sep, "/")
+            for path in files:
+                if normalized.endswith("/" + path):
+                    executed[path].update(recorded.lines(measured) or ())
+    return executed
 
 
 def measure(root, files, suites, work):
@@ -115,7 +136,7 @@ def measure(root, files, suites, work):
     root = Path(root)
     tools = [provision(requirements) for requirements in requirement_files(root, suites)]
     shutil.rmtree(work, ignore_errors=True)
-    python, rc = environment(work, tools, files)
+    python, data = environment(work, tools, files)
     env = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
     for name, suite in sorted(suites.items()):
         start = suite["start"].rstrip("/")
@@ -126,22 +147,16 @@ def measure(root, files, suites, work):
                            cwd=root, env=env) != 0:
             return None
     sys.path.extend(str(t) for t in tools if str(t) not in sys.path)
-    import coverage
-    from coverage.python import PythonFileReporter
-    cov = coverage.Coverage(config_file=str(rc))
-    if any((work / "data").glob(".coverage.*")):
-        cov.combine()
-    data = cov.get_data()
-    executed = {path: set() for path in files}
-    for measured in data.measured_files():
-        normalized = measured.replace(os.sep, "/")
-        for path in files:
-            if normalized.endswith("/" + path):
-                executed[path].update(data.lines(measured) or ())
+    from coverage.exceptions import CoverageException
+    from coverage.parser import PythonParser
+    executed = executed_lines(data, files)
     out = {}
     for path in files:
         try:
-            out[path] = Measurement(PythonFileReporter(str(root / path), cov), executed[path])
-        except coverage.exceptions.CoverageException as error:
+            # No exclusions: changed code has no pragma that opts it out of measurement.
+            parser = PythonParser(filename=str(root / path), exclude=None)
+            parser.parse_source()
+            out[path] = Measurement(parser, executed[path])
+        except CoverageException as error:
             out[path] = error
     return out
