@@ -757,8 +757,8 @@ Release candidates qualify their Nix closures with the *Linux Nix
 qualification* workflow, dispatched with a frozen `refs/qualification/<commit>`
 source and a fixed component on both native CPUs. Every step is a `./task`
 target in that source: `nix:build -- --qualify` binds a passed hosted build to
-its source, lock and controller, authorizes only the admitted scanner builder,
-and exports the locked workflow fixture. *Linux NixOS factory qualification*
+its source, lock and controller, and authorizes only the admitted scanner
+builder. *Linux NixOS factory qualification*
 admits that run's retained closure with `nix:check -- --prepare
 --application-producer …` before the daemon trusts it as a substituter, then
 builds and binds each desktop factory from the dispatching ref's committed

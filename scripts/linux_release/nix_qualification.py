@@ -10,11 +10,9 @@ import re
 
 from . import nix_scanner_host, nix_vm
 
-STORE = re.compile(r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^\s/]+\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 # Components whose retained closure is a qualification artifact.
 ARCHIVED = ("default", "scanner-finalized", "desktop-settings-observer", "shell", "desktop-shell-check")
-FIXTURE_FIELDS = ("bash", "coreutils", "stdenv")
 
 
 def hosted(environment) -> None:
@@ -27,19 +25,6 @@ def output(report) -> str:
     if len(paths) != 1:
         raise ValueError("qualification requires exactly one built output")
     return paths[0]
-
-
-def fixture_environment(fixture: dict) -> dict:
-    """The locked Nix workflow fixture's store tools, as the confined Nix suites read them."""
-    if fixture.get("schema") != 1 or set(fixture) != {"schema", *FIXTURE_FIELDS}:
-        raise ValueError("invalid locked Nix workflow fixture")
-    values = {}
-    for field in FIXTURE_FIELDS:
-        value = fixture[field]
-        if not isinstance(value, str) or not re.fullmatch(r"/nix/store/[a-z0-9]{32}-[^\s]+", value):
-            raise ValueError("invalid locked Nix workflow path")
-        values["PW_NIX_FIXTURE_" + field.upper()] = value
-    return values
 
 
 def source_manifest(report, *, architecture, controller_commit) -> tuple[str, dict]:
@@ -64,11 +49,7 @@ def qualify(report: dict, evidence: Path, environment=os.environ, authorize=nix_
     if report.get("passed") is not True or report.get("operation") != "build":
         raise ValueError("only a passed build can be qualified")
     component, built = report.get("component"), output(report)
-    if component == "nix-workflow-fixture":
-        values = fixture_environment(json.loads(Path(built).read_text()))
-        with open(environment["GITHUB_ENV"], "a", encoding="utf-8") as stream:
-            stream.writelines(f"{name}={value}\n" for name, value in values.items())
-    elif component == "scanner-host-tools":
+    if component == "scanner-host-tools":
         selected = report["scanner_tools"]
         if built != selected["output"]:
             raise ValueError("realized scanner output differs from the admitted derivation")

@@ -98,10 +98,6 @@ jobs:
         working-directory: ${{ steps.source.outputs.path }}
         run: ./task nix:check -- --prepare
 
-      - name: Prepare the locked Nix development fixture
-        working-directory: ${{ steps.source.outputs.path }}
-        run: ./task nix:build -- --component nix-workflow-fixture --qualify
-
       - name: Verify confined Nix development and explicit daemon authority
         working-directory: ${{ steps.source.outputs.path }}
         run: ./task test:confine:linux -- nix

@@ -27,24 +27,6 @@ class NixQualificationTests(unittest.TestCase):
         return {"operation": "build", "passed": True, "component": component, **self.identity,
                 "builds": [{"outputs": {"out": output}}], **extra}
 
-    def test_workflow_fixture_exports_only_its_locked_store_tools(self):
-        fixture = Path(self.temporary.name) / "fixture.json"
-        tools = {"bash": "/nix/store/" + "a" * 32 + "-bash/bin/bash",
-                 "coreutils": "/nix/store/" + "b" * 32 + "-coreutils/bin/mkdir",
-                 "stdenv": "/nix/store/" + "c" * 32 + "-stdenv-linux"}
-        fixture.write_text(json.dumps({"schema": 1, **tools}))
-        environment = Path(self.temporary.name) / "github-env"
-        qualification.qualify(self.report("nix-workflow-fixture", str(fixture)), self.evidence,
-                              {**HOSTED, "GITHUB_ENV": str(environment)})
-        self.assertEqual(environment.read_text().splitlines(),
-                         [f"PW_NIX_FIXTURE_{name.upper()}={value}" for name, value in tools.items()])
-        for altered in ({"schema": 2, **tools}, {"schema": 1, **tools, "extra": "x"},
-                        {"schema": 1, **tools, "bash": "/usr/bin/bash"}):
-            fixture.write_text(json.dumps(altered))
-            with self.subTest(altered=altered), self.assertRaises(ValueError):
-                qualification.qualify(self.report("nix-workflow-fixture", str(fixture)), self.evidence,
-                                      {**HOSTED, "GITHUB_ENV": str(environment)})
-
     def test_scanner_authorization_requires_the_admitted_output(self):
         selected = {"output": APP, "executable": APP + "/bin/opengrep-artifact"}
         authorized = []
