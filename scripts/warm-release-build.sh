@@ -3,6 +3,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
+# Match the release build rustflags so the warmed cache is the one release reuses.
+# shellcheck source=toolchain/rust-path-remap.sh
+source "${ROOT}/scripts/toolchain/rust-path-remap.sh"
+rust_path_remap "${ROOT}"
 bin="$(python3 scripts/artifact_paths.py bin "${ROOT}")"
 mkdir -p "${bin}"
 if [[ ! -x "${bin}/cargo-about" ]]; then

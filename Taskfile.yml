@@ -129,6 +129,7 @@ tasks:
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
+      - scripts/toolchain/rust-path-remap.sh
     generates:
       - '{{.BUILD_DIR}}/bialy'
     preconditions:
