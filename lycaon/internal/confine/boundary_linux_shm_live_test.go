@@ -41,8 +41,11 @@ func runSharedMemoryProbe(mode string) error {
 	path := os.Getenv(shmPathEnv)
 	if mode == "absent" {
 		_, err := os.Stat(path)
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("foreign shared memory visible: %w", err)
+		switch {
+		case err == nil:
+			return errors.New("foreign shared memory visible")
+		case !errors.Is(err, os.ErrNotExist):
+			return fmt.Errorf("inspect foreign shared memory: %w", err)
 		}
 		return nil
 	}
