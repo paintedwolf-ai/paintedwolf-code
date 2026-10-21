@@ -1,7 +1,7 @@
 // Suppresses the release console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[cfg(all(target_os = "linux", not(debug_assertions)))]
+#[cfg(all(target_os = "linux", any(test, not(debug_assertions))))]
 mod linux_module_preinit;
 
 fn main() {

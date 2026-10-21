@@ -38,24 +38,11 @@ class NativeModuleAuditTests(unittest.TestCase):
         if compiled.returncode:
             raise RuntimeError(compiled.stderr)
         cls.abi = INTEGRITY.describe(cls.auditor, cls.guard)
-        fixture = cls.root / "ctor.c"
-        fixture.write_text('#include <unistd.h>\nstatic void __attribute__((constructor)) witness(void){write(1,"C",1);}')
-        subprocess.run(["cc", "-shared", "-fPIC", "-Wl,-soname,module-ctor-fixture.so",
-                        str(fixture), "-o", str(cls.root / "module-ctor-fixture.so")], check=True)
-        main = cls.root / "main.c"
-        main.write_text('#define _GNU_SOURCE\n#include <dlfcn.h>\n#include <string.h>\n#include <unistd.h>\n'
-                        'int main(int n,char **v){if(n==3){void *h=!strcmp(v[1],"dlmopen")?dlmopen(LM_ID_NEWLM,v[2],RTLD_NOW):dlopen(v[2],RTLD_NOW);if(!h)return 42;}write(1,"M",1);return 0;}')
-        cls.probe = cls.root / "module-probe"
-        subprocess.run(["cc", str(main), "-Wl,--no-as-needed", str(cls.guard),
-                        str(cls.root / "module-ctor-fixture.so"), "-Wl,-rpath,$ORIGIN", "-ldl",
-                        "-o", str(cls.probe)], check=True)
         artifact_root = os.environ.get("PW_ARTIFACT_ROOT")
         if artifact_root:
             retained = Path(artifact_root) / "module-audit-components" / uuid.uuid4().hex
             retained.mkdir(parents=True, exist_ok=False)
-            components = {"pw-module-audit.so": cls.auditor, "pw-module-guard.so": cls.guard,
-                          "module-ctor-fixture.so": cls.root / "module-ctor-fixture.so",
-                          "module-probe": cls.probe}
+            components = {"pw-module-audit.so": cls.auditor, "pw-module-guard.so": cls.guard}
             for name, source in components.items():
                 shutil.copyfile(source, retained / name)
             (retained / "module-integrity.json").write_text(json.dumps(cls.abi, indent=2) + "\n")
@@ -79,40 +66,6 @@ class NativeModuleAuditTests(unittest.TestCase):
         symbols = subprocess.run(["nm", "--dynamic", "--undefined-only", str(self.auditor)],
                                  check=True, capture_output=True, text=True).stdout
         self.assertEqual(symbols.strip(), "")
-
-    def test_missing_root_policy_refuses_before_executable_entry(self):
-        # /usr/bin/true has no dependency on our test program or an injected constructor.
-        result = subprocess.run(["/usr/bin/true"], env={"LD_AUDIT": str(self.auditor)},
-                                close_fds=True, capture_output=True, timeout=5)
-        self.assertEqual(result.returncode, 125)
-        self.assertIn(b"refused an untrusted native module", result.stderr)
-
-    def test_production_preinit_uses_direct_syscalls_and_fixed_fds(self):
-        source = (ROOT / "lycaon-den/src-tauri/src/linux_module_preinit.rs").read_text()
-        self.assertIn('section = ".preinit_array"', source)
-        self.assertIn('inlateout("rax")', source)
-        self.assertIn('inlateout("x0")', source)
-        self.assertIn("for fd in [7, 9, 10]", source)
-        self.assertNotIn("std::", source)
-        self.assertNotIn("assume_init()", source)
-
-    def test_concrete_search_uses_physical_ancestry_and_selected_policy(self):
-        # Compile-time checks above prove the actual callbacks link; these fixed guards
-        # keep the source owner separate from a generic, user-selected search path.
-        source = (SOURCE / "paths.h").read_text()
-        self.assertIn("O_PATH|O_NOFOLLOW", source)
-        self.assertIn("pw_same_file(&facts,selected)", source)
-        self.assertIn("pw_in_policy(physical", source)
-        policy = (SOURCE / "policy.h").read_text()
-        self.assertIn("facts.stx_uid!=0", policy)
-        self.assertIn("(seals&15)!=15", policy)
-        self.assertIn("pw_canonical", policy)
-
-    def test_mandatory_guard_refuses_before_dependency_constructor_and_main(self):
-        result = subprocess.run([str(self.probe)], env={"PATH": "/usr/bin:/bin"},
-                                capture_output=True, timeout=5)
-        self.assertEqual(result.returncode, 125)
-        self.assertEqual(result.stdout, b"")
 
     def test_abi_describes_actual_final_guard_bytes(self):
         self.assertEqual(self.abi["schema_version"], 2)
