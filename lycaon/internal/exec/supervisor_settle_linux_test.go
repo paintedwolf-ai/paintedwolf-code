@@ -232,7 +232,7 @@ func TestSupervisorLaunchReportReachesTheParent(t *testing.T) {
 		read, status, err := os.Pipe()
 		testutil.FailErr(t, "open startup status pipe", err)
 		cmd := &exec.Cmd{Args: []string{"engine", supervisorCommand, "0", "", missing}, ExtraFiles: []*os.File{status}}
-		supervisorStarts.Store(cmd, read)
+		supervisorStarts.Store(cmd, supervisorStart{read: read, write: status, target: missing})
 		if report {
 			testutil.FailErr(t, "report launch", reportLaunch(status, started))
 			if reportLaunch(status, started) == nil {
