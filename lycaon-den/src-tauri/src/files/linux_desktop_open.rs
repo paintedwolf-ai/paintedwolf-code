@@ -49,6 +49,9 @@ fn launch(handler: gio::AppInfo, uri: &str) -> Result<Via, String> {
     use glib::translate::{from_glib_full, ToGlibPtr};
     let desktop = handler.downcast::<gio::DesktopAppInfo>()
         .map_err(|_| "The desktop association has no native application entry".to_owned())?;
+    if crate::protected_launch::broker().is_some() {
+        return brokered_launch(&desktop, uri);
+    }
     let uris: &[&str] = &[uri];
     let mut error = std::ptr::null_mut();
     // GIO may activate an existing D-Bus application instead; that service does
@@ -70,6 +73,19 @@ fn launch(handler: gio::AppInfo, uri: &str) -> Result<Via, String> {
     Ok(Via::DefaultHandler)
 }
 
+/// Under the protected launch nothing outside the generation may execute in the
+/// desktop's namespace, so the chosen entry starts through the broker instead.
+fn brokered_launch(desktop: &gio::DesktopAppInfo, uri: &str) -> Result<Via, String> {
+    let entry = desktop.filename()
+        .ok_or_else(|| "The desktop association has no application entry file".to_owned())?;
+    let status = crate::external_launch::External::new("gio")
+        .args([std::ffi::OsStr::new("launch"), entry.as_os_str(), std::ffi::OsStr::new(uri)])
+        .status()
+        .map_err(|error| format!("The desktop application could not open the item: {error}"))?;
+    if status.success() { Ok(Via::DefaultHandler) }
+    else { Err(format!("The desktop application could not open the item: gio exited with {status}")) }
+}
+
 fn xdg_open(uri: &str) -> Result<Via, String> {
     let status = crate::external_launch::External::new("xdg-open").args([uri]).status()
         .map_err(|error| format!("xdg-open: {error}"))?;
@@ -77,17 +93,8 @@ fn xdg_open(uri: &str) -> Result<Via, String> {
     else { Err(format!("xdg-open exited with {status}")) }
 }
 
-/// Under the protected launch nothing outside the generation may execute in the
-/// desktop's namespace, so the session's own resolver opens the item through the broker.
-fn protected() -> bool {
-    crate::protected_launch::broker().is_some()
-}
-
 pub fn open_uri(uri: &str) -> Result<Via, String> {
     let parsed = tauri::Url::parse(uri).map_err(|error| format!("Invalid destination: {error}"))?;
-    if protected() {
-        return xdg_open(uri);
-    }
     match gio::AppInfo::default_for_uri_scheme(parsed.scheme()) {
         Some(handler) => launch(handler, uri),
         None => xdg_open(uri),
@@ -97,9 +104,6 @@ pub fn open_uri(uri: &str) -> Result<Via, String> {
 pub fn open_file(path: &Path) -> Result<Via, String> {
     let file = gio::File::for_path(path);
     let uri = file.uri();
-    if protected() {
-        return xdg_open(&uri);
-    }
     match file.query_default_handler(gio::Cancellable::NONE) {
         Ok(handler) => launch(handler, &uri),
         Err(error) if error.matches(gio::IOErrorEnum::NotSupported) => xdg_open(&uri),
@@ -138,9 +142,6 @@ fn containing_folder(path: &Path) -> &Path {
 }
 
 pub fn open_in_default_browser(uri: &str) -> Result<(), String> {
-    if protected() {
-        return xdg_open(uri).map(|_| ());
-    }
     let browser = gio::AppInfo::default_for_uri_scheme("https")
         .ok_or_else(|| "No default browser is configured.".to_owned())?;
     launch(browser, uri).map(|_| ())
