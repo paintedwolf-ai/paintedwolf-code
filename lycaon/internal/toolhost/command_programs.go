@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/native/search"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -25,6 +27,7 @@ type programOwnerTools struct {
 	summarize  *survey.SummarizeTool
 	repo       *reposurvey.RepoTool
 	operations mutation.Operations
+	catalog    *sourcecatalog.Catalog
 }
 
 // compose builds the literal and mutation owners once and returns the
@@ -39,6 +42,11 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
+	searchOwners, err := search.NewOwners(revisions, recorder, search.DeleteRemover{Delete: t.operations.Delete})
+	if err != nil {
+		return nil, err
+	}
+	searchOwners.Catalog = t.catalog
 	textOwners, err := textutil.NewOwners(revisions, recorder)
 	if err != nil {
 		return nil, err
@@ -74,8 +82,18 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := literalOwners.Prepare(frame, request)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+			}}
+		}
+		for _, name := range searchOwners.Commands() {
+			tool, _ := searchOwners.Operation(name)
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := searchOwners.Prepare(frame, dispatch, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
@@ -84,7 +102,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range mutationOwners.Commands() {
 			tool, _ := mutationOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
 				if err != nil {
 					return command.NativePrepared{}, err

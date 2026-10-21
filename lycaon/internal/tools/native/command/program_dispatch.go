@@ -25,7 +25,9 @@ import (
 // directory frame and returns the reviewed form; it runs nothing.
 type NativeOperation struct {
 	Tool    string
-	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.OperationRequest) (NativePrepared, error)
+	// Prepare binds a reached request in its directory frame; dispatch is that
+	// frame, through which owners such as find -exec run their children.
+	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -250,7 +252,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", operation.Tool)
 	}
-	prepared, err := operation.Prepare(ctx, d.paths, request)
+	prepared, err := operation.Prepare(ctx, d.paths, d, request)
 	if err != nil {
 		return d.refuseArgv(ctx, spec, request, err)
 	}

@@ -45,7 +45,7 @@ func (f *programFixture) executions(t *testing.T) map[string]string { return f.E
 // firstLineOperation is a typed fixture reader that copies one stdin line and
 // then stops reading, as head does.
 func firstLineOperation() command.NativeOperation {
-	return command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	return command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("head"), request.Argv)
 		if err != nil {
 			return command.NativePrepared{}, err
@@ -67,7 +67,7 @@ func firstLineOperation() command.NativeOperation {
 // teeOperation is a typed fixture owner bound through InvokeNative: it copies
 // its actual stdin to the bound operand and to stdout.
 func teeOperation(dir string) command.NativeOperation {
-	return command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	return command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("tee"), request.Argv)
 		if err != nil {
 			return command.NativePrepared{}, err

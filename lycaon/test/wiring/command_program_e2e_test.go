@@ -107,12 +107,12 @@ func requireExecutions(t *testing.T, got []string, want ...string) {
 }
 
 func TestCommandProgramNativePipelineDeliversThroughProvider(t *testing.T) {
-	s := newCommandProgramSession(t, "cat notes.txt | head -n 1", "")
+	s := newCommandProgramSession(t, `cat notes.txt | head -n 1; grep -c note notes.txt | tr -d '\n'; printf ' %s\n' "${MISSING:-done}"`, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	if result := s.result(t); !strings.Contains(result, "first note") || strings.Contains(result, "second note") {
+	if result := s.result(t); !strings.Contains(result, "first note") || strings.Contains(result, "second note") || !strings.Contains(result, `2 done`) {
 		t.Fatalf("delivered result = %q", result)
 	}
-	requireExecutions(t, s.executions(t), "read=completed")
+	requireExecutions(t, s.executions(t), "read=completed", "grep=completed")
 	if state := s.programState(t); state != "completed" {
 		t.Fatalf("program state = %q", state)
 	}

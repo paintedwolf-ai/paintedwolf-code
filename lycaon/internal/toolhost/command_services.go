@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -18,7 +19,6 @@ import (
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
 	owners            programOwnerTools
-	ownersErr         error
 	bgRegistry        *bgprocess.Registry
 	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
@@ -127,20 +127,23 @@ func (r *CommandServices) programs() *command.ProgramRuntime {
 	return r.commandTool.Programs
 }
 
-// SetProgramServices completes the program runtime at host composition.
-func (r *CommandServices) SetProgramServices(services ProgramServices) {
+// SetProgramServices completes the program runtime at host composition. An
+// owner that cannot be composed fails host startup rather than leaving
+// programs without their native utilities.
+func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs := r.programs()
 	if programs == nil {
-		return
+		return nil
 	}
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
 	programs.Progress, programs.Sessions = services.Progress, services.Sessions
 	programs.Supervisor.Interrupter = services.Recorder
-	if owners, err := r.owners.compose(services.Recorder); err == nil {
-		programs.Owners = owners
-	} else {
-		r.ownersErr = err
+	owners, err := r.owners.compose(services.Recorder)
+	if err != nil {
+		return fmt.Errorf("compose command program owners: %w", err)
 	}
+	programs.Owners = owners
+	return nil
 }
 
 // setProgramExecutor binds the executor that admits each native child.
