@@ -11,6 +11,7 @@ use std::ffi::c_void;
 
 use gtk::gdk;
 use gtk::glib::translate::ToGlibPtr;
+use gtk::prelude::*;
 
 extern "C" {
     fn pw_toplevel_drag_init(display: *mut c_void) -> libc::c_int;
@@ -29,8 +30,8 @@ pub(crate) fn supported(display: &gdk::Display) -> bool {
     }
     let raw: *mut gdk::ffi::GdkDisplay = display.to_glib_none().0;
     // SAFETY: the display is a live GdkWaylandDisplay owned by GTK on this thread.
-    let wl_display = unsafe { gdkwayland_sys::gdk_wayland_display_get_wl_display(raw.cast()) };
-    !wl_display.is_null() && unsafe { pw_toplevel_drag_init(wl_display.cast()) } == 1
+    let wl_display = unsafe { gdk_wayland_sys::gdk_wayland_display_get_wl_display(raw.cast()) };
+    !wl_display.is_null() && unsafe { pw_toplevel_drag_init(wl_display) } == 1
 }
 
 /// The next drag GTK starts on this thread gets a toplevel drag.
