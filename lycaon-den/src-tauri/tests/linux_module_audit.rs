@@ -148,6 +148,8 @@ impl Fixture {
             let target = tree.join(to.trim_start_matches('/'));
             fs::create_dir_all(target.parent().unwrap()).unwrap();
             fs::copy(from, &target).unwrap();
+            // Independent of the host umask: selected modules are never group or world writable.
+            fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).unwrap();
         };
         place(&fs::canonicalize(&loader).unwrap(), &loader);
         place(&libc, "/usr/lib/libc.so.6");
@@ -299,6 +301,11 @@ fn writable_directories_and_links_refuse_even_inside_a_selected_root() {
     fs::set_permissions(&writable, fs::Permissions::from_mode(0o777)).unwrap();
     let output = fixture.launch(&["sealed", "audit", "/bin/probe", "/usr/lib/writable/module-ctor.so"]);
     assert_eq!(outcome(&output), (Some(125), "C".to_owned()), "a module in a writable directory loaded");
+    let shared = fixture.tree.join("usr/lib/group-writable.so");
+    fs::copy(fixture.tree.join("usr/lib/module-ctor.so"), &shared).unwrap();
+    fs::set_permissions(&shared, fs::Permissions::from_mode(0o775)).unwrap();
+    let output = fixture.launch(&["sealed", "audit", "/bin/probe", "/usr/lib/group-writable.so"]);
+    assert_eq!(outcome(&output), (Some(125), "C".to_owned()), "a group-writable module loaded");
     symlink("/foreign/module-ctor.so", fixture.tree.join("usr/lib/linked.so")).unwrap();
     let output = fixture.launch(&["sealed", "audit", "/bin/probe", "/usr/lib/linked.so"]);
     assert_eq!(outcome(&output), (Some(125), "C".to_owned()), "a link into an unselected root loaded");
