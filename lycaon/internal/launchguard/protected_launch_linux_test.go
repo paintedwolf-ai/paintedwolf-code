@@ -197,7 +197,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatal("the generation lifetime lock was free while the desktop ran")
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	testutil.FailErr(t, "supervisor exit", launch.cmd.Wait())
+	waitLaunchEnd(t, launch.cmd)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
 }
 
@@ -278,4 +278,18 @@ func TestProtectedLaunchRefusesAGenerationThePolicyDoesNotName(t *testing.T) {
 	f := installLaunchFixture(t)
 	testutil.FailErr(t, "tamper policy", sudoFixture(t, "tamper", f.dir, fixtureHash+"="+f.digest))
 	refusedLaunch(t, exec.Command(f.bootstrap), "generation manifest differs from installed policy")
+}
+
+// waitLaunchEnd requires the supervisor to exit once the launch's last
+// process has ended, broker agent included.
+func waitLaunchEnd(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		testutil.FailErr(t, "supervisor exit", err)
+	case <-time.After(20 * time.Second):
+		t.Fatal("the supervisor outlived the launch's processes")
+	}
 }
