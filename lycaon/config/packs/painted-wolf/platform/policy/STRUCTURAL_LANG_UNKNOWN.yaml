@@ -3,13 +3,14 @@ id: STRUCTURAL_LANG_UNKNOWN
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - grep
   - code_rewrite
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.detail
   - paintedwolf.path

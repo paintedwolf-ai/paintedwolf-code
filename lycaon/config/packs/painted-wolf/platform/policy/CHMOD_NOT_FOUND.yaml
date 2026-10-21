@@ -3,7 +3,7 @@ id: CHMOD_NOT_FOUND
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
@@ -11,6 +11,7 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.path
 when: paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
 effect: block
@@ -20,7 +21,7 @@ copy:
   why: Permission changes require an existing target.
   fix: Confirm the intended path with an offered discovery tool, or remove an unintended missing path from
     the request. Do not create a file solely to make chmod succeed.
-  instead: Branch on Code; confirm path or remove from paths[]
+  instead: Branch on Code; confirm the target or remove the unintended target
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:chmod
 x-paintedwolf-message: chmod path does not exist

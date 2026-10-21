@@ -53,6 +53,11 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	defer arguments.close()
 	tc = freshProgramOwnerContext("update_progress", definition.Contract, p.identity.ExecutionID, p.identity.Scope.ProjectID, p.identity.SessionID, tc)
 	ctx = invocationContext(ctx, tc)
+	ctx, observation, releaseObservation, err := prepareProgramPolicyObservation(ctx, p.frame, p.admission, tc, nil)
+	if err != nil {
+		return result, err
+	}
+	defer releaseObservation()
 	if reject := e.validateInvocation(ctx, "update_progress", tc.Identity.Agent, arguments.values, &tc); reject != nil {
 		return result, reject
 	}
@@ -72,7 +77,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	}
 	defer reviewedArguments.close()
 	canonical = reviewedArguments.values
-	ctx, resolved, err := e.prepareOwnerDispatch(ctx, "update_progress", tc.Identity.Agent, canonical, &tc)
+	ctx, resolved, err := e.prepareOwnerDispatch(ctx, "update_progress", tc.Identity.Agent, canonical, &tc, observation)
 	if err != nil {
 		return result, err
 	}

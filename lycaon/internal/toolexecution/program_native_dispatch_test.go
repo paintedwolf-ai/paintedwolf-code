@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -43,6 +45,16 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath string) {
 	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
+	// Both real preinvoke anchors must see the submitted command envelope,
+	// independently of the raw native path handed to the existing read door.
+	var observationRules []*oar.Rule
+	for _, anchor := range []string{oar.AnchorToolPreInvoke, oar.AnchorToolHandler} {
+		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "command" || paintedwolf.native_operation != "read" || tool_arg_string("script") != "fixture" || tool_arg_string("path") != ""`})
+	}
+	pipeline := oar.NewGuardPipeline(oar.NewRuleSet(observationRules), nil, nil)
+	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
+	pipeline.EnableAnchor(oar.AnchorToolHandler)
+	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline})
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "freeze actual profile", err)

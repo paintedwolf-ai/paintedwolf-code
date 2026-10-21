@@ -3,7 +3,7 @@ id: HELD_CALL_CAP_REACHED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - find
     - grep
     - wc
@@ -24,6 +24,7 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.limit
     - paintedwolf.handles_text

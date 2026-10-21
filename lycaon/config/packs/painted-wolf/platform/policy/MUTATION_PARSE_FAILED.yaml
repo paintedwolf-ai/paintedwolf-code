@@ -3,10 +3,11 @@ id: MUTATION_PARSE_FAILED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [write, edit, replace_lines, code_rewrite]
+  paintedwolf.operation: [write, edit, replace_lines, code_rewrite]
 requires:
   profiles: [tool]
   facts:
+    - paintedwolf.operation
     - paintedwolf.path
     - paintedwolf.rejection_code
     - paintedwolf.parse_timed_out

@@ -3,7 +3,7 @@ id: EDITOR_DOCUMENT_CHANGING
 kind: policy
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
     - write
     - edit
     - replace_lines
@@ -14,6 +14,7 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.path
 when: paintedwolf.rejection_code == "EDITOR_DOCUMENT_CHANGING"
