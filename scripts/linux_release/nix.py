@@ -22,7 +22,7 @@ NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
-              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
+              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools", "closure-notices",
               "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
 
 
