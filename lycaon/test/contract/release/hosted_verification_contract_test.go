@@ -101,7 +101,7 @@ func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	}
 }
 
-func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
+func TestHostedReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "verification")
 	if len(jobs) != 2 {
@@ -127,7 +127,7 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 }
 
 // Publication requires qualified source, preflight, and upgrade rehearsal.
-func TestReleaseGatesPrecedePublication(t *testing.T) {
+func TestHostedReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
 	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade"})
@@ -190,7 +190,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T) {
+func TestHostedEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T) {
 	t.Parallel()
 	platform := hostedJobs(t, "platform-verification")
 	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
@@ -228,7 +228,7 @@ func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T)
 	t.Fatal("nightly may excuse only deliberately unselected E2E; failures and unexpected skips must block")
 }
 
-func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
+func TestHostedBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "e2e-verification")
 	if len(workflow.On) != 1 {
@@ -283,7 +283,7 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	}
 }
 
-func TestRecoveryConcurrencyPreservesDistinctCompletedRuns(t *testing.T) {
+func TestHostedRecoveryConcurrencyPreservesDistinctCompletedRuns(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "verification-recovery")
 	if workflow.Concurrency.Group != "verification-recovery-${{ github.event.workflow_run.id }}" || workflow.Concurrency.Cancel.Value != "false" {

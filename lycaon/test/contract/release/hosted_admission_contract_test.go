@@ -14,7 +14,7 @@ const ciGateStep = "python3 scripts/ci_verification.py gate"
 
 // A ready pull request runs the fast tier; the merge queue runs the integration gate on
 // the commit that lands; a dispatch runs either tier by hand. Each reports the required check.
-func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
+func TestHostedReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
 	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
@@ -61,7 +61,7 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 
 // A pull request's checks leave out dispatch runs; a dispatch reports the
 // required check as a commit status. No other event may write statuses.
-func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
+func TestHostedDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 	t.Parallel()
 	jobs := hostedWorkflowFile(t, "ci").Jobs
 	report := jobs["dispatched-check"]
@@ -86,7 +86,7 @@ func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 
 // Drafts spend no verification runners, never pass the required check, and get
 // the fast tier once marked ready.
-func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
+func TestHostedDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
 	var pullRequest struct{ Types []string }
@@ -112,7 +112,7 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 
 // A merge group's jobs watch their own queue branch and cancel the run once the queue
 // removes the group. Only the merge-group caller may grant the write that cancelling needs.
-func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
+func TestHostedMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	t.Parallel()
 	ci := hostedWorkflowFile(t, "ci")
 	if ci.Permissions["actions"] != "" || ci.Jobs["fast"].Permissions != nil {
@@ -150,7 +150,7 @@ func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 
 // Speculative groups of one pull request each build in parallel, so a failure costs one
 // rebuild behind it and never sends a batch back; every group must pass in full.
-func TestMergeQueueBuildsParallelGroupsOfOne(t *testing.T) {
+func TestHostedMergeQueueBuildsParallelGroupsOfOne(t *testing.T) {
 	t.Parallel()
 	settings := readQueueSettings(t, contractcheck.RepoRoot(t))
 	for key, want := range map[string]any{

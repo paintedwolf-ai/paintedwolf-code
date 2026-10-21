@@ -770,7 +770,7 @@
         "--",
         "./test/contract/release",
         "-run",
-        "^Test(Hosted.*|TriggeredWorkflowsHoldBoundedRunners|PullRequestCIHoldsOneRunner|BoundedClassesFitTheHostedRunners|VerificationMatrixTakesItsCatalogCap)$"
+        "^TestHosted"
       ]
     },
     "limits": {

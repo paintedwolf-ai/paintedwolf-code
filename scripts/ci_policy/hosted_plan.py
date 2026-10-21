@@ -67,7 +67,7 @@ def lanes():
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
                     or not isinstance(command, list) or len(command) != 5
                     or command[:3] != ["test:contract", "--", "./test/contract/release"]
-                    or command[3] != "-run" or not all(isinstance(arg, str) and arg for arg in command)):
+                    or command[3:] != ["-run", "^TestHosted"] or not all(isinstance(arg, str) and arg for arg in command)):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))

@@ -359,7 +359,7 @@ func readQueueSettings(t *testing.T, root string) map[string]any {
 
 // Every workflow other than the gate holds a declared, bounded number of runners:
 // one run at a time, each matrix capped. Per-event runs are one short job each.
-func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
+func TestHostedTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	triggered := plan.triggered()
@@ -394,7 +394,7 @@ func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 
 // A ready pull request's CI run holds one runner at a time: plan, its one fast job, then the check.
 // Its merge-group and dispatch jobs never run for a pull request (see the admission contract).
-func TestPullRequestCIHoldsOneRunner(t *testing.T) {
+func TestHostedPullRequestCIHoldsOneRunner(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	jobs := plan.workflows["ci.yml"].Jobs
@@ -409,7 +409,7 @@ func TestPullRequestCIHoldsOneRunner(t *testing.T) {
 
 // Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's
 // runners and leaves one pull request's CI run a runner.
-func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
+func TestHostedBoundedClassesFitTheHostedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	runners, macos := map[string]int{}, map[string]int{}
@@ -439,7 +439,7 @@ func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 }
 
 // The gate's verification matrix takes its cap from the catalog, so each profile's footprint has one source.
-func TestVerificationMatrixTakesItsCatalogCap(t *testing.T) {
+func TestHostedVerificationMatrixTakesItsCatalogCap(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	verify := plan.workflows["verification.yml"].Jobs["verify"]

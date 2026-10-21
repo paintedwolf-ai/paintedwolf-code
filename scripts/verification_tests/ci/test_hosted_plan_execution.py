@@ -57,7 +57,7 @@ class HostedPlanTests(unittest.TestCase):
                     ci.matrix("check")
 
     def test_admission_refuses_missing_or_unbounded_contract_selection(self):
-        for mutation in ("missing", "target", "scope", "empty", "sharded", "missing-lint"):
+        for mutation in ("missing", "target", "scope", "empty", "sharded", "missing-lint", "no-tests"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 lane = data["ci"]["ready"]
@@ -71,8 +71,10 @@ class HostedPlanTests(unittest.TestCase):
                     lane["preflight"][-1] = ""
                 elif mutation == "sharded":
                     lane["shards"] = 2
-                else:
+                elif mutation == "missing-lint":
                     lane["targets"].remove("lint:full")
+                else:
+                    lane["preflight"][-1] = "^TestMissing"
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("fast")
 
