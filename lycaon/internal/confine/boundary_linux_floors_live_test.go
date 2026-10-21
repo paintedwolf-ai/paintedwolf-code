@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -286,19 +287,19 @@ func TestLinuxExistingProtectedPathsSurviveParentRename(t *testing.T) {
 		"exchange sub2 sub",
 	)
 	expectFloors(t, results, map[string]string{
-		"write AGENTS.md":                        "EROFS",
-		"create AGENTS.md":                       "EACCES",
-		"rename AGENTS.md moved.md":              "EACCES",
-		"rename .paintedwolf/mcp.yaml mcp.yaml":  "EACCES",
-		"rename sub sub2":                        "ok",
-		"write sub2/AGENTS.md":                   "EROFS",
-		"read sub2/AGENTS.md sub":                "ok",
-		"mkdir sub":                              "ok",
-		"create sub/AGENTS.md":                   "EACCES",
-		"rename .paintedwolf pw-moved":           "ok",
-		"mkdir .paintedwolf":                     "ok",
-		"create .paintedwolf/mcp.yaml":           "EACCES",
-		"exchange sub2 sub":                      "EACCES",
+		"write AGENTS.md":                       "EROFS",
+		"create AGENTS.md":                      "EROFS",
+		"rename AGENTS.md moved.md":             "EROFS",
+		"rename .paintedwolf/mcp.yaml mcp.yaml": "EROFS",
+		"rename sub sub2":                       "ok",
+		"write sub2/AGENTS.md":                  "EROFS",
+		"read sub2/AGENTS.md sub":               "ok",
+		"mkdir sub":                             "ok",
+		"create sub/AGENTS.md":                  "EACCES",
+		"rename .paintedwolf pw-moved":          "ok",
+		"mkdir .paintedwolf":                    "ok",
+		"create .paintedwolf/mcp.yaml":          "EACCES",
+		"exchange sub2 sub":                     "EACCES",
 	})
 	for path, content := range map[string]string{"AGENTS.md": "root instructions", "sub2/AGENTS.md": "sub instructions", "pw-moved/mcp.yaml": "servers: {}"} {
 		if raw, err := os.ReadFile(filepath.Join(root, path)); err != nil || string(raw) != content {
@@ -345,10 +346,11 @@ func TestLinuxApprovedProtectedWritesCreateAbsentPaths(t *testing.T) {
 // process while the command runs, is unreadable inside the sandbox.
 func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "home", err)
-	// Outside every write root, so only the read floor stands in the way.
-	base, err := os.MkdirTemp(home, ".pw-confine-absent-read-")
+	// The account's own home directory lies outside every write root, so only
+	// the read floor stands in the way; the test environment's HOME may not.
+	account, err := user.Current()
+	testutil.FailErr(t, "account", err)
+	base, err := os.MkdirTemp(account.HomeDir, ".pw-confine-absent-read-")
 	testutil.FailErr(t, "fixture base", err)
 	t.Cleanup(func() { _ = os.RemoveAll(base) })
 	store := filepath.Join(base, "store")

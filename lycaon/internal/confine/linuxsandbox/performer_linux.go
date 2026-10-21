@@ -295,9 +295,31 @@ func readlinkat(dirfd int, name string) (string, error) {
 	return string(buf[:n]), nil
 }
 
-// refusal records a floor's refusal in the macOS kernel's vocabulary.
-func refusal(operation, path string) pathResult {
-	return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: operation, Target: path}}
+// refusal records a floor's refusal in the macOS kernel's vocabulary. Where a
+// mask already makes the location read-only the answer is the kernel's own,
+// EROFS; a location no mask covers yet answers EACCES.
+func refusal(operation string, p parent) pathResult {
+	errno := unix.EACCES
+	if readOnlyMount(p.fd, "") || readOnlyMount(p.fd, p.base) {
+		errno = unix.EROFS
+	}
+	return pathResult{Errno: int(errno), Refusal: &Refusal{Operation: operation, Target: p.path}}
+}
+
+// readOnlyMount reports whether the entry, or the directory itself when name
+// is empty, lies on a read-only mount.
+func readOnlyMount(dirfd int, name string) bool {
+	fd := dirfd
+	if name != "" {
+		opened, err := unix.Openat(dirfd, name, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = unix.Close(opened) }()
+		fd = opened
+	}
+	var st unix.Statfs_t
+	return unix.Fstatfs(fd, &st) == nil && st.Flags&unix.ST_RDONLY != 0
 }
 
 const (
@@ -338,7 +360,7 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	exists := unix.Fstatat(p.fd, p.base, &st, unix.AT_SYMLINK_NOFOLLOW) == nil
 	writes := call.Flags&unix.O_ACCMODE != unix.O_RDONLY || call.Flags&unix.O_TRUNC != 0
 	if (!exists || writes) && f.refuses(createEntry, p.path) {
-		return refusal(refusalCreate, p.path), -1
+		return refusal(refusalCreate, p), -1
 	}
 	// The final component was resolved above; a symlink swapped in since then
 	// fails rather than redirecting the create.
@@ -361,7 +383,7 @@ func (f creationFloors) create(dirfd int, call pathCall) pathResult {
 		kind = createDirectory
 	}
 	if f.refuses(kind, p.path) {
-		return refusal(refusalCreate, p.path)
+		return refusal(refusalCreate, p)
 	}
 	switch call.Op {
 	case callMkdir:
@@ -389,10 +411,9 @@ func plainCreate(dirfd int, call pathCall) error {
 func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
 	if call.Path != "" || call.Flags&unix.AT_EMPTY_PATH == 0 {
 		if old, err := resolveParent(olddir, call.Path, 0); err == nil {
-			refused := f.refuses(renameSource, old.path)
-			old.close()
-			if refused {
-				return refusal(refusalCreate, old.path)
+			defer old.close()
+			if f.refuses(renameSource, old.path) {
+				return refusal(refusalCreate, old)
 			}
 		}
 	}
@@ -405,7 +426,7 @@ func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
 	}
 	defer p.close()
 	if f.refuses(createEntry, p.path) {
-		return refusal(refusalCreate, p.path)
+		return refusal(refusalCreate, p)
 	}
 	return errnoResult(unix.Linkat(olddir, call.Path, p.fd, p.base, int(call.Flags)))
 }
@@ -430,9 +451,9 @@ func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 	exchange := call.Flags&unix.RENAME_EXCHANGE != 0
 	switch {
 	case f.refuses(renameSource, old.path), exchange && f.refuses(renameSource, target.path):
-		return refusal(refusalUnlink, old.path)
+		return refusal(refusalUnlink, old)
 	case f.refuses(renameTarget, target.path), exchange && f.refuses(renameTarget, old.path):
-		return refusal(refusalCreate, target.path)
+		return refusal(refusalCreate, target)
 	}
 	return errnoResult(unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags)))
 }
