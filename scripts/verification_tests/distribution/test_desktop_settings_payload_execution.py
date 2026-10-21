@@ -27,6 +27,7 @@ class DesktopSettingsPayloadTests(unittest.TestCase):
             paths = [tauri / 'target' / target / 'release/painted-wolf-code']
             paths += [tauri / 'binaries' / (helper + '-' + target) for helper in manifest.HELPERS]
             paths += [root / 'packaging/linux/bin' / helper for helper in manifest.ENTRY_POINTS]
+            paths += [tauri / 'binaries' / (manifest.BOOTSTRAP['name'] + '-' + target)]
             for path in paths:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'final fixture executable ' + path.name.encode())
@@ -35,6 +36,7 @@ class DesktopSettingsPayloadTests(unittest.TestCase):
             (tauri / 'engine-root').mkdir()
             (root / 'VERSION').write_text('1.2.3\n')
             (tauri / 'THIRD-PARTY-NOTICES.md').write_text('notices\n')
+            (root / 'packaging/linux/protected-launch.json').write_bytes((ROOT / 'packaging/linux/protected-launch.json').read_bytes())
             args = argparse.Namespace(root=root, target=target, version='1.2.3', output=root / 'manifest.json')
             manifest.generate(args)
             row = next(row for row in json.loads(args.output.read_text())['executables']

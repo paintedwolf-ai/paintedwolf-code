@@ -29,7 +29,8 @@ fi
 case "$1" in
   remove|purge)
     if [ -d /opt/painted-wolf-code ]; then
-      find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || true
+      # Never inside generations: a held generation's empty directories are its bytes.
+      find /opt/painted-wolf-code -depth -type d -empty ! -path '/opt/painted-wolf-code/generations/*' -delete 2>/dev/null || true
     fi
     ;;
 esac

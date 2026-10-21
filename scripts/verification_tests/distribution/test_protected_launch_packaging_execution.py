@@ -200,6 +200,8 @@ class MaintainerScripts(unittest.TestCase):
     def generation(self, name):
         path = self.install / "generations" / name
         (path / "bin").mkdir(parents=True)
+        (path / "bin" / "pw").write_bytes(b"engine")
+        (path / "empty-resource-directory").mkdir()
         return path
 
     def test_purge_reclaims_only_unheld_generations_and_the_policy(self):
@@ -216,7 +218,7 @@ class MaintainerScripts(unittest.TestCase):
                     fcntl.flock(handle, fcntl.LOCK_SH)
                     result = self.run_script(family, script, *purge)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertTrue(held.exists(), "a running launch's generation was purged")
+                self.assertTrue((held / "empty-resource-directory").is_dir(), "a running launch's generation was changed")
                 self.assertFalse(free.exists() or interrupted.exists())
                 self.assertFalse(self.policy.exists())
                 for created in self.locks.iterdir():

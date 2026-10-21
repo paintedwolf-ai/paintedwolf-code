@@ -24,7 +24,8 @@ if [ "$1" -eq 0 ]; then
     flock -n -x "$lock" rm -rf -- "$generation" || :
   done
   if [ -d /opt/painted-wolf-code ]; then
-    find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || :
+    # Never inside generations: a held generation's empty directories are its bytes.
+    find /opt/painted-wolf-code -depth -type d -empty ! -path '/opt/painted-wolf-code/generations/*' -delete 2>/dev/null || :
   fi
 fi
 exit 0
