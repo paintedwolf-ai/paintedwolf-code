@@ -1,7 +1,6 @@
 use super::*;
 use crate::installation_mode::InstallationMode;
 use crate::test_support::TempDir;
-use sha2::{Digest, Sha256};
 use std::os::unix::fs::{symlink, PermissionsExt};
 
 fn stage() -> (TempDir, InstallLocation) {
@@ -10,19 +9,24 @@ fn stage() -> (TempDir, InstallLocation) {
     let bin_dir = directory.path().join("usr-bin");
     fs::create_dir_all(root.join("bin")).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
-    let mut entries = Vec::new();
+    let mut staged_executables = Vec::new();
     for role in [ENGINE_NAME, LOGS_NAME] {
         let path = bin_dir.join(role);
-        let bytes = format!("#!/bin/sh\nexec '{}' \"$@\"\n", root.join("bin").join(role).display());
-        for target in [&path, &root.join("bin").join(role)] {
-            fs::write(target, bytes.as_bytes()).unwrap();
+        let helper = root.join("bin").join(role);
+        let bytes = format!("#!/bin/sh\nexec '{}' \"$@\"\n", helper.display()).into_bytes();
+        for target in [&path, &helper] {
+            fs::write(target, &bytes).unwrap();
             fs::set_permissions(target, fs::Permissions::from_mode(0o755)).unwrap();
         }
-        entries.push(serde_json::json!({"path": path, "sha256": hex::encode(Sha256::digest(bytes.as_bytes())), "size": bytes.len()}));
+        staged_executables.push((path, bytes.clone()));
+        staged_executables.push((helper, bytes));
     }
-    fs::write(root.join("manifest.json"), serde_json::to_vec(&serde_json::json!({
-        "format_version": 1, "install_root": root, "executables": entries
-    })).unwrap()).unwrap();
+    let refs: Vec<(&Path, &[u8])> = staged_executables
+        .iter()
+        .map(|(path, bytes)| (path.as_path(), bytes.as_slice()))
+        .collect();
+    let manifest = crate::sidecar::manifest::fixture_json(&root, "1.0.2", &refs);
+    fs::write(root.join("manifest.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     (directory, InstallLocation { bin_dir, managed_by_package: true, mode: InstallationMode::Package { root } })
 }
 
@@ -39,7 +43,7 @@ fn status_accepts_exact_package_wrappers_without_bundle_links() {
 
 #[test]
 fn directories_nonexecutables_foreign_links_and_missing_helpers_are_not_installed() {
-    for condition in ["directory", "nonexecutable", "foreign-link", "dangling-link", "missing-helper", "changed-wrapper", "manifest"] {
+    for condition in ["directory", "nonexecutable", "foreign-link", "dangling-link", "missing-helper", "changed-wrapper", "manifest", "legacy-v1-manifest", "future-v3-manifest"] {
         let (directory, location) = stage();
         let path = location.bin_dir.join(ENGINE_NAME);
         match condition {
@@ -61,6 +65,13 @@ fn directories_nonexecutables_foreign_links_and_missing_helpers_are_not_installe
             "manifest" => {
                 let InstallationMode::Package { root } = &location.mode else { unreachable!() };
                 fs::write(root.join("manifest.json"), b"{}").unwrap();
+            }
+            "legacy-v1-manifest" | "future-v3-manifest" => {
+                let InstallationMode::Package { root } = &location.mode else { unreachable!() };
+                let manifest_path = root.join("manifest.json");
+                let mut raw: serde_json::Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+                raw["format_version"] = serde_json::json!(if condition == "legacy-v1-manifest" { 1 } else { 3 });
+                fs::write(&manifest_path, serde_json::to_vec(&raw).unwrap()).unwrap();
             }
             _ => unreachable!(),
         }
