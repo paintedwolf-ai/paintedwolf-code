@@ -2,9 +2,6 @@ package toolcontract
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math"
 	"sync"
@@ -15,18 +12,13 @@ const LosslessOperationArgumentsV1 = "operation_arguments_v1"
 // ReviewedOperationInputs is an admitted immutable lossless opaque-reference
 // object. Resolved secret values remain solely with the ephemeral owner.
 // The returned lease must remain held while any consumer retains its strings.
-type ReviewedOperationInputs struct {
-	representation string
-	digest         string
-	canonical      string
-	valid          bool
-}
+type ReviewedOperationInputs struct{ value NativeValue }
 
-func (r ReviewedOperationInputs) Representation() string     { return r.representation }
-func (r ReviewedOperationInputs) ArgumentsDigest() string    { return r.digest }
-func (r ReviewedOperationInputs) CanonicalArguments() string { return r.canonical }
+func (r ReviewedOperationInputs) Representation() string     { return r.value.Representation() }
+func (r ReviewedOperationInputs) ArgumentsDigest() string    { return r.value.Digest() }
+func (r ReviewedOperationInputs) CanonicalArguments() string { return r.value.Canonical() }
 func (r ReviewedOperationInputs) Valid() bool {
-	return r.valid && r.representation == LosslessOperationArgumentsV1
+	return r.value.Valid() && r.value.domain == OperationArgumentsDomain
 }
 
 // ReviewStateAdmission borrows the host aggregate state ledger. It creates no
@@ -76,17 +68,9 @@ func NewReviewedOperationInputs(ctx context.Context, admission ReviewStateAdmiss
 	if ctx == nil || admission == nil || arguments == nil {
 		return ReviewedOperationInputs{}, nil, fmt.Errorf("review inputs require context, admission and argument object")
 	}
-	leases := &reviewLeases{}
-	encoded, err := encodeReviewValue(ctx, admission, leases, arguments)
+	value, release, err := NewNativeValue(ctx, admission, OperationArgumentsDomain, arguments)
 	if err != nil {
-		leases.close()
 		return ReviewedOperationInputs{}, nil, err
 	}
-	raw, err := json.Marshal([]any{"operation_arguments", 1, encoded})
-	if err != nil {
-		leases.close()
-		return ReviewedOperationInputs{}, nil, err
-	}
-	sum := sha256.Sum256(raw)
-	return ReviewedOperationInputs{representation: LosslessOperationArgumentsV1, digest: hex.EncodeToString(sum[:]), canonical: string(raw), valid: true}, leases.release(), nil
+	return ReviewedOperationInputs{value: value}, release, nil
 }
