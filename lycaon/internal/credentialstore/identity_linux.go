@@ -60,7 +60,7 @@ func (c custody) provider(path string) identityProvider {
 		return refusedIdentityProvider{refusal: c.refusal}
 	case custodyUnavailable:
 		return &passphraseIdentityProvider{
-			path: identityPath(path), missingError: ErrCustodianUnavailable,
+			path: identityPath(path), missingError: ErrCustodianUnavailable, unreachableVault: path,
 			missingGuidance: "; restore the vault identity service and open the installed desktop app; " +
 				"an app password requires a previously exported identity",
 		}

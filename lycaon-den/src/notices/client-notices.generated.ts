@@ -80,8 +80,8 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   credential_vault_identity_missing: {
     title: "Credential vault key is missing",
-    message: "The key for this credential vault is missing from its custodian. Your encrypted credentials are preserved. Restore the matching key or the original configuration root, then try again. A new password cannot replace a missing key.",
-    suggestedAction: "The matching credential vault key is still missing. Restore it before trying again.",
+    message: "The key that opens your saved credentials is no longer held by this device, so they cannot be opened. If you can restore the key, for example from a backup of the Keychain or the original configuration folder, restore it and try again. Otherwise reset the vault: saved credentials are removed, and projects and conversation history are not deleted.",
+    suggestedAction: "The key is still missing. Restore it and try again, or reset the vault.",
     scope: "app",
   },
   credential_vault_launcher_refused: {

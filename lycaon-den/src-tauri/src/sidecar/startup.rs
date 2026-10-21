@@ -303,7 +303,7 @@ where
                             }
                             "credential_vault_identity_missing" => {
                                 SidecarStartError::CredentialVaultIdentityMissing(
-                                    "Restore the matching credential vault identity; encrypted credentials are preserved.".into(),
+                                    "The credential vault key is missing; restore it or reset the vault.".into(),
                                 )
                             }
                             "credential_vault_corrupt" => {

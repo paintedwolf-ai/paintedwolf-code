@@ -29,6 +29,11 @@ export type CriticalStopSpec = {
   /** Copy shown after a failed recovery attempt. */
   retryFailed?: string;
   recovery: CriticalStopRecovery;
+  /**
+   * A destructive reset the person may choose instead of the recovery, when
+   * the vault's key is confirmed gone rather than merely unreachable.
+   */
+  resettable?: boolean;
   /** Host stop-screen report, when the readiness read reached us. */
   catastrophicDetail?: CatastrophicDetail;
   /** Selectable host failure evidence. */
@@ -136,6 +141,9 @@ function offlineCriticalStop(
     message: copy.message,
     retryFailed: copy.suggestedAction,
     recovery,
+    // A custodian that answered the key is gone cannot be waited out; an
+    // unreachable or refusing one can, so it never offers destruction.
+    ...(startFailure === "credential_vault_identity_missing" ? { resettable: true } : {}),
     // Known startup failures already have actionable catalog copy.
     diagnostic:
       startFailure === "store_locked" ||

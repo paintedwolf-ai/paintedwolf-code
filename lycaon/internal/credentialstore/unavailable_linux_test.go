@@ -102,3 +102,32 @@ func TestInterruptedMoveToPasswordRemainsRecoverable(t *testing.T) {
 		t.Fatal("re-enabled service silently took custody")
 	}
 }
+
+func TestUnreachableServiceRefusesToDestroyAnUnwrappedVault(t *testing.T) {
+	_, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
+	healthy := probeCustody(client)
+	path := filepath.Join(t.TempDir(), VaultBasename)
+	backend := &namespaceBackend{vault: &vaultFile{path: path, provider: healthy.provider(path)}, namespace: "providers"}
+	testutil.FailErr(t, "store credential", backend.Set("openai", "sk-kept"))
+	original, err := os.ReadFile(path)
+	testutil.FailErr(t, "read ciphertext", err)
+	lost := unavailableCustody(t)
+	if err := (&vaultFile{path: path, provider: lost.provider(path)}).purge(); !errors.Is(err, ErrCustodianUnavailable) {
+		t.Fatalf("purge with the service unreachable: %v, want a refusal", err)
+	}
+	current, err := os.ReadFile(path)
+	testutil.FailErr(t, "read preserved ciphertext", err)
+	if !bytes.Equal(original, current) {
+		t.Fatal("a refused purge changed the vault")
+	}
+	if got := readThrough(t, healthy, path); got != "sk-kept" {
+		t.Fatalf("after the service returns = %q", got)
+	}
+	// A vault the person moved to the app password does not depend on the
+	// service, so it still resets while the service is away.
+	wrapped := wrappedVault(t, "correct horse battery staple")
+	testutil.FailErr(t, "reset a password vault without the service", (&vaultFile{path: wrapped, provider: lost.provider(wrapped)}).purge())
+	if _, err := os.Lstat(wrapped); !os.IsNotExist(err) {
+		t.Fatalf("password vault not reset: %v", err)
+	}
+}

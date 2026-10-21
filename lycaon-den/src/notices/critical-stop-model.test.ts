@@ -145,6 +145,18 @@ describe("resolveCriticalStop", () => {
     expect(stop?.diagnostic).toBeUndefined();
   });
 
+  it("offers reset only when the vault's key is confirmed gone", () => {
+    for (const startFailure of [
+      "credential_vault_custodian_unavailable",
+      "credential_vault_launcher_refused",
+    ] as const) {
+      expect(resolveCriticalStop({ sidecarStatus: "disconnected", startFailure })?.resettable).toBeUndefined();
+    }
+    expect(
+      resolveCriticalStop({ sidecarStatus: "disconnected", startFailure: "credential_vault_identity_missing" })?.resettable,
+    ).toBe(true);
+  });
+
   it.each([
     "store_locked",
     "engine_not_started",
