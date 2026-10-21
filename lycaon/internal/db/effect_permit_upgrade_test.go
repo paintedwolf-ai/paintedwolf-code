@@ -13,18 +13,26 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// revision4Store builds the exact registered revision4 shape: the current
-// fresh schema without the native authority columns revision5 adds.
+// DeriveRevision4Fixture derives the registered revision4 shape: revision5
+// without the native authority columns it adds.
+func DeriveRevision4Fixture(t *testing.T, source DBTX) {
+	t.Helper()
+	DeriveRevision5Fixture(t, source)
+	for _, table := range []string{"checkpoints", "approval_operations", "chat_grants"} {
+		for _, column := range []string{"authority_body", "authority_digest", "authority_format"} {
+			_, err := source.ExecContext(t.Context(), "ALTER TABLE "+table+" DROP COLUMN "+column)
+			testutil.FailErr(t, "remove revision5 column", err)
+		}
+	}
+	_, err := source.ExecContext(t.Context(), `PRAGMA user_version=4`)
+	testutil.FailErr(t, "claim revision4", err)
+}
+
 func revision4Store(t *testing.T, path string) *Store {
 	t.Helper()
 	source, err := Open(path)
 	testutil.FailErr(t, "open isolated source fixture", err)
-	for _, table := range []string{"checkpoints", "approval_operations", "chat_grants"} {
-		for _, column := range []string{"authority_body", "authority_digest", "authority_format"} {
-			_, err = source.ExecContext(t.Context(), "ALTER TABLE "+table+" DROP COLUMN "+column)
-			testutil.FailErr(t, "remove revision5 column", err)
-		}
-	}
+	DeriveRevision4Fixture(t, source)
 	return source
 }
 
@@ -39,8 +47,6 @@ func TestEffectPermitUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	const retained = `{"approval_plan":{"id":"plan","action_digest":"semantic","stage":"pre_dial","recommended_option_id":"once","options":[{"id":"once","authority":[{"kind":"direct_ip_permit","session_id":"fixture-session","tool_call_id":"actual-model-call","action_digest":"semantic","direct_ip_lease":{"ActionDigest":"semantic","RequestDigest":"requested","ConfinementDigest":"confined","ChatConfinementDigest":"","DeclaredDestinations":["fixture.invalid"],"CommandSummary":"fixture"}}]}]}}`
 	_, err = source.ExecContext(t.Context(), `INSERT INTO checkpoints(id,session_id,project_id,kind,status,created_at,payload_json) VALUES('fixture-checkpoint','fixture-session','fixture-project','tool_approval','pending','2026-01-01T00:00:00Z',?)`, retained)
 	testutil.FailErr(t, "seed retained once metadata", err)
-	_, err = source.ExecContext(t.Context(), `PRAGMA user_version=4`)
-	testutil.FailErr(t, "claim exact known intermediate", err)
 	actual, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "inspect known source", err)
 	target, err := CurrentBaseline(t.Context())

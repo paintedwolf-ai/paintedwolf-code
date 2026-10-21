@@ -100,6 +100,10 @@ func NewOperationDefinition(facts OperationFacts) (OperationDefinition, error) {
 
 func (d OperationDefinition) Digest() string { return d.digest }
 
+// Serialized returns the exact immutable definition bytes named by Digest.
+// Receipt persistence must not decode and re-encode a different representation.
+func (d OperationDefinition) Serialized() string { return d.data }
+
 func (d OperationDefinition) Facts() OperationFacts {
 	var facts OperationFacts
 	// Construction validates the encoded declaration; the bytes cannot change.

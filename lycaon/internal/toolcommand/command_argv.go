@@ -20,6 +20,9 @@ func ArgvShapeObservation(toolName string, err error) *toolrejection.ToolReject 
 	if err == nil {
 		return nil
 	}
+	if observation := ProgramSyntaxObservation(toolName, err); observation != nil {
+		return observation
+	}
 	var redirection *argv.RedirectionError
 	var budget *commandsurface.GlobBudgetError
 	switch {

@@ -602,6 +602,18 @@
       "emit": "guard:command_composition_redirect",
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
     },
+    "COMMAND_SYNTAX_INVALID": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+    },
+    "COMMAND_SYNTAX_UNSUPPORTED": {
+      "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
+    },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",
       "category": "recoverable",
