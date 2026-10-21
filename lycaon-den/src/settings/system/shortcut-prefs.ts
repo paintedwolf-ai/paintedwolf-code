@@ -245,7 +245,7 @@ export async function clearShortcutOverride(entryId: string): Promise<void> {
       next,
       liveKeymapSource(shortcutPlatform()),
     ).leaderChord;
-    next = rebindLeaderOverrides(next, DEFAULT_NAV_LEADER_CHORDS, previous);
+    next = rebindLeaderOverrides(next, DEFAULT_NAV_LEADER_CHORDS[shortcutPlatform()], previous);
   }
   delete next[entryId];
   applyOverrides(next);
