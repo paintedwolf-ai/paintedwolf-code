@@ -111,13 +111,23 @@ var gnuDirectives = map[string]statDirective{
 	"b": statBlocks, "o": statIOBlock,
 	"D": posix(func(st fseffect.EntryStat) string { return strconv.FormatUint(st.Device, 16) }, false),
 	"d": posix(func(st fseffect.EntryStat) string { return decimal(st.Device) }, true),
+	"Hd": posix(func(st fseffect.EntryStat) string { return decimal(uint64(st.DeviceMajor)) }, true),
+	"Ld": posix(func(st fseffect.EntryStat) string { return decimal(uint64(st.DeviceMinor)) }, true),
 	"x": statAccess, "y": statModified, "z": statChange,
 	"X": posix(func(st fseffect.EntryStat) string { return strconv.FormatInt(st.AccessTime.Unix(), 10) }, true),
 	"Z": posix(func(st fseffect.EntryStat) string { return strconv.FormatInt(st.ChangeTime.Unix(), 10) }, true),
-	// Birth time is not observed through the held root; GNU prints these
-	// when the file system does not report it.
-	"w": text(func(statEntry) string { return "-" }),
-	"W": text(func(statEntry) string { return "0" }),
+	"w": text(func(e statEntry) string {
+		if e.st.BirthTime.IsZero() {
+			return "-"
+		}
+		return statTime(e.st.BirthTime)
+	}),
+	"W": statDirective{render: func(e statEntry) (string, bool) {
+		if e.st.BirthTime.IsZero() {
+			return "0", true
+		}
+		return strconv.FormatInt(e.st.BirthTime.Unix(), 10), true
+	}, numeric: true},
 }
 
 var bsdDirectives = map[string]statDirective{
