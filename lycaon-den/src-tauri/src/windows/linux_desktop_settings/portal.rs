@@ -1,159 +1,146 @@
-//! Session-bus reads and change tracking for `org.freedesktop.portal.Settings`.
-
-use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
-
-use gtk::gio;
-use gtk::glib::{self, ToVariant, Variant, VariantTy};
-use tauri::{AppHandle, Emitter};
-
-use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot, NAMESPACES};
+//! Primary fixed Settings observer; the hardened shell never retries a denied portal identity.
+use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot};
 use crate::windows::accessibility_text_size::{TextSizePayload, TEXT_SIZE_CHANGED_EVENT};
 use crate::windows::linux_decorations::{DecorationLayout, LAYOUT_CHANGED_EVENT};
 use crate::windows::system_appearance::{SystemAppearancePayload, SYSTEM_APPEARANCE_CHANGED_EVENT};
-
-const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
-const PORTAL_OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
-const SETTINGS_INTERFACE: &str = "org.freedesktop.portal.Settings";
-const BUS_TIMEOUT: Duration = Duration::from_millis(1500);
-
-static STATE: Mutex<DesktopSettingsState> = Mutex::new(DesktopSettingsState::new());
-
-fn state() -> MutexGuard<'static, DesktopSettingsState> {
-    STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+use desktop_settings_observer::{process, Frame, Setting, Status};
+use serde::Serialize;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, MutexGuard,
+};
+use std::thread::JoinHandle;
+use tauri::{AppHandle, Emitter, Manager};
+const STATUS_EVENT: &str = "desktop-settings://observation";
+struct Observation {
+    settings: DesktopSettingsState,
+    status: Status,
+    generation: u64,
 }
-
-pub(crate) fn current_text_size_payload() -> TextSizePayload {
-    state().text_size_payload()
+static STATE: Mutex<Observation> = Mutex::new(Observation {
+    settings: DesktopSettingsState::new(),
+    status: Status::Missing,
+    generation: 0,
+});
+fn state() -> MutexGuard<'static, Observation> {
+    STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
-
-pub(crate) fn current_appearance_payload() -> SystemAppearancePayload {
-    state().appearance_payload()
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ObservationStatus {
+    status: Status,
+    generation: u64,
 }
-
-pub(crate) fn current_decoration_layout() -> DecorationLayout {
-    state().decoration_layout()
+pub(crate) struct Observer {
+    stop: Arc<AtomicBool>,
+    worker: Mutex<Option<JoinHandle<()>>>,
 }
-
-/// Reads the portal on its own thread; the main loop keeps the GTK thread free.
-pub(crate) fn setup(app: AppHandle) -> Result<(), String> {
-    std::thread::Builder::new()
-        .name("desktop-settings".into())
-        .spawn(move || watch(app))
-        .map(|_| ())
-        .map_err(|err| format!("desktop settings thread: {err}"))
-}
-
-fn watch(app: AppHandle) {
-    let context = glib::MainContext::new();
-    let outcome = context.with_thread_default(|| {
-        let connection = connect(&context)?;
-        let snapshot = read_all(&context, &connection)?;
-        emit(&app, state().replace_snapshot(snapshot));
-        let app = app.clone();
-        connection.signal_subscribe(
-            Some(PORTAL_BUS_NAME),
-            Some(SETTINGS_INTERFACE),
-            Some("SettingChanged"),
-            Some(PORTAL_OBJECT_PATH),
-            None,
-            gio::DBusSignalFlags::NONE,
-            move |_, _, _, _, _, parameters| {
-                if let Some((namespace, key, value)) = parse_setting_changed(parameters) {
-                    emit(&app, state().apply_change(&namespace, &key, value));
-                }
-            },
-        );
-        glib::MainLoop::new(Some(&context), false).run();
-        Ok::<(), String>(())
-    });
-    match outcome {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => eprintln!("desktop settings: {err}"),
-        Err(err) => eprintln!("desktop settings: main context: {err}"),
-    }
-}
-
-fn connect(context: &glib::MainContext) -> Result<gio::DBusConnection, String> {
-    context
-        .block_on(glib::future_with_timeout(
-            BUS_TIMEOUT,
-            gio::bus_get_future(gio::BusType::Session),
-        ))
-        .map_err(|_| "session bus connection timed out".to_string())?
-        .map_err(|err| format!("session bus: {err}"))
-}
-
-fn read_all(
-    context: &glib::MainContext,
-    connection: &gio::DBusConnection,
-) -> Result<SettingsSnapshot, String> {
-    let namespaces: Vec<&str> = NAMESPACES.to_vec();
-    let reply = context
-        .block_on(glib::future_with_timeout(
-            BUS_TIMEOUT,
-            connection.call_future(
-                Some(PORTAL_BUS_NAME),
-                PORTAL_OBJECT_PATH,
-                SETTINGS_INTERFACE,
-                "ReadAll",
-                Some(&(namespaces,).to_variant()),
-                Some(VariantTy::new("(a{sa{sv}})").map_err(|err| err.to_string())?),
-                gio::DBusCallFlags::NONE,
-                BUS_TIMEOUT.as_millis() as i32,
-            ),
-        ))
-        .map_err(|_| "settings portal read timed out".to_string())?
-        .map_err(|err| format!("settings portal: {err}"))?;
-    Ok(snapshot_from_variant(&reply.child_value(0)))
-}
-
-/// Flattens `a{sa{sv}}` into the snapshot map.
-fn snapshot_from_variant(namespaces: &Variant) -> SettingsSnapshot {
-    let mut snapshot = SettingsSnapshot::new();
-    for entry in namespaces.iter() {
-        let Some(namespace) = entry.child_value(0).str().map(str::to_string) else {
-            continue;
-        };
-        let keys = snapshot.entry(namespace).or_default();
-        for setting in entry.child_value(1).iter() {
-            let Some(key) = setting.child_value(0).str().map(str::to_string) else {
-                continue;
-            };
-            keys.insert(key, setting_value(&setting.child_value(1)));
+impl Observer {
+    fn shutdown(&self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(worker) = self.worker.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            let _ = worker.join();
         }
     }
-    snapshot
 }
-
-/// `SettingChanged` carries `(ssv)`.
-fn parse_setting_changed(parameters: &Variant) -> Option<(String, String, SettingValue)> {
-    if parameters.n_children() != 3 {
-        return None;
-    }
-    let namespace = parameters.child_value(0).str()?.to_string();
-    let key = parameters.child_value(1).str()?.to_string();
-    Some((namespace, key, setting_value(&parameters.child_value(2))))
-}
-
-/// Unwraps a boxed `v` and maps the few types the facts read.
-fn setting_value(boxed: &Variant) -> SettingValue {
-    let value = boxed.as_variant().unwrap_or_else(|| boxed.clone());
-    match value.type_().as_str() {
-        "b" => value.get::<bool>().map_or(SettingValue::Unsupported, SettingValue::Bool),
-        "u" => value.get::<u32>().map_or(SettingValue::Unsupported, SettingValue::U32),
-        "d" => value.get::<f64>().map_or(SettingValue::Unsupported, SettingValue::F64),
-        "s" => value
-            .str()
-            .map_or(SettingValue::Unsupported, |text| SettingValue::Str(text.to_string())),
-        "(ddd)" => match value.get::<(f64, f64, f64)>() {
-            Some((red, green, blue)) => SettingValue::Rgb(red, green, blue),
-            None => SettingValue::Unsupported,
-        },
-        _ => SettingValue::Unsupported,
+impl Drop for Observer {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
-
+pub(crate) fn current_text_size_payload() -> TextSizePayload {
+    state().settings.text_size_payload()
+}
+pub(crate) fn current_appearance_payload() -> SystemAppearancePayload {
+    state().settings.appearance_payload()
+}
+pub(crate) fn current_decoration_layout() -> DecorationLayout {
+    state().settings.decoration_layout()
+}
+pub(crate) fn shutdown(app: &AppHandle) {
+    if let Some(observer) = app.try_state::<Observer>() {
+        observer.shutdown();
+    }
+}
+pub(crate) fn setup(app: AppHandle) -> Result<(), String> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let requested = stop.clone();
+    let running = app.clone();
+    let worker = std::thread::Builder::new()
+        .name("desktop-settings".into())
+        .spawn(move || {
+            let shell = match std::env::current_exe() {
+                Ok(path) => path,
+                Err(_) => {
+                    source_status(&running, Status::Failed, false);
+                    return;
+                }
+            };
+            let changed = running.clone();
+            let failed = running.clone();
+            process::watch(
+                &shell,
+                requested,
+                move |frame| apply(&changed, frame),
+                move |status| source_status(&failed, status, false),
+            );
+        })
+        .map_err(|error| format!("desktop settings observer: {error}"))?;
+    if !app.manage(Observer {
+        stop,
+        worker: Mutex::new(Some(worker)),
+    }) {
+        return Err("desktop settings observer already started".into());
+    }
+    Ok(())
+}
+fn source_status(app: &AppHandle, status: Status, restarted: bool) {
+    let payload = {
+        let mut state = state();
+        if restarted {
+            state.generation = state.generation.saturating_add(1);
+        }
+        if !restarted && state.status == status {
+            return;
+        }
+        state.status = status;
+        ObservationStatus {
+            status,
+            generation: state.generation,
+        }
+    };
+    if status != Status::Ready {
+        eprintln!("desktop settings observation: {status:?}");
+    }
+    if let Err(error) = app.emit(STATUS_EVENT, &payload) {
+        eprintln!("desktop settings status emit: {error}");
+    }
+}
+fn apply(app: &AppHandle, frame: Frame) {
+    source_status(app, frame.status, frame.sequence == 1);
+    if frame.status != Status::Ready {
+        return;
+    }
+    let mut snapshot = SettingsSnapshot::new();
+    for setting in frame.settings {
+        let (namespace, key) = setting.identity();
+        let value = match setting {
+            Setting::Contrast(value) => SettingValue::U32(value),
+            Setting::TextScale(value) => SettingValue::F64(value),
+            Setting::HighContrast(value) => SettingValue::Bool(value),
+            Setting::Accent([red, green, blue]) => SettingValue::Rgb(red, green, blue),
+            Setting::KdeAccent(value) | Setting::ButtonLayout(value) => SettingValue::Str(value),
+        };
+        snapshot
+            .entry(namespace.into())
+            .or_default()
+            .insert(key.into(), value);
+    }
+    let emissions = state().settings.replace_snapshot(snapshot);
+    emit(app, emissions);
+}
 fn emit(app: &AppHandle, emissions: Vec<Emission>) {
     for emission in emissions {
         let result = match emission {
@@ -164,5 +151,51 @@ fn emit(app: &AppHandle, emissions: Vec<Emission>) {
         if let Err(err) = result {
             eprintln!("desktop settings: emit: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn owned_observer() -> (Observer, Arc<AtomicBool>) {
+        let stop = Arc::new(AtomicBool::new(false));
+        let requested = stop.clone();
+        let finished = Arc::new(AtomicBool::new(false));
+        let completed = finished.clone();
+        let worker = std::thread::spawn(move || {
+            while !requested.load(Ordering::Acquire) {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            completed.store(true, Ordering::Release);
+        });
+        (
+            Observer {
+                stop,
+                worker: Mutex::new(Some(worker)),
+            },
+            finished,
+        )
+    }
+
+    #[test]
+    fn managed_shutdown_joins_the_worker_and_is_idempotent() {
+        let (observer, finished) = owned_observer();
+        observer.shutdown();
+        assert!(finished.load(Ordering::Acquire));
+        assert!(observer.worker.lock().unwrap().is_none());
+        observer.shutdown();
+    }
+
+    #[test]
+    fn dropping_one_observer_does_not_stop_another_owner() {
+        let (observer, finished) = owned_observer();
+        let (other, other_finished) = owned_observer();
+        drop(observer);
+        assert!(finished.load(Ordering::Acquire));
+        assert!(!other.stop.load(Ordering::Acquire));
+        assert!(!other_finished.load(Ordering::Acquire));
+        other.shutdown();
+        assert!(other_finished.load(Ordering::Acquire));
     }
 }

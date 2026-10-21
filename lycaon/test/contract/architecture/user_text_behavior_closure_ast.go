@@ -303,6 +303,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"surface_card":                                 true,
 	"more_tools_loadable":                          true,
 	"pending_overlay_promote":                      true,
+	"progress_missing":                             true,
+	"profile_has_update_progress":                  true,
 	"verify_required":                              true,
 	"verify_command":                               true,
 	"has_file_tools":                               true,
@@ -332,6 +334,12 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_task":                             true,
 	"profile_has_delegate_dispatch":                true,
 	"profile_has_delegate_decompose":               true,
+	"progress_gated_tools":                         true,
+	"profile_has_preview_overlay":                  true,
+	"profile_has_promote_overlay":                  true,
+	"profile_has_reject_overlay":                   true,
+	"profile_has_answer_decision":                  true,
+	"profile_has_pack_board":                       true,
 	"profile_has_wait":                             true,
 	"wait_needs_request":                           true,
 	"profile_has_scan_drilldown":                   true,
@@ -488,11 +496,6 @@ var allowedKickTriggerClasses = map[string]bool{
 }
 
 var forbiddenKickFiresInSubstrings = []string{
-	"greenfield",
-	"user message contains",
-	"strings.Contains",
-	"phrase list",
-	"chat yes",
-	"lgtm",
-	"nl intent",
+	"greenfield", "user message contains", "strings.Contains", "phrase list",
+	"chat yes", "lgtm", "nl intent",
 }

@@ -815,6 +815,8 @@ Repository generators take an exclusive writer slot (`repo-snapshot.lockdir` in 
 
 ### Generated-surface write paths
 
+**Browser page driver:** edit `lycaon-den/src/platform/semantic-driver/` → `./task codegen:browser-driver`. Commit the generated `lycaon/internal/browser/embed/semantic_driver.js` with the source changes; the Go host injects that bundle into browser pages.
+
 **Wire types and operations (same change):** edit `docs/openapi/**` → `./task openapi:bundle` → `./task codegen:den-types`. This generates Den and Go wire types plus operation bindings for both clients and handlers. Register each `/v1` handler through the generated operation in `Server.registerV1Operation`, so authorization, rate limits, and person-action recording share the declared route. Never edit generated files. Handwritten `pkg/api` files retain custom union decoding, validation, and support types. [API conventions](host-contract.md#11-api-conventions) define the route shapes.
 
 Mark an ordinary object schema `x-go-generate: true`. Required properties retain their JSON tags; optional properties use `omitempty`. Add `x-go-pointer: true` when an optional scalar must distinguish absence from an explicit zero or false. Nullable scalars also become pointers. `x-go-name` specifies a field's Go spelling, or on a schema its Go type name (references follow it); `x-go-type` supplies an explicit representation for raw JSON, custom unions, or numeric widths. `x-go-field-order` is needed only when the Go layout differs from schema property order. These annotations live on the modular schema, alongside its wire contract. Unsupported or ambiguous shapes fail generation rather than inventing a representation. Contract discovery checks generated and handwritten objects against the schema without a second DTO registry.
@@ -1011,7 +1013,7 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
 
-The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, upgrade rehearsal, signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source.
+The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, sidecar/store rehearsal, the [desktop self-upgrade gate](#desktop-self-upgrade-release-gate), signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source. The trusted controller also supplies the macOS native notarization adapter: it retains Apple's accepted ticket contents and every staple/validation result, validates the app ticket before Tauri creates its updater archive, and refuses missing or failed operation receipts. Stapling gets at most three attempts, with 10- and 30-second delays; retries do not resubmit notarization or weaken final artifact verification. Evidence uploads even when packaging fails. Failed signed updater archives are retained for 14 days so ticket diagnosis can reuse their exact bytes without another build. This lets an unchanged, qualified application tag use repaired packaging control without replacing its source.
 
 ### Clean-Mac validation
 
@@ -1060,9 +1062,10 @@ Every release tag clears the same gate:
 4. `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
    clean source commit that landed on `main`.
 5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac (it only warns on hosted runners).
-6. The updater public key is real, the private key is available to Actions, and
+6. The [desktop self-upgrade gate](#desktop-self-upgrade-release-gate) completes before publication, using the exact signed candidate and supported automatic-updater sources. Its receipt distinguishes tested paths from excluded or inapplicable sources.
+7. The updater public key is real, the private key is available to Actions, and
    both closed channel endpoints match the egress inventory.
-7. Tag the selected fully qualified commit that landed on `main`. Main may advance
+8. Tag the selected fully qualified commit that landed on `main`. Main may advance
    afterward; unlanded source or qualification for another commit is refused.
    To publish an existing historical tag, dispatch the release workflow from
    `main` with that exact `release_tag`. Keep published tags immutable.
@@ -1075,3 +1078,86 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+### Upgrade source evidence
+
+The release controller authenticates prior channel pointers with the retained feed
+keys before selecting an upgrade source. `release_control.py snapshot` retains
+those exact pointer and signature bytes alongside `plan.json`. Its matrix keeps
+stable and preview preferences distinct, includes stable users opting into preview,
+and follows each retained trust bridge before offering the candidate. Withdrawn
+releases remain source installations; a withdrawn bridge cannot advance trust.
+Missing or invalid signatures fail selection rather than silently reducing coverage.
+
+The 1.0.0 and 1.0.1 clients use the Tauri updater plugin and require an explicit
+install action. Their exclusions identify `tauri-plugin-v1`; automatic cases name
+`native-v2` and support automatic preparation and startup activation. Each case
+records the source archive's signing generation separately from the installed
+app's embedded trust generation. These are
+released protocol boundaries, not runtime guesses from logs or file presence.
+
+Desktop rehearsal covers the automatic updater in the 1.0.2 line onward. Manual
+clients are recorded under `excluded_sources` with `requires_manual_installation`;
+they retain sidecar/store coverage through `upgrade:rehearse`. A desktop result
+with no automatic source records `no_automatic_upgrade_source`, never a pass.
+
+### Desktop self-upgrade release gate
+
+The release workflow rehearses automatic updates for direct-download macOS
+installations shipped in the 1.0.2 line and later. The existing sidecar/store
+rehearsal continues to cover earlier manual clients. A protected preparation job authenticates and freezes prior feeds,
+verifies prior archives and the exact candidate archive, and signs channel-bound
+candidate pointers. Retained bridge pointers and their signatures are served
+byte for byte from the authenticated source snapshot. Only public keys, signed
+pointers, archives, and corpus data reach the desktop runner; artifact-signing credentials stay in the build job and
+feed-signing credentials stay in preparation.
+
+After 1.0.2 ships, its immutable release manifest remains a permanent automatic
+updater baseline alongside the active stable and preview sources. This covers
+installations that skip releases even after both mutable pointers advance.
+Archived baseline metadata records `artifact_signature_required` until preparation
+verifies its exact version-bound archive signature against the retained public
+key. Executable fixtures require `artifact_signature_verified`; metadata alone
+cannot authorize a baseline app. Every skipped trust generation follows its
+registered channel bridge before reaching the candidate.
+
+Each source/channel case uses a fresh GitHub-hosted arm64 macOS runner with an
+absent product store and its actual account home. Cases run serially, isolating
+Keychain state as well as files while keeping the declared runner footprint.
+It refuses local and self-hosted execution.
+This makes the updater's normal LaunchServices relaunch use the same installation
+and data root without changing the shipped binary or adding runtime overrides.
+The runner launch environment sets `LYCAON_LLM_MOCK=1` across helper relaunches
+and restores its previous value during cleanup. A temporary CA, trusted only on
+that runner, and an owned `/etc/hosts` entry direct
+`downloads.paintedwolf.dev` to a local HTTPS fixture. The fixture serves exact
+allowlisted paths and retains request evidence. Cleanup removes its certificate
+and hosts entry and stops its captured server process; cleanup failures fail the
+gate. Cancellation records an interrupted result and attempts the same cleanup.
+
+`./task upgrade:rehearse -- --bundle --case <id> --fixtures <directory> --evidence <directory>`
+uses the prepared artifact without rebuilding the candidate. The protected job
+prepares it through the same target with `--prepare-bundle --manifest PATH
+--archives DIR --source DIR --output DIR`. Each case installs
+an unmodified prior app in writable scratch space, materializes its exact corpus,
+and enables automatic updates with rollout bucket zero. After automatic staging,
+it terminates the staged source process and stops its captured engine, then
+launches that installation again to exercise startup activation. The installed
+bundle must remain unchanged until that launch.
+The shipped helper performs activation and relaunch. Assertions require the
+prepared bundle's inode at the installation path, matching executable and release
+identities, healthy engine/schema, startup confirmation, old-bundle removal,
+retained corpus semantics, and another healthy restart. Preview promotion keeps
+the preview preference; retained generations advance through their bridge feeds.
+
+Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
+artifact names. A retried desktop job consumes the successful preparation job's
+original artifact; retries preserve earlier diagnostics. Failed or cancelled
+preparation retains its public source pointers and candidate manifest separately.
+The receipt binds the selected source SHA, candidate version, fixture inventory,
+per-case transitions, and exclusions. Failed cases retain native records and
+engine diagnostics without API tokens. An empty automatic-source matrix records
+`not_applicable` and its reason; it does not claim a tested upgrade. Publication
+and activation depend on successful completion of the desktop gate. PR tests
+exercise preparation failures, TLS routing, runner admission, and receipt rules;
+only the protected signed release run qualifies a real old-to-new app upgrade.
