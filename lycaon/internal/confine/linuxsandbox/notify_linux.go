@@ -64,6 +64,13 @@ func (s *supervisor) serveNotifications(listener int) {
 			}
 			return
 		}
+		// The performer serves one name-creating call at a time, so answering
+		// those here costs no concurrency and saves waking another thread;
+		// socket calls, which can wait on the network, run beside the loop.
+		if isPathCall(n.Nr) {
+			s.answer(listener, n)
+			continue
+		}
 		go s.answer(listener, n)
 	}
 }
