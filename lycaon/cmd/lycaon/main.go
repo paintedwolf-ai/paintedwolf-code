@@ -154,6 +154,13 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.Startup = startup
 	}
 	cfg.DBPath = dbPath
+	if strings.TrimSpace(os.Getenv(startupprotocol.APITokenStdinEnv)) != "" {
+		token, err := startupprotocol.ReadAPITokenFrame(os.Stdin)
+		if err != nil {
+			return err
+		}
+		cfg.APIToken = token
+	}
 	if strings.TrimSpace(os.Getenv(credentialstore.UnlockStdinEnv)) != "" {
 		if err := credentialstore.ReadUnlockFrame(os.Stdin); err != nil {
 			return err
