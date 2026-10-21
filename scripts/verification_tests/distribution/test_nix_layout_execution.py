@@ -14,7 +14,8 @@ class NixFinalLayoutTests(unittest.TestCase):
     def test_plain_cargo_desktop_build_explicitly_selects_production_protocol(self):
         source = Path(__file__).resolve().parents[3] / "packaging/nix/shell.nix"
         recipe = source.read_text()
-        self.assertIn('cargoBuildFeatures = [ "tauri/custom-protocol" ];', recipe)
+        self.assertIn('buildFeatures = [ "tauri/custom-protocol" ];', recipe)
+        self.assertNotIn("cargoBuildFeatures =", recipe)
         self.assertIn('build.frontendDist = "${frontend}";', recipe)
         self.assertIn('env.PW_REQUIRE_RELEASE_PROTOCOL = "1";', recipe)
         build = (source.parents[2] / "lycaon-den/src-tauri/build.rs").read_text()

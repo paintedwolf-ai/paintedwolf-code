@@ -27,7 +27,8 @@ in rust.buildRustPackage {
   buildAndTestSubdir = "lycaon-den/src-tauri";
   cargoBuildFlags = [ "--bin" "painted-wolf-code" ];
   # Plain Cargo builds do not receive the production feature from the Tauri CLI.
-  cargoBuildFeatures = [ "tauri/custom-protocol" ];
+  # buildRustPackage derives cargoBuildFeatures from buildFeatures.
+  buildFeatures = [ "tauri/custom-protocol" ];
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ gtk3 glib webkitgtk_4_1 libsoup_3 openssl ];
   env.PW_REQUIRE_RELEASE_PROTOCOL = "1";
