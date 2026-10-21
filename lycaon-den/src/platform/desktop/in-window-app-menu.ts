@@ -15,6 +15,7 @@ import {
   pasteEditable,
   selectAllEditable,
   snapshotEditable,
+  restoreEditableSelection,
   type EditableSnapshot,
 } from "../interaction/text-edit-context.ts";
 import { isTauriRuntime } from "../runtime.ts";
@@ -64,9 +65,8 @@ function focusedEditable(): EditableSnapshot | null {
   return el ? snapshotEditable(el) : null;
 }
 
-function stepHistory(direction: "undo" | "redo"): void {
-  const snap = focusedEditable();
-  if (!snap) return;
+function stepHistory(snap: EditableSnapshot, direction: "undo" | "redo"): void {
+  restoreEditableSelection(snap);
   const view = snap.el instanceof HTMLElement ? EditorView.findFromDOM(snap.el) : null;
   if (view) {
     stepEditorHistory(view, direction);
@@ -82,13 +82,13 @@ function editItems(): ContextMenuEntry[][] {
   const editable = snap !== null && !snap.readOnly;
   const selected = snap !== null && editableHasSelection(snap);
   const act = (run: (snapshot: EditableSnapshot) => unknown) => () => {
-    const current = focusedEditable();
-    if (current) void run(current);
+    if (snap && snap.el.isConnected && findTextEditable(snap.el) === snap.el
+        && (snap.readOnly || !snapshotEditable(snap.el).readOnly)) void run(snap);
   };
   return [
     [
-      { label: "Undo", shortcut: displayBinding("Mod+Z"), disabled: !editable, onSelect: () => stepHistory("undo") },
-      { label: "Redo", shortcut: displayBinding("Mod+Shift+Z"), disabled: !editable, onSelect: () => stepHistory("redo") },
+      { label: "Undo", shortcut: displayBinding("Mod+Z"), disabled: !editable, onSelect: act((snapshot) => stepHistory(snapshot, "undo")) },
+      { label: "Redo", shortcut: displayBinding("Mod+Shift+Z"), disabled: !editable, onSelect: act((snapshot) => stepHistory(snapshot, "redo")) },
     ],
     [
       { label: "Cut", shortcut: displayBinding("Mod+X"), disabled: !editable || !selected, onSelect: act(cutEditable) },

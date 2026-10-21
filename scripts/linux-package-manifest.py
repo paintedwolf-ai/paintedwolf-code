@@ -21,15 +21,17 @@ import re
 import stat
 import sys
 
+from linux_release.payload import load as load_payload
 from linux_release.payload_inventory import collect as collect_payload, tree as payload_tree
+
+PAYLOAD = load_payload()
 
 FORMAT_VERSION = 2
 PACKAGE_NAME = "painted-wolf-code"
 INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/opt/painted-wolf-code/bin/painted-wolf-code"
-HELPERS = ("pw", "pw-logs", "pw-document-core", "pw-desktop-settings", "bialy")
-OPTIONAL_HELPERS = ("pw-vault-identity",)
-ENTRY_POINTS = ("pw", "pw-logs")
+HELPERS = tuple(PAYLOAD["helpers"])
+ENTRY_POINTS = tuple(PAYLOAD["entry_points"])
 ARCHITECTURES = {"x86_64-unknown-linux-gnu": "x86_64", "aarch64-unknown-linux-gnu": "aarch64"}
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
@@ -65,10 +67,6 @@ def generate(args: argparse.Namespace) -> int:
     executables = [entry(SHELL_EXECUTABLE, tauri_dir / "target" / args.target / "release" / PACKAGE_NAME)]
     for helper in HELPERS:
         executables.append(entry(f"{INSTALL_ROOT}/bin/{helper}", tauri_dir / "binaries" / f"{helper}-{args.target}"))
-    for helper in OPTIONAL_HELPERS:
-        source = tauri_dir / "binaries" / f"{helper}-{args.target}"
-        if source.exists():
-            executables.append(entry(f"{INSTALL_ROOT}/bin/{helper}", source))
     for name in ENTRY_POINTS:
         executables.append(entry(f"/usr/bin/{name}", root / "packaging" / "linux" / "bin" / name))
     engine_root = tauri_dir / "engine-root"
@@ -85,10 +83,6 @@ def generate(args: argparse.Namespace) -> int:
                "release-version": root / "VERSION",
                "THIRD-PARTY-NOTICES.md": tauri_dir / "THIRD-PARTY-NOTICES.md"}
     sources.update({"bin/" + helper: tauri_dir / "binaries" / f"{helper}-{args.target}" for helper in HELPERS})
-    for helper in OPTIONAL_HELPERS:
-        source = tauri_dir / "binaries" / f"{helper}-{args.target}"
-        if source.exists():
-            sources["bin/" + helper] = source
     manifest = {
         "format_version": FORMAT_VERSION,
         "package": PACKAGE_NAME,

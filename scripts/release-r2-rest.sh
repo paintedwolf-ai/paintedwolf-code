@@ -2,6 +2,12 @@
 
 r2_rest_require_env() {
   : "${R2_BUCKET:?missing R2_BUCKET}"
+  if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+    : "${R2_S3_ENDPOINT:?missing R2_S3_ENDPOINT}"
+    : "${AWS_ACCESS_KEY_ID:?missing AWS_ACCESS_KEY_ID}"
+    : "${AWS_SECRET_ACCESS_KEY:?missing AWS_SECRET_ACCESS_KEY}"
+    return
+  fi
   : "${CLOUDFLARE_ACCOUNT_ID:?missing CLOUDFLARE_ACCOUNT_ID}"
   : "${CLOUDFLARE_API_TOKEN:?missing CLOUDFLARE_API_TOKEN}"
 }
@@ -13,6 +19,10 @@ r2_rest_file_md5() {
 r2_rest_object_stat() {
   local key="$1"
   r2_rest_require_env
+  if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+    python3 "$(dirname "${BASH_SOURCE[0]}")/release_storage/s3.py" stat "${key}"
+    return
+  fi
   curl --silent --show-error --connect-timeout 10 --max-time 30 --get \
     --data-urlencode "prefix=${key}" \
     --data-urlencode "per_page=20" \
@@ -49,6 +59,10 @@ print(etag)
 r2_rest_get() {
   local key="$1" output="$2"
   r2_rest_require_env
+  if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+    python3 "$(dirname "${BASH_SOURCE[0]}")/release_storage/s3.py" get "${key}" "${output}"
+    return
+  fi
   curl --silent --show-error --connect-timeout 10 --max-time 30 --output "${output}" --write-out '%{http_code}' \
     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
     "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/objects/${key}"
