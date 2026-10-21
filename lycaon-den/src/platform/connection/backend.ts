@@ -88,7 +88,8 @@ export type SidecarStartFailure =
   | "credential_vault_locked"
   | "credential_vault_uninitialized"
   | "credential_vault_unlock_failed"
-  | "credential_vault_corrupt";
+  | "credential_vault_corrupt"
+  | "desktop_restart_required";
 
 /** Mirrors the `SidecarStartError` tag in `sidecar.rs`. */
 type TaggedStartError = { code: string; message?: string };
@@ -144,7 +145,8 @@ function noteStartFailure(err: unknown): void {
     tagged.code === "credential_vault_locked" ||
     tagged.code === "credential_vault_uninitialized" ||
     tagged.code === "credential_vault_unlock_failed" ||
-    tagged.code === "credential_vault_corrupt"
+    tagged.code === "credential_vault_corrupt" ||
+    tagged.code === "desktop_restart_required"
   ) {
     lastStartFailure = tagged.code;
   }
@@ -270,4 +272,10 @@ export async function harnessControlFetch(
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) return { ok: false, status: res.status, ...body };
   return body;
+}
+
+/** Quits through the native app exit coordinator before reopening the installed launcher. */
+export async function quitDesktopForRestart(): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("request_quit");
 }

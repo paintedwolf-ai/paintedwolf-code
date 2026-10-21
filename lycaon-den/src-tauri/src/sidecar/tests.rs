@@ -644,7 +644,7 @@ fn an_engine_that_keeps_exiting_stops_being_restarted() {
         .filter(|engine| matches!(engine, supervisor::EngineState::Restarting { .. }))
         .count();
     assert_eq!(restarts, FAST_RESTARTS.delays.len());
-    let supervisor::EngineState::Stopped { exit, failure } = state.engine_state() else {
+    let supervisor::EngineState::Stopped { exit, failure, .. } = state.engine_state() else {
         unreachable!();
     };
     assert_eq!((exit.code, failure), (Some(3), None));
@@ -674,6 +674,7 @@ fn a_replacement_that_cannot_start_stops_with_its_reason() {
                 description: "was killed by signal 9 (SIGKILL)".into(),
             },
             failure: Some("another engine is already serving this store".into()),
+            restart_required: false,
         }
     );
 }
@@ -728,10 +729,22 @@ fn the_engine_log_records_each_unexpected_exit_once() {
         supervisor::log_line(&restarting).as_deref(),
         Some("--- engine was killed by signal 9 (SIGKILL); restarting (attempt 2) ---\n")
     );
-    let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()) };
+    let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()), restart_required: false };
     assert_eq!(
         supervisor::log_line(&refused).as_deref(),
         Some("--- replacement engine could not start: store locked ---\n")
     );
     assert!(supervisor::log_line(&supervisor::EngineState::Running { generation: 1 }).is_none());
+}
+
+
+#[cfg(unix)]
+#[test]
+fn a_package_replacement_stops_automatic_recovery_with_restart_required() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    supervised(&state, |_| Err(SidecarStartError::DesktopRestartRequired("package changed".into())));
+    launch_fixture(&state, "exec sleep 30").expect("engine");
+    kill_engine(&state);
+    wait_until("the restart requirement", || matches!(state.engine_state(), supervisor::EngineState::Stopped { restart_required: true, .. }));
+    assert!(state.cached_info().is_none());
 }
