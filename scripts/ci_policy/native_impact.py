@@ -3,9 +3,9 @@ from pathlib import PurePosixPath
 
 # Manifests, fixtures, generated inputs, and build scripts keep the full gate.
 DEPENDENCIES = {
-    "lycaon-den/src-tauri/src/": {"lanes": {"native", "frontend"}, "go": ()},
-    "lycaon/internal/decide/native/src/": {"lanes": {"native"}, "go": ("lycaon/internal/decide",)},
-    "lycaon/internal/documentcore/native/src/": {"lanes": {"native", "frontend"}, "go": ("lycaon/internal/documentcore",)},
+    "lycaon-den/src-tauri/src/": {"lanes": {"native", "frontend", "webkit-gtk"}, "go": ()},
+    "lycaon/internal/decide/native/src/": {"lanes": {"native"}, "go": ()},
+    "lycaon/internal/documentcore/native/src/": {"lanes": {"frontend"}, "go": ("lycaon/internal/documentcore",)},
 }
 
 

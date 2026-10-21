@@ -16,9 +16,9 @@ class NativeImpactTests(unittest.TestCase):
     def test_native_source_selects_its_dependencies_and_the_repository_baseline(self):
         baseline = {"limits", "contracts", "integration-build", "behavior"}
         cases = {
-            "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend"},
+            "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend", "webkit-gtk"},
             "lycaon/internal/decide/native/src/main.rs": {"native"},
-            "lycaon/internal/documentcore/native/src/main.rs": {"native", "frontend"},
+            "lycaon/internal/documentcore/native/src/main.rs": {"frontend"},
         }
         for path, additional in cases.items():
             with self.subTest(path=path):
@@ -58,12 +58,11 @@ class NativeImpactTests(unittest.TestCase):
                                      "TestImports": [module + dependency for dependency in dependencies]})
                          for directory, dependencies in edges.items())
 
-    def test_decision_source_reaches_adapter_and_its_transitive_test_callers(self):
+    def test_decision_source_uses_rust_tests_without_claiming_go_binary_coverage(self):
         result = impact.subprocess.CompletedProcess([], 0, stdout=self.graph())
         scope = dict(full=False, paths=["lycaon/internal/decide/native/src/model.rs"])
         with patch.object(impact.subprocess, "run", return_value=result):
-            self.assertEqual(impact.go_scope(scope), ["./internal/consumer", "./internal/decide/bialy",
-                                                     "./internal/testconsumer", "./test/contract/authority", "./test/smoke"])
+            self.assertEqual(impact.go_scope(scope), ["./test/contract/authority", "./test/smoke"])
 
     def test_document_core_selects_its_go_dependencies_without_unrelated_packages(self):
         result = impact.subprocess.CompletedProcess([], 0, stdout=self.graph())
@@ -73,11 +72,11 @@ class NativeImpactTests(unittest.TestCase):
                 ["./internal/documentcore", "./test/contract/authority", "./test/smoke"])
 
     def test_unresolved_native_dependencies_or_graph_runs_the_full_go_recipe(self):
-        for output, code in [("", 0), (self.graph(), 1), (self.graph().replace("internal/decide", "internal/missing"), 0)]:
+        for output, code in [("", 0), (self.graph(), 1), (self.graph().replace("internal/documentcore", "internal/missing"), 0)]:
             with self.subTest(output=output[:30], code=code), patch.object(
                     impact.subprocess, "run", return_value=impact.subprocess.CompletedProcess([], code, stdout=output)):
                 self.assertIsNone(impact.go_scope(dict(full=False, paths=[
-                    "lycaon/internal/decide/native/src/main.rs"])))
+                    "lycaon/internal/documentcore/native/src/main.rs"])))
 
     def test_tauri_source_keeps_contracts_and_smoke_without_seeding_go(self):
         result = impact.subprocess.CompletedProcess([], 0, stdout=self.graph())
