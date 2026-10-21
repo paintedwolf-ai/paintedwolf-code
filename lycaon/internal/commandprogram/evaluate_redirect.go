@@ -84,12 +84,14 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	case "<<", "<<-":
 		return g.hereDocument(ctx, r)
 	}
-	target, err := g.e.ports.Expander.ExpandScalar(ctx, g, r.Target)
-	if failure := substitutionFailure(err); failure != nil {
-		return nil, true, g.builtinStatus(r.SyntaxLocation, "redirect", failure.Status)
-	}
-	if err != nil {
-		return nil, false, err
+	var target string
+	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
+		var err error
+		target, err = g.e.expander.ExpandScalar(ctx, scope, r.Target)
+		return err
+	})
+	if prevented || err != nil {
+		return nil, true, err
 	}
 	child, err := g.begin(r.SyntaxLocation, r.Operator)
 	if err != nil {
@@ -133,22 +135,17 @@ func (g *frame) redirectFailure(child *childRun, err error) error {
 	return nil
 }
 
-// hereDocument expands the body once (no splitting or globbing) and supplies it
-// as stdin. Its expanded size stays within here_document_bytes.
+// hereDocument expands the body once through the expander's document rules
+// (bounded by here_document_bytes) and supplies it as stdin.
 func (g *frame) hereDocument(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
-	body := ""
-	if r.HereDocument != nil {
+	var body string
+	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
 		var err error
-		body, err = g.e.ports.Expander.ExpandScalar(ctx, g, *r.HereDocument)
-		if failure := substitutionFailure(err); failure != nil {
-			return nil, true, g.builtinStatus(r.SyntaxLocation, "here-document", failure.Status)
-		}
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	if int64(len(body)) > g.e.limits["here_document_bytes"] {
-		return nil, false, g.refuseLimit(r.SyntaxLocation, "here_document_bytes", int64(len(body)))
+		body, err = g.e.expander.ExpandDocument(ctx, scope, r)
+		return err
+	})
+	if prevented || err != nil {
+		return nil, true, err
 	}
 	g.streams.Input = io.NopCloser(strings.NewReader(body))
 	return nil, false, nil

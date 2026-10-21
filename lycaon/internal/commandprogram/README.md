@@ -11,8 +11,9 @@ authority. The command catalog remains the source of syntax and numeric bounds.
 `ports.go` holds the seams the evaluator is built against. `OperationRequest`
 carries the typed plan statement and the complete expanded argv as `Fields`
 (value plus source-word span); `Streams` reach the owner through native dispatch.
-`Expander` performs field, scalar and pattern expansion under the evaluator's
-`ExpansionScope`. `ProgramRecorder` is the receipt owner's port over the
+`Expander` performs field, scalar, pattern and here-document expansion under the
+evaluator's `ExpansionScope`; `Substitution` is the evaluator's callback for a
+reached `$()` or backtick unit. `ProgramRecorder` is the receipt owner's port over the
 `toolcontract` program receipt records, so this package stays free of storage.
 `OutputPublication` opens a redirect destination, stages bytes and publishes or
 abandons them through the destination owner. `toolcontract.ProgramMemory` is the
@@ -25,6 +26,52 @@ values, the catalog's `shorthand` (`-N` or `-SIGNAL`), `--`, and permutation
 unless `operands_end_options` is declared. Find-style primaries bind whole words.
 The bound record keeps each form's typed values; approval review presents that
 record with the operation identity rather than a legacy tool schema.
+
+## Variables and expansion
+
+`Variables` is one invocation frame: variables, export marks, positional
+parameters, `$?`, `$!` and `$0`. The captured child environment seeds exported
+entries; `Environment` applies one dispatch's `NAME=value` prefix without
+changing the frame, and `Clone` gives an isolated group or substitution unit its
+own copy. Entries are charged to `program_state_bytes` with old/new overlap and
+bounded by `variable_count`, `variable_value_bytes` and `environment_bytes`.
+Names follow the shell identifier grammar, NUL is refused and `IFS` cannot be
+assigned; an `IFS` inherited from the environment is inert data.
+
+`WordExpander` expands the detached plan's words, never upstream syntax objects.
+Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
+`$name`, `${name}`, `${#name}` (Unicode scalars), `$0`, `$1`..`${10}`, `$#`, `$?`,
+`$!`, `$@` and `$*`; unset values expand empty. Quoted `"$@"` keeps each operand
+and expands to no field for no operands, `"$*"` joins with single spaces. Only
+`~` and `~/` expand, from `HOME`; without it the tilde stays literal. Unquoted
+expansion output splits on space, tab and LF; quoted output and literal text
+never split. Values are data: metacharacters, substitution syntax and secret
+reference tokens in a value remain argument text.
+
+A field whose unquoted text has an active `*`, `?` or `[` is a pathname pattern.
+Quoted and escaped characters are escaped in the pattern, so they match
+literally. `commandsurface.MatchGlob` walks a `GlobFiles` view: matches are
+sorted by bytes, hidden names need a leading dot in the component, `**` matches
+nonhidden directories, and an unmatched pattern stays literal. The production
+view is `projectpaths.GlobFiles`, which lists through the held-root confined walk
+and admits a match only when the invocation's read authority admits that path.
+Links are entries but never directories, so no walk traverses one. Matches and
+directory visits are charged cumulatively to the program's `glob_matches` and
+`traversal_visits`.
+
+`Substitution` runs one reached unit through the evaluator's admission, dispatch
+and receipts. Its stdout is bounded by `substitution_bytes`; trailing LF bytes
+are stripped and NUL is refused. The context carries the nesting depth, bounded by
+`substitution_depth`. An ordinary nonzero status is data the evaluator retains;
+a port error or a refused, interrupted or failed unit returns `SubstitutionError`
+with the unit's span and producer result, and no later part of the word expands.
+Scalars are bounded by `variable_value_bytes`, here-documents by
+`here_document_bytes`, fields by `argument_bytes`, `argv_bytes` and
+`expanded_fields`. Live intermediate buffers are charged to the program's working
+memory and `expansion_memory_bytes` and released when the word completes.
+Every refusal is an `ExpansionError` with the catalog code and the word or part
+span. Here-documents with a quoted delimiter are literal; `<<-` strips leading
+tabs from body lines, not from expanded values.
 
 ## Evaluator
 
@@ -49,10 +96,12 @@ closure exception applies only to native producers. Functions share variables
 and exit control with their caller and keep positional arguments local.
 `( )`, `$( )`, pipeline stages and background jobs copy variables and functions
 and fork the directory through `Dispatch.Fork`; a job also gets its own latch
-and the streams `ProgramSupervision.StartJob` owns for it. `Substitute` is the
-`ExpansionScope` callback expansion uses for `$(...)`: captured stdout bounded by
-`substitution_bytes`, trailing LF removed, nonzero status as
-`SubstitutionFailure`. `source` captures through `LoadSourceUnit`, preflights the
+and the streams `ProgramSupervision.StartJob` owns for it. The evaluator is the
+`Substitution` port of the `WordExpander` it builds over `EvaluationPorts.Files`:
+each reached unit runs in an isolated frame with its stdout going to the
+expander's bounded writer. A nonzero unit status is retained, prevents the
+containing dispatch (P08 `AdmitSubstitution`) and becomes that command's status;
+an `ExpansionError` latches as a refusal with its own code. `source` captures through `LoadSourceUnit`, preflights the
 unit and runs it in the current frame; its pin is recorded in the outcome.
 
 Before the first statement, preflight refuses reserved function names and any
@@ -64,8 +113,8 @@ calls, substitutions, redirections, source units, isolated groups, pipelines
 and jobs are child executions: each charges `child_executions` and holds the
 catalog's per-execution trace settlement reservation until it settles.
 Evaluator bookkeeping (assignments, declarations, branch and loop results) is
-not a child execution. Variables are charged to `program_state_bytes` with
-`variable_count` and `variable_value_bytes`. Child receipts belong to the
+not a child execution. Frames keep their variables in `Variables`; a function's
+`NAME=value` prefixes overlay its frame without mutating the caller. Child receipts belong to the
 dispatcher's per-child admission; `ProgramOutcome` carries the bounded trace,
 captured sources and job handles, and `Settlement` projects it onto the
 receipt owner's aggregate record.

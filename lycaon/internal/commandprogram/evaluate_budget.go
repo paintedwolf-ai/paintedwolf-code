@@ -24,7 +24,7 @@ const (
 
 type evaluationLimits map[string]int64
 
-var evaluationLimitIDs = []string{"statement_visits", "loop_iterations", "function_depth", "source_depth", "substitution_depth", "substitution_bytes", "child_executions", "concurrent_processes", "trace_events", "trace_bytes", "pipeline_stages", "stream_bytes", "here_document_bytes", "variable_count", "variable_value_bytes"}
+var evaluationLimitIDs = []string{"statement_visits", "loop_iterations", "function_depth", "source_depth", "child_executions", "concurrent_processes", "trace_events", "trace_bytes", "pipeline_stages", "stream_bytes"}
 
 var catalogEvaluationLimits = sync.OnceValues(func() (evaluationLimits, error) {
 	catalog, err := toolcontract.LanguageV1()
@@ -47,6 +47,7 @@ var catalogEvaluationLimits = sync.OnceValues(func() (evaluationLimits, error) {
 // and background job of one invocation. Counters are cumulative per program.
 type evaluation struct {
 	ports       EvaluationPorts
+	expander    *WordExpander
 	limits      evaluationLimits
 	programName string
 

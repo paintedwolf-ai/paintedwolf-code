@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -48,7 +49,7 @@ func resolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error
 func (f *frame) expandWords(ctx context.Context, words []commandsurface.DeferredWord) (Fields, error) {
 	var out Fields
 	for _, word := range words {
-		fields, err := f.e.ports.Expander.ExpandFields(ctx, f, word)
+		fields, err := f.e.expander.ExpandFields(ctx, f, word)
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +61,7 @@ func (f *frame) expandWords(ctx context.Context, words []commandsurface.Deferred
 func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.Assignment) ([]assignment, error) {
 	out := make([]assignment, 0, len(items))
 	for _, item := range items {
-		value, err := f.e.ports.Expander.ExpandScalar(ctx, f, item.Value)
+		value, err := f.e.expander.ExpandScalar(ctx, f, item.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -69,32 +70,60 @@ func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.As
 	return out, nil
 }
 
-func substitutionFailure(err error) *SubstitutionFailure {
-	var failure *SubstitutionFailure
-	if errors.As(err, &failure) {
-		return failure
+// expanding runs one command's expansion with the statuses of the
+// substitutions it reaches retained. A nonzero unit prevents the containing
+// command (P08 AdmitSubstitution) and becomes its status; prevented reports
+// that the command must not run. Expansion refusals latch at the word.
+func (f *frame) expanding(loc commandsurface.SyntaxLocation, expand func(scope *frame) error) (prevented bool, err error) {
+	g := *f
+	tracker := &substitutionStatus{}
+	g.substs = tracker
+	if err := expand(&g); err != nil {
+		return true, f.expansionRefusal(loc, err)
 	}
-	return nil
+	if !tracker.hasFailure {
+		return false, nil
+	}
+	admitted := f.state.control.AdmitSubstitution(tracker.failedID, PipelineOutcome{Status: tracker.failed, Complete: true})
+	var failure *SubstitutionFailure
+	if errors.As(admitted, &failure) {
+		return true, f.builtinStatus(loc, "substitution", failure.Status)
+	}
+	return true, admitted
+}
+
+// expansionRefusal latches a typed expansion or variable refusal at its word.
+// A failed substitution unit has already latched its own host stop.
+func (f *frame) expansionRefusal(loc commandsurface.SyntaxLocation, err error) error {
+	var substitution *SubstitutionError
+	if errors.As(err, &substitution) {
+		if _, stopped := f.state.latch.Stop(); !stopped {
+			_ = f.state.latch.Record(uuid.NewString(), ownerResult(err), true)
+		}
+		return err
+	}
+	return f.stateRefusal(loc, err)
 }
 
 // simple expands one reached simple command and selects its owner. A failed
 // substitution prevents the dispatch and leaves its ordinary status.
 func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c commandsurface.SimpleCommand) (signal, error) {
-	fields, err := f.expandWords(ctx, c.Words)
+	var fields Fields
 	var assigns []assignment
-	if err == nil {
-		assigns, err = f.expandAssignments(ctx, c.Assignments)
-	}
-	if failure := substitutionFailure(err); failure != nil {
-		return signal{}, f.builtinStatus(s.SyntaxLocation, "substitution", failure.Status)
-	}
-	if err != nil {
+	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
+		var err error
+		if fields, err = g.expandWords(ctx, c.Words); err == nil {
+			assigns, err = g.expandAssignments(ctx, c.Assignments)
+		}
+		return err
+	})
+	if prevented || err != nil {
 		return signal{}, err
 	}
 	if len(fields) == 0 {
 		for _, a := range assigns {
-			if err := f.state.vars.set(ctx, a.name, a.value, false); err != nil {
-				return signal{}, f.stateRefusal(a.loc, err)
+			if err := f.state.vars.Assign(ctx, a.name, a.value); err != nil {
+				return signal{}, f.expansionRefusal(a.loc, err)
 			}
 		}
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "assignment", 0)
@@ -125,7 +154,7 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 
 func (f *frame) predicates() PredicateRuntime {
 	runtime := f.e.ports.Predicates
-	runtime.Expansion, runtime.Scope = f.e.ports.Expander, f
+	runtime.Expansion, runtime.Scope = f.e.expander, f
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
 	}
@@ -177,7 +206,12 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 			return err
 		}
 	}
-	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: f.environment(assigns), EffectMode: effectMode(spec, native)}
+	environment, err := f.environment(assigns)
+	if err != nil {
+		child.close()
+		return f.expansionRefusal(s.SyntaxLocation, err)
+	}
+	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native)}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
@@ -279,7 +313,7 @@ func (f *frame) unset(s commandsurface.Statement, fields Fields) error {
 		functions, args = args[0] == "-f", args[1:]
 	}
 	for _, name := range args {
-		if !variableName(name) {
+		if !VariableName(name) {
 			return f.builtinStatus(s.SyntaxLocation, "unset", 2)
 		}
 	}
@@ -287,57 +321,52 @@ func (f *frame) unset(s commandsurface.Statement, fields Fields) error {
 		if functions {
 			delete(f.state.functions, name)
 		} else {
-			f.state.vars.unset(name)
+			f.state.vars.Unset(name)
 		}
 	}
 	return f.builtinStatus(s.SyntaxLocation, "unset", 0)
 }
 
 func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statement, c commandsurface.EnvironmentDeclaration) error {
-	assigns, err := f.expandAssignments(ctx, c.Assignments)
-	if err == nil {
+	var assigns, names []assignment
+	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
+		var err error
+		if assigns, err = g.expandAssignments(ctx, c.Assignments); err != nil {
+			return err
+		}
 		for _, word := range c.Words {
-			var value string
-			value, err = f.e.ports.Expander.ExpandScalar(ctx, f, word)
+			value, err := f.e.expander.ExpandScalar(ctx, g, word)
 			if err != nil {
-				break
+				return err
 			}
-			name, val, hasValue := strings.Cut(value, "=")
-			if !variableName(name) {
-				return f.builtinStatus(s.SyntaxLocation, "export", 1)
-			}
-			if hasValue {
+			if name, val, hasValue := strings.Cut(value, "="); hasValue {
 				assigns = append(assigns, assignment{loc: word.SyntaxLocation, name: name, value: val})
-			} else if err := f.state.vars.export(ctx, name); err != nil {
-				return f.stateRefusal(word.SyntaxLocation, err)
+			} else {
+				names = append(names, assignment{loc: word.SyntaxLocation, name: name})
 			}
 		}
-	}
-	if failure := substitutionFailure(err); failure != nil {
-		return f.builtinStatus(s.SyntaxLocation, "export", failure.Status)
-	}
-	if err != nil {
+		return nil
+	})
+	if prevented || err != nil {
 		return err
 	}
+	all := append(append([]assignment(nil), assigns...), names...)
+	for _, a := range all {
+		if !VariableName(a.name) {
+			return f.builtinStatus(s.SyntaxLocation, "export", 1)
+		}
+	}
 	for _, a := range assigns {
-		if err := f.state.vars.set(ctx, a.name, a.value, true); err != nil {
-			return f.stateRefusal(a.loc, err)
+		if err := f.state.vars.Assign(ctx, a.name, a.value); err != nil {
+			return f.expansionRefusal(a.loc, err)
+		}
+	}
+	for _, a := range all {
+		if err := f.state.vars.Export(ctx, a.name); err != nil {
+			return f.expansionRefusal(a.loc, err)
 		}
 	}
 	return f.builtinStatus(s.SyntaxLocation, "export", 0)
-}
-
-func variableName(name string) bool {
-	if name == "" || (name[0] >= '0' && name[0] <= '9') {
-		return false
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
-			return false
-		}
-	}
-	return true
 }
 
 // call runs a declared function with invocation-local positional arguments.
@@ -351,13 +380,17 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 		return err
 	}
 	defer child.close()
-	restore, err := f.scopedAssignments(ctx, assigns)
-	if err != nil {
-		return f.stateRefusal(s.SyntaxLocation, err)
-	}
-	defer restore()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
+	if len(assigns) > 0 {
+		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
+		for name, value := range f.prefix {
+			g.prefix[name] = value
+		}
+		for _, a := range assigns {
+			g.prefix[a.name] = a.value
+		}
+	}
 	_, err = g.statement(ctx, decl.Body)
 	result := ordinaryResult(f.state.control.Status())
 	if stop, ok := f.state.latch.Stop(); ok {
@@ -365,35 +398,4 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	}
 	child.settle(result, err)
 	return err
-}
-
-// scopedAssignments applies NAME=value prefixes as exported variables for one
-// function call, restoring the previous values afterwards.
-func (f *frame) scopedAssignments(ctx context.Context, assigns []assignment) (func(), error) {
-	type saved struct {
-		name string
-		prev *variable
-	}
-	var undo []saved
-	restore := func() {
-		for i := len(undo) - 1; i >= 0; i-- {
-			f.state.vars.unset(undo[i].name)
-			if prev := undo[i].prev; prev != nil {
-				_ = f.state.vars.set(context.WithoutCancel(ctx), undo[i].name, prev.value, prev.exported)
-			}
-		}
-	}
-	for _, a := range assigns {
-		var prev *variable
-		if entry, ok := f.state.vars.values[a.name]; ok && entry.set {
-			copied := *entry
-			prev = &copied
-		}
-		undo = append(undo, saved{name: a.name, prev: prev})
-		if err := f.state.vars.set(ctx, a.name, a.value, true); err != nil {
-			restore()
-			return nil, err
-		}
-	}
-	return restore, nil
 }

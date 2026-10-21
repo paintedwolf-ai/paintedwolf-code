@@ -53,17 +53,14 @@ type OperationDispatcher interface {
 
 // ExpansionScope is the evaluator-visible state expansion may read. The
 // evaluator owns and mutates it; expansion never assigns or records status.
+// Variables is the invocation-local implementation.
 type ExpansionScope interface {
 	Variable(name string) (value string, set bool)
+	// ProgramName is $0, the program or sourced unit identity.
+	ProgramName() string
 	Positional() []string
 	LastStatus() int
 	LastBackground() (job string, set bool)
-	// Substitute runs one reached $(...) or backtick unit as an isolated
-	// sub-program and returns its captured stdout with trailing LF bytes
-	// removed. Output is bounded by substitution_bytes and never reparsed. A
-	// nonzero or incomplete unit returns *SubstitutionFailure, which prevents
-	// the containing dispatch; host stops are returned unchanged.
-	Substitute(context.Context, commandsurface.SubstitutionPart) (string, error)
 }
 
 // Expander expands one reached word under the scope. Substitutions dispatch
@@ -75,6 +72,26 @@ type Expander interface {
 	ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error)
 	// ExpandPattern keeps quoted fragments literal for glob and ERE matching.
 	ExpandPattern(context.Context, ExpansionScope, commandsurface.DeferredWord) (PredicateValue, error)
+	// ExpandDocument yields a here-document body: literal when its delimiter
+	// is quoted, otherwise parameters and substitutions without splitting.
+	ExpandDocument(context.Context, ExpansionScope, commandsurface.ProgramRedirect) (string, error)
+}
+
+// SubstitutionRequest is one reached $() or backtick unit. Depth counts the
+// enclosing substitutions, starting at one for an outermost unit.
+type SubstitutionRequest struct {
+	Unit  commandsurface.SubstitutionPart
+	Depth int
+}
+
+// Substitution evaluates a reached unit through the evaluator's own admission,
+// dispatch and receipts, as a distinct child execution in an isolated frame.
+// Stdout receives the unit's complete output and refuses bytes past the
+// substitution ceiling. The implementation retains each ordinary status (the
+// last one is $? for an assignment-only command) and latches host stops; ctx
+// carries the substitution depth into nested expansion and must be passed on.
+type Substitution interface {
+	Substitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest, stdout io.Writer) (toolcontract.ProducerResult, error)
 }
 
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one

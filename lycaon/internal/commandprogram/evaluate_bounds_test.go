@@ -212,11 +212,21 @@ func TestStatementVisitCeiling(t *testing.T) {
 	}
 }
 
+// assertLimit accepts the evaluator's own ceilings and expansion's, both
+// latched as the same typed refusal.
 func assertLimit(t *testing.T, err error, limit string, maximum, observed int64) {
 	t.Helper()
 	var refusal *EvaluationRefusal
-	var cause *ProgramLimitError
-	if !errors.As(err, &refusal) || refusal.Code != limitExceeded || !errors.As(err, &cause) || cause.Limit != limit || cause.Maximum != maximum || cause.Observed != observed {
+	var program *ProgramLimitError
+	var expansion *ExpansionError
+	var got [3]any
+	switch {
+	case errors.As(err, &program):
+		got = [3]any{program.Limit, program.Maximum, program.Observed}
+	case errors.As(err, &expansion):
+		got = [3]any{expansion.Limit, expansion.Maximum, expansion.Observed}
+	}
+	if !errors.As(err, &refusal) || refusal.Code != limitExceeded || got != [3]any{limit, maximum, observed} {
 		t.Fatalf("want %s %d>%d refusal, got %v", limit, observed, maximum, err)
 	}
 }

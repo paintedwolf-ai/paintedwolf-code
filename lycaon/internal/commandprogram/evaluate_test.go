@@ -220,3 +220,76 @@ func sortedPublished(m map[string]string) []string {
 	slices.Sort(out)
 	return out
 }
+
+func TestUntakenBranchesNeverExpand(t *testing.T) {
+	f := newEvalFixture(t)
+	program := "if grep z; then echo $(rm -- never); fi; echo a || echo $(rm -- never); grep z && echo $(rm -- never); while false; do echo $(rm -- never); done; echo done"
+	out, err := f.run(t, t.Context(), program)
+	if err != nil || out.Stop != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if got := f.log.argv(); !slices.Equal(got, []string{"grep z", "echo a", "grep z", "echo done"}) {
+		t.Fatalf("untaken word expanded: %q", got)
+	}
+	for _, child := range out.Children {
+		if child.Command == "$()" {
+			t.Fatal("untaken substitution left a child execution")
+		}
+	}
+}
+
+func TestFailedSubstitutionNeverLaunchesItsCommand(t *testing.T) {
+	f := newEvalFixture(t)
+	out, err := f.run(t, t.Context(), "echo before; echo $(fail 3) never; echo status $?; x=$(fail 4); echo assigned $?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.log.argv(); !slices.Equal(got, []string{"echo before", "fail 3", "echo status 3", "fail 4", "echo assigned 4"}) {
+		t.Fatalf("dispatched %q", got)
+	}
+	if !out.Children[0].Executed {
+		t.Fatal("earlier effect lost")
+	}
+	f = newEvalFixture(t)
+	out, err = f.run(t, t.Context(), "echo before; echo $(rm -- x) never || echo handled")
+	var coded *codedError
+	if !errors.As(err, &coded) || out.Stop == nil || out.Stop.Kind != StopAuthority {
+		t.Fatalf("host stop in substitution: %v %+v", err, out.Stop)
+	}
+	if got := f.log.argv(); !slices.Equal(got, []string{"echo before", "rm -- x"}) {
+		t.Fatalf("command launched after refused substitution: %q", got)
+	}
+}
+
+// Q08: a selector read through substitution chooses the operation as data;
+// the allowed target runs, the forbidden one is refused before any mutation,
+// and the selector read stays recorded. Metacharacters never become syntax.
+func TestDynamicSelectorBindsOneOperationAsData(t *testing.T) {
+	for _, c := range []struct {
+		selector string
+		dispatch []string
+		refused  bool
+	}{
+		{"cat", []string{"cat selector", "cat input"}, false},
+		{"rm", []string{"cat selector", "rm input"}, true},
+		{"echo a; rm -- input", []string{"cat selector", "echo a; rm -- input input"}, false},
+	} {
+		t.Run(c.selector, func(t *testing.T) {
+			f := newEvalFixture(t)
+			f.log.files = map[string]string{"selector": c.selector + "\n", "input": "payload\n"}
+			out, err := f.run(t, t.Context(), "cmd=$(cat selector); \"$cmd\" input")
+			if got := f.log.argv(); !slices.Equal(got, c.dispatch) {
+				t.Fatalf("dispatched %q", got)
+			}
+			if c.refused != (out.Stop != nil && out.Stop.Kind == StopAuthority) || c.refused != (err != nil) {
+				t.Fatalf("refusal=%v stop=%+v", err, out.Stop)
+			}
+			if !c.refused && c.selector == "cat" && f.stdout.String() != "payload\n" {
+				t.Fatalf("allowed target output %q", f.stdout.String())
+			}
+			if out.Children[0].Command != "cat" || !out.Children[0].Executed || out.Children[0].Result.Status != 0 {
+				t.Fatalf("selector read lost: %+v", out.Children[0])
+			}
+		})
+	}
+}

@@ -17,147 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// evalExpander is a small fixture of the P19 expansion port: literal, quoted,
-// parameter and substitution parts with fixed whitespace splitting. Globbing
-// and parameter operators are out of scope for evaluator fixtures.
-type evalExpander struct{}
-
-func (evalExpander) ExpandFields(ctx context.Context, scope ExpansionScope, w commandsurface.DeferredWord) (Fields, error) {
-	var fields []string
-	var current strings.Builder
-	started := false
-	split := func(value string) {
-		for i, word := range strings.Fields(value) {
-			if i > 0 {
-				fields = append(fields, current.String())
-				current.Reset()
-			}
-			current.WriteString(word)
-			started = true
-		}
-	}
-	for _, part := range w.Parts {
-		switch p := part.(type) {
-		case commandsurface.LiteralPart:
-			current.WriteString(unescape(p.Value))
-			started = true
-		case commandsurface.SingleQuotedPart:
-			current.WriteString(p.Value)
-			started = true
-		case commandsurface.DoubleQuotedPart:
-			if len(p.Parts) == 1 {
-				if param, ok := p.Parts[0].(commandsurface.ParameterPart); ok && param.Name == "@" {
-					args := scope.Positional()
-					for i, arg := range args {
-						if i > 0 {
-							fields = append(fields, current.String())
-							current.Reset()
-						}
-						current.WriteString(arg)
-						started = true
-					}
-					continue
-				}
-			}
-			value, err := scalarParts(ctx, scope, p.Parts)
-			if err != nil {
-				return nil, err
-			}
-			current.WriteString(value)
-			started = true
-		case commandsurface.ParameterPart:
-			split(parameter(scope, p))
-		case commandsurface.SubstitutionPart:
-			value, err := scope.Substitute(ctx, p)
-			if err != nil {
-				return nil, err
-			}
-			split(value)
-		}
-	}
-	if started {
-		fields = append(fields, current.String())
-	}
-	out := make(Fields, len(fields))
-	for i, value := range fields {
-		out[i] = Field{Value: value, Span: w.Span}
-	}
-	return out, nil
-}
-
-func (evalExpander) ExpandScalar(ctx context.Context, scope ExpansionScope, w commandsurface.DeferredWord) (string, error) {
-	return scalarParts(ctx, scope, w.Parts)
-}
-
-func (evalExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, w commandsurface.DeferredWord) (PredicateValue, error) {
-	value, err := scalarParts(ctx, scope, w.Parts)
-	return PredicateValue{{Value: value, Quoted: true}}, err
-}
-
-func scalarParts(ctx context.Context, scope ExpansionScope, parts []commandsurface.WordNode) (string, error) {
-	var b strings.Builder
-	for _, part := range parts {
-		switch p := part.(type) {
-		case commandsurface.LiteralPart:
-			b.WriteString(unescape(p.Value))
-		case commandsurface.SingleQuotedPart:
-			b.WriteString(p.Value)
-		case commandsurface.DoubleQuotedPart:
-			value, err := scalarParts(ctx, scope, p.Parts)
-			if err != nil {
-				return "", err
-			}
-			b.WriteString(value)
-		case commandsurface.ParameterPart:
-			b.WriteString(parameter(scope, p))
-		case commandsurface.SubstitutionPart:
-			value, err := scope.Substitute(ctx, p)
-			if err != nil {
-				return "", err
-			}
-			b.WriteString(value)
-		}
-	}
-	return b.String(), nil
-}
-
-func unescape(value string) string {
-	var b strings.Builder
-	for i := 0; i < len(value); i++ {
-		if value[i] == '\\' && i+1 < len(value) {
-			i++
-		}
-		b.WriteByte(value[i])
-	}
-	return b.String()
-}
-
-func parameter(scope ExpansionScope, p commandsurface.ParameterPart) string {
-	var value string
-	switch p.Name {
-	case "?":
-		value = strconv.Itoa(scope.LastStatus())
-	case "#":
-		value = strconv.Itoa(len(scope.Positional()))
-	case "@", "*":
-		value = strings.Join(scope.Positional(), " ")
-	case "!":
-		value, _ = scope.LastBackground()
-	default:
-		if n, err := strconv.Atoi(p.Name); err == nil && n > 0 {
-			if args := scope.Positional(); n <= len(args) {
-				value = args[n-1]
-			}
-		} else {
-			value, _ = scope.Variable(p.Name)
-		}
-	}
-	if p.Length {
-		return strconv.Itoa(len([]rune(value)))
-	}
-	return value
-}
-
 // dispatchCall is what the fake owner observed for one dispatch.
 type dispatchCall struct {
 	operation   string
@@ -173,6 +32,7 @@ type dispatchCall struct {
 
 type dispatchLog struct {
 	mu       sync.Mutex
+	files    map[string]string
 	calls    []dispatchCall
 	started  chan string
 	forks    int
@@ -231,10 +91,6 @@ func (d *fakeDispatch) Fork(context.Context) (Dispatch, func(), error) {
 	}, nil
 }
 
-func completed(status int) toolcontract.ProducerResult {
-	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.NoEffect}
-}
-
 func (d *fakeDispatch) Invoke(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
 	if err := request.Validate(); err != nil {
 		return toolcontract.ProducerResult{}, err
@@ -268,6 +124,19 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 	case "env":
 		return write(strings.Join(env, "\n") + "\n")
 	case "cat":
+		if len(argv) > 1 {
+			var out strings.Builder
+			for _, name := range argv[1:] {
+				d.log.mu.Lock()
+				content, ok := d.log.files[name]
+				d.log.mu.Unlock()
+				if !ok {
+					return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("no such file")
+				}
+				out.WriteString(content)
+			}
+			return write(out.String())
+		}
 		data, err := io.ReadAll(streams.Input)
 		call.stdin = string(data)
 		if err != nil {
@@ -447,7 +316,7 @@ func newEvalFixture(t *testing.T) *evalFixture {
 	f := &evalFixture{log: log, stdout: stdout, publication: &fakePublication{}, sources: &fakeSources{files: map[string]string{}, changes: map[string]string{}}, jobs: &fakeJobs{}}
 	root := fixtureInvocation()
 	root.SourceUnitID = "program"
-	f.ports = EvaluationPorts{Invocation: root, Dispatch: &fakeDispatch{log: log, cwd: "/project"}, Binder: CatalogBinder{}, Expander: evalExpander{},
+	f.ports = EvaluationPorts{Invocation: root, Dispatch: &fakeDispatch{log: log, cwd: "/project"}, Binder: CatalogBinder{}, Files: memoryFiles{},
 		Publication: f.publication, Input: fakeInput{"input.txt": "from file\n"}, Sources: f.sources, Supervision: f.jobs,
 		Memory: fixtureScratch(t), Streams: Streams{Input: NullInput(), Output: stdout, Error: io.Discard}}
 	return f

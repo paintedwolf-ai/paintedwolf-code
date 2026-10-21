@@ -196,11 +196,13 @@ func (f *frame) whileLoop(ctx context.Context, s commandsurface.Statement, c com
 func (f *frame) forLoop(ctx context.Context, s commandsurface.Statement, c commandsurface.ForLoop) (signal, error) {
 	items := f.Positional()
 	if !c.Positional {
-		fields, err := f.expandWords(ctx, c.Items)
-		if failure := substitutionFailure(err); failure != nil {
-			return signal{}, f.builtinStatus(s.SyntaxLocation, "for", failure.Status)
-		}
-		if err != nil {
+		var fields Fields
+		prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
+			var err error
+			fields, err = g.expandWords(ctx, c.Items)
+			return err
+		})
+		if prevented || err != nil {
 			return signal{}, err
 		}
 		items = fields.Values()
@@ -213,8 +215,8 @@ func (f *frame) forLoop(ctx context.Context, s commandsurface.Statement, c comma
 		if err := f.e.charge(f, s.SyntaxLocation, "loop_iterations", 1); err != nil {
 			return signal{}, err
 		}
-		if err := f.state.vars.set(ctx, c.Variable, item, false); err != nil {
-			return signal{}, f.stateRefusal(s.SyntaxLocation, err)
+		if err := f.state.vars.Assign(ctx, c.Variable, item); err != nil {
+			return signal{}, f.expansionRefusal(s.SyntaxLocation, err)
 		}
 		sig, done, err := f.loopBody(ctx, c.Body)
 		status = f.state.control.Status()
@@ -274,8 +276,16 @@ func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string,
 	return f.state.control.Record(uuid.NewString(), ordinaryResult(status), true, false)
 }
 
-// stateRefusal turns a variable/memory admission refusal into a latched stop.
+// stateRefusal turns an expansion, variable or memory admission refusal into a
+// latched stop located at the refused word when the refusal names one.
 func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error {
+	var expansion *ExpansionError
+	if errors.As(err, &expansion) {
+		if expansion.Span != (toolcontract.SourceSpan{}) {
+			loc.Span = expansion.Span
+		}
+		return f.refuse(loc, expansion.Code, expansion.Expected, err)
+	}
 	var limit *ProgramLimitError
 	if errors.As(err, &limit) {
 		return f.refuseLimit(loc, limit.Limit, limit.Observed)

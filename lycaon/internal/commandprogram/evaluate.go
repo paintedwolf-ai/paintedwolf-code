@@ -16,7 +16,9 @@ type EvaluationPorts struct {
 	Invocation  toolcontract.OperationInvocation
 	Dispatch    Dispatch
 	Binder      ArgvBinder
-	Expander    Expander
+	// Files is the logical-path view pathname expansion lists; Evaluate builds
+	// the program's WordExpander over it with itself as the Substitution port.
+	Files       commandsurface.GlobFiles
 	Publication OutputPublication
 	Input       InputRedirection
 	Sources     SourceCapture
@@ -26,6 +28,8 @@ type EvaluationPorts struct {
 	Predicates PredicateRuntime
 	Memory     *toolcontract.ProgramMemory
 	Streams    Streams
+	// Environment is the captured child environment; its entries start exported.
+	Environment []string
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -113,6 +117,10 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	e := &evaluation{ports: ports, limits: limits, programName: plan.SourceName}
+	e.expander, err = NewWordExpander(ExpanderPorts{Substitutions: e, Files: ports.Files, Memory: ports.Memory})
+	if err != nil {
+		return ProgramOutcome{}, err
+	}
 	root, release, err := e.rootFrame(ctx)
 	if err != nil {
 		return ProgramOutcome{}, err
@@ -123,8 +131,8 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 }
 
 func (p EvaluationPorts) validate(plan commandsurface.ProgramSnapshot) error {
-	if p.Dispatch == nil || p.Binder == nil || p.Expander == nil || p.Memory == nil {
-		return fmt.Errorf("evaluation requires dispatch, argv binding, expansion and program memory")
+	if p.Dispatch == nil || p.Binder == nil || p.Files == nil || p.Memory == nil {
+		return fmt.Errorf("evaluation requires dispatch, argv binding, a glob view and program memory")
 	}
 	if err := p.Invocation.Validate(); err != nil {
 		return err

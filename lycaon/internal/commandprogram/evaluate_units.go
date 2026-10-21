@@ -4,54 +4,46 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// Substitute runs one reached $(...) unit in an isolated frame with captured
-// stdout. The containing frame admits its outcome: nonzero status prevents the
-// containing dispatch, incomplete output and host stops latch. Captured bytes
-// are data; a NUL byte cannot become a scalar and fails like status 2.
-func (f *frame) Substitute(ctx context.Context, part commandsurface.SubstitutionPart) (string, error) {
-	if int64(f.substs+1) > f.e.limits["substitution_depth"] {
-		return "", f.refuseLimit(part.SyntaxLocation, "substitution_depth", int64(f.substs+1))
+var _ Substitution = (*evaluation)(nil)
+
+// Substitute is the expander's Substitution port: one reached $(...) unit runs
+// as its own child execution in an isolated frame of the frame expanding it,
+// with stdout going to the expander's bounded writer. Its ordinary status is
+// retained for the containing command; host stops latch the shared program.
+// ctx carries the substitution depth and reaches nested expansion unchanged.
+func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest, stdout io.Writer) (toolcontract.ProducerResult, error) {
+	f, ok := scope.(*frame)
+	if !ok || f.e != e {
+		return toolcontract.ProducerResult{}, errors.New("substitution scope is not a frame of this evaluation")
 	}
+	part := request.Unit
 	run, err := f.begin(part.SyntaxLocation, "$()")
 	if err != nil {
-		return "", err
+		return toolcontract.ProducerResult{}, err
 	}
 	defer run.close()
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
-		return "", f.stateRefusal(part.SyntaxLocation, err)
+		return toolcontract.ProducerResult{}, f.expansionRefusal(part.SyntaxLocation, err)
 	}
 	defer release()
-	capture := &boundedCapture{maximum: f.e.limits["substitution_bytes"]}
-	g.parent, g.loops, g.returnable, g.substs = run.inv, 0, false, f.substs+1
-	g.streams = Streams{Input: NullInput(), Output: capture, Error: f.streams.Error}
+	g.parent, g.loops, g.returnable = run.inv, 0, false
+	g.streams = Streams{Input: NullInput(), Output: stdout, Error: f.streams.Error}
 	_, err = g.statements(ctx, part.Statements)
-	if capture.overflow > 0 {
-		run.settle(ordinaryResult(2), err)
-		return "", f.refuseLimit(part.SyntaxLocation, "substitution_bytes", capture.overflow)
-	}
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
 	run.settle(result, err)
-	if err != nil {
-		return "", err
+	if err == nil && f.substs != nil {
+		f.substs.record(run.inv.Identity.ExecutionID, result.Status)
 	}
-	if err := f.state.control.AdmitSubstitution(run.inv.Identity.ExecutionID, PipelineOutcome{Status: result.Status, Complete: true}); err != nil {
-		return "", err
-	}
-	out := strings.TrimRight(string(capture.data), "\n")
-	if strings.IndexByte(out, 0) >= 0 {
-		return "", &SubstitutionFailure{Status: 2, Complete: true}
-	}
-	return out, nil
+	return result, err
 }
 
 // source captures and validates the whole reached unit through the source
@@ -105,6 +97,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	g := *f
 	g.parent = run.inv
 	g.parent.SourceUnitID = captured.Pin.SourceID
+	g.unit = captured.Pin.SourceID
 	g.sources = f.sources + 1
 	g.returnable = true
 	sig, err := g.statements(ctx, lease.Plan.Statements)
