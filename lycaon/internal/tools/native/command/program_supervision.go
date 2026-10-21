@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -27,9 +28,36 @@ var errSupervisorLost = errors.New("command program supervisor lost")
 // work; loss interrupts the program and reconciles receipts without replay.
 type ProgramSupervisor struct {
 	Interrupter ProgramInterrupter
+	// Background is the session process registry that holds & jobs.
+	Background *bgprocess.Registry
 
 	mu       sync.Mutex
 	programs map[string]*supervisedProgram
+	sessions map[string]*SessionJobs
+}
+
+// Jobs returns the session's job set; wait and kill read the same outcomes
+// StartJob records.
+func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessions == nil {
+		s.sessions = map[string]*SessionJobs{}
+	}
+	jobs, ok := s.sessions[sessionID]
+	if !ok {
+		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, RootSessionID: sessionID, ProjectID: projectID}
+		s.sessions[sessionID] = jobs
+	}
+	return jobs
+}
+
+// StartJob supervises one statement-trailing & job in the session registry.
+func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+	if s == nil || s.Background == nil {
+		return "", fmt.Errorf("program jobs require the session process registry")
+	}
+	return s.Jobs(invocation.SessionID, invocation.Scope.ProjectID).start(ctx, "background job "+invocation.Identity.ExecutionID, run)
 }
 
 type supervisedProgram struct {

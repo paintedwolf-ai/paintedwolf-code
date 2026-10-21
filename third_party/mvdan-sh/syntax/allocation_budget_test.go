@@ -72,3 +72,39 @@ func TestSharedLedgerRefusesBeforeAllocationAndRetainsUsage(t *testing.T) {
 		t.Fatalf("one-byte excess = %v; retained=%d", err, pool.UsedBytes())
 	}
 }
+
+func TestAdmittedLedgerChargesAggregateBeforeGrowth(t *testing.T) {
+	var admitted []int64
+	refuse := errors.New("aggregate exhausted")
+	limit := int64(96 << 10)
+	pool, err := syntax.NewAdmittedAllocationBudget(1<<20, func(n int64) error {
+		var total int64
+		for _, a := range admitted {
+			total += a
+		}
+		if total+n > limit {
+			return refuse
+		}
+		admitted = append(admitted, n)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create ledger: %v", err)
+	}
+	if err := pool.ReserveBytes(10, syntax.Pos{}); err != nil || pool.AdmittedBytes() != 64<<10 || len(admitted) != 1 {
+		t.Fatalf("first chunk = %v admitted=%d calls=%v", err, pool.AdmittedBytes(), admitted)
+	}
+	if err := pool.ReserveBytes(64<<10-10, syntax.Pos{}); err != nil || len(admitted) != 1 {
+		t.Fatalf("growth within chunk charged again: %v %v", err, admitted)
+	}
+	var refusal *syntax.BudgetError
+	if err := pool.ReserveBytes(64<<10, syntax.Pos{}); !errors.As(err, &refusal) || !errors.Is(err, refuse) || refusal.Kind != "aggregate_admission" || pool.UsedBytes() != 64<<10 {
+		t.Fatalf("aggregate refusal = %v used=%d", err, pool.UsedBytes())
+	}
+	if _, err := syntax.NewParser(syntax.WithBudget(syntax.Budget{Pool: pool})).Parse(strings.NewReader("printf '%s' fixture"), "fixture.pw"); !errors.Is(err, refuse) {
+		t.Fatalf("parser hid aggregate refusal: %v", err)
+	}
+	if _, err := syntax.NewAdmittedAllocationBudget(1, nil); err == nil {
+		t.Fatal("admitted ledger accepted no aggregate")
+	}
+}

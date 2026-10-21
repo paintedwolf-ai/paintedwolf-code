@@ -45,7 +45,7 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 		r.commandStopTool.Registry = reg
 	}
 	if programs := r.programs(); programs != nil {
-		programs.Background = reg
+		programs.Supervisor.Background = reg
 	}
 	if r.reviews != nil {
 		r.reviews.SetBackgroundCommandResolver(r.backgroundCommandLine)

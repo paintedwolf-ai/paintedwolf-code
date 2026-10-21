@@ -11,7 +11,6 @@ import (
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // ExternalStages launches one confined external stage per request through the
@@ -19,6 +18,7 @@ import (
 // stays literal: no shell, no PATH re-resolution by the host, no fallback.
 type ExternalStages struct {
 	ToolContext     tools.ToolContext
+	Dir             string
 	ExtraWriteRoots []string
 }
 
@@ -32,9 +32,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
 	tctx := l.ToolContext
-	cwd, _, err := projectpaths.CommandCwd(ctx, tctx, request.Invocation.Scope.Directory)
-	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	cwd := l.Dir
+	if cwd == "" {
+		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
 	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
@@ -49,7 +49,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		Launch:         agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine),
 		Dir:            cwd,
 		NoTimeout:      true,
-		InlineEnv:      request.Environment,
+		Env:            request.Environment,
 		PathExtra:      append([]string(nil), tctx.Host.HostResourcePathExtra...),
 		SeparateStderr: true,
 		Stdout:         nonNilWriter(streams.Output),

@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"io"
 	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -37,15 +39,14 @@ type ProgramRuntime struct {
 	Recorder   *invocation.SQLRecorder
 	Blobs      blobstore.Store
 	Projector  *captureprojection.Projector
-	Background *bgprocess.Registry
 	Progress   toolexecution.ProgramProgressFacts
 	Supervisor *ProgramSupervisor
-	Evaluate   commandprogram.Evaluator
-	Expand     commandprogram.Expander
+	// Evaluate is the statement scheduler, commandprogram.Evaluate in production.
+	Evaluate func(context.Context, commandsurface.ProgramSnapshot, commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error)
+	Boundary *sandbox.Boundary
 	// Owners names the host owner when no authenticated request started the work.
-	Owners   people.OwnerSource
-	Builtins func(context.Context, tools.ToolContext) (map[string]commandprogram.OperationDispatcher, error)
-	Natives  map[string]NativeOperation
+	Owners  people.OwnerSource
+	Natives map[string]NativeOperation
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 
@@ -183,36 +184,37 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
-	builtins := map[string]commandprogram.OperationDispatcher{}
-	if r.Builtins != nil {
-		if builtins, err = r.Builtins(ctx, tc); err != nil {
-			return "", err
-		}
+	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
+	if err != nil {
+		return "", err
 	}
-	jobs := &SessionJobs{Registry: r.Background, Supervisor: r.Supervisor, SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID}
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, external: ExternalStages{ToolContext: tc}, binder: commandprogram.CatalogBinder{}}
-	host := jobBuiltins(jobs, run.commands)
+	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
+	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
 	if listeners == nil {
 		listeners = lineage.SessionListeners
 	}
-	host["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
-	for name, builtin := range host {
-		if _, taken := dispatcher.builtins[name]; !taken {
-			dispatcher.builtins[name] = builtin
-		}
-	}
+	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
-	evaluation := commandprogram.Evaluation{
-		Root: root, Plan: snapshot.Plan,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
-		Ports:   commandprogram.EvaluationPorts{Dispatch: dispatcher, Expand: r.Expand, Record: r.Recorder, Held: &ProgramHeldEffects{}, Jobs: jobs, Memory: memory},
+	environment := lycexec.InheritedEnviron()
+	if tc.Files.PackageExecution != nil {
+		environment = lycexec.ReducedEnviron()
 	}
+	ports := commandprogram.EvaluationPorts{
+		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
+		Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
+		Memory:  memory,
+		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr}, Environment: environment,
+	}
+	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-		return r.Evaluate(ctx, evaluation)
+		var err error
+		evaluated, err = r.Evaluate(ctx, snapshot.Plan, ports)
+		return evaluatedResult(evaluated), err
 	})
 	settled := make(chan error, 1)
-	r.Supervisor.AfterJobs(root.Identity.ProgramID, func() { settled <- r.settleProgram(ctx, run, result) })
+	r.Supervisor.AfterJobs(root.Identity.ProgramID, func() { settled <- r.settleProgram(ctx, run, result, evaluated) })
 	var settleErr error
 	select {
 	case settleErr = <-settled:
@@ -239,21 +241,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 // parseProgram validates the entire unit; an excluded construct anywhere
 // refuses before the first statement could run.
 func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
-	parser, err := commandsurface.NewProgramParser(ctx, memory)
-	if err != nil {
-		return nil, nil, err
-	}
-	parsed, err := parser.Parse([]byte(source), commandsurface.ParseOptions{})
-	closeErr := parser.Close()
+	parsed, err := commandsurface.ParseAdmitted(ctx, memory, []byte(source), commandsurface.ParseOptions{})
 	if err != nil {
 		if reject := toolcommand.ProgramSyntaxObservation("command", err); reject != nil {
 			return nil, nil, reject
 		}
 		return nil, nil, err
-	}
-	if closeErr != nil {
-		_ = parsed.Close()
-		return nil, nil, closeErr
 	}
 	snapshot, err := parsed.SnapshotWithMemory(ctx, memory)
 	if err != nil {
@@ -297,18 +290,23 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 	return spill, metadata.Redacted, nil
 }
 
-func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult) error {
-	state := "completed"
-	switch result.Terminal {
-	case toolcontract.ProducerRefused:
-		state = "rejected"
-	case toolcontract.ProducerInterrupted:
-		state = "interrupted"
-	case toolcontract.ProducerFailed, "":
-		state = "failed"
+// settleProgram records the evaluator's aggregate; a supervisor stop or loss
+// overrides it with the interruption RunProgram reported.
+func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome) error {
+	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
+	if result.Terminal == toolcontract.ProducerInterrupted && settlement.State == "completed" {
+		status := result.Status
+		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, result.StopCode
 	}
-	status := result.Status
-	return r.Recorder.SettleProgram(context.WithoutCancel(ctx), run.root.Identity.ProgramID, toolcontract.ProgramSettlement{State: state, Status: &status, StopCode: result.StopCode, DetailReference: "output:program-source:" + run.root.Identity.ProgramID})
+	return r.Recorder.SettleProgram(context.WithoutCancel(ctx), run.root.Identity.ProgramID, settlement)
+}
+
+// evaluatedResult is the aggregate utility outcome of an evaluated program.
+func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.ProducerResult {
+	if outcome.Stop != nil {
+		return outcome.Stop.Result
+	}
+	return toolcontract.ProducerResult{Status: outcome.Status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: outcome.Status == 0, EffectCertainty: toolcontract.EffectUnknown}
 }
 
 // feedback renders the first native owner rejection through the program
@@ -316,6 +314,11 @@ func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, res
 func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, evalErr error) error {
 	rejection := dispatcher.firstRejection()
 	if rejection == nil {
+		var refusal *commandprogram.EvaluationRefusal
+		if errors.As(evalErr, &refusal) {
+			span := refusal.Node.Span
+			return toolrejection.RejectInvalidArguments(refusal.Code, map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected})
+		}
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
 			return reject
 		}

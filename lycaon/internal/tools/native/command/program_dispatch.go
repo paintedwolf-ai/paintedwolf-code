@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // NativeOperation binds one catalog command to its existing typed owner. Bind
@@ -32,12 +33,38 @@ type ProgramDispatcher struct {
 	run      *programRun
 	builtins map[string]commandprogram.OperationDispatcher
 	natives  map[string]NativeOperation
-	external commandprogram.ExternalLauncher
 	binder   commandprogram.ArgvBinder
+	// paths is this directory frame; cd moves it and Fork copies it.
+	paths  *projectpaths.ProgramPaths
+	shared *dispatchShared
+}
 
+// dispatchShared is per-program state every forked frame shares.
+type dispatchShared struct {
 	mu          sync.Mutex
 	definitions map[string]toolcontract.OperationDefinition
 	rejected    *nativeRejection
+}
+
+// pathCommands run on the frame's own directory state.
+var pathCommands = map[string]bool{"cd": true, "pwd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
+
+// Fork captures this frame's directory for an isolated frame.
+func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func(), error) {
+	fork := *d
+	fork.paths = d.paths.Fork()
+	return &fork, func() {}, nil
+}
+
+// Launch runs a confined external program from this frame's directory.
+func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if err := request.Validate(); err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
+	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	return d.invokeExternal(ctx, request, streams)
 }
 
 // nativeRejection is the first typed owner refusal, kept for program feedback.
@@ -47,12 +74,12 @@ type nativeRejection struct {
 }
 
 func (d *ProgramDispatcher) firstRejection() *nativeRejection {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.rejected
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	return d.shared.rejected
 }
 
-var _ commandprogram.OperationDispatcher = (*ProgramDispatcher)(nil)
+var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
 
 // Invoke admits, records, dispatches and settles one child.
 func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -62,20 +89,18 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
-	name := request.Argv[0].Value
-	spec, native := d.run.commands[name]
-	if native {
-		if operation, ok := d.natives[spec.Name]; ok {
-			return d.invokeNative(ctx, spec, operation, request, streams)
-		}
-		if builtin, ok := d.builtins[spec.Name]; ok {
-			return d.invokeBuiltin(ctx, spec, builtin, request, streams)
-		}
-		if spec.Name != "external" {
-			return d.refuseUnimplemented(ctx, spec, request)
-		}
+	spec, native := d.run.commands[request.Argv[0].Value]
+	switch {
+	case !native || spec.Name == "external":
+		return d.invokeExternal(ctx, request, streams)
+	case d.natives[spec.Name].Bind != nil:
+		return d.invokeNative(ctx, spec, d.natives[spec.Name], request, streams)
+	case pathCommands[spec.Name]:
+		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
+	case d.builtins[spec.Name] != nil:
+		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
-	return d.invokeExternal(ctx, request, streams)
+	return d.refuseUnimplemented(ctx, spec, request)
 }
 
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -106,7 +131,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		result := refusedResult("TOOL_OWNER_FAILED")
 		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
 	}
-	result, runErr := d.external.Launch(ctx, request, streams)
+	result, runErr := ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs}.Launch(ctx, request, streams)
 	if result.Terminal == "" {
 		result = ownerFailure(runErr)
 	}
@@ -159,11 +184,11 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if toolrejection.AsToolReject(runErr) != nil {
-		d.mu.Lock()
-		if d.rejected == nil {
-			d.rejected = &nativeRejection{operation: bound, cause: runErr}
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: runErr}
 		}
-		d.mu.Unlock()
+		d.shared.mu.Unlock()
 	}
 	return native.Producer, errors.Join(runErr, d.settle(ctx, child, native.Producer, native.OwnerInvoked, native.HostStopCode))
 }
@@ -243,9 +268,9 @@ func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, resu
 // catalogDefinition compiles one definition per catalog command without a
 // registered tool, attributed to the command's declared owner.
 func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecification) (toolcontract.OperationDefinition, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if definition, ok := d.definitions[spec.Name]; ok {
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	if definition, ok := d.shared.definitions[spec.Name]; ok {
 		return definition, nil
 	}
 	contract, ok := toolcontract.Lookup("command")
@@ -272,10 +297,10 @@ func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecifica
 	if err != nil {
 		return toolcontract.OperationDefinition{}, err
 	}
-	if d.definitions == nil {
-		d.definitions = map[string]toolcontract.OperationDefinition{}
+	if d.shared.definitions == nil {
+		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
-	d.definitions[spec.Name] = definition
+	d.shared.definitions[spec.Name] = definition
 	return definition, nil
 }
 
