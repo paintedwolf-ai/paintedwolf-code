@@ -388,7 +388,16 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		var refusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
-			return toolrejection.RejectInvalidArguments(refusal.Code, map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected})
+			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
+			}
+			return toolrejection.RejectInvalidArguments(refusal.Code, data)
 		}
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
 			return reject
