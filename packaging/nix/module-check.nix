@@ -83,10 +83,10 @@ pkgs.runCommand "painted-wolf-code-nixos-module-check" { nativeBuildInputs = [ p
     --arg input ${pkgs.lib.escapeShellArg (toString desktop.i18n.inputMethod.package)} \
     --arg member ${pkgs.lib.escapeShellArg (toString desktopSystem.pkgs.hello)} \
     --arg foreign ${pkgs.lib.escapeShellArg (toString ownerOnly)} '
-    (.generations | length) == 1 and
+    .generations as $generations | ($generations | length) == 1 and
     all([$package, $path, $graphics, $dconf, $input, $member][];
-        . as $required | (.generations[0].store_paths | index($required)) != null) and
-    (.generations[0].store_paths | index($foreign)) == null
+        . as $required | ($generations[0].store_paths | index($required)) != null) and
+    ($generations[0].store_paths | index($foreign)) == null
   ' ${desktopPolicy}
   touch "$out"
 ''
