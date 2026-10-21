@@ -58,6 +58,7 @@ type NativeEffect struct {
 	Operation       toolcontract.BoundOperation
 	Stage           toolcontract.ExecutionStage
 	Arguments       map[string]any
+	Argv            *commandprogram.ArgvReview
 	Streams         commandprogram.Streams
 	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
 }
@@ -102,7 +103,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
-	arguments, err := prepareNativeArguments(ctx, admission, effect.Arguments)
+	values := effect.Arguments
+	if effect.Argv != nil {
+		values = effect.Argv.Arguments()
+	}
+	arguments, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {
 		return result, err
 	}
@@ -131,15 +136,8 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(arguments.values, tc.Host.SessionScratchDir); reject != nil {
-		return result, reject
-	}
-	var schema map[string]any
-	if err = json.Unmarshal(facts.Arguments, &schema); err != nil {
+	if err = validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
 		return result, err
-	}
-	if reject := tools.ValidateCallArguments(facts.Identity, arguments.values, schema, tc); reject != nil {
-		return result, reject
 	}
 	if err = validateNativeSecretSlots(facts.Contract, arguments.values); err != nil {
 		return result, err
@@ -269,4 +267,27 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 		return err
 	}
 	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
+}
+
+// validateNativeArguments checks a legacy structured value against its tool
+// schema. A catalog-bound form was already validated by the argv binder, so
+// its review record is not forced into that schema.
+func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandprogram.ArgvReview, values map[string]any, tc tools.ToolContext) error {
+	if argv != nil {
+		if argv.OperationID != facts.Identity {
+			return fmt.Errorf("argv review names a different operation")
+		}
+		return nil
+	}
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+		return reject
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(facts.Arguments, &schema); err != nil {
+		return err
+	}
+	if reject := tools.ValidateCallArguments(facts.Identity, values, schema, tc); reject != nil {
+		return reject
+	}
+	return nil
 }

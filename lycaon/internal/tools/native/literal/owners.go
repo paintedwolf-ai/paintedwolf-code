@@ -125,8 +125,8 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if !ok || paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a literal content command", command)
 	}
-	if request.OperationID != o.ops[command] {
-		return Prepared{}, fmt.Errorf("%s belongs to operation %s, not %s", command, o.ops[command], request.OperationID)
+	if request.OperationID != command {
+		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, command)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {

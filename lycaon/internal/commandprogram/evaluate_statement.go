@@ -240,7 +240,7 @@ func (f *frame) loopStatus(s commandsurface.Statement, status int) error {
 // isolated runs ( ... ): variables, functions and directory are copied and its
 // exit leaves only the group. Host stops still latch the shared program.
 func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list []commandsurface.Statement) error {
-	run, err := f.begin(s.SyntaxLocation, "( )")
+	run, err := f.beginRecorded(ctx, s.SyntaxLocation, "( )")
 	if err != nil {
 		return err
 	}

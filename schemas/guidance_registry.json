@@ -590,6 +590,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "This native command operation is unavailable on the current platform."
     },
+    "COMMAND_PROGRAMS_DISABLED": {
+      "branch_instruction": "Continue with the other offered tools; do not resubmit this program",
+      "category": "blocked",
+      "emit": "guard:tool",
+      "summary": "Command programs are turned off on this host, so this program did not start."
+    },
     "COMMAND_PUBLICATION_PENDING": {
       "branch_instruction": "Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit",
       "category": "recoverable",

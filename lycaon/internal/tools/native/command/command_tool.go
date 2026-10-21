@@ -32,6 +32,8 @@ type CommandTool struct {
 	Background      *bgprocess.Registry
 	FailureTracker  *CommandFailureTracker
 	WriteRootGate   SandboxWriteRootGate
+	// Programs is the v1 program entry the command registration switches to.
+	Programs *ProgramRuntime
 }
 
 func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
