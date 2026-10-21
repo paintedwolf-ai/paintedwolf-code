@@ -23,7 +23,22 @@ window.addEventListener('load', () => {
 });
 </script>"#;
 
-const WINDOW_TITLE: &str = "Painted Wolf Code native paste fixture";
+/// The owner child's window, which the clipboard fixture has already focused.
+const OWNER_TITLE: &str = "Painted Wolf Code clipboard fixture";
+
+fn owner_window() -> gtk::Window {
+    gtk::Window::list_toplevels()
+        .into_iter()
+        .filter_map(|window| window.downcast::<gtk::Window>().ok())
+        .find(|window| window.title().as_deref() == Some(OWNER_TITLE))
+        .expect("the owner child's focused window")
+}
+
+fn detach(window: &gtk::Window) {
+    if let Some(child) = window.child() {
+        window.remove(&child);
+    }
+}
 
 #[derive(Clone, Copy)]
 enum Contents {
@@ -61,18 +76,17 @@ fn publish(contents: Contents) {
     }
 }
 
-/// `focus_input` asks the compositor to focus the titled fixture window and
-/// gives it a key event, so the view receives keyboard focus as a person's
-/// keyboard would provide.
-pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
+/// Each paste runs in the owner child's window, whose keyboard focus the
+/// clipboard fixture established; `focus_input` gives the compositor another
+/// key event when the view still lacks focus, as a person's keyboard would.
+pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
     tauri::async_runtime::block_on(async {
         for contents in [Contents::Plain, Contents::Rich, Contents::Image] {
             let (reply, receiver) = tokio::sync::oneshot::channel();
             let focus_input = focus_input.clone();
             GlibMainThread.dispatch(Box::new(move || {
-                let window = gtk::Window::new(gtk::WindowType::Toplevel);
-                window.set_title(WINDOW_TITLE);
-                window.set_default_size(320, 200);
+                let window = owner_window();
+                detach(&window);
                 let view = webkit2gtk::WebView::new();
                 window.add(&view);
                 let reply = Rc::new(RefCell::new(Some(reply)));
@@ -96,7 +110,7 @@ pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
                                 };
                                 window.present();
                                 view.grab_focus();
-                                focus_input(WINDOW_TITLE);
+                                focus_input();
                                 return gtk::glib::ControlFlow::Continue;
                             }
                             publish(contents);
@@ -105,7 +119,7 @@ pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
                                 if let Some(reply) = answer.borrow_mut().take() {
                                     let _ = reply.send(Err(error));
                                 }
-                                window.close();
+                                detach(&window);
                             }
                             gtk::glib::ControlFlow::Break
                         });
@@ -113,7 +127,7 @@ pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
                         if let Some(reply) = answer.borrow_mut().take() {
                             let _ = reply.send(Ok(title.to_string()));
                         }
-                        owned_window.close();
+                        owned_detach(&window);
                     }
                 });
                 window.show_all();
@@ -124,7 +138,7 @@ pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
                     if let Some(reply) = reply.borrow_mut().take() {
                         let _ = reply.send(Err(format!("native paste event deadline while {}", progress.borrow())));
                     }
-                    window.close();
+                    detach(&window);
                 });
             })).expect("dispatch private native paste");
             let observed = tokio::time::timeout(Duration::from_secs(12), receiver)
