@@ -289,9 +289,11 @@ fn screensaver_active(
 }
 
 fn watch_connection(connection: &gio::DBusConnection, monitor: &Weak<Inner>, system: bool) {
-    let monitor = monitor.clone();
+    // Closing is a GObject signal, emitted on the connection's own context,
+    // which is the monitor's.
+    let monitor = glib::thread_guard::ThreadGuard::new(monitor.clone());
     connection.connect_closed(move |_, _, _| {
-        let Some(inner) = monitor.upgrade() else {
+        let Some(inner) = monitor.get_ref().upgrade() else {
             return;
         };
         let mut next = inner.current();
