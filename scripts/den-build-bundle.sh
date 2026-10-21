@@ -7,6 +7,9 @@ if [[ -n "${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=toolchain/rust-path-remap.sh
+source "${ROOT}/scripts/toolchain/rust-path-remap.sh"
+rust_path_remap "${ROOT}"
 GO_DIR="${ROOT}/lycaon"
 DEN_DIR="${ROOT}/lycaon-den"
 TAURI_DIR="${DEN_DIR}/src-tauri"

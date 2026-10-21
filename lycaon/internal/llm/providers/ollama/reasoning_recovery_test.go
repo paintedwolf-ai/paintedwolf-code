@@ -71,7 +71,7 @@ func TestOllamaToolContinuationReplaysReasoning(t *testing.T) {
 	testutil.FailErr(t, "open tool continuation", err)
 	_, _, err = modelcall.CollectStream(ch)
 	testutil.FailErr(t, "collect tool continuation", err)
-	if len(received.Messages) != 5 || received.Messages[1].Thinking != "Read the file before editing." || len(received.Messages[1].ToolCalls) != 1 || received.Messages[2].ToolName != "read" {
+	if len(received.Messages) != 3 || received.Messages[1].Thinking != "Read the file before editing." || len(received.Messages[1].ToolCalls) != 1 || received.Messages[2].ToolName != "read" || received.Messages[2].Content != "file text\n\nCurrent host state.\n\nCurrent tool availability." {
 		t.Fatalf("tool continuation lost reasoning or association: %+v", received.Messages)
 	}
 }

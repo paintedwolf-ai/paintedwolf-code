@@ -21,7 +21,7 @@ on_fire:
 - increment_counter
 copy:
   cause: The same tool+args invocation keeps repeating without a changed outcome
-  why: Replaying or cosmetically varying a call that already failed burns budget without advancing the current
+  why: Replaying or cosmetically varying a call with no new outcome burns budget without advancing the current
     objective.
   fix: '{% if paintedwolf.handle %}Do not call `command_output` with the same cursor again. Call `wait(until_complete=true,
     conditions=[{"kind":"process_done","handles":["{{ paintedwolf.handle }}"]}], reason="waiting for command
@@ -37,7 +37,7 @@ copy:
     paintedwolf.can_complete_leg %}If no available prerequisite or corrected call can resolve the question, call complete_leg with `leg_status: partial`, name the unanswered
     question in `remaining_risk`, and put the next step in `suggested_next_task`. A partial leg with cited
     evidence is a result; more calls against this block are not.{% else %}Report the unresolved question through
-    the actual completion channel.{% endif %}{% else %}Resume the current next action. For a rejected call, correct the arguments or complete its named prerequisite before retrying. {% endif %}{% endif %}'
+    the actual completion channel.{% endif %}{% else %}Resume the current next action. {% if paintedwolf.code %}Correct the arguments or complete the named prerequisite before retrying.{% else %}Reuse the completed result. If all work is complete, send the final answer with no tool calls.{% endif %} {% endif %}{% endif %}'
   what: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with
     Code: {{ paintedwolf.code }}, so unchanged retries remain blocked{% else %} after {{ paintedwolf.count }} repeats{%
     endif %}.'

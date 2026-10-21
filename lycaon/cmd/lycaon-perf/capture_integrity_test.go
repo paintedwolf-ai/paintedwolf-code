@@ -55,7 +55,7 @@ func completeRuntimeSample() *observability.RuntimeSample {
 	return &observability.RuntimeSample{
 		HeapAllocBytes: 100, Goroutines: 4,
 		Gauges: map[string]int64{
-			"db_reader_wait_ns": 0, "db_writer_wait_ns": 0, "db_reader_wait_count": 0, "db_writer_wait_count": 0,
+			"process_fds": 10, "db_reader_wait_ns": 0, "db_writer_wait_ns": 0, "db_reader_wait_count": 0, "db_writer_wait_count": 0,
 			"db_reader_open": 0, "db_reader_in_use": 0, "db_writer_open": 0, "db_writer_in_use": 0,
 		},
 	}
