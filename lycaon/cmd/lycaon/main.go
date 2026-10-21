@@ -18,6 +18,7 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
@@ -144,6 +145,12 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
+	// Shipped helpers must come from the installation this engine started from.
+	binding, err := installbinding.CaptureRunning()
+	if err != nil {
+		return fmt.Errorf("bind the running installation: %w", err)
+	}
+	installbinding.Install(binding)
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context
