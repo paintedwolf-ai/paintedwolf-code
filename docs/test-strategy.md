@@ -917,7 +917,7 @@ not run is planned at its budget, so it starts early.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a thirty-minute execution budget |
 
 A newer run replaces a pending one in its group and a started run finishes, so
 a long nightly or qualification never multiplies. The maintenance workflows
@@ -930,26 +930,19 @@ fifteen minutes.
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
-footprint is small and each pull request's is a single job of about ten
-minutes. Nothing reorders or preempts runs.
+footprint is small and each pull request's is a single bounded job. Nothing reorders or preempts runs.
 
 At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
-merge queue 8, leaving three that long work never claims; a pull request's CI
-run holds one. Under a burst of ten pull request pushes at once, their ten jobs
-queue ahead of a merge-queue job. With every bounded class at its widest, the
-three spare runners serve them four rounds of about ten minutes, so the
-merge-queue job starts after at most about 40 minutes. That worst case needs
-qualification, nightly, a release, warming, maintenance, and both groups all at
-their widest together. With the queue's two groups, qualification, and nightly
-running (13 runners), the ten jobs take seven runners at once and the
-merge-queue job starts with the last three, after about ten minutes. On macOS,
-qualification, warming, and nightly hold one runner each and a release two,
-five in all; the merge queue and the fast tier run on Linux. With `limits`,
-`lint`, and both behavior shards in its first wave, a full-scope group capped
-at four finishes in about 32 minutes of measured lane times, against about 26
-uncapped and about 44 at a cap of three; a group whose budgets or changed
-coverage fail stops after about six. A third group of four would not fit
-beside the other classes.
+merge queue 8, leaving three runners outside those classes. Ready PR jobs share
+that remaining capacity and may wait during bursts. Full lint before admission
+uses more PR time but prevents deterministic analyzer failures from occupying
+speculative integration groups. Caps do not establish queue latency guarantees.
+On macOS, qualification, warming, and nightly hold one runner each and a release
+two, five in all; the merge queue and the admission tier run on Linux.
+
+Increase integration parallelism only with a revised capacity model that still
+fits every bounded class and a ready PR. Reduce repeated compilation, preparation,
+and unnecessary broad selection before adding runners to each group.
 
 Contract tests in
 [`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
