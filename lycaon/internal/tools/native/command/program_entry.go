@@ -116,6 +116,7 @@ type ProgramOutcome struct {
 	ExecutedChildren int    `json:"executed_children"`
 	CompletedEffects int    `json:"completed_effects"`
 	UncertainEffects int    `json:"uncertain_effects"`
+	NativeGaps       int    `json:"native_gaps,omitempty"`
 	ReplayAvailable  bool   `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
@@ -426,7 +427,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result to
 		return ProgramOutcome{}, err
 	}
 	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
-		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects}
+		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
 	for _, stream := range []struct {
 		buffer *boundedBuffer
 		target *string

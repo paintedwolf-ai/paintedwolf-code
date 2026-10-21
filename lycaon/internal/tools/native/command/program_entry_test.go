@@ -360,7 +360,7 @@ func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), "external -- /bin/echo gap-line | grep gap")
 	testutil.FailErr(t, "run native gap", err)
-	if !strings.Contains(out, `"stdout":"gap-line\n"`) {
+	if !strings.Contains(out, `"stdout":"gap-line\n"`) || decodeOutcome(t, out).NativeGaps != 1 {
 		t.Fatalf("gap launch outcome %s", out)
 	}
 	var operation, gap string
