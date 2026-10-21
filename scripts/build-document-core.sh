@@ -6,6 +6,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "${ROOT}/scripts/sha256.sh"
+# shellcheck source=rust-path-remap.sh
+source "${ROOT}/scripts/rust-path-remap.sh"
+rust_path_remap "${ROOT}"
 CACHE_ROOT="$(python3 "${ROOT}/scripts/artifact_paths.py" cache)/document-core"
 CRATE="${ROOT}/lycaon/internal/documentcore/native"
 NAME="pw-document-core"
@@ -36,7 +39,8 @@ identity() {
   {
     printf 'target %s\n' "$(rustc --print host-tuple)"
     printf 'macos-floor %s\n' "${MACOSX_DEPLOYMENT_TARGET:-}"
-    (cd "${ROOT}" && LC_ALL=C find rust-toolchain.toml scripts/build-document-core.sh \
+    printf 'rustflags %s\n' "${CARGO_ENCODED_RUSTFLAGS}"
+    (cd "${ROOT}" && LC_ALL=C find rust-toolchain.toml scripts/build-document-core.sh scripts/rust-path-remap.sh \
       lycaon/internal/documentcore/native/Cargo.toml lycaon/internal/documentcore/native/Cargo.lock \
       lycaon/internal/documentcore/native/src -type f -print | LC_ALL=C sort | while IFS= read -r file; do
         printf '%s %s\n' "$(sha256 "${file}" | cut -d' ' -f1)" "${file}"

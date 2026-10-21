@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
+# shellcheck source=rust-path-remap.sh
+source "${ROOT}/scripts/rust-path-remap.sh"
+rust_path_remap "${ROOT}"
 CRATE="${ROOT}/lycaon/internal/decide/native"
 OUT="${1:-${PW_BUILD_DIR}/bialy}"
 
