@@ -167,3 +167,82 @@ func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *te
 		t.Fatal("unverified generation reached policy writer")
 	}
 }
+
+func TestDamagedGenerationIsRepairedOnlyWhileNoRuntimeHoldsIt(t *testing.T) {
+	source, raw := fixture(t, "resource")
+	l := testLayout(t)
+	generation, err := l.materialize(source, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	damaged := filepath.Join(generation.Root, "resource.data")
+	if err := os.WriteFile(damaged, []byte("corrupt retained"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	live, err := l.openLifetime(generation.ManifestSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	if err := unix.Flock(int(live.Fd()), unix.LOCK_SH); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.materialize(source, raw); err == nil || !strings.Contains(err.Error(), "in use") {
+		t.Fatalf("damaged generation in use was not refused: %v", err)
+	}
+	if content, _ := os.ReadFile(damaged); string(content) != "corrupt retained" {
+		t.Fatal("bytes held by a live runtime were rewritten")
+	}
+	if err := unix.Flock(int(live.Fd()), unix.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
+	repaired, err := l.materialize(source, raw)
+	if err != nil || repaired != generation {
+		t.Fatalf("unused damaged generation was not repaired: %+v, %v", repaired, err)
+	}
+	if content, _ := os.ReadFile(damaged); string(content) != "resource" {
+		t.Fatalf("repair left %q", content)
+	}
+	selected := false
+	if err := l.selectGeneration(generation.ManifestSHA256, func(Generation) error { selected = true; return nil }); err != nil || !selected {
+		t.Fatalf("repaired generation was not selectable: %v", err)
+	}
+}
+
+func TestInterruptedInstallationIsDiscardedUnderTheIdentityLock(t *testing.T) {
+	source, raw := fixture(t, "resource")
+	l := testLayout(t)
+	if err := os.MkdirAll(l.store, 0755); err != nil {
+		t.Fatal(err)
+	}
+	identity := digest(raw)
+	leftover := filepath.Join(l.store, ".install-"+identity)
+	if err := os.MkdirAll(filepath.Join(leftover, "bin"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(leftover, "bin", "pw"), []byte("partial"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	generation, err := l.materialize(source, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(leftover); !os.IsNotExist(err) {
+		t.Fatalf("interrupted staging survived installation: %v", err)
+	}
+	if err := os.Mkdir(leftover, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(generation.Root, "resource.data"), []byte("corrupt retained"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := l.reclaim(identity, func() (string, error) { return "", nil })
+	if err != nil || !removed {
+		t.Fatalf("unselected damaged generation was not reclaimed: %v, %v", removed, err)
+	}
+	for _, name := range []string{generation.Root, leftover} {
+		if _, err := os.Lstat(name); !os.IsNotExist(err) {
+			t.Fatalf("%s survived reclamation: %v", name, err)
+		}
+	}
+}

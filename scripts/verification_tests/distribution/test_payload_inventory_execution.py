@@ -8,7 +8,7 @@ import unittest
 
 from linux_release.payload_inventory import tree
 
-SPEC = importlib.util.spec_from_file_location("native_manifest_owner", Path(__file__).with_name("linux-package-manifest.py"))
+SPEC = importlib.util.spec_from_file_location("native_manifest_owner", Path(__file__).resolve().parents[2] / "linux-package-manifest.py")
 OWNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(OWNER)
 

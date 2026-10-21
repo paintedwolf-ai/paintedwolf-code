@@ -77,15 +77,26 @@ func (l layout) reclaim(identity string, freshSelection func() (string, error)) 
 	if selected == path || strings.HasPrefix(selected, path+string(os.PathSeparator)) {
 		return false, nil
 	}
-	root, raw, manifest, err := l.retainedGeneration(identity)
+	if err := l.controlledParents(path); err != nil {
+		return false, err
+	}
+	// Interrupted installations of this identity are garbage under the same lock.
+	if err := os.RemoveAll(filepath.Join(l.store, ".install-"+identity)); err != nil {
+		return false, err
+	}
+	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
-		return false, nil
+		return false, syncDirectory(l.store)
 	}
 	if err != nil {
 		return false, err
 	}
-	defer root.Close()
-	if err := verifyExisting(path, raw, manifest, l.owner); err != nil {
+	// Unselected, unused bytes are removed whether or not they still match their
+	// seal; only a foreign object at a generation name is refused.
+	if !info.IsDir() {
+		return false, errors.New("native generation: retained generation is not a physical directory")
+	}
+	if err := controlledObject(path, info, l.owner); err != nil {
 		return false, err
 	}
 	if err := os.RemoveAll(path); err != nil {

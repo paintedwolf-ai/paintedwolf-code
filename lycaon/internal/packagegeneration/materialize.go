@@ -59,21 +59,27 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
 		return Generation{}, err
 	}
-	if _, err := os.Lstat(selected.Root); err == nil {
-		return selected, verifyExisting(selected.Root, raw, manifest, owner)
-	} else if !os.IsNotExist(err) {
-		return Generation{}, err
+	present, damage, err := retained(selected.Root, raw, manifest, owner)
+	if err != nil || present && damage == nil {
+		return selected, err
 	}
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_UN); err != nil {
 		return Generation{}, err
 	}
-	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+	exclusive := unix.LOCK_EX
+	if present {
+		// Damaged bytes are replaced only while no runtime holds them.
+		exclusive |= unix.LOCK_NB
+	}
+	if err := unix.Flock(int(lock.Fd()), exclusive); err != nil {
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return Generation{}, fmt.Errorf("native generation: retained generation %s is damaged and in use; restart Painted Wolf Code to repair it: %w", identity, damage)
+		}
 		return Generation{}, err
 	}
-	if _, err := os.Lstat(selected.Root); err == nil {
-		return selected, verifyExisting(selected.Root, raw, manifest, owner)
-	} else if !os.IsNotExist(err) {
-		return Generation{}, err
+	present, damage, err = retained(selected.Root, raw, manifest, owner)
+	if err != nil || present && damage == nil {
+		return selected, err
 	}
 	if err := manifest.VerifyOwnedPayload(staging, owner); err != nil {
 		return Generation{}, err
@@ -85,8 +91,18 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if !bytes.Equal(sourceManifest, raw) {
 		return Generation{}, errors.New("native generation: staging seal differs from selection")
 	}
-	temporary, err := os.MkdirTemp(l.store, ".install-")
-	if err != nil {
+	if present {
+		if err := os.RemoveAll(selected.Root); err != nil {
+			return Generation{}, err
+		}
+	}
+	// One staging name per identity: an interrupted installation is discarded
+	// by the next holder of the same exclusive lock.
+	temporary := filepath.Join(l.store, ".install-"+identity)
+	if err := os.RemoveAll(temporary); err != nil {
+		return Generation{}, err
+	}
+	if err := os.Mkdir(temporary, 0700); err != nil {
 		return Generation{}, err
 	}
 	complete := false
@@ -137,6 +153,17 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 		return Generation{}, err
 	}
 	return selected, nil
+}
+
+// retained reports whether a generation directory exists and, separately, why
+// its bytes no longer match the seal. err is reserved for failures to inspect it.
+func retained(path string, raw []byte, manifest *pkgmanifest.Manifest, owner uint32) (bool, error, error) {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return false, nil, nil
+	} else if err != nil {
+		return false, nil, err
+	}
+	return true, verifyExisting(path, raw, manifest, owner), nil
 }
 
 func verifyExisting(path string, raw []byte, manifest *pkgmanifest.Manifest, owner uint32) error {
