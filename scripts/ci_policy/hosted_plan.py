@@ -32,7 +32,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform"}:
+                        "platform", "preflight"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
@@ -61,9 +61,17 @@ def lanes():
     if actual != expected:
         raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
                          f"missing={expected - actual}, extra={actual - expected}")
+    for name, lane in values.items():
+        if "preflight" in lane:
+            command = lane["preflight"]
+            if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
+                    or not isinstance(command, list) or len(command) != 5
+                    or command[:3] != ["test:contract", "--", "./test/contract/release"]
+                    or command[3] != "-run" or not all(isinstance(arg, str) and arg for arg in command)):
+                raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
+    extra = set(fast) - ({stage["name"] for stage in expand([FAST_GATE])} | {"lint:full"})
     if not fast or extra or max(fast.values()) > 1:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")

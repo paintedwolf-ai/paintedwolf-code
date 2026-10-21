@@ -681,14 +681,17 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-static job, `ready`: it compiles the host and runs `lint:fast`, size budgets,
-Den typecheck, and Den lint, in about ten minutes with setup, `lint:fast` being
-the longest stage at about seven. The planner requires its stages to be a subset
-of `./task check-fast`. Nothing that runs tests runs here: repository
-contracts, changed coverage, and every suite wait for the merge queue, which
-starts each group with its cheapest, most frequently failing lanes (`limits`,
-for budgets and changed coverage, and `lint`) and stops the group at its first
-failure, freeing its runners for the next.
+job, `ready`: it first runs the focused hosted workflow and capacity contracts,
+then compiles the host and runs `lint:full`, size budgets, Den typecheck, and Den
+lint. The lane has a thirty-minute execution budget. Full Go lint catches the
+same analyzer findings before queue admission and on the exact landing commit.
+The admission contracts run through `test:contract` with an explicit package and
+test selection; failure or interruption stops the lane before its remaining work.
+The planner restricts this selection to the release contract package.
+
+The merge queue runs changed coverage and the complete affected integration
+selection. Its `limits` and `lint` lanes start first, and the group stops at its
+first failure. The PR's pass does not replace verification of the landing commit.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty

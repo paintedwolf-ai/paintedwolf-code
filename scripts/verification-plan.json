@@ -754,17 +754,24 @@
     "ready": {
       "targets": [
         "build",
-        "lint:fast",
+        "lint:full",
         "budgets",
         "den:typecheck",
         "den:lint"
       ],
-      "minutes": 15,
+      "minutes": 30,
       "profiles": [
         "fast"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "preflight": [
+        "test:contract",
+        "--",
+        "./test/contract/release",
+        "-run",
+        "^Test(Hosted.*|TriggeredWorkflowsHoldBoundedRunners|PullRequestCIHoldsOneRunner|BoundedClassesFitTheHostedRunners|VerificationMatrixTakesItsCatalogCap)$"
+      ]
     },
     "limits": {
       "targets": [
