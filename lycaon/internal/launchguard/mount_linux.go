@@ -18,9 +18,6 @@ import (
 // reopens the desktop image through that logical name, so its executable and
 // mappings resolve there, while proving the inode is the one selected.
 func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.File, error) {
-	if err := freshMountNamespace(); err != nil {
-		return nil, err
-	}
 	info, err := generation.Stat()
 	if err != nil {
 		return nil, err
@@ -36,9 +33,6 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 		return nil, err
 	}
 	_ = target.Close()
-	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return nil, fmt.Errorf("make mounts private: %w", err)
-	}
 	// A bind source must belong to this mount namespace, and the retained
 	// descriptor belongs to the bootstrap's. Reopen the generation here and
 	// bind it only if it is the very directory the bootstrap selected.
@@ -49,6 +43,14 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 	defer func() { _ = local.Close() }()
 	if err := sameObject(generation, local); err != nil {
 		return nil, err
+	}
+	if err := freshMountNamespace(); err != nil {
+		return nil, err
+	}
+	// Mounts the host makes later still reach the launch, as removable and
+	// network volumes must; the launch's own mounts never reach the host.
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_SLAVE, ""); err != nil {
+		return nil, fmt.Errorf("make mounts receive-only: %w", err)
 	}
 	source := "/proc/self/fd/" + strconv.Itoa(int(local.Fd()))
 	if err := unix.Mount(source, policy.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -59,6 +60,7 @@ type protectedFacts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
 }
@@ -88,6 +90,9 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	testutil.FailErr(t, "desktop report", err)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
+	stopProbe := make(chan struct{})
+	probeErr := make(chan error, 1)
+	go probeEarlyBrokerAgent(stopProbe, probeErr)
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
 	t.Cleanup(func() {
 		_ = stdin.Close()
@@ -108,7 +113,12 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	select {
 	case line = <-lines:
 	case <-time.After(30 * time.Second):
+		close(stopProbe)
 		t.Fatalf("protected desktop never reported; bootstrap stderr: %s", stderr.String())
+	}
+	close(stopProbe)
+	if err := <-probeErr; err != nil {
+		t.Fatal(err)
 	}
 	var facts protectedFacts
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
@@ -128,9 +138,17 @@ func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
 func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	f := installLaunchFixture(t)
 	home := t.TempDir()
-	env := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LD_PRELOAD=/tmp/planted.so", "GTK_MODULES=planted", "LYCAON_SANDBOX=off", "SSL_CERT_FILE=/tmp/planted.pem"}
+	coverDir := t.TempDir()
+	env := []string{
+		"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8",
+		"LD_PRELOAD=/tmp/planted.so", "GTK_MODULES=planted", "LYCAON_SANDBOX=off", "SSL_CERT_FILE=/tmp/planted.pem",
+		"GOCOVERDIR=" + coverDir, "GODEBUG=inittrace=1", "GOTRACEBACK=crash",
+	}
 	launch := startLaunch(t, f, env, "--fixture-argument", "--broker-probe")
 	facts := launch.facts
+	if facts.DetachedPID > 0 {
+		t.Cleanup(func() { _ = syscall.Kill(facts.DetachedPID, syscall.SIGKILL) })
+	}
 	uid, gid := os.Getuid(), os.Getgid()
 	if facts.ReadError != "" {
 		t.Fatalf("desktop could not read its own namespace facts: %s", facts.ReadError)
@@ -172,6 +190,9 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
 	assertCallerCredentials(t, launch.cmd.Process.Pid)
+	agentPID := findBrokerAgentPID(t)
+	assertCallerCredentials(t, agentPID)
+	assertBrokerAgentSealed(t, agentPID)
 	// The broker starts programs outside the protected namespace, with the
 	// caller's ordinary authority, and ends one whose caller abandons it.
 	own, err := os.Readlink("/proc/self/ns/user")
@@ -181,6 +202,9 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	}
 	if !facts.AbandonedEnded {
 		t.Fatal("an abandoned brokered program kept running")
+	}
+	if facts.DetachedPID <= 0 {
+		t.Fatal("detached brokered program did not report a background PID")
 	}
 	// Only the generation (and the policy's system executables, none here)
 	// can execute inside the namespace; the broker ran sh outside it.
@@ -206,6 +230,111 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	testutil.FailErr(t, "supervisor exit", launch.cmd.Wait())
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
+	if _, err := os.Stat(fmt.Sprintf("/proc/%d", facts.DetachedPID)); err != nil {
+		t.Fatalf("detached background process %d did not survive desktop exit: %v", facts.DetachedPID, err)
+	}
+	entries, err := os.ReadDir(coverDir)
+	testutil.FailErr(t, "read coverdir", err)
+	if len(entries) != 0 {
+		t.Fatalf("privileged bootstrap wrote to caller GOCOVERDIR: %v", entries)
+	}
+}
+
+// probeEarlyBrokerAgent races /proc from before bootstrap start to verify a
+// same-UID caller can never open /proc/<agent>/fd, /proc/<agent>/mem, or
+// ptrace-attach the broker agent from the first observable window.
+func probeEarlyBrokerAgent(stop <-chan struct{}, result chan<- error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	for {
+		select {
+		case <-stop:
+			result <- nil
+			return
+		default:
+		}
+		for _, pid := range brokerAgentPIDs() {
+			if err := tryAttackBrokerAgent(pid); err != nil {
+				result <- err
+				return
+			}
+		}
+	}
+}
+
+func brokerAgentPIDs() []int {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+	var pids []int
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid <= 1 {
+			continue
+		}
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+		if err != nil || !strings.Contains(string(raw), BrokerAgentArgument) {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids
+}
+
+func tryAttackBrokerAgent(pid int) error {
+	for _, target := range []string{
+		fmt.Sprintf("/proc/%d/mem", pid),
+		fmt.Sprintf("/proc/%d/fd/4", pid),
+	} {
+		if file, err := os.Open(target); err == nil {
+			_ = file.Close()
+			return fmt.Errorf("same-UID process opened broker agent %s", target)
+		}
+	}
+	if err := syscall.PtraceAttach(pid); err == nil {
+		var status syscall.WaitStatus
+		_, _ = syscall.Wait4(pid, &status, 0, nil)
+		_ = syscall.PtraceDetach(pid)
+		return fmt.Errorf("same-UID process ptrace-attached broker agent %d", pid)
+	}
+	return nil
+}
+
+func findBrokerAgentPID(t *testing.T) int {
+	t.Helper()
+	pids := brokerAgentPIDs()
+	if len(pids) == 0 {
+		t.Fatal("broker agent process not found in /proc")
+	}
+	return pids[len(pids)-1]
+}
+
+func assertBrokerAgentSealed(t *testing.T, pid int) {
+	t.Helper()
+	for _, target := range []string{
+		fmt.Sprintf("/proc/%d/mem", pid),
+		fmt.Sprintf("/proc/%d/fd/4", pid),
+	} {
+		file, err := os.Open(target)
+		if err == nil {
+			_ = file.Close()
+			t.Fatalf("same-UID process opened broker agent %s", target)
+		}
+		if !errors.Is(err, unix.EACCES) {
+			t.Fatalf("open %s: %v, want EACCES", target, err)
+		}
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := syscall.PtraceAttach(pid); err == nil {
+		var status syscall.WaitStatus
+		_, _ = syscall.Wait4(pid, &status, 0, nil)
+		_ = syscall.PtraceDetach(pid)
+		t.Fatalf("same-UID process ptrace-attached broker agent %d", pid)
+	} else if !errors.Is(err, unix.EPERM) {
+		t.Fatalf("ptrace broker agent %d: %v, want EPERM", pid, err)
+	}
 }
 
 // assertCallerCredentials requires the running supervisor to hold only the
