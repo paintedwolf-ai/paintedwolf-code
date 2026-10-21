@@ -99,9 +99,12 @@ def published_feed(mirror, base, channel):
             raise ValueError("published stable feed signature is missing")
         manifest = json.loads(raw)
         validate_binding(registry, manifest, row["generation"])
-        release = {"draft": False, "prerelease": channel == "preview", "tag_name": "v" + manifest["version"],
-                   "published_at": manifest["pub_date"], "feed_manifest_sha256": hashlib.sha256(raw).hexdigest()}
-        version = published_version(release, channel)
+        # The preview feed also carries stable promotions; the stable feed carries only stable releases.
+        promoted = channel == "preview" and parse(manifest["version"]).channel == "stable"
+        release = {"draft": False, "prerelease": channel == "preview" and not promoted,
+                   "tag_name": "v" + manifest["version"], "published_at": manifest["pub_date"],
+                   "feed_manifest_sha256": hashlib.sha256(raw).hexdigest()}
+        version = published_version(release, "stable" if promoted else channel)
         with tempfile.TemporaryDirectory(prefix="release-stable-baseline-") as temporary:
             pointer = Path(temporary) / f"latest-{channel}-key-{row['generation']}.json"
             pointer.write_bytes(raw)
@@ -167,7 +170,11 @@ def check_progression(candidate, releases, channel_release, source_ref, publish=
             rerun = (not publish) or same_release_commit(source_ref, "v" + candidate)
         return rerun
     if channel_release is not None:
-        channel_version = published_version(channel_release, selected.channel)
+        # A preview candidate's channel may last have published a stable promotion.
+        released = "preview" if channel_release.get("prerelease") is True else "stable"
+        if selected.channel == "stable" and released != "stable":
+            raise ValueError("release must be post-v1 and in the stable channel")
+        channel_version = published_version(channel_release, released)
         ordering = compare(selected, channel_version)
         if ordering < 0 or (ordering == 0 and not allow_equal_version()):
             raise ValueError("release must be newer than the last publication in its channel")
