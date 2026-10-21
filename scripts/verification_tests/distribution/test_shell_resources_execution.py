@@ -26,10 +26,15 @@ class ShellResourcesTests(unittest.TestCase):
                 '#!/bin/bash\nset -eu\n'
                 'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
                 'test -s "$root/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"\n')
+            (scripts / "test-source-snapshot.sh").write_text("#!/bin/bash\nexit 0\n")
+            (scripts / "artifact-paths.sh").write_text(
+                'export PW_COMPILER_CACHE_DIR="' + str(root / "compiler") + '"\n')
+            (scripts / "decide-features.sh").write_text("#!/bin/bash\necho cpu\n")
+            (scripts / "build-decide.sh").write_text("#!/bin/bash\nexit 0\n")
             binary = root / "bin"
             binary.mkdir()
             cargo = binary / "cargo"
-            cargo.write_text('#!/bin/bash\nset -eu\ntest -s THIRD-PARTY-NOTICES.md\n')
+            cargo.write_text('#!/bin/bash\nset -eu\ncase "$*" in *--manifest-path*) exit 0 ;; esac\ntest -s THIRD-PARTY-NOTICES.md\n')
             cargo.chmod(0o755)
             env = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ['PATH']}")
 

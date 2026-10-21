@@ -626,6 +626,14 @@ editing modular OpenAPI sources, run `./task openapi:bundle` and
 
 Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease-holder PID is gone. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
 
+
+Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
+directory under its artifact root. `PW_COMPILER_CACHE_DIR` preserves that path
+across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. Cargo's
+own locks serialize compilation, and the decision build holds a publication lock
+until its executable is staged. The decision cache warmer compiles both test and
+release profiles in the verification source slot.
+
 Ordinary `./task` requests automatically share compatible verification on macOS
 and Linux: the oldest request admits up to 32 consecutive requests from the same
 checkout with the same declared environment, captures one source snapshot at

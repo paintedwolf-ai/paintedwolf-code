@@ -27,6 +27,11 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 export CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/decide"
+# Hold publication until the compiled binary has been staged.
+source "${ROOT}/scripts/digest-run-lock.sh"
+mkdir -p "${PW_COMPILER_CACHE_DIR}"
+digest_acquire_lock "${PW_COMPILER_CACHE_DIR}/decide-build.lockdir" 900
+trap digest_release_lock EXIT
 ARGS=(--locked --release --manifest-path "${CRATE}/Cargo.toml" --bin bialy)
 if [[ -n "${FEATURES}" ]]; then
   ARGS+=(--features "${FEATURES}")
