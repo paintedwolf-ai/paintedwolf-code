@@ -13,7 +13,7 @@ func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *con
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
 	launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, lease, commandEgressIdentity(tctx, subject, commandLine))
 	if tctx.Files.PackageExecution != nil {
-		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
+		launch = launch.WithExtraEnv(packageExecutionCacheEnv()...)
 	}
 	return launch
 }

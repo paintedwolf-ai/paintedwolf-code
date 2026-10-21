@@ -69,7 +69,7 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 		cmd.Dir = opts.Dir
 	}
 	provided := opts.Env
-	if opts.Launch.Environment == EnvironmentReduced {
+	if opts.Launch.reduced() {
 		provided = ReducedEnviron()
 	}
 	inline := opts.InlineEnv

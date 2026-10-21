@@ -46,7 +46,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
