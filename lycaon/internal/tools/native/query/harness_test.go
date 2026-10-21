@@ -111,12 +111,11 @@ func (h *harness) exec(stdin string, words ...string) run {
 	for i, word := range words {
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
 	}
-	operation, ok := h.owners.Operation(words[0])
-	if !ok {
+	if _, ok := h.owners.Operation(words[0]); !ok {
 		h.t.Fatalf("%s has no operation", words[0])
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	request := commandprogram.OperationRequest{Invocation: inv, OperationID: operation, Statement: statement, Argv: argv}
+	request := commandprogram.OperationRequest{Invocation: inv, OperationID: words[0], Statement: statement, Argv: argv}
 	var stdout, stderr bytes.Buffer
 	result, err := h.owners.Invoke(h.t.Context(), h.tc, h.program, request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
 	if invalid := result.Validate(); invalid != nil {

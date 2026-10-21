@@ -130,8 +130,8 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if !ok || program.Paths == nil || program.Barrier == nil {
 		return Prepared{}, fmt.Errorf("%s is not a query command", command)
 	}
-	if request.OperationID != o.ops[command] {
-		return Prepared{}, fmt.Errorf("%s belongs to operation %s, not %s", command, o.ops[command], request.OperationID)
+	if request.OperationID != command {
+		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, command)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {

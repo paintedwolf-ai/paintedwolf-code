@@ -69,8 +69,14 @@ func runXargs(inv *invocation) error {
 	if inv.ports.Nested == nil {
 		return unsupported(inv, command[0], "a program runtime that dispatches xargs batches")
 	}
+	// Each batch runs in the invoking frame's exported environment.
+	environment := make(map[string]string, len(inv.request.Environment))
+	for _, entry := range inv.request.Environment {
+		name, value, _ := strings.Cut(entry, "=")
+		environment[name] = value
+	}
 	for _, argv := range batches {
-		result, err := inv.ports.Nested.RunNested(inv.ctx, inv.request, argv, inv.request.Environment, commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.streams.Error})
+		result, err := inv.ports.Nested.RunNested(inv.ctx, inv.request, argv, environment, commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.streams.Error})
 		if err != nil || result.Terminal != toolcontract.ProducerCompleted || result.StopCode != "" {
 			return &batchStop{result: result, cause: err}
 		}
