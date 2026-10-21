@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -141,5 +142,98 @@ func TestRootsChangedKickData_BoundsRows(t *testing.T) {
 	}
 	if got := data["after_omitted_count"].(int); got != 1 {
 		t.Fatalf("after_omitted_count = %d", got)
+	}
+}
+
+func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
+
+	for _, tc := range []struct {
+		name     string
+		posture  gate.Posture
+		wantLine string
+		omitLine string
+	}{
+		{
+			name:     "light",
+			posture:  gate.PostureLight,
+			wantLine: "Other paths ask the person first, except temporary and cache folders.",
+			omitLine: "Other paths, including temporary folders, ask the person first.",
+		},
+		{
+			name:     "balanced",
+			posture:  gate.PostureBalanced,
+			wantLine: "Other paths ask the person first, except temporary and cache folders.",
+			omitLine: "Other paths, including temporary folders, ask the person first.",
+		},
+		{
+			name:     "strict",
+			posture:  gate.PostureStrict,
+			wantLine: "Other paths, including temporary folders, ask the person first.",
+			omitLine: "Other paths ask the person first, except temporary and cache folders.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+				SessionScratchDir: "/scratch/s1",
+				Posture:           string(tc.posture),
+			})
+			vars["tool_profile"] = "implement"
+			prompts.MergeWorkspaceRootsVars(vars, roots, "/workspace/app")
+			out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+			testutil.FailErr(t, "render command-surface", err)
+			const coverage = "These folders are the project; search indexing, history and undo cover only them."
+			if !strings.Contains(out, coverage) {
+				t.Fatalf("missing project coverage sentence:\n%s", out)
+			}
+			if !strings.Contains(out, tc.wantLine) {
+				t.Fatalf("missing outside-folder sentence %q:\n%s", tc.wantLine, out)
+			}
+			if strings.Contains(out, tc.omitLine) {
+				t.Fatalf("unexpected outside-folder sentence %q:\n%s", tc.omitLine, out)
+			}
+			for _, term := range []string{"posture", "gate", "lease", "floor"} {
+				if strings.Contains(strings.ToLower(out), term) {
+					t.Fatalf("command-surface leaked internal term %q:\n%s", term, out)
+				}
+			}
+		})
+	}
+
+	t.Run("no folders attached", func(t *testing.T) {
+		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+			Posture: string(gate.PostureStrict),
+		})
+		vars["tool_profile"] = "implement"
+		prompts.MergeWorkspaceRootsVars(vars, nil, "")
+		out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+		testutil.FailErr(t, "render command-surface without roots", err)
+		if strings.Contains(out, "These folders are the project") || strings.Contains(out, "Other paths") {
+			t.Fatalf("no-roots command-surface rendered folder coverage copy:\n%s", out)
+		}
+	})
+}
+
+func TestPostureChangedNoticeCopy(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	strictOut, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(gate.PostureStrict))
+	testutil.FailErr(t, "render strict posture notice", err)
+	if strings.TrimSpace(strictOut) != "The person now wants to approve writes outside the project, including temporary folders." {
+		t.Fatalf("strict notice = %q", strictOut)
+	}
+	for _, p := range []gate.Posture{gate.PostureBalanced, gate.PostureLight} {
+		out, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(p))
+		testutil.FailErr(t, "render non-strict posture notice", err)
+		if strings.TrimSpace(out) != "The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first." {
+			t.Fatalf("%s notice = %q", p, out)
+		}
+		for _, term := range []string{"posture", "gate", "lease", "grant", "floor"} {
+			if strings.Contains(strings.ToLower(out), term) || strings.Contains(strings.ToLower(strictOut), term) {
+				t.Fatalf("posture notice leaked internal term %q", term)
+			}
+		}
 	}
 }

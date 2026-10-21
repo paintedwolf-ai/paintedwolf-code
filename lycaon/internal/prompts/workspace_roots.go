@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
@@ -86,4 +87,17 @@ func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
 		})
 	}
 	return out
+}
+
+// PostureChangedKickNeeded reports whether a posture change alters whether
+// writes outside the project (including temporary and cache folders) ask first.
+func PostureChangedKickNeeded(before, after gate.Posture) bool {
+	return before.ReviewsConfinedWrites() != after.ReviewsConfinedWrites()
+}
+
+// PostureChangedKickData builds the posture-change notice context.
+func PostureChangedKickData(after gate.Posture) map[string]any {
+	return map[string]any{
+		"reviews_confined_writes": after.ReviewsConfinedWrites(),
+	}
 }

@@ -90,7 +90,7 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	if !reg.WhenMatches(binding, gc) {
 		return
 	}
-	if id == PhaseEntered || id == ProjectRootsChanged {
+	if id == PhaseEntered || id == ProjectRootsChanged || id == ProjectPostureChanged {
 		b.kicks.QueueDeferredLatest(sessionID, id.String(), binding.Render, partial.KickOptions()...)
 		return
 	}

@@ -61,6 +61,7 @@ type AgentPromptSurface struct {
 	HostResourcesOmitted int // rows the ambient budget dropped
 	Fingerprint          string
 	SessionScratchDir    string
+	Posture              string
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -94,6 +95,7 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 		"session_scratch_dir":          surface.SessionScratchDir,
+		"posture":                      surface.Posture,
 	}
 }
 

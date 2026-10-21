@@ -4,7 +4,8 @@
 
 {% if workspace_roots %}Programs start in {{ project_dir }}. `pwd`, `$PWD` and `$OLDPWD` are absolute; `cd` moves between folders by absolute path or `@label`, and relative paths resolve from the current directory for every command, redirect and external program. Unquoted `@label/...` and `@scratch/...` expand to the absolute paths below; quote one to pass it literally. Neither form grants access.
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
-{% endfor %}{% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch, also `$TMPDIR` and where `mktemp` creates. Literal `/tmp` is the system's own.
+{% endfor %}These folders are the project; search indexing, history and undo cover only them. {% if posture == "strict" %}Other paths, including temporary folders, ask the person first.{% else %}Other paths ask the person first, except temporary and cache folders.{% endif %}
+{% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch, also `$TMPDIR` and where `mktemp` creates. Literal `/tmp` is the system's own.
 {% endif %}
 
 Foreground waits ~30s, then returns a live handle if still running; yielding never terminates it. The host ledger preserves the job and emits its terminal envelope. First read: `command_output(handle="<handle>", cursor=0)`. Later reads must pass the exact returned `next_cursor`; never reuse a cursor. If no output is needed now, call `wait(until_complete=true, conditions=[{"kind":"process_done","handles":["<handle>"]}], reason="waiting for command completion")`. Intentional termination uses `command_stop(handle="<handle>")`. Exact live reruns are rejected; set `allow_concurrent:true` only for independent work. `timeout_ms` is the execution deadline. For a server/watch/tail, set `background:true`; stop it with **`command_stop`**, never `kill`/`pkill`/`lsof` via `command`.

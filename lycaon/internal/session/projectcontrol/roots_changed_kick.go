@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 )
@@ -61,5 +62,43 @@ func (m *Service) EnqueueRootsChangedKick(ctx context.Context, projectID string,
 		}
 		data := prompts.RootsChangedKickData(sessionChange, after, sess.WorkspaceRootID)
 		m.anchors.Emit(ctx, sess.ID, anchor.ProjectRootsChanged, anchor.Envelope{Vars: data})
+	}
+}
+
+// EnqueuePostureChangedKick queues one posture-change notice per open session
+// of the project for its next turn boundary when the change alters whether
+// writes outside the project ask first. Repeated changes before that turn runs
+// coalesce against the session's pre-change baseline, and reverting to the
+// same outside-folder write behavior drops the pending notice.
+func (m *Service) EnqueuePostureChangedKick(ctx context.Context, projectID string, before, after gate.Posture) {
+	if m == nil || m.store == nil || m.anchors == nil || before == after {
+		return
+	}
+	sessions, err := m.store.List(ctx)
+	if err != nil {
+		return
+	}
+	probe, hasProbe := m.anchors.(latestAnchorProbe)
+	for _, sess := range sessions {
+		if sess == nil || (projectID != "" && sess.ProjectID != projectID) {
+			continue
+		}
+		baseline := before
+		if hasProbe && probe.HasLatest(sess.ID, anchor.ProjectPostureChanged) {
+			if saved, ok := m.pendingPostureBaselines.Load(sess.ID); ok {
+				baseline = saved.(gate.Posture)
+			}
+		} else if prompts.PostureChangedKickNeeded(before, after) {
+			m.pendingPostureBaselines.Store(sess.ID, before)
+		}
+		if !prompts.PostureChangedKickNeeded(baseline, after) {
+			m.pendingPostureBaselines.Delete(sess.ID)
+			if drop, ok := m.anchors.(droppableAnchors); ok {
+				drop.Drop(sess.ID, anchor.ProjectPostureChanged)
+			}
+			continue
+		}
+		data := prompts.PostureChangedKickData(after)
+		m.anchors.Emit(ctx, sess.ID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
 	}
 }

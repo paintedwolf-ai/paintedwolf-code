@@ -9,8 +9,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -108,8 +111,34 @@ func (m *Service) PromptSurface(
 	})
 	out.HostResources = hostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
+	out.Posture = string(m.approvalPosture(ctx, sess))
 	out.Fingerprint = promptSurfaceFingerprint(out)
 	return out
+}
+
+func (m *Service) approvalPosture(ctx context.Context, sess *api.Session) gate.Posture {
+	if m == nil || m.approvals == nil || sess == nil {
+		return gate.DefaultPosture
+	}
+	var projectDir string
+	if m.workspace != nil {
+		projectDir, _ = m.workspace.ActivePath(ctx, sess)
+	}
+	if projectDir == "" {
+		projectDir = strings.TrimSpace(sess.WorkspacePath)
+	}
+	scope := llm.SettingsScopeGlobal
+	if strings.TrimSpace(sess.ProjectID) != "" || projectDir != "" {
+		scope = llm.SettingsScopeProject
+	}
+	cfg := m.approvals.Get(scope, settings.ProjectRef{
+		ID:  strings.TrimSpace(sess.ProjectID),
+		Dir: projectDir,
+	})
+	if cfg.Posture != "" {
+		return cfg.Posture
+	}
+	return gate.DefaultPosture
 }
 
 func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {

@@ -34,6 +34,7 @@ type Service struct {
 	skillsGate         *settings.ProjectSurfaceGate
 	skillsCache        skills.ProjectCache
 	hostResources      *hostresources.Service
+	approvals          *settings.ApprovalStore
 	coordinatorProfile func(context.Context, string) string
 }
 
@@ -42,6 +43,9 @@ func New(store SessionReader, catalog *catalog.Service, workspace *sessionscope.
 }
 func (m *Service) SetProjects(projects Projects)                { m.projects = projects }
 func (m *Service) SetAgentRegistry(agents AgentProfileResolver) { m.Agents = agents }
+func (m *Service) SetApprovals(approvals *settings.ApprovalStore) {
+	m.approvals = approvals
+}
 func (m *Service) SetCoordinatorProfile(resolve func(context.Context, string) string) {
 	m.coordinatorProfile = resolve
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -126,5 +127,71 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(detachedTransient.Before), project.RootRefsFrom(detachedTransient.After))
 	if _, ok := kicks.PeekPendingKickID("sess-1"); ok {
 		t.Fatal("net-empty change left a pending kick")
+	}
+}
+
+func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
+	ctx := t.Context()
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	kicks := &kick.KickEngine{}
+	kicks.SetPromptEngine(engine)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	bus := anchor.NewBus(kicks)
+	bus.SetRegistry(anchorReg)
+
+	sessions := &detachSessions{sessions: []*api.Session{
+		{ID: "sess-1", ProjectID: "proj-1", Status: api.SessionStatusIdle},
+		{ID: "other", ProjectID: "proj-2", Status: api.SessionStatusIdle},
+	}}
+	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc.SetAnchors(bus)
+
+	// Moving between light and balanced does not alter outside-folder write review.
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureBalanced, gate.PostureLight)
+	if _, ok := kicks.PeekPendingKickID("sess-1"); ok {
+		t.Fatal("balanced -> light queued a posture kick")
+	}
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureLight, gate.PostureBalanced)
+	if _, ok := kicks.PeekPendingKickID("sess-1"); ok {
+		t.Fatal("light -> balanced queued a posture kick")
+	}
+
+	// Crossing into strict queues one notice for the project's sessions only.
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureBalanced, gate.PostureStrict)
+	if _, ok := kicks.PeekPendingKickID("other"); ok {
+		t.Fatal("foreign project session received posture kick")
+	}
+	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-posture-changed" {
+		t.Fatalf("pending kick = %q want coordinator-posture-changed", got)
+	}
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render strict posture nudge", err)
+	if !ok || strings.TrimSpace(text) != "The person now wants to approve writes outside the project, including temporary folders." {
+		t.Fatalf("strict nudge = %q (ok=%v)", text, ok)
+	}
+	kicks.AckPendingNudge("sess-1", lease)
+
+	// Repeated changes before the next turn coalesce; strict -> balanced -> light delivers one non-strict notice.
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureStrict, gate.PostureBalanced)
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureBalanced, gate.PostureLight)
+	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-posture-changed" {
+		t.Fatalf("coalesced pending kick = %q want coordinator-posture-changed", got)
+	}
+	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render non-strict posture nudge", err)
+	if !ok || strings.TrimSpace(text2) != "The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first." {
+		t.Fatalf("non-strict nudge = %q (ok=%v)", text2, ok)
+	}
+	kicks.AckPendingNudge("sess-1", lease2)
+	if extra := kicks.TakePendingKickID("sess-1"); extra != "" {
+		t.Fatalf("duplicate posture kick queued: %q", extra)
+	}
+
+	// Reverting balanced -> strict -> balanced before the next turn drops the pending notice.
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureBalanced, gate.PostureStrict)
+	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureStrict, gate.PostureBalanced)
+	if _, ok := kicks.PeekPendingKickID("sess-1"); ok {
+		t.Fatal("reverted posture change left a pending kick")
 	}
 }

@@ -27,23 +27,24 @@ func TestSessionPromptCacheStableHit(t *testing.T) {
 }
 
 func TestStablePromptKeyFollowsEveryRenderedRoot(t *testing.T) {
-	vars := func(label, path, scratch string) map[string]any {
-		return map[string]any{"root_count": 2, "session_scratch_dir": scratch, "workspace_roots": []map[string]any{
+	vars := func(label, path, scratch, posture string) map[string]any {
+		return map[string]any{"root_count": 2, "session_scratch_dir": scratch, "posture": posture, "workspace_roots": []map[string]any{
 			{"label": "api", "path": "/abs/api", "is_primary": true},
 			{"label": label, "path": path, "is_primary": false},
 		}}
 	}
-	base := rootsFingerprint(vars("web", "/abs/web", "/scratch/s1"))
+	base := rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", "balanced"))
 	for name, changed := range map[string]map[string]any{
-		"renamed": vars("site", "/abs/web", "/scratch/s1"),
-		"moved":   vars("web", "/abs/new-web", "/scratch/s1"),
-		"scratch": vars("web", "/abs/web", "/scratch/s2"),
+		"renamed": vars("site", "/abs/web", "/scratch/s1", "balanced"),
+		"moved":   vars("web", "/abs/new-web", "/scratch/s1", "balanced"),
+		"scratch": vars("web", "/abs/web", "/scratch/s2", "balanced"),
+		"posture": vars("web", "/abs/web", "/scratch/s1", "strict"),
 	} {
 		if rootsFingerprint(changed) == base {
 			t.Fatalf("%s root set kept the cached stable prompt", name)
 		}
 	}
-	if rootsFingerprint(vars("web", "/abs/web", "/scratch/s1")) != base {
+	if rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", "balanced")) != base {
 		t.Fatal("identical root set changed the stable prompt key")
 	}
 }
