@@ -262,6 +262,22 @@ Unix fixtures and unsupported results do not qualify those capabilities. The
 same native macOS/Linux runtime and installed-platform qualification obligations
 remain; individual adapter tests do not qualify the complete command evaluator.
 
+Program operations pin execution revisions instead of conversational read bases.
+`native.ExecutionRevisions` captures each native input from the accepted shared
+document when one exists, otherwise from published disk, and captures each
+destination's revision or absence before the transform is prepared. A
+`WriteExecutionPinned` write rechecks the destination exactly in the document
+owner (or the write door's base check), rechecks its sources after review, and
+refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
+rebases, retries or reruns. External processes read published disk: their
+inputs are declared at launch as disk identities, not as observed reads. A
+`PublicationBarrier` refuses a dependent launch with
+`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
+state stays held and no other draft is saved. Each operation pins its own
+inputs, so a later statement captures newer revisions and sees earlier
+published writes; there is no whole-program snapshot. Program receipts retain
+the pins per execution.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
