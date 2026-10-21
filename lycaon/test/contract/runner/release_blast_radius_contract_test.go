@@ -240,7 +240,7 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
 	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
-	for _, task := range []string{"release:halt:", "release:recovery:prepare:"} {
+	for _, task := range []string{"release:halt:", "release:recovery:prepare:", "release:withdraw:native-repositories:"} {
 		if !strings.Contains(taskfile, task) {
 			t.Fatalf("Taskfile.yml missing %s", task)
 		}
@@ -264,6 +264,10 @@ func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 		"scripts/release_withdrawal.py prepare",
 		"scripts/release_withdrawal.py apply",
 		"steps.distribution_plan.outcome == 'success'",
+		"release:withdraw:native-repositories -- prepare",
+		"release:withdraw:native-repositories -- apply",
+		"steps.native_plan.outcome == 'success'",
+		"LINUX_REPOSITORY_ORIGIN: ${{ vars.LINUX_REPOSITORY_ORIGIN }}",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("release halt workflow missing %q", needle)

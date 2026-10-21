@@ -972,6 +972,20 @@ It restores only that channel's pointer and matching cask; `dry_run` defaults to
 true. The local primitive is `./task release:halt -- --channel <stable|preview>
 --generation <number> --bad <bad> --last-good <last-good>`.
 
+The same workflow withdraws the halted version from every enabled apt, dnf and
+pacman channel through `./task release:withdraw:native-repositories -- prepare|apply`.
+Preparation reads each channel's active state, takes the retained predecessor
+generation, requires it to be the named last-good version with the same signing
+key generation, downloads its sealed objects and re-verifies their signatures
+against the committed signing catalog. It changes nothing, so `dry_run` exercises
+it in full. Application republishes that predecessor through the repository's own
+`withdraw` operation, which tombstones the halted generation and version, and
+refuses any channel that changed after preparation. A rerun converges on the
+completed state. Channels that never published, or offer another version, are left
+untouched. Clients keep the last index they fetched, so a channel that offers the
+halted version with no retained predecessor cannot be withdrawn by deleting its
+index: the halt refuses it and names the missing last-good release.
+
 A halt prevents new installs and stops older clients discovering the bad version; it does not downgrade clients that already installed it. Build recovery from the last-good source plus any compatibility/security repair, bump to a version higher than the bad release, run `./task release:recovery:prepare -- --withdraws <bad> --restores-from <last-good>`, review and commit `.release/recovery.json`, and use the normal signed release workflow. This fix-forward preserves monotonic SemVer, current data compatibility, notarization, and the updater's trust model. Remove the recovery record for the following ordinary release.
 
 **Signing custody.** Two minisign key pairs per generation, with different roles and different homes:

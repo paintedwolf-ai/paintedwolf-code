@@ -1739,6 +1739,13 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-halt.sh {{.CLI_ARGS}}
 
+  release:withdraw:native-repositories:
+    desc: 'Protected release halt: prepare or apply withdrawal of a halted version from apt, dnf and pacman channels'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.publication.delivery.repository_withdrawal {{.CLI_ARGS}}
+
   release:recovery:prepare:
     desc: 'Record provenance for a higher-version recovery release. Pass --withdraws BAD --restores-from LAST_GOOD after --'
     preconditions:
