@@ -59,6 +59,8 @@ type protectedFacts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	ExecOutside     string                      `json:"exec_outside"`
+	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *engineProbe                `json:"exec,omitempty"`
 }
 
@@ -198,6 +200,11 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	}
 	if !facts.AbandonedEnded {
 		t.Fatal("an abandoned brokered program kept running")
+	}
+	// Only the generation (and the policy's system executables, none here)
+	// can execute inside the namespace; the broker ran sh outside it.
+	if facts.ExecOutside != "EACCES" || facts.ExecGeneration != "started" {
+		t.Fatalf("execution domain: outside %s, generation %s", facts.ExecOutside, facts.ExecGeneration)
 	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)

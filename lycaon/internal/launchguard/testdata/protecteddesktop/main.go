@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -45,6 +46,8 @@ type Facts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	ExecOutside     string                      `json:"exec_outside"`
+	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *ExecProbe                  `json:"exec,omitempty"`
 }
 
@@ -78,6 +81,8 @@ func main() {
 		}
 	}
 	install := filepath.Dir(filepath.Dir(facts.Executable))
+	facts.ExecOutside = startName("/bin/true")
+	facts.ExecGeneration = startName(filepath.Join(install, "bin", "pw-launch-entry"))
 	facts.InstallWrite = errnoName(os.WriteFile(filepath.Join(install, "planted"), []byte("x"), 0o644))
 	facts.Remount = errnoName(unix.Mount("", install, "", unix.MS_REMOUNT|unix.MS_BIND, ""))
 	for _, arg := range os.Args[1:] {
@@ -164,6 +169,17 @@ func brokerProbe(facts *Facts) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// startName reports whether the kernel let this process execute path.
+func startName(path string) string {
+	pid, err := syscall.ForkExec(path, []string{path}, &syscall.ProcAttr{Files: []uintptr{0, 1, 2}})
+	if err != nil {
+		return errnoName(err)
+	}
+	var status unix.WaitStatus
+	_, _ = unix.Wait4(pid, &status, 0, nil)
+	return "started"
 }
 
 func errnoName(err error) string {
