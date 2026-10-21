@@ -25,12 +25,7 @@ The public release target is **macOS 14 (Sonoma) or later on Apple Silicon**. Ea
 
 Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; Linux candidates are built per release but not linked or offered through the updater.
 
-On Linux, install the package for your distribution family and update it through the package manager; the app checks for new releases and shows the exact `apt` or `dnf` command instead of installing anything itself:
-
-```sh
-sudo apt install ./painted-wolf-code_v<version>_linux-x86_64.deb   # Ubuntu 24.04+, Debian 13+
-sudo dnf install ./painted-wolf-code_v<version>_linux-x86_64.rpm   # Fedora 41+, RHEL 10+ compatibles
-```
+Linux packages (`.deb`, `.rpm` and pacman) are release candidates: no package repository is published yet. A package installed from a candidate file receives no updates through the package manager until its signed repository is configured. The app never installs anything itself. It reports a newer release from its channel, and says whether the configured package source offers that release, rather than printing an upgrade command. Supported distribution releases are listed in the [Linux capability contract](docs/den.md#linux-capability-contract).
 
 The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.35+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
 
