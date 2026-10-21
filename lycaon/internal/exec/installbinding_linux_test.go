@@ -13,21 +13,22 @@ import (
 
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLaunchesFromAReplacedInstallationAreRefused(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
 	if err := os.Mkdir(bin, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	engine, helper := filepath.Join(bin, "pw"), filepath.Join(bin, "helper")
 	write := func(path, content string) {
 		if err := os.WriteFile(path+".new", []byte(content), 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 		if err := os.Rename(path+".new", path); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "os.Rename failed", err)
 		}
 	}
 	write(engine, "engine")
@@ -40,20 +41,14 @@ func TestLaunchesFromAReplacedInstallationAreRefused(t *testing.T) {
 	}
 	raw, err := json.Marshal(pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code",
 		Version: "1.0.2", Architecture: "x86_64", InstallRoot: root, Executables: executables})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "json.Marshal failed", err)
 	manifest := filepath.Join(root, "manifest.json")
 	write(manifest, string(raw))
 	image, err := os.Open(engine)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	defer func() { _ = image.Close() }()
 	binding, err := installbinding.Capture(root, manifest, engine, image)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "installbinding.Capture failed", err)
 	installbinding.Install(binding)
 	t.Cleanup(func() { installbinding.Install(nil) })
 

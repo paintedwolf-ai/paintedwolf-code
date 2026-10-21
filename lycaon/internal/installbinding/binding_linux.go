@@ -110,7 +110,7 @@ func Capture(root, manifestPath, executable string, image *os.File) (*Binding, e
 		return nil, fmt.Errorf("installed manifest does not list the running engine %s", executable)
 	}
 	if err := pkgmanifest.VerifyOpened(image, entry); err != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return nil, fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	return b, nil
 }
@@ -124,7 +124,7 @@ func (b *Binding) Verify(path string) error {
 	}
 	resolved, err := filepath.EvalSymlinks(clean)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -137,14 +137,14 @@ func (b *Binding) Verify(path string) error {
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	if known, ok := b.verified[resolved]; ok && known == identity(info) {
 		return nil
 	}
 	file, err := os.Open(resolved)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
@@ -152,7 +152,7 @@ func (b *Binding) Verify(path string) error {
 		return err
 	}
 	if err := pkgmanifest.VerifyOpened(file, entry); err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	b.verified[resolved] = identity(opened)
 	return nil
@@ -161,14 +161,14 @@ func (b *Binding) Verify(path string) error {
 func (b *Binding) unchangedManifest() error {
 	info, err := os.Stat(b.manifestPath)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	if identity(info) == b.manifestFile {
 		return nil
 	}
 	raw, err := os.ReadFile(b.manifestPath)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrReplaced, err)
+		return fmt.Errorf("%w (%w)", ErrReplaced, err)
 	}
 	if sha256.Sum256(raw) != sha256.Sum256(b.manifest) {
 		return ErrReplaced

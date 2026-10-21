@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type install struct {
@@ -27,7 +28,7 @@ func newInstall(t *testing.T) *install {
 	in := &install{t: t, root: root, manifest: filepath.Join(root, "manifest.json"),
 		engine: filepath.Join(root, "bin", "pw"), helper: filepath.Join(root, "bin", "pw-document-core")}
 	if err := os.Mkdir(filepath.Join(root, "bin"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	in.write(in.engine, "engine v1")
 	in.write(in.helper, "helper v1")
@@ -101,7 +102,7 @@ func TestAReplacedHelperIsRefusedWithARestartOutcome(t *testing.T) {
 	in := newInstall(t)
 	b := in.capture()
 	if err := b.Verify(in.helper); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "b.Verify failed", err)
 	}
 	in.write(in.helper, "helper v2")
 	refused(t, b.Verify(in.helper))
@@ -119,9 +120,7 @@ func TestARewrittenButIdenticalManifestStillLaunches(t *testing.T) {
 	in := newInstall(t)
 	b := in.capture()
 	raw, err := os.ReadFile(in.manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read file", err)
 	in.write(in.manifest, string(raw))
 	if err := b.Verify(in.helper); err != nil {
 		t.Fatalf("identical reinstall = %v", err)
@@ -132,10 +131,10 @@ func TestInPlaceChangesAndUnlistedProgramsAreRefused(t *testing.T) {
 	in := newInstall(t)
 	b := in.capture()
 	if err := b.Verify(in.helper); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "b.Verify failed", err)
 	}
 	if err := os.WriteFile(in.helper, []byte("helper vX"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	refused(t, b.Verify(in.helper))
 	unlisted := filepath.Join(in.root, "bin", "new-helper")
@@ -149,7 +148,7 @@ func TestLinksResolveToTheListedProgram(t *testing.T) {
 	b := in.capture()
 	link := filepath.Join(in.root, "bin", "core")
 	if err := os.Symlink("pw-document-core", link); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	if err := b.Verify(link); err != nil {
 		t.Fatalf("link to listed helper = %v", err)
@@ -158,7 +157,7 @@ func TestLinksResolveToTheListedProgram(t *testing.T) {
 	in.write(other, "unlisted")
 	escape := filepath.Join(in.root, "bin", "escape")
 	if err := os.Symlink("../other", escape); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	refused(t, b.Verify(escape))
 }
@@ -166,9 +165,7 @@ func TestLinksResolveToTheListedProgram(t *testing.T) {
 func TestCaptureRequiresTheRunningImageToBeTheListedEngine(t *testing.T) {
 	in := newInstall(t)
 	image, err := os.Open(in.engine)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	defer func() { _ = image.Close() }()
 	in.write(in.engine, "engine v2")
 	in.seal(in.engine, in.helper)
