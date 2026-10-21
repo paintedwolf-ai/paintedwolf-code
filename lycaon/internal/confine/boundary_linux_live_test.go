@@ -144,6 +144,43 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "interrupted":
+		// Interrupt notified calls while they wait for the supervisor, the
+		// way Go's preemption signal does in a busy toolchain, then confirm
+		// the supervisor still answers.
+		stop := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = unix.Kill(os.Getpid(), unix.SIGURG)
+				}
+			}
+		}()
+		refusedConnect := func() error {
+			fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(fd) }()
+			return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
+		}
+		var wg sync.WaitGroup
+		for worker := 0; worker < 8; worker++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < 2000; i++ {
+					_ = refusedConnect()
+				}
+			}()
+		}
+		wg.Wait()
+		close(stop)
+		fmt.Println("after interruptions:", errnoName(refusedConnect()))
+		return 0
 	case "iouring":
 		params := make([]byte, 120)
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
@@ -490,6 +527,16 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+// A notified call interrupted while it waits must not end supervision: later
+// calls are still decided rather than failing with ENOSYS.
+func TestLinuxSupervisorSurvivesInterruptedNotifications(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("interrupted"), self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "after interruptions: EACCES") {
+		t.Fatalf("interrupted probe: exit %d: %s", status.ExitStatus(), out)
 	}
 }
 
