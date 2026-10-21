@@ -497,7 +497,57 @@
       "issues": [
         731,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "ubuntu-24-04",
+            "os_ids": [
+              "ubuntu"
+            ],
+            "version_id": "24.04",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "ubuntu-floor-gnome-x11",
@@ -524,7 +574,57 @@
       "issues": [
         731,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "ubuntu-24-04",
+            "os_ids": [
+              "ubuntu"
+            ],
+            "version_id": "24.04",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "ubuntu-newer-kde-wayland",
@@ -552,7 +652,57 @@
         731,
         453,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "ubuntu-26-04",
+            "os_ids": [
+              "ubuntu"
+            ],
+            "version_id": "26.04",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "ubuntu-newer-kde-x11",
@@ -580,7 +730,57 @@
         731,
         453,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "ubuntu-26-04",
+            "os_ids": [
+              "ubuntu"
+            ],
+            "version_id": "26.04",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-floor-gnome",
@@ -607,7 +807,57 @@
       "issues": [
         731,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "fedora-maintained-gnome",
@@ -634,7 +884,66 @@
       "issues": [
         731,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "fedora-43",
+            "os_ids": [
+              "fedora"
+            ],
+            "version_id": "43",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          },
+          {
+            "id": "fedora-44",
+            "os_ids": [
+              "fedora"
+            ],
+            "version_id": "44",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "rhel-floor-gnome",
@@ -661,7 +970,60 @@
       "issues": [
         731,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rhel-compatible-10",
+            "os_ids": [
+              "rhel",
+              "rocky",
+              "almalinux",
+              "centos"
+            ],
+            "version_id": "10",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "arch-plasma",
@@ -687,7 +1049,57 @@
       "issues": [
         731,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "arch"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "arch-arm-plasma",
@@ -713,7 +1125,57 @@
       "issues": [
         731,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "archarm"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "artix-openrc",
@@ -740,7 +1202,57 @@
         733,
         941,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "artix"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-xfce",
@@ -768,7 +1280,57 @@
         733,
         734,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-cinnamon",
@@ -796,7 +1358,57 @@
         733,
         734,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-mate",
@@ -824,7 +1436,57 @@
         733,
         734,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-lxqt",
@@ -852,7 +1514,57 @@
         733,
         734,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-cosmic",
@@ -880,7 +1592,57 @@
         733,
         734,
         456
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "debian-13",
+            "os_ids": [
+              "debian"
+            ],
+            "version_id": "13",
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "arch-sway",
@@ -908,7 +1670,58 @@
         733,
         734,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "arch",
+              "archarm"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "disabled",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "arch-hyprland",
@@ -936,7 +1749,58 @@
         733,
         734,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "arch",
+              "archarm"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "disabled",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "arch-i3",
@@ -964,7 +1828,58 @@
         733,
         734,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "arch",
+              "archarm"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "absent"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-stable-gnome-wayland",
@@ -991,7 +1906,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-26-05",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": "26.05",
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-26.05"
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-stable-gnome-x11",
@@ -1018,7 +1983,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-26-05",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": "26.05",
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-26.05"
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-stable-plasma-wayland",
@@ -1045,7 +2060,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-26-05",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": "26.05",
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-26.05"
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-stable-plasma-x11",
@@ -1072,7 +2137,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-26-05",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": "26.05",
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-26.05"
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-unstable-gnome-wayland",
@@ -1099,7 +2214,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-unstable",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": null,
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-unstable"
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-unstable-gnome-x11",
@@ -1126,7 +2291,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-unstable",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": null,
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-unstable"
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-unstable-plasma-wayland",
@@ -1153,7 +2368,57 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-unstable",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": null,
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-unstable"
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "nixos-unstable-plasma-x11",
@@ -1180,7 +2445,66 @@
       "issues": [
         929,
         932
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "nixos-unstable",
+            "os_ids": [
+              "nixos"
+            ],
+            "version_id": null,
+            "snapshot_kind": "nixos-revision",
+            "channel": "nixos-unstable"
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     }
-  ]
+  ],
+  "qualification_reference": {
+    "date": "2026-10-20",
+    "sources": [
+      "https://ubuntu.com/about/release-cycle",
+      "https://fedoraproject.org/wiki/Fedora_Release_Life_Cycle/ko",
+      "https://www.debian.org/releases/index.en.html",
+      "https://nixos.org/blog/announcements/2026/nixos-2605/"
+    ]
+  }
 }
