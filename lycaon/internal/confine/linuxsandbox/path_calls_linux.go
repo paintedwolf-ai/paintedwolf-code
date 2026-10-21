@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -94,29 +93,22 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 	if !target.valid() {
 		return 0, unix.EINTR, true
 	}
-	result, opened, err := performer.call(call, dirs)
-	if err != nil {
+	// The performer performs the call and answers the kernel itself.
+	call.Notification, call.Caller = target.id, target.pid
+	if err := performer.forward(call, dirs); err != nil {
 		return 0, unix.EACCES, false
 	}
-	if result.Refusal != nil {
-		result.Refusal.Process = target.comm()
-		s.refusals.report(*result.Refusal)
+	return 0, errAnswered, true
+}
+
+// reportPerformed reports a refusal the performer returned for a forwarded
+// call, naming the caller as it now is.
+func (s *supervisor) reportPerformed(result pathResult) {
+	refusal := *result.Refusal
+	if result.Caller > 0 {
+		refusal.Process = (&targetProcess{pid: result.Caller}).comm()
 	}
-	if opened < 0 {
-		return 0, unix.Errno(result.Errno), true
-	}
-	defer func() { _ = unix.Close(opened) }()
-	var newFlags uint32
-	if call.Flags&unix.O_CLOEXEC != 0 {
-		newFlags = unix.O_CLOEXEC
-	}
-	add := seccompNotifAddfd{ID: target.id, Flags: unix.SECCOMP_ADDFD_FLAG_SEND, SrcFD: uint32(opened), NewFDFlags: newFlags}
-	fd, _, e := unix.Syscall(unix.SYS_IOCTL, uintptr(target.listener), uintptr(unix.SECCOMP_IOCTL_NOTIF_ADDFD), uintptr(unsafe.Pointer(&add)))
-	if e != 0 {
-		return 0, unix.EINTR, true
-	}
-	// The kernel already answered the call with the installed descriptor.
-	return int64(fd), errAnswered, true
+	s.refusals.report(refusal)
 }
 
 // errAnswered marks a call the kernel completed while installing its result.

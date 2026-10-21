@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -50,6 +51,12 @@ type pathCall struct {
 	// Absolute marks, by position, a name whose absolute path makes its
 	// directory irrelevant; no descriptor travels for it.
 	Absolute uint8 `json:"absolute,omitempty"`
+	// Notification is the pending call this one performs. The performer
+	// answers the kernel for it directly when it holds the listener, so the
+	// caller resumes without another hop through the supervisor.
+	Notification uint64 `json:"notification,omitempty"`
+	// Caller is the calling process, echoed back so a refusal names it.
+	Caller int `json:"caller,omitempty"`
 }
 
 // slots places the received directories at the positions of the call's
@@ -87,13 +94,18 @@ const (
 	callSymlink = "symlink"
 	callLink    = "link"
 	callRename  = "rename"
+	// callListener lends the performer the seccomp listener.
+	callListener = "listener"
 )
 
-// pathResult is the performer's answer; an opened descriptor travels with it.
+// pathResult is the performer's answer; an opened descriptor travels with it
+// unless the performer already answered the kernel.
 type pathResult struct {
 	Errno int `json:"errno,omitempty"`
 	// Refusal is set when a floor refused the call.
 	Refusal *Refusal `json:"refusal,omitempty"`
+	// Caller echoes the call's caller.
+	Caller int `json:"caller,omitempty"`
 }
 
 // maxPathMessage bounds one request: two paths, a symlink target, and fields.
@@ -167,6 +179,7 @@ func servePathCalls(fd int) error {
 		return fmt.Errorf("performer floors: %w", err)
 	}
 	floors := newCreationFloors(fs)
+	listener := -1
 	oob := make([]byte, unix.CmsgSpace(4*2))
 	for {
 		n, oobn, _, _, err := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
@@ -178,14 +191,27 @@ func servePathCalls(fd int) error {
 		}
 		dirs := receivedFDs(oob[:oobn])
 		var call pathCall
+		decoded := json.Unmarshal(buf[:n], &call) == nil
+		if decoded && call.Op == callListener && len(dirs) == 1 && listener < 0 {
+			listener = dirs[0]
+			continue
+		}
 		result, opened := pathResult{Errno: int(unix.EINVAL)}, -1
-		if json.Unmarshal(buf[:n], &call) == nil && call.Dirs == len(dirs) {
+		if decoded && call.Dirs == len(dirs) {
 			if slots, ok := call.slots(dirs); ok {
 				result, opened = floors.perform(call, slots)
 			}
 		}
 		for _, dir := range dirs {
 			_ = unix.Close(dir)
+		}
+		result.Caller = call.Caller
+		if call.Notification != 0 && listener >= 0 {
+			answerKernel(listener, call, result, opened)
+			if opened >= 0 {
+				_ = unix.Close(opened)
+				opened = -1
+			}
 		}
 		reply, _ := json.Marshal(result)
 		var rights []byte
@@ -200,6 +226,26 @@ func servePathCalls(fd int) error {
 			return nil
 		}
 	}
+}
+
+// answerKernel completes the pending call: an opened descriptor is installed
+// in the caller and returned in one step, anything else is the call's result.
+// A call that ended meanwhile is simply no longer pending.
+func answerKernel(listener int, call pathCall, result pathResult, opened int) {
+	if opened >= 0 {
+		var newFlags uint32
+		if call.Flags&unix.O_CLOEXEC != 0 {
+			newFlags = unix.O_CLOEXEC
+		}
+		add := seccompNotifAddfd{ID: call.Notification, Flags: unix.SECCOMP_ADDFD_FLAG_SEND, SrcFD: uint32(opened), NewFDFlags: newFlags}
+		_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(&add))
+		return
+	}
+	resp := seccompNotifResp{ID: call.Notification}
+	if result.Errno != 0 {
+		resp.Error = -int32(result.Errno)
+	}
+	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
 }
 
 func receivedFDs(oob []byte) []int {
@@ -227,6 +273,8 @@ type performerClient struct {
 	fd int
 	// broken is set once an answer went missing.
 	broken bool
+	// forwarding is set once the performer holds the listener.
+	forwarding bool
 }
 
 // newPerformerClient bounds the wait for each answer on fd.
@@ -236,15 +284,61 @@ func newPerformerClient(fd int) *performerClient {
 	return &performerClient{fd: fd}
 }
 
-func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, error) {
+// lend gives the performer the seccomp listener, after which every call it is
+// forwarded is answered to the kernel by the performer itself; its results
+// arrive at report for refusals.
+func (c *performerClient) lend(listener int, report func(pathResult)) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.broken {
-		return pathResult{}, -1, errors.New("the sandbox performer stopped answering")
+	if err := c.sendLocked(pathCall{Op: callListener}, []int{listener}); err != nil {
+		return err
 	}
+	c.forwarding = true
+	go c.readResults(report)
+	return nil
+}
+
+// forward hands the performer a pending call it answers itself.
+func (c *performerClient) forward(call pathCall, dirs []int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.forwarding || c.broken {
+		return errors.New("the sandbox performer is not answering calls")
+	}
+	return c.sendLocked(call, dirs)
+}
+
+// readResults reports each forwarded call's refusal until the performer
+// stops. A performer that stops leaves its pending calls unanswered; the
+// sandbox cannot continue without it.
+func (c *performerClient) readResults(report func(pathResult)) {
+	buf := make([]byte, 4096)
+	oob := make([]byte, unix.CmsgSpace(4))
+	for {
+		n, oobn, _, _, err := unix.Recvmsg(c.fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+		if errors.Is(err, unix.EINTR) || errors.Is(err, unix.EAGAIN) {
+			continue
+		}
+		if err != nil || n == 0 {
+			c.mu.Lock()
+			c.broken = true
+			c.mu.Unlock()
+			return
+		}
+		for _, fd := range receivedFDs(oob[:oobn]) {
+			_ = unix.Close(fd)
+		}
+		var result pathResult
+		if json.Unmarshal(buf[:n], &result) == nil && result.Refusal != nil {
+			report(result)
+		}
+	}
+}
+
+func (c *performerClient) sendLocked(call pathCall, dirs []int) error {
 	raw, err := json.Marshal(call)
 	if err != nil {
-		return pathResult{}, -1, err
+		return err
 	}
 	var rights []byte
 	if len(dirs) > 0 {
@@ -256,6 +350,19 @@ func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, erro
 	}
 	if err != nil {
 		c.broken = true
+	}
+	return err
+}
+
+// call performs one call and waits for its result, before any listener is
+// lent.
+func (c *performerClient) call(call pathCall, dirs []int) (pathResult, int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.broken || c.forwarding {
+		return pathResult{}, -1, errors.New("the sandbox performer stopped answering")
+	}
+	if err := c.sendLocked(call, dirs); err != nil {
 		return pathResult{}, -1, err
 	}
 	buf := make([]byte, 4096)

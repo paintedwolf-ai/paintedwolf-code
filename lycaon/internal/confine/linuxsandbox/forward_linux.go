@@ -230,6 +230,11 @@ func (s *supervisor) accept(h handoff, fd int) {
 		s.run(tun, func() { serveGateway(tun, s.network, s.refusals) })
 	case handoffNotify:
 		s.setupDone = true
+		// A performer that cannot take the listener answers nothing; its
+		// calls are then refused as unexamined, never left waiting.
+		if s.performer != nil {
+			_ = s.performer.lend(fd, s.reportPerformed)
+		}
 		s.run(nil, func() { s.serveNotifications(fd) })
 		// The inner helper answers socket requests until it is told the
 		// launch relays are in place, and starts the target only then.
