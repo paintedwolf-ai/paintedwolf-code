@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -70,5 +71,22 @@ func RunStage() error {
 	if err := entry.Start(); err != nil {
 		return fmt.Errorf("start protected entry: %w", err)
 	}
+	agent := &exec.Cmd{
+		Path:       "/proc/self/fd/" + strconv.Itoa(agentSelfFD),
+		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
+		Env:        []string{},
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), entryImage},
+		SysProcAttr: &syscall.SysProcAttr{
+			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
+			Setsid:     true,
+		},
+	}
+	if err := agent.Start(); err != nil {
+		return fmt.Errorf("start broker agent: %w", err)
+	}
 	return nil
 }
+
+// agentSelfFD is where the broker agent's image sits for its execution.
+const agentSelfFD = agentBrokerFD + 1

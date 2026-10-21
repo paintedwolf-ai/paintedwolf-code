@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/lycaon/lycaon/internal/launchguard"
+	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/launchverify"
 )
 
@@ -108,7 +108,7 @@ func brokerProbe(facts *Facts) {
 		facts.BrokerError = err.Error()
 		return
 	}
-	channel, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+	channel, err := launchbroker.Send(broker, launchbroker.Request{
 		Argv:        []string{"sh", "-c", "readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status"},
 		Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
 	}, null, write, write)
@@ -120,7 +120,7 @@ func brokerProbe(facts *Facts) {
 	output, _ := io.ReadAll(read)
 	facts.BrokerOutput = string(output)
 	for {
-		event, err := launchguard.ReadBrokerEvent(channel)
+		event, err := launchbroker.ReadEvent(channel)
 		if err != nil {
 			facts.BrokerError = err.Error()
 			break
@@ -135,14 +135,14 @@ func brokerProbe(facts *Facts) {
 		}
 	}
 	_ = channel.Close()
-	sleeper, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+	sleeper, err := launchbroker.Send(broker, launchbroker.Request{
 		Argv: []string{"sleep", "60"}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
 	}, null, null, null)
 	if err != nil {
 		facts.BrokerError = err.Error()
 		return
 	}
-	started, err := launchguard.ReadBrokerEvent(sleeper)
+	started, err := launchbroker.ReadEvent(sleeper)
 	_ = sleeper.Close()
 	if err != nil || started.Started <= 0 {
 		facts.BrokerError = "abandoned call never started"

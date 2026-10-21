@@ -36,8 +36,10 @@ func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.
 		return nil, err
 	}
 	_ = target.Close()
-	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return nil, fmt.Errorf("make mounts private: %w", err)
+	// Mounts the host makes later still reach the launch, as removable and
+	// network volumes must; the launch's own mounts never reach the host.
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_SLAVE, ""); err != nil {
+		return nil, fmt.Errorf("make mounts receive-only: %w", err)
 	}
 	// A bind source must belong to this mount namespace, and the retained
 	// descriptor belongs to the bootstrap's. Reopen the generation here and
