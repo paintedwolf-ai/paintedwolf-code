@@ -714,6 +714,15 @@ policy expand to the full `check` profile. A missing Git base fails planning;
 an unresolved Go graph runs the full Go recipe. An empty shard never passes as
 an empty test run. Selection and source identities travel with each lane receipt.
 
+Native Rust source has explicit owners in
+[`native_impact.py`](../scripts/ci_policy/native_impact.py). Tauri source runs native
+and frontend checks beside the repository baseline. Decision-engine and document
+core source runs native checks and seeds the owning Go subtree's reverse import
+closure, including test callers. A missing owner in the resolved graph falls back
+to the full Go recipe. Cargo manifests and lockfiles, build scripts, fixtures,
+assets, and unrecognized native paths still widen to full verification. Mixed
+changes union their lane and package obligations.
+
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
