@@ -305,8 +305,7 @@ func (r *findRun) newerTest(value string) (*findNode, error) {
 		err = inv.usage(value, "a file for -newer")
 	}
 	if err == nil {
-		var st = bound
-		stat, statErr := st.Stat(true)
+		stat, statErr := bound.Stat(true)
 		if statErr == nil {
 			reference := stat.ModTime
 			return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) {

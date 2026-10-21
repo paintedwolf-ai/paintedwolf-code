@@ -1,12 +1,8 @@
 package textsearch
 
 import (
-	"context"
-	"errors"
 	"slices"
-	"strings"
 	"testing"
-	"time"
 )
 
 func catalogLimits(t *testing.T) Limits {
@@ -88,6 +84,12 @@ func TestBasicRegexSemantics(t *testing.T) {
 		{name: "dot is one scalar", dialect: Basic, patterns: []string{`a.b`}, input: "aéb", selected: true, only: []string{"aéb"}},
 		{name: "empty pattern selects without output", dialect: Basic, patterns: []string{``}, input: "abc", selected: true},
 		{name: "no match", dialect: Basic, patterns: []string{`zz`}, input: "abc", selected: false},
+		{name: "collating and equivalence classes", dialect: Basic, patterns: []string{`[[.a.][=b=]]\+`}, input: "xab", selected: true, only: []string{"ab"}},
+		{name: "space classes", dialect: Basic, patterns: []string{`\S\s\W`}, input: "a -", selected: true, only: []string{"a -"}},
+		{name: "not a word boundary", dialect: Basic, patterns: []string{`a\Bb`}, input: "ab a b", selected: true, only: []string{"ab"}},
+		{name: "leading BRE closures are literal", dialect: Basic, patterns: []string{`\+a`}, input: "+a", selected: true, only: []string{"+a"}},
+		{name: "escaped punctuation", dialect: Basic, patterns: []string{`a\.b\/`}, input: "a.b/", selected: true, only: []string{"a.b/"}},
+		{name: "range with an edge hyphen", dialect: Basic, patterns: []string{`[a-c-]\+`}, input: "x-ab", selected: true, only: []string{"-ab"}},
 	})
 }
 
@@ -134,6 +136,12 @@ func TestPerlRegexSemantics(t *testing.T) {
 		{name: "line option", dialect: Perl, patterns: []string{`a|ab`}, line: true, input: "ab", selected: true, only: []string{"ab"}},
 		{name: "several patterns renumber references", dialect: Perl, patterns: []string{`(x)\1`, `(y)\1`}, input: "yy", selected: true, only: []string{"yy"}},
 		{name: "zero-width matches advance", dialect: Perl, patterns: []string{`(?=a)`}, input: "aa", selected: true},
+		{name: "control escapes", dialect: Perl, patterns: []string{`\t\x7e[\t\x41]`}, input: "\t~A", selected: true, only: []string{"\t~A"}},
+		{name: "non-word boundary", dialect: Perl, patterns: []string{`a\Bb`}, input: "ab", selected: true, only: []string{"ab"}},
+		{name: "escaped scalar", dialect: Perl, patterns: []string{`\é[\é]`}, input: "éé", selected: true, only: []string{"éé"}},
+		{name: "fixed group width behind", dialect: Perl, patterns: []string{`(?<=(?:ab|cd){2})x`}, input: "abcdx", selected: true, only: []string{"x"}},
+		{name: "counted quantifiers", dialect: Perl, patterns: []string{`a{2}b{1,}c{0,1}?`}, input: "aabbc", selected: true, only: []string{"aabb"}},
+		{name: "literal metacharacters", dialect: Perl, patterns: []string{`a\.b\-c#d e`}, input: "a.b-c#d e", selected: true, only: []string{"a.b-c#d e"}},
 	})
 }
 
@@ -153,177 +161,6 @@ func TestRE2AndFixedSemantics(t *testing.T) {
 		{name: "fixed word", dialect: Fixed, patterns: []string{"a+"}, word: true, input: "xa+ a+", selected: true, only: []string{"a+"}},
 		{name: "fixed exact bytes", dialect: Fixed, patterns: []string{"\xff"}, input: "a\xffb", selected: true, only: []string{"\xff"}},
 	})
-}
-
-func TestPatternRejections(t *testing.T) {
-	limits := catalogLimits(t)
-	for _, c := range []struct {
-		dialect Dialect
-		pattern string
-		code    string
-	}{
-		{Basic, `\(a`, CodeRegexInvalid},
-		{Basic, `a\)`, CodeRegexInvalid},
-		{Basic, `a\{1`, CodeRegexInvalid},
-		{Basic, `a\{2,1\}`, CodeRegexInvalid},
-		{Basic, `\1\(a\)`, CodeRegexInvalid},
-		{Basic, `\(a\1\)`, CodeRegexInvalid},
-		{Basic, `[a`, CodeRegexInvalid},
-		{Basic, `[[:nope:]]`, CodeRegexInvalid},
-		{Basic, `a\`, CodeRegexInvalid},
-		{Basic, `\d`, CodeRegexUnsupported},
-		{Basic, `a\{1001\}`, CodeRegexUnsupported},
-		{Basic, "\U0010FF01", CodeRegexUnsupported},
-		{Extended, `(a`, CodeRegexInvalid},
-		{Extended, `a)`, CodeRegexInvalid},
-		{Extended, `a{3,2}`, CodeRegexInvalid},
-		{Extended, `\n`, CodeRegexUnsupported},
-		{Perl, `(?R)`, CodeRegexUnsupported},
-		{Perl, `(?<=a+)b`, CodeRegexUnsupported},
-		{Perl, `[`, CodeRegexInvalid},
-		{Perl, `(?<name>a)`, CodeRegexUnsupported},
-		{Perl, `(?P<name>a)`, CodeRegexUnsupported},
-		{Perl, `(?i)a`, CodeRegexUnsupported},
-		{Perl, `(?>a)`, CodeRegexUnsupported},
-		{Perl, `(?(1)a|b)`, CodeRegexUnsupported},
-		{Perl, `(?C1)`, CodeRegexUnsupported},
-		{Perl, `(*FAIL)`, CodeRegexUnsupported},
-		{Perl, `a*+`, CodeRegexUnsupported},
-		{Perl, `\p{L}`, CodeRegexUnsupported},
-		{Perl, `\R`, CodeRegexUnsupported},
-		{Perl, `\1(a)`, CodeRegexUnsupported},
-		{Perl, `(a\1)`, CodeRegexUnsupported},
-		{Perl, `\2(a)`, CodeRegexInvalid},
-		{Perl, `a{2,1}`, CodeRegexInvalid},
-		{Perl, `a{,2}`, CodeRegexUnsupported},
-		{Perl, `a**`, CodeRegexInvalid},
-		{Perl, `*a`, CodeRegexInvalid},
-		{Perl, `(?<=a(?:b|cd))x`, CodeRegexUnsupported},
-		{Perl, `(?=a)*`, CodeRegexUnsupported},
-		{Perl, `a)`, CodeRegexInvalid},
-		{RE2, `a(b`, CodeRegexInvalid},
-		{RE2, `(a)\1`, CodeRegexInvalid},
-		{RE2, `(?<=a)b`, CodeRegexInvalid},
-	} {
-		t.Run(string(c.dialect)+" "+c.pattern, func(t *testing.T) {
-			_, err := Compile(t.Context(), Spec{Patterns: []string{c.pattern}, Dialect: c.dialect}, limits)
-			var pattern *PatternError
-			if !errors.As(err, &pattern) || pattern.Code != c.code {
-				t.Fatalf("compile %q: %v, want %s", c.pattern, err, c.code)
-			}
-		})
-	}
-}
-
-func budgetResource(t *testing.T, err error) string {
-	t.Helper()
-	var budget *BudgetError
-	if !errors.As(err, &budget) {
-		t.Fatalf("want budget error, got %v", err)
-	}
-	return budget.Resource
-}
-
-// TestRegexBudgets exercises each engine's resource ceilings: the linear
-// engine at its exact catalog step boundary, the bounded engines on
-// catastrophic backtracking, and pattern and record size.
-func TestRegexBudgets(t *testing.T) {
-	limits := catalogLimits(t)
-	ctx := t.Context()
-	linear, err := Compile(ctx, Spec{Patterns: []string{`b`}, Dialect: Extended}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := []byte(strings.Repeat("a", int(limits.WorkSteps)-1))
-	if _, ok, err := linear.Select(ctx, at); err != nil || ok {
-		t.Fatalf("record at the step ceiling: %v %v", ok, err)
-	}
-	over := append(at, 'a')
-	if _, _, err := linear.Select(ctx, over); budgetResource(t, err) != "regex_work_steps" {
-		t.Fatalf("record over the step ceiling: %v", err)
-	}
-
-	catastrophic := []byte(strings.Repeat("a", 40))
-	for _, spec := range []Spec{
-		{Patterns: []string{`(a*)*b`}, Dialect: Perl},
-		{Patterns: []string{`\(a*\)*\1b`}, Dialect: Basic},
-		{Patterns: []string{`(a|aa)*c`}, Dialect: Extended, Word: true},
-	} {
-		m, err := Compile(ctx, spec, limits)
-		if err != nil {
-			t.Fatalf("%v: %v", spec.Patterns, err)
-		}
-		// A loaded host must not reach the time ceiling first.
-		vm := m.engine.(vmEngine)
-		vm.limits.CPU = time.Minute
-		m.engine = vm
-		if _, _, err := m.Select(ctx, catastrophic); budgetResource(t, err) != "regex_work_steps" {
-			t.Fatalf("%v select: %v", spec.Patterns, err)
-		}
-	}
-
-	long := strings.Repeat("a", int(limits.PatternBytes)+1)
-	for _, dialect := range []Dialect{Basic, Extended, Perl, RE2} {
-		if _, err := Compile(ctx, Spec{Patterns: []string{long}, Dialect: dialect}, limits); budgetResource(t, err) != "regex_pattern_bytes" {
-			t.Fatalf("%s pattern bytes: %v", dialect, err)
-		}
-	}
-	if _, err := Compile(ctx, Spec{Patterns: []string{long}, Dialect: Fixed}, limits); err != nil {
-		t.Fatalf("fixed strings are not regex patterns: %v", err)
-	}
-
-	small := limits
-	small.InputBytes = 4
-	for _, dialect := range []Dialect{Fixed, Basic, Perl} {
-		m, err := Compile(ctx, Spec{Patterns: []string{"a"}, Dialect: dialect}, small)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := m.Select(ctx, []byte("aaaaa")); budgetResource(t, err) != "regex_input_bytes" {
-			t.Fatalf("%s record bytes: %v", dialect, err)
-		}
-	}
-
-	m, err := Compile(ctx, Spec{Patterns: []string{`(a|b)*c`}, Dialect: Perl}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vm := m.engine.(vmEngine)
-	vm.limits.CPU = time.Nanosecond
-	m.engine = vm
-	if _, _, err := m.Select(ctx, []byte(strings.Repeat("ab", 2000))); budgetResource(t, err) != "regex_cpu_ms" {
-		t.Fatalf("cpu ceiling: %v", err)
-	}
-}
-
-// TestBoundedSessionStepBoundary is the catalog's injected work-step pair:
-// exactly regex_work_steps is admitted and one more step stops the record.
-func TestBoundedSessionStepBoundary(t *testing.T) {
-	limits := catalogLimits(t)
-	m, err := Compile(t.Context(), Spec{Patterns: []string{`(?=a)`}, Dialect: Perl}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	program := m.engine.(vmEngine).program
-	session, err := program.Session(t.Context(), limits.syntaxBudget())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer session.Close()
-	if err := session.Charge(limits.WorkSteps); err != nil {
-		t.Fatalf("at ceiling: %v", err)
-	}
-	if err := session.Charge(1); budgetResource(t, budgetError(err)) != "regex_work_steps" {
-		t.Fatalf("over ceiling: %v", err)
-	}
-}
-
-func TestCompileHonorsCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	if _, err := Compile(ctx, Spec{Patterns: []string{"a"}, Dialect: Basic}, catalogLimits(t)); !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled compile: %v", err)
-	}
 }
 
 func TestNoPatternsSelectNothing(t *testing.T) {

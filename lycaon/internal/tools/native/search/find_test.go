@@ -83,6 +83,7 @@ func TestFindPreservesHostileNames(t *testing.T) {
 	h.exec("", "find", "t", "-name", "-dash*").expect(t, "dash glob is data", "t/-dash\nname\n", "", 0)
 	r := h.exec("", "find", "t", "-name", "-dash*", "-exec", "printf", "%s", "{}", ";")
 	r.expect(t, "exec keeps one argument", "argv: printf|%s|t/-dash\nname\n", "", 0)
+	h.exec("", "grep", "-l", "--", "x", "t/-dash\nname").expect(t, "grep operand after --", "t/-dash\nname\n", "", 0)
 }
 
 func TestFindRefusals(t *testing.T) {
@@ -209,4 +210,33 @@ func TestFindVisitsLinksAsEntries(t *testing.T) {
 	symlink(t, "../target", filepath.Join(h.root, "d", "ld"))
 	h.exec("", "find", "d").expect(t, "links are not followed", "d\nd/f\nd/ld\n", "", 0)
 	h.exec("", "find", "d", "-type", "l").expect(t, "type l", "d/ld\n", "", 0)
+}
+
+func TestEffectModesFollowTheCatalog(t *testing.T) {
+	h := newHarness(t, nil)
+	modes := map[string]bool{}
+	for _, name := range h.owners.Commands() {
+		for _, effect := range h.owners.specs[name].Effects {
+			modes[name+" "+effect.Mode] = true
+		}
+	}
+	for _, c := range []struct {
+		argv []string
+		mode string
+	}{
+		{[]string{"grep", "-r", "a"}, "always"},
+		{[]string{"rg", "a"}, "always"},
+		{[]string{"find", ".", "-print"}, "default-predicates-print"},
+		{[]string{"find", ".", "-exec", "printf", "{}", ";"}, "-exec"},
+		{[]string{"find", ".", "-exec", "printf", "{}", ";", "-delete"}, "-delete"},
+	} {
+		prepared, err := h.owners.Prepare(mustPaths(t, h), h.dispatch, requestFor(h, c.argv...))
+		testutil.FailErr(t, "prepare", err)
+		if got := EffectMode(prepared.Argv); got != c.mode || !modes[prepared.Argv.Command+" "+got] {
+			t.Fatalf("%v mode %q, want catalogued %q", c.argv, got, c.mode)
+		}
+	}
+	if !slices.Equal(h.owners.Commands(), []string{"find", "grep", "rg"}) {
+		t.Fatalf("commands %v", h.owners.Commands())
+	}
 }

@@ -137,6 +137,22 @@ func (o *Owners) spec(word string) (toolcontract.CommandSpecification, bool) {
 	return toolcontract.CommandSpecification{}, false
 }
 
+// EffectMode names the catalog effect mode a bound form selects, for the
+// dispatcher's per-operation admission: find -delete needs write and recovery,
+// find -exec needs its bound child effect set, every other form reads.
+func EffectMode(argv commandprogram.BoundArgv) string {
+	if argv.Command != "find" {
+		return "always"
+	}
+	if _, ok := argv.Last("-delete"); ok {
+		return "-delete"
+	}
+	if _, ok := argv.Last("-exec"); ok {
+		return "-exec"
+	}
+	return "default-predicates-print"
+}
+
 // Prepared is one bound utility invocation. InvokeOwner matches
 // toolexecution.PreparedNativeEffect: streams reach it only after admission.
 type Prepared struct {

@@ -43,7 +43,7 @@ var pcreControlEscapes = map[byte]string{'n': `\n`, 't': `\t`, 'r': `\r`, 'f': `
 // lookbehind and unknown escapes are refused with GREP_REGEX_UNSUPPORTED.
 func translatePerl(pattern string, groupOffset int) (perlPattern, error) {
 	t := perlTranslator{src: pattern, offset: groupOffset, closed: map[int]bool{}}
-	if err := t.sequence(0); err != nil {
+	if _, err := t.alternatives(0); err != nil {
 		return perlPattern{}, err
 	}
 	if t.pos < len(t.src) {
@@ -77,13 +77,8 @@ type width struct {
 	fixed bool
 }
 
-// sequence translates alternatives until an unmatched ")" or the end. It
-// returns the common width when every alternative is fixed and equal.
-func (t *perlTranslator) sequence(depth int) error {
-	_, err := t.alternatives(depth)
-	return err
-}
-
+// alternatives translates alternatives until an unmatched ")" or the end and
+// returns each alternative's width.
 func (t *perlTranslator) alternatives(depth int) ([]width, error) {
 	var widths []width
 	current := width{fixed: true}
@@ -102,12 +97,11 @@ func (t *perlTranslator) alternatives(depth int) ([]width, error) {
 			}
 			return append(widths, current), nil
 		}
-		atomStart := t.out.Len()
 		w, quantifiable, err := t.atom(depth)
 		if err != nil {
 			return nil, err
 		}
-		w, err = t.quantifier(w, quantifiable, atomStart)
+		w, err = t.quantifier(w, quantifiable)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +181,7 @@ func braceQuantifier(s string) (minimum, maximum, size int, ok bool) {
 	return minimum, maximum, end + 1, true
 }
 
-func (t *perlTranslator) quantifier(w width, quantifiable bool, atomStart int) (width, error) {
+func (t *perlTranslator) quantifier(w width, quantifiable bool) (width, error) {
 	if t.pos >= len(t.src) {
 		return w, nil
 	}
@@ -243,7 +237,6 @@ func (t *perlTranslator) quantifier(w width, quantifiable bool, atomStart int) (
 			return w, t.invalid("nested quantifier")
 		}
 	}
-	_ = atomStart
 	if minimum == maximum {
 		return width{w.n * minimum, w.fixed}, nil
 	}
