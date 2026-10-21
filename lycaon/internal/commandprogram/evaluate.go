@@ -13,9 +13,9 @@ import (
 // port is absent; it never substitutes a shell or another owner.
 type EvaluationPorts struct {
 	// Invocation is the program's root execution; every child derives from it.
-	Invocation  toolcontract.OperationInvocation
-	Dispatch    Dispatch
-	Binder      ArgvBinder
+	Invocation toolcontract.OperationInvocation
+	Dispatch   Dispatch
+	Binder     ArgvBinder
 	// Files is the logical-path view pathname expansion lists; Evaluate builds
 	// the program's WordExpander over it with itself as the Substitution port.
 	Files       commandsurface.GlobFiles
