@@ -11,15 +11,17 @@ import (
 
 type countedWriter struct {
 	writer io.Writer
-	bytes  int64
+	bytes  uint64
 }
 
 func (writer *countedWriter) Write(raw []byte) (int, error) {
-	if writer.bytes+int64(len(raw)) > MaxBytes {
+	if writer.bytes+uint64(len(raw)) > MaxBytes {
 		return 0, fmt.Errorf("onefile output exceeds its bound")
 	}
 	n, err := writer.writer.Write(raw)
-	writer.bytes += int64(n)
+	if n > 0 && n <= len(raw) {
+		writer.bytes += uint64(len(raw[:n]))
+	}
 	return n, err
 }
 
@@ -88,5 +90,5 @@ func Write(destination io.Writer, image *Image) error {
 	if err := encoder.Close(); err != nil {
 		return err
 	}
-	return binary.Write(destination, binary.LittleEndian, uint64(payload.bytes))
+	return binary.Write(destination, binary.LittleEndian, payload.bytes)
 }

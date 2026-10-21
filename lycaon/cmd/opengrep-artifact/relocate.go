@@ -16,17 +16,17 @@ import (
 
 func relocateConsumer(ctx context.Context, producer *bundled.Manifest, opts options, recipe bundled.ConsumerRecipe) error {
 	if recipe.Kind != "nix-nuitka-relocation" || len(recipe.Arguments) != 4 || recipe.Arguments[0] != "--set-interpreter" || recipe.Arguments[2] != "--set-rpath" {
-		return fmt.Errorf("Nuitka relocation requires a closed interpreter and RPATH recipe")
+		return fmt.Errorf("nuitka relocation requires a closed interpreter and RPATH recipe")
 	}
 	loader := recipe.Arguments[1]
 	roots := strings.Split(recipe.Arguments[3], ":")
 	for _, path := range append(append([]string{}, roots...), loader) {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || !strings.HasPrefix(path, "/nix/store/") {
-			return fmt.Errorf("Nuitka relocation requires explicit Nix store deployment paths")
+			return fmt.Errorf("nuitka relocation requires explicit Nix store deployment paths")
 		}
 	}
 	if !filepath.IsAbs(opts.root) || runtime.GOOS != "linux" {
-		return fmt.Errorf("Nuitka relocation requires an absolute private root on native Linux")
+		return fmt.Errorf("nuitka relocation requires an absolute private root on native Linux")
 	}
 	root, err := filepath.EvalSymlinks(opts.root)
 	if err != nil {
@@ -38,7 +38,7 @@ func relocateConsumer(ctx context.Context, producer *bundled.Manifest, opts opti
 	}
 	flat, err := filepath.EvalSymlinks(bundled.EngineBundledDir(root, producer.OpenGrep.Version))
 	if err != nil || flat == original {
-		return fmt.Errorf("Nuitka relocation requires a distinct staged producer copy")
+		return fmt.Errorf("nuitka relocation requires a distinct staged producer copy")
 	}
 	binary, err := bundled.VerifyStagedArtifact(producer, root, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
@@ -46,7 +46,7 @@ func relocateConsumer(ctx context.Context, producer *bundled.Manifest, opts opti
 	}
 	tool, err := os.Lstat(recipe.ToolPath)
 	if err != nil || !tool.Mode().IsRegular() || tool.Mode().Perm()&0o111 == 0 {
-		return fmt.Errorf("Nuitka relocation requires a regular executable patch tool")
+		return fmt.Errorf("nuitka relocation requires a regular executable patch tool")
 	}
 	if err := bundled.VerifyFileSHA256(recipe.ToolPath, recipe.ToolSHA256); err != nil {
 		return err

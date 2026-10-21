@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 const consumerRecordName = "consumer-finalization.json"
@@ -77,7 +78,7 @@ func (recipe ConsumerRecipe) validate() error {
 		return fmt.Errorf("consumer recipe requires explicit tool and argument identities")
 	}
 	for _, argument := range recipe.Arguments {
-		if len(argument) > 4096 || bytes.IndexByte([]byte(argument), 0) >= 0 {
+		if len(argument) > 4096 || strings.IndexByte(argument, 0) >= 0 {
 			return fmt.Errorf("consumer recipe argument exceeds its bound")
 		}
 	}
