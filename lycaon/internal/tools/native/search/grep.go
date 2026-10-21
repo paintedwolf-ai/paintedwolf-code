@@ -5,9 +5,11 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -46,6 +48,8 @@ type grepRun struct {
 	selection    selection
 	searchBinary bool
 	walker       *walker
+	// json is rg --json's printer; nil for the plain forms.
+	json *rgJSON
 	// prune holds the index requirement when acceleration applies; drafts
 	// are the unsaved documents the index cannot speak for.
 	prune    litprefilter.Requirement
@@ -321,6 +325,9 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if r.matcher, err = textsearch.Compile(inv.ctx, spec, inv.owners.regex); err != nil {
 		return err
 	}
+	if r.rg && inv.flag("--json") && r.mode == modeLines {
+		r.json = &rgJSON{started: time.Now()}
+	}
 	r.indexAcceleration()
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
@@ -329,6 +336,11 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	}
 	if err := r.searchOperands(); err != nil {
 		return err
+	}
+	if r.json != nil {
+		if err := inv.out.text(r.json.summary()); err != nil {
+			return err
+		}
 	}
 	switch {
 	case inv.status == inv.failure && !(r.mode == modeQuiet && r.selected):
@@ -382,7 +394,10 @@ func (r *grepRun) searchOperands() error {
 	operands := r.operands
 	implicit := false
 	if len(operands) == 0 {
-		if !r.recursive {
+		// rg searches an attached stdin, as it does a pipe; with no producer it
+		// walks the current directory. grep reads stdin unless recursive.
+		piped := r.rg && r.mode != modeFileList && !commandprogram.IsNullInput(inv.input)
+		if !r.recursive || piped {
 			return r.searchStdin()
 		}
 		operands, implicit = []string{"."}, true
@@ -418,7 +433,11 @@ func (r *grepRun) searchStdin() error {
 	if err != nil {
 		return err
 	}
-	err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
+	label := "(standard input)"
+	if r.json != nil {
+		label = "<stdin>"
+	}
+	err = r.searchContent(label, data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -545,7 +564,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 // --files-without-match, whose walk skips binary files a pruned file would
 // not reveal.
 func (r *grepRun) indexAcceleration() {
-	if r.inv.owners.Catalog == nil || r.scan.Invert || r.rg && r.mode == modeFilesWithout {
+	if r.inv.owners.Catalog == nil || r.scan.Invert || r.json != nil || r.rg && r.mode == modeFilesWithout {
 		return
 	}
 	r.prune = r.matcher.Requirement()

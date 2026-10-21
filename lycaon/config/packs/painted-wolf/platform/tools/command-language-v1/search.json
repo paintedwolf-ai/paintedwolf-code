@@ -832,6 +832,16 @@
         },
         {
           "spellings": [
+            "--json"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "rg-option-json",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "-r",
             "--replace"
           ],
@@ -955,7 +965,7 @@
           }
         }
       },
-      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases. rg honours .gitignore, .ignore and the project's ignore rules by default; --no-ignore drops them (as -u does) while still skipping hidden entries; -T excludes a catalogued file type; --color=never|auto prints plain text and --color=always refuses.",
+      "notes": "grep default BRE; -E ERE; rg default RE2-compatible regex. -F exact bytes; -P uses pcre-common-v1 declared grammar; P13 selects/qualifies engine/adapter from regex.json. grep recursive includes hidden but respects explicit exclusions; rg default ignore/hidden rules reuse owner, -u increments ignore bypass, --hidden enables hidden, no symlink traversal beyond authorized selected -R. Unreadable/capped inputs are error/incomplete, never no-match. No args uses stdin except rg --files inventory. Output lines are PATH:LINE:TEXT for matches and PATH-LINE-TEXT for context; the path prefix appears for multiple or recursive inputs unless --no-filename (or grep -h), the line field only with -n, and -- separates non-adjacent context groups. -o prints each match as its own line with the same prefixes; -l/-L/-c print one LF-terminated path or PATH:COUNT record. No NUL-delimited path form is offered. rg -r/--replace consumes replacement text (capture $N supported); -L/--follow follows authorized symlinks with cycle detection; -h help; --no-filename and --files-without-match are explicit long forms. Recursive discovery is rg default. -s is case-sensitive override, -S smart-case; never reuse grep -s suppression. GNU-only --include/--exclude forms are accepted portable extensions with same stated filtering, not claimed stock ripgrep aliases. rg honours .gitignore, .ignore and the project's ignore rules by default; --no-ignore drops them (as -u does) while still skipping hidden entries; -T excludes a catalogued file type; --color=never|auto prints plain text and --color=always refuses. --json prints ripgrep 15's JSON Lines: begin, match and context messages per file with output, its end message with statistics and one closing summary; field order, escaping, {\"bytes\"} base64 data and statistics follow rg, elapsed times are this search's own; listing and counting forms ignore --json as rg does. Without PATH operands rg searches an attached stdin (a pipe or redirect) and walks the current directory when no producer is attached, as ripgrep does.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/grep_engine.go",
         "tests": [
@@ -1010,7 +1020,8 @@
         "rg-option-case-sensitive",
         "rg-option-T-typenot",
         "rg-option-no-ignore",
-        "rg-option-color"
+        "rg-option-color",
+        "rg-option-json"
       ]
     },
     {
