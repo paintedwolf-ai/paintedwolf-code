@@ -9,7 +9,8 @@ let
     data = b"\x7fELF\x02\x01\x01" + bytes(11) + struct.pack("<H", {"x86_64":62,"aarch64":183}[sys.argv[2]])
     engine.write_bytes(data)
     engine.chmod(0o755)
-    (root / "manifest.json").write_text(json.dumps({"format_version":1,"package":"painted-wolf-code","architecture":sys.argv[2],"install_root":str(root),"executables":[{"path":str(engine),"sha256":hashlib.sha256(data).hexdigest(),"size":len(data)}]}))
+    digest = hashlib.sha256(data).hexdigest()
+    (root / "manifest.json").write_text(json.dumps({"format_version":2,"package":"painted-wolf-code","version":"1.0.2","architecture":sys.argv[2],"install_root":str(root),"executables":[{"path":str(engine),"sha256":digest,"size":len(data)}],"payload":[{"path":"bin","kind":"directory","mode":0o755},{"path":"bin/pw","kind":"file","mode":0o755,"sha256":digest,"size":len(data)}]}))
     PY
   '';
   package = fixture "painted-wolf-module-selected";
