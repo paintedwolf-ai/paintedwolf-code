@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -19,6 +20,8 @@ import (
 // CopyTool copies regular files, and bounded directory trees, within write scope.
 type CopyTool struct {
 	Boundary *sandbox.Boundary
+	// Caps overrides the catalog recursive mutation ceilings; zero uses them.
+	Caps RecursiveCaps
 }
 
 type copyResult struct {
@@ -35,9 +38,11 @@ type copyResponse struct {
 // parents first, measured against the catalog's recursive mutation caps before
 // any entry is written. NoClobber keeps existing destination files.
 type CopyInput struct {
-	Pairs        []FilePair
-	Recursive    bool
-	NoClobber    bool
+	Pairs     []FilePair
+	Recursive bool
+	NoClobber bool
+	// Preserve copies permission bits and access/modification times.
+	Preserve     bool
 	MaxFileBytes int64
 }
 
@@ -92,20 +97,20 @@ func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContex
 				return result, err
 			}
 			if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
-				if err := t.copyTree(ctx, tctx, source.Abs, pair, in.NoClobber, maxBytes, &result); err != nil {
+				if err := t.copyTree(ctx, tctx, source.Abs, pair, in, maxBytes, &result); err != nil {
 					return result, err
 				}
 				continue
 			}
 		}
-		if err := t.copyFile(ctx, tctx, pair, in.NoClobber, maxBytes, &result); err != nil {
+		if err := t.copyFile(ctx, tctx, pair, in, maxBytes, &result); err != nil {
 			return result, err
 		}
 	}
 	return result, nil
 }
 
-func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, noClobber bool, maxBytes int64, result *CopyResult) error {
+func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, in CopyInput, maxBytes int64, result *CopyResult) error {
 	prof := tctx.ProfileID()
 	fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
 	srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "copy",
@@ -117,7 +122,7 @@ func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair Fi
 	if err != nil {
 		return err
 	}
-	if noClobber {
+	if in.NoClobber {
 		if _, err := os.Lstat(dstResolved.Abs); err == nil {
 			result.Skipped = append(result.Skipped, FilePair{From: fromSlash, To: toSlash})
 			return nil
@@ -133,17 +138,45 @@ func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair Fi
 	}
 	result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: n})
 	afterSuccessfulMutation(ctx, tctx, toSlash)
+	if in.Preserve {
+		return preserveMetadata(ctx, tctx, srcResolved.Abs, resolvedMutationTarget(dstResolved))
+	}
+	return nil
+}
+
+// preserveMetadata copies permission bits and times from source to target
+// through the reviewed metadata path. A platform without timestamp support
+// refuses rather than leaving -p half applied silently.
+func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string, target mutationTarget) error {
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	if err := chmodAgentPath(ctx, tctx, target, info.Mode().Perm()); err != nil {
+		return err
+	}
+	modify := info.ModTime()
+	var access *time.Time
+	if at, ok := fseffect.AccessTime(info); ok {
+		access = &at
+	}
+	if err := timesAgentPath(ctx, tctx, target, access, &modify); err != nil {
+		if errors.Is(err, fseffect.ErrUnsupported) {
+			return &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"path": target.Abs, "capability": "timestamps"}}
+		}
+		return err
+	}
 	return nil
 }
 
 // copyTree recreates a directory tree at the destination, parents first.
-func (t *CopyTool) copyTree(ctx context.Context, tctx tools.ToolContext, sourceRoot string, pair FilePair, noClobber bool, maxBytes int64, result *CopyResult) error {
+func (t *CopyTool) copyTree(ctx context.Context, tctx tools.ToolContext, sourceRoot string, pair FilePair, in CopyInput, maxBytes int64, result *CopyResult) error {
 	type entry struct {
 		path  string
 		isDir bool
 	}
 	var order []entry
-	if err := walkRecursiveTree(sourceRoot, filepath.ToSlash(pair.From), func(path string, isDir bool) error {
+	if err := walkRecursiveTree(t.Caps, sourceRoot, filepath.ToSlash(pair.From), func(path string, isDir bool) error {
 		order = append(order, entry{path, isDir})
 		return nil
 	}); err != nil {
@@ -160,7 +193,7 @@ func (t *CopyTool) copyTree(ctx context.Context, tctx tools.ToolContext, sourceR
 		}
 		to := filepath.Join(pair.To, rel)
 		if !order[i].isDir {
-			if err := t.copyFile(ctx, tctx, FilePair{From: order[i].path, To: to}, noClobber, maxBytes, result); err != nil {
+			if err := t.copyFile(ctx, tctx, FilePair{From: order[i].path, To: to}, in, maxBytes, result); err != nil {
 				return err
 			}
 			continue

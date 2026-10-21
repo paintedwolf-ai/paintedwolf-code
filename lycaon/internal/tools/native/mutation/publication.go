@@ -87,13 +87,13 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 	return pinnedTarget{abs: abs, pin: pin}, nil
 }
 
-// publish lands content at the captured revision through the shared write
-// operation and tracks it on the program's publication barrier. A moved
+// publish lands content byte for byte at the captured revision through the
+// shared write operation and tracks it on the program's publication barrier. A moved
 // destination is COMMAND_REVISION_CONFLICT; nothing is refreshed or retried.
-func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content string) (native.WriteResult, error) {
+func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Content: content, Append: appendBytes,
+	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
 		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
 	if err != nil {
 		return result, err
@@ -134,7 +134,7 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 		return commandprogram.OutputPublished{}, io.ErrClosedPipe
 	}
 	s.settled = true
-	content := s.buffer.String()
+	content := bytes.Clone(s.buffer.Bytes())
 	s.buffer.Reset()
 	s.mu.Unlock()
 	result, err := s.owners.publish(ctx, s.tools, s.barrier, s.target, content)

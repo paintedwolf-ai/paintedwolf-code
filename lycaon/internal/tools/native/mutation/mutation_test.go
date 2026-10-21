@@ -252,25 +252,19 @@ func TestMoveCopyMkdirChmodAndRmdir(t *testing.T) {
 			t.Fatalf("%v: %+v %v %q", step.words, r.result, r.err, r.stderr)
 		}
 	}
-	if r := h.run("", "cp", "-p", "b.txt", "d.txt"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("d.txt") {
-		t.Fatalf("cp -p claimed preservation: %+v", r.result)
-	}
 	if r := h.run("", "mv", "--not-a-version-1-option", "b.txt", "e.txt"); r.err == nil {
 		t.Fatal("unsupported option bound")
 	}
 }
 
-func TestTouchCreatesOnlyMissingFiles(t *testing.T) {
-	h := newHarness(t, map[string]string{"old.txt": "old\n"})
+func TestTouchCreatesMissingFiles(t *testing.T) {
+	h := newHarness(t, nil)
 	r := h.run("", "touch", "new.txt")
 	if r.err != nil || r.result.Status != 0 || h.read("new.txt") != "" || len(h.pins.pins[r.execution]) != 1 {
 		t.Fatalf("touch new %+v %v", r.result, r.err)
 	}
 	if r := h.run("", "touch", "-c", "skipped.txt"); r.err != nil || !h.absent("skipped.txt") {
 		t.Fatalf("touch -c created a file: %v", r.err)
-	}
-	if r := h.run("", "touch", "old.txt"); r.result.Terminal != toolcontract.ProducerRefused || h.read("old.txt") != "old\n" {
-		t.Fatalf("touch of an existing file claimed a timestamp update: %+v", r.result)
 	}
 }
 

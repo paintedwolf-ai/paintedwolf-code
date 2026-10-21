@@ -4,6 +4,7 @@ package fseffect
 
 import (
 	"os"
+	"time"
 )
 
 func OpenRead(Location) (*os.File, error)                     { return nil, ErrUnsupported }
@@ -20,6 +21,8 @@ func UpdateMode(ModeUpdateRequest) (ModeUpdateResult, error) {
 	return ModeUpdateResult{}, ErrUnsupported
 }
 func platformChown(Location, int, int) error { return ErrUnsupported }
+
+func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
 
 func RenameNoReplace(string, string, string) error { return ErrUnsupported }
 
@@ -40,3 +43,5 @@ func (*ReadRoot) Open(string) (*os.File, error) { return nil, ErrUnsupported }
 func (*ReadRoot) Close() error                  { return nil }
 
 func RelocateGuarded(Location, Location, string) error { return ErrUnsupported }
+
+func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }

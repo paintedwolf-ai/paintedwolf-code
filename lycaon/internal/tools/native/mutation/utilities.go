@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -91,15 +92,12 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber}, inv.tc)
+		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
 		return len(result.Moved), err
 	})
 }
 
 func runCp(inv *invocation) error {
-	if inv.flag("-p") {
-		return inv.unsupportedForm("-p", "copies without preserving timestamps or ownership")
-	}
 	sources, dest, err := inv.sourcesAndDestination()
 	if err != nil {
 		return err
@@ -118,7 +116,7 @@ func runCp(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber,
+		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"),
 			MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.tc)
 		return len(result.Copied), err
 	})
@@ -173,16 +171,20 @@ func runChmod(inv *invocation) error {
 	})
 }
 
-// runTouch creates missing files through the pinned write door. Updating an
-// existing file's timestamps has no shared owner operation, so it refuses.
+// runTouch creates missing files through the pinned write door and sets the
+// current time on existing ones through the timestamp metadata operation.
+// -a and -m restrict the update to the access or modification time.
 func runTouch(inv *invocation) error {
-	for _, key := range []string{"-m", "-a"} {
-		if inv.flag(key) {
-			return inv.unsupportedForm(key, "creation of missing files only")
-		}
-	}
 	if len(inv.operands()) == 0 {
 		return inv.usage(inv.name(), "at least one PATH")
+	}
+	now := time.Now()
+	access, modify := &now, &now
+	if inv.flag("-a") && !inv.flag("-m") {
+		modify = nil
+	}
+	if inv.flag("-m") && !inv.flag("-a") {
+		access = nil
 	}
 	noCreate := inv.flag("-c")
 	return inv.each(inv.operands(), func(operand string) (int, error) {
@@ -190,21 +192,57 @@ func runTouch(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		target, err := inv.capture(bound.Resolved.Abs)
-		if err != nil {
-			return 0, err
-		}
-		if target.pin.Mode != toolcontract.AbsentRevision {
-			return 0, inv.unsupportedForm(operand, "creation of missing files; existing timestamps are not updated")
+		if _, err := os.Lstat(bound.Resolved.Abs); err == nil {
+			changed, err := inv.owners.Operations.Times.SetTimes(inv.ctx, []string{bound.Resolved.Abs}, access, modify, inv.tc)
+			return len(changed), err
 		}
 		if noCreate {
 			return 0, nil
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, ""); err != nil {
+		target, err := inv.capture(bound.Resolved.Abs)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
 			return 0, err
 		}
 		return 1, nil
 	})
+}
+
+// runChown accepts the numeric UID[:GID] form the catalog declares and applies
+// the existing ownership policy; an omitted GID keeps each file's group.
+func runChown(inv *invocation) error {
+	operands := inv.operands()
+	if len(operands) < 2 {
+		return inv.usage(inv.name(), "UID[:GID] PATH ...")
+	}
+	owner, group, hasGroup := strings.Cut(operands[0], ":")
+	if !numericID(owner) || (hasGroup && !numericID(group)) {
+		return inv.usage(operands[0], "numeric UID[:GID]")
+	}
+	if !hasGroup {
+		group = "current"
+	}
+	uid, gid, err := native.ResolveChownIdentities(owner, group)
+	if err != nil {
+		return err
+	}
+	if !hasGroup {
+		gid = -1
+	}
+	return inv.each(operands[1:], func(operand string) (int, error) {
+		bound, err := inv.bind(operand, true)
+		if err != nil {
+			return 0, err
+		}
+		results, err := inv.owners.Operations.Chown.Chown(inv.ctx, native.ChownInput{Paths: []string{bound.Resolved.Abs}, UID: uid, GID: gid}, inv.tc)
+		return len(results), err
+	})
+}
+
+func numericID(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789") == ""
 }
 
 func (inv *invocation) capture(abs string) (pinnedTarget, error) {
@@ -247,7 +285,7 @@ func runTee(inv *invocation) error {
 		return err
 	}
 	for _, target := range targets {
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, string(data)); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {
 			return err
 		}
 		inv.effects++
@@ -301,7 +339,7 @@ func runMktemp(inv *invocation) error {
 		if target.pin.Mode != toolcontract.AbsentRevision {
 			return inv.usage(name, "an unused temporary name")
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, ""); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
 			return err
 		}
 		inv.effects++

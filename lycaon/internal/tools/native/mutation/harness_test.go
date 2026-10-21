@@ -19,11 +19,13 @@ import (
 	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -58,6 +60,7 @@ func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []
 
 type harness struct {
 	t       *testing.T
+	db      *db.Store
 	root    string
 	tc      tools.ToolContext
 	owners  *Owners
@@ -102,15 +105,26 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	scratch, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve scratch", err)
 	tc.Host.SessionScratchDir = scratch
-	boundary := nativefixture.Boundary(t)
+	boundary := mutationBoundary()
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
-		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary}})
+		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "build owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: root, IsPrimary: true}}}
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
+	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
+}
+
+// mutationBoundary admits every operation the frontend reaches for the default
+// profile, so refusals in these tests come from scope and confinement.
+func mutationBoundary() *sandbox.Boundary {
+	allowed := map[string]bool{}
+	for _, name := range []string{"read", "write", "edit", "delete", "copy", "move", "mkdir", "chmod", "chown", "extract_archive", "stat", "list_dir"} {
+		allowed[name] = true
+	}
+	return sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: allowed}})
 }
 
 func (h *harness) invocation() toolcontract.OperationInvocation {

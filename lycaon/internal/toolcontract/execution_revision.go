@@ -96,6 +96,11 @@ func (r ExecutionRevision) Validate() error {
 		return fmt.Errorf("unknown execution revision mode %q", r.Mode)
 	}
 	representation := r.Representation == LogicalUTF8LF || r.Representation == UTF8SourceBytes
+	// A destination with no text view (binary or above the text door) is
+	// captured as its exact disk bytes.
+	if r.Basis == CapturedRevision && r.Role == DestinationRevision && r.Mode == PublishedDiskRevision && r.Representation == OriginalEncodedBytes {
+		representation = r.ContentSHA256 == r.DiskSHA256
+	}
 	if r.Basis == DeclaredAtLaunch {
 		representation = r.Representation == OriginalEncodedBytes && r.ContentSHA256 == r.DiskSHA256
 	}

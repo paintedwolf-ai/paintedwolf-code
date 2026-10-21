@@ -3,6 +3,7 @@ package native
 import (
 	"archive/tar"
 	"archive/zip"
+	"compress/bzip2"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -11,16 +12,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-)
-
-const (
-	hostExtractMaxEntries           = 500
-	hostExtractMaxUncompressedBytes = 50 << 20 // 50 MiB
 )
 
 type extractEntryResult struct {
@@ -28,24 +26,72 @@ type extractEntryResult struct {
 	Bytes int64  `json:"bytes"`
 }
 
-type extractArchiveResponse struct {
+// ExtractResult is the extraction receipt: the committed entries, and the
+// existing destination files an extraction without overwrite left in place.
+type ExtractResult struct {
 	Path      string               `json:"path"`
 	Dest      string               `json:"dest"`
 	Extracted []extractEntryResult `json:"extracted"`
 	Entries   int                  `json:"entries"`
 	Bytes     int64                `json:"bytes"`
+	Skipped   []string             `json:"skipped,omitempty"`
 }
 
+// extractBudget meters one extraction. Its ceilings are the catalog's
+// archive_extract_entries and archive_extract_bytes, the latter further bound
+// by archive_expansion_ratio times the archive's compressed size.
 type extractBudget struct {
-	entries int
-	bytes   int64
-	out     []extractEntryResult
+	entries    int
+	bytes      int64
+	out        []extractEntryResult
+	skipped    []string
+	maxEntries int
+	maxBytes   int64
+}
+
+// archiveLimit reads one archive ceiling from the frozen catalog.
+func archiveLimit(id string) int64 {
+	catalog, err := toolcontract.LanguageV1()
+	if err != nil {
+		return 0
+	}
+	for _, limit := range catalog.Language.Limits {
+		if limit.ID == id {
+			return limit.Maximum
+		}
+	}
+	return 0
+}
+
+func newExtractBudget(archiveBytes int64) (*extractBudget, error) {
+	entries, bytes, ratio := archiveLimit("archive_extract_entries"), archiveLimit("archive_extract_bytes"), archiveLimit("archive_expansion_ratio")
+	if entries < 1 || bytes < 1 || ratio < 1 {
+		return nil, fmt.Errorf("compiled language is missing archive extraction ceilings")
+	}
+	if archiveBytes > 0 && archiveBytes <= bytes/ratio {
+		bytes = archiveBytes * ratio
+	}
+	return &extractBudget{out: make([]extractEntryResult, 0, 16), maxEntries: int(entries), maxBytes: bytes}, nil
+}
+
+func (b *extractBudget) entryLimit() int {
+	if b.maxEntries == 0 {
+		b.maxEntries = int(archiveLimit("archive_extract_entries"))
+	}
+	return b.maxEntries
+}
+
+func (b *extractBudget) byteLimit() int64 {
+	if b.maxBytes == 0 {
+		b.maxBytes = archiveLimit("archive_extract_bytes")
+	}
+	return b.maxBytes
 }
 
 func (b *extractBudget) checkEntry() error {
-	if b.entries >= hostExtractMaxEntries {
+	if b.entries >= b.entryLimit() {
 		return &toolrejection.ToolReject{Code: "EXTRACT_ENTRY_LIMIT", Data: map[string]any{
-			"max_entries": hostExtractMaxEntries, "entries": b.entries,
+			"max_entries": b.entryLimit(), "entries": b.entries,
 		}}
 	}
 	return nil
@@ -60,8 +106,12 @@ func (b *extractBudget) addEntry(relDest string, n int64) {
 func archiveFormat(path string) (string, error) {
 	lower := strings.ToLower(filepath.ToSlash(path))
 	switch {
-	case strings.HasSuffix(lower, ".tar.gz"):
+	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
 		return "tar.gz", nil
+	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"):
+		return "tar.bz2", nil
+	case strings.HasSuffix(lower, ".tar"):
+		return "tar", nil
 	case strings.HasSuffix(lower, ".zip"):
 		return "zip", nil
 	default:
@@ -69,7 +119,7 @@ func archiveFormat(path string) (string, error) {
 			Code: "EXTRACT_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
 				"path":    filepath.ToSlash(path),
-				"allowed": []string{".zip", ".tar.gz"},
+				"allowed": []string{".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2"},
 			},
 		}
 	}
@@ -126,56 +176,35 @@ func extractZipFile(sink extractSink, archive fseffect.Location, budget *extract
 		return fmt.Errorf("open zip: %w", err)
 	}
 	for _, f := range zr.File {
-		rel, err := safeArchiveEntryName(f.Name)
+		mode := f.FileInfo().Mode()
+		err := sink.entry(f.Name, mode.IsDir() || strings.HasSuffix(f.Name, "/"), mode&os.ModeSymlink != 0, budget, guard, func() (io.ReadCloser, error) { return f.Open() })
 		if err != nil {
 			return err
 		}
-		target := sink.target(rel)
-		if !pathWithinDir(sink.dest.Abs, target.Abs) {
-			return extractZipSlip(f.Name)
-		}
-		if err := budget.checkEntry(); err != nil {
-			return err
-		}
-		if err := guard(rel, target.Abs); err != nil {
-			return err
-		}
-		if f.FileInfo().IsDir() || strings.HasSuffix(rel, "/") {
-			if err := mkdirAgentPath(sink.ctx, sink.tctx, target, 0o755); err != nil {
-				return fmt.Errorf("mkdir %s: %w", rel, err)
-			}
-			budget.addEntry(rel, 0)
-			continue
-		}
-		if err := mkdirAgentPath(sink.ctx, sink.tctx, sink.target(filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))), 0o755); err != nil {
-			return fmt.Errorf("mkdir parent %s: %w", rel, err)
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return fmt.Errorf("open zip entry %s: %w", rel, err)
-		}
-		n, err := writeExtractFile(sink, target, rc, budget)
-		_ = rc.Close()
-		if err != nil {
-			return err
-		}
-		budget.addEntry(rel, n)
 	}
 	return nil
 }
 
-func extractTarGzFile(sink extractSink, archive fseffect.Location, budget *extractBudget, guard entryGuard) error {
+// extractTarFile extracts a plain, gzip or bzip2 tar stream.
+func extractTarFile(sink extractSink, archive fseffect.Location, format string, budget *extractBudget, guard entryGuard) error {
 	f, err := fseffect.OpenRead(archive)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return fmt.Errorf("open gzip: %w", err)
+	var stream io.Reader = f
+	switch format {
+	case "tar.gz":
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return fmt.Errorf("open gzip: %w", err)
+		}
+		defer func() { _ = gz.Close() }()
+		stream = gz
+	case "tar.bz2":
+		stream = bzip2.NewReader(f)
 	}
-	defer func() { _ = gz.Close() }()
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(stream)
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -184,48 +213,31 @@ func extractTarGzFile(sink extractSink, archive fseffect.Location, budget *extra
 		if err != nil {
 			return fmt.Errorf("read tar: %w", err)
 		}
-		rel, err := safeArchiveEntryName(hdr.Name)
-		if err != nil {
-			return err
-		}
-		target := sink.target(rel)
-		if !pathWithinDir(sink.dest.Abs, target.Abs) {
-			return extractZipSlip(hdr.Name)
-		}
 		switch hdr.Typeflag {
 		case tar.TypeDir, tar.TypeReg:
+		case tar.TypeSymlink, tar.TypeLink:
+			if err := sink.entry(hdr.Name, false, true, budget, guard, nil); err != nil {
+				return err
+			}
+			continue
 		default:
 			continue
 		}
-		if err := budget.checkEntry(); err != nil {
+		if err := sink.entry(hdr.Name, hdr.Typeflag == tar.TypeDir, false, budget, guard, func() (io.ReadCloser, error) { return io.NopCloser(tr), nil }); err != nil {
 			return err
 		}
-		if err := guard(rel, target.Abs); err != nil {
-			return err
-		}
-		if hdr.Typeflag == tar.TypeDir || strings.HasSuffix(rel, "/") {
-			if err := mkdirAgentPath(sink.ctx, sink.tctx, target, 0o755); err != nil {
-				return fmt.Errorf("mkdir %s: %w", rel, err)
-			}
-			budget.addEntry(rel, 0)
-			continue
-		}
-		if err := mkdirAgentPath(sink.ctx, sink.tctx, sink.target(filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))), 0o755); err != nil {
-			return fmt.Errorf("mkdir parent %s: %w", rel, err)
-		}
-		n, err := writeExtractFile(sink, target, tr, budget)
-		if err != nil {
-			return err
-		}
-		budget.addEntry(rel, n)
 	}
 	return nil
 }
 
+// extractSink is one extraction's destination and entry selection.
 type extractSink struct {
-	ctx  context.Context
-	tctx tools.ToolContext
-	dest mutationTarget
+	ctx       context.Context
+	tctx      tools.ToolContext
+	dest      mutationTarget
+	strip     int
+	overwrite bool
+	members   []string
 }
 
 func (s extractSink) target(rel string) mutationTarget {
@@ -236,8 +248,68 @@ func (s extractSink) target(rel string) mutationTarget {
 	}
 }
 
+// entry admits and writes one archive entry. Names are confined before
+// stripping, links are refused rather than created, and every write passes
+// the entry and byte budgets and the governed-path guard first.
+func (s extractSink) entry(name string, isDir, isLink bool, budget *extractBudget, guard entryGuard, open func() (io.ReadCloser, error)) error {
+	rel, err := safeArchiveEntryName(name)
+	if err != nil {
+		return err
+	}
+	if len(s.members) > 0 && !slices.Contains(s.members, rel) {
+		return nil
+	}
+	if s.strip > 0 {
+		parts := strings.Split(rel, "/")
+		if len(parts) <= s.strip {
+			return nil
+		}
+		rel = strings.Join(parts[s.strip:], "/")
+	}
+	target := s.target(rel)
+	if !pathWithinDir(s.dest.Abs, target.Abs) {
+		return extractZipSlip(name)
+	}
+	if isLink {
+		return &toolrejection.ToolReject{Code: "EXTRACT_ZIP_SLIP", Data: map[string]any{"entry": name, "reason": "archive links are not extracted"}}
+	}
+	if err := budget.checkEntry(); err != nil {
+		return err
+	}
+	if err := guard(rel, target.Abs); err != nil {
+		return err
+	}
+	if isDir {
+		if err := mkdirAgentPath(s.ctx, s.tctx, target, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", rel, err)
+		}
+		budget.addEntry(rel, 0)
+		return nil
+	}
+	if !s.overwrite {
+		if _, err := os.Lstat(target.Abs); err == nil {
+			budget.skipped = append(budget.skipped, rel)
+			return nil
+		}
+	}
+	if err := mkdirAgentPath(s.ctx, s.tctx, s.target(filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))), 0o755); err != nil {
+		return fmt.Errorf("mkdir parent %s: %w", rel, err)
+	}
+	rc, err := open()
+	if err != nil {
+		return fmt.Errorf("open archive entry %s: %w", rel, err)
+	}
+	n, err := writeExtractFile(s, target, rc, budget)
+	_ = rc.Close()
+	if err != nil {
+		return err
+	}
+	budget.addEntry(rel, n)
+	return nil
+}
+
 func writeExtractFile(sink extractSink, target mutationTarget, r io.Reader, budget *extractBudget) (int64, error) {
-	remaining := hostExtractMaxUncompressedBytes - budget.bytes
+	remaining := budget.byteLimit() - budget.bytes
 	result, err := applyAgentStream(sink.ctx, sink.tctx, agentStreamRequest{
 		Target: target, Source: io.LimitReader(r, remaining+1),
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
@@ -247,7 +319,7 @@ func writeExtractFile(sink extractSink, target mutationTarget, r io.Reader, budg
 			return &toolrejection.ToolReject{
 				Code: "EXTRACT_SIZE_EXCEEDED",
 				Data: map[string]any{
-					"max_uncompressed_bytes": hostExtractMaxUncompressedBytes,
+					"max_uncompressed_bytes": budget.byteLimit(),
 					"bytes":                  budget.bytes + staged.Bytes,
 				},
 			}
