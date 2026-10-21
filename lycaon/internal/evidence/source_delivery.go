@@ -92,3 +92,35 @@ func verifyDeliveredSource(rec Record, claim Claim) (bool, string) {
 	}
 	return excerptInRecordBodies(rec, excerpt), ""
 }
+
+// RecordStateBytes measures the detached observation copy without allocating it.
+// Delivery consumers reserve this before Record; input capture and the original
+// opaque observation remain independently retained by their producing owner.
+func (o DeliveredSourceObservation) RecordStateBytes() (int64, error) {
+	total := int64(4096)
+	add := func(n int) error {
+		if int64(n) > (int64(^uint64(0)>>1)-total-256)/8 {
+			return fmt.Errorf("source delivery metadata bound overflow")
+		}
+		total += int64(n)*8 + 256
+		return nil
+	}
+	for _, text := range []string{o.record.Path, o.record.Kind, o.record.SourceTool, o.record.Handle} {
+		if err := add(len(text)); err != nil {
+			return 0, err
+		}
+	}
+	for _, line := range o.record.Body {
+		if err := add(len(line)); err != nil {
+			return 0, err
+		}
+	}
+	if fact := o.record.SourceDelivery; fact != nil {
+		for _, text := range []string{fact.ResponseID, fact.DeliveryID, fact.Source.SourceID, fact.Source.Revision, fact.Source.SHA256, string(fact.Source.Representation)} {
+			if err := add(len(text)); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return total, nil
+}

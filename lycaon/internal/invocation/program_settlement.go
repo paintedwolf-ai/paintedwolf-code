@@ -20,7 +20,7 @@ func validDigest(s string) bool {
 	return err == nil
 }
 
-// BeforeNativeOwner implements the existing admission consumer port. A committed
+// startNativeOwner records ProgramAdmissionRecorder.BeforeNativeOwner. A committed
 // start marker is a conservative recovery obligation, not proof of an effect.
 // No operation is dispatched if the durable marker cannot be acknowledged.
 func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelCallID, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation string) error {

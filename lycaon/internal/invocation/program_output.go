@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -82,19 +83,30 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 		if output.RetentionClaimID != "" && output.RetentionClaimID != reference.RetentionClaimID {
 			return fmt.Errorf("output actual retention claim mismatch")
 		}
-		blob, err := json.Marshal(reference.Blob)
-		if err != nil {
-			return err
-		}
 		tx, err := r.database.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs (id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), programID, output.ExecutionID, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, string(mappings), time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
+		if err = insertProgramOutput(ctx, tx, programID, output, reference, string(mappings)); err != nil {
 			return err
 		}
 		return tx.Commit()
 	})
+}
+
+func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output RetainedOutput, reference tooloutput.RetainedStreamReference, mappings string) error {
+	blob, err := json.Marshal(reference.Blob)
+	if err != nil {
+		return err
+	}
+	var execution any
+	if output.ExecutionID != "" {
+		execution = output.ExecutionID
+	}
+	if mappings == "" {
+		mappings = "[]"
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, mappings, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
 }

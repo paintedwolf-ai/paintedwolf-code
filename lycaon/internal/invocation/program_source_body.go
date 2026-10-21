@@ -2,11 +2,8 @@ package invocation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
@@ -25,10 +22,6 @@ func (r *SQLRecorder) BeginProgramWithSource(ctx context.Context, in ProgramStar
 		return nil, fmt.Errorf("retained source bytes differ from exact program identity")
 	}
 	return spill.TransferBody(ctx, func(ctx context.Context, reference tooloutput.RetainedStreamReference) error {
-		blob, err := json.Marshal(reference.Blob)
-		if err != nil {
-			return err
-		}
 		tx, err := r.database.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -37,8 +30,7 @@ func (r *SQLRecorder) BeginProgramWithSource(ctx context.Context, in ProgramStar
 		if err = insertProgram(ctx, tx, in); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at) VALUES(?,?,NULL,'source',?,?,?,?,1,?,'[]',?)`, uuid.NewString(), in.Version.ProgramID, in.Version.SourceReference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), redacted, time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
+		if err = insertProgramOutput(ctx, tx, in.Version.ProgramID, RetainedOutput{Stream: "source", Reference: in.Version.SourceReference, Complete: true, Redacted: redacted}, reference, ""); err != nil {
 			return err
 		}
 		return tx.Commit()

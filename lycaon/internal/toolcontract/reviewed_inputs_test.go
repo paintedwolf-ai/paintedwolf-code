@@ -18,6 +18,48 @@ type reviewMemory struct {
 
 var errReviewLimit = errors.New("aggregate review state ceiling")
 
+func TestNativeValueDomainsCannotAcquireOperationMeaning(t *testing.T) {
+	memory := &reviewMemory{maximum: 64 << 20}
+	args := map[string]any{"path": "fixture\xff"}
+	seen := map[string]bool{}
+	for _, domain := range []NativeValueDomain{OperationArgumentsDomain, ApprovalAuthorityDomain, DiagnosticInspectionDomain} {
+		value, release, err := NewNativeValue(t.Context(), memory, domain, args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !value.Valid() || seen[value.Digest()] {
+			t.Fatal("native semantic domains aliased")
+		}
+		seen[value.Digest()] = true
+		decoded, releaseDecoded, err := value.Value(t.Context(), memory)
+		if err != nil || !reflect.DeepEqual(decoded, args) {
+			t.Fatal("neutral codec changed original byte values", err)
+		}
+		restored, releaseRestored, err := RestoreNativeValue(t.Context(), memory, domain, value.Representation(), value.Digest(), value.Canonical())
+		if err != nil || restored != value {
+			t.Fatal("neutral persisted value changed", err)
+		}
+		if domain != OperationArgumentsDomain {
+			if _, releaseWrong, err := RestoreReviewedOperationInputs(t.Context(), memory, value.Representation(), value.Digest(), value.Canonical()); err == nil || releaseWrong != nil {
+				t.Fatal("authority or inspection became executable arguments")
+			}
+		} else {
+			if value.Canonical() != `["operation_arguments",1,["object",[[["utf8","path"],["bytes_base64","Zml4dHVyZf8="]]]]]` {
+				t.Fatal("existing operation representation bytes changed")
+			}
+		}
+		releaseRestored()
+		releaseDecoded()
+		release()
+	}
+	if _, release, err := NewNativeValue(t.Context(), memory, NativeValueDomain("unregistered"), args); err == nil || release != nil {
+		t.Fatal("unknown native semantic domain accepted")
+	}
+	if memory.held != 0 {
+		t.Fatal("neutral codec leaked admitted state")
+	}
+}
+
 func (m *reviewMemory) ReserveProgramState(ctx context.Context, n int64) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

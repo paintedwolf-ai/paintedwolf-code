@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_progress (
     started_at TEXT NOT NULL,
     settled_at TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_session ON invocation_program_progress(session_id);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_root_session ON invocation_program_progress(root_session_id);
 
 CREATE TABLE IF NOT EXISTS invocation_program_sources (
     program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
@@ -138,6 +140,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_execution ON invocation_program_outputs(execution_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invocation_program_outputs_reference ON invocation_program_outputs(program_id,reference);
 
 -- Only source-owner-confirmed delivered pages become observation records.
 CREATE TABLE IF NOT EXISTS invocation_program_deliveries (

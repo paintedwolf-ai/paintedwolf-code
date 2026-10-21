@@ -2,91 +2,48 @@ package toolcontract
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"strings"
 	"unicode/utf8"
 )
 
 // Arguments restores exact original scalar bytes for inspection/screening.
-// The caller owns this detached map and its separate retained-state lease.
-// This is never an owner-dispatch path: live owners retain their frozen inputs.
+// The caller holds the detached map's lease; live owners retain frozen inputs.
 func (r ReviewedOperationInputs) Arguments(ctx context.Context, admission ReviewStateAdmission) (map[string]any, func(), error) {
-	if ctx == nil || admission == nil || !r.Valid() {
-		return nil, nil, fmt.Errorf("admitted review representation required")
+	if !r.Valid() {
+		return nil, nil, fmt.Errorf("admitted operation inputs required")
 	}
-	leases := &reviewLeases{}
-	// Account the JSON decoder's tree/scratch before it allocates. Four payload
-	// shares reserve 64 bytes per encoded byte; recursive restored frames below
-	// are separately admitted before allocating the raw inspection containers.
-	if int64(len(r.canonical)) > (int64(^uint64(0)>>1)-2048)/64 {
-		return nil, nil, fmt.Errorf("review restore bound overflow")
-	}
-	if err := leases.reserve(ctx, admission, int64(len(r.canonical))*4); err != nil {
-		return nil, nil, err
-	}
-	decoder := json.NewDecoder(strings.NewReader(r.canonical))
-	decoder.UseNumber()
-	var envelope []any
-	if err := decoder.Decode(&envelope); err != nil {
-		leases.close()
-		return nil, nil, err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		leases.close()
-		return nil, nil, fmt.Errorf("review representation has trailing data")
-	}
-	if len(envelope) != 3 || envelope[0] != "operation_arguments" || envelope[1] != json.Number("1") {
-		leases.close()
-		return nil, nil, fmt.Errorf("unknown review argument envelope")
-	}
-	restored, err := decodeReviewValue(ctx, admission, leases, envelope[2])
+	value, release, err := r.value.Value(ctx, admission)
 	if err != nil {
-		leases.close()
 		return nil, nil, err
 	}
-	object, ok := restored.(map[string]any)
+	object, ok := value.(map[string]any)
 	if !ok {
-		leases.close()
-		return nil, nil, fmt.Errorf("review argument root must be an object")
+		release()
+		return nil, nil, fmt.Errorf("operation argument root must be an object")
 	}
-	return object, leases.release(), nil
+	return object, release, nil
 }
 
-// RestoreReviewedOperationInputs admits a persisted known representation,
-// validates its exact digest and canonical grammar, and refuses unknown shapes.
+// RestoreReviewedOperationInputs accepts only the executable-input domain and
+// object shape. Other native value domains cannot acquire operation meaning.
 func RestoreReviewedOperationInputs(ctx context.Context, admission ReviewStateAdmission, representation, digest, canonical string) (ReviewedOperationInputs, func(), error) {
-	if representation != LosslessOperationArgumentsV1 {
-		return ReviewedOperationInputs{}, nil, fmt.Errorf("unknown review argument representation")
-	}
-	candidate := ReviewedOperationInputs{representation: representation, digest: digest, canonical: canonical, valid: true}
-	arguments, releaseDecoded, err := candidate.Arguments(ctx, admission)
+	value, release, err := RestoreNativeValue(ctx, admission, OperationArgumentsDomain, representation, digest, canonical)
 	if err != nil {
 		return ReviewedOperationInputs{}, nil, err
 	}
-	// The parser/tree reservation is live before hashing or copying persisted
-	// bytes. This is validation of admitted data, never an owner invocation.
-	sum := sha256.Sum256([]byte(canonical))
-	if digest != hex.EncodeToString(sum[:]) {
-		releaseDecoded()
-		return ReviewedOperationInputs{}, nil, fmt.Errorf("review argument digest mismatch")
-	}
-	normalized, releaseEncoded, err := NewReviewedOperationInputs(ctx, admission, arguments)
+	object, releaseObject, err := value.Value(ctx, admission)
 	if err != nil {
-		releaseDecoded()
+		release()
 		return ReviewedOperationInputs{}, nil, err
 	}
-	if normalized.canonical != canonical {
-		releaseEncoded()
-		releaseDecoded()
-		return ReviewedOperationInputs{}, nil, fmt.Errorf("noncanonical review argument representation")
+	if _, ok := object.(map[string]any); !ok {
+		releaseObject()
+		release()
+		return ReviewedOperationInputs{}, nil, fmt.Errorf("operation argument root must be an object")
 	}
-	return normalized, func() { releaseEncoded(); releaseDecoded() }, nil
+	return ReviewedOperationInputs{value: value}, func() { releaseObject(); release() }, nil
 }
 
 func decodeReviewString(value any) (string, error) {
