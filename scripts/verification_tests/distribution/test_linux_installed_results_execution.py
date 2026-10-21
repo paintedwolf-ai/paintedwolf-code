@@ -11,8 +11,22 @@ import unittest
 
 from linux_release.installed_results import admit
 from linux_release.support_matrix import CATALOG, expand
+from linux_release.support_variants import variants
 
 SOURCE = "a" * 40
+
+
+def passed_variants(environment: dict, capability: str, capabilities: set[str]) -> list[dict]:
+    """Every declared variant observed exactly, one package snapshot per release."""
+    result = []
+    for variant in variants(environment, capability, capabilities):
+        release = variant["release"]
+        result.append({"id": variant["id"], "status": "passed", "observed": {
+            "os_id": release["os_ids"][0], "version_id": release["version_id"],
+            "snapshot": {"kind": release["snapshot_kind"], "channel": release["channel"],
+                         "value": hashlib.sha256(release["id"].encode()).hexdigest()},
+            "display_protocol": variant["display"]["protocol"], "scales_percent": variant["scales_percent"]}})
+    return result
 
 
 class LinuxInstalledResultsTests(unittest.TestCase):
@@ -33,12 +47,16 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                                                    if value["tier"] == tier)
                                         for tier in ("installed-functional", "native-desktop",
                                                      "native-security", "native-performance")]
+        for name in ("mixed_capabilities", "uniform_capabilities"):
+            environment["qualification"]["scaling"][name] = [key for key in environment["qualification"]["scaling"][name]
+                                                               if key in {item["id"] for item in self.catalog["capabilities"]}]
         artifact = {"id": "candidate", "installation": environment["installations"][0],
                     "architecture": environment["architectures"][0], "source_commit": SOURCE,
                     "identity": {"kind": "file", "sha256": "b" * 64}}
         self.final = {"format_version": 1, "source_commit": SOURCE, "artifacts": [artifact]}
         self.campaign = {**copy.deepcopy(self.final), "results": []}
         proof = {"path": "native.txt", "sha256": hashlib.sha256(self.proof.read_bytes()).hexdigest()}
+        capabilities = {item["id"] for item in self.catalog["capabilities"]}
         for row in expand(self.catalog):
             self.campaign["results"].append({
                 "row_id": row["id"], "source_commit": SOURCE, "artifact_id": "candidate",
@@ -47,6 +65,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                                       for key in self.catalog["recorded_environment_facts"]},
                 "cases": [{"id": case, "status": "passed", "evidence": [proof]}
                           for case in row["cases"]],
+                "variants": passed_variants(environment, row["capability"], capabilities),
             })
 
     def report(self):
@@ -74,6 +93,28 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         self.campaign = copy.deepcopy(original)
         self.campaign["results"][0]["cases"].pop()
         self.assertFalse(self.report()["accepted"])
+
+    def test_each_declared_variant_must_pass_on_its_own_release(self):
+        original = copy.deepcopy(self.campaign)
+        row = self.campaign["results"][0]
+        self.assertGreater(len(row["variants"]), 1)
+        row["variants"].pop()
+        result = self.report()
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["rows"][0]["status"], "unverified")
+        self.assertTrue(any(error.endswith(": missing") for error in result["rows"][0]["errors"]))
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"][0]["observed"]["version_id"] = "26.04"
+        result = self.report()
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["rows"][0]["status"], "unverified")
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"][0]["status"] = "failed"
+        self.assertEqual(self.report()["rows"][0]["status"], "failed")
+        self.campaign = copy.deepcopy(original)
+        self.campaign["results"][0]["variants"].append(copy.deepcopy(self.campaign["results"][0]["variants"][0]))
+        with self.assertRaises(ValueError):
+            self.report()
 
     def test_emulation_only_satisfies_declared_functional_cases(self):
         functional = next(row for row in self.campaign["results"] if row["tier"] == "installed-functional")
@@ -113,6 +154,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
             lambda c: c["results"][0].update(environment_facts={}),
             lambda c: c["results"][0].update(status="available"),
             lambda c: c["results"][0].update(extra="ignored"),
+            lambda c: c["results"][0].pop("variants"),
             lambda c: c["results"][0]["cases"][0].update(evidence=[]),
             lambda c: c["results"][0]["cases"].append(copy.deepcopy(c["results"][0]["cases"][0])),
             lambda c: c.update(format_version=True),
@@ -166,3 +208,29 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertFalse(report["accepted"])
         self.assertTrue(any(row["status"] == "failed" for row in report["rows"]))
+
+    def test_cli_retains_failed_checklist_and_never_replaces_inputs_or_reports(self):
+        self.campaign["results"].pop()
+        for name, value in (("catalog", self.catalog), ("campaign", self.campaign), ("artifacts", self.final)):
+            (self.root / (name + ".json")).write_text(json.dumps(value))
+        command = [sys.executable, "-m", "scripts.linux_release.installed_results",
+                   "--catalog", str(self.root / "catalog.json"),
+                   "--campaign", str(self.root / "campaign.json"),
+                   "--final-artifacts", str(self.root / "artifacts.json"),
+                   "--source-commit", SOURCE, "--evidence-root", str(self.root), "--report"]
+        cwd = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as output_directory:
+            output = Path(output_directory) / "report.json"
+            result = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            retained = output.read_bytes()
+            self.assertEqual(json.loads(retained), json.loads(result.stdout))
+            self.assertFalse(json.loads(retained)["accepted"])
+            self.assertTrue(json.loads(retained)["manual_checklist"])
+            repeated = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            self.assertNotEqual(repeated.returncode, 0)
+            self.assertEqual(output.read_bytes(), retained)
+        before = self.proof.read_bytes()
+        refused = subprocess.run(command + [str(self.proof)], cwd=cwd, text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertEqual(self.proof.read_bytes(), before)
