@@ -7,9 +7,9 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/promptattach/attacherr"
 	"github.com/lycaon/lycaon/internal/promptattach/format"
@@ -278,27 +278,40 @@ func ingestExternalFileRef(deps ReferenceDeps, previewBudget *TurnPreviewBudget,
 		}
 	}
 	name := filepath.Base(abs)
+	if !info.Mode().IsRegular() {
+		return FramedPart{}, nil, attacherr.Unsupported(fmt.Sprintf("references[%d]: a regular file is required", i))
+	}
 
 	peek := make([]byte, format.PeekBytes)
-	f, err := os.Open(abs)
+	f, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(abs), Rel: filepath.Base(abs)})
 	if err != nil {
 		return FramedPart{}, nil, attacherr.Unsupported(fmt.Sprintf("references[%d]: open %s: %v", i, abs, err))
 	}
+	defer func() { _ = f.Close() }()
+	info, err = f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return FramedPart{}, nil, attacherr.Unsupported(fmt.Sprintf("references[%d]: a regular file is required", i))
+	}
 	n, _ := io.ReadFull(f, peek)
-	_ = f.Close()
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return FramedPart{}, nil, attacherr.Unsupported(err.Error())
+	}
 	detected := format.Detect(name, "", peek[:n])
 
 	if detected.Kind == format.KindImage {
 		maxImage := deps.MaxImageBytes
 		if maxImage <= 0 {
-			maxImage = 20 * 1024 * 1024
+			maxImage = Active().Transport.MaxImage.Int64()
 		}
 		if info.Size() > maxImage {
 			return FramedPart{}, nil, attacherr.TooLarge(fmt.Sprintf("references[%d]: image %s exceeds byte cap", i, name))
 		}
-		rawBytes, err := os.ReadFile(abs)
+		rawBytes, err := io.ReadAll(io.LimitReader(f, maxImage+1))
 		if err != nil {
 			return FramedPart{}, nil, attacherr.Unsupported(fmt.Sprintf("references[%d]: read %s: %v", i, abs, err))
+		}
+		if int64(len(rawBytes)) > maxImage {
+			return FramedPart{}, nil, attacherr.TooLarge(fmt.Sprintf("references[%d]: image %s exceeds byte cap", i, name))
 		}
 		hint := PathImageHintPrefix + display + "]"
 		part := FramedPart{
@@ -333,19 +346,10 @@ func ingestExternalFileRef(deps ReferenceDeps, previewBudget *TurnPreviewBudget,
 		if part.EndLine < start {
 			part.EndLine = start
 		}
-		if contentBytes, err := os.ReadFile(abs); err == nil && utf8.Valid(contentBytes) {
-			if text, sliceErr := SliceLines(string(contentBytes), part.StartLine, part.EndLine); sliceErr == nil && text != "" && previewBudget != nil {
-				body := hint + "\n" + text
-				part.Fence = frameSnippet(name, mediaType, body, previewBudget.claimBody(int64(len(body))))
-			}
-		}
-	} else if previewBudget != nil && detected.Kind == format.KindText {
-		if contentBytes, err := os.ReadFile(abs); err == nil && utf8.Valid(contentBytes) {
-			preview, _, _ := truncatePrefix(string(contentBytes), previewBudget.claimText(info.Size()))
-			if preview != "" {
-				body := hint + "\n" + preview
-				part.Fence = frameSnippet(name, mediaType, body, len(body))
-			}
+	}
+	if previewBudget != nil && (ref.StartLine >= 1 || detected.Kind == format.KindText) {
+		if fence := externalReferencePreview(f, name, mediaType, hint, info.Size(), part.StartLine, part.EndLine, previewBudget); fence != "" {
+			part.Fence = fence
 		}
 	}
 

@@ -186,8 +186,10 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		if err == nil {
 			return resolved, nil
 		}
-		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
-			return granted, nil
+		if op == sandbox.PathOpRead {
+			if granted, ok := resolveGranted(tctx, modelPath, op); ok {
+				return granted, nil
+			}
 		}
 		return Resolved{}, err
 	}

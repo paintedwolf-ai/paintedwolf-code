@@ -194,10 +194,7 @@ func TestResolveWorkerBranchGrantedExternalAccess(t *testing.T) {
 		t.Fatalf("readRes.Abs = %q want %q", readRes.Abs, canon(t, extFile))
 	}
 
-	writeRes, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, extFile)
-	testutil.FailErr(t, "ResolveWrite granted external file on worker branch", err)
-	if writeRes.Abs != canon(t, extFile) {
-		t.Fatalf("writeRes.Abs = %q want %q", writeRes.Abs, canon(t, extFile))
+	if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, extFile); err == nil {
+		t.Fatal("worker write escaped its branch through an external grant")
 	}
 }
-
