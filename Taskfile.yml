@@ -1822,7 +1822,7 @@ tasks:
       - python3 -m scripts.linux_release.repository_remote {{.CLI_ARGS}}
 
   release:publish:aur-recipe:
-    desc: 'Admit a release-aur-delivery request and prepare its separately bound AUR recipe. Pass request, provenance or prepare and its options after --'
+    desc: 'Admit a release-aur-delivery request and prepare its separately bound AUR recipe. Pass request, provenance, collect or prepare and its options after --'
     cmds:
       - python3 -m scripts.linux_release.aur_delivery_workflow {{.CLI_ARGS}}
 

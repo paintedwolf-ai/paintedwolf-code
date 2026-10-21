@@ -1,4 +1,4 @@
-"""Prepare a separately bound AUR recipe from a trusted controller artifact bundle."""
+"""Admit an AUR delivery request, collect its input bundle and prepare the separately bound recipe."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import re
 import subprocess
 
 from .aur_delivery import plan, production_publish
+from .aur_delivery_inputs import collect
 from .aur_recipe import generate
 from .repository_objects import encoded
 from .signing import CATALOG
@@ -43,14 +44,16 @@ def request(run_id: str, source_commit: str, operation: str):
     selected_request(source_commit, operation)
 
 
-def verify_provenance(run: dict, repository_id: int, run_id: int | None = None):
+def verify_provenance(run: dict, repository_id: int, run_id: int, source_commit: str):
     if (type(repository_id) is not int or type(run.get("repository", {}).get("id")) is not int
             or run["repository"]["id"] != repository_id
-            or (run_id is not None and (type(run.get("id")) is not int or run["id"] != run_id))
+            or type(run.get("id")) is not int or run["id"] != run_id
             or run.get("path") != ".github/workflows/release.yml" or run.get("head_branch") != "main"
             or run.get("event") != "workflow_dispatch" or run.get("status") != "completed"
             or run.get("conclusion") != "success"):
         raise ValueError("AUR inputs must come from the successful protected main release controller")
+    if not isinstance(run.get("head_sha"), str) or run["head_sha"] != source_commit:
+        raise ValueError("AUR controller run was not dispatched for the selected source commit")
 
 
 def prepare(input_root: Path, source_commit: str, receipt: Path, operation: str, *, catalog: Path = CATALOG,
@@ -76,6 +79,9 @@ def prepare(input_root: Path, source_commit: str, receipt: Path, operation: str,
     final = root / "final-artifacts.json"
     if final.is_symlink() or not final.is_file():
         raise ValueError("AUR bundle lacks its retained final-artifact inventory")
+    inventory = json.loads(final.read_text())
+    if not isinstance(inventory, dict) or inventory.get("source_commit") != source_commit:
+        raise ValueError("AUR final-artifact inventory differs from the selected source")
     receipt.parent.mkdir(parents=True, exist_ok=True)
     recipe = receipt.parent / "recipe"
     metadata = generate(generations, recipe, selected["base_url"], catalog, package=package)
@@ -93,18 +99,27 @@ def main(arguments=None):
     provenance.add_argument("--repository-id", type=int, required=True)
     for command in [selected, provenance]:
         command.add_argument("--release-run-id", required=True)
+    collected = commands.add_parser("collect", help="bundle published generations with the controller's final files")
+    collected.add_argument("--repository-url", required=True)
+    collected.add_argument("--channel", required=True)
+    collected.add_argument("--final-artifacts", type=Path, required=True)
+    collected.add_argument("--output", type=Path, required=True)
     prepared = commands.add_parser("prepare", help="prepare the bound recipe from the retained bundle")
     prepared.add_argument("--input-root", type=Path, required=True)
     prepared.add_argument("--receipt", type=Path, required=True)
     for command in [selected, prepared]:
-        command.add_argument("--source-commit", required=True)
         command.add_argument("--operation", required=True)
+    for command in [selected, provenance, collected, prepared]:
+        command.add_argument("--source-commit", required=True)
     args = parser.parse_args(arguments)
     try:
         if args.command == "request":
             request(args.release_run_id, args.source_commit, args.operation)
         elif args.command == "provenance":
-            verify_provenance(json.loads(args.run.read_text()), args.repository_id, run_identity(args.release_run_id))
+            verify_provenance(json.loads(args.run.read_text()), args.repository_id, run_identity(args.release_run_id),
+                              args.source_commit)
+        elif args.command == "collect":
+            collect(args.repository_url, args.channel, args.source_commit, args.final_artifacts, args.output)
         else:
             prepare(args.input_root, args.source_commit, args.receipt, args.operation)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:

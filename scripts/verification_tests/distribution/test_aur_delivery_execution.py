@@ -19,7 +19,7 @@ from scripts.verification_tests.distribution.pacman_repository_fixtures import P
 
 SOURCE = "f" * 40
 CONTROLLER = {"id": 7, "repository": {"id": 1}, "path": ".github/workflows/release.yml", "head_branch": "main",
-              "event": "workflow_dispatch", "status": "completed", "conclusion": "success"}
+              "head_sha": SOURCE, "event": "workflow_dispatch", "status": "completed", "conclusion": "success"}
 
 
 def recipe(directory: Path, version: str) -> Path:
@@ -187,7 +187,7 @@ class AurWorkflowAdmissionTests(unittest.TestCase):
             shutil.copytree(TESTDATA / name, self.bundle / name)
             path = self.bundle / name / "generation.json"
             path.write_text(json.dumps({**json.loads(path.read_text()), "rehearsal": False}))
-        (self.bundle / "final-artifacts.json").write_text('{"final": "selected"}\n')
+        (self.bundle / "final-artifacts.json").write_text(json.dumps({"source_commit": SOURCE}))
         self.delivery({"format_version": 1, "source_commit": SOURCE, "base_url": "https://repository.example.invalid",
                        "generations": ["pacman-0.0.1-x86_64", "pacman-0.0.1-aarch64"]})
         self.receipt = self.work / "output/delivery.json"
@@ -219,16 +219,26 @@ class AurWorkflowAdmissionTests(unittest.TestCase):
                                   "--operation", "prepare"), 1)
 
     def test_only_the_selected_successful_main_release_controller_run_is_admitted(self):
-        verify_provenance(CONTROLLER, 1, 7)
+        verify_provenance(CONTROLLER, 1, 7, SOURCE)
         for mutation in [{'head_branch': 'feature'}, {'conclusion': 'failure'}, {'event': 'pull_request'},
                          {'path': '.github/workflows/other.yml'}, {'repository': {'id': 2}}, {'id': 8},
                          {'status': 'in_progress'}]:
             with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "successful protected main"):
-                verify_provenance({**CONTROLLER, **mutation}, 1, 7)
+                verify_provenance({**CONTROLLER, **mutation}, 1, 7, SOURCE)
         run = self.work / "run.json"
         run.write_text(json.dumps(CONTROLLER))
-        self.assertEqual(self.cli("provenance", "--run", str(run), "--repository-id", "1", "--release-run-id", "7"), 0)
-        self.assertEqual(self.cli("provenance", "--run", str(run), "--repository-id", "1", "--release-run-id", "8"), 1)
+        provenance = ["provenance", "--run", str(run), "--repository-id", "1"]
+        self.assertEqual(self.cli(*provenance, "--release-run-id", "7", "--source-commit", SOURCE), 0)
+        self.assertEqual(self.cli(*provenance, "--release-run-id", "8", "--source-commit", SOURCE), 1)
+
+    def test_controller_run_must_be_dispatched_for_the_selected_source_commit(self):
+        for head in ["e" * 40, SOURCE.upper(), None]:
+            with self.subTest(head=head), self.assertRaisesRegex(ValueError, "selected source commit"):
+                verify_provenance({**CONTROLLER, "head_sha": head}, 1, 7, SOURCE)
+        stale = self.work / "stale-run.json"
+        stale.write_text(json.dumps({**CONTROLLER, "head_sha": "e" * 40}))
+        self.assertEqual(self.cli("provenance", "--run", str(stale), "--repository-id", "1", "--release-run-id", "7",
+                                  "--source-commit", SOURCE), 1)
 
     def test_bundle_must_bind_the_selected_source_and_relative_generations(self):
         catalog = trust(self.work / "trust", rehearsal=False)
@@ -263,6 +273,10 @@ class AurWorkflowAdmissionTests(unittest.TestCase):
             self.prepare(catalog)
         generation.write_text(original)
         final = self.bundle / "final-artifacts.json"
+        final.write_text(json.dumps({"source_commit": "e" * 40}))
+        with self.assertRaisesRegex(ValueError, "final-artifact inventory differs from the selected source"):
+            self.prepare(catalog)
+        final.write_text(json.dumps({"source_commit": SOURCE}))
         final.rename(self.work / "final.json")
         final.symlink_to(self.work / "final.json")
         with self.assertRaisesRegex(ValueError, "final-artifact inventory"):

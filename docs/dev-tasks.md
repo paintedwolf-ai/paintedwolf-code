@@ -1104,14 +1104,20 @@ upload refuse stale competing plans. `test:runner` covers ordering, interrupted 
 and retries against a real local generation and an in-memory object store. Real CDN
 convergence remains a separate credentialed qualification. Neither the generated recipe nor these tools
 publish an AUR Git repository. AUR availability has a separate delivery owner and never becomes atomic with binary
-publication. The separate `release-aur-delivery` workflow consumes the fixed
-`linux-aur-delivery-inputs` artifact from a successful main `release.yml` dispatch.
-Its `delivery.json` selects source, HTTPS base URL and relative generation directories;
-`final-artifacts.json` retains the independently selected final input inventory. The
-workflow calls `./task release:publish:aur-recipe -- request` to check the run identity,
-source commit and operation before reading anything, `-- provenance` to admit the
-downloaded controller run record, and `-- prepare`, which validates native generations
-and emits exact recipe/source/signer/generation bindings. It stages only generated
+publication. The separate `release-aur-delivery` workflow takes a successful main
+`release.yml` dispatch, its exact source commit and the channel. Its `inputs` job calls
+`./task release:publish:aur-recipe -- request` to check the run identity, source commit
+and operation before reading anything, then `-- provenance`, which admits the controller
+run record only when its head commit is the selected source. `-- collect` reads the
+active x86_64 and aarch64 generations from the published pacman repository at the
+`PACMAN_REPOSITORY_URL` repository variable, refuses channel state or manifests for any
+other source commit and objects that differ from their generation inventory, and
+inventories the controller run's `release-public-artifacts`. It retains the bundle as
+the `linux-aur-delivery-inputs` artifact: `delivery.json` selects source, HTTPS base URL
+and relative generation directories, and `final-artifacts.json` binds the final file
+inventory to the same source. The `recipe` job downloads that artifact from its own run
+and calls `-- prepare`, which validates native generations and emits exact
+recipe/source/signer/generation bindings. It stages only generated
 `PKGBUILD`, `.SRCINFO` and the native lifecycle declaration; it never includes binary
 packages or private key material in an AUR Git commit.
 
