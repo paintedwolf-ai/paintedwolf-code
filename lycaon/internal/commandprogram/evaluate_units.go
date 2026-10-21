@@ -50,7 +50,7 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 // owner, then runs it in the current frame. A capture, encoding or syntax
 // refusal latches before any sourced statement; earlier parent effects stay.
 func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields Fields) error {
-	spec, _, err := resolveCommand(fields)
+	spec, _, err := ResolveCommand(fields)
 	if err != nil {
 		return err
 	}

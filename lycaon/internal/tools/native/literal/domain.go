@@ -85,13 +85,15 @@ func runSummarize(inv *invocation) error {
 		return err
 	}
 	focus, _ := inv.value("--focus")
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus}, inv.tc)
+	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, inv.tc)
 	if err != nil {
 		return err
 	}
 	return inv.structured(resp)
 }
 
+// runRepoMap runs the layout bundle, whose find and list_dir probes read
+// catalog and directory metadata only; it opens no file content to pin.
 func runRepoMap(inv *invocation) error {
 	if value, ok := inv.value("--depth"); ok {
 		return inv.usage(value, "the survey owner selects its own layout depth")

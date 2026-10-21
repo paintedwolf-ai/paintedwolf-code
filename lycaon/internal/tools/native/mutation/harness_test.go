@@ -30,14 +30,14 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each call carries the
+// captures from one ordinal on; a recorded position may only be repeated.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, first int, pins []toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, pin := range pins {
@@ -46,13 +46,17 @@ func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []
 		}
 	}
 	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if first < 0 || first > len(existing) || len(pins) == 0 {
+		return io.ErrUnexpectedEOF
+	}
+	overlap := min(len(pins), len(existing)-first)
+	if !slices.Equal(existing[first:first+overlap], pins[:overlap]) {
 		return io.ErrUnexpectedEOF
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(slices.Clone(existing), pins[overlap:]...)
 	return nil
 }
 

@@ -102,7 +102,7 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 // recordPin retains one capture for this execution before its effect.
 func (inv *invocation) recordPin(pin toolcontract.ExecutionRevision) error {
 	inv.pins = append(inv.pins, pin)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, inv.request.Invocation.Identity.ExecutionID, inv.pins)
+	return inv.owners.Pins.RecordRevisionPins(inv.ctx, inv.request.Invocation.Identity.ExecutionID, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
 }
 
 // ordinaryCodes are owner refusals the utilities report on stderr and survive.

@@ -98,6 +98,15 @@ func (m *Meter) Alloc(n int64) {
 	}
 	m.bytes += n
 }
+
+// Steps reports the work admitted so far.
+func (m *Meter) Steps() int64 {
+	if m == nil {
+		return 0
+	}
+	return m.steps
+}
+
 func (m *Meter) Close() {
 	for i := len(m.releases) - 1; i >= 0; i-- {
 		m.releases[i]()
