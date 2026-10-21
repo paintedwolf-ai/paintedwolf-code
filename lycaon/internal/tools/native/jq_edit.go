@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
