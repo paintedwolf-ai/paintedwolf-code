@@ -81,7 +81,10 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	}
 }
 
-type deliveryQuota struct{ state, disk, scratch int }
+type deliveryQuota struct {
+	state, disk, scratch int
+	detector             int64
+}
 
 func (q *deliveryQuota) ReserveProgramState(context.Context, int64) (func(), error) {
 	q.state++
@@ -98,8 +101,8 @@ func (q *deliveryQuota) Reserve(context.Context, int64) (func(), error) {
 func (q *deliveryQuota) ReserveParserScratch(ctx context.Context, n int64) (func(), error) {
 	return q.Reserve(ctx, n)
 }
-func (q *deliveryQuota) ReserveBytes(context.Context, int64) error { q.scratch++; return nil }
-func (q *deliveryQuota) ReleaseBytes(int64)                        { q.scratch-- }
+func (q *deliveryQuota) ReserveBytes(_ context.Context, n int64) error { q.scratch++; return nil }
+func (q *deliveryQuota) ReleaseBytes(int64)                            { q.scratch-- }
 
 type retainedDeliveryFixture struct {
 	owner                                  *SQL
@@ -285,7 +288,7 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	if _, ok = evidence.ResolveHandle(after, shown); !ok {
 		t.Fatal("receipt/output collection erased independent delivered evidence")
 	}
-	if f.quota.state != 0 || f.quota.disk != 0 || f.quota.scratch != 0 {
+	if f.quota.state != 0 || f.quota.disk != 0 || f.quota.scratch != 0 || f.quota.detector != 0 {
 		t.Fatalf("source delivery lifetime leaked: %+v", f.quota)
 	}
 }
