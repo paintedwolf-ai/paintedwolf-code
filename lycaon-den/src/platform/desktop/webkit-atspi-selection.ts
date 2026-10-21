@@ -9,24 +9,25 @@ type Intent = {
 
 /** Keep logical endpoints outside WebKit's live selection while the surface is inaccessible. */
 export function createRetainedWebKitSelection(surface: HTMLElement) {
-  const document = surface.ownerDocument;
+  let parkedDocument: Document | undefined;
   let intent: Intent | undefined;
   let parked = false;
   const changed = () => { intent = undefined; };
   const content = new MutationObserver(changed);
   const selectionChanged = () => {
-    if (parked && document.getSelection()?.rangeCount) changed();
+    if (parked && parkedDocument?.getSelection()?.rangeCount) changed();
   };
 
   const stop = () => {
     const mutated = content.takeRecords().length > 0;
     content.disconnect();
-    document.removeEventListener("selectionchange", selectionChanged);
+    parkedDocument?.removeEventListener("selectionchange", selectionChanged);
+    parkedDocument = undefined;
     parked = false;
     if (mutated) changed();
   };
   const release = () => {
-    const selection = document.getSelection();
+    const selection = surface.ownerDocument.getSelection();
     if (selection && (surface.contains(selection.anchorNode) || surface.contains(selection.focusNode))) {
       selection.removeAllRanges();
     }
@@ -35,7 +36,7 @@ export function createRetainedWebKitSelection(surface: HTMLElement) {
   return {
     hide() {
       if (!webkitAtspiWorkaroundActive() || parked) return;
-      const selection = document.getSelection();
+      const selection = surface.ownerDocument.getSelection();
       intent = undefined;
       if (selection?.anchorNode && selection.focusNode && !selection.isCollapsed &&
           surface.contains(selection.anchorNode) && surface.contains(selection.focusNode)) {
@@ -46,17 +47,20 @@ export function createRetainedWebKitSelection(surface: HTMLElement) {
       }
       parked = true;
       content.observe(surface, { subtree: true, childList: true, characterData: true });
-      document.addEventListener("selectionchange", selectionChanged);
+      parkedDocument = surface.ownerDocument;
+      parkedDocument.addEventListener("selectionchange", selectionChanged);
       release();
     },
     restore() {
+      const previousDocument = parkedDocument;
       stop();
       const saved = intent;
       intent = undefined;
-      if (!saved || !webkitAtspiWorkaroundActive() || !surface.isConnected) return;
-      const selection = document.getSelection();
+      if (!saved || !webkitAtspiWorkaroundActive() || !surface.isConnected ||
+          previousDocument !== surface.ownerDocument) return;
+      const selection = surface.ownerDocument.getSelection();
       if (!selection || selection.rangeCount > 0) return;
-      const focused = document.activeElement;
+      const focused = surface.ownerDocument.activeElement;
       if (focused instanceof HTMLElement && !surface.contains(focused) &&
           (focused.isContentEditable || focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement)) return;
       if (!saved.anchor.isConnected || !saved.focus.isConnected ||

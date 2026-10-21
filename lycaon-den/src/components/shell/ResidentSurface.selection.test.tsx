@@ -38,6 +38,22 @@ describe("retained surface selection", () => {
     surface.remove();
   });
 
+  it("binds the actual document after a template-owned surface is adopted", () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    const template = document.createElement("template");
+    template.innerHTML = "<section>Adopted reader</section>";
+    const surface = template.content.firstElementChild as HTMLElement;
+    const lifecycle = createRetainedWebKitSelection(surface);
+    document.body.append(surface);
+    const selection = select(surface);
+    lifecycle.hide();
+    expect(selection.rangeCount).toBe(0);
+    lifecycle.restore();
+    expect(selection.toString()).toBe("Adopted reader");
+    lifecycle.dispose();
+    surface.remove();
+  });
+
   it.each(["webkitgtk", "wkwebview", null])("releases only inaccessible WebKitGTK ranges: %s", async (engine) => {
     applyWebEngineFact(engine ? { engine, version: "2.54.1" } : null);
     const [presence, setPresence] = createSignal<"active" | "idle">("active");
