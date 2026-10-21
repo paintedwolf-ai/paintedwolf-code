@@ -80,11 +80,11 @@ Adjustments apply where the theme applies: theme tokens land as inline custom pr
 
 ## Linux desktop preferences
 
-The host reads `org.freedesktop.portal.Settings` on the session bus (`ReadAll` at launch, `SettingChanged` afterwards) and reduces the snapshot to typed facts ([`linux_desktop_settings.rs`](../lycaon-den/src-tauri/src/windows/linux_desktop_settings.rs)). A fact the desktop does not expose is absent, and the app says so rather than inventing a preference. The same two events and commands as macOS deliver the payloads, with the same monotonic revisions.
+A distinct read-only `pw-desktop-settings` process reads `org.freedesktop.portal.Settings` on the session bus (`ReadAll` at launch with change subscription already active, `SettingChanged` afterwards) and reduces the snapshot to typed facts ([`linux_desktop_settings.rs`](../lycaon-den/src-tauri/src/windows/linux_desktop_settings.rs)). A fact the desktop does not expose is absent, and the app says so rather than inventing a preference. The same two events and commands as macOS deliver the payloads, with the same monotonic revisions. The secret-bearing shell stays non-dumpable. The observer has no vault or native-presence authority and never performs portal actions. Its bounded private pipe supplies only fixed typed preference observations; `desktop-settings://observation` reports ready, missing, denied, disconnected, timed out or failed status and an observer generation. Denial remains denial, without another provider or identity fallback. A failed source leaves last-known appearance stale rather than inventing a new observed preference. Unknown contrast values mean no preference. The shell owns, stops and reaps the observer, with bounded retry after transient service loss.
 
 | Concern | Source | Delivery |
 |---------|--------|----------|
-| Increase contrast | `org.freedesktop.appearance` `contrast` ≥ 1, or `org.gnome.desktop.a11y.interface` `high-contrast` | `increaseContrast`; theme tokens re-derived as on macOS |
+| Increase contrast | `org.freedesktop.appearance` `contrast` = 1, or `org.gnome.desktop.a11y.interface` `high-contrast` | `increaseContrast`; theme tokens re-derived as on macOS |
 | Accent | `org.freedesktop.appearance` `accent-color` (components outside 0..1 mean no preference), else `org.kde.kdeglobals.General` `AccentColor` | `accent` |
 | Reduce transparency | No Linux desktop exposes one | `reduceTransparency` stays `false` |
 | Text scale | `org.gnome.desktop.interface` `text-scaling-factor` | Category `linux-text-scaling-factor` with `textScale` `1`; see below |
