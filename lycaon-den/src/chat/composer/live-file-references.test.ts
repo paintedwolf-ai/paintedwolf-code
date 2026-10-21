@@ -49,6 +49,28 @@ describe("live file references", () => {
     expect(pendingAttachmentsForSession("chat")).toMatchObject([{ kind: "path-file", path: "shot.png", mediaType: "image/png" }]);
   });
 
+  it("retains a native document projection alongside its project-root address", async () => {
+    vi.mocked(readPathBytes).mockResolvedValue(new Uint8Array([1, 2, 3]));
+    upload.mockResolvedValue({ blob_id: "document-blob", filename: "report.pdf", kind: "document", mime: "application/pdf", bytes: 3 });
+    const classification = { kind: "projected-file" as const, projectId: "project", rootId: "root", path: "docs/report.pdf", absolutePath: "/project/docs/report.pdf" };
+    await ingestDropClassification(classification, destination, ["/project"]);
+    expect(pendingAttachmentsForSession("chat")).toMatchObject([{ kind: "document", blobId: "document-blob" }, { kind: "path-file", path: "docs/report.pdf", rootId: "root" }]);
+  });
+
+  it("trusts the detected upload family when a document suffix contains an image", async () => {
+    vi.mocked(readPathBytes).mockResolvedValue(new Uint8Array([1, 2, 3]));
+    upload.mockResolvedValue({ blob_id: "image-blob", filename: "report.pdf", kind: "image", mime: "image/png", bytes: 3 });
+    await ingestDropClassification({ kind: "projected-file", projectId: "project", rootId: "root", path: "report.pdf", absolutePath: "/project/report.pdf" }, destination, ["/project"]);
+    expect(pendingAttachmentsForSession("chat")).toMatchObject([{ kind: "path-file", path: "report.pdf", mediaType: "image/png" }]);
+    expect(pendingAttachmentsForSession("chat")).toHaveLength(1);
+  });
+
+  it("keeps a native projection read failure visible as a rejected chip", async () => {
+    vi.mocked(readPathBytes).mockRejectedValue({ code: "attachment_too_large" });
+    await ingestDropClassification({ kind: "projected-file", projectId: "project", rootId: "root", path: "report.pdf", absolutePath: "/project/report.pdf" }, destination, ["/project"]);
+    expect(pendingAttachmentsForSession("chat")).toMatchObject([{ kind: "reject", rejectMessage: "Attachment is too large for one message" }]);
+  });
+
   it("keeps disk files and folders through staging, persistence, and wire projection", async () => {
     await ingestDropClassification({ kind: "external-file", absolutePath: file.path }, destination, []);
     await ingestDropClassification({ kind: "external-folder", absolutePath: "/outside/folder" }, destination, []);

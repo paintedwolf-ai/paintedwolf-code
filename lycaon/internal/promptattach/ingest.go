@@ -22,9 +22,10 @@ type FramedPart struct {
 	Fence         string
 	Source        string
 	MediaType     string
-	// BlobID identifies a staged payload.
+	// ArtifactID binds the visual derived from this source part.
 	ArtifactID string
-	BlobID     string
+	// BlobID identifies a staged payload.
+	BlobID string
 	// Path is empty when no materialized body exists.
 	Path string
 	// RootID is the attached root a path reference resolves under.

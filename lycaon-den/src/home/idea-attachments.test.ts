@@ -274,6 +274,17 @@ describe("stageHomeIdeaAttachments", () => {
     });
   });
 
+  it.each([
+    { path: "/tmp/report.pdf", kind: "document" as const, mime: "application/pdf" },
+    { path: "/tmp/bug.mov", kind: "video" as const, mime: "video/quicktime" },
+  ])("keeps the native $kind projection and its live original path", async ({ path, kind, mime }) => {
+    vi.mocked(importPathKind).mockResolvedValue("file");
+    vi.mocked(importExternalAttachment).mockResolvedValue(receipt({ filename: path.split("/").pop(), kind, mime }));
+    const buffered = await intakeOne([pathItem(path)], []);
+    const staged = await stageHomeIdeaAttachments({ uploadAttachment: vi.fn() }, "proj-1", [buffered]);
+    expect(staged).toMatchObject([{ kind, importedCopy: true }, { kind: "external-file", path, projectId: "proj-1" }]);
+  });
+
   it("maps an import failure to a structured reject chip", async () => {
     vi.mocked(importPathKind).mockResolvedValue("file");
     vi.mocked(importExternalAttachment).mockRejectedValue(
