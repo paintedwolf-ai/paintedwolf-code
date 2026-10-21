@@ -20,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/internal/tools/native/command/programtest"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
