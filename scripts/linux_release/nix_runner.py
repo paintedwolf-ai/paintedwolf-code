@@ -51,8 +51,9 @@ def install(environment=os.environ, fetch=urllib.request.urlretrieve, run=subpro
         archive = directory / f"nix-{VERSION}-{machine}-linux.tar.xz"
         fetch(installer_url(machine), archive)
         verify(archive, machine)
+        # The verified installer carries absolute store links, so only member paths are confined.
         with tarfile.open(archive) as source:
-            source.extractall(directory, filter="data")
+            source.extractall(directory, filter="tar")
         (directory / "nix.conf").write_text(DAEMON_CONFIGURATION)
         run(install_command(directory, machine), check=True)
     if environment.get("GITHUB_PATH"):

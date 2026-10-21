@@ -29,6 +29,10 @@ class NixRunnerTests(unittest.TestCase):
             entry = tarfile.TarInfo(f"nix-{nix_runner.VERSION}-x86_64-linux/install")
             entry.size, entry.mode = len(script), 0o755
             archive.addfile(entry, io.BytesIO(script))
+            # Store links in the real installer are absolute.
+            link = tarfile.TarInfo(f"nix-{nix_runner.VERSION}-x86_64-linux/store/{'0' * 32}-lib/lib/libgcc_s.so")
+            link.type, link.linkname = tarfile.SYMTYPE, f"/nix/store/{'0' * 32}-lib/lib/libgcc_s.so.1"
+            archive.addfile(link)
         self.installer = buffer.getvalue()
         self.commands = []
 
