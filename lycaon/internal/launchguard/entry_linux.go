@@ -123,10 +123,12 @@ func sameIdentity(spec EntrySpec) error {
 }
 
 // verifyBroker requires the broker descriptor to be a seqpacket socket whose
-// peer is the supervisor named by the sealed frame, running as the caller.
+// peer is the supervisor named by the sealed frame. The kernel records a
+// socket pair's credentials when it is created, which the bootstrap did while
+// still privileged, so the peer reads as uid 0 even after the drop.
 func verifyBroker(spec EntrySpec) error {
 	peer, err := unix.GetsockoptUcred(entryBrokerFD, unix.SOL_SOCKET, unix.SO_PEERCRED)
-	if err != nil || peer.Uid != spec.UID || int(peer.Pid) != spec.SupervisorPID {
+	if err != nil || peer.Uid != 0 || int(peer.Pid) != spec.SupervisorPID {
 		return errors.New("desktop broker is not the launch supervisor")
 	}
 	kind, err := unix.GetsockoptInt(entryBrokerFD, unix.SOL_SOCKET, unix.SO_TYPE)

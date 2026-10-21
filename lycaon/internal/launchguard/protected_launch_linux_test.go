@@ -352,8 +352,9 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if err := launchverify.ProtectedNamespacePair(initial, facts.Namespace, facts.Namespace); err != nil {
 		t.Fatalf("service attestation refused the protected desktop: %v (%+v)", err, facts.Namespace)
 	}
-	// The supervisor is the bootstrap, back to the caller's identity.
-	if facts.BrokerPeerPID != launch.cmd.Process.Pid || facts.BrokerPeerUID != uid || facts.BrokerType != unix.SOCK_SEQPACKET || !facts.LifetimeRegular {
+	// The supervisor is the bootstrap, which created the broker pair while
+	// privileged and now holds only the caller's identity.
+	if facts.BrokerPeerPID != launch.cmd.Process.Pid || facts.BrokerPeerUID != 0 || facts.BrokerType != unix.SOCK_SEQPACKET || !facts.LifetimeRegular {
 		t.Fatalf("broker or lifetime descriptor not inherited from the supervisor: %+v", facts)
 	}
 	if len(facts.OpenBeyond) != 0 {
