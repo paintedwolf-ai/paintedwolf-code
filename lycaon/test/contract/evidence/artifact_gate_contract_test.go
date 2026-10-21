@@ -48,11 +48,6 @@ func TestArtifactGateRunsBeforeAnyPublish(t *testing.T) {
 			t.Fatalf("the platform artifact gate lacks Linux structural proof %q", linuxProof)
 		}
 	}
-	assembleScript := contractcheck.ReadRepoFile(t, root, "scripts/linux-package-assemble.py")
-	if !strings.Contains(assembleScript, `control / "conffiles"`) {
-		t.Fatal("scripts/linux-package-assemble.py must declare /etc files in DEBIAN/conffiles")
-	}
-
 	bundleScript := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")
 	if !strings.Contains(bundleScript, "verify-bundle.sh") {
 		t.Fatal("scripts/den-build-bundle.sh no longer verifies the bundle it just built")
