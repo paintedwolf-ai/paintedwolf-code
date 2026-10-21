@@ -88,11 +88,11 @@ func (f *revisionFixture) beginExecution(t *testing.T) {
 	f.program = uuid.NewString()
 	rootExecution := uuid.NewString()
 	span := toolcontract.SourceSpan{EndByte: len(source), Line: 1, Column: 1}
-	testutil.FailErr(t, "begin program", f.recorder.BeginProgram(ctx, invocation.ProgramStart{Version: invocation.ProgramVersion{ProgramID: f.program, ParentReceiptID: parent.ID, RootExecutionID: rootExecution,
+	testutil.FailErr(t, "begin program", f.recorder.BeginProgram(ctx, toolcontract.ProgramStart{Version: toolcontract.ProgramVersion{ProgramID: f.program, ParentReceiptID: parent.ID, RootExecutionID: rootExecution,
 		LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:program"},
 		PlanReference: "output:plan", SourceExact: true, SyntaxValidated: true,
-		Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:program"}},
-		Nodes:   []invocation.ProgramNode{{ID: "write-node", SourceUnitID: "submitted", Span: span}}}))
+		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:program"}},
+		Nodes:   []toolcontract.ProgramNode{{ID: "write-node", SourceUnitID: "submitted", Span: span}}}))
 	write, _ := toolcontract.Lookup("write")
 	definition, err := toolcontract.ToolOperation("write", json.RawMessage(`{"type":"object"}`), write)
 	testutil.FailErr(t, "freeze write definition", err)
@@ -102,7 +102,7 @@ func (f *revisionFixture) beginExecution(t *testing.T) {
 	expanded, release, err := toolcontract.NewReviewedOperationInputs(ctx, reviewMemory{}, map[string]any{"path": "out"})
 	testutil.FailErr(t, "freeze expanded inputs", err)
 	defer release()
-	testutil.FailErr(t, "prepare child", f.recorder.PrepareChild(ctx, invocation.ChildStart{ParentReceiptID: parent.ID, Invocation: in, Definition: definition, ArgumentsReference: "output:arguments", ExpandedInputs: expanded, Canonical: "transform > out"}))
+	testutil.FailErr(t, "prepare child", f.recorder.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: parent.ID, Invocation: in, Definition: definition, ArgumentsReference: "output:arguments", ExpandedInputs: expanded, Canonical: "transform > out"}))
 }
 
 type reviewMemory struct{}
