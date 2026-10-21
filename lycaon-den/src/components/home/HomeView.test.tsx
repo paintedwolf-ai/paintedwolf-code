@@ -152,6 +152,11 @@ describe("HomeView draft materialization", () => {
 
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
     fireEvent.input(input, { target: { value: "Build a release dashboard" } });
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(onSubmitIdea).not.toHaveBeenCalled();
+      expect(input.disabled).toBe(false);
+    }
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);
