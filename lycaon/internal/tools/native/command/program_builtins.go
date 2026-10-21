@@ -50,6 +50,9 @@ func newSessionOutputResources() *sessionOutputResources {
 	if err != nil {
 		limits = toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 64 << 20}
 	}
+	// A spill read's decoder scratch, its screening window and one program's
+	// working storage can be held at once by the session's output lifetime.
+	limits.Working *= 3
 	memory, _ := toolcontract.NewProgramMemory(limits)
 	spill := int64(1 << 30)
 	if catalog, err := toolcontract.LanguageV1(); err == nil {

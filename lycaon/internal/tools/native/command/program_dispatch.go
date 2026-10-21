@@ -45,6 +45,13 @@ type dispatchShared struct {
 	mu          sync.Mutex
 	definitions map[string]toolcontract.OperationDefinition
 	rejected    *nativeRejection
+	evaluated   map[string]evaluatedChild
+}
+
+// evaluatedChild is a recorded execution the evaluator runs itself.
+type evaluatedChild struct {
+	child        programChild
+	ownerInvoked bool
 }
 
 // pathCommands run on the frame's own directory state.
@@ -163,9 +170,12 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", operation.Tool)
 	}
-	mode := "default"
+	mode := request.EffectMode
 	if operation.Mode != nil {
 		mode = operation.Mode(argv)
+	}
+	if mode == "" && len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
 	}
 	bound, err := toolcontract.BindOperation(definition.Operation, request.Invocation, spec.Name, mode, nil)
 	if err != nil {
@@ -245,16 +255,20 @@ func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition to
 	if err != nil {
 		return programChild{}, err
 	}
+	return d.prepareInvocation(ctx, definition, request.Invocation, display, inputs)
+}
+
+func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any) (programChild, error) {
 	review, release, err := toolcontract.NewReviewedOperationInputs(ctx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: request.Invocation, Definition: definition, ExpandedInputs: review, Canonical: display})
+	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display})
 	if err != nil {
 		release()
 		return programChild{}, err
 	}
-	return programChild{id: request.Invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
+	return programChild{id: invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
 }
 
 // start commits the durable owner-start marker for a host-run child.
@@ -360,4 +374,95 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 		return d.refuseArgv(ctx, spec, request, err)
 	}
 	return d.Invoke(ctx, request, streams)
+}
+
+var _ commandprogram.ExecutionRecorder = (*ProgramDispatcher)(nil)
+
+// BeginExecution records an execution the evaluator runs itself. A catalog
+// builtin (true, test, [[, export) also commits its owner-start marker; a
+// structural execution (pipeline, group, function, substitution, job,
+// redirection) owns no effect of its own.
+func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
+	spec, native := d.run.commands[command]
+	definition, err := d.structuralDefinition(command)
+	if native {
+		definition, err = d.catalogDefinition(spec)
+	}
+	if err != nil {
+		return err
+	}
+	display := d.run.source
+	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
+		display = display[span.StartByte:span.EndByte]
+	}
+	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command})
+	if err != nil {
+		return err
+	}
+	invoked := false
+	if native && len(spec.Effects) > 0 {
+		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil); err == nil {
+			err = d.start(ctx, child)
+		}
+		if err != nil {
+			child.release()
+			return err
+		}
+		invoked = true
+	}
+	d.shared.mu.Lock()
+	if d.shared.evaluated == nil {
+		d.shared.evaluated = map[string]evaluatedChild{}
+	}
+	d.shared.evaluated[invocation.Identity.ExecutionID] = evaluatedChild{child: child, ownerInvoked: invoked}
+	d.shared.mu.Unlock()
+	return nil
+}
+
+// SettleExecution settles a recorded execution once with the evaluator's record.
+func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation toolcontract.OperationInvocation, record commandprogram.ChildRecord) error {
+	d.shared.mu.Lock()
+	entry, ok := d.shared.evaluated[invocation.Identity.ExecutionID]
+	delete(d.shared.evaluated, invocation.Identity.ExecutionID)
+	d.shared.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("execution %s was not recorded", invocation.Identity.ExecutionID)
+	}
+	defer entry.child.release()
+	result := record.Result
+	if !record.Executed || result.Validate() != nil {
+		result = toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}
+	}
+	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted {
+		// Descendants own their effects; a structural node only aggregates them.
+		result.EffectCertainty = toolcontract.EffectUnknown
+	}
+	return d.settle(ctx, entry.child, result, entry.ownerInvoked, "")
+}
+
+// structuralDefinition compiles one definition per evaluator construct.
+func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	key := "construct " + construct
+	if definition, ok := d.shared.definitions[key]; ok {
+		return definition, nil
+	}
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
+	}
+	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
+		Identity: "program " + construct, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+		Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
+		Streams: toolcontract.StreamContract{Input: "program streams", Output: "program streams", Error: "typed owner rejection; prose is diagnostic", Statuses: map[int]string{0: "aggregate status of the construct"}},
+	})
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	if d.shared.definitions == nil {
+		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
+	}
+	d.shared.definitions[key] = definition
+	return definition, nil
 }

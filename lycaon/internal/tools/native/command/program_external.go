@@ -46,7 +46,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	defer bound.close(context.WithoutCancel(ctx))
 	opts := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
-	opts.NoTimeout, opts.SeparateStderr, opts.Stdout = true, true, nonNilWriter(streams.Output)
+	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	if streams.Input != nil {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
@@ -74,7 +74,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		status = 255
 	}
 	// An external process may have done anything it was confined to do.
-	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}, waitErr
+	result := toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}
+	if len(run.Stages) == 1 && run.Stages[0].ExpectedConsumerClosure() {
+		// The executor's own SIGPIPE classification travels to pipeline settlement.
+		return result, errors.Join(waitErr, launchClosure{run.Stages[0]})
+	}
+	return result, waitErr
 }
 
 // externalArgv drops the explicit "external --" selector.
@@ -95,3 +100,9 @@ func nonNilWriter(w io.Writer) io.Writer {
 func refusedResult(code string) toolcontract.ProducerResult {
 	return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: strings.TrimSpace(code), EffectCertainty: toolcontract.NoEffect}
 }
+
+// launchClosure reports the executor's classification that an external
+// producer ended by SIGPIPE after its host consumer stopped reading.
+type launchClosure struct{ lycexec.StageRun }
+
+func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }

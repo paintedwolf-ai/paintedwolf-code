@@ -264,7 +264,7 @@ func (b *serveBuilder) wireMCP() error {
 		if recorder, ok := b.sessions.Invocations.(*invocation.SQLRecorder); ok && b.execution.Host != nil && b.execution.Host.Commands != nil {
 			b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
 				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
-				Progress: b.sessions.Manager.Coordinator.Guards, Owners: b.storage.Sessions,
+				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions,
 			})
 		}
 		if b.interactions.Preview != nil {

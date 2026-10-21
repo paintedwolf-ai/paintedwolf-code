@@ -8,6 +8,7 @@ import (
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -19,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/lineage"
-	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -44,8 +44,8 @@ type ProgramRuntime struct {
 	// Evaluate is the statement scheduler, commandprogram.Evaluate in production.
 	Evaluate func(context.Context, commandsurface.ProgramSnapshot, commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error)
 	Boundary *sandbox.Boundary
-	// Owners names the host owner when no authenticated request started the work.
-	Owners people.OwnerSource
+	// Sessions names the person who started the session; the program acts for them.
+	Sessions SessionOwners
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
 	Natives  map[string]NativeOperation
@@ -69,6 +69,11 @@ func (r *ProgramRuntime) SetDisabled(disabled bool) []string {
 		return nil
 	}
 	return r.Supervisor.StopAll()
+}
+
+// SessionOwners reads the session whose owner a program acts for.
+type SessionOwners interface {
+	Get(context.Context, string) (*api.Session, error)
 }
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
@@ -118,7 +123,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if r != nil && r.disabled.Load() {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": "command"})
 	}
-	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Owners == nil || r.Projector == nil {
+	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
 	catalog, err := toolcontract.LanguageV1()
@@ -133,9 +138,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	actor, err := people.Acting(ctx, r.Owners)
+	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
 	if err != nil {
 		return "", err
+	}
+	if session == nil || session.OwnerPersonID == "" {
+		return "", fmt.Errorf("command program requires the session owner")
 	}
 	parsed, snapshot, err := parseProgram(ctx, memory, source)
 	if err != nil {
@@ -147,7 +155,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	root := toolcontract.OperationInvocation{
 		Kind:         toolcontract.ProgramChildInvocation,
 		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
-		ActorID:      actor.ID,
+		ActorID:      session.OwnerPersonID,
 		SessionID:    tc.Identity.SessionID,
 		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID},
 		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
@@ -212,7 +220,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
+		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:  memory,
 		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr}, Environment: environment,
 	}
@@ -223,7 +231,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		return evaluatedResult(evaluated), err
 	})
 	settled := make(chan error, 1)
-	r.Supervisor.AfterJobs(root.Identity.ProgramID, func() { settled <- r.settleProgram(ctx, run, result, evaluated) })
+	r.Supervisor.AfterJobs(root.Identity.ProgramID, func(stopped bool) { settled <- r.settleProgram(ctx, run, result, evaluated, stopped) })
 	var settleErr error
 	select {
 	case settleErr = <-settled:
@@ -268,8 +276,8 @@ func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, sourc
 func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, plan commandsurface.ProgramSnapshot, scope captureprojection.Scope, screening captureprojection.StreamOptions) error {
 	sourceRef := "output:program-source:" + run.root.Identity.ProgramID
 	var nodes []toolcontract.ProgramNode
-	for _, statement := range programStatements(plan.Statements) {
-		nodes = append(nodes, toolcontract.ProgramNode{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span})
+	for _, location := range programNodes(plan.Statements) {
+		nodes = append(nodes, toolcontract.ProgramNode{ID: string(location.ID), SourceUnitID: "submitted", Span: location.Span})
 	}
 	start := toolcontract.ProgramStart{
 		Version:       toolcontract.ProgramVersion{ProgramID: run.root.Identity.ProgramID, ParentReceiptID: run.parentReceipt, RootExecutionID: run.root.Identity.ExecutionID, LanguageVersion: plan.Version, CatalogDigest: plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: plan.SourceDigest, SourceReference: sourceRef},
@@ -301,11 +309,11 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 
 // settleProgram records the evaluator's aggregate; a supervisor stop or loss
 // overrides it with the interruption RunProgram reported.
-func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome) error {
+func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
-	if result.Terminal == toolcontract.ProducerInterrupted && settlement.State == "completed" {
-		status := result.Status
-		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, result.StopCode
+	if stopped {
+		status := 130
+		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode
 	}
 	return r.Recorder.SettleProgram(context.WithoutCancel(ctx), run.root.Identity.ProgramID, settlement)
 }
@@ -331,7 +339,8 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
 			return reject
 		}
-		return nil
+		// A host stop without a typed rejection is a host failure, never success.
+		return evalErr
 	}
 	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.tc, rejection.operation, rejection.cause)
 	if err != nil || prepared == nil {
@@ -411,10 +420,10 @@ func (b *boundedBuffer) Bytes() []byte {
 	return append([]byte(nil), b.data...)
 }
 
-// programStatements lists every static statement, nested ones and those in
-// substitutions included, so each reachable child has a recorded node.
-func programStatements(statements []commandsurface.Statement) []commandsurface.Statement {
-	var out []commandsurface.Statement
+// programNodes lists every static location an execution can begin at:
+// statements (nested and inside substitutions), substitutions and redirections.
+func programNodes(statements []commandsurface.Statement) []commandsurface.SyntaxLocation {
+	var out []commandsurface.SyntaxLocation
 	var statement func(commandsurface.Statement)
 	var words func([]commandsurface.DeferredWord)
 	var parts func([]commandsurface.WordNode)
@@ -429,6 +438,7 @@ func programStatements(statements []commandsurface.Statement) []commandsurface.S
 			case commandsurface.DoubleQuotedPart:
 				parts(node.Parts)
 			case commandsurface.SubstitutionPart:
+				out = append(out, node.SyntaxLocation)
 				list(node.Statements)
 			}
 		}
@@ -439,8 +449,9 @@ func programStatements(statements []commandsurface.Statement) []commandsurface.S
 		}
 	}
 	statement = func(s commandsurface.Statement) {
-		out = append(out, s)
+		out = append(out, s.SyntaxLocation)
 		for _, redirect := range s.Redirects {
+			out = append(out, redirect.SyntaxLocation)
 			words([]commandsurface.DeferredWord{redirect.Target})
 		}
 		switch node := s.Command.(type) {
@@ -470,5 +481,13 @@ func programStatements(statements []commandsurface.Statement) []commandsurface.S
 		}
 	}
 	list(statements)
-	return out
+	seen := map[commandsurface.NodeID]bool{}
+	unique := out[:0]
+	for _, location := range out {
+		if !seen[location.ID] {
+			seen[location.ID] = true
+			unique = append(unique, location)
+		}
+	}
+	return unique
 }

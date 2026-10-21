@@ -67,7 +67,7 @@ type supervisedProgram struct {
 	jobs       map[int]*supervisedJob
 	nextJob    int
 	foreground bool
-	settle     func()
+	settle     func(stopped bool)
 }
 
 type supervisedKey struct{}
@@ -236,8 +236,9 @@ func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, s
 	}, nil
 }
 
-// AfterJobs runs settle once the program's foreground and every held job end.
-func (s *ProgramSupervisor) AfterJobs(programID string, settle func()) {
+// AfterJobs runs settle once the program's foreground and every held job end;
+// stopped reports whether a stop or loss closed the program first.
+func (s *ProgramSupervisor) AfterJobs(programID string, settle func(stopped bool)) {
 	s.mu.Lock()
 	program, ok := s.programs[programID]
 	if ok {
@@ -245,7 +246,7 @@ func (s *ProgramSupervisor) AfterJobs(programID string, settle func()) {
 	}
 	s.mu.Unlock()
 	if !ok {
-		settle()
+		settle(false)
 		return
 	}
 	s.finishIfIdle(programID)
@@ -268,7 +269,7 @@ func (s *ProgramSupervisor) finishIfIdle(programID string) {
 		return
 	}
 	delete(s.programs, programID)
-	settle := program.settle
+	settle, stopped := program.settle, program.closed
 	s.mu.Unlock()
-	settle()
+	settle(stopped)
 }

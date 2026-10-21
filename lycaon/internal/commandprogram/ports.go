@@ -102,6 +102,13 @@ type NestedCommand interface {
 	RunNested(ctx context.Context, parent OperationRequest, argv Fields, environment map[string]string, streams Streams) (toolcontract.ProducerResult, error)
 }
 
+// ExecutionRecorder records an execution the evaluator runs itself before any
+// descendant is dispatched, and settles it with its record once.
+type ExecutionRecorder interface {
+	BeginExecution(context.Context, toolcontract.OperationInvocation, string) error
+	SettleExecution(context.Context, toolcontract.OperationInvocation, ChildRecord) error
+}
+
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one
 // parent program, a prepared child per dynamic execution, once-only settlements.
 type ProgramRecorder interface {

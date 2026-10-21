@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 
@@ -116,7 +115,7 @@ type ProgramServices struct {
 	Blobs     blobstore.Store
 	Projector *captureprojection.Projector
 	Progress  toolexecution.ProgramProgressFacts
-	Owners    people.OwnerSource
+	Sessions  command.SessionOwners
 }
 
 func (r *CommandServices) programs() *command.ProgramRuntime {
@@ -133,7 +132,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) {
 		return
 	}
 	programs.Recorder, programs.Blobs, programs.Projector = services.Recorder, services.Blobs, services.Projector
-	programs.Progress, programs.Owners = services.Progress, services.Owners
+	programs.Progress, programs.Sessions = services.Progress, services.Sessions
 	programs.Supervisor.Interrupter = services.Recorder
 }
 

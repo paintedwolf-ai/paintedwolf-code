@@ -47,7 +47,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	if int64(len(stages)) > f.e.limits["pipeline_stages"] {
 		return f.refuseLimit(s.SyntaxLocation, "pipeline_stages", int64(len(stages)))
 	}
-	run, err := f.begin(s.SyntaxLocation, "|")
+	run, err := f.beginRecorded(ctx, s.SyntaxLocation, "|")
 	if err != nil {
 		return err
 	}
@@ -125,6 +125,10 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 				cause = ErrConsumerClosed
 			}
 			outcomes[i].Closure = NativeConsumerClosure(pipes[i], cause, r.executionID, results[i+1].executionID)
+		}
+		var executor ExecutorClosure
+		if i < len(pipes) && r.external && errors.As(r.cause, &executor) {
+			outcomes[i].Closure = ExternalConsumerClosure(executor, r.executionID, results[i+1].executionID)
 		}
 		if stageErr == nil && r.err != nil {
 			stageErr = r.err

@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/lineage"
-	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -47,10 +47,10 @@ type programFixture struct {
 	background *bgprocess.Registry
 }
 
-type fixtureOwner struct{}
+type fixtureSessions struct{}
 
-func (fixtureOwner) HostOwner(context.Context) (people.Person, error) {
-	return people.Person{ID: "fixture-person", Role: api.PersonRoleOwner}, nil
+func (fixtureSessions) Get(_ context.Context, id string) (*api.Session, error) {
+	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
 }
 
 type progressFacts struct{ store progress.Store }
@@ -69,9 +69,11 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register write owner", registry.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return "", errors.New("structured write is not exercised")
-	}))
+	for _, name := range []string{"write", "read"} {
+		testutil.FailErr(t, "register "+name+" owner", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			return "", errors.New("structured tool is not exercised")
+		}))
+	}
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
@@ -84,8 +86,8 @@ func newProgramFixture(t *testing.T) *programFixture {
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Owners:  fixtureOwner{},
-		Natives: map[string]command.NativeOperation{"tee": teeOperation(dir)},
+		Sessions: fixtureSessions{},
+		Natives:  map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()},
 	}
 	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background}
 }
@@ -131,6 +133,27 @@ func (f *programFixture) executions(t *testing.T) map[string]string {
 		out[operation] += state + ";"
 	}
 	return out
+}
+
+// firstLineOperation is a typed fixture reader that copies one stdin line and
+// then stops reading, as head does.
+func firstLineOperation() command.NativeOperation {
+	return command.NativeOperation{Tool: "read",
+		Bind: func(_ context.Context, _ commandprogram.OperationRequest, _ commandprogram.BoundArgv, bound toolcontract.BoundOperation) (toolexecution.NativeEffect, error) {
+			return toolexecution.NativeEffect{PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					line, err := bufio.NewReader(streams.Input).ReadString('\n')
+					_ = streams.Input.Close()
+					if err == nil {
+						_, err = io.WriteString(streams.Output, line)
+					}
+					if err != nil {
+						return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+					}
+					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
+				}}, nil
+			}}, nil
+		}}
 }
 
 // teeOperation is a typed fixture owner bound through InvokeNative: it copies
@@ -323,7 +346,7 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
 		t.Fatalf("disabled entry admitted a program: %v", err)
 	}
-	if programs := f.programRows(t); len(programs) != 1 || programs[0] == "running" {
+	if programs := f.programRows(t); len(programs) != 2 || programs[0] != "interrupted" || programs[1] != "completed" {
 		t.Fatalf("programs after disable %v", programs)
 	}
 	f.runtime.SetDisabled(false)
@@ -354,5 +377,17 @@ func TestProgramEntryLsofReportsOnlySessionListeners(t *testing.T) {
 	}
 	if len(asked) != 2 || asked[0] != f.session || asked[1] != f.session {
 		t.Fatalf("listener observation scope %v", asked)
+	}
+}
+
+func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), "external -- /usr/bin/yes | head")
+	testutil.FailErr(t, "run early-consumer pipeline", err)
+	if !strings.Contains(out, `"stdout":"y\n"`) || !strings.Contains(out, `"status":0`) || !strings.Contains(out, `"state":"completed"`) {
+		t.Fatalf("early consumer outcome %s", out)
+	}
+	if executions := f.executions(t); executions["external"] != "completed;" || executions["read"] != "completed;" {
+		t.Fatalf("children %v", executions)
 	}
 }
