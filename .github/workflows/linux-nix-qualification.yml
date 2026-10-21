@@ -42,6 +42,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Nix reads the source's Git history; a shallow controller root would cut it.
+          fetch-depth: 0
 
       - name: Select the frozen qualification source
         id: source
