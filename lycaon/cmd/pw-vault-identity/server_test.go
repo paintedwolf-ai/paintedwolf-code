@@ -11,7 +11,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,9 +51,10 @@ func (f *fixture) addProcess(p process) {
 	testutil.FailErr(f.t, "mkdir proc", os.MkdirAll(dir, 0o755))
 	stat := fmt.Sprintf("%d (x) S %d 1 1 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 1 1 1", p.pid, p.ppid, p.start)
 	testutil.FailErr(f.t, "write stat", os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644))
-	status := fmt.Sprintf("Uid:\t%d\t%d\t%d\t%d\n", p.uid, p.uid, p.uid, p.uid)
+	status := fmt.Sprintf("TracerPid:\t0\nUid:\t%d\t%d\t%d\t%d\n", p.uid, p.uid, p.uid, p.uid)
 	testutil.FailErr(f.t, "write status", os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o644))
 	testutil.FailErr(f.t, "write exe", os.WriteFile(filepath.Join(dir, "exe"), p.image, 0o755))
+	testutil.FailErr(f.t, "create target root", os.MkdirAll(filepath.Join(dir, "root"), 0755))
 	// Only anonymous code: the mapping rules are covered in launchverify.
 	maps := "7fff00000000-7fff00002000 r-xp 00000000 00:00 0                          [vdso]\n"
 	testutil.FailErr(f.t, "write maps", os.WriteFile(filepath.Join(dir, "maps"), []byte(maps), 0o644))
@@ -66,11 +69,28 @@ func entry(path string, image []byte) pkgmanifest.Executable {
 	return pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(image))}
 }
 
+// writeManifest seals the listed executables in a complete payload inventory, as
+// the package producer does; the vault server reads the same installed shape.
 func writeManifest(t *testing.T, path string, executables ...pkgmanifest.Executable) {
 	t.Helper()
+	const installRoot = "/opt/painted-wolf-code"
+	payload := map[string]pkgmanifest.PayloadEntry{}
+	for _, exe := range executables {
+		relative := strings.TrimPrefix(exe.Path, installRoot+"/")
+		for parent := filepath.Dir(relative); parent != "."; parent = filepath.Dir(parent) {
+			payload[parent] = pkgmanifest.PayloadEntry{Path: parent, Kind: "directory", Mode: 0o755}
+		}
+		sum, size := exe.SHA256, exe.Size
+		payload[relative] = pkgmanifest.PayloadEntry{Path: relative, Kind: "file", Mode: 0o755, SHA256: &sum, Size: &size}
+	}
+	entries := make([]pkgmanifest.PayloadEntry, 0, len(payload))
+	for _, row := range payload {
+		entries = append(entries, row)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	raw, err := json.Marshal(pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: "1.0.2",
-		Architecture: "x86_64", InstallRoot: "/opt/painted-wolf-code", Executables: executables,
+		Architecture: "x86_64", InstallRoot: installRoot, Executables: executables, Payload: entries,
 	})
 	testutil.FailErr(t, "encode manifest", err)
 	testutil.FailErr(t, "write manifest", os.WriteFile(path, raw, 0o644))
@@ -90,7 +110,12 @@ func newFixture(t *testing.T) *fixture {
 	f.addProcess(process{pid: 300, ppid: 1, uid: 1000, start: 10, image: desktopImage})
 	f.addProcess(process{pid: 301, ppid: 300, uid: 1000, start: 20, image: engineImage})
 	f.server = &Server{
-		Store: &Store{Root: f.state}, Verifier: launchverify.Verifier{ProcRoot: f.procRoot}, Manifest: f.manifest,
+		Store: &Store{Root: f.state}, Verifier: launchverify.Verifier{ProcRoot: f.procRoot, NamespaceReader: func(_ string, pid int) (launchverify.NamespaceFacts, error) {
+			if pid == 0 {
+				return launchverify.NamespaceFacts{Device: 1, Inode: 10}, nil
+			}
+			return launchverify.NamespaceFacts{Device: 1, Inode: 20, FullUIDMap: true, FullGIDMap: true, NoNewPrivileges: true}, nil
+		}}, Manifest: f.manifest,
 		PeerOf: func(net.Conn) (Peer, error) { return f.peer, nil },
 		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}

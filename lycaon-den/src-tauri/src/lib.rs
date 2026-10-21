@@ -18,6 +18,8 @@ mod linux_install;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
+#[cfg(unix)]
+mod protected_launch;
 mod shell_command;
 mod sidecar;
 #[cfg(test)]
@@ -34,6 +36,10 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before any thread or child exists that could inherit the launch's
+    // broker and lifetime descriptors.
+    #[cfg(unix)]
+    protected_launch::claim();
     harden_process();
     let context = tauri::generate_context!();
     // GTK 3 names the Wayland toplevel and the X11 window class after the program
