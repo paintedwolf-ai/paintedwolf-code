@@ -66,20 +66,17 @@ export function createAppStore(
   );
   let progressRevisionEpoch = initial.sessionViewEpoch;
   let findingsRevisionEpoch = initial.sessionViewEpoch;
-  let queueRevisionEpoch = initial.sessionViewEpoch;
+  const freshQueueSessions = new Set<string>();
   const queueDrafts = new Map<string, QueueDraft>();
   if (initial.currentSession && initial.queueDraft) {
     queueDrafts.set(initial.currentSession.id.trim(), initial.queueDraft);
+    freshQueueSessions.add(initial.currentSession.id.trim());
   }
 
-  const rememberQueueDraft = (sessionId: string, draft: QueueDraft, epoch?: number): QueueDraft => {
+  const rememberQueueDraft = (sessionId: string, draft: QueueDraft, authoritative = true): QueueDraft => {
     const current = queueDrafts.get(sessionId);
-    if (epoch !== undefined && queueRevisionEpoch === epoch) {
-      if (current && current.revision >= draft.revision) return current;
-    }
-    if (epoch !== undefined) {
-      queueRevisionEpoch = epoch;
-    }
+    if (current && (!authoritative || freshQueueSessions.has(sessionId)) && current.revision >= draft.revision) return current;
+    if (authoritative) freshQueueSessions.add(sessionId);
     queueDrafts.set(sessionId, draft);
     return draft;
   };
@@ -113,7 +110,6 @@ export function createAppStore(
           draft.currentSession = session;
           progressRevisionEpoch = draft.sessionViewEpoch;
           findingsRevisionEpoch = draft.sessionViewEpoch;
-          queueRevisionEpoch = draft.sessionViewEpoch;
           draft.progress = bootstrap.progress;
           draft.turnClock = bootstrap.turn_clock;
           draft.findings = loaded(bootstrap.findings ?? null);
@@ -253,6 +249,7 @@ export function createAppStore(
       return workerRetention.retain(workerId);
     },
     invalidateSessionViewRequests() {
+      freshQueueSessions.clear();
       setState("sessionViewEpoch", state.sessionViewEpoch + 1);
     },
     noteSessionSeen(session) {
@@ -593,22 +590,8 @@ export function createAppStore(
     },
     setQueueDraft(sessionId, epoch, queueDraft) {
       const sid = sessionId.trim();
-      if (state.currentSession?.id.trim() !== sid) {
-        rememberQueueDraft(sid, queueDraft);
-        return false;
-      }
-      if (
-        state.sessionViewEpoch !== epoch &&
-        state.queueDraft !== undefined &&
-        queueDraft.revision <= state.queueDraft.revision
-      ) {
-        return false;
-      }
-      const queue = rememberQueueDraft(
-        sid,
-        queueDraft,
-        state.sessionViewEpoch === epoch ? epoch : undefined,
-      );
+      if (state.currentSession?.id.trim() !== sid || state.sessionViewEpoch !== epoch) return false;
+      const queue = rememberQueueDraft(sid, queueDraft);
       batch(() => {
         setState("queueDraft", queue);
         reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
@@ -788,8 +771,7 @@ export function createAppStore(
         produce((draft) => {
           draft.currentSession = snapshot.session;
           if (snapshot.queueDraft) {
-            rememberQueueDraft(sessionId, snapshot.queueDraft);
-            draft.queueDraft = snapshot.queueDraft;
+            draft.queueDraft = rememberQueueDraft(sessionId, snapshot.queueDraft, false);
           } else {
             draft.queueDraft = queueDrafts.get(sessionId);
           }

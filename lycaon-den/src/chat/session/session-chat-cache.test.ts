@@ -126,7 +126,7 @@ describe("session-chat-cache", () => {
     const store = createAppStore();
     store.actions.setCurrentSession(demoSession);
     store.actions.installTranscriptBaseline("sess-a", [], 0);
-    const queue = { revision: 3, queue_items: [{ id: "q1", prompt: "queued", created_at: "t" }], hold: false, sending: false };
+    const queue = { revision: 3, queue_items: [{ id: "q1", text: "queued", submitted_by: "person", created_at: "t" }], hold: false, sending: false };
     store.actions.setQueueDraft("sess-a", store.state.sessionViewEpoch, queue);
     expect(store.state.queueDraft?.revision).toBe(3);
 
@@ -139,6 +139,22 @@ describe("session-chat-cache", () => {
 
     store.actions.restoreSessionChatSnapshot(hit!);
     expect(store.state.queueDraft).toEqual(queue);
+  });
+
+  it("restoring a cached queue cannot replace a newer live queue", () => {
+    const store = createAppStore();
+    store.actions.setCurrentSession(demoSession);
+    store.actions.installTranscriptBaseline("sess-a", [], 0);
+    const queue = { revision: 3, queue_items: [], hold: false, sending: false };
+    store.actions.setQueueDraft("sess-a", store.state.sessionViewEpoch, queue);
+    rememberSessionChatFromStore(store);
+    const snapshot = getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })!;
+    store.actions.setQueueDraft("sess-a", store.state.sessionViewEpoch, { ...queue, revision: 4 });
+    store.actions.restoreSessionChatSnapshot(snapshot);
+    expect(store.state.queueDraft?.revision).toBe(4);
+    store.actions.setCurrentSession({ ...demoSession, id: "sess-b" });
+    store.actions.setCurrentSession(demoSession);
+    expect(store.state.queueDraft?.revision).toBe(4);
   });
 
   it("restoreCachedSessionChat binds a cached transcript", () => {

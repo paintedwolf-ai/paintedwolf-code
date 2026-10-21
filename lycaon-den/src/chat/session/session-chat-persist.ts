@@ -76,6 +76,15 @@ function parseTranscript(value: unknown): TranscriptWindow | null {
   };
 }
 
+function parseQueueDraft(value: unknown): QueueDraft | undefined {
+  if (!isRecord(value) || !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 ||
+      typeof value.hold !== "boolean" || typeof value.sending !== "boolean" || !Array.isArray(value.queue_items)) return undefined;
+  if (!value.queue_items.every(item => isRecord(item) && typeof item.id === "string" &&
+      typeof item.submitted_by === "string" && typeof item.text === "string" && typeof item.created_at === "string" &&
+      (item.group_id === undefined || typeof item.group_id === "string"))) return undefined;
+  return value as unknown as QueueDraft;
+}
+
 export function parsePersistedSessionSnapshot(
   raw: unknown,
 ): PersistedSessionChatSnapshot | null {
@@ -120,9 +129,7 @@ export function parsePersistedSessionSnapshot(
     scope,
     touchedAt: raw.touchedAt,
     session,
-    queueDraft: isRecord(raw.queueDraft)
-      ? (raw.queueDraft as unknown as QueueDraft)
-      : undefined,
+    queueDraft: parseQueueDraft(raw.queueDraft),
     transcript,
     transcriptWatermark: raw.transcriptWatermark,
     turnClocks: raw.turnClocks as TurnClock[],
