@@ -956,7 +956,7 @@ fits every bounded class and a ready PR. Reduce repeated compilation, preparatio
 and unnecessary broad selection before adding runners to each group.
 
 Contract tests in
-[`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
+[`hosted_capacity_contract_test.go`](../lycaon/test/contract/hosted/hosted_capacity_contract_test.go)
 compute each workflow's widest set of jobs that can run at once, following
 `needs`, event conditions, matrix caps, and reusable workflows, and require it
 within the declared footprint. They also require the classes, the merge queue
