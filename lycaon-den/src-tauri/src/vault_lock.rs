@@ -2,11 +2,12 @@
 //!
 //! The engine ends idle unlocks itself; only the desktop sees the screen
 //! lock, sleep, a user switch, or quit. Locking only removes authority, so
-//! a lost request costs at most the rest of an unlock. Windows lock events
-//! are not observed yet.
+//! a lost request costs at most the rest of an unlock. On Linux the display
+//! server's input idle also counts as stepping away. Windows lock events are
+//! not observed yet.
 
-use std::time::Duration;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 static STEP_AWAY_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -30,6 +31,9 @@ const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
 pub enum LockReason {
     ScreenLocked,
     Sleep,
+    /// The display server reported the person's input idle for the
+    /// step-away period.
+    Away,
     AppQuit,
 }
 
@@ -38,6 +42,7 @@ impl LockReason {
         match self {
             LockReason::ScreenLocked => "screen_locked",
             LockReason::Sleep => "sleep",
+            LockReason::Away => "away",
             LockReason::AppQuit => "app_quit",
         }
     }
@@ -83,14 +88,20 @@ fn lock_in_background(app: &AppHandle, reason: LockReason) {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn confirmation_allowed() -> bool { linux::confirmation_allowed() }
+pub(crate) fn confirmation_allowed() -> bool {
+    linux::confirmation_allowed()
+}
 
 #[tauri::command]
 pub(crate) fn vault_lock_status() -> serde_json::Value {
     #[cfg(target_os = "linux")]
-    { serde_json::to_value(linux::status()).unwrap_or(serde_json::Value::Null) }
+    {
+        serde_json::to_value(linux::status()).unwrap_or(serde_json::Value::Null)
+    }
     #[cfg(not(target_os = "linux"))]
-    { serde_json::Value::Null }
+    {
+        serde_json::Value::Null
+    }
 }
 
 /// Registers the step-away observers.
@@ -213,6 +224,7 @@ mod tests {
     fn lock_reasons_use_the_engine_wire_names() {
         assert_eq!(LockReason::ScreenLocked.wire(), "screen_locked");
         assert_eq!(LockReason::Sleep.wire(), "sleep");
+        assert_eq!(LockReason::Away.wire(), "away");
         assert_eq!(LockReason::AppQuit.wire(), "app_quit");
     }
 }

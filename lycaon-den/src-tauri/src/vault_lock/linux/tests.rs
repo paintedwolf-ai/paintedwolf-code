@@ -1,10 +1,16 @@
-//! The step-away monitor against private buses: one dbus-daemon stands in
-//! for the system bus with a fixture logind, another for the session bus
-//! with a fixture screen saver.
+//! The step-away monitor against private buses and an in-test compositor:
+//! one dbus-daemon stands in for the system bus with a fixture logind,
+//! another for the session bus with a fixture screen saver and GNOME idle
+//! monitor, and a minimal Wayland compositor serves the idle notifier.
+
+mod compositor;
+
+use compositor::Compositor;
 
 use super::*;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -108,6 +114,8 @@ struct Facts {
     sleeping: bool,
     screensaver: bool,
     session_uid: u32,
+    session_type: &'static str,
+    mutter_idle_ms: u64,
 }
 
 impl Default for Facts {
@@ -118,6 +126,8 @@ impl Default for Facts {
             sleeping: false,
             screensaver: false,
             session_uid: uid(),
+            session_type: "wayland",
+            mutter_idle_ms: 0,
         }
     }
 }
@@ -157,16 +167,31 @@ const SCREENSAVER_XML: &str = "<node><interface name='org.freedesktop.ScreenSave
 <method name='GetActive'><arg type='b' direction='out'/></method>\
 <signal name='ActiveChanged'><arg type='b'/></signal></interface></node>";
 
+const MUTTER_XML: &str = "<node><interface name='org.gnome.Mutter.IdleMonitor'>\
+<method name='GetIdletime'><arg type='t' direction='out'/></method></interface></node>";
+const MUTTER: &str = "org.gnome.Mutter.IdleMonitor";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Logind,
+    ScreenSaver,
+    Mutter,
+}
+
 impl Service {
     fn logind(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
-        Self::start(daemon.address(), facts, true)
+        Self::start(daemon.address(), facts, Kind::Logind)
     }
 
     fn screensaver(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
-        Self::start(daemon.address(), facts, false)
+        Self::start(daemon.address(), facts, Kind::ScreenSaver)
     }
 
-    fn start(address: String, facts: Arc<Mutex<Facts>>, logind: bool) -> Self {
+    fn mutter(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
+        Self::start(daemon.address(), facts, Kind::Mutter)
+    }
+
+    fn start(address: String, facts: Arc<Mutex<Facts>>, kind: Kind) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let (requests, incoming) = mpsc::channel::<Request>();
@@ -183,12 +208,13 @@ impl Service {
                         None::<&gio::Cancellable>,
                     )
                     .unwrap();
-                    let registrations = if logind {
-                        register_logind(&connection, &facts)
-                    } else {
-                        register_screensaver(&connection, &facts)
+                    let (registrations, name) = match kind {
+                        Kind::Logind => (register_logind(&connection, &facts), session::NAME),
+                        Kind::ScreenSaver => {
+                            (register_screensaver(&connection, &facts), SCREENSAVER)
+                        }
+                        Kind::Mutter => (register_mutter(&connection, &facts), MUTTER),
                     };
-                    let name = if logind { session::NAME } else { SCREENSAVER };
                     request_name(&connection, name);
                     ready.send(()).unwrap();
                     while !stopping.load(Ordering::Acquire) {
@@ -332,7 +358,7 @@ fn register_logind(
                         match property {
                             "PreparingForSleep" => facts.sleeping.to_variant(),
                             "Id" => "fixture".to_variant(),
-                            "Type" => "wayland".to_variant(),
+                            "Type" => facts.session_type.to_variant(),
                             "Class" => "user".to_variant(),
                             "User" => (
                                 facts.session_uid,
@@ -379,6 +405,27 @@ fn register_screensaver(
         .unwrap()]
 }
 
+fn register_mutter(
+    connection: &gio::DBusConnection,
+    facts: &Arc<Mutex<Facts>>,
+) -> Vec<gio::RegistrationId> {
+    let node = gio::DBusNodeInfo::for_xml(MUTTER_XML).unwrap();
+    let info = node.lookup_interface(MUTTER).unwrap();
+    let reads = facts.clone();
+    vec![connection
+        .register_object(
+            "/org/gnome/Mutter/IdleMonitor/Core",
+            &info,
+            move |_, _, _, _, _, _, invocation| {
+                let idle = reads.lock().unwrap().mutter_idle_ms;
+                invocation.return_value(Some(&(idle,).to_variant()));
+            },
+            |_, _, _, _, _| false.to_variant(),
+            |_, _, _, _, _, _| false,
+        )
+        .unwrap()]
+}
+
 /// A monitor on its own context against the two daemons, recording every lock
 /// it asks for.
 struct Harness {
@@ -388,7 +435,8 @@ struct Harness {
 }
 
 impl Harness {
-    fn new(system: &Daemon, desktop: &Daemon) -> Self {
+    fn new(fixture: &Fixture) -> Self {
+        let (system, desktop) = (&fixture.system, &fixture.desktop);
         let context = glib::MainContext::new();
         let locks = Rc::new(RefCell::new(Vec::new()));
         let recorded = locks.clone();
@@ -396,6 +444,10 @@ impl Harness {
             BusAddresses {
                 system: system.address(),
                 session: Ok(desktop.address()),
+            },
+            DisplayTargets {
+                wayland: Some(fixture.wayland.clone()),
+                x11: None,
             },
             context.clone(),
             Box::new(move |reason| recorded.borrow_mut().push(reason)),
@@ -449,6 +501,8 @@ struct Fixture {
     facts: Arc<Mutex<Facts>>,
     logind: Option<Service>,
     screensaver: Option<Service>,
+    wayland: PathBuf,
+    compositor: Option<Compositor>,
 }
 
 impl Fixture {
@@ -458,12 +512,16 @@ impl Fixture {
         let facts = Arc::new(Mutex::new(facts));
         let logind = Some(Service::logind(&system, facts.clone()));
         let screensaver = screensaver.then(|| Service::screensaver(&desktop, facts.clone()));
+        let wayland = system.root.join("wayland-0");
+        let compositor = Some(Compositor::start(&wayland, Some(2)));
         Self {
             system,
             desktop,
             facts,
             logind,
             screensaver,
+            wayland,
+            compositor,
         }
     }
 
@@ -475,7 +533,7 @@ impl Fixture {
 #[test]
 fn an_active_unlocked_session_confirms_and_reports_its_sources() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let status = h.monitor.status();
@@ -504,7 +562,7 @@ fn an_initially_locked_or_inactive_session_locks_and_cannot_confirm() {
         },
     ] {
         let fixture = Fixture::new(facts, false);
-        let harness = Harness::new(&fixture.system, &fixture.desktop);
+        let harness = Harness::new(&fixture);
         harness.run(|h| {
             h.monitor.refresh();
             assert!(!h.allowed());
@@ -522,7 +580,7 @@ fn another_users_session_cannot_confirm() {
         },
         true,
     );
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert_eq!(
@@ -536,7 +594,7 @@ fn another_users_session_cannot_confirm() {
 #[test]
 fn lock_and_unlock_signals_follow_the_session() {
     let fixture = Fixture::new(Facts::default(), false);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert!(h.allowed());
@@ -562,7 +620,7 @@ fn lock_and_unlock_signals_follow_the_session() {
 #[test]
 fn locked_hint_and_activity_changes_lock() {
     let fixture = Fixture::new(Facts::default(), false);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let changed = properties_changed(&[("LockedHint", true.to_variant())]);
@@ -599,7 +657,7 @@ fn locked_hint_and_activity_changes_lock() {
 #[test]
 fn a_changed_session_identity_is_stale_until_reread() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let changed = properties_changed(&[(
@@ -622,7 +680,7 @@ fn a_changed_session_identity_is_stale_until_reread() {
 #[test]
 fn sleep_locks_and_a_wake_rereads_before_confirming() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         fixture
@@ -649,7 +707,7 @@ fn sleep_locks_and_a_wake_rereads_before_confirming() {
 #[test]
 fn the_screen_saver_locks_when_it_activates() {
     let fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         let service = fixture.screensaver.as_ref().unwrap();
@@ -674,7 +732,7 @@ fn the_screen_saver_locks_when_it_activates() {
 #[test]
 fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         fixture.logind().release(session::NAME);
@@ -699,7 +757,7 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
 #[test]
 fn a_closed_system_bus_locks_and_reconnects_when_it_returns() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         assert!(h.allowed());
@@ -725,7 +783,7 @@ fn a_closed_system_bus_locks_and_reconnects_when_it_returns() {
 #[test]
 fn a_closed_session_bus_drops_the_screen_saver_source() {
     let mut fixture = Fixture::new(Facts::default(), true);
-    let harness = Harness::new(&fixture.system, &fixture.desktop);
+    let harness = Harness::new(&fixture);
     harness.run(|h| {
         h.monitor.refresh();
         fixture.screensaver = None;
@@ -735,5 +793,193 @@ fn a_closed_session_bus_drops_the_screen_saver_source() {
         });
         assert_eq!(h.monitor.status().screensaver_locked, None);
         assert!(h.locks().contains(&LockReason::ScreenLocked));
+    });
+}
+
+fn compositor(fixture: &Fixture) -> &Compositor {
+    fixture.compositor.as_ref().unwrap()
+}
+
+#[test]
+fn input_idle_steps_away_and_activity_confirms_again() {
+    let fixture = Fixture::new(Facts::default(), false);
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        let status = h.monitor.status();
+        assert_eq!(
+            status.idle.source,
+            Some(idle::IdleSource::WaylandInputIdle),
+            "{status:?}"
+        );
+        assert!(h.allowed());
+        let timeout = u32::try_from(idle::STEP_AWAY_IDLE.as_millis()).unwrap();
+        assert_eq!(
+            *compositor(&fixture).requested.lock().unwrap(),
+            vec![(timeout, true)]
+        );
+        compositor(&fixture).report_idle(true);
+        h.pump_until("input idle", |h| {
+            h.monitor.tick();
+            !h.allowed()
+        });
+        assert_eq!(h.locks(), vec![LockReason::Away]);
+        // Idle that persists asks only once.
+        h.monitor.tick();
+        h.monitor.tick();
+        assert_eq!(h.locks(), vec![LockReason::Away]);
+        compositor(&fixture).report_idle(false);
+        h.pump_until("input resumed", |h| {
+            h.monitor.tick();
+            h.allowed()
+        });
+    });
+}
+
+#[test]
+fn a_version_one_notifier_is_honoured_as_inhibitable_idle() {
+    let mut fixture = Fixture::new(Facts::default(), false);
+    fixture.compositor = None;
+    fixture.compositor = Some(Compositor::start(&fixture.wayland, Some(1)));
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        assert_eq!(
+            h.monitor.status().idle.source,
+            Some(idle::IdleSource::WaylandIdle)
+        );
+        assert!(h.allowed());
+        let requested = compositor(&fixture).requested.lock().unwrap().clone();
+        assert_eq!(requested.len(), 1);
+        assert!(
+            !requested[0].1,
+            "a version-1 notifier offers no input-idle request"
+        );
+    });
+}
+
+#[test]
+fn lock_signals_alone_never_confirm_without_an_idle_observer() {
+    let mut fixture = Fixture::new(Facts::default(), true);
+    fixture.compositor = None;
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        let status = h.monitor.status();
+        assert!(status.session.is_some() && status.screensaver_locked == Some(false));
+        assert_eq!(
+            status.idle.error,
+            Some(idle::IdleUnavailable::WaylandUnreachable)
+        );
+        assert!(!h.allowed());
+    });
+}
+
+#[test]
+fn a_lost_compositor_locks_and_its_return_is_observed_again() {
+    let mut fixture = Fixture::new(Facts::default(), false);
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        assert!(h.allowed());
+        fixture.compositor = None;
+        h.pump_until("compositor loss", |h| {
+            h.monitor.tick();
+            h.monitor.status().idle.error == Some(idle::IdleUnavailable::Lost)
+        });
+        assert!(!h.allowed());
+        assert!(h.locks().contains(&LockReason::ScreenLocked));
+        fixture.compositor = Some(Compositor::start(&fixture.wayland, Some(2)));
+        h.pump_until("compositor return", |h| {
+            h.monitor.tick();
+            h.allowed()
+        });
+    });
+}
+
+#[test]
+fn gnome_shell_idle_is_accepted_only_from_the_compositor_process() {
+    let mut fixture = Fixture::new(
+        Facts {
+            mutter_idle_ms: 1_000,
+            ..Facts::default()
+        },
+        false,
+    );
+    // This process is the compositor, without an idle notifier, and owns the
+    // idle monitor on the session bus.
+    fixture.compositor = None;
+    fixture.compositor = Some(Compositor::start(&fixture.wayland, None));
+    let _mutter = Service::mutter(&fixture.desktop, fixture.facts.clone());
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        assert_eq!(
+            h.monitor.status().idle.source,
+            Some(idle::IdleSource::MutterIdleMonitor)
+        );
+        assert!(h.allowed());
+        fixture.facts.lock().unwrap().mutter_idle_ms = 300_000;
+        h.monitor.tick();
+        assert!(!h.allowed());
+        assert_eq!(h.locks(), vec![LockReason::Away]);
+    });
+}
+
+#[test]
+fn a_session_bus_idle_monitor_from_another_process_is_refused() {
+    let mut fixture = Fixture::new(Facts::default(), false);
+    fixture.compositor = None;
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "vault_lock::linux::tests::compositor::compositor_child",
+            "--nocapture",
+        ])
+        .env(compositor::CHILD_SOCKET_ENV, &fixture.wayland)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while UnixStream::connect(&fixture.wayland).is_err() {
+        assert!(
+            Instant::now() < deadline,
+            "compositor process never listened"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    // This process owns the idle monitor; the compositor is the child.
+    let _mutter = Service::mutter(&fixture.desktop, fixture.facts.clone());
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        assert_eq!(
+            h.monitor.status().idle.error,
+            Some(idle::IdleUnavailable::MutterNotCompositor)
+        );
+        assert!(!h.allowed());
+    });
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[test]
+fn an_x11_session_without_its_display_reports_it_unreachable() {
+    let fixture = Fixture::new(
+        Facts {
+            session_type: "x11",
+            ..Facts::default()
+        },
+        false,
+    );
+    let harness = Harness::new(&fixture);
+    harness.run(|h| {
+        h.monitor.refresh();
+        assert_eq!(
+            h.monitor.status().idle.error,
+            Some(idle::IdleUnavailable::X11Unreachable)
+        );
+        assert!(!h.allowed());
     });
 }
