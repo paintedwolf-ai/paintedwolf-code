@@ -14,7 +14,7 @@ import time
 import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source, nix_runner, nix_scanner_tools
+from . import nix_archive, factory_source, nix_qualification, nix_runner, nix_scanner_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
@@ -48,7 +48,9 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             archive_dir: Path | None = None, factory_root: Path | None = None,
             factory_commit: str | None = None, factory_channel: str | None = None,
             prepare_factory_lock: bool = False, application_root: Path | None = None,
-            application_commit: str | None = None) -> int:
+            application_commit: str | None = None, qualify: bool = False) -> int:
+    if qualify and operation != "build":
+        raise ValueError("--qualify binds a hosted build")
     scanner_source = None
     if application_root is not None or application_commit is not None:
         if component != "scanner-host-tools" or application_root is None or application_commit is None:
@@ -124,7 +126,10 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             result = nix_archive.copy_closure(NIX, outputs, archive, environment)
             report["archive"] = {"path": str(archive), "publication": "nonrelease"}
             report["passed"] = result.returncode == 0
-    return retain_report(root, report, result.returncode)
+    status = retain_report(root, report, result.returncode)
+    if qualify and status == 0:
+        nix_qualification.qualify(report, artifact_root(root))
+    return status
 
 
 def nonflake_identity(root, environment):
@@ -187,18 +192,28 @@ def main() -> int:
     parser.add_argument("--prepare-factory-lock", action="store_true")
     parser.add_argument("--application-source-root", type=Path)
     parser.add_argument("--application-source-commit")
+    parser.add_argument("--application-producer", type=Path, help="retained producer evidence admitted by --prepare")
+    parser.add_argument("--application-cache", type=Path, help="retained producer closure cache admitted by --prepare")
+    parser.add_argument("--application-run", type=Path, help="producer workflow run record admitted by --prepare")
+    parser.add_argument("--qualify", action="store_true",
+                        help="on a hosted runner, bind the passed build to its source and consumers")
     parser.add_argument("--prepare", action="store_true",
                         help="provision pinned Nix and every locked input, then evaluate nothing")
     args = parser.parse_args()
     try:
+        producer = (args.application_producer, args.application_cache, args.application_run)
+        if any(producer) and (not all(producer) or not args.prepare):
+            raise ValueError("an application producer, its cache and run record are admitted together by --prepare")
         if args.prepare:
             if args.operation != "check":
                 raise ValueError("--prepare provisions evaluation inputs for check")
-            return nix_runner.prepare(NIX, ROOT, credential_free_environment())
+            return nix_runner.prepare(NIX, ROOT, credential_free_environment(),
+                                      producer=(*producer, artifact_root(ROOT)) if all(producer) else None)
         return execute(args.operation, component=args.component, archive_dir=args.archive_dir,
                        factory_root=args.factory_source_root, factory_commit=args.factory_source_commit,
                        factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock,
-                       application_root=args.application_source_root, application_commit=args.application_source_commit)
+                       application_root=args.application_source_root, application_commit=args.application_source_commit,
+                       qualify=args.qualify)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
