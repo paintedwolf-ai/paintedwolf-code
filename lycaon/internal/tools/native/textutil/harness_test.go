@@ -9,17 +9,19 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 // spillQuota is a counting SpillAdmission with an explicit ceiling.
@@ -63,16 +65,41 @@ func (b *batchLog) RunNested(_ context.Context, _ commandprogram.OperationReques
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}, err
 }
 
+// pinLog follows the receipt store's contract: each call resubmits the
+// execution's captures in order and may only append.
+type pinLog struct {
+	executions map[string][]toolcontract.ExecutionRevision
+}
+
+func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+	for _, pin := range pins {
+		if err := pin.Validate(); err != nil {
+			return err
+		}
+	}
+	existing := l.executions[execution]
+	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+		return io.ErrUnexpectedEOF
+	}
+	if l.executions == nil {
+		l.executions = map[string][]toolcontract.ExecutionRevision{}
+	}
+	l.executions[execution] = slices.Clone(pins)
+	return nil
+}
+
 type harness struct {
 	t      *testing.T
 	root   string
 	tc     tools.ToolContext
 	owners *Owners
+	pins   *pinLog
 	memory *toolcontract.ProgramMemory
 	spills string
 	quota  *spillQuota
 	nested commandprogram.NestedCommand
 	env    []string
+	runs   int
 }
 
 type run struct {
@@ -80,22 +107,20 @@ type run struct {
 	result         toolcontract.ProducerResult
 	err            error
 	argv           commandprogram.Fields
+	execution      string
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	root := t.TempDir()
-	owners, err := NewOwners(nil)
+	pins := &pinLog{}
+	owners, err := NewOwners(native.ExecutionRevisions{Boundary: nativefixture.Boundary(t)}, pins)
 	testutil.FailErr(t, "owners", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
-	tc := tools.ToolContext{
-		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
-	}
-	return &harness{t: t, root: root, tc: tc, owners: owners, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}}
+	return &harness{t: t, root: root, tc: nativefixture.Context(root), owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}}
 }
 
 func (h *harness) write(name, content string) {
@@ -133,9 +158,11 @@ func (h *harness) runWith(ports Ports, source, stdin string) run {
 		testutil.FailErr(h.t, "expand", err)
 		argv = append(argv, fields...)
 	}
+	h.runs++
+	execution := "child-" + strconv.Itoa(h.runs)
 	request := commandprogram.OperationRequest{
 		Invocation: toolcontract.OperationInvocation{
-			Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: string(statement.ID), ExecutionID: "child"},
+			Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: string(statement.ID), ExecutionID: execution},
 			ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"},
 			SourceUnitID: "inline", Span: statement.Span, CatalogDigest: toolcontract.LanguageCatalogDigest(),
 		},
@@ -150,7 +177,7 @@ func (h *harness) runWith(ports Ports, source, stdin string) run {
 	if used := ports.Memory.InUse().Working; used != 0 {
 		h.t.Fatalf("%s retained %d bytes of working memory", source, used)
 	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv}
+	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv, execution: execution}
 }
 
 type noSubstitution struct{}

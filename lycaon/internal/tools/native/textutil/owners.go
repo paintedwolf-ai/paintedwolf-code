@@ -13,17 +13,27 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
+// PinRecorder retains the revisions one execution captured
+// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+type PinRecorder interface {
+	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+}
+
 // Owners serves every program; per-invocation state lives in Prepared.
 type Owners struct {
-	// Boundary is the read boundary PATH operands bind under.
-	Boundary *sandbox.Boundary
+	// Revisions captures and pins every file operand before it is read.
+	Revisions native.ExecutionRevisions
+	Pins      PinRecorder
+	// Regex is the shared POSIX BRE/ERE engine sed compiles with. Without
+	// it sed refuses rather than run on another engine.
+	Regex PosixRegexEngine
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -34,7 +44,7 @@ type utility func(*invocation) error
 
 var utilities = map[string]utility{
 	"echo": runEcho, "printf": runPrintf, "sort": runSort, "uniq": runUniq,
-	"cut": runCut, "tr": runTr, "xargs": runXargs,
+	"cut": runCut, "tr": runTr, "xargs": runXargs, "sed": runSed,
 }
 
 // leadingOptions are utilities whose options are only the declared leading
@@ -42,12 +52,15 @@ var utilities = map[string]utility{
 var leadingOptions = map[string]bool{"echo": true, "printf": true}
 
 // NewOwners binds the frozen catalog's specifications and ceilings.
-func NewOwners(boundary *sandbox.Boundary) (*Owners, error) {
+func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, error) {
+	if pins == nil {
+		return nil, errors.New("text utilities require a revision pin recorder")
+	}
 	catalog, err := toolcontract.LanguageV1()
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Boundary: boundary, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, limits: map[string]int64{}}
+	o := &Owners{Revisions: revisions, Pins: pins, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, limits: map[string]int64{}}
 	for _, command := range catalog.Commands {
 		if _, ok := utilities[command.Name]; ok {
 			o.specs[command.Name] = command

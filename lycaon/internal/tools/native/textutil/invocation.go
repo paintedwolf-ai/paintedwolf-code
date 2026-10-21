@@ -19,28 +19,28 @@ import (
 
 // invocation is one utility run: bound argv, metered output and status.
 type invocation struct {
-	ctx      context.Context
-	owners   *Owners
-	ports    Ports
-	request  commandprogram.OperationRequest
-	spec     toolcontract.CommandSpecification
-	argv     commandprogram.BoundArgv
-	input    io.Reader
-	stderr   io.Writer
+	ctx     context.Context
+	owners  *Owners
+	ports   Ports
+	request commandprogram.OperationRequest
+	spec    toolcontract.CommandSpecification
+	argv    commandprogram.BoundArgv
+	// streams has non-nil Input and Error; Output is reached through out.
+	streams  commandprogram.Streams
 	out      *nativeutility.Output
 	errors   strings.Builder
 	status   int
 	releases []func()
+	pins     []toolcontract.ExecutionRevision
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, input: streams.Input}
-	if inv.input == nil {
-		inv.input = commandprogram.NullInput()
+	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
+	if inv.streams.Input == nil {
+		inv.streams.Input = commandprogram.NullInput()
 	}
-	inv.stderr = streams.Error
-	if inv.stderr == nil {
-		inv.stderr = io.Discard
+	if inv.streams.Error == nil {
+		inv.streams.Error = io.Discard
 	}
 	inv.out = nativeutility.NewOutput(ctx, streams.Output, p.owners.limits["stream_bytes"])
 	return inv
@@ -105,32 +105,29 @@ type source struct {
 }
 
 // openInputs opens each PATH operand ("-" is standard input), or standard
-// input when there are none. A missing or unreadable file is an ordinary
-// failure reported on stderr; an authority refusal stops the run.
+// input when there are none. A file is captured through the execution
+// revision owner and its pin recorded before any byte is used. A missing or
+// unreadable file is an ordinary failure on stderr; an authority refusal stops.
 func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, error) {
 	if len(operands) == 0 {
-		return []source{{name: "-", reader: io.NopCloser(inv.input)}}, nil
+		return []source{{name: "-", reader: io.NopCloser(inv.streams.Input)}}, nil
 	}
 	var paths *projectpaths.ProgramPaths
 	var out []source
 	for _, operand := range operands {
 		if operand.Value == "-" {
-			out = append(out, source{name: "-", reader: io.NopCloser(inv.input)})
+			out = append(out, source{name: "-", reader: io.NopCloser(inv.streams.Input)})
 			continue
 		}
 		if paths == nil {
 			var err error
-			paths, err = projectpaths.NewProgramPaths(inv.ctx, inv.owners.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
+			paths, err = projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
 			if err != nil {
 				closeSources(out)
 				return nil, err
 			}
 		}
-		bound, err := paths.Bind(inv.ctx, operand.Value, false)
-		var reader io.ReadCloser
-		if err == nil {
-			reader, err = bound.OpenReader()
-		}
+		reader, err := inv.capture(paths, operand)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				inv.fail(1, operand.Value, reason)
@@ -142,6 +139,39 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 		out = append(out, source{name: operand.Value, reader: reader})
 	}
 	return out, nil
+}
+
+// capture binds one operand under the invocation cwd, pins its accepted
+// revision and returns its captured bytes.
+func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
+	bound, err := paths.Bind(inv.ctx, operand.Value, false)
+	if err != nil {
+		return nil, err
+	}
+	if bound.Null {
+		return io.NopCloser(strings.NewReader("")), nil
+	}
+	tc := inv.ports.ToolContext
+	captured, err := inv.owners.Revisions.CaptureSource(inv.ctx, tc, bound.Resolved.Abs)
+	if err != nil {
+		return nil, err
+	}
+	if err := inv.reserve(int64(len(captured.Content))); err != nil {
+		return nil, err
+	}
+	// A credential file's bytes reach no stream until their exposure is recorded.
+	if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
+		return nil, fmt.Errorf("record credential file read: %w", err)
+	}
+	execution := inv.request.Invocation.Identity.ExecutionID
+	if execution == "" {
+		return nil, errors.New("file operands require a program execution identity")
+	}
+	inv.pins = append(inv.pins, captured.Revision)
+	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins); err != nil {
+		return nil, err
+	}
+	return io.NopCloser(strings.NewReader(captured.Content)), nil
 }
 
 // pathRejection projects a path owner's typed refusal with the operand span.
@@ -164,7 +194,13 @@ func closeSources(sources []source) {
 
 // ordinary classifies an input failure the utility reports and survives.
 func ordinary(err error) (string, bool) {
-	if toolrejection.AsToolReject(err) != nil {
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		switch reject.Code {
+		case "READ_PATH_NOT_FOUND":
+			return "No such file or directory", true
+		case "READ_IS_DIRECTORY":
+			return "Is a directory", true
+		}
 		return "", false
 	}
 	var pathErr *projectpaths.PathError
@@ -203,18 +239,24 @@ func (inv *invocation) records(r io.Reader, delimiter byte) (*records, error) {
 
 // next returns the record without its delimiter, or io.EOF.
 func (r *records) next() ([]byte, error) {
+	record, _, err := r.nextTerminated()
+	return record, err
+}
+
+// nextTerminated also reports whether the record ended with its delimiter.
+func (r *records) nextTerminated() ([]byte, bool, error) {
 	r.buffer = r.buffer[:0]
 	for {
 		if err := r.inv.ctx.Err(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		chunk, err := r.reader.ReadSlice(r.delimiter)
 		if int64(len(r.buffer)+len(chunk)) > r.maximum+1 {
-			return nil, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)+len(chunk)))
+			return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)+len(chunk)))
 		}
 		if cap(r.buffer) < len(r.buffer)+len(chunk) {
 			if reserve := r.inv.reserve(int64(2 * (len(r.buffer) + len(chunk)))); reserve != nil {
-				return nil, reserve
+				return nil, false, reserve
 			}
 		}
 		r.buffer = append(r.buffer, chunk...)
@@ -222,21 +264,21 @@ func (r *records) next() ([]byte, error) {
 		case err == nil:
 			record := r.buffer[:len(r.buffer)-1]
 			if int64(len(record)) > r.maximum {
-				return nil, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(record)))
+				return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(record)))
 			}
-			return record, nil
+			return record, true, nil
 		case errors.Is(err, bufio.ErrBufferFull):
 			continue
 		case errors.Is(err, io.EOF):
 			if len(r.buffer) == 0 {
-				return nil, io.EOF
+				return nil, false, io.EOF
 			}
 			if int64(len(r.buffer)) > r.maximum {
-				return nil, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)))
+				return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)))
 			}
-			return r.buffer, nil
+			return r.buffer, false, nil
 		default:
-			return nil, err
+			return nil, false, err
 		}
 	}
 }

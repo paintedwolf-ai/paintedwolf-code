@@ -186,7 +186,7 @@ func (inv *invocation) transformBytes(transform func(in, out []byte, last *int) 
 	in, out := make([]byte, chunk), make([]byte, 0, chunk)
 	last := -1
 	for {
-		n, err := inv.input.Read(in)
+		n, err := inv.streams.Input.Read(in)
 		if n > 0 {
 			out = transform(in[:n], out[:0], &last)
 			if _, writeErr := inv.out.Write(out); writeErr != nil {

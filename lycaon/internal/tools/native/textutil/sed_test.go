@@ -1,0 +1,177 @@
+//go:build darwin || linux
+
+package textutil
+
+import (
+	"context"
+	"os/exec"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// fixturePosix is a test-only engine for sed's script parser and executor:
+// it translates the fixture BREs to ERE and runs Go's POSIX leftmost-longest
+// mode. Production sed compiles with the shared POSIX engine only.
+type fixturePosix struct{}
+
+type fixtureRegex struct{ re *regexp.Regexp }
+
+func (fixturePosix) Compile(_ context.Context, pattern string, extended bool) (PosixRegex, error) {
+	if !extended {
+		var out strings.Builder
+		for i := 0; i < len(pattern); i++ {
+			c := pattern[i]
+			switch {
+			case c == '\\' && i+1 < len(pattern) && strings.IndexByte("(){}", pattern[i+1]) >= 0:
+				out.WriteByte(pattern[i+1])
+				i++
+			case c == '\\' && i+1 < len(pattern):
+				out.WriteString(pattern[i : i+2])
+				i++
+			case strings.IndexByte("(){}+?|", c) >= 0:
+				out.WriteString(`\` + string(c))
+			default:
+				out.WriteByte(c)
+			}
+		}
+		pattern = out.String()
+	}
+	re, err := regexp.CompilePOSIX(pattern)
+	if err != nil {
+		return nil, err
+	}
+	return fixtureRegex{re: re}, nil
+}
+
+func (r fixtureRegex) Find(_ context.Context, subject []byte, from int) ([]int, error) {
+	for _, match := range r.re.FindAllSubmatchIndex(subject, -1) {
+		if match[0] >= from {
+			return match, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r fixtureRegex) Groups() int { return r.re.NumSubexp() }
+
+func sedHarness(t *testing.T) *harness {
+	h := newHarness(t)
+	h.owners.Regex = fixturePosix{}
+	return h
+}
+
+func TestSedGolden(t *testing.T) {
+	lines := "a\nb\nc\nd\n"
+	sedHarness(t).goldens(t, []golden{
+		{"sed -n 1,2p", lines, "a\nb\n", 0},
+		{"sed '1d;$d'", lines, "b\nc\n", 0},
+		{"sed -n '$p'", lines, "d\n", 0},
+		{"sed 2q", lines, "a\nb\n", 0},
+		{"sed -n '2{p;q;}'", lines, "b\n", 0},
+		{"sed '2,3!d'", lines, "b\nc\n", 0},
+		{"sed '3,1d'", lines, "a\nb\nd\n", 0},
+		{"sed -n '/^start$/,/^end$/p'", "x\nstart\na\nend\ny\n", "start\na\nend\n", 0},
+		{"sed -n '/a/,/a/p'", "a\nb\na\nc\n", "a\nb\na\n", 0},
+		{"sed -n '/b/,$p'", lines, "b\nc\nd\n", 0},
+		{"sed s/a/b/", "aaa\n", "baa\n", 0},
+		{"sed s/a/b/g", "aaa\n", "bbb\n", 0},
+		{"sed s/a/b/2", "aaa\n", "aba\n", 0},
+		{"sed s/a/b/2g", "aaaa\n", "abbb\n", 0},
+		{"sed 's/x*/-/g'", "abc\n", "-a-b-c-\n", 0},
+		{"sed 's/b*/x/g'", "abc\n", "xaxcx\n", 0},
+		{`sed 's/\(a*\)b/[\1]&/'`, "aab\n", "[aa]aab\n", 0},
+		{`sed -E 's/(x+)(y?)/<\2\1>/g'`, "xxy x\n", "<yxx> <x>\n", 0},
+		{`sed 's|/|\||g'`, "a/b/c\n", "a|b|c\n", 0},
+		{`sed 's/a/\n/'`, "bab\n", "b\nb\n", 0},
+		{`sed 's/a/\&/'`, "a\n", "&\n", 0},
+		{"sed -n s/a/b/p", "a\nc\n", "b\n", 0},
+		{"sed -e s/a/b/ -e s/b/c/", "a\n", "c\n", 0},
+		{"sed 'a\\\nafter'", "x\ny\n", "x\nafter\ny\nafter\n", 0},
+		{"sed '1i before'", "x\ny\n", "before\nx\ny\n", 0},
+		{"sed '2,3c\\\nreplaced'", lines, "a\nreplaced\nd\n", 0},
+		{"sed '$!c gone'", "x\ny\n", "gone\ny\n", 0},
+		{"sed 'a one; two'", "x\n", "x\none; two\n", 0},
+		{"sed p", "x", "x\nx", 0},
+		{"sed s/x/y/", "a\nx", "a\ny", 0},
+		{"sed ''", "a\x00b\n\xff\n", "a\x00b\n\xff\n", 0},
+		{"sed -n p", "", "", 0},
+	})
+}
+
+func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
+	h := sedHarness(t)
+	for _, c := range []struct{ source, code string }{
+		{"sed 'w out'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's/a/b/w out'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's/a/b/e'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's/a/b/I'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed h", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 'y/a/b/'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 'b end'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 'r file'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 1~2d", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed q5", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's//x/'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed -i s/a/b/ f", "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+		{"sed -i '' s/a/b/ f", "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+		{"sed -f script", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's/a/b'", "COMMAND_OPERAND_INVALID"},
+		{`sed 's/a/\1/'`, "COMMAND_OPERAND_INVALID"},
+		{"sed '0d'", "COMMAND_OPERAND_INVALID"},
+		{"sed '{p'", "COMMAND_OPERAND_INVALID"},
+		{"sed '}'", "COMMAND_OPERAND_INVALID"},
+		{"sed 'pq'", "COMMAND_OPERAND_INVALID"},
+		{"sed '1,2a x'", "COMMAND_OPERAND_INVALID"},
+		{"sed 's/[/x/'", "COMMAND_OPERAND_INVALID"},
+		{"sed", "COMMAND_OPERAND_INVALID"},
+	} {
+		h.write("f", "a\n")
+		h.run(c.source, "a\n").expectRefusal(t, c.source, c.code)
+	}
+	unwired := newHarness(t)
+	unwired.run("sed p", "a\n").expectRefusal(t, "no shared engine", "COMMAND_PLATFORM_UNAVAILABLE")
+}
+
+func TestSedReadsPinnedFilesAsOneStream(t *testing.T) {
+	h := sedHarness(t)
+	h.write("one", "a\nb\n")
+	h.write("two", "c\n")
+	r := h.run("sed -n '$p;2p' one two", "")
+	r.expectOutput(t, "files", "b\nc\n", 0)
+	if len(h.pins.executions[r.execution]) != 2 {
+		t.Fatalf("pins %+v", h.pins.executions[r.execution])
+	}
+}
+
+// GNU and BSD sed agree on these forms under LC_ALL=C.
+func TestSedDifferentialAgainstHost(t *testing.T) {
+	h := sedHarness(t)
+	input := "alpha\nbeta\nstart\ngamma\nend\nalpha beta\n"
+	for _, c := range []struct {
+		source string
+		argv   []string
+	}{
+		{"sed -n 2,4p", []string{"-n", "2,4p"}},
+		{"sed '1d;$d'", []string{"1d;$d"}},
+		{"sed s/a/A/g", []string{"s/a/A/g"}},
+		{"sed s/a/A/2", []string{"s/a/A/2"}},
+		{"sed -n '/^start$/,/^end$/p'", []string{"-n", "/^start$/,/^end$/p"}},
+		{`sed 's/\(al\)\(pha\)/\2\1/'`, []string{`s/\(al\)\(pha\)/\2\1/`}},
+		{"sed -E 's/(a|e)+/<&>/g'", []string{"-E", "s/(a|e)+/<&>/g"}},
+		{"sed 's/x*/-/g'", []string{"s/x*/-/g"}},
+		{"sed 3q", []string{"3q"}},
+		{"sed '$!d'", []string{"$!d"}},
+		{"sed -n '/beta/{p;p;}'", []string{"-n", "/beta/{p;p;}"}},
+		{"sed -e s/a/b/ -e s/b/c/", []string{"-e", "s/a/b/", "-e", "s/b/c/"}},
+	} {
+		cmd := exec.Command(hostTool(t, "sed"), c.argv...)
+		cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin"}
+		cmd.Stdin = strings.NewReader(input)
+		want, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("host %s: %v", c.source, err)
+		}
+		h.run(c.source, input).expectOutput(t, c.source, string(want), 0)
+	}
+}

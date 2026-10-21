@@ -2,7 +2,11 @@
 
 package textutil
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 func TestEchoGolden(t *testing.T) {
 	newHarness(t).goldens(t, []golden{
@@ -135,5 +139,24 @@ func TestUniqOperands(t *testing.T) {
 	r.expectOutput(t, "uniq missing", "", 1)
 	if r.stderr != "uniq: missing.txt: No such file or directory\n" {
 		t.Fatalf("stderr %q", r.stderr)
+	}
+}
+
+// Every file operand is pinned through the execution revision owner and its
+// pin recorded under the child's execution before its bytes are used.
+func TestFileOperandsArePinned(t *testing.T) {
+	h := newHarness(t)
+	h.write("one.txt", "b\na\n")
+	h.write("two.txt", "c\n")
+	r := h.run("sort one.txt - two.txt", "d\n")
+	r.expectOutput(t, "pinned sort", "a\nb\nc\nd\n", 0)
+	pins := h.pins.executions[r.execution]
+	if len(pins) != 2 || pins[0].Path != "one.txt" || pins[1].Path != "two.txt" || pins[0].Role != toolcontract.SourceRevision || pins[0].ContentBytes != 4 {
+		t.Fatalf("pins %+v", pins)
+	}
+	r = h.run("cut -b 1 two.txt missing.txt", "")
+	r.expectOutput(t, "missing operand keeps earlier pins", "c\n", 1)
+	if got := h.pins.executions[r.execution]; len(got) != 1 || got[0].Path != "two.txt" {
+		t.Fatalf("pins %+v", got)
 	}
 }

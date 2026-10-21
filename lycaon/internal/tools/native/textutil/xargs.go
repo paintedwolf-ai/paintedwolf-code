@@ -70,7 +70,7 @@ func runXargs(inv *invocation) error {
 		return unsupported(inv, command[0], "a program runtime that dispatches xargs batches")
 	}
 	for _, argv := range batches {
-		result, err := inv.ports.Nested.RunNested(inv.ctx, inv.request, argv, inv.request.Environment, commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.stderr})
+		result, err := inv.ports.Nested.RunNested(inv.ctx, inv.request, argv, inv.request.Environment, commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.streams.Error})
 		if err != nil || result.Terminal != toolcontract.ProducerCompleted || result.StopCode != "" {
 			return &batchStop{result: result, cause: err}
 		}
@@ -103,7 +103,7 @@ func (x xargsRun) readAll() ([]byte, error) {
 			return nil, err
 		}
 		buffer.Grow(chunk)
-		n, err := io.CopyN(&buffer, x.inv.input, chunk)
+		n, err := io.CopyN(&buffer, x.inv.streams.Input, chunk)
 		if int64(buffer.Len()) > maximum {
 			return nil, nativeutility.LimitExceeded("stream_bytes", maximum, int64(buffer.Len()))
 		}
