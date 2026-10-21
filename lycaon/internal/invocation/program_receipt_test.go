@@ -35,6 +35,12 @@ func newProgramReceiptFixtureWithArgs(t *testing.T, args map[string]any) program
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
+	return programReceiptFixtureOn(t, database, session, args)
+}
+
+// programReceiptFixtureOn begins an actual command program in an existing store.
+func programReceiptFixtureOn(t *testing.T, database db.Handle, session string, args map[string]any) programReceiptFixture {
+	t.Helper()
 	recorder := invocation.NewSQLRecorder(database)
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
