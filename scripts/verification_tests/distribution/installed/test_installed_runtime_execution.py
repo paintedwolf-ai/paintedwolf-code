@@ -3,13 +3,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import struct
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.installed_runtime import ROLES, bind, elf, manifest, nix_command, unchanged
+from scripts.linux_release.installed_runtime import (
+    ROLES, SETUID_LAUNCHER, bind, elf, manifest, nix_command, unchanged,
+)
 
 
 def image(path, machine=62):
@@ -80,6 +83,85 @@ class InstalledRuntimeTests(unittest.TestCase):
             path.symlink_to("missing")
             with self.assertRaises(OSError):
                 elf(path, "amd64")
+
+    def test_manifest_format_2_binds_payload_and_refuses_unknown_versions_or_mismatches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "bin").mkdir()
+            names = [*sorted(ROLES), "pw-launch-entry"]
+            entries = [image(root / "bin" / role) for role in names]
+            payload = [{"path": "bin", "kind": "directory", "mode": 0o755, "sha256": None, "size": None, "target": None},
+                       {"path": "protected-launch.json", "kind": "file", "mode": 0o644,
+                        "sha256": "a" * 64, "size": 12, "target": None},
+                       {"path": "bin/current-entry", "kind": "symlink", "mode": 0o777,
+                        "sha256": None, "size": None, "target": "pw-launch-entry"},
+                       *[{"path": f"bin/{role}", "kind": "file", "mode": 0o755,
+                          "sha256": row["sha256"], "size": row["size"], "target": None}
+                         for role, row in zip(names, entries)]]
+            base = {"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
+                    "architecture": "x86_64", "install_root": str(root), "executables": entries, "payload": payload}
+            path = root / "manifest.json"
+            path.write_text(json.dumps(base))
+            result = manifest(root, "amd64")
+            self.assertIn(str(root / "bin/pw-launch-entry"), result["images"])
+            for invalid in ({**base, "format_version": 0}, {**base, "format_version": 3},
+                            {**base, "format_version": True}, {**base, "format_version": "2"},
+                            {**base, "format_version": 1},
+                            {k: v for k, v in base.items() if k != "payload"},
+                            {**base, "payload": []},
+                            {**base, "payload": [*payload, {"path": "manifest.json", "kind": "file", "mode": 0o644, "sha256": "a" * 64, "size": 1, "target": None}]},
+                            {**base, "payload": [{**payload[0], "mode": 0o4755}, *payload[1:]]},
+                            {**base, "payload": [{**payload[0], "mode": 0o775}, *payload[1:]]},
+                            {**base, "payload": [{**payload[2], "target": "../../escape"}, *payload[:2], *payload[3:]]},
+                            {**base, "payload": [*payload[:-1], {**payload[-1], "sha256": "0" * 64}]}):
+                path.write_text(json.dumps(invalid))
+                with self.subTest(version=invalid.get("format_version")), self.assertRaises(ValueError):
+                    manifest(root, "amd64")
+
+    def test_setuid_launcher_requires_exact_libexec_path_mode_4755_and_root_owner(self):
+        header = bytearray(64)
+        header[:6] = b"\x7fELF\x02\x01"
+        struct.pack_into("<HH", header, 16, 2, 62)
+        digest = hashlib.sha256(header).hexdigest()
+        root = Path("/opt/painted-wolf-code")
+        executables = [{"path": str(root / "bin" / role), "sha256": digest, "size": 64} for role in sorted(ROLES)]
+        executables.append({"path": str(SETUID_LAUNCHER), "sha256": digest, "size": 64})
+        payload = [{"path": f"bin/{role}", "kind": "file", "mode": 0o755, "sha256": digest, "size": 64, "target": None}
+                   for role in sorted(ROLES)]
+        raw_manifest = json.dumps({"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
+                                   "architecture": "x86_64", "install_root": str(root),
+                                   "executables": executables, "payload": payload})
+
+        def fake_identity(target):
+            mode = 0o4755 if target == SETUID_LAUNCHER else 0o755
+            return {"sha256": digest, "bytes": 64, "mode": mode, "device": 7, "inode": 11, "header": bytes(header)}
+
+        root_setuid = SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_size=64, st_dev=7, st_ino=11, st_uid=0, st_gid=0)
+        with patch.object(Path, "is_symlink", return_value=False), \
+                patch.object(Path, "stat", return_value=root_setuid), \
+                patch.object(Path, "lstat", return_value=root_setuid), \
+                patch.object(Path, "read_text", return_value=raw_manifest), \
+                patch("scripts.linux_release.installed_runtime.file_identity", side_effect=fake_identity):
+            observed = manifest(root, "amd64")
+            self.assertEqual(observed["images"][str(SETUID_LAUNCHER)]["mode"], 0o4755)
+            nix_root = Path("/nix/store/00000000000000000000000000000000-app/lib/painted-wolf-code")
+            nix_manifest = json.dumps({"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
+                                       "architecture": "x86_64", "install_root": str(nix_root),
+                                       "executables": [{"path": str(nix_root / "bin" / role), "sha256": digest, "size": 64}
+                                                       for role in sorted(ROLES)] + [{"path": str(SETUID_LAUNCHER), "sha256": digest, "size": 64}],
+                                       "payload": payload})
+            with patch.object(Path, "read_text", return_value=nix_manifest), self.assertRaisesRegex(ValueError, "foreign"):
+                manifest(nix_root, "amd64")
+            with self.assertRaises(ValueError):
+                elf(root / "bin/pw-launch", "amd64", setuid=True)
+            for bad_stat in (SimpleNamespace(st_mode=stat.S_IFREG | 0o755, st_size=64, st_dev=7, st_ino=11, st_uid=0, st_gid=0),
+                             SimpleNamespace(st_mode=stat.S_IFREG | 0o6755, st_size=64, st_dev=7, st_ino=11, st_uid=0, st_gid=0),
+                             SimpleNamespace(st_mode=stat.S_IFREG | 0o4750, st_size=64, st_dev=7, st_ino=11, st_uid=0, st_gid=0),
+                             SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_size=64, st_dev=7, st_ino=11, st_uid=1000, st_gid=0),
+                             SimpleNamespace(st_mode=stat.S_IFREG | 0o4755, st_size=64, st_dev=7, st_ino=11, st_uid=0, st_gid=1000)):
+                with self.subTest(stat=bad_stat), patch.object(Path, "lstat", return_value=bad_stat):
+                    with self.assertRaises(ValueError):
+                        elf(SETUID_LAUNCHER, "amd64", setuid=True)
 
     def test_nix_verification_uses_private_configuration_without_inherited_authority(self):
         def run(arguments, *, env, **kwargs):
