@@ -5,6 +5,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -41,6 +42,12 @@ type protectedLaunch struct {
 }
 
 func init() {
+	lookExecutable = func(path string) (string, error) {
+		if protectedState().protected {
+			return relayedExecutable(path)
+		}
+		return exec.LookPath(path)
+	}
 	// Confinement availability is probed where confined commands run: under
 	// the protected launch, outside its namespace through the broker.
 	confine.SetHelperProbeRunner(func(cmd *exec.Cmd) error {
@@ -139,6 +146,33 @@ func relayThrough(cmd *exec.Cmd, state protectedLaunch) error {
 	cmd.Args = append([]string{cmd.Args[0], relayCommand}, cmd.Args[1:]...)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, state.broker)
 	return nil
+}
+
+// relayedExecutable checks a program the broker will start. Inside the
+// protected launch's module view the caller's programs sit on noexec mounts, so
+// asking the kernel whether this process may execute them always answers no;
+// the broker starts them outside, where the caller's own authority decides.
+// Here a regular file with an execute bit is a program.
+func relayedExecutable(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return "", &os.PathError{Op: "lookpath", Path: path, Err: fs.ErrPermission}
+	}
+	return path, nil
+}
+
+// resolveRelayedProgram finds the bare program name os/exec could not resolve
+// inside the module view, on the PATH os/exec searched.
+func resolveRelayedProgram(cmd *exec.Cmd, state protectedLaunch) {
+	if !state.protected || cmd.Err == nil || !errors.Is(cmd.Err, exec.ErrNotFound) || strings.ContainsRune(cmd.Path, '/') {
+		return
+	}
+	if found, err := LookPathIn(cmd.Path, os.Getenv("PATH")); err == nil {
+		cmd.Path, cmd.Err = found, nil
+	}
 }
 
 // relayedCommand reports a command that is the broker relay.
