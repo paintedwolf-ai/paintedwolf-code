@@ -6,8 +6,9 @@
 //! window hit-tests its own tab strip in its own coordinates. The drag carries
 //! a shell-minted token (see `transfer`) and only drags from this process are
 //! accepted. A drop on no accepting window tears the tab off into a new
-//! window that the compositor places; Escape or a compositor cancellation
-//! keeps it. X11 runs the same path.
+//! window that the compositor places. On X11, Escape keeps the tab. Wayland
+//! compositors report Escape, a drop over no window and a drop on another
+//! application as the same cancellation, so on Wayland each of them tears off.
 
 use std::sync::{LazyLock, Mutex};
 
@@ -32,8 +33,6 @@ static TRANSFERS: LazyLock<Mutex<Transfers>> = LazyLock::new(|| Mutex::new(Trans
 struct ActiveDrag {
     token: String,
     initiator: String,
-    /// Wayland reports the release before cancelling a drop nobody accepted.
-    dropped: bool,
     hovered: Option<String>,
 }
 
@@ -160,7 +159,6 @@ pub fn ipc_begin_native_file_tab_drag(
         *running = Some(ActiveDrag {
             token: token.clone(),
             initiator,
-            dropped: false,
             hovered: None,
         });
     }
@@ -319,24 +317,44 @@ fn accept_drop(app: &AppHandle, label: &str, token: &str, x: f64, y: f64) -> boo
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Protocol {
+    Wayland,
+    X11,
+}
+
+fn protocol(display: &gdk::Display) -> Protocol {
+    if display.type_().name() == "GdkWaylandDisplay" {
+        Protocol::Wayland
+    } else {
+        Protocol::X11
+    }
+}
+
+/// Whether a drag that no window received tears its tab off.
+///
+/// A Wayland compositor cancels the data source both when the button is
+/// released over no accepting surface and when it aborts the drag itself
+/// (Mutter on Escape), and GTK reports both as `Error`; the client gets no
+/// fact that separates them.
+fn tears_off(protocol: Protocol, result: gtk::DragResult) -> bool {
+    match result {
+        gtk::DragResult::NoTarget => true,
+        gtk::DragResult::Error => protocol == Protocol::Wayland,
+        _ => false,
+    }
+}
+
 /// The source settled the drag without a recipient.
-fn source_failed(app: &AppHandle, label: &str, result: gtk::DragResult) {
-    let Some(drag) = active()
+fn source_failed(app: &AppHandle, label: &str, protocol: Protocol, result: gtk::DragResult) {
+    let Some(token) = active()
         .as_ref()
         .filter(|drag| drag.initiator == label)
-        .map(|drag| (drag.token.clone(), drag.dropped))
+        .map(|drag| drag.token.clone())
     else {
         return;
     };
-    let (token, dropped) = drag;
-    let tear_off = match result {
-        gtk::DragResult::NoTarget => true,
-        // Wayland cancels both an unaccepted drop and a compositor abort; only
-        // the former reported the release first.
-        gtk::DragResult::Error => dropped,
-        _ => false,
-    };
-    if tear_off {
+    if tears_off(protocol, result) {
         let delivery = transfers().tear_off(&token);
         if let Ok(Some(delivery)) = delivery {
             deliver(app, &token, delivery);
@@ -369,12 +387,6 @@ fn connect_source(widget: &gtk::Widget, app: &AppHandle, label: &str) {
                 return;
             }
             context.drag_set_icon_name("text-x-generic", 0, 0);
-            context.connect_local("drop-performed", false, |_| {
-                if let Some(drag) = active().as_mut() {
-                    drag.dropped = true;
-                }
-                None
-            });
         });
     }
     {
@@ -396,11 +408,11 @@ fn connect_source(widget: &gtk::Widget, app: &AppHandle, label: &str) {
     {
         let app = app.clone();
         let label = label.to_string();
-        widget.connect_drag_failed(move |_, context, result| {
+        widget.connect_drag_failed(move |widget, context, result| {
             if !carries_tab(context) {
                 return Propagation::Proceed;
             }
-            source_failed(&app, &label, result);
+            source_failed(&app, &label, protocol(&widget.display()), result);
             // No snap-back animation: the tab either stayed or moved.
             Propagation::Stop
         });
@@ -487,5 +499,32 @@ fn connect_destination(widget: &gtk::Widget, app: &AppHandle, label: &str) {
                 .is_some_and(|token| accept_drop(&app, &label, token, f64::from(x), f64::from(y)));
             context.drag_finish(accepted, false, time);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{tears_off, Protocol};
+    use gtk::DragResult;
+
+    #[test]
+    fn a_drop_on_no_window_tears_off_on_both_protocols() {
+        assert!(tears_off(Protocol::X11, DragResult::NoTarget));
+        assert!(tears_off(Protocol::Wayland, DragResult::NoTarget));
+    }
+
+    #[test]
+    fn a_wayland_cancellation_tears_off_because_the_compositor_reports_every_unreceived_drop_that_way() {
+        assert!(tears_off(Protocol::Wayland, DragResult::Error));
+        assert!(!tears_off(Protocol::X11, DragResult::Error));
+    }
+
+    #[test]
+    fn user_cancellation_and_other_results_keep_the_tab() {
+        for protocol in [Protocol::Wayland, Protocol::X11] {
+            for result in [DragResult::UserCancelled, DragResult::TimeoutExpired, DragResult::GrabBroken, DragResult::Success] {
+                assert!(!tears_off(protocol, result), "{protocol:?} {result:?}");
+            }
+        }
     }
 }
