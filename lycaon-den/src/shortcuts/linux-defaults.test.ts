@@ -63,7 +63,7 @@ describe("Linux desktop and toolkit-safe defaults", () => {
 
   it("dispatches Stop without the native emoji chord", () => {
     const stop = vi.fn();
-    registerCommandHandler(stockId("session-stop"), stop);
+    registerCommandHandler("session.stop", stop);
     expect(dispatchKeyboardEvent(event(".", "Period", true)).handled).toBe(false);
     expect(stop).not.toHaveBeenCalled();
     expect(dispatchKeyboardEvent(event("F5", "F5", false, true)).handled).toBe(true);
@@ -72,7 +72,7 @@ describe("Linux desktop and toolkit-safe defaults", () => {
 
   it("dispatches a shifted punctuation leader and its normal mnemonic child", () => {
     const chat = vi.fn();
-    registerCommandHandler(stockId("go-chat"), chat);
+    registerCommandHandler("go.chat", chat);
     expect(dispatchKeyboardEvent(event(";", "Semicolon", true)).handled).toBe(false);
     expect(pendingLeaderChord()).toBeNull();
     expect(dispatchKeyboardEvent(event(":", "Semicolon", true, true)).handled).toBe(true);

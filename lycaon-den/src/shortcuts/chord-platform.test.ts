@@ -160,7 +160,7 @@ describe("reservedReason", () => {
 
   it("Mod+Alt+* on linux and windows", () => {
     for (const platform of ["linux", "windows"] as const) {
-      expect(reservedReason("Mod+Alt+A", platform)).toBe("system");
+      expect(reservedReason("Mod+Alt+X", platform)).toBe("system");
       expect(reservedReason("Mod+Alt+Delete", platform)).toBe("os");
       expect(reservedReason("Mod+K", platform)).toBeNull();
     }
