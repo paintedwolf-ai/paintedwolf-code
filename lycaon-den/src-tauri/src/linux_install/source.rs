@@ -12,6 +12,8 @@ mod ownership;
 mod query;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod apt_probe_tests;
 pub use query::refresh;
 
 pub(super) fn read(program: &str, args: &[&str]) -> Result<String, QueryReason> {
