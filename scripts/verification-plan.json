@@ -958,6 +958,21 @@
       "setup": "verification",
       "platform": "linux"
     },
+    "nix-confine": {
+      "targets": [
+        "test:confine:linux"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "platform": "linux",
+      "arguments": [
+        "nix"
+      ]
+    },
     "race": {
       "targets": [
         "test:race"
