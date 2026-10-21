@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from ci_policy import hosted_plan, impact
-from ci_policy.native_impact import owner
+from ci_policy.native_impact import dependencies
 
 
 class NativeImpactTests(unittest.TestCase):
@@ -13,7 +13,7 @@ class NativeImpactTests(unittest.TestCase):
         return {row["lane"] for row in hosted_plan.matrix(
             "integration", scope=dict(full=full, paths=list(paths), reasons=reasons))["include"]}
 
-    def test_native_source_selects_its_owner_and_the_repository_baseline(self):
+    def test_native_source_selects_its_dependencies_and_the_repository_baseline(self):
         baseline = {"limits", "contracts", "integration-build", "behavior"}
         cases = {
             "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend"},
@@ -32,7 +32,7 @@ class NativeImpactTests(unittest.TestCase):
                      "lycaon/internal/decide/native/src/weights.bin", "new/native/src/lib.rs",
                      "packaging/native/manifest.json", "scripts/build-decide.sh"]:
             with self.subTest(path=path):
-                self.assertIsNone(owner(path))
+                self.assertIsNone(dependencies(path))
                 self.assertTrue(impact.broad_scope([path])[0])
                 self.assertIn("build", self.lanes(path))
                 self.assertIn("confinement-arm64", self.lanes(path))
@@ -65,14 +65,14 @@ class NativeImpactTests(unittest.TestCase):
             self.assertEqual(impact.go_scope(scope), ["./internal/consumer", "./internal/decide/bialy",
                                                      "./internal/testconsumer", "./test/contract/authority", "./test/smoke"])
 
-    def test_document_core_selects_its_go_owner_without_unrelated_packages(self):
+    def test_document_core_selects_its_go_dependencies_without_unrelated_packages(self):
         result = impact.subprocess.CompletedProcess([], 0, stdout=self.graph())
         with patch.object(impact.subprocess, "run", return_value=result):
             self.assertEqual(impact.go_scope(dict(full=False, paths=[
                 "lycaon/internal/documentcore/native/src/main.rs"])),
                 ["./internal/documentcore", "./test/contract/authority", "./test/smoke"])
 
-    def test_unresolved_native_owner_or_graph_runs_the_full_go_recipe(self):
+    def test_unresolved_native_dependencies_or_graph_runs_the_full_go_recipe(self):
         for output, code in [("", 0), (self.graph(), 1), (self.graph().replace("internal/decide", "internal/missing"), 0)]:
             with self.subTest(output=output[:30], code=code), patch.object(
                     impact.subprocess, "run", return_value=impact.subprocess.CompletedProcess([], code, stdout=output)):

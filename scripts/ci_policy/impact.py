@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 
-from ci_policy.native_impact import owner as native_owner
+from ci_policy.native_impact import dependencies as native_dependencies
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
@@ -59,7 +59,7 @@ def broad_scope(paths):
     for path in paths:
         ordinary = (path.startswith("lycaon/internal/") and path.endswith(".go")
                     or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css"))
-                    or prose(path) or native_owner(path) is not None)
+                    or prose(path) or native_dependencies(path) is not None)
         if path.startswith(SHARED) or not ordinary:
             reasons.append(path)
     return bool(reasons), reasons
@@ -69,13 +69,13 @@ def selected_lanes(scope, lanes):
     if scope["full"]:
         return set(lanes)
     paths = [path for path in scope["paths"] if not prose(path)]
-    native = [native_owner(path) for path in paths if native_owner(path) is not None]
-    ordinary = [path for path in paths if native_owner(path) is None]
+    native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
+    ordinary = [path for path in paths if native_dependencies(path) is None]
     areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
     # Repository contracts read source outside the package/import graph.
     chosen = {"limits", "contracts", "integration-build", "behavior"}
-    for owner in native:
-        chosen |= owner["lanes"]
+    for dependency in native:
+        chosen |= dependency["lanes"]
     if "go" in areas:
         chosen |= {"behavior", "lint", "vulnerabilities"}
     if "den" in areas:
@@ -124,9 +124,9 @@ def go_scope(scope):
     for path in scope["paths"]:
         if not path.startswith("lycaon/") or prose(path):
             continue
-        owner = native_owner(path)
-        if owner is not None:
-            for prefix in owner["go"]:
+        dependency = native_dependencies(path)
+        if dependency is not None:
+            for prefix in dependency["go"]:
                 matches = {name for directory, name in directories.items()
                            if directory == prefix or directory.startswith(prefix + "/")}
                 if not matches:
