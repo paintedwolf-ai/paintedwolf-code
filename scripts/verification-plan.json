@@ -370,7 +370,8 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
     "den:harness:test": {

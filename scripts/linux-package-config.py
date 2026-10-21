@@ -19,7 +19,7 @@ import sys
 INSTALL_ROOT = "/opt/painted-wolf-code"
 PACKAGE_NAME = "painted-wolf-code"
 APP_ID = "dev.paintedwolf.code"
-HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
+HELPERS = ("pw", "pw-logs", "pw-document-core", "pw-desktop-settings", "bialy")
 # Shipped when the build stages it; staging requires it once a unit runs it.
 OPTIONAL_HELPERS = ("pw-vault-identity",)
 ENTRY_POINTS = ("pw", "pw-logs")
