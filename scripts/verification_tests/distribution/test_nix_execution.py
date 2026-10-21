@@ -26,9 +26,19 @@ with pathlib.Path(os.environ['NIX_FIXTURE_CALLS']).open('a') as output:
  output.write(json.dumps({'args':sys.argv[1:], 'credentials':any(name in os.environ for name in ['GH_TOKEN','LINUX_PACKAGE_SIGNING_KEY','FEED_SIGNING_KEYS_JSON','TAURI_SIGNING_PRIVATE_KEY'])})+'\\n')
 if 'build' in sys.argv: print(json.dumps([{'drvPath':'/nix/store/fixture.drv','outputs':{'out':'/nix/store/fixture'}}]))
 if 'path-info' in sys.argv: print(json.dumps({'/nix/store/fixture':{'references':[],'narHash':'sha256-fixture'}}))
+if 'eval' in sys.argv: print('/nix/store/' + sys.argv[-1].split('.')[-3] + '.drv', end='')
 sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv else os.environ.get('NIX_FIXTURE_EXIT','0')))
 ''')
         tool.chmod(0o755)
+        entry = binary / "nix-instantiate"
+        entry.write_text("#!" + sys.executable + "\n" + '''import json,os,pathlib,re,sys
+with pathlib.Path(os.environ['NIX_FIXTURE_CALLS']).open('a') as output:
+ output.write(json.dumps({'args':sys.argv[1:], 'credentials':any(name in os.environ for name in ['GH_TOKEN','LINUX_PACKAGE_SIGNING_KEY','FEED_SIGNING_KEYS_JSON','TAURI_SIGNING_PRIVATE_KEY'])})+'\\n')
+system = re.search(r'"([^"]+)"', sys.argv[sys.argv.index('stdenv') + 1]).group(1)
+print('/nix/store/' + os.environ.get('NIX_FIXTURE_NONFLAKE', system) + '.drv')
+sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
+''')
+        entry.chmod(0o755)
         (self.root / "flake.lock").write_text('{"version":7}')
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
@@ -52,7 +62,7 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv e
         before = (self.root / "flake.lock").read_bytes()
         self.assertEqual(self.invoke("check"), 0)
         self.assertEqual((self.root / "flake.lock").read_bytes(), before)
-        call = json.loads(self.calls.read_text())
+        call = json.loads(self.calls.read_text().splitlines()[0])
         self.assertIn("--no-build", call["args"])
         self.assertIn("--no-write-lock-file", call["args"])
         self.assertFalse(call["credentials"])
@@ -70,6 +80,31 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_COPY_EXIT','0') if 'copy' in sys.argv e
         self.assertIn("/nix/store/fixture", self.reports()[0]["closure"])
         with patch.object(nix.platform, "system", return_value="Darwin"), self.assertRaises(ValueError):
             nix.command("build", self.root)
+
+    def test_evaluation_requires_the_nonflake_entry_to_select_the_flake_application(self):
+        self.assertEqual(self.invoke("check"), 0)
+        calls = [json.loads(line)["args"] for line in self.calls.read_text().splitlines()]
+        for system in ("x86_64-linux", "aarch64-linux"):
+            self.assertIn(["--arg", "stdenv", '{ hostPlatform.system = "%s"; }' % system,
+                           str(self.root / "default.nix")], calls)
+            self.assertIn("git+file://%s#packages.%s.default.drvPath" % (self.root, system),
+                          [call[-1] for call in calls])
+        report = self.reports()[0]
+        self.assertEqual(report["nonflake"]["aarch64-linux"],
+                         {"flake": "/nix/store/aarch64-linux.drv", "nonflake": "/nix/store/aarch64-linux.drv"})
+        self.assertTrue(all(not json.loads(line)["credentials"] for line in self.calls.read_text().splitlines()))
+
+    def test_a_divergent_or_failing_nonflake_entry_fails_evaluation(self):
+        for variable, value in (("NIX_FIXTURE_NONFLAKE", "other"), ("NIX_FIXTURE_NONFLAKE_EXIT", "37")):
+            with self.subTest(variable=variable):
+                for path in (self.root / "artifacts/nix").glob("*.json"):
+                    path.unlink()
+                self.environment[variable] = value
+                self.assertNotEqual(self.invoke("check"), 0)
+                report = self.reports()[0]
+                self.assertFalse(report["passed"])
+                self.assertEqual(list(report["nonflake"]), ["x86_64-linux"])
+                del self.environment[variable]
 
     def test_failures_have_a_failed_report_and_missing_lock_never_runs_nix(self):
         self.environment["NIX_FIXTURE_EXIT"] = "29"

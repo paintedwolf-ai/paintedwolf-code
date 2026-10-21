@@ -101,6 +101,9 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
         return retain_report(root, report, 0)
     result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
     report["passed"] = result.returncode == 0
+    if result.returncode == 0 and operation == "check" and role is None:
+        result, report["nonflake"] = nonflake_identity(root, environment)
+        report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
         report["builds"] = json.loads(result.stdout)
         outputs = [path for build in report["builds"] for path in build["outputs"].values()]
@@ -118,6 +121,27 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             report["archive"] = {"path": str(archive), "publication": "nonrelease"}
             report["passed"] = result.returncode == 0
     return retain_report(root, report, result.returncode)
+
+
+def nonflake_identity(root, environment):
+    """Require default.nix to instantiate the flake's exact application for every system."""
+    identities = {}
+    for system in SYSTEMS.values():
+        flake = subprocess.run(NIX + ["eval", "--raw", "--no-write-lock-file",
+                                      f"git+file://{root}#packages.{system}.default.drvPath"],
+                               cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+        if flake.returncode != 0:
+            return flake, identities
+        entry = subprocess.run(["nix-instantiate", "--arg", "stdenv", f'{{ hostPlatform.system = "{system}"; }}',
+                                str(root / "default.nix")],
+                               cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+        identities[system] = {"flake": flake.stdout.strip(), "nonflake": entry.stdout.strip()}
+        if entry.returncode != 0:
+            return entry, identities
+        if identities[system]["flake"] != identities[system]["nonflake"]:
+            print(f"error: default.nix selects a different {system} derivation than flake.nix", file=sys.stderr)
+            return subprocess.CompletedProcess(entry.args, 1), identities
+    return subprocess.CompletedProcess([], 0), identities
 
 
 def retain_report(root, report, status):

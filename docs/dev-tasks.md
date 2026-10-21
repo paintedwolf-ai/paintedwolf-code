@@ -897,8 +897,14 @@ with `nix develop`, then use the existing root `./task` commands. The shell
 supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
 application feature code still uses native capability facts.
 
+Consumers without flakes use [default.nix](../default.nix): `nix-build` or
+`pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
+inputs pinned in `flake.lock`; the caller's package set selects only the
+platform.
+
 `./task nix:check` evaluates all declared systems without building or updating
-the lock file. `./task nix:build` builds the host's native Linux package under
+the lock file, and requires `default.nix` to instantiate the flake's exact
+application derivation for each system. `./task nix:build` builds the host's native Linux package under
 normal exclusive admission with one Nix job/core and sandboxing enabled. Its
 report binds the source tree, flake lock, derivations, outputs and recursive
 closure. Missing Nix, missing outputs and incompatible inputs fail the target.
