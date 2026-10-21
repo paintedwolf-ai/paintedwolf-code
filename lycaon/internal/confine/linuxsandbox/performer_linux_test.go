@@ -198,10 +198,11 @@ func TestSelfRelativeLinksNameTheCaller(t *testing.T) {
 }
 
 func TestTargetFactsReadTheCallersProcess(t *testing.T) {
-	mem, err := os.Open("/proc/self/mem")
-	testutil.FailErr(t, "own memory", err)
-	defer func() { _ = mem.Close() }()
-	target := &targetProcess{pid: os.Getpid(), mem: mem}
+	cache := newTargetHandles()
+	handles, err := cache.acquire(os.Getpid())
+	testutil.FailErr(t, "own handles", err)
+	target := &targetProcess{pid: os.Getpid(), handles: handles, cache: cache}
+	defer target.close()
 	raw := append([]byte("some/relative/path"), 0)
 	got, err := target.readPath(uint64(uintptr(unsafe.Pointer(&raw[0]))))
 	testutil.FailErr(t, "read path", err)

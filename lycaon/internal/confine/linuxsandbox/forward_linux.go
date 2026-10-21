@@ -133,6 +133,8 @@ type supervisor struct {
 	// performer creates, links, and moves names inside the sandbox; it
 	// arrives before the seccomp listener.
 	performer *performerClient
+	// targets keeps sandbox processes' handles across their calls.
+	targets *targetHandles
 }
 
 func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
@@ -140,7 +142,7 @@ func newSupervisor(control *os.File, network Network, refusals io.Writer) *super
 	return &supervisor{
 		control: control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
-		refusals: &refusalLines{w: refusals},
+		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(),
 	}
 }
 

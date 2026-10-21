@@ -24,13 +24,39 @@ type creationFloors struct {
 	names []NamedFloor
 	// grants are approved writes beneath a protected location.
 	grants []string
+	// sensitive holds, folded, every component name of a protected location
+	// and every protected basename.
+	sensitive map[string]bool
 }
 
 func newCreationFloors(fs Filesystem) creationFloors {
-	f := creationFloors{names: fs.ReadOnlyNames}
+	f := creationFloors{names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
 	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
+	for _, p := range f.protected {
+		for _, component := range strings.Split(filepath.Clean(p), "/") {
+			if component != "" {
+				f.sensitive[strings.ToLower(component)] = true
+			}
+		}
+	}
+	for _, n := range f.names {
+		f.sensitive[strings.ToLower(n.Name)] = true
+	}
 	return f
+}
+
+// mayRefuseCreate reports whether creating an entry named base could be
+// refused. An entry is refused only where it would be a protected location, a
+// protected name, or below a protected location. The first two end in a
+// sensitive name. The last needs that location to exist as a directory: one
+// that existed at launch is covered by a read-only or empty mount, which the
+// kernel refuses to create in except where a grant restores a subtree, which
+// the floors admit too; and one that did not can come to exist only by
+// creating, linking or moving an entry with its name, which the floors decide.
+// So any other name is created as the caller asked.
+func (f creationFloors) mayRefuseCreate(base string) bool {
+	return f.sensitive[strings.ToLower(base)]
 }
 
 // creation is one name a call would create, link, or move.

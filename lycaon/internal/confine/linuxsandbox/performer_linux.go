@@ -47,6 +47,36 @@ type pathCall struct {
 	// Dirs reports which directories accompany the call, in order: the one
 	// Path resolves from, then the one NewPath resolves from.
 	Dirs int `json:"dirs"`
+	// Absolute marks, by position, a name whose absolute path makes its
+	// directory irrelevant; no descriptor travels for it.
+	Absolute uint8 `json:"absolute,omitempty"`
+}
+
+// slots places the received directories at the positions of the call's
+// names, the working directory standing for an absolute name's.
+func (c pathCall) slots(received []int) ([]int, bool) {
+	var out []int
+	next := 0
+	for i := 0; i < c.Dirs+bitsSet(c.Absolute); i++ {
+		if c.Absolute&(1<<i) != 0 {
+			out = append(out, unix.AT_FDCWD)
+			continue
+		}
+		if next >= len(received) {
+			return nil, false
+		}
+		out = append(out, received[next])
+		next++
+	}
+	return out, next == len(received)
+}
+
+func bitsSet(v uint8) int {
+	n := 0
+	for ; v != 0; v &= v - 1 {
+		n++
+	}
+	return n
 }
 
 // Calls the performer serves.
@@ -150,7 +180,9 @@ func servePathCalls(fd int) error {
 		var call pathCall
 		result, opened := pathResult{Errno: int(unix.EINVAL)}, -1
 		if json.Unmarshal(buf[:n], &call) == nil && call.Dirs == len(dirs) {
-			result, opened = floors.perform(call, dirs)
+			if slots, ok := call.slots(dirs); ok {
+				result, opened = floors.perform(call, slots)
+			}
 		}
 		for _, dir := range dirs {
 			_ = unix.Close(dir)

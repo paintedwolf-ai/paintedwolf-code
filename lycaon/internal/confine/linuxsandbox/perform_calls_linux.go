@@ -5,6 +5,7 @@ package linuxsandbox
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,9 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return unix.AT_FDCWD
 	}
 	unix.Umask(int(call.Umask & 0o777))
+	if result, opened, done := f.createPlainName(dir(0), call); done {
+		return result, opened
+	}
 	switch call.Op {
 	case callOpen:
 		return f.open(dir(0), call)
@@ -35,6 +39,38 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return f.rename(dir(0), dir(1), call), -1
 	}
 	return pathResult{Errno: int(unix.ENOSYS)}, -1
+}
+
+// createPlainName performs a create whose last component no floor can refuse
+// (mayRefuseCreate) directly on the caller's directory, with this copy of its
+// path. An open that would follow a final symlink is attempted without
+// following; a symlink there takes the full decision, since its target is the
+// name that would be created.
+func (f creationFloors) createPlainName(dirfd int, call pathCall) (pathResult, int, bool) {
+	base := filepath.Base(strings.TrimRight(call.Path, "/"))
+	if base == "." || base == ".." || base == "/" || f.mayRefuseCreate(base) {
+		return pathResult{}, -1, false
+	}
+	switch call.Op {
+	case callOpen:
+		if call.Flags&unix.O_CREAT == 0 {
+			return pathResult{}, -1, false
+		}
+		follows := call.Flags&unix.O_NOFOLLOW == 0 && call.Resolve&unix.RESOLVE_NO_SYMLINKS == 0
+		how := unix.OpenHow{Flags: call.Flags | unix.O_NOFOLLOW, Mode: uint64(call.Mode), Resolve: call.Resolve}
+		fd, err := unix.Openat2(dirfd, call.Path, &how)
+		if follows && errors.Is(err, unix.ELOOP) {
+			return pathResult{}, -1, false
+		}
+		return errnoResult(err), fd, true
+	case callMkdir:
+		return errnoResult(unix.Mkdirat(dirfd, call.Path, call.Mode)), -1, true
+	case callMknod:
+		return errnoResult(unix.Mknodat(dirfd, call.Path, call.Mode, int(call.Dev))), -1, true
+	case callSymlink:
+		return errnoResult(unix.Symlinkat(call.Content, dirfd, call.Path)), -1, true
+	}
+	return pathResult{}, -1, false
 }
 
 // parent is a name's directory, pinned, and the name's last component.

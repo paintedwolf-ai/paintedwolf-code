@@ -173,7 +173,17 @@ func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathA
 		dirArgs = append(dirArgs, a.newDir)
 	}
 	var dirs []int
-	for _, d := range dirArgs {
+	for i, d := range dirArgs {
+		name := call.Path
+		if i == 1 {
+			name = call.NewPath
+		}
+		// The kernel ignores the directory of an absolute name, so the
+		// supervisor need not open it.
+		if strings.HasPrefix(name, "/") {
+			call.Absolute |= 1 << i
+			continue
+		}
 		dirfd := int32(unix.AT_FDCWD)
 		if d != noArg {
 			dirfd = int32(arg(d))
@@ -217,7 +227,7 @@ func (t *targetProcess) readPath(addr uint64) (string, error) {
 			chunk = room
 		}
 		buf := make([]byte, chunk)
-		n, err := t.mem.ReadAt(buf, int64(addr))
+		n, err := t.handles.readAt(t.pid, buf, int64(addr))
 		if n == 0 && err != nil {
 			return "", unix.EFAULT
 		}
