@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -63,6 +64,15 @@ func TestFindFormsProduceExactBytes(t *testing.T) {
 		{name: "missing start", argv: []string{"find", "nope", "tree/sub"}, stdout: "tree/sub\ntree/sub/c.go\ntree/sub/empty.txt\n", stderr: "find: 'nope': No such file or directory\n", status: 1},
 		{name: "missing newer reference", argv: []string{"find", "tree", "-newer", "nope"}, stderr: "find: 'nope': No such file or directory\n", status: 1},
 		{name: "trailing slash start", argv: []string{"find", "tree/sub/", "-name", "*.go"}, stdout: "tree/sub/c.go\n"},
+		{name: "iregex", argv: []string{"find", "tree", "-iregex", ".*/A\\.GO"}, stdout: "tree/a.go\n"},
+		{name: "mmin", argv: []string{"find", "tree/sub", "-type", "f", "-mmin", "+2159"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "mmin exact", argv: []string{"find", "tree/sub", "-type", "f", "-mmin", "-2161", "-mmin", "+2158"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "perm exact", argv: []string{"find", "tree/sub", "-type", "f", "-perm", "644"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "perm all bits", argv: []string{"find", "tree/sub", "-type", "f", "-perm", "-600"}, stdout: "tree/sub/c.go\ntree/sub/empty.txt\n"},
+		{name: "perm any bit", argv: []string{"find", "tree/sub", "-type", "f", "-perm", "/111"}},
+		{name: "printf", argv: []string{"find", "tree/sub", "-printf", "%y %d %P|%f|%h|%m\\n"}, stdout: "d 0 |sub|tree|755\nf 1 c.go|c.go|tree/sub|644\nf 1 empty.txt|empty.txt|tree/sub|644\n"},
+		{name: "printf size", argv: []string{"find", "tree/sub", "-type", "f", "-printf", "%s\\t%T@\\n"}, stdout: "10\t1767323045.0000000000\n0\t1767323045.0000000000\n"},
+		{name: "printf literal and percent", argv: []string{"find", "tree/sub/c.go", "-printf", "[%p] 100%%\\0"}, stdout: "[tree/sub/c.go] 100%\x00"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h := newHarness(t, findTree)
@@ -108,6 +118,11 @@ func TestFindRefusals(t *testing.T) {
 		{"invalid regex", []string{"find", "tree", "-regex", "(a"}, "GREP_REGEX_INVALID"},
 		{"exec needs terminator", []string{"find", "tree", "-exec", "printf", "{}"}, "COMMAND_OPERAND_INVALID"},
 		{"second braces in batch", []string{"find", "tree", "-exec", "printf", "{}x", "{}", "+"}, "COMMAND_OPERAND_INVALID"},
+		{"printf directive", []string{"find", "tree", "-printf", "%Z"}, "COMMAND_OPERAND_INVALID"},
+		{"printf escape", []string{"find", "tree", "-printf", "\\q"}, "COMMAND_OPERAND_INVALID"},
+		{"bad perm", []string{"find", "tree", "-perm", "u+x"}, "COMMAND_OPERAND_INVALID"},
+		{"user name", []string{"find", "tree", "-user", "root"}, "COMMAND_OPERAND_INVALID"},
+		{"bad mmin", []string{"find", "tree", "-mmin", "x"}, "COMMAND_OPERAND_INVALID"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			h.exec("", c.argv...).refused(t, c.name, c.code)
@@ -253,4 +268,12 @@ func TestFindDeleteUsesTheSharedDeleteOperation(t *testing.T) {
 	}
 	r := h.exec("", "find", "tree", "-maxdepth", "0", "-delete")
 	r.expect(t, "non-empty", "", "find: cannot delete 'tree': Directory not empty\n", 1)
+}
+
+func TestFindUserMatchesNumericOwner(t *testing.T) {
+	h := newHarness(t, findTree)
+	uid := strconv.Itoa(os.Getuid())
+	h.exec("", "find", "tree/sub", "-type", "f", "-user", uid).expect(t, "own files", "tree/sub/c.go\ntree/sub/empty.txt\n", "", 0)
+	h.exec("", "find", "tree/sub", "-type", "f", "-user", strconv.Itoa(os.Getuid()+1)).expect(t, "other owner", "", "", 0)
+	h.exec("", "find", "tree/sub/c.go", "-printf", "%U\\n").expect(t, "printf uid", uid+"\n", "", 0)
 }

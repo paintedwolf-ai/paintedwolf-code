@@ -17,6 +17,8 @@ type entry struct {
 	bound   projectpaths.BoundPath
 	stat    fseffect.EntryStat
 	depth   int
+	// start is the starting point the entry was reached from.
+	start string
 	// link reports that the entry itself is a symbolic link.
 	link bool
 }
@@ -64,7 +66,7 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	if err != nil {
 		return entry{}, err
 	}
-	e := entry{display: spelling, name: baseName(spelling), bound: bound, stat: st, link: st.Mode&fs.ModeSymlink != 0}
+	e := entry{display: spelling, name: baseName(spelling), bound: bound, stat: st, start: spelling, link: st.Mode&fs.ModeSymlink != 0}
 	if e.link && follow {
 		if target, err := bound.Stat(true); err == nil {
 			e.stat = target
@@ -101,7 +103,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 			}
 			return nil, err
 		}
-		e := entry{display: joinDisplay(dir.display, name), name: name, bound: child, stat: st, depth: dir.depth + 1, link: st.Mode&fs.ModeSymlink != 0}
+		e := entry{display: joinDisplay(dir.display, name), name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
 			if target, err := child.Stat(true); err == nil {
 				e.stat = target

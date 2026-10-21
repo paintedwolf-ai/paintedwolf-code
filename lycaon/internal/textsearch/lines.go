@@ -37,6 +37,8 @@ type ScanOptions struct {
 	Before, After int
 	// TrimCR drops one CR before each LF from the matched record.
 	TrimCR bool
+	// NullData separates records with NUL instead of LF (grep -z).
+	NullData bool
 }
 
 // StopScan ends a scan early without error when a yield returns it.
@@ -51,17 +53,21 @@ func ScanLines(ctx context.Context, content []byte, sel Selector, opts ScanOptio
 		return 0, nil
 	}
 	trailing := false
+	separator := byte('\n')
+	if opts.NullData {
+		separator = 0
+	}
 	for start, number := 0, 1; start < len(content); number++ {
 		if err := ctx.Err(); err != nil {
 			return s.selected, err
 		}
 		end := len(content)
-		if i := bytes.IndexByte(content[start:], '\n'); i >= 0 {
+		if i := bytes.IndexByte(content[start:], separator); i >= 0 {
 			end = start + i
 		}
 		next := end + 1
 		recordEnd := end
-		if opts.TrimCR && recordEnd > start && content[recordEnd-1] == '\r' {
+		if opts.TrimCR && !opts.NullData && recordEnd > start && content[recordEnd-1] == '\r' {
 			recordEnd--
 		}
 		line := Line{Number: number, Start: start, End: recordEnd}

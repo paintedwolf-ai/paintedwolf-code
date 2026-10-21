@@ -107,7 +107,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return fmt.Errorf("literal reads require a program execution and pin recorder")
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
 }
 
 // readBounded gathers a stream whole, refusing rather than truncating input

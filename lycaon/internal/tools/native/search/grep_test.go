@@ -94,10 +94,10 @@ func TestGrepFormsProduceExactBytes(t *testing.T) {
 		{name: "exclude", argv: []string{"grep", "-r", "--exclude", "*.md", "--exclude", ".*", "alpha", "sub"}, stdout: "sub/c.txt:alphabet\n"},
 		{name: "exclude dir", argv: []string{"grep", "-r", "--exclude-dir=deep", "alpha", "sub"}, stdout: "sub/.hidden:alpha hidden\nsub/c.txt:alphabet\n"},
 		{name: "include applies to command-line files", argv: []string{"grep", "--include=*.go", "alpha", "a.txt", "b.go"}, stdout: "b.go:// alpha beta\n"},
-		{name: "binary file notice", argv: []string{"grep", "alpha", "bin.dat", "input"}, stdout: "Binary file bin.dat matches\ninput:alpha\n"},
+		{name: "binary file notice", argv: []string{"grep", "alpha", "bin.dat", "input"}, stdout: "input:alpha\n", stderr: "grep: bin.dat: binary file matches\n"},
 		{name: "binary file counts", argv: []string{"grep", "-c", "alpha", "bin.dat"}, stdout: "1\n"},
 		{name: "binary file listed", argv: []string{"grep", "-l", "alpha", "bin.dat"}, stdout: "bin.dat\n"},
-		{name: "invalid UTF-8 line is binary", argv: []string{"grep", "alpha", "bad.txt"}, stdout: "Binary file bad.txt matches\n"},
+		{name: "invalid UTF-8 line is binary", argv: []string{"grep", "alpha", "bad.txt"}, stderr: "grep: bad.txt: binary file matches\n"},
 		{name: "no match is status one", argv: []string{"grep", "zzz", "a.txt"}, status: 1},
 		{name: "missing file", argv: []string{"grep", "alpha", "missing", "input"}, stdout: "input:alpha\n", stderr: "grep: missing: No such file or directory\n", status: 2},
 		{name: "missing file suppressed", argv: []string{"grep", "-s", "alpha", "missing"}, status: 2},
@@ -107,6 +107,18 @@ func TestGrepFormsProduceExactBytes(t *testing.T) {
 		{name: "quiet no match with error", argv: []string{"grep", "-q", "zzz", "missing", "a.txt"}, stderr: "grep: missing: No such file or directory\n", status: 2},
 		{name: "quiet no match", argv: []string{"grep", "-q", "zzz", "a.txt"}, status: 1},
 		{name: "max count zero", argv: []string{"grep", "-m", "0", "alpha", "a.txt"}, status: 1},
+		{name: "byte offsets", argv: []string{"grep", "-b", "alpha", "a.txt"}, stdout: "4:two alpha\n30:six alpha\n"},
+		{name: "byte offsets of matches", argv: []string{"grep", "-ob", "alpha", "a.txt"}, stdout: "8:alpha\n34:alpha\n"},
+		{name: "clustered -ohn", argv: []string{"grep", "-ohn", "alpha", "a.txt", "input"}, stdout: "2:alpha\n6:alpha\n1:alpha\n"},
+		{name: "null after names", argv: []string{"grep", "-Z", "alpha", "a.txt", "input"}, stdout: "a.txt\x00two alpha\na.txt\x00six alpha\ninput\x00alpha\n"},
+		{name: "null after listed names", argv: []string{"grep", "-lZ", "alpha", "a.txt", "nope.txt", "input"}, stdout: "a.txt\x00input\x00"},
+		{name: "null after counted names", argv: []string{"grep", "-cZ", "alpha", "a.txt", "nope.txt"}, stdout: "a.txt\x002\nnope.txt\x000\n"},
+		{name: "null-separated records", argv: []string{"grep", "-z", "alpha"}, stdin: "a\x00b alpha\x00c", stdout: "b alpha\x00"},
+		{name: "initial tab", argv: []string{"grep", "-T", "-n", "alpha", "a.txt", "input"}, stdout: "a.txt: 2:\ttwo alpha\na.txt: 6:\tsix alpha\ninput: 1:\talpha\n"},
+		{name: "initial tab without prefix", argv: []string{"grep", "-T", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "color never", argv: []string{"grep", "--color=never", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "colour auto", argv: []string{"grep", "--colour=auto", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "line buffered", argv: []string{"grep", "--line-buffered", "alpha", "input"}, stdout: "alpha\n"},
 	})
 }
 
@@ -143,6 +155,8 @@ func TestRgFormsProduceExactBytes(t *testing.T) {
 		{name: "follow is accepted", argv: []string{"rg", "-L", "deep", "sub"}, stdout: "sub/deep/d.md:alpha deep\n"},
 		{name: "no messages", argv: []string{"rg", "--no-messages", "alpha", "missing"}, status: 2},
 		{name: "context", argv: []string{"rg", "-n", "-A", "1", "two", "a.txt"}, stdout: "2:two alpha\n3-three\n"},
+		{name: "type not", argv: []string{"rg", "-T", "md", "alpha", "sub"}, stdout: "sub/c.txt:alphabet\n"},
+		{name: "color never", argv: []string{"rg", "--color=never", "alpha", "input"}, stdout: "alpha\n"},
 	})
 }
 
@@ -158,6 +172,7 @@ func TestRgAppliesProjectIgnoreRules(t *testing.T) {
 	h := newHarness(t, map[string]string{".gitignore": "skip.txt\n", "skip.txt": "alpha\n", "keep.txt": "alpha\n", ".git/HEAD": "ref\n"})
 	h.exec("", "rg", "alpha").expect(t, "ignored", "keep.txt:alpha\n", "", 0)
 	h.exec("", "rg", "-u", "alpha").expect(t, "unrestricted", "keep.txt:alpha\nskip.txt:alpha\n", "", 0)
+	h.exec("", "rg", "--no-ignore", "alpha").expect(t, "no ignore", "keep.txt:alpha\nskip.txt:alpha\n", "", 0)
 	h.exec("", "rg", "alpha", "skip.txt").expect(t, "named path", "alpha\n", "", 0)
 	h.exec("", "grep", "-r", "alpha", ".").expect(t, "grep ignores no file", "./keep.txt:alpha\n./skip.txt:alpha\n", "", 0)
 }
@@ -230,6 +245,7 @@ func TestSearchRefusals(t *testing.T) {
 		{"bad context", []string{"grep", "-A", "-1", "a", "input"}, "COMMAND_OPERAND_INVALID"},
 		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, "COMMAND_OPERAND_INVALID"},
 		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"color always", []string{"grep", "--color=always", "a", "input"}, "COMMAND_OPERAND_INVALID"},
 		{"outside the roots", []string{"grep", "a", "/etc/hosts"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {

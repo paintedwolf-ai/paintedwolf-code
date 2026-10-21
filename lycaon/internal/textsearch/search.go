@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -124,10 +125,11 @@ type Selector interface {
 
 // Matcher is a compiled Spec.
 type Matcher struct {
-	spec   Spec
-	limits Limits
-	engine engine
-	none   bool
+	spec    Spec
+	limits  Limits
+	engine  engine
+	none    bool
+	require litprefilter.Requirement
 }
 
 var _ Selector = (*Matcher)(nil)
@@ -160,7 +162,31 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 	if err != nil {
 		return nil, err
 	}
+	m.require = requirement(m.engine, patterns, spec)
 	return m, nil
+}
+
+// Requirement is what a record must contain to hold any match, for index
+// pruning; empty when the spec cannot state one exactly (case folding,
+// assertions and references, the PCRE grammar, an empty pattern).
+func (m *Matcher) Requirement() litprefilter.Requirement { return m.require }
+
+func requirement(e engine, patterns []string, spec Spec) litprefilter.Requirement {
+	if spec.IgnoreCase {
+		return litprefilter.Requirement{}
+	}
+	switch e := e.(type) {
+	case literalEngine:
+		for _, p := range patterns {
+			if p == "" {
+				return litprefilter.Requirement{}
+			}
+		}
+		return litprefilter.AnyOf(patterns...)
+	case goEngine:
+		return litprefilter.Extract(e.re.String(), false)
+	}
+	return litprefilter.Requirement{}
 }
 
 // Select reports whether the record holds a match under the spec.
