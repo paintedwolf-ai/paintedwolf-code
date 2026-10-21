@@ -21,7 +21,9 @@ import re
 import stat
 import sys
 
-FORMAT_VERSION = 1
+from linux_release.payload_inventory import collect as collect_payload, tree as payload_tree
+
+FORMAT_VERSION = 2
 PACKAGE_NAME = "painted-wolf-code"
 INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/opt/painted-wolf-code/bin/painted-wolf-code"
@@ -78,6 +80,15 @@ def generate(args: argparse.Namespace) -> int:
                 continue
             relative = source.relative_to(engine_root).as_posix()
             executables.append(entry(f"{INSTALL_ROOT}/engine-root/{relative}", source))
+    sources = {"bin/painted-wolf-code": tauri_dir / "target" / args.target / "release" / PACKAGE_NAME,
+               "engine-root": engine_root,
+               "release-version": root / "VERSION",
+               "THIRD-PARTY-NOTICES.md": tauri_dir / "THIRD-PARTY-NOTICES.md"}
+    sources.update({"bin/" + helper: tauri_dir / "binaries" / f"{helper}-{args.target}" for helper in HELPERS})
+    for helper in OPTIONAL_HELPERS:
+        source = tauri_dir / "binaries" / f"{helper}-{args.target}"
+        if source.exists():
+            sources["bin/" + helper] = source
     manifest = {
         "format_version": FORMAT_VERSION,
         "package": PACKAGE_NAME,
@@ -85,6 +96,7 @@ def generate(args: argparse.Namespace) -> int:
         "architecture": architecture,
         "install_root": INSTALL_ROOT,
         "executables": sorted(executables, key=lambda row: row["path"]),
+        "payload": collect_payload(sources),
     }
     validate(manifest)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -94,7 +106,7 @@ def generate(args: argparse.Namespace) -> int:
 
 
 def validate(manifest: dict) -> None:
-    expected_keys = {"format_version", "package", "version", "architecture", "install_root", "executables"}
+    expected_keys = {"format_version", "package", "version", "architecture", "install_root", "executables", "payload"}
     if set(manifest) != expected_keys:
         raise ValueError("manifest keys do not match the schema")
     if manifest["format_version"] != FORMAT_VERSION or manifest["package"] != PACKAGE_NAME:
@@ -129,6 +141,8 @@ def verify_tree(args: argparse.Namespace) -> int:
         raise ValueError(f"manifest version {manifest['version']} does not equal {args.version}")
     if args.architecture is not None and manifest["architecture"] != args.architecture:
         raise ValueError(f"manifest architecture {manifest['architecture']} does not equal {args.architecture}")
+    if manifest["payload"] != payload_tree(tree / INSTALL_ROOT.lstrip("/")):
+        raise ValueError("package payload bytes, modes, links or inventory differ from their seal")
     listed = {row["path"] for row in manifest["executables"]}
     for row in manifest["executables"]:
         installed = tree / row["path"].lstrip("/")
@@ -170,6 +184,7 @@ def seal_tree(args: argparse.Namespace) -> int:
                 if not path.is_symlink() and is_executable_file(path):
                     rows.append(entry("/" + path.relative_to(tree).as_posix(), path))
     manifest["executables"] = sorted(rows, key=lambda row: row["path"])
+    manifest["payload"] = payload_tree(tree / INSTALL_ROOT.lstrip("/"))
     validate(manifest)
     # The staged file may be a hard link to the build output; replace it rather than writing through.
     sealed = manifest_path.with_suffix(".json.sealed")
