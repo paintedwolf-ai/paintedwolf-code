@@ -75,7 +75,7 @@ export function createAppStore(
 
   const rememberQueueDraft = (sessionId: string, draft: QueueDraft, authoritative = true): QueueDraft => {
     const current = queueDrafts.get(sessionId);
-    if (current && (!authoritative || freshQueueSessions.has(sessionId)) && current.revision >= draft.revision) return current;
+    if (current && (!authoritative || (freshQueueSessions.has(sessionId) && current.revision >= draft.revision))) return current;
     if (authoritative) freshQueueSessions.add(sessionId);
     queueDrafts.set(sessionId, draft);
     return draft;

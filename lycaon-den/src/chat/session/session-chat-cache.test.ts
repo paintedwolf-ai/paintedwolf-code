@@ -155,6 +155,10 @@ describe("session-chat-cache", () => {
     store.actions.setCurrentSession({ ...demoSession, id: "sess-b" });
     store.actions.setCurrentSession(demoSession);
     expect(store.state.queueDraft?.revision).toBe(4);
+    store.actions.invalidateSessionViewRequests();
+    store.actions.setQueueDraft("sess-a", store.state.sessionViewEpoch, { ...queue, revision: 1 });
+    store.actions.restoreSessionChatSnapshot(snapshot);
+    expect(store.state.queueDraft?.revision).toBe(1);
   });
 
   it("restoreCachedSessionChat binds a cached transcript", () => {
