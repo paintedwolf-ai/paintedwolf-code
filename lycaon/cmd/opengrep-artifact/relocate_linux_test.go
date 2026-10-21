@@ -109,7 +109,7 @@ func TestConsumerRelocationIsAtomicAndDoesNotGrantQualification(t *testing.T) {
 }
 
 func TestConsumerRelocationRefusalsDoNotReplaceOriginal(t *testing.T) {
-	for _, name := range []string{"wrong kind", "extra argument", "host loader", "host RPATH", "relative root", "same original", "wrong tool hash", "missing tool", "invalid image", "canceled"} {
+	for _, name := range []string{"wrong kind", "extra argument", "host loader", "host RPATH", "relative root", "missing root", "missing original", "same original", "tampered stage", "wrong tool hash", "missing tool", "invalid image", "canceled"} {
 		t.Run(name, func(t *testing.T) {
 			manifest, opts, recipe := relocationFixture(t, name == "invalid image")
 			binary := bundled.ArtifactPath(opts.root, manifest.OpenGrep.Version, runtime.GOOS)
@@ -128,6 +128,12 @@ func TestConsumerRelocationRefusalsDoNotReplaceOriginal(t *testing.T) {
 				recipe.Arguments[3] = "/usr/lib"
 			case "relative root":
 				opts.root = "relative"
+			case "missing root":
+				opts.root = filepath.Join(t.TempDir(), "missing")
+			case "missing original":
+				opts.directory = filepath.Join(t.TempDir(), "missing")
+			case "tampered stage":
+				testutil.FailErr(t, "tamper staged producer proof", os.WriteFile(filepath.Join(filepath.Dir(binary), "platform-checks.json"), []byte("tampered"), 0o600))
 			case "same original":
 				opts.directory = filepath.Dir(binary)
 			case "wrong tool hash":
