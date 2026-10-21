@@ -1,6 +1,6 @@
 //! Real WebKit paste events on the existing private X11/Wayland display fixtures.
 
-use super::linux::{paste_into_view, GlibMainThread};
+use super::linux::{paste_into_view, request_image, GlibMainThread};
 use super::service::MainThread;
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -59,10 +59,13 @@ fn publish(contents: Contents) {
     }
 }
 
-pub(super) fn exercise() {
+/// `focus_input` gives the compositor a key event so the fixture window can
+/// receive keyboard focus, as a person's keyboard does.
+pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
     tauri::async_runtime::block_on(async {
         for contents in [Contents::Plain, Contents::Rich, Contents::Image] {
             let (reply, receiver) = tokio::sync::oneshot::channel();
+            let focus_input = focus_input.clone();
             GlibMainThread.dispatch(Box::new(move || {
                 let window = gtk::Window::new(gtk::WindowType::Toplevel);
                 window.set_default_size(320, 200);
@@ -79,11 +82,13 @@ pub(super) fn exercise() {
                         // The compositor activates the window asynchronously; paste
                         // once the view holds keyboard focus, as a menu action would.
                         let (view, window, answer, stage) = (view.clone(), owned_window.clone(), answer.clone(), stage.clone());
+                        let focus_input = focus_input.clone();
                         *stage.borrow_mut() = "awaiting focus";
                         gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
                             if !view.has_focus() {
                                 window.present();
                                 view.grab_focus();
+                                focus_input();
                                 return gtk::glib::ControlFlow::Continue;
                             }
                             publish(contents);
@@ -128,8 +133,27 @@ pub(super) fn exercise() {
                     let html = observed["html"].as_str().expect("pasted markup");
                     assert!(html.starts_with("<b") && html.ends_with(">fixture rich</b>"), "pasted markup {html}");
                 }
-                Contents::Image => assert_eq!(observed["images"], serde_json::json!(["image/png"]), "pasted {observed}"),
+                Contents::Image => assert_clipboard_image().await,
             }
         }
     });
+}
+
+/// WebKitGTK hands the page no clipboard image, so the shell's read must
+/// return the published pixels as PNG.
+async fn assert_clipboard_image() {
+    let (reply, receiver) = tokio::sync::oneshot::channel();
+    GlibMainThread.dispatch(Box::new(move || request_image(reply))).expect("dispatch clipboard image read");
+    let png = tokio::time::timeout(Duration::from_secs(5), receiver)
+        .await.expect("bounded clipboard image read").expect("clipboard image sender").expect("clipboard image");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"), "clipboard image is PNG");
+    let (reply, receiver) = tokio::sync::oneshot::channel();
+    GlibMainThread.dispatch(Box::new(move || {
+        let loader = gtk::gdk_pixbuf::PixbufLoader::new();
+        let decoded = loader.write(&png).and_then(|_| loader.close()).ok().and_then(|_| loader.pixbuf())
+            .map(|image| (image.width(), image.height(), image.read_pixel_bytes().to_vec()[..3].to_vec()));
+        let _ = reply.send(decoded);
+    })).expect("dispatch decode");
+    let decoded = receiver.await.expect("decode reply").expect("decodable clipboard PNG");
+    assert_eq!(decoded, (2, 2, vec![0x23, 0x64, 0xaa]));
 }

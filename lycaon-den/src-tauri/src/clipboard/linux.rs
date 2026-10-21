@@ -146,6 +146,24 @@ mod tests {
     }
 }
 
+/// The largest PNG a paste carries from the clipboard.
+pub(super) const IMAGE_LIMIT: usize = 32 << 20;
+
+/// The clipboard image as PNG, or empty when the board holds no image. WebKitGTK
+/// gives DOM paste events no clipboard images, so the shell reads them for the
+/// focused editor. Runs on the GTK main thread.
+pub(super) fn request_image(reply: oneshot::Sender<Result<Vec<u8>, ClipboardError>>) {
+    match clipboard() {
+        Err(error) => {
+            let _ = reply.send(Err(error));
+        }
+        Ok(clipboard) => clipboard.request_image(move |_, image| {
+            let png = image.and_then(|image| image.save_to_bufferv("png", &[]).ok()).unwrap_or_default();
+            let _ = reply.send(if png.len() > IMAGE_LIMIT { Err(ClipboardError::ImageTooLarge) } else { Ok(png) });
+        }),
+    }
+}
+
 /// Runs the native editing action without transporting clipboard contents to IPC.
 pub(super) fn paste_into_view(view: &webkit2gtk::WebView) -> Result<(), String> {
     use webkit2gtk::WebViewExt;

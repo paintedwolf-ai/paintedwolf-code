@@ -355,7 +355,11 @@ fn clipboard_owner_child() {
     let worker = std::thread::spawn(move || {
         let outcome = std::panic::catch_unwind(|| {
             exercise_adapter(peer);
-            super::tests_native_paste::exercise();
+            super::tests_native_paste::exercise(move || {
+                if peer == Peer::Wayland {
+                    peer.send_key_to_owner_window();
+                }
+            });
         });
         gtk::glib::MainContext::default().invoke(gtk::main_quit);
         outcome

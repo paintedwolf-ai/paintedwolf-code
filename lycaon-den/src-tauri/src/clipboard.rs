@@ -58,6 +58,29 @@ pub async fn read_clipboard_text(
     state.service.read(&app).await
 }
 
+/// The clipboard image as PNG bytes, empty when it holds none. Only Linux needs
+/// it: WebKitGTK paste events carry no clipboard images, while WebKit on macOS
+/// and WebView2 deliver them with the event.
+#[tauri::command]
+pub async fn read_clipboard_image(app: tauri::AppHandle) -> Result<tauri::ipc::Response, ClipboardError> {
+    #[cfg(target_os = "linux")]
+    {
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || linux::request_image(reply))
+            .map_err(|_| ClipboardError::Stopped)?;
+        let png = tokio::time::timeout(service::OPERATION_TIMEOUT, receiver)
+            .await
+            .map_err(|_| ClipboardError::Timeout)?
+            .map_err(|_| ClipboardError::Stopped)??;
+        Ok(tauri::ipc::Response::new(png))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        Err(ClipboardError::Backend("clipboard images arrive with the paste event on this platform".into()))
+    }
+}
+
 /// Pastes into the focused web view through the system paste action, the
 /// same path Edit > Paste takes.
 #[tauri::command]

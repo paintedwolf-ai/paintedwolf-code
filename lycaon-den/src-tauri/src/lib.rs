@@ -92,6 +92,7 @@ pub fn run() {
             windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
+            clipboard::read_clipboard_image,
             clipboard::write_clipboard_text,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,

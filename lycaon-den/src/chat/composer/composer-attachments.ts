@@ -1,5 +1,6 @@
 /** Composer attachment intake projected by the host readiness response. */
 
+import { readClipboardImage } from "../../utils/clipboard.ts";
 import type { AttachmentCapabilities, AttachmentUploadResponse, AttachmentVideoFacts, ManagedSecret } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { preflightReport } from "../../platform/persistence/preflight-report.ts";
@@ -493,6 +494,29 @@ export function isSendablePendingAttachment(att: ComposerPendingAttachment): boo
     att.kind === "search-hit" ||
     att.kind === "secret"
   );
+}
+
+/**
+ * Attaches the files a paste carries, and reports whether it took the paste
+ * from the editor's default handling. A paste with neither files nor text
+ * (WebKitGTK reports clipboard images that way) attaches the clipboard image
+ * the shell reads, if any; `failed` hears why that read could not complete.
+ */
+export function attachPastedFiles(
+  event: ClipboardEvent,
+  attach: (files: File[]) => void | Promise<unknown>,
+  failed: (error: unknown) => void = (error) => console.error("clipboard image paste failed", error),
+): boolean {
+  const files = filesFromClipboard(event.clipboardData?.items);
+  if (files.length > 0) {
+    event.preventDefault();
+    void attach(files);
+    return true;
+  }
+  if ((event.clipboardData?.getData("text/plain") ?? "") === "") {
+    void readClipboardImage().then((image) => (image ? attach([image]) : undefined), failed);
+  }
+  return false;
 }
 
 /** Clipboard: any file item (images + text files when the OS provides them). */
