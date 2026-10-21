@@ -1,6 +1,8 @@
 package toolhost
 
 import (
+	"time"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/hostprocess"
@@ -8,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 )
 
 // commandProgramEntry routes the command tool to the v1 program entry. It
@@ -35,7 +38,11 @@ func registerCommandTools(
 		return err
 	}
 	ft := command.NewCommandFailureTracker()
-	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate}
+	hostUtilities, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, boundary)
+	if err != nil {
+		return err
+	}
+	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate, Builtins: hostUtilities.Builtins}
 	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
 	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
 	*commandOutputTool = &command.CommandOutputTool{}

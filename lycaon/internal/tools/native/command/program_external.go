@@ -45,15 +45,8 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts := lycexec.ExecOpts{
-		Launch:         agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine),
-		Dir:            cwd,
-		NoTimeout:      true,
-		Env:            request.Environment,
-		PathExtra:      append([]string(nil), tctx.Host.HostResourcePathExtra...),
-		SeparateStderr: true,
-		Stdout:         nonNilWriter(streams.Output),
-	}
+	opts := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts.NoTimeout, opts.SeparateStderr, opts.Stdout = true, true, nonNilWriter(streams.Output)
 	if streams.Input != nil {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}

@@ -45,8 +45,10 @@ type ProgramRuntime struct {
 	Evaluate func(context.Context, commandsurface.ProgramSnapshot, commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error)
 	Boundary *sandbox.Boundary
 	// Owners names the host owner when no authenticated request started the work.
-	Owners  people.OwnerSource
-	Natives map[string]NativeOperation
+	Owners people.OwnerSource
+	// Builtins supplies host utilities for one invocation; nested runs their command operands.
+	Builtins func(tools.ToolContext, commandprogram.NestedCommand) map[string]commandprogram.OperationDispatcher
+	Natives  map[string]NativeOperation
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 
@@ -196,6 +198,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: r.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}}
+	if r.Builtins != nil {
+		for name, builtin := range r.Builtins(tc, dispatcher) {
+			if _, taken := builtins[name]; !taken {
+				builtins[name] = builtin
+			}
+		}
+	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
 	environment := lycexec.InheritedEnviron()
 	if tc.Files.PackageExecution != nil {

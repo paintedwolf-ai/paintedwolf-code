@@ -134,3 +134,13 @@ func (p LaunchPlan) validate() error {
 		return fmt.Errorf("unknown process launch kind %q", p.Kind)
 	}
 }
+
+// AgentLaunchOptions are the directory and environment inputs of one confined
+// agent launch. Launches and launch lookups (which, type, command -v) build
+// their options here, so discovery selects exactly what a launch would run.
+func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) ExecOpts {
+	if reduced {
+		launch = launch.WithReducedEnvironment()
+	}
+	return ExecOpts{Launch: launch, Dir: dir, Env: append([]string{}, environment...), PathExtra: append([]string(nil), pathExtra...)}
+}

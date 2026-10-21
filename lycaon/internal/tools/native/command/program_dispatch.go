@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -47,7 +48,7 @@ type dispatchShared struct {
 }
 
 // pathCommands run on the frame's own directory state.
-var pathCommands = map[string]bool{"cd": true, "pwd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
+var pathCommands = map[string]bool{"cd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
 
 // Fork captures this frame's directory for an isolated frame.
 func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func(), error) {
@@ -98,6 +99,8 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	case pathCommands[spec.Name]:
 		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 	case d.builtins[spec.Name] != nil:
+		// Host builtins read the frame's directory from the invocation scope.
+		request.Invocation.Scope.Directory = d.paths.Cwd().DisplayPath
 		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
 	return d.refuseUnimplemented(ctx, spec, request)
@@ -328,4 +331,33 @@ func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.
 		}
 	}
 	return index
+}
+
+var _ commandprogram.NestedCommand = (*ProgramDispatcher)(nil)
+
+// RunNested runs a utility's command operand (env COMMAND) as its own child
+// of the parent statement, with exactly the given environment, through the
+// same admission and receipts as any reached command.
+func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram.OperationRequest, argv commandprogram.Fields, environment map[string]string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if len(argv) == 0 {
+		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("nested command requires a program")
+	}
+	entries := make([]string, 0, len(environment))
+	for name, value := range environment {
+		entries = append(entries, name+"="+value)
+	}
+	sort.Strings(entries)
+	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
+	child.Scope = parent.Invocation.Scope
+	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
+	spec, native := d.run.commands[argv[0].Value]
+	if !native || spec.Name == "external" {
+		request.OperationID = "external"
+		return d.Launch(ctx, request, streams)
+	}
+	request.OperationID = spec.Name
+	if _, err := d.binder.Bind(spec, argv); err != nil {
+		return d.refuseArgv(ctx, spec, request, err)
+	}
+	return d.Invoke(ctx, request, streams)
 }
