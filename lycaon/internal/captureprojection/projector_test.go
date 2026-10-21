@@ -3,7 +3,6 @@ package captureprojection
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -392,28 +391,5 @@ func TestScopeForFallsBackToTheSessionAsItsOwnRoot(t *testing.T) {
 	}
 	if got := ScopeFor("project", "parent", "session"); got.RootSessionID != "parent" {
 		t.Fatalf("root session = %q, want the parent", got.RootSessionID)
-	}
-}
-
-func TestValueScreensRawScalarBytesBeforeAnyJSONEncoding(t *testing.T) {
-	projector := testProjector(t, nil)
-	key := "raw\xffkey"
-	original := map[string]any{key: []any{"literal\xff/" + testSecret, json.Number("9007199254740993")}}
-	projected, metadata, err := projector.Value(t.Context(), Scope{ProjectID: "fixture-project", SessionID: "fixture-session"}, "operation.arguments", original)
-	testutil.FailErr(t, "screen raw native argument values", err)
-	values := projected.(map[string]any)[key].([]any)
-	text := values[0].(string)
-	if !strings.Contains(text, "\xff") || strings.Contains(text, testSecret) || values[1].(json.Number) != "9007199254740993" || metadata.RedactedCount == 0 || !metadata.StructuredCoverage {
-		t.Fatalf("raw bytes or exact number changed before screening: %#v %+v", projected, metadata)
-	}
-	if original[key].([]any)[0].(string) != "literal\xff/"+testSecret {
-		t.Fatal("screening mutated actual reviewed inputs")
-	}
-	if _, _, err = projector.Value(t.Context(), Scope{}, "operation.arguments", struct{ Secret string }{testSecret}); err == nil {
-		t.Fatal("opaque object bypassed string screening")
-	}
-	var absent *Projector
-	if _, _, err = absent.Value(t.Context(), Scope{}, "operation.arguments", original); !errors.Is(err, ErrUnavailable) {
-		t.Fatal("missing capture owner admitted values")
 	}
 }

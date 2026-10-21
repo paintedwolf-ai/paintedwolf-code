@@ -16,8 +16,17 @@ type ProgramFeedbackAdmission interface {
 	ReserveProgramState(context.Context, int64) (func(), error)
 }
 
+// ProgramFeedbackExecution is the exact requested dynamic execution, distinct
+// from the aggregate's most recent stopped child or a later loop iteration.
+type ProgramFeedbackExecution struct {
+	ID, State, StopCode, HostStopCode string
+	OwnerStarted, OwnerInvoked        bool
+	StatusCode                        *int
+}
+
 type ProgramFeedbackLease struct {
 	Binding            ProgramExecutionBinding
+	Execution          ProgramFeedbackExecution
 	Projection         ProgramProjection
 	RequiredStateBytes int64
 	release            func()
@@ -30,6 +39,7 @@ func (l *ProgramFeedbackLease) Close() {
 	}
 	l.once.Do(func() {
 		l.Binding = ProgramExecutionBinding{}
+		l.Execution = ProgramFeedbackExecution{}
 		l.Projection = ProgramProjection{}
 		if l.release != nil {
 			l.release()
@@ -93,6 +103,12 @@ func (r *SQLRecorder) ReadProgramFeedback(ctx context.Context, session, program,
 	if out.Binding.Invocation.Identity.ProgramID != program {
 		return nil, fmt.Errorf("feedback binding belongs to another program")
 	}
+	var status sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT id,state,stop_code,host_stop_code,owner_started,owner_invoked,status_code FROM invocation_program_executions WHERE id=? AND program_id=?`, execution, program).Scan(&out.Execution.ID, &out.Execution.State, &out.Execution.StopCode, &out.Execution.HostStopCode, &out.Execution.OwnerStarted, &out.Execution.OwnerInvoked, &status)
+	if err != nil {
+		return nil, err
+	}
+	out.Execution.StatusCode = optionalStatus(status)
 	out.Projection, err = projectProgram(ctx, tx, session, program, maximum)
 	if err != nil {
 		return nil, err
@@ -129,7 +145,7 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 	if err := add(`SELECT COALESCE(sum(`+sqlByteSum("execution_id,program_id,root_session_id,state,arguments_representation,arguments_digest,arguments_ref,detail_ref")+`),0) FROM invocation_program_progress WHERE program_id=?`, program); err != nil {
 		return 0, err
 	}
-	if err := add(`SELECT `+sqlByteSum("e.id,e.program_id,e.node_id,e.parent_execution_id,e.actor_id,e.scope_json,e.definition_digest,n.source_unit_id,s.source_id,s.revision,s.representation,s.sha256")+` FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id JOIN invocation_program_sources s ON s.program_id=n.program_id AND s.source_unit_id=n.source_unit_id WHERE e.id=? AND e.program_id=? AND r.session_id=?`, execution, program, session); err != nil {
+	if err := add(`SELECT `+sqlByteSum("e.id,e.program_id,e.node_id,e.parent_execution_id,e.actor_id,e.scope_json,e.definition_digest,e.state,e.stop_code,e.host_stop_code,n.source_unit_id,s.source_id,s.revision,s.representation,s.sha256")+` FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id JOIN invocation_program_sources s ON s.program_id=n.program_id AND s.source_unit_id=n.source_unit_id WHERE e.id=? AND e.program_id=? AND r.session_id=?`, execution, program, session); err != nil {
 		return 0, err
 	}
 	columns := "e.id,e.program_id,e.node_id,e.parent_execution_id,e.owner,e.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.stop_code,e.host_stop_code,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,n.source_unit_id"
@@ -147,7 +163,7 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 			return 0, err
 		}
 	}
-	return 64<<10 + total*32 + int64(2*maximum+1)*4096, nil
+	return 64<<10 + total*32 + int64(2*maximum+2)*4096, nil
 }
 
 func sqlByteSum(columns string) string {
