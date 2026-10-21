@@ -49,21 +49,57 @@
             scannerIdentityFile = "${resources}/scanner-identity.base64";
             gsettingsExecutable = "${pkgs.glib.bin}/bin/gsettings";
           };
+          desktop-settings-observer = pkgs.callPackage ./packaging/nix/desktop-settings.nix { source = self; };
           application = pkgs.callPackage ./packaging/nix/application.nix {
             source = self;
             engine = bound-engine;
+            desktopSettings = desktop-settings-observer;
             inherit shell bialy document-core resources;
           };
         in {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
-          inherit frontend resources shell bialy document-core bound-engine;
+          inherit frontend resources shell bialy document-core bound-engine desktop-settings-observer;
+          desktop-shell-check = shell.overrideAttrs (_: {
+            doCheck = true;
+            cargoCheckType = "release";
+            nativeCheckInputs = [ pkgs.python3 ];
+            preCheck = ''
+              # A filter with no matching tests must never qualify this component.
+              (
+                cd lycaon-den/src-tauri
+                cargo test --locked --offline --quiet --profile release \
+                  --target ${pkgs.stdenv.hostPlatform.rust.rustcTarget} \
+                  --package painted-wolf-code --lib \
+                  windows::linux_desktop_settings::portal::tests \
+                  -- --list --format terse > "$TMPDIR/desktop-observer-tests"
+              )
+              python3 - "$TMPDIR/desktop-observer-tests" <<'OBSERVER_TESTS'
+              from pathlib import Path
+              import sys
+              path = Path(sys.argv[1])
+              if path.stat().st_size > 16384:
+                  raise SystemExit('Desktop observer test registry exceeds its bound')
+              rows = path.read_text().splitlines()
+              prefix = 'windows::linux_desktop_settings::portal::tests::'
+              expected = {prefix + name + ': test' for name in (
+                  'managed_shutdown_joins_the_worker_and_is_idempotent',
+                  'dropping_one_observer_does_not_stop_another_owner')}
+              actual = [row for row in rows if row and row != '2 tests, 0 benchmarks']
+              if len(actual) != 2 or set(actual) != expected:
+                  raise SystemExit('Desktop observer lifecycle test identities differ')
+              print('Both fixed desktop observer lifecycle tests are registered')
+              OBSERVER_TESTS
+            '';
+            cargoTestFlags = [ "--package" "painted-wolf-code" "--lib"
+              "windows::linux_desktop_settings::portal::tests" ];
+          });
           default = application;
           closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
             inherit application;
-            components = [ shell bound-engine bialy document-core resources frontend ];
+            components = [ shell bound-engine bialy document-core desktop-settings-observer resources frontend ];
             nixpkgsRevision = nixpkgs.rev;
           };
           browser = resources.inputs.browser;

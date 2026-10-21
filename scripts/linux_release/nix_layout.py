@@ -13,7 +13,7 @@ import struct
 from . import nix_apparmor
 
 FORMAT_VERSION = 2
-ROLES = ("painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy")
+ROLES = ("painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy", "pw-desktop-settings")
 MACHINES = {"x86_64": 62, "aarch64": 183}
 
 
