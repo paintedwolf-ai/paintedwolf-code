@@ -20,7 +20,7 @@ import (
 )
 
 // FormatVersion is the only manifest shape this reader accepts.
-const FormatVersion = 1
+const FormatVersion = 2
 
 // DefaultPath is where the package installs the manifest.
 const DefaultPath = "/opt/painted-wolf-code/manifest.json"
@@ -30,12 +30,13 @@ const maxManifestBytes = 4 << 20
 
 // Manifest records what the package installed.
 type Manifest struct {
-	FormatVersion int          `json:"format_version"`
-	Package       string       `json:"package"`
-	Version       string       `json:"version"`
-	Architecture  string       `json:"architecture"`
-	InstallRoot   string       `json:"install_root"`
-	Executables   []Executable `json:"executables"`
+	FormatVersion int            `json:"format_version"`
+	Package       string         `json:"package"`
+	Version       string         `json:"version"`
+	Architecture  string         `json:"architecture"`
+	InstallRoot   string         `json:"install_root"`
+	Executables   []Executable   `json:"executables"`
+	Payload       []PayloadEntry `json:"payload"`
 }
 
 // Executable is one installed file with its recorded digest.
@@ -144,7 +145,7 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("native manifest: executable %q has negative size", exe.Path)
 		}
 	}
-	return nil
+	return m.validatePayload()
 }
 
 // validateVersion accepts a dotted numeric core with an optional pre-release suffix.
