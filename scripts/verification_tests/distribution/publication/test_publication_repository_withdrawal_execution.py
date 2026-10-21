@@ -173,10 +173,14 @@ class NativeChannelHalt(Halt):
         healthy = identity(self.generations[("deb-{version}", "0.0.1")][0])
         key = next(name for name in self.store.objects
                    if name.startswith(f"{PREFIX}/generations/{healthy}/") and name.endswith("/Packages"))
-        self.store.objects[key] += b"Package: injected\n"
+        original = self.store.objects[key]
         self.store.writes.clear()
-        with self.assertRaisesRegex(ValueError, "differs from its generation inventory"):
-            self.prepare()
+        for tampered, refusal in [(original + b"Package: injected\n", "exceeds its recorded size"),
+                                  (b"X" + original[1:], "differs from its generation inventory"),
+                                  (original[:-1], "differs from its generation inventory")]:
+            self.store.objects[key] = tampered
+            with self.subTest(refusal=refusal), self.assertRaisesRegex(ValueError, refusal):
+                self.prepare()
         self.assertEqual(self.store.writes, [])
 
     def test_a_substituted_predecessor_record_is_refused(self):
