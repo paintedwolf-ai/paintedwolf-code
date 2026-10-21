@@ -93,6 +93,25 @@ type childRun struct {
 	record   ChildRecord
 	settled  bool
 	producer bool
+	// recorded executions settle their receipt through ports.Executions.
+	recorded bool
+	ctx      context.Context
+}
+
+// beginRecorded allocates an execution the evaluator itself runs (pipelines,
+// groups, functions, substitutions, jobs, in-process builtins, redirections)
+// and records it, so every dispatched descendant has a recorded parent.
+func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLocation, command string) (*childRun, error) {
+	child, err := f.begin(loc, command)
+	if err != nil || f.e.ports.Executions == nil {
+		return child, err
+	}
+	if err := f.e.ports.Executions.BeginExecution(ctx, child.inv, command); err != nil {
+		child.close()
+		return nil, err
+	}
+	child.recorded, child.ctx = true, ctx
+	return child, nil
 }
 
 // begin allocates a dynamic execution for a reached node. Its trace capacity is
@@ -136,6 +155,9 @@ func (c *childRun) close() {
 		return
 	}
 	c.settled = true
+	if c.recorded {
+		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(c.ctx), c.inv, c.record)
+	}
 	e := c.frame.e
 	e.mu.Lock()
 	defer e.mu.Unlock()

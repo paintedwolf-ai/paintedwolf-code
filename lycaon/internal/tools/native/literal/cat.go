@@ -14,10 +14,12 @@ type catOptions struct {
 // windows and reversible numbering keep exact source mappings.
 func (o catOptions) transforms() bool { return o.nonprinting || o.ends || o.tabs }
 
-// lineState carries numbering and squeezing across every input of one run.
+// lineState carries numbering, squeezing and line position across every
+// input of one run: an unterminated last line continues into the next input.
 type lineState struct {
 	next      int64
 	lastBlank bool
+	midLine   bool
 }
 
 func runCat(inv *invocation) error {
@@ -44,8 +46,10 @@ func runCat(inv *invocation) error {
 
 func catInput(inv *invocation, in *input, opts catOptions, state *lineState) error {
 	return eachLine(in, func(f fragment) error {
-		blank := f.starts && f.ends && len(f.data) == 1 && f.data[0] == '\n'
-		if f.starts {
+		starts := f.starts && !state.midLine
+		state.midLine = !f.terminated()
+		blank := starts && f.ends && len(f.data) == 1 && f.data[0] == '\n'
+		if starts {
 			if opts.squeeze && blank && state.lastBlank {
 				return nil
 			}
@@ -56,7 +60,7 @@ func catInput(inv *invocation, in *input, opts catOptions, state *lineState) err
 				state.next++
 			}
 		}
-		if f.ends {
+		if f.ends && !state.midLine {
 			state.lastBlank = blank
 		}
 		if !opts.transforms() {
@@ -156,7 +160,9 @@ func runNl(inv *invocation) error {
 	}
 	blankPrefix := strings.Repeat(" ", int(width)+len(separator))
 	next := start
-	return eachLine(in, func(f fragment) error {
+	terminated := true
+	err = eachLine(in, func(f fragment) error {
+		terminated = f.terminated()
 		if f.starts {
 			blank := f.ends && len(f.data) == 1 && f.data[0] == '\n'
 			prefix := blankPrefix
@@ -170,6 +176,11 @@ func runNl(inv *invocation) error {
 		}
 		return inv.out.literal(in, f.data, f.offset)
 	})
+	if err != nil || terminated {
+		return err
+	}
+	// nl terminates every numbered line it writes.
+	return inv.out.text("\n")
 }
 
 // integer parses one decimal option value; negative values need allowNegative.

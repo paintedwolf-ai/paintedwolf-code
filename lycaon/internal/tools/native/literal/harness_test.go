@@ -13,13 +13,14 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // fixtureTime is the deterministic mtime every seeded entry carries.
@@ -63,13 +64,14 @@ func (b *mappingBuffer) RecordSourceMapping(m toolcontract.StreamSourceMapping) 
 }
 
 type harness struct {
-	t      *testing.T
-	root   string
-	tc     tools.ToolContext
-	owners *Owners
-	pins   *pinLog
-	cwd    string
-	runs   int
+	t        *testing.T
+	boundary *sandbox.Boundary
+	root     string
+	tc       tools.ToolContext
+	owners   *Owners
+	pins     *pinLog
+	cwd      string
+	runs     int
 }
 
 type run struct {
@@ -103,6 +105,11 @@ func seed(t *testing.T, root string, files map[string]string) {
 	}
 }
 
+func symlink(t *testing.T, target, path string) {
+	t.Helper()
+	testutil.FailErr(t, "symlink "+path, os.Symlink(target, path))
+}
+
 func newHarness(t *testing.T, files map[string]string) *harness {
 	t.Helper()
 	root := t.TempDir()
@@ -113,7 +120,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, DomainOwners{})
 	testutil.FailErr(t, "build owners", err)
-	return &harness{t: t, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, cwd: "."}
+	return &harness{t: t, boundary: boundary, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, cwd: "."}
 }
 
 func (h *harness) invocation() toolcontract.OperationInvocation {
@@ -121,21 +128,33 @@ func (h *harness) invocation() toolcontract.OperationInvocation {
 	return toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", ExecutionID: "execution-" + strings.Repeat("x", h.runs)}}
 }
 
-// exec runs one argv with stdin through Prepare and InvokeOwner.
-func (h *harness) exec(stdin string, argv ...string) run {
-	h.t.Helper()
-	paths, err := projectpaths.NewProgramPaths(h.t.Context(), nativefixture.Boundary(h.t), h.tc, h.cwd)
-	testutil.FailErr(h.t, "bind program cwd", err)
+func mustPaths(t *testing.T, h *harness) *projectpaths.ProgramPaths {
+	t.Helper()
+	paths, err := projectpaths.NewProgramPaths(t.Context(), h.boundary, h.tc, h.cwd)
+	testutil.FailErr(t, "bind program cwd", err)
+	return paths
+}
+
+func requestFor(h *harness, argv ...string) commandprogram.OperationRequest {
 	fields := make(commandprogram.Fields, len(argv))
 	for i, word := range argv {
 		fields[i] = commandprogram.Field{Value: word}
 	}
-	command := argv[0]
-	operation, ok := h.owners.Operation(command)
-	if !ok {
-		h.t.Fatalf("%s has no operation", command)
+	if _, ok := h.owners.Operation(argv[0]); !ok {
+		h.t.Fatalf("%s has no operation", argv[0])
 	}
-	request := commandprogram.OperationRequest{Invocation: h.invocation(), OperationID: operation, Argv: fields}
+	return commandprogram.OperationRequest{Invocation: h.invocation(), OperationID: argv[0], Argv: fields}
+}
+
+func streamsFor(stdin string) commandprogram.Streams {
+	return commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &mappingBuffer{}, Error: &bytes.Buffer{}}
+}
+
+// exec runs one argv with stdin through Prepare and InvokeOwner.
+func (h *harness) exec(stdin string, argv ...string) run {
+	h.t.Helper()
+	paths := mustPaths(h.t, h)
+	request := requestFor(h, argv...)
 	var stdout mappingBuffer
 	var stderr bytes.Buffer
 	streams := commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr}

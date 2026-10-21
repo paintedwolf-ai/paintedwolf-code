@@ -165,6 +165,8 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	testutil.FailErr(t, "close source fixture", database.Shutdown(t.Context()))
 	source, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open prior revision", err)
+	// Revision3 has revision4's SQL shape; its path repair is data-only.
+	db.DeriveRevision4Fixture(t, source)
 	_, err = source.Exec(`PRAGMA user_version=3`)
 	testutil.FailErr(t, "set source revision", err)
 	testutil.FailErr(t, "close prior revision", source.Close())

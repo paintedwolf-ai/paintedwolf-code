@@ -22,7 +22,7 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 		return toolcontract.ProducerResult{}, errors.New("substitution scope is not a frame of this evaluation")
 	}
 	part := request.Unit
-	run, err := f.begin(part.SyntaxLocation, "$()")
+	run, err := f.beginRecorded(ctx, part.SyntaxLocation, "$()")
 	if err != nil {
 		return toolcontract.ProducerResult{}, err
 	}
@@ -69,7 +69,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	if int64(f.sources+1) > f.e.limits["source_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "source_depth", int64(f.sources+1))
 	}
-	run, err := f.begin(s.SyntaxLocation, "source")
+	run, err := f.beginRecorded(ctx, s.SyntaxLocation, "source")
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (e *evaluation) recordSource(executionID string, pin toolcontract.SourcePin
 // and host-stop latch, and the streams the supervisor owns for it. The parent
 // continues at once with status 0 and $! naming the session job handle.
 func (f *frame) background(ctx context.Context, s commandsurface.Statement) error {
-	run, err := f.begin(s.SyntaxLocation, "&")
+	run, err := f.beginRecorded(ctx, s.SyntaxLocation, "&")
 	if err != nil {
 		return err
 	}

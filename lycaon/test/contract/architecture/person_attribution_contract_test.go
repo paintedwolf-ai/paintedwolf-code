@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -63,31 +64,56 @@ func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
 	contractcheck.FailViolations(t, "stale actingFallbacks entries", sortedKeys(unused))
 }
 
+// agentInvocationEntries are the executor doors through which a model's call
+// reaches an owner; each enters through the shared invocation context.
+var agentInvocationEntries = []string{"Invoke", "InvokeNative", "ApplyProgramProgress"}
+
 func TestAgentToolCallsCarryNoRequestCaller(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "toolexecution"))
 	contractcheck.FailErr(t, "load AST corpus", err)
-	found := false
+	stripped := false
+	entries := map[string]bool{}
 	for _, gf := range corp.Files() {
 		if gf.IsTest {
 			continue
 		}
 		alias := contractcheck.ImportAliasFor(gf.AST, peoplePkg)
 		for _, fn := range funcDecls(gf.AST) {
-			if fn.Name.Name != "Invoke" || receiverName(fn) != "Executor" {
+			if fn.Name.Name == "invocationContext" && fn.Recv == nil {
+				stripped = alias != "" && callsSelector(fn.Body, alias, "WithoutCaller")
 				continue
 			}
-			found = true
-			if alias == "" || !callsSelector(fn.Body, alias, "WithoutCaller") {
-				t.Errorf("Executor.Invoke must strip the request caller with people.WithoutCaller " +
-					"so agent effects are never recorded as a person's")
+			if receiverName(fn) == "Executor" && slices.Contains(agentInvocationEntries, fn.Name.Name) {
+				entries[fn.Name.Name] = callsFunction(fn.Body, "invocationContext")
 			}
 		}
 	}
-	if !found {
-		t.Fatal("Executor.Invoke not found")
+	if !stripped {
+		t.Error("invocationContext must strip the request caller with people.WithoutCaller " +
+			"so agent effects are never recorded as a person's")
 	}
+	for _, name := range agentInvocationEntries {
+		if ok, found := entries[name]; !found {
+			t.Errorf("Executor.%s not found", name)
+		} else if !ok {
+			t.Errorf("Executor.%s must enter through invocationContext, which strips the request caller", name)
+		}
+	}
+}
+
+func callsFunction(body ast.Node, name string) bool {
+	found := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == name {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 // directRouteExemptions register state-changing routes outside the operation

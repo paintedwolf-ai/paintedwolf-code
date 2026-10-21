@@ -28,7 +28,7 @@ func TestEffectPermitMigrationRetainsActualValidatedApprovalPlan(t *testing.T) {
 	database, err := sql.Open("sqlite", t.TempDir()+"/fixture.db")
 	testutil.FailErr(t, "open isolated checkpoint", err)
 	defer database.Close()
-	_, err = database.Exec(`CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT)`)
+	_, err = database.Exec(`CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT); CREATE TABLE approval_operations(checkpoint_id TEXT PRIMARY KEY); CREATE TABLE chat_grants(id TEXT PRIMARY KEY)`)
 	testutil.FailErr(t, "create checkpoint table", err)
 	_, err = database.Exec(`INSERT INTO checkpoints VALUES('fixture','tool_approval',?)`, string(payload))
 	testutil.FailErr(t, "persist actual owner plan", err)

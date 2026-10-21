@@ -169,7 +169,7 @@ func (f *frame) testExpression(ctx context.Context, s commandsurface.Statement, 
 
 // inProcess runs a native host builtin as its own dynamic execution.
 func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name string, run func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error)) error {
-	child, err := f.begin(s.SyntaxLocation, name)
+	child, err := f.beginRecorded(ctx, s.SyntaxLocation, name)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	if int64(f.functions+1) > f.e.limits["function_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "function_depth", int64(f.functions+1))
 	}
-	child, err := f.begin(s.SyntaxLocation, decl.Name)
+	child, err := f.beginRecorded(ctx, s.SyntaxLocation, decl.Name)
 	if err != nil {
 		return err
 	}

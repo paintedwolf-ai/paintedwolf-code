@@ -52,6 +52,7 @@ func runLs(inv *invocation) error {
 			}
 		}
 		if err != nil {
+			err = projectpaths.PathOperationError(operand, err)
 			if reason, ok := ordinary(err); ok {
 				inv.fail(2, operand, reason)
 				continue
@@ -78,9 +79,9 @@ func runLs(inv *invocation) error {
 	visited := int64(0)
 	labelled := len(files) > 0 || len(dirEntries) > 1 || opts.recursive
 	first := len(files) == 0
-	var walk func(label string, entry lsEntry) error
-	walk = func(label string, entry lsEntry) error {
-		children, err := inv.children(entry.bound, opts, &visited, visits)
+	var walk func(label string, entry lsEntry, operand bool) error
+	walk = func(label string, entry lsEntry, operand bool) error {
+		children, err := inv.children(entry.bound, opts, &visited, visits, operand)
 		if err != nil {
 			return err
 		}
@@ -109,14 +110,14 @@ func runLs(inv *invocation) error {
 			if child.name == "." || child.name == ".." || typeLetter(child.stat.Mode) != 'd' {
 				continue
 			}
-			if err := walk(path.Join(label, child.name), child); err != nil {
+			if err := walk(path.Join(label, child.name), child, false); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 	for _, d := range dirEntries {
-		if err := walk(d.name, d); err != nil {
+		if err := walk(d.name, d, true); err != nil {
 			return err
 		}
 	}
@@ -124,13 +125,18 @@ func runLs(inv *invocation) error {
 }
 
 // children reads one directory's entries itself: no ignore rules or map.
-// An unreadable directory is reported and yields no entries.
-func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64) ([]lsEntry, error) {
+// An unreadable directory is reported and yields no entries; GNU treats an
+// unreadable command-line operand as serious (2) and a nested one as minor.
+func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, error) {
 	names, err := dir.ReadDir()
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			_, _ = fmt.Fprintf(inv.stderr, "ls: cannot open directory '%s': %s\n", dir.Resolved.DisplayPath, reason)
-			inv.status = max(inv.status, 1)
+			status := 1
+			if operand {
+				status = 2
+			}
+			inv.status = max(inv.status, status)
 			return nil, nil
 		}
 		return nil, err

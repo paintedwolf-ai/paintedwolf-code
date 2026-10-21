@@ -137,6 +137,8 @@ func TestCatalogGoldenProgramsProduceExactBytes(t *testing.T) {
 var contradictedExamples = map[string]string{
 	// GNU and BSD ls list a file operand by name; the example shows nothing.
 	"ls": "./empty\n",
+	// GNU and BSD nl terminate the last numbered line; the example does not.
+	"nl": "1:alpha\n2:beta\n",
 }
 
 // TestCatalogCommandExamplesProduceExactBytes runs each literal command's

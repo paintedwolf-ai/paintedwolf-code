@@ -17,6 +17,7 @@ type output struct {
 	ctx              context.Context
 	w                io.Writer
 	mappings         commandprogram.SourceMappingRecorder
+	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
 }
 
@@ -62,7 +63,8 @@ func (o *output) text(s string) error {
 }
 
 // literal writes bytes taken verbatim from in at offset and, for a pinned
-// capture, records them as an exact mapping of that capture.
+// capture, maps them. Adjacent windows of one capture coalesce into a single
+// mapping, so a literal window is one exact range however it was read.
 func (o *output) literal(in *input, p []byte, offset int64) error {
 	if len(p) == 0 {
 		return nil
@@ -74,5 +76,24 @@ func (o *output) literal(in *input, p []byte, offset int64) error {
 	if o.mappings == nil || in.pin == nil {
 		return nil
 	}
-	return o.mappings.RecordSourceMapping(toolcontract.StreamSourceMapping{Source: *in.pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written})
+	next := toolcontract.StreamSourceMapping{Source: *in.pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written}
+	if last := o.pending; last != nil && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
+		last.SourceEndByte, last.OutputEndByte = next.SourceEndByte, next.OutputEndByte
+		return nil
+	}
+	if err := o.flush(); err != nil {
+		return err
+	}
+	o.pending = &next
+	return nil
+}
+
+// flush records the mapping still being extended.
+func (o *output) flush() error {
+	if o.pending == nil {
+		return nil
+	}
+	pending := *o.pending
+	o.pending = nil
+	return o.mappings.RecordSourceMapping(pending)
 }

@@ -66,7 +66,7 @@ func TestEffectPermitMigrationRollsBackEarlierBatchOnUnknownRow(t *testing.T) {
 	database, err := sql.Open("sqlite", t.TempDir()+"/fixture.db")
 	testutil.FailErr(t, "open fixture", err)
 	defer database.Close()
-	_, err = database.Exec(`CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT)`)
+	_, err = database.Exec(`CREATE TABLE checkpoints(id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT); CREATE TABLE approval_operations(checkpoint_id TEXT PRIMARY KEY); CREATE TABLE chat_grants(id TEXT PRIMARY KEY)`)
 	testutil.FailErr(t, "create fixture", err)
 	for i := 0; i < 33; i++ {
 		id := string(rune('A' + i))
@@ -82,7 +82,20 @@ func TestEffectPermitMigrationRollsBackEarlierBatchOnUnknownRow(t *testing.T) {
 	if err := migrateEffectPermitIdentity(t.Context(), tx); err == nil {
 		t.Fatal("unknown later batch accepted")
 	}
+	columns := func(q interface {
+		QueryRow(string, ...any) *sql.Row
+	}) int {
+		var n int
+		testutil.FailErr(t, "count native authority columns", q.QueryRow(`SELECT count(*) FROM pragma_table_info('checkpoints') WHERE name LIKE 'authority_%'`).Scan(&n))
+		return n
+	}
+	if columns(tx) != 3 {
+		t.Fatal("refusal came before the row conversion")
+	}
 	testutil.FailErr(t, "rollback refused migration", tx.Rollback())
+	if columns(database) != 0 {
+		t.Fatal("refused migration kept its columns")
+	}
 	var raw string
 	testutil.FailErr(t, "read retained first batch", database.QueryRow(`SELECT payload_json FROM checkpoints WHERE id='A'`).Scan(&raw))
 	if raw != retainedOnceFixture {

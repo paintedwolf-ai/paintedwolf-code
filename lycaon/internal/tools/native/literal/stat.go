@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // statDirective renders one format directive from observed metadata.
@@ -43,7 +44,7 @@ var gnuDirectives = map[string]statDirective{
 var bsdDirectives = map[string]statDirective{
 	"N": statName, "z": statSize, "Lp": statOctal, "Sp": statMode, "m": statMTime,
 	"HT": func(_ string, st fseffect.EntryStat) (string, bool) { return bsdType(st), true },
-	"u": statUID, "g": statGID, "i": statInode,
+	"u":  statUID, "g": statGID, "i": statInode,
 }
 
 // statFormat is a parsed format: literal text and directive names.
@@ -145,6 +146,7 @@ func (inv *invocation) entry(operand string, follow bool) (fseffect.EntryStat, b
 			return st, true, nil
 		}
 	}
+	err = projectpaths.PathOperationError(operand, err)
 	if reason, ok := ordinary(err); ok {
 		inv.fail(inv.entryFailureStatus(), operand, reason)
 		return fseffect.EntryStat{}, false, nil

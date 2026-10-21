@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path"
 	"slices"
+
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // diffDirectories compares two trees in unsigned byte name order. Without
@@ -82,6 +84,7 @@ func (inv *invocation) directoryNames(label string) ([]string, bool, error) {
 			return names, true, nil
 		}
 	}
+	err = projectpaths.PathOperationError(label, err)
 	if reason, ok := ordinary(err); ok {
 		inv.fail(2, label, reason)
 		return nil, false, nil

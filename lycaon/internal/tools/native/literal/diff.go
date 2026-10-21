@@ -4,23 +4,24 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path"
 	"strconv"
-	"io/fs"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // diffOptions are the catalogued diff selections; output is unified.
 type diffOptions struct {
-	context                         int
-	brief, allSpace, spaceChange    bool
-	blankLines, recursive           bool
-	header                          string
-	maxCells                        int64
+	context                      int
+	brief, allSpace, spaceChange bool
+	blankLines, recursive        bool
+	header                       string
+	maxCells                     int64
 }
 
 func runDiff(inv *invocation) error {
@@ -112,6 +113,7 @@ func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
 		}
 		err = statErr
 	}
+	err = projectpaths.PathOperationError(operand, err)
 	reason, ok := ordinary(err)
 	switch {
 	case !ok:
