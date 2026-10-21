@@ -3,25 +3,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-rehearsal_module=
-case "${1:-}" in
-  --local-package-probe) rehearsal_module=linux_release.package_probe ;;
-  --local-rpm-metadata) rehearsal_module=linux_release.rpm_metadata_rehearsal ;;
-  --local-pacman-construction) rehearsal_module=linux_release.arch_substrate_rehearsal ;;
-esac
-if [[ -n "$rehearsal_module" ]]; then
-  shift
-  cd "$ROOT"
-  exec env PYTHONPATH="$ROOT/scripts" python3 -m "$rehearsal_module" "$@"
-fi
-
-for tool in bun curl jq ruby; do
-  command -v "$tool" >/dev/null || {
-    echo "error: $tool is required for the credentialed release live test" >&2
-    exit 1
-  }
-done
-
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)

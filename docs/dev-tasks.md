@@ -1097,3 +1097,15 @@ container import; its SHA-256 is fixed independently of the mutable download URL
 An upstream rootfs replacement fails until the reviewed pin is updated. A container
 package build establishes package construction only; installed Arch/Artix desktop
 and service qualification remains separate.
+
+Native package rehearsals are declared verification targets, each admitted under
+its own lock rather than through `release:live-test`.
+`./task release:rehearse:rpm-metadata -- --receipt PATH [--container]` builds and
+lints production RPM metadata around a tiny nonapplication payload with rpmlint
+2.5.0, and requires the historical spelling regression to fail.
+`./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
+sealed tiny fixture with native makepkg in the pinned substrate.
+`./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
+engine diagnostic under an owned transient AppArmor userns profile on a disposable
+GitHub-hosted runner, or on an owned guest with `--lease`; it removes the exact
+profile it loaded and fails if the global userns restriction changes.

@@ -17,6 +17,8 @@ import tempfile
 POLICY = Path('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')
 MARKER = Path('/etc/paintedwolf-qualification.json')
 INSTALL = 'opt/painted-wolf-code'
+ELF_MACHINES = {'x86_64': 62, 'aarch64': 183}
+DESKTOPS = {'gnome', 'plasma', 'xfce', 'cinnamon', 'mate', 'lxqt'}
 
 
 def physical(path, *, owner, executable=False, limit=None):
@@ -48,10 +50,15 @@ def profile_source(executable):
     return name, source.encode()
 
 
-def selected(tree):
+def native_host():
     uid = os.geteuid()
     if uid == 0 or platform.system() != 'Linux' or platform.machine() not in {'x86_64', 'aarch64'}:
         raise ValueError('package diagnostics require a nonroot native Linux caller')
+    return uid, platform.machine()
+
+
+def selected(tree, host=None):
+    uid, machine = host or native_host()
     if not tree.is_absolute() or tree.resolve(strict=True) != tree or tree == Path('/'):
         raise ValueError('select an absolute physical extracted package root')
     ancestor = tree.stat()
@@ -72,8 +79,7 @@ def selected(tree):
             raise ValueError('probe executable differs from its selected package manifest')
         with path.open('rb') as stream:
             header = stream.read(20)
-        machine = 62 if platform.machine() == 'x86_64' else 183
-        if len(header) != 20 or header[:6] != b'\x7fELF\x02\x01' or int.from_bytes(header[18:20], 'little') != machine:
+        if len(header) != 20 or header[:6] != b'\x7fELF\x02\x01' or int.from_bytes(header[18:20], 'little') != ELF_MACHINES[machine]:
             raise ValueError('package diagnostic executable is not native ELF64')
         result[name] = measured
     profile_source(result['pw']['path'])
@@ -87,19 +93,24 @@ def authority(binding, lease):
     if lease is None or re.fullmatch(r'/run/paintedwolf-package-stage-[a-f0-9]{32}\.json', str(lease)) is None:
         raise ValueError('owned guest package probing requires its exact root-owned operation lease')
     marker_identity = physical(MARKER, owner=0, limit=4096)
-    marker = json.loads(MARKER.read_bytes())
-    if (set(marker) != {'format_version', 'desktop', 'package'} or type(marker['format_version']) is not int
-            or marker['format_version'] != 1 or marker['desktop'] not in {'gnome', 'plasma', 'xfce', 'cinnamon', 'mate', 'lxqt'}
-            or marker['package'] != '/' + INSTALL):
-        raise ValueError('existing disposable guest marker does not authorize this native package')
     lease_identity = physical(lease, owner=0, limit=4096)
-    expected = {'format_version': 1, 'uid': os.geteuid(), 'tree': binding['tree'],
-                'engine_path': binding['pw']['path'], 'engine_sha256': binding['pw']['sha256'],
-                'marker_sha256': marker_identity['sha256']}
-    actual = json.loads(lease.read_bytes())
-    if set(actual) != set(expected) or any(type(actual[key]) is not type(value) or actual[key] != value for key, value in expected.items()):
-        raise ValueError('root operation lease differs from the selected package and existing guest marker')
+    operation_lease(json.loads(MARKER.read_bytes()), marker_identity['sha256'], json.loads(lease.read_bytes()),
+                    binding, os.geteuid())
     return {'kind': 'owned-disposable-guest', 'marker': marker_identity, 'lease': lease_identity}
+
+
+def operation_lease(marker, marker_sha256, lease, binding, uid):
+    """Admit only the root-written lease for this caller, package and existing guest marker."""
+    if (not isinstance(marker, dict) or set(marker) != {'format_version', 'desktop', 'package'}
+            or type(marker['format_version']) is not int or marker['format_version'] != 1
+            or marker['desktop'] not in DESKTOPS or marker['package'] != '/' + INSTALL):
+        raise ValueError('existing disposable guest marker does not authorize this native package')
+    expected = {'format_version': 1, 'uid': uid, 'tree': binding['tree'],
+                'engine_path': binding['pw']['path'], 'engine_sha256': binding['pw']['sha256'],
+                'marker_sha256': marker_sha256}
+    if (not isinstance(lease, dict) or set(lease) != set(expected)
+            or any(type(lease[key]) is not type(value) or lease[key] != value for key, value in expected.items())):
+        raise ValueError('root operation lease differs from the selected package and existing guest marker')
 
 
 def profiles():
@@ -159,8 +170,9 @@ def fixed_diagnostic(binding):
         return result
 
 
-def run(tree, *, lease=None, output=None, require_baseline_refusal=False):
-    binding = selected(tree)
+def run(tree, *, lease=None, output=None, require_baseline_refusal=False, host=None):
+    host = host or native_host()
+    binding = selected(tree, host)
     proof = authority(binding, lease)
     name, source = profile_source(binding['pw']['path'])
     before = POLICY.read_text().strip() if POLICY.exists() else None
@@ -192,12 +204,12 @@ def run(tree, *, lease=None, output=None, require_baseline_refusal=False):
             report['profile_loaded'] = True
             if not any(line in {name + ' (unconfined)', name + ' (enforce)'} for line in profiles()):
                 raise ValueError('exact package probe profile was not observed in the kernel')
-        if selected(tree) != binding or authority(binding, lease) != proof:
+        if selected(tree, host) != binding or authority(binding, lease) != proof:
             raise ValueError('selected package or operation lease changed before execution')
         result = fixed_diagnostic(binding)
         report.update({'diagnostic_exit_code': result.returncode, 'stdout': result.stdout.decode(errors='replace'),
                        'stderr': result.stderr.decode(errors='replace'), 'status': 'passed' if result.returncode == 0 else 'failed'})
-        if selected(tree) != binding or authority(binding, lease) != proof:
+        if selected(tree, host) != binding or authority(binding, lease) != proof:
             raise ValueError('selected package or operation lease changed during execution')
     except Exception as error:
         report.update({'status': 'failed', 'error': {'type': type(error).__name__, 'message': str(error)}})

@@ -347,6 +347,15 @@
     ],
     "licenses:notices": [
       "licenses:notices"
+    ],
+    "release:rehearse:package-probe": [
+      "release:rehearse:package-probe"
+    ],
+    "release:rehearse:rpm-metadata": [
+      "release:rehearse:rpm-metadata"
+    ],
+    "release:rehearse:pacman-construction": [
+      "release:rehearse:pacman-construction"
     ]
   },
   "private": [
@@ -370,7 +379,10 @@
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
-    "test:confine:linux": "passthrough"
+    "test:confine:linux": "passthrough",
+    "release:rehearse:package-probe": "passthrough",
+    "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -687,6 +699,24 @@
     "licenses:notices": {
       "locks": [
         "notices"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:package-probe": {
+      "locks": [
+        "linux-package-probe"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:rpm-metadata": {
+      "locks": [
+        "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-construction": {
+      "locks": [
+        "pacman-substrate"
       ],
       "workers": 1
     }

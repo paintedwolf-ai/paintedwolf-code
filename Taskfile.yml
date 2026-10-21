@@ -1750,10 +1750,29 @@ tasks:
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
-      - sh: command -v python3
-        msg: python3 required for release:live-test
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
+        msg: bun, curl, jq, python3, and ruby required for release:live-test
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+
+  release:rehearse:package-probe:
+    desc: 'Run the extracted-package engine diagnostic under an owned transient AppArmor userns profile on a disposable native Linux host (-- --tree DIR [--lease PATH --output PATH --require-baseline-refusal])'
+    cmds:
+      - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
+
+  release:rehearse:rpm-metadata:
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:pacman-construction:
+    desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.arch_substrate_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
