@@ -6,82 +6,75 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 )
 
-// prepareEntry runs only in the root-created private namespace, before login
-// credentials or application code. The sealed policy fixes both mount roots.
-func prepareEntry(spec EntrySpec, origin *os.File) error {
-	if os.Getuid() != 0 || os.Geteuid() != 0 || os.Getgid() != 0 || os.Getegid() != 0 {
-		return errors.New("entry lacks its fixed namespace setup credentials")
+// bindGeneration runs in the privileged stage, as uid 0 of the initial user
+// namespace, inside the fresh mount namespace it was cloned into. It binds the
+// retained generation read-only over the logical installation root and
+// reopens the desktop image through that logical name, so its executable and
+// mappings resolve there, while proving the inode is the one selected.
+func bindGeneration(policy GenerationPolicy, generation, desktop *os.File) (*os.File, error) {
+	if err := freshMountNamespace(); err != nil {
+		return nil, err
 	}
-	if err := verifyNamespace(origin); err != nil {
-		return err
-	}
-	generation := os.NewFile(entryGenerationFD, "selected-generation-root")
-	defer func() { _ = generation.Close() }()
 	info, err := generation.Stat()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !info.IsDir() {
-		return errors.New("selected generation is not a directory")
+		return nil, errors.New("selected generation is not a directory")
 	}
 	if err := trustedObject(info); err != nil {
-		return err
+		return nil, err
 	}
-	target, err := openRootControlled(spec.Generation.LogicalInstallRoot, true)
+	target, err := openRootControlled(policy.LogicalInstallRoot, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_ = target.Close()
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return err
+		return nil, err
 	}
-	if err := unix.Mount("/proc/self/fd/11", spec.Generation.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
-		return err
+	source := "/proc/self/fd/" + strconv.Itoa(int(generation.Fd()))
+	if err := unix.Mount(source, policy.LogicalInstallRoot, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
+		return nil, err
 	}
 	attributes := unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY | unix.MOUNT_ATTR_NOSUID | unix.MOUNT_ATTR_NODEV}
-	if err := unix.MountSetattr(unix.AT_FDCWD, spec.Generation.LogicalInstallRoot, unix.AT_RECURSIVE, &attributes); err != nil {
-		return err
+	if err := unix.MountSetattr(unix.AT_FDCWD, policy.LogicalInstallRoot, unix.AT_RECURSIVE, &attributes); err != nil {
+		return nil, err
 	}
-	// Reopen through the mounted logical name so /proc/exe and file mappings
-	// resolve in the process's own filesystem view, while retaining inode proof.
-	logical := filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")
 	var previous unix.Stat_t
-	if err := unix.Fstat(entryImageFD, &previous); err != nil {
-		return err
+	if err := unix.Fstat(int(desktop.Fd()), &previous); err != nil {
+		return nil, err
 	}
-	mounted, err := os.Open(logical)
+	mounted, err := os.Open(filepath.Join(policy.LogicalInstallRoot, "bin/painted-wolf-code"))
+	if err != nil {
+		return nil, err
+	}
+	var actual unix.Stat_t
+	if err := unix.Fstat(int(mounted.Fd()), &actual); err != nil || previous.Dev != actual.Dev || previous.Ino != actual.Ino {
+		_ = mounted.Close()
+		return nil, errors.New("logical generation image differs from retained selection")
+	}
+	return mounted, nil
+}
+
+// freshMountNamespace refuses to change mounts anywhere but a namespace this
+// stage was cloned into: the host's mount table is never touched.
+func freshMountNamespace() error {
+	own, err := os.Readlink("/proc/self/ns/mnt")
 	if err != nil {
 		return err
 	}
-	defer func() { _ = mounted.Close() }()
-	var actual unix.Stat_t
-	if err := unix.Fstat(int(mounted.Fd()), &actual); err != nil {
+	host, err := os.Readlink("/proc/1/ns/mnt")
+	if err != nil {
 		return err
 	}
-	if previous.Dev != actual.Dev || previous.Ino != actual.Ino {
-		return errors.New("logical generation image differs from retained selection")
+	if own == host {
+		return errors.New("privileged stage did not enter a private mount namespace")
 	}
-	if err := unix.Dup3(int(mounted.Fd()), entryImageFD, unix.O_CLOEXEC); err != nil {
-		return err
-	}
-	groups := make([]int, len(spec.Groups))
-	for i, group := range spec.Groups {
-		groups[i] = int(group)
-	}
-	// x/sys uses Go's all-thread credential syscalls, removing setup identity
-	// from the runtime's existing threads before any application exec.
-	if err := unix.Setgroups(groups); err != nil {
-		return err
-	}
-	if err := unix.Setresgid(int(spec.GID), int(spec.GID), int(spec.GID)); err != nil {
-		return err
-	}
-	if err := unix.Setresuid(int(spec.UID), int(spec.UID), int(spec.UID)); err != nil {
-		return err
-	}
-	return SealEntry(origin)
+	return nil
 }

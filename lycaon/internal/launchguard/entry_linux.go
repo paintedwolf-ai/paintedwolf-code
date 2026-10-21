@@ -17,33 +17,36 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Descriptors the privileged stage hands the unprivileged entry.
 const (
-	entryImageFD      = 3
-	entrySpecFD       = 4
-	entryOriginFD     = 5
-	entryBrokerFD     = 6
-	entryGenerationFD = 11
-	maxEntryBytes     = 128 << 10
-	entrySeals        = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
+	entryImageFD    = 3
+	entrySpecFD     = 4
+	entryOriginFD   = 5
+	entryBrokerFD   = 6
+	entryLifetimeFD = 7
+	maxEntryBytes   = 128 << 10
+	entrySeals      = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
 )
 
 // EntrySpec is carried only by a sealed, root-created descriptor. It never
 // derives installation authority from the command line or environment.
 type EntrySpec struct {
-	Version     int                    `json:"version"`
-	ParentPID   int                    `json:"parent_pid"`
-	UID         uint32                 `json:"uid"`
-	GID         uint32                 `json:"gid"`
-	Groups      []uint32               `json:"groups"`
-	Generation  GenerationPolicy       `json:"generation"`
-	Image       pkgmanifest.Executable `json:"image"`
-	Arguments   []string               `json:"arguments"`
-	Environment []string               `json:"environment"`
-	Broker      bool                   `json:"broker"`
+	Version int `json:"version"`
+	// SupervisorPID is the bootstrap's unprivileged continuation, which holds
+	// the broker's other end and reaps every descendant.
+	SupervisorPID int                    `json:"supervisor_pid"`
+	UID           uint32                 `json:"uid"`
+	GID           uint32                 `json:"gid"`
+	Groups        []uint32               `json:"groups"`
+	Generation    GenerationPolicy       `json:"generation"`
+	Image         pkgmanifest.Executable `json:"image"`
+	Arguments     []string               `json:"arguments"`
+	Environment   []string               `json:"environment"`
 }
 
-// EnterDesktop is the unprivileged static entry's only operation. All
-// executable and argument selection was completed by its privileged parent.
+// EnterDesktop is the unprivileged entry's only operation. It starts as the
+// login identity inside the protected namespace, with every selection already
+// made by the privileged stage, and seals itself before executing the desktop.
 func EnterDesktop() error {
 	origin := os.NewFile(entryOriginFD, "original-user-namespace")
 	defer func() { _ = origin.Close() }()
@@ -53,17 +56,11 @@ func EnterDesktop() error {
 	if err != nil {
 		return err
 	}
-	if os.Getppid() != spec.ParentPID {
-		return errors.New("entry caller or parent changed")
-	}
-	if err := prepareEntry(spec, origin); err != nil {
+	if err := sameIdentity(spec); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0); err != nil {
+	if err := SealEntry(origin); err != nil {
 		return err
-	}
-	if os.Getppid() != spec.ParentPID {
-		return errors.New("entry parent exited")
 	}
 	image := os.NewFile(entryImageFD, "selected-desktop-image")
 	defer func() { _ = image.Close() }()
@@ -73,30 +70,70 @@ func EnterDesktop() error {
 	if err := pkgmanifest.VerifyOpened(image, spec.Image); err != nil {
 		return err
 	}
-	if spec.Broker {
-		peer, err := unix.GetsockoptUcred(entryBrokerFD, unix.SOL_SOCKET, unix.SO_PEERCRED)
-		if err != nil || peer.Uid != 0 || int(peer.Pid) != spec.ParentPID {
-			return errors.New("desktop broker is not the privileged parent")
-		}
-		kind, err := unix.GetsockoptInt(entryBrokerFD, unix.SOL_SOCKET, unix.SO_TYPE)
-		if err != nil || kind != unix.SOCK_SEQPACKET {
-			return errors.New("invalid desktop broker transport")
-		}
-	}
-	// Runtime and bootstrap descriptors must not reach application helpers.
-	if err := unix.CloseRange(entryBrokerFD, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+	if err := verifyBroker(spec); err != nil {
 		return err
 	}
-	if spec.Broker {
-		if _, err := unix.FcntlInt(entryBrokerFD, unix.F_SETFD, 0); err != nil {
+	lifetime := os.NewFile(entryLifetimeFD, "generation-lifetime")
+	if err := rootRegular(lifetime); err != nil {
+		return err
+	}
+	// Bootstrap descriptors must not reach the desktop. The broker and the
+	// generation's lifetime lock stay open for it to claim.
+	if err := unix.CloseRange(entryImageFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		return err
+	}
+	for _, fd := range []int{entryBrokerFD, entryLifetimeFD} {
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
 			return err
 		}
 	}
 	unix.CloseOnExec(entryImageFD)
-	unix.CloseOnExec(entrySpecFD)
-	unix.CloseOnExec(entryOriginFD)
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
 	return syscall.Exec("/proc/self/fd/3", args, spec.Environment)
+}
+
+// sameIdentity requires the clone's identity change to have produced exactly
+// the original login identity on every credential.
+func sameIdentity(spec EntrySpec) error {
+	uid, euid, suid := unix.Getresuid()
+	gid, egid, sgid := unix.Getresgid()
+	for _, id := range []int{uid, euid, suid} {
+		if id != int(spec.UID) {
+			return errors.New("entry user identity differs from the original caller")
+		}
+	}
+	for _, id := range []int{gid, egid, sgid} {
+		if id != int(spec.GID) {
+			return errors.New("entry group identity differs from the original caller")
+		}
+	}
+	groups, err := unix.Getgroups()
+	if err != nil {
+		return err
+	}
+	if len(groups) != len(spec.Groups) {
+		return errors.New("entry supplementary groups differ from the original caller")
+	}
+	for i, group := range groups {
+		if uint32(group) != spec.Groups[i] {
+			return errors.New("entry supplementary groups differ from the original caller")
+		}
+	}
+	return nil
+}
+
+// verifyBroker requires the broker descriptor to be a seqpacket socket whose
+// peer is the supervisor named by the sealed frame, running as the caller.
+func verifyBroker(spec EntrySpec) error {
+	peer, err := unix.GetsockoptUcred(entryBrokerFD, unix.SOL_SOCKET, unix.SO_PEERCRED)
+	if err != nil || peer.Uid != spec.UID || int(peer.Pid) != spec.SupervisorPID {
+		return errors.New("desktop broker is not the launch supervisor")
+	}
+	kind, err := unix.GetsockoptInt(entryBrokerFD, unix.SOL_SOCKET, unix.SO_TYPE)
+	if err != nil || kind != unix.SOCK_SEQPACKET {
+		return errors.New("invalid desktop broker transport")
+	}
+	return nil
 }
 
 func readEntry(file *os.File) (EntrySpec, error) {
@@ -127,7 +164,7 @@ func decodeEntry(raw []byte) (EntrySpec, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return spec, errors.New("entry specification has trailing data")
 	}
-	if spec.Version != 1 || spec.ParentPID <= 1 || spec.UID == 0 || spec.UID == ^uint32(0) || spec.GID == ^uint32(0) {
+	if spec.Version != 1 || spec.SupervisorPID <= 1 || spec.UID == 0 || spec.UID == ^uint32(0) || spec.GID == ^uint32(0) {
 		return spec, errors.New("invalid entry identity")
 	}
 	if !filepath.IsAbs(spec.Image.Path) || filepath.Clean(spec.Image.Path) != spec.Image.Path || filepath.Base(spec.Image.Path) != "painted-wolf-code" {

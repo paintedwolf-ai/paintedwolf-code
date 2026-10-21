@@ -25,7 +25,7 @@ func WritePolicy(policy GenerationPolicy) error {
 	if _, err := decodePolicy(raw); err != nil {
 		return err
 	}
-	parent, err := openRootControlled(filepath.Dir(PolicyPath), true)
+	parent, err := openRootControlled(filepath.Dir(policyPath), true)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func WritePolicy(policy GenerationPolicy) error {
 	}
 	defer func() { _ = lifetime.Close() }()
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.Location{Root: filepath.Dir(PolicyPath), Rel: filepath.Base(PolicyPath)},
+		Location: fseffect.Location{Root: filepath.Dir(policyPath), Rel: filepath.Base(policyPath)},
 		Source:   bytes.NewReader(append(raw, '\n')), Mode: 0644,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			info, err := target.Lstat()

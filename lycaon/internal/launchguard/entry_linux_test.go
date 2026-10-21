@@ -13,7 +13,7 @@ import (
 
 func entryFixture() EntrySpec {
 	return EntrySpec{
-		Version: 1, ParentPID: 10, UID: 1000, GID: 1000,
+		Version: 1, SupervisorPID: 10, UID: 1000, GID: 1000,
 		Generation:  GenerationPolicy{Version: 1, GenerationRoot: "/opt/painted-wolf-code", LogicalInstallRoot: "/opt/painted-wolf-code", ManifestSHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		Image:       pkgmanifest.Executable{Path: "/opt/painted-wolf-code/bin/painted-wolf-code", Size: 1, SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		Environment: []string{"PATH=/usr/bin:/bin"},
@@ -28,7 +28,7 @@ func TestEntryFrameRejectsIdentityAndTransportAmbiguity(t *testing.T) {
 	}{
 		{"selected desktop", func(*EntrySpec) {}, true},
 		{"root identity", func(s *EntrySpec) { s.UID = 0 }, false},
-		{"missing parent", func(s *EntrySpec) { s.ParentPID = 1 }, false},
+		{"missing supervisor", func(s *EntrySpec) { s.SupervisorPID = 1 }, false},
 		{"other role", func(s *EntrySpec) { s.Image.Path = "/usr/bin/sh" }, false},
 		{"wrong generation", func(s *EntrySpec) { s.Generation.GenerationRoot = "/opt/other" }, false},
 		{"invalid supplementary identity", func(s *EntrySpec) { s.Groups = []uint32{^uint32(0)} }, false},

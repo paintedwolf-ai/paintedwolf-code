@@ -45,21 +45,23 @@ func CaptureCaller() (Identity, error) {
 	return caller, nil
 }
 
-// Attributes creates a user namespace owned by the privileged parent. The
-// entry executable must remove all capabilities and set no_new_privs before
-// executing application code: identity mappings deliberately preserve root
-// ownership facts, not authority to assume uid 0.
-func Attributes(caller Identity) (*syscall.SysProcAttr, error) {
-	if os.Geteuid() != 0 || uint32(os.Getuid()) != caller.UID || uint32(os.Getgid()) != caller.GID || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
-		return nil, errors.New("protected launch requires a privileged bootstrap and a login user")
+// EntryAttributes clones the unprivileged entry directly into a new user
+// namespace owned by the privileged stage that creates it, with full identity
+// mappings, as the original login identity. Nothing ever runs as uid 0 inside
+// the namespace: the clone's capabilities end with its identity change, before
+// the entry executes. The mappings preserve filesystem ownership facts, not
+// authority to assume uid 0. The mount namespace stays the stage's, which the
+// initial user namespace owns, so nothing inside can change a mount.
+func EntryAttributes(caller Identity) (*syscall.SysProcAttr, error) {
+	if os.Getuid() != 0 || os.Geteuid() != 0 || caller.UID == 0 || caller.UID == ^uint32(0) || caller.GID == ^uint32(0) {
+		return nil, errors.New("protected launch requires the privileged stage and a login user")
 	}
 	return &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+		Cloneflags:                 unix.CLONE_NEWUSER,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
 		GidMappingsEnableSetgroups: true,
-		Credential:                 &syscall.Credential{Uid: 0, Gid: 0},
-		Pdeathsig:                  syscall.SIGKILL,
+		Credential:                 &syscall.Credential{Uid: caller.UID, Gid: caller.GID, Groups: caller.Groups},
 	}, nil
 }
 

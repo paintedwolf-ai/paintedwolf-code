@@ -23,6 +23,14 @@ import (
 // PolicyPath is selected by the administrator, never by the desktop caller.
 const PolicyPath = "/etc/paintedwolf/launch.json"
 
+// The installed layout. These are variables only so a test build can place a
+// root-owned fixture elsewhere at link time (-ldflags -X); no runtime input,
+// environment or argument selects them.
+var (
+	policyPath    = PolicyPath
+	lockDirectory = GenerationLockDirectory
+)
+
 // GenerationPolicy binds a physical immutable generation to its logical paths.
 type GenerationPolicy struct {
 	Version            int    `json:"version"`
@@ -35,6 +43,7 @@ type GenerationPolicy struct {
 // launch. Package lifecycle owns the generation's shared lifetime lock.
 type Generation struct {
 	Lifetime     *os.File
+	Directory    *os.File
 	Policy       GenerationPolicy
 	Root         *os.Root
 	Manifest     *pkgmanifest.Manifest
@@ -52,6 +61,9 @@ func (g *Generation) Close() {
 	}
 	if g.Root != nil {
 		_ = g.Root.Close()
+	}
+	if g.Directory != nil {
+		_ = g.Directory.Close()
 	}
 	if g.Lifetime != nil {
 		_ = g.Lifetime.Close()
@@ -79,12 +91,12 @@ func CaptureGeneration() (*Generation, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = directory.Close() }()
 	root, err := os.OpenRoot(fmt.Sprintf("/proc/self/fd/%d", directory.Fd()))
 	if err != nil {
+		_ = directory.Close()
 		return nil, err
 	}
-	generation := &Generation{Policy: policy, Root: root, Lifetime: lifetime}
+	generation := &Generation{Policy: policy, Root: root, Directory: directory, Lifetime: lifetime}
 	retained = true
 	success := false
 	defer func() {
@@ -282,7 +294,7 @@ func retainGeneration(digest string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	directory, err := ensureControlledDirectory(root, GenerationLockDirectory, trustedObject)
+	directory, err := ensureControlledDirectory(root, lockDirectory, trustedObject)
 	_ = root.Close()
 	if err != nil {
 		return nil, err
@@ -307,7 +319,7 @@ func retainGeneration(digest string) (*os.File, error) {
 // ReadPolicy reads the administrator-selected launch generation without
 // opening it. The collector rechecks this selection while holding its lock.
 func ReadPolicy() (GenerationPolicy, error) {
-	policyFile, err := openRootControlled(PolicyPath, false)
+	policyFile, err := openRootControlled(policyPath, false)
 	if err != nil {
 		return GenerationPolicy{}, err
 	}

@@ -13,7 +13,7 @@ import (
 
 // CreateEntryFrame seals the selected image and original caller into a
 // root-created memfd. Only the static entry consumes this descriptor.
-func CreateEntryFrame(generation *Generation, caller Identity, arguments, environment []string, broker bool) (*os.File, error) {
+func CreateEntryFrame(generation *Generation, caller Identity, arguments, environment []string) (*os.File, error) {
 	if os.Geteuid() != 0 || generation == nil || generation.Desktop == nil || generation.Entry == nil || generation.Lifetime == nil {
 		return nil, errors.New("entry frame requires retained privileged generation authority")
 	}
@@ -26,7 +26,7 @@ func CreateEntryFrame(generation *Generation, caller Identity, arguments, enviro
 	if actual.UID != caller.UID || actual.GID != caller.GID || !slices.Equal(actual.Groups, caller.Groups) {
 		return nil, errors.New("entry caller changed")
 	}
-	spec := EntrySpec{Version: 1, ParentPID: os.Getpid(), UID: caller.UID, GID: caller.GID, Groups: caller.Groups, Generation: generation.Policy, Image: generation.DesktopImage, Arguments: arguments, Environment: environment, Broker: broker}
+	spec := EntrySpec{Version: 1, SupervisorPID: os.Getpid(), UID: caller.UID, GID: caller.GID, Groups: caller.Groups, Generation: generation.Policy, Image: generation.DesktopImage, Arguments: arguments, Environment: environment}
 	raw, err := json.Marshal(spec)
 	if err != nil {
 		return nil, err
