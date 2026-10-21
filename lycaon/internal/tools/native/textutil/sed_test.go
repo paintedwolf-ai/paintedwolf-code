@@ -152,7 +152,7 @@ func TestSedInPlacePublishesEachFileAtItsPin(t *testing.T) {
 		t.Fatalf("f holds %q", got)
 	}
 	pins := h.pins.executions[r.execution]
-	if len(pins) != 2 || pins[0].Role != toolcontract.DestinationRevision || pins[1].Role != toolcontract.SourceRevision || pins[0].Path != "f" {
+	if len(pins) != 2 || pins[0].Role != toolcontract.DestinationRevision || pins[1].Role != toolcontract.SourceRevision || pins[0].Path != "f" || pins[1].Path != "f" {
 		t.Fatalf("pins %+v", pins)
 	}
 	h.seed("g", "1\n2\n")
@@ -183,21 +183,21 @@ func TestSedInPlacePublishesEachFileAtItsPin(t *testing.T) {
 	}
 }
 
-// A destination that moved after its capture is a typed revision conflict;
-// the prepared bytes are not refreshed or retried.
+// A destination that moved after its capture is a typed revision conflict
+// from the redirect owner; the prepared bytes are not refreshed or retried.
 func TestInPlacePublicationConflictIsTyped(t *testing.T) {
 	h := sedHarness(t)
 	h.seed("f", "a\n")
 	r := h.run("sed -n p f", "")
 	r.expectOutput(t, "setup", "a\n", 0)
-	inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports(), spec: h.owners.specs["sed"],
-		request: commandprogramRequest(r.execution + "-conflict")}
-	paths, err := inv.paths()
-	testutil.FailErr(t, "paths", err)
-	target, err := pinnedOutputs{inv}.capture(paths, commandprogram.Field{Value: "f"})
-	testutil.FailErr(t, "capture destination", err)
+	request := commandprogramRequest(r.execution + "-conflict")
+	inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports(), spec: h.owners.specs["sed"], request: request}
+	stage, err := inv.openDestination(commandprogram.Field{Value: "f"})
+	testutil.FailErr(t, "open destination", err)
 	h.seed("f", "moved\n")
-	err = pinnedOutputs{inv}.publish(target, []byte("b\n"))
+	_, err = stage.Write([]byte("b\n"))
+	testutil.FailErr(t, "stage", err)
+	err = settleStage(t.Context(), stage, nil)
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" {
 		t.Fatalf("err = %v", err)
 	}
@@ -205,11 +205,11 @@ func TestInPlacePublicationConflictIsTyped(t *testing.T) {
 		t.Fatalf("conflicting publication changed f to %q", h.read("f"))
 	}
 	unwired := sedHarness(t)
-	unwired.write = nil
+	unwired.publication = nil
 	unwired.seed("f", "a\n")
-	unwired.run("sed -i p f", "").expectRefusal(t, "no write owner", "COMMAND_PLATFORM_UNAVAILABLE")
+	unwired.run("sed -i p f", "").expectRefusal(t, "no publication owner", "COMMAND_PLATFORM_UNAVAILABLE")
 }
 
 func commandprogramRequest(execution string) commandprogram.OperationRequest {
-	return commandprogram.OperationRequest{Invocation: toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ExecutionID: execution}}}
+	return commandprogram.OperationRequest{Invocation: toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ExecutionID: execution}, Span: toolcontract.SourceSpan{Line: 1, Column: 1}}}
 }

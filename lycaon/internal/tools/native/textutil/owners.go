@@ -22,9 +22,10 @@ import (
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+// (invocation.SQLRecorder.AppendRevisionPin). Each capture appends at the
+// execution's next position, after the program's redirects and other owners.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
 
 // Owners serves every program; per-invocation state lives in Prepared.
@@ -108,9 +109,9 @@ type Ports struct {
 	Spills      SpillStorage
 	Admission   tooloutput.SpillAdmission
 	Nested      commandprogram.NestedCommand
-	// Write and Barrier publish sed -i files and uniq OUTPUT at their pins.
-	Write   *native.WriteTool
-	Barrier *native.PublicationBarrier
+	// Publication is the program's redirect owner (mutation.Publication); sed
+	// -i files and uniq OUTPUT stage and publish through it.
+	Publication commandprogram.OutputPublication
 }
 
 // Builtins returns one in-process dispatcher per utility for one program.

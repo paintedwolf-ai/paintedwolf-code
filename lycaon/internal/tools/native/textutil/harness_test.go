@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // spillQuota is a counting SpillAdmission with an explicit ceiling.
@@ -65,43 +66,39 @@ func (b *batchLog) RunNested(_ context.Context, _ commandprogram.OperationReques
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}, err
 }
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each capture of an
+// execution, by any owner, appends at its next position.
 type pinLog struct {
 	executions map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
+	if err := pin.Validate(); err != nil {
+		return err
 	}
-	existing := l.executions[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
 	if l.executions == nil {
 		l.executions = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.executions[execution] = slices.Clone(pins)
+	l.executions[execution] = append(l.executions[execution], pin)
 	return nil
 }
 
 type harness struct {
-	t       *testing.T
-	root    string
-	tc      tools.ToolContext
-	owners  *Owners
-	pins    *pinLog
-	memory  *toolcontract.ProgramMemory
-	spills  string
-	quota   *spillQuota
-	nested  commandprogram.NestedCommand
-	env     []string
-	runs    int
-	write   *native.WriteTool
-	barrier *native.PublicationBarrier
+	t           *testing.T
+	root        string
+	tc          tools.ToolContext
+	owners      *Owners
+	pins        *pinLog
+	memory      *toolcontract.ProgramMemory
+	spills      string
+	quota       *spillQuota
+	nested      commandprogram.NestedCommand
+	env         []string
+	runs        int
+	publication commandprogram.OutputPublication
 }
 
 type run struct {
@@ -123,8 +120,15 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
-	return &harness{t: t, root: root, tc: nativefixture.Context(root), owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30},
-		write: &native.WriteTool{Boundary: boundary}, barrier: &native.PublicationBarrier{}}
+	tc := nativefixture.Context(root)
+	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
+		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
+	testutil.FailErr(t, "mutation owners", err)
+	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
+	testutil.FailErr(t, "program paths", err)
+	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, Tools: tc}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}, publication: publication}
 }
 
 func (h *harness) seed(name, content string) {
@@ -135,7 +139,7 @@ func (h *harness) seed(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Write: h.write, Barrier: h.barrier}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
 }
 
 func (h *harness) read(name string) string {

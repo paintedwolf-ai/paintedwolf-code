@@ -1,82 +1,53 @@
 package textutil
 
 import (
-	"bytes"
+	"context"
+	"errors"
+	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
-
-// destination is one pinned sed -i file or uniq OUTPUT. Its revision, or its
-// absence, is captured before any bytes are prepared for it, in the
-// execution's capture order; publication lands exact bytes at that pin.
-type destination struct {
-	operand commandprogram.Field
-	abs     string
-	pin     toolcontract.ExecutionRevision
-	sources []toolcontract.ExecutionRevision
-}
 
 func (inv *invocation) paths() (*projectpaths.ProgramPaths, error) {
 	return projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
 }
 
-// pinnedOutputs captures and publishes one invocation's destinations.
-type pinnedOutputs struct{ inv *invocation }
-
-// capture binds the operand under mutation authority and pins it.
-func (o pinnedOutputs) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (destination, error) {
-	inv := o.inv
-	if inv.ports.Write == nil {
-		return destination{}, toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": inv.spec.Name, "capability": "the program's pinned write owner"})
+// openDestination stages one sed -i file or uniq OUTPUT through the program's
+// redirect owner, which pins the destination at the execution's next
+// position and later publishes exact bytes at that pin. A destination that
+// moved since capture is COMMAND_REVISION_CONFLICT; nothing reruns.
+func (inv *invocation) openDestination(operand commandprogram.Field) (commandprogram.StagedOutput, error) {
+	if inv.ports.Publication == nil {
+		return nil, toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": inv.spec.Name, "capability": "the program's redirect publication owner"})
 	}
-	bound, err := paths.Bind(inv.ctx, operand.Value, true)
+	stage, err := inv.ports.Publication.Open(inv.ctx, commandprogram.OutputDestination{
+		Invocation: inv.request.Invocation,
+		Redirect:   commandsurface.ProgramRedirect{SyntaxLocation: commandsurface.SyntaxLocation{Span: operand.Span}, Operator: ">", Descriptor: -1},
+		Target:     operand,
+	})
 	if err != nil {
-		return destination{}, pathRejection(err, operand)
+		return nil, pathRejection(err, operand)
 	}
-	if bound.Null {
-		return destination{}, inv.usage(operand, "a file; the null device holds no publication")
-	}
-	pin, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.ports.ToolContext, bound.Resolved.Abs)
-	if err != nil {
-		return destination{}, pathRejection(err, operand)
-	}
-	if err := inv.recordPin(pin); err != nil {
-		return destination{}, err
-	}
-	return destination{operand: operand, abs: bound.Resolved.Abs, pin: pin}, nil
+	return stage, nil
 }
 
-// publish lands content at the destination's pin through the shared pinned
-// write door and the program's publication barrier. A destination that moved
-// since capture is COMMAND_REVISION_CONFLICT; nothing is refreshed or rerun.
-func (o pinnedOutputs) publish(d destination, content []byte) error {
-	inv := o.inv
-	result, err := inv.ports.Write.Apply(inv.ctx, native.WriteInput{Path: d.abs, Content: string(content),
-		Admission: native.WriteExecutionPinned, Destination: d.pin, Sources: d.sources}, inv.ports.ToolContext)
+// settleStage publishes a complete stage or abandons it on failure.
+func settleStage(ctx context.Context, stage commandprogram.StagedOutput, err error) error {
 	if err != nil {
-		return err
+		return errors.Join(err, stage.Abandon(context.WithoutCancel(ctx)))
 	}
-	if inv.ports.Barrier != nil {
-		return inv.ports.Barrier.Track(result)
-	}
-	return nil
-}
-
-// staged collects one destination's complete bytes under stream_bytes.
-func staged(inv *invocation) (*bytes.Buffer, *nativeutility.Output) {
-	var buffer bytes.Buffer
-	return &buffer, nativeutility.NewOutput(inv.ctx, &buffer, inv.limit("stream_bytes"))
+	_, err = stage.Publish(ctx)
+	return err
 }
 
 // sedInPlace edits each file separately: line numbers, $ and ranges restart
-// per file. Every file's destination and source are pinned before it is read,
-// and its complete output is published before the next file starts; the first
-// failure stops the run and earlier files stay published. q ends the run after
+// per file. Each file's destination is staged, then its source pinned, and its
+// complete output published before the next file starts; the first failure
+// stops the run and earlier files stay published. q ends the run after
 // publishing the current file's output so far.
 func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fields) error {
 	if len(files) == 0 {
@@ -90,57 +61,52 @@ func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fi
 		if operand.Value == "-" {
 			return inv.usage(operand, "a file; standard input cannot be edited in place")
 		}
-		target, err := pinnedOutputs{inv}.capture(paths, operand)
+		// The destination is pinned first, so a change between the two
+		// captures conflicts at publication instead of being overwritten.
+		stage, err := inv.openDestination(operand)
 		if err != nil {
 			return err
 		}
-		reader, source, err := inv.capture(paths, operand)
-		if err != nil {
-			if reason, ok := ordinary(err); ok {
-				inv.fail(2, operand.Value, reason)
-				return nil
-			}
-			return pathRejection(err, operand)
-		}
-		if source != nil {
-			target.sources = []toolcontract.ExecutionRevision{*source}
+		reader, err := inv.captureExisting(paths, operand)
+		if err != nil || reader == nil {
+			return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
 		}
 		records, err := inv.records(reader, '\n')
 		if err != nil {
-			return err
+			return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
 		}
 		for _, c := range commands {
 			c.active = false
 		}
-		buffer, out := staged(inv)
+		out := nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))
 		run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: out}
 		quit, err := run.cycles()
-		err = regexBudget(err)
-		if err == nil {
-			err = pinnedOutputs{inv}.publish(target, buffer.Bytes())
-		}
-		if err != nil || quit {
+		if err = settleStage(inv.ctx, stage, regexBudget(err)); err != nil || quit {
 			return err
 		}
 	}
 	return nil
 }
 
-// uniqOutput pins OUTPUT after INPUT and publishes uniq's complete output there.
+// captureExisting pins an in-place file's source; a missing or unreadable file
+// is an ordinary failure that stops the run before anything is staged for it.
+func (inv *invocation) captureExisting(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
+	reader, _, err := inv.capture(paths, operand)
+	if err == nil {
+		return reader, nil
+	}
+	if reason, ok := ordinary(err); ok {
+		inv.fail(2, operand.Value, reason)
+		return nil, nil
+	}
+	return nil, pathRejection(err, operand)
+}
+
+// uniqOutput stages OUTPUT after INPUT is pinned and publishes uniq's output.
 func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativeutility.Output) error) error {
-	paths, err := inv.paths()
+	stage, err := inv.openDestination(operands[1])
 	if err != nil {
 		return err
 	}
-	sources := len(inv.pins)
-	target, err := pinnedOutputs{inv}.capture(paths, operands[1])
-	if err != nil {
-		return err
-	}
-	target.sources = append([]toolcontract.ExecutionRevision(nil), inv.pins[:sources]...)
-	buffer, out := staged(inv)
-	if err := run(out); err != nil {
-		return err
-	}
-	return pinnedOutputs{inv}.publish(target, buffer.Bytes())
+	return settleStage(inv.ctx, stage, run(nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))))
 }

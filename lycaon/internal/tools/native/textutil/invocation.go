@@ -31,7 +31,6 @@ type invocation struct {
 	errors   strings.Builder
 	status   int
 	releases []func()
-	pins     []toolcontract.ExecutionRevision
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
@@ -175,8 +174,7 @@ func (inv *invocation) recordPin(pin toolcontract.ExecutionRevision) error {
 	if execution == "" {
 		return errors.New("file operands require a program execution identity")
 	}
-	inv.pins = append(inv.pins, pin)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, pin)
 }
 
 // pathRejection projects a path owner's typed refusal with the operand span.
