@@ -8,7 +8,7 @@ unsigned int la_version(unsigned int version) {
  unsigned char frame[40];
  for(size_t i=0;i<8;++i)frame[i]=(unsigned char)"PWAUD01\0"[i];
  for(size_t i=0;i<32;++i)frame[8+i]=pw_policy[16+i];
- if(pw_call(PW_WRITE,10,(long)frame,sizeof(frame),0,0,0)!=sizeof(frame))pw_refuse();
+ if(pw_call(PW_WRITE,10,(long)frame,sizeof(frame),0,0,0)!=(long)sizeof(frame))pw_refuse();
  return LAV_CURRENT;
 }
 char *la_objsearch(const char *name,uintptr_t *cookie,unsigned int flag) {

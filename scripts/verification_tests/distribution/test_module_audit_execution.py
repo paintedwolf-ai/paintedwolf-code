@@ -1,5 +1,9 @@
 """Native ABI contracts for the dependency-free protected loader boundary."""
 import os
+import hashlib
+import json
+import shutil
+import uuid
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,11 +20,25 @@ class NativeModuleAuditTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory(prefix="paintedwolf-audit-contract-")
         cls.root = Path(cls.directory.name)
         cls.auditor = cls.root / "module-audit.so"
-        subprocess.run([
+        compiled = subprocess.run([
             "cc", "-shared", "-fPIC", "-nostdlib", "-ffreestanding", "-fno-builtin",
             "-fno-stack-protector", "-O2", "-Wall", "-Wextra", "-Werror",
             str(SOURCE / "audit.c"), "-o", str(cls.auditor),
-        ], check=True, capture_output=True, text=True)
+        ], capture_output=True, text=True)
+        if compiled.returncode:
+            raise RuntimeError(compiled.stderr)
+        artifact_root = os.environ.get("PW_ARTIFACT_ROOT")
+        if artifact_root:
+            retained = Path(artifact_root) / "module-audit-components" / uuid.uuid4().hex
+            retained.mkdir(parents=True, exist_ok=False)
+            shutil.copyfile(cls.auditor, retained / "pw-module-audit.so")
+            (retained / "source.json").write_text(json.dumps({
+                "kind": "managed-test-built-module-discriminator",
+                "publication": "nonrelease",
+                "sources": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for p in sorted(SOURCE.iterdir()) if p.is_file()},
+                "elf_sha256": hashlib.sha256(cls.auditor.read_bytes()).hexdigest(),
+            }, indent=2) + "\n")
 
     @classmethod
     def tearDownClass(cls):

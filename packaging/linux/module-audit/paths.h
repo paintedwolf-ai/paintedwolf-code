@@ -41,7 +41,8 @@ static char *pw_selected_name(const char *name) {
  char link[64]="/proc/self/fd/";size_t length=14;unsigned value=(unsigned)fd;
  char digits[16];size_t count=0;
  do{digits[count++]=(char)('0'+value%10);value/=10;}while(value);
- while(count)link[length++]=digits[--count];link[length]=0;
+ while(count) { link[length++]=digits[--count]; }
+ link[length]=0;
  char physical[PW_PATH_LIMIT];
  long size=pw_call(PW_READLINKAT,AT_FDCWD,(long)link,(long)physical,PW_PATH_LIMIT-1,0,0);
  if(size<=0||size>=PW_PATH_LIMIT-1){pw_close(fd);pw_refuse();}

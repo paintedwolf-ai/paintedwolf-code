@@ -53,6 +53,7 @@ static inline size_t pw_length(const char *s,size_t limit) {
  size_t n=0;while(n<limit&&s[n])++n;return n;
 }
 static inline int pw_equal(const char *a,const char *b,size_t n) {
- for(size_t i=0;i<n;++i)if(a[i]!=b[i])return 0;return 1;
+ for(size_t i=0;i<n;++i) { if(a[i]!=b[i])return 0; }
+ return 1;
 }
 #endif
