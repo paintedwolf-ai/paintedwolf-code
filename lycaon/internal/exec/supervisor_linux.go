@@ -18,7 +18,6 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -86,24 +85,23 @@ func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (
 		cleanup()
 		return nil, nil, err
 	}
-	unconfined := !confine.IsHelperInvocation(cmd.Args)
 	count := len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, read, statusWrite)
 	supervisorStarts.Store(cmd, supervisorStart{read: statusRead, write: statusWrite, target: cmd.Path})
 	cmd.Args = append([]string{self, supervisorCommand, strconv.Itoa(count), string(priority), cmd.Path}, cmd.Args...)
 	cmd.Path = self
-	if unconfined {
-		// Under the protected launch an unconfined program never runs inside
-		// the protected namespace: its supervisor starts through the broker.
-		if err := relayThroughBroker(cmd); err != nil {
-			_ = read.Close()
-			_ = write.Close()
-			_ = statusRead.Close()
-			_ = statusWrite.Close()
-			supervisorStarts.Delete(cmd)
-			cleanup()
-			return nil, nil, err
-		}
+	// Under the protected launch nothing the engine starts executes inside
+	// the protected namespace, whose processes may execute only the
+	// generation and the administrator's executables: every supervisor,
+	// a confinement helper's included, starts through the broker.
+	if err := relayThroughBroker(cmd); err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = statusRead.Close()
+		_ = statusWrite.Close()
+		supervisorStarts.Delete(cmd)
+		cleanup()
+		return nil, nil, err
 	}
 	return cmd, func() {
 		_ = read.Close()

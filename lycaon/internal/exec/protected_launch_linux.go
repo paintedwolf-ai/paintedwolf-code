@@ -27,9 +27,9 @@ const initialUserNamespaceInode = 0xEFFFFFFD
 // relayCommand is the engine image's broker relay mode.
 const relayCommand = "__broker-relay"
 
-// ErrLaunchBrokerUnavailable refuses an unconfined launch inside the
-// protected namespace when the broker that must start it is missing.
-var ErrLaunchBrokerUnavailable = errors.New("the protected launch broker is unavailable, so an unconfined program cannot start")
+// ErrLaunchBrokerUnavailable refuses a launch inside the protected namespace
+// when the broker that must start it is missing.
+var ErrLaunchBrokerUnavailable = errors.New("the protected launch broker is unavailable, so the program cannot start")
 
 // protectedLaunch is this process's position relative to the protected
 // launch, decided once from kernel facts.

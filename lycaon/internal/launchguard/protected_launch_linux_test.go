@@ -311,10 +311,11 @@ func waitLaunchEnd(t *testing.T, cmd *exec.Cmd) {
 	}
 }
 
-// Inside the protected launch, the engine starts unconfined programs through
-// the broker, in the caller's initial namespaces without no_new_privs, and
-// confined ones in their own nested namespaces.
-func TestProtectedLaunchRoutesUnconfinedEngineLaunchesThroughTheBroker(t *testing.T) {
+// Inside the protected launch, the engine starts every program through the
+// broker: unconfined ones in the caller's initial namespaces without
+// no_new_privs, confined ones in their own nested namespaces built outside
+// the protected one.
+func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	f := installLaunchFixture(t)
 	env := []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
 	launch := startLaunch(t, f, env, "--exec-probe")

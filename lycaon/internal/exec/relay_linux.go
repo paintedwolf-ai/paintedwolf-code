@@ -41,7 +41,19 @@ func runBrokerRelay(args []string) int {
 	broker := os.NewFile(uintptr(brokerFD), "launch-broker")
 	files := make([]*os.File, extras)
 	for i := range files {
-		files[i] = os.NewFile(uintptr(3+i), "supervisor-descriptor")
+		fd := 3 + i
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
+			// A slot the parent left closed (a confinement helper pads its
+			// descriptor layout this way) cannot travel as a right; the
+			// supervisor receives /dev/null there, which no flag names.
+			null, err := os.Open(os.DevNull)
+			if err != nil {
+				return 125
+			}
+			files[i] = null
+			continue
+		}
+		files[i] = os.NewFile(uintptr(fd), "supervisor-descriptor")
 	}
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, relayedSignals...)
