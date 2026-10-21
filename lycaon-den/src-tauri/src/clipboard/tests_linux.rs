@@ -369,6 +369,12 @@ fn clipboard_owner_child() {
     if let Err(panic) = worker.join().unwrap() {
         std::panic::resume_unwind(panic);
     }
+    // WebKitGTK aborts in its exit-time teardown once a web context has run in
+    // the process; the child's verdict is complete, so it leaves without it.
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+    // SAFETY: _exit ends this fixture process immediately; nothing runs after it.
+    unsafe { libc::_exit(0) }
 }
 
 fn exercise_adapter(peer: Peer) {

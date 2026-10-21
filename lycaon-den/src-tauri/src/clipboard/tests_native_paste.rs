@@ -87,9 +87,13 @@ pub(super) fn exercise(focus_input: impl Fn(&str) + Clone + Send + 'static) {
                         // once the view holds keyboard focus, as a menu action would.
                         let (view, window, answer, stage) = (view.clone(), owned_window.clone(), answer.clone(), stage.clone());
                         let focus_input = focus_input.clone();
-                        *stage.borrow_mut() = "awaiting focus";
                         gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
                             if !view.has_focus() {
+                                *stage.borrow_mut() = match (window.is_active(), window.has_toplevel_focus()) {
+                                    (false, _) => "awaiting focus: window inactive",
+                                    (true, false) => "awaiting focus: no toplevel focus",
+                                    (true, true) => "awaiting focus: view unfocused",
+                                };
                                 window.present();
                                 view.grab_focus();
                                 focus_input(WINDOW_TITLE);
