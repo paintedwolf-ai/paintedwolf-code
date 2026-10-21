@@ -94,6 +94,14 @@ type Substitution interface {
 	Substitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest, stdout io.Writer) (toolcontract.ProducerResult, error)
 }
 
+// NestedCommand runs a command operand of a native utility (env's COMMAND)
+// as its own child execution of the parent request, with exactly the given
+// environment. The implementer allocates the child identity and receipt and
+// dispatches through the same admission as any reached command.
+type NestedCommand interface {
+	RunNested(ctx context.Context, parent OperationRequest, argv Fields, environment map[string]string, streams Streams) (toolcontract.ProducerResult, error)
+}
+
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one
 // parent program, a prepared child per dynamic execution, once-only settlements.
 type ProgramRecorder interface {
