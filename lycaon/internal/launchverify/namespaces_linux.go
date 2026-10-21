@@ -30,7 +30,7 @@ func ReadNamespace(procRoot string, pid int) (NamespaceFacts, error) {
 		return NamespaceFacts{}, err
 	}
 	defer func() { _ = file.Close() }()
-	kind, err := unix.IoctlGetInt(int(file.Fd()), unix.NS_GET_NSTYPE)
+	kind, err := unix.IoctlRetInt(int(file.Fd()), unix.NS_GET_NSTYPE)
 	if err != nil || kind != unix.CLONE_NEWUSER {
 		return NamespaceFacts{}, errors.New("process namespace descriptor is not a user namespace")
 	}

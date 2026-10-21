@@ -90,7 +90,7 @@ func verifyNamespace(origin *os.File) error {
 	if origin == nil {
 		return errors.New("missing original user namespace")
 	}
-	kind, err := unix.IoctlGetInt(int(origin.Fd()), unix.NS_GET_NSTYPE)
+	kind, err := unix.IoctlRetInt(int(origin.Fd()), unix.NS_GET_NSTYPE)
 	if err != nil || kind != unix.CLONE_NEWUSER {
 		return errors.New("original descriptor is not a user namespace")
 	}
