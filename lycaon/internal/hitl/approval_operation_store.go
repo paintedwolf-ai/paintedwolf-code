@@ -20,24 +20,11 @@ type preparedApprovalOperation struct {
 }
 
 func (s *SQLStore) prepareApprovalOperation(ctx context.Context, checkpointID, sessionID string, approved approvedAuthority) error {
-	raw, err := json.Marshal(approved.display)
+	params, err := approved.operation(checkpointID, sessionID)
 	if err != nil {
 		return err
 	}
-	authority, err := approved.columns()
-	if err != nil {
-		return err
-	}
-	rows, err := s.queries.PrepareApprovalOperation(ctx, db.PrepareApprovalOperationParams{
-		CheckpointID:    checkpointID,
-		SessionID:       sessionID,
-		OptionID:        approved.display.ID,
-		OptionJson:      string(raw),
-		CreatedAt:       db.FormatTime(time.Now().UTC()),
-		AuthorityFormat: authority.format,
-		AuthorityDigest: authority.digest,
-		AuthorityBody:   authority.body,
-	})
+	rows, err := s.queries.PrepareApprovalOperation(ctx, params)
 	if err != nil {
 		return err
 	}

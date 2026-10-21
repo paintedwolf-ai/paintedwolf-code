@@ -3,6 +3,7 @@ package hitl
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -38,6 +39,23 @@ func (a approvedAuthority) columns() (authorityColumns, error) {
 		format = NativeAuthorityFormat
 	}
 	return storedAuthority(format, a.native)
+}
+
+// operation is the prepared-operation row recording this approval.
+func (a approvedAuthority) operation(checkpointID, sessionID string) (db.PrepareApprovalOperationParams, error) {
+	raw, err := json.Marshal(a.display)
+	if err != nil {
+		return db.PrepareApprovalOperationParams{}, err
+	}
+	authority, err := a.columns()
+	if err != nil {
+		return db.PrepareApprovalOperationParams{}, err
+	}
+	return db.PrepareApprovalOperationParams{
+		CheckpointID: checkpointID, SessionID: sessionID, OptionID: a.display.ID, OptionJson: string(raw),
+		CreatedAt:       db.FormatTime(time.Now().UTC()),
+		AuthorityFormat: authority.format, AuthorityDigest: authority.digest, AuthorityBody: authority.body,
+	}, nil
 }
 
 // authoritySource names one row's native authority columns. The generic
