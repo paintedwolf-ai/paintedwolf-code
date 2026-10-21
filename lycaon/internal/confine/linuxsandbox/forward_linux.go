@@ -135,6 +135,8 @@ type supervisor struct {
 	performer *performerClient
 	// targets keeps sandbox processes' handles across their calls.
 	targets *targetHandles
+	// statuses keeps calling threads' status files across their calls.
+	statuses *statusFiles
 }
 
 func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
@@ -142,7 +144,7 @@ func newSupervisor(control *os.File, network Network, refusals io.Writer) *super
 	return &supervisor{
 		control: control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
-		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(),
+		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(), statuses: newStatusFiles(),
 	}
 }
 

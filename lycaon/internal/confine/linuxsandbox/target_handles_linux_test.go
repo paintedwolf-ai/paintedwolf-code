@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -116,5 +117,39 @@ func TestTargetHandlesBoundTheirCache(t *testing.T) {
 	cache.mu.Unlock()
 	if len(cache.byGroup) >= maxCachedTargets {
 		t.Fatalf("cache kept %d entries", len(cache.byGroup))
+	}
+}
+
+func TestStatusFilesReadTheCurrentRecordEachTime(t *testing.T) {
+	statuses := newStatusFiles()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	tid := unix.Gettid()
+	old := unix.Umask(0o027)
+	defer unix.Umask(old)
+	first, err := statuses.facts(tid)
+	testutil.FailErr(t, "first facts", err)
+	unix.Umask(0o077)
+	second, err := statuses.facts(tid)
+	testutil.FailErr(t, "second facts", err)
+	if first.umask != 0o027 || second.umask != 0o077 || second.tgid != os.Getpid() {
+		t.Fatalf("cached status read %o then %o (tgid %d), want 027 then 077", first.umask, second.umask, second.tgid)
+	}
+	if len(statuses.byTID) != 1 {
+		t.Fatalf("status files cached: %d", len(statuses.byTID))
+	}
+	if _, err := statuses.facts(-1); err == nil {
+		t.Fatal("read facts for no thread")
+	}
+}
+
+func TestCallerFactsParseEachField(t *testing.T) {
+	facts, err := parseCallerFacts([]byte("Name:\tx\nUmask:\t0022\nTgid:\t40\nNStgid:\t40\t7\nNSpid:\t41\t9\n"))
+	testutil.FailErr(t, "parse", err)
+	if facts != (callerFacts{tgid: 40, nsPid: 7, nsTid: 9, umask: 0o022}) {
+		t.Fatalf("facts = %+v", facts)
+	}
+	if facts, err := parseCallerFacts([]byte("Name:\tx\n")); err == nil || facts.umask != 0o777 {
+		t.Fatalf("record without a thread group: %+v %v", facts, err)
 	}
 }

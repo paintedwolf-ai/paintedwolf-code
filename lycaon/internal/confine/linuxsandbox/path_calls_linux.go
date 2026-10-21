@@ -3,6 +3,7 @@
 package linuxsandbox
 
 import (
+	"bytes"
 	"encoding/binary"
 	"os"
 	"strconv"
@@ -243,41 +244,54 @@ type callerFacts struct {
 // callerFactsOf reads the calling thread's status once; a mask it cannot read
 // is the most restrictive one.
 func callerFactsOf(tid int) (callerFacts, error) {
-	facts := callerFacts{umask: 0o777}
 	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
 	if err != nil {
-		return facts, err
+		return callerFacts{umask: 0o777}, err
 	}
-	lastID := func(v string) int {
-		fields := strings.Fields(v)
-		if len(fields) == 0 {
-			return 0
+	return parseCallerFacts(raw)
+}
+
+// parseCallerFacts reads the fields of one status record without splitting it.
+func parseCallerFacts(raw []byte) (callerFacts, error) {
+	facts := callerFacts{umask: 0o777}
+	for len(raw) > 0 {
+		line := raw
+		if i := bytes.IndexByte(raw, '\n'); i >= 0 {
+			line, raw = raw[:i], raw[i+1:]
+		} else {
+			raw = nil
 		}
-		id, _ := strconv.Atoi(fields[len(fields)-1])
-		return id
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		key, value, ok := strings.Cut(line, ":")
+		key, value, ok := bytes.Cut(line, []byte{':'})
 		if !ok {
 			continue
 		}
-		switch key {
+		switch string(key) {
 		case "Tgid":
-			facts.tgid = lastID(value)
+			facts.tgid = lastStatusID(value)
 		case "Umask":
-			if mask, err := strconv.ParseUint(strings.TrimSpace(value), 8, 32); err == nil {
+			if mask, err := strconv.ParseUint(string(bytes.TrimSpace(value)), 8, 32); err == nil {
 				facts.umask = uint32(mask)
 			}
 		case "NStgid":
-			facts.nsPid = lastID(value)
+			facts.nsPid = lastStatusID(value)
 		case "NSpid":
-			facts.nsTid = lastID(value)
+			facts.nsTid = lastStatusID(value)
 		}
 	}
 	if facts.tgid <= 0 {
 		return facts, unix.ESRCH
 	}
 	return facts, nil
+}
+
+// lastStatusID is the last whitespace-separated number of a status value.
+func lastStatusID(value []byte) int {
+	fields := bytes.Fields(value)
+	if len(fields) == 0 {
+		return 0
+	}
+	id, _ := strconv.Atoi(string(fields[len(fields)-1]))
+	return id
 }
 
 // selfRelative rewrites the caller's own process links, which would name the
