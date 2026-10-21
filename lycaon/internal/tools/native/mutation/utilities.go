@@ -246,11 +246,7 @@ func numericID(s string) bool {
 }
 
 func (inv *invocation) capture(abs string) (pinnedTarget, error) {
-	target, err := inv.owners.captureDestination(inv.ctx, inv.tc, inv.request.Invocation.Identity.ExecutionID, inv.pins, abs)
-	if err == nil {
-		inv.pins = append(inv.pins, target.pin)
-	}
-	return target, err
+	return inv.owners.captureDestination(inv.ctx, inv.tc, inv.request.Invocation.Identity.ExecutionID, abs)
 }
 
 // runTee captures every destination before reading stdin, copies stdin to

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -32,29 +31,26 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each capture appends at the
+// execution's next position.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
+	if err := pin.Validate(); err != nil {
+		return err
 	}
-	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 
@@ -143,7 +139,15 @@ type run struct {
 // run binds and invokes one utility the way native dispatch does.
 func (h *harness) run(stdin string, words ...string) run {
 	h.t.Helper()
-	inv := h.invocation()
+	var stdout bytes.Buffer
+	r := h.runAs(h.invocation(), &stdout, stdin, words...)
+	r.stdout = stdout.String()
+	return r
+}
+
+// runAs invokes one utility as the given execution with stdout bound to out.
+func (h *harness) runAs(inv toolcontract.OperationInvocation, out io.Writer, stdin string, words ...string) run {
+	h.t.Helper()
 	argv := make(commandprogram.Fields, len(words))
 	for i, word := range words {
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
@@ -154,12 +158,12 @@ func (h *harness) run(stdin string, words ...string) run {
 	if err != nil {
 		return run{err: err, execution: inv.Identity.ExecutionID}
 	}
-	var stdout, stderr bytes.Buffer
-	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	var stderr bytes.Buffer
+	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: out, Error: &stderr})
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("%v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID}
+	return run{stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID}
 }
 
 func (h *harness) path(rel string) string { return filepath.Join(h.root, filepath.FromSlash(rel)) }

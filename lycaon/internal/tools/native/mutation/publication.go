@@ -40,7 +40,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if bound.Null {
 		return &nullStage{}, nil
 	}
-	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, nil, bound.Resolved.Abs)
+	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if err != nil {
 		return nil, err
 	}
-	if err := p.Owners.Pins.RecordRevisionPins(ctx, destination.Invocation.Identity.ExecutionID, []toolcontract.ExecutionRevision{source.Revision}); err != nil {
+	if err := p.Owners.Pins.AppendRevisionPin(ctx, destination.Invocation.Identity.ExecutionID, source.Revision); err != nil {
 		return nil, err
 	}
 	return io.NopCloser(strings.NewReader(source.Content)), nil
@@ -75,13 +75,14 @@ type pinnedTarget struct {
 	append bool
 }
 
-// captureDestination pins abs and records the pin after prior's pins.
-func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, executionID string, prior []toolcontract.ExecutionRevision, abs string) (pinnedTarget, error) {
+// captureDestination pins abs and appends the pin at the execution's next
+// position, whatever its other owners captured before it.
+func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, executionID string, abs string) (pinnedTarget, error) {
 	pin, err := o.Revisions.CaptureDestination(ctx, tc, abs)
 	if err != nil {
 		return pinnedTarget{}, err
 	}
-	if err := o.Pins.RecordRevisionPins(ctx, executionID, append(append([]toolcontract.ExecutionRevision(nil), prior...), pin)); err != nil {
+	if err := o.Pins.AppendRevisionPin(ctx, executionID, pin); err != nil {
 		return pinnedTarget{}, err
 	}
 	return pinnedTarget{abs: abs, pin: pin}, nil
