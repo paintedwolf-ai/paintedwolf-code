@@ -314,7 +314,9 @@ func TestReleaseBlastRadiusCredentialedLiveTestIsIsolated(t *testing.T) {
 	for _, needle := range []string{
 		"schedule:",
 		"environment: release-rehearsal",
-		"secrets.RELEASE_TEST_R2_API_TOKEN",
+		"secrets.RELEASE_TEST_R2_ACCESS_KEY_ID",
+		"secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY",
+		"vars.RELEASE_TEST_R2_ENDPOINT_URL",
 		"run: ./task release:live-test",
 	} {
 		if !strings.Contains(workflow, needle) {
