@@ -70,7 +70,30 @@ def seal(output: Path, architecture: str, version: str, nix_store: Path) -> dict
     receipt = {"format_version": 1, "output": str(output), "nix_store": str(nix_store)}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (root / "nix-layout.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    name, profile = engine_profile(root / "bin/pw")
+    directory = output / "share/painted-wolf-code/apparmor"
+    directory.mkdir(parents=True)
+    (directory / name).write_text(profile)
     return manifest
+
+
+def literal(value: str) -> str:
+    """An AppArmor attachment that matches exactly one path, with no globbing."""
+    if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("AppArmor attachment contains a control character")
+    return '"' + "".join("\\" + char if char in '\\"*?[]{}^' else char for char in value) + '"'
+
+
+def engine_profile(engine: Path) -> tuple[str, str]:
+    """Grant user namespaces to this generation's exact engine executable and nothing else.
+
+    Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu 24.04
+    and later) need it for the engine's per-command sandbox; an administrator installs it.
+    """
+    name = "paintedwolf-engine-" + hashlib.sha256(str(engine).encode()).hexdigest()
+    return name, ("abi <abi/4.0>,\n\n"
+                  f"profile {name} {literal(str(engine))} flags=(unconfined) {{\n"
+                  "  userns,\n}\n")
 
 
 def main():

@@ -897,6 +897,14 @@ with `nix develop`, then use the existing root `./task` commands. The shell
 supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
 application feature code still uses native capability facts.
 
+Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu
+24.04 and later) need an administrator to load the generation's engine grant
+before confinement is available. Each generation ships
+`share/painted-wolf-code/apparmor/paintedwolf-engine-<hash>`, which grants user
+namespaces to that generation's exact `pw` executable only: install it under
+`/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
+a new path and needs its own grant; remove the previous one once nothing runs it.
+
 Consumers without flakes use [default.nix](../default.nix): `nix-build` or
 `pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
 inputs pinned in `flake.lock`; the caller's package set selects only the

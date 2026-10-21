@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3
+{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
 , scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
@@ -53,6 +53,11 @@ stdenvNoCC.mkDerivation {
     python3 ${source}/scripts/linux_release/nix_layout.py \
       --output "$out" --architecture ${lib.escapeShellArg architecture} \
       --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store
+    # The shipped engine grant must parse; administrators load it unchanged.
+    for profile in "$out"/share/painted-wolf-code/apparmor/*; do
+      ${apparmor-parser}/bin/apparmor_parser --skip-kernel-load --skip-cache --skip-read-cache \
+        -I ${apparmor-profiles}/etc/apparmor.d "$profile"
+    done
   '';
   meta = {
     description = "Painted Wolf Code desktop application and complete immutable runtime resources";
