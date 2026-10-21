@@ -1031,6 +1031,12 @@ publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
 qualify a release. Draft pull requests do not start candidate builds.
 
+When a package stage fails after the build starts, the workflow runs
+`./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
+from the same source checkout. It retains the canonical assembled packages with
+hashes and an explicit report that grants no complete-candidate, installed or
+publication authority.
+
 ### Release dry run
 
 Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
@@ -1099,13 +1105,3 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
-
-The existing `release:live-test -- --local-pacman-construction --receipt /absolute/new-receipt.json`
-mode exercises actual native makepkg construction in the pinned official substrate with
-a tiny sealed nonapplication payload, then admits package metadata and exact extracted
-ELF/data/link/mode identities. It requires matching native Linux CPU, Docker, GnuPG and
-bsdtar. Toolchain preparation uses signed repositories; package construction then runs
-as the invoking unprivileged user without network or container capabilities. It adds
-no repository or trust to the host and does not install the application. This mode
-requires the finished pacman producer dependency; default credentialed rehearsals are
-separate and are not invoked by it.

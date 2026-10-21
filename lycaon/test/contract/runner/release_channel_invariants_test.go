@@ -117,12 +117,15 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
 		"retention-days: 90", "Verify the catalog row for this candidate",
 		"CANDIDATE_RUNNER_LABEL:", "scripts/linux_release/candidates.py",
+		"./task release:candidate:diagnostics --",
 	} {
 		if !strings.Contains(candidates, needle) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:"} {
+	// Candidate runs carry no branch-scoped triggers and use one source checkout.
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
+		"push:", "refs/heads/", "path: .", "python3 ."} {
 		if strings.Contains(candidates, forbidden) {
 			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}

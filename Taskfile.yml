@@ -1747,6 +1747,11 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
+  release:candidate:diagnostics:
+    desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
+    cmds:
+      - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
+
   release:live-test:
     desc: 'Isolated release:live-test rehearsal; --local-linux-signing uses disposable local keys, default uses test R2 credentials'
     cmds:
