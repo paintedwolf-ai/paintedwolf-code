@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
@@ -38,7 +40,7 @@ func RunBrokerAgent() error {
 	if err != nil {
 		return err
 	}
-	if uid, euid, suid := unix.Getresuid(); uid == 0 && euid == 0 && suid == 0 {
+	if isModuleViewWatcher() {
 		return runModuleViewWatcher(spec)
 	}
 	if err := sameIdentity(spec); err != nil {
@@ -102,19 +104,34 @@ func runModuleViewWatcher(spec EntrySpec) error {
 	return watchModuleMounts(int(mountinfo.Fd()), watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
 }
 
-// sealModuleWatcher switches the watcher to the caller's UID, GID and groups
-// so FUSE mounts without allow_other permit path lookup, while keeping only
-// CAP_SYS_ADMIN and CAP_DAC_READ_SEARCH on the locked thread with
-// no_new_privs and non-dumpable state.
+const watcherCapabilityMask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << unix.CAP_DAC_READ_SEARCH)
+
+func isModuleViewWatcher() bool {
+	uid, euid, suid := unix.Getresuid()
+	if uid != 0 || euid != 0 || suid != 0 {
+		return false
+	}
+	var stat unix.Stat_t
+	return unix.Fstat(watcherLifetimeFD, &stat) == nil && stat.Mode&unix.S_IFMT == unix.S_IFIFO
+}
+
+// sealModuleWatcher switches every OS thread of the watcher to the caller's
+// UID, GID and supplementary groups so FUSE mounts without allow_other permit
+// path lookup, while keeping only CAP_SYS_ADMIN and CAP_DAC_READ_SEARCH in
+// CapEff, CapPrm and CapBnd across all threads with no ambient or inheritable
+// capabilities, no_new_privs and non-dumpable state.
 func sealModuleWatcher(caller Identity) error {
-	if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
+	if err := dropWatcherBoundingSet(); err != nil {
+		return err
+	}
+	if err := watcherPrctlAllThreads(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
 		return err
 	}
 	groups := make([]int, len(caller.Groups))
 	for i, group := range caller.Groups {
 		groups[i] = int(group)
 	}
-	if err := unix.Setgroups(groups); err != nil {
+	if err := syscall.Setgroups(groups); err != nil {
 		return err
 	}
 	if err := unix.Setresgid(int(caller.GID), int(caller.GID), int(caller.GID)); err != nil {
@@ -123,22 +140,48 @@ func sealModuleWatcher(caller Identity) error {
 	if err := unix.Setresuid(int(caller.UID), int(caller.UID), int(caller.UID)); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0); err != nil {
+	if err := watcherPrctlAllThreads(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+	if err := watcherPrctlAllThreads(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
+	if err := watcherPrctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
-	const mask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << unix.CAP_DAC_READ_SEARCH)
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
-	capabilities := [2]unix.CapUserData{{Permitted: mask, Effective: mask}}
-	if err := unix.Capset(&header, &capabilities[0]); err != nil {
-		return err
+	capabilities := [2]unix.CapUserData{{Permitted: watcherCapabilityMask, Effective: watcherCapabilityMask}}
+	if _, _, errno := syscall.AllThreadsSyscall(
+		unix.SYS_CAPSET,
+		uintptr(unsafe.Pointer(&header)),
+		uintptr(unsafe.Pointer(&capabilities[0])),
+		0,
+	); errno != 0 {
+		return errno
 	}
 	return unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
+}
+
+func dropWatcherBoundingSet() error {
+	for cap := uintptr(0); cap <= 63; cap++ {
+		if cap == unix.CAP_SYS_ADMIN || cap == unix.CAP_DAC_READ_SEARCH {
+			continue
+		}
+		if err := watcherPrctlAllThreads(unix.PR_CAPBSET_DROP, cap, 0, 0, 0); err != nil {
+			if errors.Is(err, unix.EINVAL) {
+				break
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func watcherPrctlAllThreads(option, arg2, arg3, arg4, arg5 uintptr) error {
+	if _, _, errno := syscall.AllThreadsSyscall6(unix.SYS_PRCTL, option, arg2, arg3, arg4, arg5, 0); errno != 0 {
+		return errno
+	}
+	return nil
 }
 
 // initialUserNamespace requires this process to be in the initial user

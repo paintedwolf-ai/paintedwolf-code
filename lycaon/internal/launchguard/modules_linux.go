@@ -232,7 +232,6 @@ func baselineExemptMounts(entries []mountEntry, installRoot string, roots []stri
 }
 
 func scrubModuleMounts(entries []mountEntry, exempt map[int]bool, failed map[int]string) {
-	attr := unix.MountAttr{Attr_set: unix.MOUNT_ATTR_NOEXEC | unix.MOUNT_ATTR_NOSUID | unix.MOUNT_ATTR_NODEV}
 	for _, entry := range entries {
 		if exempt[entry.id] {
 			continue
@@ -241,13 +240,31 @@ func scrubModuleMounts(entries []mountEntry, exempt map[int]bool, failed map[int
 			delete(failed, entry.id)
 			continue
 		}
-		if isShadowedMount(entry, entries) || failed[entry.id] == entry.options {
+		key := entry.mountPoint + "\x00" + entry.options
+		if isShadowedMount(entry, entries) || failed[entry.id] == key {
 			continue
 		}
-		if err := unix.MountSetattr(unix.AT_FDCWD, entry.mountPoint, unix.AT_SYMLINK_NOFOLLOW, &attr); err != nil {
-			failed[entry.id] = entry.options
+		if err := scrubSingleMount(entry.mountPoint); err != nil {
+			failed[entry.id] = key
 		}
 	}
+}
+
+func scrubSingleMount(mountPoint string) error {
+	if !strings.HasPrefix(mountPoint, "/") || strings.ContainsRune(mountPoint, 0) {
+		return unix.EINVAL
+	}
+	how := unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
+	}
+	fd, err := unix.Openat2(unix.AT_FDCWD, mountPoint, &how)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unix.Close(fd) }()
+	attr := unix.MountAttr{Attr_set: unix.MOUNT_ATTR_NOEXEC | unix.MOUNT_ATTR_NOSUID | unix.MOUNT_ATTR_NODEV}
+	return unix.MountSetattr(fd, "", unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW, &attr)
 }
 
 func isShadowedMount(target mountEntry, entries []mountEntry) bool {
@@ -280,23 +297,31 @@ func hasMountOption(options, want string) bool {
 func parseMountInfo(raw []byte) []mountEntry {
 	var entries []mountEntry
 	for line := range strings.SplitSeq(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 6 {
-			continue
+		if entry, ok := parseMountInfoLine(line); ok {
+			entries = append(entries, entry)
 		}
-		id, err1 := strconv.Atoi(fields[0])
-		parent, err2 := strconv.Atoi(fields[1])
-		if err1 != nil || err2 != nil {
-			continue
-		}
-		entries = append(entries, mountEntry{
-			id:         id,
-			parent:     parent,
-			mountPoint: unescapeMountPath(fields[4]),
-			options:    fields[5],
-		})
 	}
 	return entries
+}
+
+func parseMountInfoLine(line string) (mountEntry, bool) {
+	var fields [6]string
+	rest := line
+	for i := range fields {
+		field, next, ok := strings.Cut(rest, " ")
+		if !ok {
+			return mountEntry{}, false
+		}
+		fields[i], rest = field, next
+	}
+	id, err1 := strconv.Atoi(fields[0])
+	parent, err2 := strconv.Atoi(fields[1])
+	mountPoint := unescapeMountPath(fields[4])
+	hasSep := strings.HasPrefix(rest, "- ") || strings.Contains(rest, " - ")
+	if err1 != nil || err2 != nil || !strings.ContainsRune(fields[2], ':') || !strings.HasPrefix(fields[3], "/") || !strings.HasPrefix(mountPoint, "/") || strings.ContainsRune(mountPoint, 0) || fields[5] == "" || !hasSep {
+		return mountEntry{}, false
+	}
+	return mountEntry{id: id, parent: parent, mountPoint: mountPoint, options: fields[5]}, true
 }
 
 func unescapeMountPath(raw string) string {
@@ -306,7 +331,7 @@ func unescapeMountPath(raw string) string {
 	var out strings.Builder
 	out.Grow(len(raw))
 	for i := 0; i < len(raw); i++ {
-		if raw[i] == '\\' && i+3 < len(raw) && isOctal(raw[i+1]) && isOctal(raw[i+2]) && isOctal(raw[i+3]) {
+		if raw[i] == '\\' && i+3 < len(raw) && raw[i+1] >= '0' && raw[i+1] <= '3' && isOctal(raw[i+2]) && isOctal(raw[i+3]) {
 			out.WriteByte(((raw[i+1] - '0') << 6) | ((raw[i+2] - '0') << 3) | (raw[i+3] - '0'))
 			i += 3
 			continue

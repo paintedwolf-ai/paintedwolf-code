@@ -73,20 +73,23 @@ func TestModuleRootsIncludesLibrariesSystemExecutablesAndInterpreter(t *testing.
 
 func checkMountInfoHelpers(t *testing.T) {
 	t.Helper()
-	if got := unescapeMountPath(`/media/pw/USB\040Drive\011Tab\012NL\134Back\999`); got != "/media/pw/USB Drive\tTab\nNL\\Back\\999" {
+	if got := unescapeMountPath(`/media/pw/USB\040Drive\011Tab\012NL\134Back\400\999`); got != "/media/pw/USB Drive\tTab\nNL\\Back\\400\\999" {
 		t.Fatalf("unescapeMountPath = %q", got)
 	}
 	raw := []byte("20 1 8:1 / / rw,noexec,relatime - ext4 /dev/sda1 rw\n" +
 		"21 20 0:25 / /opt/paintedwolf ro,nosuid,nodev - ext4 /dev/sda1 ro\n" +
 		"22 20 0:26 / /usr/lib rw,relatime - ext4 /dev/sda1 rw\n" +
-		"23 20 0:27 / /media/pw/USB\\040Drive rw,relatime - vfat /dev/sdb1 rw\n" +
-		"24 23 0:28 / /media/pw/USB\\040Drive rw,relatime - tmpfs tmpfs rw\n" +
+		"23 20 0:27 / /media/pw/USB\\040Drive\\011Tab\\012NL\\134Back\rCR rw,relatime shared:1 - vfat /dev/sdb1 rw\n" +
+		"24 23 0:28 / /media/pw/USB\\040Drive\\011Tab\\012NL\\134Back\rCR rw,relatime - tmpfs tmpfs rw\n" +
 		"25 20 0:29 / /mnt/done rw,noexec,nosuid,nodev - tmpfs tmpfs rw\n" +
+		"26 20 0:30 / /mnt/nul\\000bad rw - tmpfs tmpfs rw\n" +
+		"27 20 0:31 / relative/mnt rw - tmpfs tmpfs rw\n" +
+		"28 20 0:32 / /mnt/no-sep rw tmpfs tmpfs rw\n" +
 		"bad line\n" +
 		"x y 0:0 / /mnt rw - tmpfs tmpfs rw\n")
 	entries := parseMountInfo(raw)
-	if len(entries) != 6 {
-		t.Fatalf("parseMountInfo len = %d, want 6", len(entries))
+	if len(entries) != 6 || entries[3].mountPoint != "/media/pw/USB Drive\tTab\nNL\\Back\rCR" {
+		t.Fatalf("parseMountInfo = %+v", entries)
 	}
 	if !isShadowedMount(entries[3], entries) || isShadowedMount(entries[4], entries) {
 		t.Fatalf("shadowed mount detection mismatch: %+v", entries)
@@ -95,7 +98,7 @@ func checkMountInfoHelpers(t *testing.T) {
 	if !exempt[20] || !exempt[21] || !exempt[22] || exempt[23] {
 		t.Fatalf("baselineExemptMounts = %v", exempt)
 	}
-	failed := map[int]string{25: "rw"}
+	failed := map[int]string{25: "/mnt/done\x00rw"}
 	scrubModuleMounts(entries, exempt, failed)
 	if _, ok := failed[25]; ok {
 		t.Fatalf("completed mount kept failure record: %v", failed)
@@ -104,6 +107,7 @@ func checkMountInfoHelpers(t *testing.T) {
 		t.Fatalf("unprivileged scrub of missing mount point did not record failure: %v", failed)
 	}
 	scrubModuleMounts(entries, exempt, failed)
+	checkScrubSingleMountRejectsSymlinksAndMagiclinks(t)
 }
 
 func verifyModuleViewIsolation(dir, rawPID string) error {
@@ -124,6 +128,9 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	pid, err := strconv.Atoi(rawPID)
 	if err != nil || pid <= 1 {
 		return fmt.Errorf("invalid desktop pid %q", rawPID)
+	}
+	if err := verifyLiveWatcherProcess(pid); err != nil {
+		return err
 	}
 	existing := filepath.Join(dir, "live-existing.so")
 	if err := os.WriteFile(existing, []byte("existing"), 0o755); err != nil {
@@ -315,20 +322,11 @@ func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func
 	return func() { _ = watchW.Close(); _ = <-done; _ = watchR.Close() }, nil
 }
 
-func checkModuleWatcherSeal() error {
-	uid, _ := strconv.Atoi(os.Getenv("SUDO_UID"))
-	gid, _ := strconv.Atoi(os.Getenv("SUDO_GID"))
-	if uid <= 0 || gid <= 0 {
-		uid, gid = 1000, 1000
-	}
-	return sealModuleWatcher(Identity{UID: uint32(uid), GID: uint32(gid), Groups: []uint32{uint32(gid)}})
-}
-
 func prepareLateMountPoint(baseDir string) (dir, underlying, lateFile string, err error) {
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
 		return "", "", "", err
 	}
-	lateDir := filepath.Join(baseDir, "USB Drive")
+	lateDir := filepath.Join(baseDir, "USB Drive\tTab\nLine\rCR\\Back")
 	if err := os.MkdirAll(lateDir, 0o755); err != nil {
 		return "", "", "", err
 	}
