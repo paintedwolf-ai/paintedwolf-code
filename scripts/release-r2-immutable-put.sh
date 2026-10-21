@@ -35,6 +35,10 @@ done
   exit 1
 }
 r2_rest_require_env
+if [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]]; then
+  exec python3 "${SCRIPT_DIR}/release_storage/s3.py" immutable "${KEY}" "${FILE}" \
+    --content-type "${CONTENT_TYPE}" --cache-control "${CACHE_CONTROL}"
+fi
 
 # Objects past wrangler's limit go through R2's S3 API; their identity is the
 # SHA-256 recorded in object metadata, since multipart ETags are not MD5s.

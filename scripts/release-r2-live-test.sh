@@ -3,26 +3,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${PW_R2_REHEARSAL_CONFIGURED:-}" != 1 ]]; then
+  exec python3 "${ROOT}/scripts/release_storage/rehearsal.py" "$0" "$@"
+fi
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
-WRANGLER=(bunx wrangler@4.115.0)
-
-for name in \
-  RELEASE_TEST_R2_ACCOUNT_ID RELEASE_TEST_R2_API_TOKEN \
-  RELEASE_TEST_R2_BUCKET RELEASE_TEST_DOWNLOAD_BASE_URL; do
-  [[ -n "${!name:-}" ]] || {
-    echo "error: ${name} is required for the credentialed release live test" >&2
-    exit 1
-  }
-done
-[[ "${RELEASE_TEST_DOWNLOAD_BASE_URL}" =~ ^https://[^/?#]+/?$ ]] || {
-  echo "error: RELEASE_TEST_DOWNLOAD_BASE_URL must be an HTTPS origin with no path, query, or fragment" >&2
-  exit 1
-}
-
-export CLOUDFLARE_ACCOUNT_ID="${RELEASE_TEST_R2_ACCOUNT_ID}"
-export CLOUDFLARE_API_TOKEN="${RELEASE_TEST_R2_API_TOKEN}"
-export R2_BUCKET="${RELEASE_TEST_R2_BUCKET}"
+[[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]] || { echo 'error: rehearsal requires S3 credentials' >&2; exit 1; }
+S3_DRIVER="${ROOT}/scripts/release_storage/s3.py"
 
 RUN_NONCE="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 if [[ -n "${GITHUB_RUN_ID:-}" && -n "${GITHUB_RUN_ATTEMPT:-}" ]]; then
@@ -60,23 +47,16 @@ PYREG
 declare -a CREATED_KEYS=()
 CLEANED=0
 
-object_url() {
-  local key="$1"
-  printf 'https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s' \
-    "${CLOUDFLARE_ACCOUNT_ID}" "${R2_BUCKET}" "${key}"
-}
-
 get_status() {
   local key="$1" output="$2"
-  curl --silent --show-error --output "${output}" --write-out '%{http_code}' \
-    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "$(object_url "${key}")"
+  python3 "${S3_DRIVER}" get "${key}" "${output}"
 }
 
 delete_created_objects() {
   local failed=0 key
   [[ "${CLEANED}" -eq 0 ]] || return 0
-  for key in "${CREATED_KEYS[@]}"; do
-    "${WRANGLER[@]}" r2 object delete "${R2_BUCKET}/${key}" --remote \
+  for key in ${CREATED_KEYS[@]+"${CREATED_KEYS[@]}"}; do
+    python3 "${S3_DRIVER}" delete "${key}" \
       >/dev/null 2>&1 || failed=1
   done
   [[ "${failed}" -ne 0 ]] || CLEANED=1
@@ -379,7 +359,7 @@ grep -Fq "active updater version is ${VERSIONS[2]}" "${WORKDIR}/stale-halt.out"
 echo "release-live-test: halt, idempotent retry, recovery, and stale halt verified" >&2
 
 delete_created_objects
-for key in "${CREATED_KEYS[@]}"; do
+for key in ${CREATED_KEYS[@]+"${CREATED_KEYS[@]}"}; do
   stat="$(r2_rest_object_stat "${key}")" || {
     CLEANED=0
     echo "error: cleanup verification transport failure for ${key}" >&2

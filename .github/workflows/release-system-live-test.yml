@@ -38,11 +38,15 @@ jobs:
         working-directory: lycaon-den
       - name: Install minisign for cryptographic feed verification
         run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Check S3 object transport
+        run: aws --version
 
       - name: Exercise isolated R2 release system
         env:
-          RELEASE_TEST_R2_ACCOUNT_ID: ${{ vars.RELEASE_TEST_R2_ACCOUNT_ID }}
-          RELEASE_TEST_R2_API_TOKEN: ${{ secrets.RELEASE_TEST_R2_API_TOKEN }}
+          RELEASE_TEST_R2_ENDPOINT_URL: ${{ vars.RELEASE_TEST_R2_ENDPOINT_URL }}
+          RELEASE_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_TEST_R2_ACCESS_KEY_ID }}
+          RELEASE_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_TEST_R2_SECRET_ACCESS_KEY }}
+          RELEASE_TEST_R2_SESSION_TOKEN: ${{ secrets.RELEASE_TEST_R2_SESSION_TOKEN }}
           RELEASE_TEST_R2_BUCKET: ${{ vars.RELEASE_TEST_R2_BUCKET }}
           RELEASE_TEST_DOWNLOAD_BASE_URL: ${{ vars.RELEASE_TEST_DOWNLOAD_BASE_URL }}
         run: ./task release:live-test
