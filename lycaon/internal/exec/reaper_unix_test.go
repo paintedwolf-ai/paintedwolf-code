@@ -112,11 +112,18 @@ func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
 // A SIGKILLed engine runs no cleanup of its own; only the reaper ends its
 // groups and removes its scratch directories.
 func TestEngineKilledOutrightTakesItsTrackedGroupsWithIt(t *testing.T) {
+	for _, role := range []string{"engine", "engine-group"} {
+		t.Run(role, func(t *testing.T) { assertEngineDeathReapsOwnedGroup(t, role) })
+	}
+}
+
+func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
+	t.Helper()
 	dir := t.TempDir()
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
 	engine := exec.Command(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
-	engine.Env = append(os.Environ(), reaperRoleEnv+"=engine:"+dir)
+	engine.Env = append(os.Environ(), reaperRoleEnv+"="+role+":"+dir)
 	engine.Stdout, engine.Stderr = io.Discard, io.Discard
 	testutil.FailErr(t, "start engine helper", engine.Start())
 	t.Cleanup(func() { _ = engine.Process.Kill(); _ = engine.Wait() })
@@ -154,7 +161,7 @@ func TestReaperHelperProcess(t *testing.T) {
 	switch role {
 	case "reaper":
 		os.Exit(RunReaper(os.Stdin))
-	case "engine":
+	case "engine", "engine-group":
 	default:
 		t.Skip("helper process for TestEngineKilledOutrightTakesItsTrackedGroupsWithIt")
 	}
@@ -170,12 +177,24 @@ func TestReaperHelperProcess(t *testing.T) {
 	}
 	script := fmt.Sprintf("echo $$ > %s; sleep 30 & echo $! > %s; sleep 30",
 		strconv.Quote(filepath.Join(dir, "leader.pid")), strconv.Quote(filepath.Join(dir, "descendant.pid")))
-	// StartPipelineAsync returns once the group is started and tracked.
-	if _, err := StartPipelineAsync(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}},
-		ExecOpts{Launch: HostLaunch("reaper test"), NoTimeout: true}, nil, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "start pipeline: %v\n", err)
+	if role == "engine-group" {
+		cmd, cleanup, err := PrepareCommand(context.Background(), "sh", []string{"-c", script}, ExecOpts{Launch: HostLaunch("asynchronous group reaper fixture")})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		group, err := StartInOwnGroup(cmd)
+		if err != nil {
+			cleanup()
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		go func() { _ = group.Wait(); cleanup() }()
+	} else if _, err := StartPipelineAsync(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}}, ExecOpts{Launch: HostLaunch("reaper test"), NoTimeout: true}, nil, nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+
 	scratch := filepath.Join(dir, "scratch")
 	if err := os.Mkdir(scratch, 0o700); err != nil {
 		os.Exit(1)

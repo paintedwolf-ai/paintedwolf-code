@@ -180,10 +180,6 @@ func socketHolders(wanted map[uint64]bool) (map[uint64][]int, error) {
 	return out, nil
 }
 
-func sameEndpoint(a, b netip.AddrPort) bool {
-	return a.Port() == b.Port() && a.Addr().Unmap() == b.Addr().Unmap()
-}
-
 func livePIDs() ([]int, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
