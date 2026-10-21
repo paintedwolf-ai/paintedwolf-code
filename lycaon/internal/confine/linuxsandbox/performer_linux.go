@@ -212,6 +212,10 @@ func servePathCalls(fd int) error {
 				_ = unix.Close(opened)
 				opened = -1
 			}
+			// The supervisor hears only what it reports: a refusal.
+			if result.Refusal == nil {
+				continue
+			}
 		}
 		reply, _ := json.Marshal(result)
 		var rights []byte
@@ -308,8 +312,8 @@ func (c *performerClient) forward(call pathCall, dirs []int) error {
 	return c.sendLocked(call, dirs)
 }
 
-// readResults reports each forwarded call's refusal until the performer
-// stops. A performer that stops leaves its pending calls unanswered; the
+// readResults reports each refusal the performer returns for a forwarded
+// call until the performer stops. A performer that stops leaves its pending calls unanswered; the
 // sandbox cannot continue without it.
 func (c *performerClient) readResults(report func(pathResult)) {
 	buf := make([]byte, 4096)
