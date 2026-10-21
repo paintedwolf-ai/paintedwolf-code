@@ -110,13 +110,15 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     selected = {name for name, lane in values.items() if "platform" in lane} if platform else set(values)
     # A broad change runs the whole check gate and every platform lane of the merge queue.
     broad = profile == "integration" and scope is not None and scope["full"]
+    # A path-selected lane runs when its paths change, or whenever the changed paths are unknown.
+    by_path = {name for name in selected if "paths" in values[name]}
+    if profile == "integration" and scope is not None and scope.get("paths"):
+        by_path = {name for name in by_path
+                   if any(path.startswith(tuple(values[name]["paths"])) for path in scope["paths"])}
     if profile == "integration" and scope is not None and not broad:
         from ci_policy.impact import selected_lanes
         selected &= selected_lanes(scope, values)
-    # A path-selected lane runs whenever the changed paths are unknown.
-    if profile == "integration" and scope is not None and scope.get("paths"):
-        selected = {name for name in selected if "paths" not in values[name]
-                    or any(path.startswith(tuple(values[name]["paths"])) for path in scope["paths"])}
+    selected = {name for name in selected if "paths" not in values[name]} | by_path
     result = []
     for name, lane in values.items():
         if name not in selected:

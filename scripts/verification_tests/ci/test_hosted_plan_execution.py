@@ -159,6 +159,8 @@ class HostedPlanTests(unittest.TestCase):
                 self.assertIn("nix", lanes([path], True))
         self.assertNotIn("nix", lanes(["scripts/ci_policy/impact.py"], True))
         self.assertNotIn("nix", lanes(["lycaon/internal/confine/boundary_linux.go"], False))
+        # A narrow change still runs the path-selected lanes its paths name.
+        self.assertIn("nix", lanes(["scripts/linux_release/nix_runner.py"], False))
         for profile in ("nightly", "release"):
             rows = [row for row in ci.matrix(profile)["include"] if row["lane"] == "nix"]
             self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
