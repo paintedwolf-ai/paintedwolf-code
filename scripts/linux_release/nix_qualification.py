@@ -12,7 +12,8 @@ from . import nix_scanner_host, nix_vm
 
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 # Components whose retained closure is a qualification artifact.
-ARCHIVED = ("default", "scanner-finalized", "desktop-settings-observer", "shell", "desktop-shell-check")
+ARCHIVED = ("default", "closure-notices", "scanner-finalized", "desktop-settings-observer", "shell",
+            "desktop-shell-check")
 
 
 def hosted(environment) -> None:
