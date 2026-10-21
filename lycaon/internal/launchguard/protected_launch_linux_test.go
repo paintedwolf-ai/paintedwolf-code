@@ -235,7 +235,9 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	var nonce [8]byte
 	_, err := rand.Read(nonce[:])
 	testutil.FailErr(t, "fixture nonce", err)
-	dir := filepath.Join(os.TempDir(), "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
+	// The fixture's whole ancestry must be root-controlled, which a caller's
+	// own temporary directory never is.
+	dir := filepath.Join("/tmp", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
 	build := t.TempDir()
 	module := "github.com/lycaon/lycaon/internal/launchguard"
 	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))

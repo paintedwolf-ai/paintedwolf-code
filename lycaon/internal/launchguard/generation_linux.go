@@ -213,7 +213,7 @@ func openRootControlled(path string, directory bool) (*os.File, error) {
 			return nil, err
 		}
 		if err := trustedObject(info); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("/%s: %w", current, err)
 		}
 	}
 	file, err := root.Open(current)
