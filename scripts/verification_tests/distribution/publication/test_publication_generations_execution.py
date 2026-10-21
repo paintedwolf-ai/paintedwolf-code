@@ -8,8 +8,8 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication.generations import CATALOG, verify
-from linux_release.publication.repositories import digest
+from linux_release.publication.trust.generations import CATALOG, verify
+from linux_release.publication.trust.repositories import digest
 
 
 class PublicationGenerationsTests(unittest.TestCase):

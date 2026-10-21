@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-from linux_release.publication.authority import CATALOG, PREFIX, RepositoryAuthority
-from linux_release.publication.repositories import digest
+from linux_release.publication.trust.authority import CATALOG, PREFIX, RepositoryAuthority
+from linux_release.publication.trust.repositories import digest
 
 
 class PublicationAuthorityTests(unittest.TestCase):

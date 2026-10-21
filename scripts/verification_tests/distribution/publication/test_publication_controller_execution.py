@@ -9,18 +9,21 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication.controller import SelectedCampaign, main, retain
+from linux_release.publication.campaign.controller import SelectedCampaign, main, retain
+from linux_release.publication.trust.repositories import digest
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
 class PublicationControllerTests(unittest.TestCase):
-    def fixture(self, directory):
-        crypto = patch("linux_release.publication.controller.verify_generations")
-        crypto.start()
-        setups = patch("linux_release.publication.controller.verify_setups", return_value=[])
+    def fixture(self, directory, *, signed_formats=True):
+        # Accepting campaigns stand in for production-signed repositories; refusals use the real format owners.
+        if signed_formats:
+            crypto = patch("linux_release.publication.campaign.controller.verify_generations")
+            crypto.start()
+            self.addCleanup(crypto.stop)
+        setups = patch("linux_release.publication.campaign.controller.verify_setups", return_value=[])
         setups.start()
         self.addCleanup(setups.stop)
-        self.addCleanup(crypto.stop)
         root, _, _ = fixtures.LinuxReleaseAdmissionTests().fixture(directory)
         (root / "final-artifacts.json").write_bytes((root / "artifacts.json").read_bytes())
         provenance = {"repository_id": 42, "run_id": 123, "run_attempt": 2,
@@ -67,22 +70,26 @@ class PublicationControllerTests(unittest.TestCase):
 
     def test_refused_server_provenance_never_downloads_campaign_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch("linux_release.publication.controller.facts", return_value={}), \
-                 patch("linux_release.publication.controller.select_final", side_effect=ValueError("untrusted workflow")), \
-                 patch("linux_release.publication.controller.download") as download:
+            with patch("linux_release.publication.campaign.controller.facts", return_value={}), \
+                 patch("linux_release.publication.campaign.controller.select_final", side_effect=ValueError("untrusted workflow")), \
+                 patch("linux_release.publication.campaign.controller.download") as download:
                 with self.assertRaisesRegex(ValueError, "untrusted workflow"):
                     retain(None, "owner/repo", 42, 123, Path(directory), "a" * 40,
                            Path(directory) / "out", catalog={}, signing_generation=1, key_fingerprint="A" * 40)
                 download.assert_not_called()
 
-    def test_format_signature_refusal_cannot_be_replaced_with_accepted_campaign(self):
+    def test_repository_outside_the_protected_signing_identity_refuses_an_accepted_campaign(self):
         with tempfile.TemporaryDirectory() as directory:
-            root, selected = self.fixture(directory)
-            with patch("linux_release.publication.controller.verify_generations",
-                       side_effect=ValueError("invalid repository signature")) as crypto:
-                with self.assertRaisesRegex(ValueError, "repository signature"):
-                    selected.authorize()
-                crypto.assert_called_once_with(root, json.loads((root / "repositories.json").read_text()))
+            root, selected = self.fixture(directory, signed_formats=False)
+            manifest = json.loads((root / "repositories.json").read_text())["generations"][0]["manifest"]
+            retained = root / "generations" / digest(manifest)
+            retained.mkdir(parents=True)
+            (retained / "generation.json").write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "differs from the selected signing identity"):
+                selected.authorize()
+            (retained / "generation.json").write_text(json.dumps({**manifest, "version": "1.0.1"}))
+            with self.assertRaisesRegex(ValueError, "independently selected generation"):
+                selected.authorize()
 
     def test_managed_controller_checks_actual_publication_files_and_retains_a_fresh_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -104,8 +111,8 @@ class PublicationControllerTests(unittest.TestCase):
                     "GITHUB_SHA": "b" * 40, "GITHUB_WORKFLOW_SHA": "b" * 40,
                     "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
                     "LINUX_REPOSITORY_ORIGIN": "https://downloads.example.test"}), \
-                 patch("linux_release.publication.controller.CATALOG", root / "catalog.json"), \
-                 patch("linux_release.publication.controller.retain", return_value=selected):
+                 patch("linux_release.publication.campaign.controller.CATALOG", root / "catalog.json"), \
+                 patch("linux_release.publication.campaign.controller.retain", return_value=selected):
                 self.assertEqual(main(arguments), 0)
                 receipt = json.loads((root / "receipt.json").read_text())
                 self.assertEqual(receipt["publication_files"][0]["id"], "app")

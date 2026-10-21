@@ -7,17 +7,20 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.publication import release_producer as owner
+from scripts.linux_release.publication.release import release_producer as owner
+from verification_tests.distribution.publication import signed_release as fixture
 
 
 class ReleaseProducerTests(unittest.TestCase):
     def fixture(self, root):
-        source = root / 'source'; source.mkdir()
         files = root / 'files'; files.mkdir()
-        catalog = source / 'catalog.json'
-        catalog.write_text(json.dumps({'schema_version': 2, 'platforms': [
-            {'updater_key': 'darwin-aarch64', 'publication': 'public', 'package_extensions': ['dmg'], 'updater_extension': 'app.tar.gz'},
-            {'updater_key': 'linux-x86_64', 'publication': 'public', 'package_extensions': ['deb'], 'updater_extension': None}]}))
+        catalog = json.dumps({'schema_version': 2, 'platforms': [
+            {'updater_key': 'darwin-aarch64', 'goos': 'darwin', 'goarch': 'arm64', 'artifact_arch': 'aarch64',
+             'runner': 'macos-15', 'publication': 'public', 'package_extensions': ['dmg'], 'updater_extension': 'app.tar.gz'},
+            {'updater_key': 'linux-x86_64', 'goos': 'linux', 'goarch': 'amd64', 'artifact_arch': 'x86_64',
+             'runner': 'ubuntu-24.04', 'publication': 'public', 'package_extensions': ['deb'], 'updater_extension': None}]})
+        source = root / 'source'
+        commit, tree = fixture.source_repository(source, {'packaging/release-platforms.json': catalog})
         stem = 'painted-wolf-code_v1.2.3_darwin-aarch64'
         package = files / (stem + '.dmg'); package.write_bytes(b'actual fixture')
         (files / (stem + '.dmg.sha256')).write_text(hashlib.sha256(package.read_bytes()).hexdigest() + '\n')
@@ -28,14 +31,12 @@ class ReleaseProducerTests(unittest.TestCase):
         updater.write_text(json.dumps({'version': '1.2.3', 'notes': 'Notes', 'pub_date': '2026-10-20T00:00:00Z',
             'platforms': {'darwin-aarch64': {'signature': 'signature fixture', 'url': 'https://example.invalid/' + stem + '.app.tar.gz'}}}))
         producer = {'repository_id': 1, 'run_id': 2, 'run_attempt': 1, 'controller_commit': 'a' * 40}
-        facts = {'source_commit': 'b' * 40, 'source_tree': 'c' * 40, 'version': '1.2.3'}
-        return source, files, catalog, updater, producer, facts
+        return source, commit, tree, files, source / 'packaging/release-platforms.json', updater, producer
 
     def execute(self, root, *, changed=False, wrong_catalog=False):
-        source, files, catalog, updater, producer, facts = self.fixture(root)
-        raw_catalog = catalog.read_bytes()
+        source, commit, tree, files, catalog, updater, producer = self.fixture(root)
         if wrong_catalog:
-            raw_catalog += b'\n'
+            catalog.write_bytes(catalog.read_bytes() + b'\n')
         original = shutil.copyfile
         def copy(incoming, destination):
             result = original(incoming, destination)
@@ -43,10 +44,11 @@ class ReleaseProducerTests(unittest.TestCase):
                 Path(incoming).write_bytes(b'changed during retention')
             return result
         output = root / 'retained'
-        with patch.object(owner, 'facts', return_value=facts), \
-                patch.object(owner.subprocess, 'check_output', return_value=raw_catalog), \
-                patch.object(owner.shutil, 'copyfile', side_effect=copy):
-            return owner.produce(source, facts['source_commit'], catalog, updater, files, output, producer), output
+        # Only the copy is instrumented, to change a signed result while it is being retained.
+        with patch.object(owner.shutil, 'copyfile', side_effect=copy):
+            report = owner.produce(source, commit, catalog, updater, files, output, producer)
+        self.assertEqual((report['source']['source_commit'], report['source']['source_tree']), (commit, tree))
+        return report, output
 
     def test_only_exact_non_linux_packages_checksums_and_signed_updater_are_retained(self):
         with tempfile.TemporaryDirectory() as temporary:

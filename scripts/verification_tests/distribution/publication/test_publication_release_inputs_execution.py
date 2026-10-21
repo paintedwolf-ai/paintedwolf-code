@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.linux_release.publication.release_inputs import ARTIFACT, SelectedReleaseInputs, select
+from scripts.linux_release.publication.release.release_inputs import ARTIFACT, SelectedReleaseInputs, select
 
 
 class ReleaseInputSelectionTests(unittest.TestCase):

@@ -5,8 +5,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
-from scripts.linux_release.publication import delivery_publication as owner
-from scripts.linux_release.publication.immutable import identity, publish_setups
+from scripts.linux_release.publication.delivery import delivery_publication as owner
+from scripts.linux_release.publication.delivery.immutable import identity, publish_setups
 
 class DeliveryTransportTests(unittest.TestCase):
     def test_complete_stage_precedes_setups_cache_and_any_activation(self):
@@ -38,7 +38,7 @@ class DeliveryTransportTests(unittest.TestCase):
             selected.authorize.return_value = ({"repositories": {"generations": [{"manifest": {}}]}}, {"verified_setups": [setup]})
             backend = Mock()
             backend.put.side_effect = lambda *a, **k: (directory / "setup.deb").write_bytes(b"changed")
-            with patch("scripts.linux_release.publication.immutable.digest", return_value="a"), patch("scripts.linux_release.publication.immutable.captured_setup", return_value=nullcontext(directory)), self.assertRaisesRegex(ValueError, "changed"):
+            with patch("scripts.linux_release.publication.delivery.immutable.digest", return_value="a"), patch("scripts.linux_release.publication.delivery.immutable.captured_setup", return_value=nullcontext(directory)), self.assertRaisesRegex(ValueError, "changed"):
                 publish_setups(selected, backend=backend)
             self.assertEqual(backend.put.call_count, 1)
 

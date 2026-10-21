@@ -88,7 +88,9 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
 	for _, needle := range []string{
-		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)`,
+		// Native Linux publication collects admitted installed bytes instead of joining the signing matrix.
+		`matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public" and .goos != "linux")]}' packaging/release-platforms.json)`,
+		`linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)`,
 		"matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}",
 		"needs: [classify, build-release]",
 		"release-assemble-updater-manifest.py",

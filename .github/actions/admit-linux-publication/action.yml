@@ -36,7 +36,7 @@ runs:
         PUBLICATION_FILES: ${{ inputs.publication_files }}
       run: |
         set -euo pipefail
-        ./task release:live-test -- --admit-linux-publication \
+        ./task release:publish:linux-admission -- \
           --campaign-run-id "$CAMPAIGN_RUN_ID" --source-commit "$SOURCE_COMMIT" \
           --source-repository "$PWD" --retained-dir "$RUNNER_TEMP/linux-final-campaign" \
           --publication-files "$PUBLICATION_FILES" --receipt "$RUNNER_TEMP/linux-publication-admission.json"

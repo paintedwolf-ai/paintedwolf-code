@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -85,7 +87,7 @@ func TestLinuxPublicationActionUsesManagedFreshAdmission(t *testing.T) {
 		if step.ID != "admit-final-linux" {
 			continue
 		}
-		for _, required := range []string{"./task release:live-test -- --admit-linux-publication", "--campaign-run-id", "--source-commit", "--publication-files", "--retained-dir"} {
+		for _, required := range []string{"./task release:publish:linux-admission --", "--campaign-run-id", "--source-commit", "--publication-files", "--retained-dir"} {
 			if !strings.Contains(step.Run, required) {
 				t.Fatalf("managed publication admission lacks %q", required)
 			}
@@ -93,4 +95,61 @@ func TestLinuxPublicationActionUsesManagedFreshAdmission(t *testing.T) {
 		return
 	}
 	t.Fatal("protected action lacks fresh final admission")
+}
+
+func TestReleaseProductionEntriesStayOutsideVerificationTargets(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
+	var plan struct {
+		Tasks     map[string][]string `json:"tasks"`
+		Resources map[string]struct {
+			Locks []string `json:"locks"`
+		} `json:"resources"`
+	}
+	contractcheck.FailErr(t, "parse verification plan", json.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, "scripts/verification-plan.json")), &plan))
+	entry := regexp.MustCompile(`\./task (release:[a-z:-]+)`)
+	for _, path := range []string{".github/workflows/release.yml", ".github/actions/admit-linux-publication/action.yml"} {
+		workflow := contractcheck.ReadRepoFile(t, root, path)
+		for _, forbidden := range []string{"release:live-test", "release:rehearse:", "<<'PYTHON'", "python3 -", "python3 .linux-publication-controller"} {
+			if strings.Contains(workflow, forbidden) {
+				t.Fatalf("%s runs production publication through %q", path, forbidden)
+			}
+		}
+		for _, match := range entry.FindAllStringSubmatch(workflow, -1) {
+			name := match[1]
+			if !strings.HasPrefix(name, "release:publish:") {
+				continue
+			}
+			if !strings.Contains(taskfile, "\n  "+name+":\n") {
+				t.Fatalf("%s calls undeclared production entry %s", path, name)
+			}
+			if _, verification := plan.Tasks[name]; verification {
+				t.Fatalf("production entry %s must not be a verification target", name)
+			}
+		}
+	}
+	declaration := regexp.MustCompile(`(?m)^  (release:(?:publish|rehearse):[a-z-]+):\n(?:    .*\n)*?      - (.*)\n`)
+	declared := declaration.FindAllStringSubmatch(taskfile, -1)
+	if len(declared) == 0 {
+		t.Fatal("Taskfile declares no release publication or rehearsal entries")
+	}
+	for _, match := range declared {
+		name, command := match[1], match[2]
+		if !strings.HasPrefix(command, "python3 -m scripts.linux_release.") {
+			t.Fatalf("%s must invoke its module as scripts.linux_release, got %q", name, command)
+		}
+		if !strings.HasPrefix(name, "release:rehearse:") {
+			continue
+		}
+		resource, registered := plan.Resources[name]
+		if _, task := plan.Tasks[name]; !task || !registered || len(resource.Locks) == 0 {
+			t.Fatalf("rehearsal %s must be a registered verification target with scoped locks", name)
+		}
+		for _, lock := range resource.Locks {
+			if lock == "*" {
+				t.Fatalf("rehearsal %s must not hold the exclusive lock", name)
+			}
+		}
+	}
 }

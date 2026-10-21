@@ -4,10 +4,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
-from linux_release.publication import controls as owner
-from linux_release.publication import control_packages as packages
+from linux_release.publication.control import controls as owner
+from linux_release.publication.control import control_packages as packages
+
+REHEARSAL_CATALOG=Path(__file__).with_name("fixtures")/"signing/rehearsal-keys.json"
 
 
 class ControlRetentionTests(unittest.TestCase):
@@ -61,15 +62,25 @@ class ControlRetentionTests(unittest.TestCase):
             finally:
                 (root.parent/"outside").unlink()
 
+    def build(self, root, manifest, inputs, catalog):
+        return owner.build(manifest,inputs,root/"controls",{"source_commit":"a"*40,"source_tree":"b"*40},
+                           catalog,root/"private","https://downloads.invalid",{},[],producer=None,
+                           source_repository=root,rehearsal=True,families=["deb"],architectures=["amd64"])
+
     def test_failed_assembly_removes_only_its_fresh_output(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             inputs,_,manifest=self.fixture(root)
-            with patch.object(owner,"selection",return_value=({"generation":"fixture","fingerprint":"fixture"},None)), \
-                    patch.object(owner,"assemble",side_effect=ValueError("signature failed")):
-                with self.assertRaisesRegex(ValueError,"signature failed"):
-                    owner.build(manifest,inputs,root/"controls",{"source_commit":"a"*40,"source_tree":"b"*40},
-                                root/"catalog",root/"private","https://downloads.invalid",{},[],producer=None,
-                                source_repository=root,rehearsal=True,families=["deb"],architectures=["amd64"])
+            (inputs/"app.deb").write_bytes(b"replaced after candidate selection")
+            with self.assertRaisesRegex(ValueError,"selected immutable bytes"):
+                self.build(root,manifest,inputs,REHEARSAL_CATALOG)
             self.assertFalse((root/"controls").exists())
-            self.assertEqual((inputs/"app.deb").read_bytes(),b"candidate")
+            self.assertEqual((inputs/"app.deb").read_bytes(),b"replaced after candidate selection")
+
+    def test_rehearsal_refuses_the_protected_production_signing_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            inputs,_,manifest=self.fixture(root)
+            with self.assertRaisesRegex(ValueError,"trust mode does not match"):
+                self.build(root,manifest,inputs,owner.CATALOG)
+            self.assertFalse((root/"controls").exists())

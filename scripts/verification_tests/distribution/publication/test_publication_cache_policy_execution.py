@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from linux_release.publication import cache_policy as owner
+from linux_release.publication.trust import cache_policy as owner
 
 
 class CachePolicyTests(unittest.TestCase):

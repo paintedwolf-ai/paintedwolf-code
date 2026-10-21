@@ -273,7 +273,7 @@ def wait_for_website(base: str, expected: dict, seconds: int = 1800, *, allow_ne
                     raise ValueError("website download page exceeds its bound")
                 urls = None
                 if "distribution_sha256" in accepted:
-                    from scripts.linux_release.publication.website import public_downloads
+                    from scripts.linux_release.publication.document.website import public_downloads
                     urls = public_downloads(accepted)
                 validate_website_downloads(raw.decode(), accepted, urls)
             return

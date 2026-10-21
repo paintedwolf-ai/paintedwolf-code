@@ -9,14 +9,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release.publication.producer import main, produce, ROOT_FILES, ROOT_DIRS
+from linux_release.publication.campaign.producer import main, produce, ROOT_FILES, ROOT_DIRS
 from linux_release.installed_artifact_bundle import Limits, retain_tree
 from verification_tests.distribution import test_linux_release_admission_execution as fixtures
 
 
 class PublicationProducerTests(unittest.TestCase):
     def setUp(self):
-        capacity=patch("linux_release.publication.producer.campaign_limits",return_value={"max_files":100000,"max_bytes":64<<30,"max_file":16<<30})
+        capacity=patch("linux_release.publication.campaign.producer.campaign_limits",return_value={"max_files":100000,"max_bytes":64<<30,"max_file":16<<30})
         capacity.start()
         self.addCleanup(capacity.stop)
 
@@ -34,8 +34,8 @@ class PublicationProducerTests(unittest.TestCase):
 
     def run_producer(self, fixture):
         source, output, immutable, producer, catalog = fixture
-        with patch("linux_release.publication.controller.verify_generations"), \
-             patch("linux_release.publication.controller.verify_setups", return_value=[]):
+        with patch("linux_release.publication.campaign.controller.verify_generations"), \
+             patch("linux_release.publication.campaign.controller.verify_setups", return_value=[]):
             return produce(source, output, immutable, producer, catalog=catalog,
                            signing_generation=1, key_fingerprint="A" * 40)
 
@@ -62,7 +62,7 @@ class PublicationProducerTests(unittest.TestCase):
                     (source / "campaign.json").write_text(json.dumps(campaign))
                 elif mutation == "package":
                     (source / "packages/app").write_bytes(b"changed")
-                with patch("linux_release.publication.controller.verify_generations",
+                with patch("linux_release.publication.campaign.controller.verify_generations",
                            side_effect=ValueError("bad signature") if mutation == "crypto" else None):
                     with self.assertRaises(ValueError):
                         produce(source, output, immutable, producer, catalog=catalog,

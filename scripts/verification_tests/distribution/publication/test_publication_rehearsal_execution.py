@@ -1,8 +1,8 @@
 """The live document fixture cannot escape its prefix or omit paginated cleanup."""
 import unittest
 from unittest.mock import patch
-from scripts.linux_release.publication import rehearsal
-from scripts.linux_release.publication.immutable import ImmutableOrigin
+from scripts.linux_release.publication.document import rehearsal
+from scripts.linux_release.publication.delivery.immutable import ImmutableOrigin
 
 class DocumentRehearsalTests(unittest.TestCase):
     def test_exact_prefix_listing_consumes_every_page(self):
@@ -37,7 +37,7 @@ class DocumentRehearsalTests(unittest.TestCase):
         import hashlib
         import tempfile
         from pathlib import Path
-        from scripts.linux_release.publication import immutable
+        from scripts.linux_release.publication.delivery import immutable
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary) / "document.json"
             source.write_bytes(b"admitted")
@@ -59,7 +59,7 @@ class DocumentRehearsalTests(unittest.TestCase):
         import hashlib
         import tempfile
         from pathlib import Path
-        from scripts.linux_release.publication import immutable
+        from scripts.linux_release.publication.delivery import immutable
         from scripts.linux_release import repository_setup_admission
         with tempfile.TemporaryDirectory() as temporary:
             original = Path(temporary)

@@ -3,23 +3,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-rehearsal_module=
-case "${1:-}" in
-  --collect-linux-publication) rehearsal_module=scripts.linux_release.publication.native_artifacts ;;
-  --prepare-distribution-document) rehearsal_module=scripts.linux_release.publication.document_pipeline ;;
-  --local-distribution-document) rehearsal_module=scripts.linux_release.publication.rehearsal ;;
-  --retain-release-inputs) rehearsal_module=scripts.linux_release.publication.release_producer ;;
-  --produce-linux-controls) rehearsal_module=scripts.linux_release.publication.control_pipeline ;;
-  --prepare-linux-controls) rehearsal_module=scripts.linux_release.publication.controls ;;
-  --retain-linux-campaign) rehearsal_module=scripts.linux_release.publication.producer ;;
-  --admit-linux-publication) rehearsal_module=scripts.linux_release.publication.controller ;;
-esac
-if [[ -n "$rehearsal_module" ]]; then
-  shift
-  cd "$ROOT"
-  PYTHONPATH="$ROOT/scripts" exec python3 -m "$rehearsal_module" "$@"
-fi
-
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 WRANGLER=(bunx wrangler@4.115.0)

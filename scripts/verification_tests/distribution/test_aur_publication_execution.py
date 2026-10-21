@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.publication import aur
+from scripts.linux_release.publication.delivery import aur
 
 
 class AurPolicyTests(unittest.TestCase):
@@ -35,8 +35,9 @@ class AurPolicyTests(unittest.TestCase):
         class Untouched:
             def authorize(self):
                 raise AssertionError('disabled AUR must not request campaign or origin work')
-        with patch.object(aur, 'load', return_value=None):
-            self.assertEqual({'enabled': False}, aur.facts(Untouched()))
+        # The committed protected policy keeps AUR disabled.
+        self.assertIsNone(aur.load())
+        self.assertEqual({'enabled': False}, aur.facts(Untouched()))
 
 
 class AurConsumerTests(unittest.TestCase):

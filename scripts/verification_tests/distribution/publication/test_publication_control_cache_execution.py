@@ -6,10 +6,14 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.publication import control_cache as owner
+from linux_release.publication.control import control_cache as owner
+from linux_release.publication.trust.cache_policy import load
 
 
 class ControlCacheTests(unittest.TestCase):
+    def test_committed_protected_declaration_keeps_public_cache_disabled(self):
+        self.assertIsNone(load())
+
     def fixture(self):
         source={"version":"1.0.2","source_commit":"a"*40,"flake_lock_sha256":"b"*64}
         request={"schema_version":1,"version":"1.0.2","application_commit":"a"*40,
@@ -21,7 +25,7 @@ class ControlCacheTests(unittest.TestCase):
     def test_disabled_cache_uses_verified_source_without_signing_or_cache_claims(self):
         source,request,report=self.fixture()
         describe=Mock(return_value=report)
-        with tempfile.TemporaryDirectory() as temporary,patch.object(owner,"load",return_value=None), \
+        with tempfile.TemporaryDirectory() as temporary, \
                 patch.dict("sys.modules",{"scripts.nix_cache.source":types.SimpleNamespace(describe_verified_source=describe)}):
             root=Path(temporary)
             artifacts,reports=owner.build([{"request":request}],root,source,rehearsal=False,
@@ -35,7 +39,7 @@ class ControlCacheTests(unittest.TestCase):
     def test_protected_disabled_state_refuses_signed_cache_input(self):
         source,request,_=self.fixture()
         request["mode"]="production"
-        with tempfile.TemporaryDirectory() as temporary,patch.object(owner,"load",return_value=None):
+        with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError,"activation"):
                 owner.build([{"request":request,"policy":{},"private_key":"/key"}],Path(temporary),source,
                             rehearsal=False,architectures=["amd64"],source_repository=Path("/source"))
@@ -43,11 +47,11 @@ class ControlCacheTests(unittest.TestCase):
     def test_selected_source_and_every_native_cpu_remain_required(self):
         source,request,_=self.fixture()
         request["application_commit"]="e"*40
-        with tempfile.TemporaryDirectory() as temporary,patch.object(owner,"load",return_value=None):
+        with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError,"immutable application source"):
                 owner.build([{"request":request}],Path(temporary),source,rehearsal=False,
                             architectures=["amd64"],source_repository=Path("/source"))
-        with tempfile.TemporaryDirectory() as temporary,patch.object(owner,"load",return_value=None):
+        with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError,"every selected CPU"):
                 owner.build([],Path(temporary),source,rehearsal=False,
                             architectures=["amd64","arm64"],source_repository=Path("/source"))
