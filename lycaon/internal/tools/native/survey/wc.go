@@ -138,19 +138,18 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 	if err != nil {
 		return wcResult{}, fmt.Errorf("wc %s: %w", relSlash, err)
 	}
-	entry := wcResult{
-		// Bytes reports the on-disk size.
-		Path:      relSlash,
-		Bytes:     info.Size(),
-		Truncated: bytesTruncated,
-		InEditor:  fromEditor,
+	counts := CountBytes(content)
+	// Every count describes the captured bytes. Only a capped scan reports
+	// the larger file size, and it says so through Truncated.
+	entry := wcResult{Path: relSlash, Bytes: counts.Bytes, Truncated: bytesTruncated, InEditor: fromEditor}
+	if bytesTruncated {
+		entry.Bytes = info.Size()
 	}
 	if !binary {
-		text := string(content)
-		lines := toolkit.CountLines(text)
+		lines := int(counts.Lines)
 		entry.Lines = &lines
 		if includeWords {
-			words := countWords(text)
+			words := int(counts.Words)
 			entry.Words = &words
 		}
 	}
@@ -296,17 +295,22 @@ func (t *wcDirTotals) merge(other wcDirTotals) {
 
 func (t *wcDirTotals) add(size int64, content []byte, binary, bytesTruncated, includeWords bool) {
 	t.files++
-	t.bytes += size
 	if bytesTruncated {
 		t.truncated = true
+	}
+	if binary || bytesTruncated {
+		t.bytes += size
 	}
 	if binary {
 		return
 	}
-	text := string(content)
-	t.lines += toolkit.CountLines(text)
+	counts := CountBytes(content)
+	if !bytesTruncated {
+		t.bytes += counts.Bytes
+	}
+	t.lines += int(counts.Lines)
 	if includeWords {
-		t.words += countWords(text)
+		t.words += int(counts.Words)
 	}
 	t.hasText = true
 }
@@ -325,12 +329,4 @@ func (t wcDirTotals) result(relRoot string, includeWords bool) wcResult {
 		}
 	}
 	return entry
-}
-
-func countWords(text string) int {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return 0
-	}
-	return len(strings.Fields(text))
 }

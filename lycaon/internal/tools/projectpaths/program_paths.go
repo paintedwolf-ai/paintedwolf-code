@@ -92,7 +92,7 @@ type ProgramPaths struct {
 	cwd           BoundPath
 	initial       BoundPath
 	initialInfo   os.FileInfo
-	forms         map[string]string
+	specs         map[string]toolcontract.CommandSpecification
 	cwdInfo       os.FileInfo
 	argumentLimit int64
 	outputLimit   int64
@@ -105,9 +105,9 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, forms: map[string]string{}}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}}
 	for _, command := range catalog.Commands {
-		p.forms[command.Name] = command.Argv
+		p.specs[command.Name] = command
 	}
 	for _, limit := range catalog.Language.Limits {
 		if limit.ID == "argument_bytes" {
