@@ -25,8 +25,12 @@ func (inv *invocation) paths() (*projectpaths.ProgramPaths, error) {
 	return projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
 }
 
-// captureDestination binds the operand under mutation authority and pins it.
-func (inv *invocation) captureDestination(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (destination, error) {
+// pinnedOutputs captures and publishes one invocation's destinations.
+type pinnedOutputs struct{ inv *invocation }
+
+// capture binds the operand under mutation authority and pins it.
+func (o pinnedOutputs) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (destination, error) {
+	inv := o.inv
 	if inv.ports.Write == nil {
 		return destination{}, toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": inv.spec.Name, "capability": "the program's pinned write owner"})
 	}
@@ -50,7 +54,8 @@ func (inv *invocation) captureDestination(paths *projectpaths.ProgramPaths, oper
 // publish lands content at the destination's pin through the shared pinned
 // write door and the program's publication barrier. A destination that moved
 // since capture is COMMAND_REVISION_CONFLICT; nothing is refreshed or rerun.
-func (inv *invocation) publish(d destination, content []byte) error {
+func (o pinnedOutputs) publish(d destination, content []byte) error {
+	inv := o.inv
 	result, err := inv.ports.Write.Apply(inv.ctx, native.WriteInput{Path: d.abs, Content: string(content),
 		Admission: native.WriteExecutionPinned, Destination: d.pin, Sources: d.sources}, inv.ports.ToolContext)
 	if err != nil {
@@ -63,7 +68,7 @@ func (inv *invocation) publish(d destination, content []byte) error {
 }
 
 // staged collects one destination's complete bytes under stream_bytes.
-func (inv *invocation) staged() (*bytes.Buffer, *nativeutility.Output) {
+func staged(inv *invocation) (*bytes.Buffer, *nativeutility.Output) {
 	var buffer bytes.Buffer
 	return &buffer, nativeutility.NewOutput(inv.ctx, &buffer, inv.limit("stream_bytes"))
 }
@@ -85,7 +90,7 @@ func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fi
 		if operand.Value == "-" {
 			return inv.usage(operand, "a file; standard input cannot be edited in place")
 		}
-		target, err := inv.captureDestination(paths, operand)
+		target, err := pinnedOutputs{inv}.capture(paths, operand)
 		if err != nil {
 			return err
 		}
@@ -107,11 +112,12 @@ func sedInPlace(inv *invocation, commands []*sedCommand, files commandprogram.Fi
 		for _, c := range commands {
 			c.active = false
 		}
-		buffer, out := inv.staged()
+		buffer, out := staged(inv)
 		run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: out}
 		quit, err := run.cycles()
+		err = regexBudget(err)
 		if err == nil {
-			err = inv.publish(target, buffer.Bytes())
+			err = pinnedOutputs{inv}.publish(target, buffer.Bytes())
 		}
 		if err != nil || quit {
 			return err
@@ -127,14 +133,14 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 		return err
 	}
 	sources := len(inv.pins)
-	target, err := inv.captureDestination(paths, operands[1])
+	target, err := pinnedOutputs{inv}.capture(paths, operands[1])
 	if err != nil {
 		return err
 	}
 	target.sources = append([]toolcontract.ExecutionRevision(nil), inv.pins[:sources]...)
-	buffer, out := inv.staged()
+	buffer, out := staged(inv)
 	if err := run(out); err != nil {
 		return err
 	}
-	return inv.publish(target, buffer.Bytes())
+	return pinnedOutputs{inv}.publish(target, buffer.Bytes())
 }

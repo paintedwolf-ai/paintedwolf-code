@@ -6,22 +6,17 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
-// PosixRegex is one compiled BRE or ERE with POSIX leftmost-longest matching
-// and POSIX subexpression offsets.
-type PosixRegex interface {
-	// Find returns the leftmost-longest match starting at or after from as
-	// [start, end, group1 start, group1 end, ...] (-1 when a group is unset),
-	// or nil. Anchors and assertions see the whole subject.
-	Find(ctx context.Context, subject []byte, from int) ([]int, error)
-	// Groups is the number of capture groups a replacement may name.
-	Groups() int
-}
+// PosixRegex is the shared engine's compiled BRE or ERE: leftmost-longest
+// matches from a byte offset with POSIX subexpressions and empty matches.
+type PosixRegex = textsearch.PosixRegex
 
-// PosixRegexEngine compiles sed's regular expressions. It must be the shared
-// POSIX BRE/ERE engine; sed never runs on RE2.
+// PosixRegexEngine compiles sed's regular expressions. textsearch.POSIXEngine,
+// the shared POSIX BRE/ERE engine, is the one implementation; sed never runs
+// on RE2.
 type PosixRegexEngine interface {
 	Compile(ctx context.Context, pattern string, extended bool) (PosixRegex, error)
 }

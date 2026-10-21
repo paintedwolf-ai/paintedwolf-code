@@ -13,6 +13,7 @@ import (
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -60,7 +61,11 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Revisions: revisions, Pins: pins, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, limits: map[string]int64{}}
+	engine, err := textsearch.NewPOSIXEngine()
+	if err != nil {
+		return nil, err
+	}
+	o := &Owners{Revisions: revisions, Pins: pins, Regex: engine, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, limits: map[string]int64{}}
 	for _, command := range catalog.Commands {
 		if _, ok := utilities[command.Name]; ok {
 			o.specs[command.Name] = command

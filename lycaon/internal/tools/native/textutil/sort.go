@@ -103,7 +103,7 @@ func (s *sorter) emit(records [][]byte) error {
 		if s.order.unique && i > 0 && s.order.compareKeys(previous, record) == 0 {
 			continue
 		}
-		if err := s.inv.writeRecord(record, s.delimiter); err != nil {
+		if err := writeRecord(s.inv.out, record, s.delimiter); err != nil {
 			return err
 		}
 		previous = record
@@ -206,7 +206,7 @@ func (s *sorter) merge() error {
 		}
 		first = false
 		previous = slices.Clone(record)
-		return s.inv.writeRecord(record, s.delimiter)
+		return writeRecord(s.inv.out, record, s.delimiter)
 	})
 }
 

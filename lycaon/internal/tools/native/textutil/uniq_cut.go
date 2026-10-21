@@ -170,7 +170,7 @@ func runCut(inv *invocation) error {
 			if mode == "-c" && !utf8.Valid(record) {
 				return inv.usage(list, "valid UTF-8 input for -c")
 			}
-			if err := inv.writeRecord(cutRecord(record, mode, selected, delimiter), '\n'); err != nil {
+			if err := writeRecord(inv.out, cutRecord(record, mode, selected, delimiter), '\n'); err != nil {
 				return err
 			}
 		}

@@ -3,11 +3,9 @@
 package textutil
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -17,56 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// fixturePosix is a test-only engine for sed's script parser and executor:
-// it translates the fixture BREs to ERE and runs Go's POSIX leftmost-longest
-// mode. Production sed compiles with the shared POSIX engine only.
-type fixturePosix struct{}
-
-type fixtureRegex struct{ re *regexp.Regexp }
-
-func (fixturePosix) Compile(_ context.Context, pattern string, extended bool) (PosixRegex, error) {
-	if !extended {
-		var out strings.Builder
-		for i := 0; i < len(pattern); i++ {
-			c := pattern[i]
-			switch {
-			case c == '\\' && i+1 < len(pattern) && strings.IndexByte("(){}", pattern[i+1]) >= 0:
-				out.WriteByte(pattern[i+1])
-				i++
-			case c == '\\' && i+1 < len(pattern):
-				out.WriteString(pattern[i : i+2])
-				i++
-			case strings.IndexByte("(){}+?|", c) >= 0:
-				out.WriteString(`\` + string(c))
-			default:
-				out.WriteByte(c)
-			}
-		}
-		pattern = out.String()
-	}
-	re, err := regexp.CompilePOSIX(pattern)
-	if err != nil {
-		return nil, err
-	}
-	return fixtureRegex{re: re}, nil
-}
-
-func (r fixtureRegex) Find(_ context.Context, subject []byte, from int) ([]int, error) {
-	for _, match := range r.re.FindAllSubmatchIndex(subject, -1) {
-		if match[0] >= from {
-			return match, nil
-		}
-	}
-	return nil, nil
-}
-
-func (r fixtureRegex) Groups() int { return r.re.NumSubexp() }
-
-func sedHarness(t *testing.T) *harness {
-	h := newHarness(t)
-	h.owners.Regex = fixturePosix{}
-	return h
-}
+// sedHarness runs sed on the shared POSIX engine the owners construct.
+func sedHarness(t *testing.T) *harness { return newHarness(t) }
 
 func TestSedGolden(t *testing.T) {
 	lines := "a\nb\nc\nd\n"
@@ -103,6 +53,10 @@ func TestSedGolden(t *testing.T) {
 		{"sed s/x/y/", "a\nx", "a\ny", 0},
 		{"sed ''", "a\x00b\n\xff\n", "a\x00b\n\xff\n", 0},
 		{"sed -n p", "", "", 0},
+		{`sed 's/\(ab\)\1/X/'`, "ababc\n", "Xc\n", 0},
+		{`sed -E 's/(a|ab)(c|bcd)(d*)/[\1|\2|\3]/'`, "abcd\n", "[ab|c|d]\n", 0},
+		{`sed 's/a\tb/X/'`, "a\tb\n", "X\n", 0},
+		{"sed 's/é/e/g'", "café é\n", "cafe e\n", 0},
 	})
 }
 
@@ -138,6 +92,7 @@ func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
 		h.run(c.source, "a\n").expectRefusal(t, c.source, c.code)
 	}
 	unwired := newHarness(t)
+	unwired.owners.Regex = nil
 	unwired.run("sed p", "a\n").expectRefusal(t, "no shared engine", "COMMAND_PLATFORM_UNAVAILABLE")
 }
 
@@ -172,6 +127,8 @@ func TestSedDifferentialAgainstHost(t *testing.T) {
 		{"sed '$!d'", []string{"$!d"}},
 		{"sed -n '/beta/{p;p;}'", []string{"-n", "/beta/{p;p;}"}},
 		{"sed -e s/a/b/ -e s/b/c/", []string{"-e", "s/a/b/", "-e", "s/b/c/"}},
+		{`sed -E 's/(a|al)(l|lpha)(.*)/[\1|\2|\3]/'`, []string{"-E", `s/(a|al)(l|lpha)(.*)/[\1|\2|\3]/`}},
+		{`sed 's/\(a\)\(.*\)\1/<\2>/'`, []string{`s/\(a\)\(.*\)\1/<\2>/`}},
 	} {
 		cmd := exec.Command(hostTool(t, "sed"), c.argv...)
 		cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin"}
@@ -237,10 +194,10 @@ func TestInPlacePublicationConflictIsTyped(t *testing.T) {
 		request: commandprogramRequest(r.execution + "-conflict")}
 	paths, err := inv.paths()
 	testutil.FailErr(t, "paths", err)
-	target, err := inv.captureDestination(paths, commandprogram.Field{Value: "f"})
+	target, err := pinnedOutputs{inv}.capture(paths, commandprogram.Field{Value: "f"})
 	testutil.FailErr(t, "capture destination", err)
 	h.seed("f", "moved\n")
-	err = inv.publish(target, []byte("b\n"))
+	err = pinnedOutputs{inv}.publish(target, []byte("b\n"))
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" {
 		t.Fatalf("err = %v", err)
 	}

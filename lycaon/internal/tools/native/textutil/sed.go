@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // runSed parses the complete script before any input is read, then runs one
@@ -45,6 +47,15 @@ func runSed(inv *invocation) error {
 	}
 	run := &sedRun{inv: inv, commands: commands, quiet: inv.flag("-n"), records: records, out: inv.out}
 	_, err = run.cycles()
+	return regexBudget(err)
+}
+
+// regexBudget reports the shared engine's metering stop as its catalog limit.
+func regexBudget(err error) error {
+	var budget *textsearch.BudgetError
+	if errors.As(err, &budget) {
+		return errors.Join(err, nativeutility.LimitExceeded(budget.Resource, budget.Maximum, budget.Observed))
+	}
 	return err
 }
 
@@ -97,38 +108,43 @@ type sedRun struct {
 	newline  bool // current record ended with a newline
 	pending  bool // the last output record omitted its newline
 	appends  []string
-	next     []byte
-	nextLF   bool
-	nextOK   bool
+	// ahead is the next record, read early so $ is known.
+	ahead sedRecord
 }
 
-func (r *sedRun) read() ([]byte, bool, bool, error) {
+type sedRecord struct {
+	text       []byte
+	terminated bool
+	ok         bool
+}
+
+func (r *sedRun) read() (sedRecord, error) {
 	record, terminated, err := r.records.nextTerminated()
 	if errors.Is(err, io.EOF) {
-		return nil, false, false, nil
+		return sedRecord{}, nil
 	}
 	if err != nil {
-		return nil, false, false, err
+		return sedRecord{}, err
 	}
-	return bytes.Clone(record), terminated, true, nil
+	return sedRecord{text: bytes.Clone(record), terminated: terminated, ok: true}, nil
 }
 
 // cycles runs every record and reports whether q ended the run.
 func (r *sedRun) cycles() (bool, error) {
 	var err error
-	if r.next, r.nextLF, r.nextOK, err = r.read(); err != nil {
+	if r.ahead, err = r.read(); err != nil {
 		return false, err
 	}
-	for r.nextOK {
-		space, terminated := r.next, r.nextLF
+	for r.ahead.ok {
+		space, terminated := r.ahead.text, r.ahead.terminated
 		if err := r.inv.reserve(int64(len(space))); err != nil {
 			return false, err
 		}
-		if r.next, r.nextLF, r.nextOK, err = r.read(); err != nil {
+		if r.ahead, err = r.read(); err != nil {
 			return false, err
 		}
 		r.line++
-		r.last, r.newline = !r.nextOK, terminated
+		r.last, r.newline = !r.ahead.ok, terminated
 		quit, err := r.cycle(space)
 		if err != nil || quit {
 			return quit, err

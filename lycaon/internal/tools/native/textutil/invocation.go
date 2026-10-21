@@ -289,10 +289,10 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 }
 
 // writeRecord emits a record with its delimiter.
-func (inv *invocation) writeRecord(record []byte, delimiter byte) error {
-	if _, err := inv.out.Write(record); err != nil {
+func writeRecord(out io.Writer, record []byte, delimiter byte) error {
+	if _, err := out.Write(record); err != nil {
 		return err
 	}
-	_, err := inv.out.Write([]byte{delimiter})
+	_, err := out.Write([]byte{delimiter})
 	return err
 }
