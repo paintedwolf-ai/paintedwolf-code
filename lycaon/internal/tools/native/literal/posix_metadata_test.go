@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 // TestLsLongReportsOwnerNamesAndUTCTimes checks -l, -h and link targets
@@ -45,27 +47,52 @@ func TestLsLongReportsOwnerNamesAndUTCTimes(t *testing.T) {
 }
 
 // TestStatDefaultIsGNUsDescription renders bare stat in GNU's multi-line
-// layout (observed from coreutils 8.32) over the entry's own metadata.
+// layout (observed from coreutils 9.12) over the entry's own metadata.
 func TestStatDefaultIsGNUsDescription(t *testing.T) {
 	h := formHarness(t)
+	paths := mustPaths(t, h)
 	describe := func(name, shown, kind string) string {
 		raw := rawStat(t, filepath.Join(h.root, name))
 		st, err := os.Lstat(filepath.Join(h.root, name))
 		testutil.FailErr(t, "lstat", err)
+		bound, err := paths.Bind(t.Context(), name, false)
+		testutil.FailErr(t, "bind "+name, err)
+		observed, err := bound.Stat(false)
+		testutil.FailErr(t, "stat "+name, err)
 		mode := fmt.Sprintf("%04o", uint32(st.Mode().Perm()))
 		perms := modeString(st.Mode())
 		user, group := accountName(lookupUser, raw.Uid), groupName(raw.Gid)
 		atime := time.Unix(int64(raw.Atim.Sec), int64(raw.Atim.Nsec)).UTC().Format("2006-01-02 15:04:05.000000000 -0700")
 		ctime := time.Unix(int64(raw.Ctim.Sec), int64(raw.Ctim.Nsec)).UTC().Format("2006-01-02 15:04:05.000000000 -0700")
-		return fmt.Sprintf("  File: %s\n  Size: %-10d\tBlocks: %-10d IO Block: %-6d %s\nDevice: %xh/%dd\tInode: %-11d Links: %d\nAccess: (%s/%s)  Uid: (%5d/%8s)   Gid: (%5d/%8s)\nAccess: %s\nModify: 2026-01-02 03:04:05.000000000 +0000\nChange: %s\n Birth: -\n",
-			shown, st.Size(), raw.Blocks, raw.Blksize, kind, uint64(raw.Dev), uint64(raw.Dev), raw.Ino, raw.Nlink, mode, perms, raw.Uid, user, raw.Gid, group, atime, ctime)
+		btime := "-"
+		if !observed.BirthTime.IsZero() {
+			btime = observed.BirthTime.UTC().Format("2006-01-02 15:04:05.000000000 -0700")
+		}
+		return fmt.Sprintf("  File: %s\n  Size: %-10d\tBlocks: %-10d IO Block: %-6d %s\nDevice: %d,%d\tInode: %-10d  Links: %d\nAccess: (%s/%s)  Uid: (%5d/%8s)   Gid: (%5d/%8s)\nAccess: %s\nModify: 2026-01-02 03:04:05.000000000 +0000\nChange: %s\n Birth: %s\n",
+			shown, st.Size(), raw.Blocks, raw.Blksize, kind, unix.Major(uint64(raw.Dev)), unix.Minor(uint64(raw.Dev)), raw.Ino, raw.Nlink, mode, perms, raw.Uid, user, raw.Gid, group, atime, ctime, btime)
 	}
 	h.exec("", "stat", "input").expect(t, "stat input", describe("input", "input", "regular file"), "", 0)
 	h.exec("", "stat", "link", "empty").expect(t, "stat link empty", describe("link", "link -> input", "symbolic link")+describe("empty", "empty", "regular empty file"), "", 0)
 	seed(t, h.root, map[string]string{"two words": "x"})
 	testutil.FailErr(t, "time", os.Chtimes(filepath.Join(h.root, "two words"), fixtureTime, fixtureTime))
 	h.exec("", "stat", "two words").expect(t, "quoted name", describe("two words", "'two words'", "regular file"), "", 0)
-	h.exec("", "stat", "-c", "[%-6s][%06s][%.3A][%5n][%h][%w][%W]", "input").expect(t, "printf flags", "[10    ][000010][-rw][input][1][-][0]\n", "", 0)
+	inputBound, err := paths.Bind(t.Context(), "input", false)
+	testutil.FailErr(t, "bind input", err)
+	inputStat, err := inputBound.Stat(false)
+	testutil.FailErr(t, "stat input", err)
+	birthText, birthUnix := "-", "0"
+	if !inputStat.BirthTime.IsZero() {
+		birthText = inputStat.BirthTime.UTC().Format("2006-01-02 15:04:05.000000000 -0700")
+		birthUnix = fmt.Sprint(inputStat.BirthTime.Unix())
+	}
+	h.exec("", "stat", "-c", "[%-6s][%06s][%.3A][%5n][%h][%Hd,%Ld][%w][%W]", "input").expect(t, "printf flags",
+		fmt.Sprintf("[10    ][000010][-rw][input][1][%d,%d][%s][%s]\n", inputStat.DeviceMajor, inputStat.DeviceMinor, birthText, birthUnix), "", 0)
+	if w, ok := gnuDirectives["w"].render(statEntry{st: fseffect.EntryStat{}}); !ok || w != "-" {
+		t.Fatalf("unknown birth %%w = %q", w)
+	}
+	if W, ok := gnuDirectives["W"].render(statEntry{st: fseffect.EntryStat{}}); !ok || W != "0" {
+		t.Fatalf("unknown birth %%W = %q", W)
+	}
 }
 
 func lookupUser(id string) (*user.User, error) { return user.LookupId(id) }
@@ -115,6 +142,13 @@ func TestLsInodeSizeTimesAndNumericOwners(t *testing.T) {
 	h.exec("", "ls", "-ut", "-r", "dir").expect(t, "ls -utr", lsByAccessReversed(t, h), "", 0)
 	h.exec("", "ls", "-uc", "dir/a").expect(t, "last of -u and -c wins", "dir/a\n", "", 0)
 
+	h.exec("", "ls", "-lG", "input").expect(t, "ls -lG omits the group", fmt.Sprintf("-rw-r--r-- 1 %s 10 2026-01-02 03:04 input\n", owner), "", 0)
+	h.exec("", "ls", "-o", "input").expect(t, "ls -o", fmt.Sprintf("-rw-r--r-- 1 %s 10 2026-01-02 03:04 input\n", owner), "", 0)
+	h.exec("", "ls", "-g", "input").expect(t, "ls -g", fmt.Sprintf("-rw-r--r-- 1 %s 10 2026-01-02 03:04 input\n", group), "", 0)
+	h.exec("", "ls", "-lH", "link").expect(t, "ls -lH", fmt.Sprintf("-rw-r--r-- 1 %s %s 10 2026-01-02 03:04 link\n", owner, group), "", 0)
+	h.exec("", "ls", "-LP", "-F", "dir").expect(t, "ls -LP -F", "a\nb\nexe*\nlink@\n", "", 0)
+	h.exec("", "ls", "-HP", "-F", "link").expect(t, "ls -HP -F", "link@\n", "", 0)
+	h.exec("", "ls", "-nG", "input").expect(t, "ls -nG", fmt.Sprintf("-rw-r--r-- 1 %d 10 2026-01-02 03:04 input\n", uid), "", 0)
 	h.exec("", "ls", "-lL", "dir/link").expect(t, "ls -lL", fmt.Sprintf("-rw-r--r-- 1 %s %s 1 2026-01-02 03:04 dir/link\n", owner, group), "", 0)
 	h.exec("", "ls", "--color=always", "dir").refused(t, "color always", "COMMAND_OPERAND_INVALID")
 }

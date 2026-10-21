@@ -21,6 +21,11 @@ type lsOptions struct {
 	slash, inode, blocks, deref, unsorted, changeTime, accessTime, groupDirs          bool
 	// numeric is -n: owner and group stay decimal instead of account names.
 	numeric bool
+	// noGroup is GNU -G: long listings omit the group column.
+	noGroup bool
+	// noOwner is -g; commas is -m; followArgs is -H (command-line links);
+	// physical is -P (never follow links, even command-line directory links).
+	noOwner, commas, followArgs, physical bool
 }
 
 // time is the timestamp -c and -u select for display and sorting.
@@ -75,8 +80,16 @@ func runLs(inv *invocation) error {
 	opts := lsOptions{
 		long: inv.flag("-l") || inv.flag("-n"), numeric: inv.flag("-n"), all: inv.flag("-a"), almost: inv.flag("-A"), directory: inv.flag("-d"), recursive: inv.flag("-R"),
 		human: inv.flag("-h"), classify: inv.flag("-F"), byTime: inv.flag("-t"), bySize: inv.flag("-S"), reverse: inv.flag("-r"),
-		slash: inv.flag("-p"), inode: inv.flag("-i"), blocks: inv.flag("-s"), deref: inv.flag("-L"), unsorted: inv.flag("-U"),
-		groupDirs: inv.flag("--group-directories-first"),
+		slash: inv.flag("-p"), inode: inv.flag("-i"), blocks: inv.flag("-s"), unsorted: inv.flag("-U"),
+		groupDirs: inv.flag("--group-directories-first"), noGroup: inv.flag("-G") || inv.flag("-o"),
+		noOwner: inv.flag("-g"), commas: inv.flag("-m"),
+	}
+	opts.deref, opts.followArgs, opts.physical = lastLinkSelection(inv)
+	// -o and -g are long listings without the group or the owner; -f is
+	// -aU without long format, as GNU and BSD define them.
+	opts.long = opts.long || inv.flag("-o") || inv.flag("-g")
+	if inv.flag("-f") {
+		opts.all, opts.unsorted, opts.long = true, true, false
 	}
 	opts.changeTime, opts.accessTime = lastTimeSelection(inv)
 	if err := lsColor(inv); err != nil {
@@ -97,10 +110,15 @@ func runLs(inv *invocation) error {
 		var st fseffect.EntryStat
 		if err == nil {
 			st, err = opts.stat(bound)
+			if err == nil && opts.followArgs && typeLetter(st.Mode) == 'l' {
+				if target, targetErr := bound.Stat(true); targetErr == nil {
+					st = target
+				}
+			}
 		}
-		if err == nil && !opts.directory && !opts.long && !opts.classify && typeLetter(st.Mode) == 'l' {
+		if err == nil && !opts.directory && !opts.long && !opts.classify && !opts.physical && typeLetter(st.Mode) == 'l' {
 			// A command-line link to a directory lists that directory unless
-			// -l, -d or -F describe the link itself.
+			// -l, -d, -F or -P describe the link itself.
 			if followed, followErr := bound.Stat(true); followErr == nil && typeLetter(followed.Mode) == 'd' {
 				st = followed
 			}
@@ -296,6 +314,24 @@ func lastTimeSelection(inv *invocation) (change, access bool) {
 	return change, access
 }
 
+// lastLinkSelection is the final of -L, -H and -P, which override each other.
+func lastLinkSelection(inv *invocation) (deref, followArgs, physical bool) {
+	for _, item := range inv.argv.Items {
+		if item.Option == nil {
+			continue
+		}
+		switch item.Option.Key {
+		case "-L":
+			deref, followArgs, physical = true, false, false
+		case "-H":
+			deref, followArgs, physical = false, true, false
+		case "-P":
+			deref, followArgs, physical = false, false, true
+		}
+	}
+	return deref, followArgs, physical
+}
+
 // suffix is the -F or -p indicator for one entry.
 func (o lsOptions) suffix(mode fs.FileMode) string {
 	switch {
@@ -315,7 +351,8 @@ func (o lsOptions) allocated(st fseffect.EntryStat) string {
 	return strconv.FormatInt((st.Blocks+1)/2, 10)
 }
 
-// prefixes are the -i and -s columns, right-aligned across one listing.
+// prefixes are the -i and -s columns, right-aligned across one listing
+// except in comma-separated (-m) listings, where GNU prints no padding.
 func (o lsOptions) prefixes(entries []lsEntry) []string {
 	if !o.inode && !o.blocks {
 		return make([]string, len(entries))
@@ -325,7 +362,9 @@ func (o lsOptions) prefixes(entries []lsEntry) []string {
 	for i, entry := range entries {
 		inodes[i] = strconv.FormatUint(entry.stat.Inode, 10)
 		sizes[i] = o.allocated(entry.stat)
-		iw, sw = max(iw, len(inodes[i])), max(sw, len(sizes[i]))
+		if !o.commas || o.long {
+			iw, sw = max(iw, len(inodes[i])), max(sw, len(sizes[i]))
+		}
 	}
 	out := make([]string, len(entries))
 	for i := range entries {
@@ -362,6 +401,9 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 			if err := inv.out.text("total " + opts.total(entries) + "\n"); err != nil {
 				return err
 			}
+		}
+		if opts.commas {
+			return inv.commaList(entries, prefixes, opts)
 		}
 		for i, entry := range entries {
 			if err := inv.out.text(prefixes[i] + entry.name + opts.suffix(entry.stat.Mode) + "\n"); err != nil {
@@ -400,7 +442,15 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool
 		} else {
 			name += opts.suffix(entry.stat.Mode)
 		}
-		line := fmt.Sprintf("%s%s %*s %-*s %-*s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], widths[2], row[2], widths[3], row[3], widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
+		owner := fmt.Sprintf(" %-*s", widths[2], row[2])
+		if opts.noOwner {
+			owner = ""
+		}
+		group := fmt.Sprintf(" %-*s", widths[3], row[3])
+		if opts.noGroup {
+			group = ""
+		}
+		line := fmt.Sprintf("%s%s %*s%s%s %*s %s %s\n", prefixes[i], row[0], widths[1], row[1], owner, group, widths[4], row[4], opts.time(entry.stat).UTC().Format("2006-01-02 15:04"), name)
 		if err := inv.out.text(line); err != nil {
 			return err
 		}
@@ -488,4 +538,30 @@ func (a *accounts) name(cache *map[uint32]string, id uint32, numeric bool, looku
 	}
 	(*cache)[id] = name
 	return name
+}
+
+// commaList is -m: names separated by ", " and wrapped before column 80,
+// GNU's width when output is not a terminal.
+func (inv *invocation) commaList(entries []lsEntry, prefixes []string, opts lsOptions) error {
+	const width = 80
+	var b strings.Builder
+	pos := 0
+	for i, entry := range entries {
+		name := prefixes[i] + entry.name + opts.suffix(entry.stat.Mode)
+		if i > 0 {
+			if pos+2+len(name) < width {
+				b.WriteString(", ")
+				pos += 2
+			} else {
+				b.WriteString(",\n")
+				pos = 0
+			}
+		}
+		b.WriteString(name)
+		pos += len(name)
+	}
+	if len(entries) > 0 {
+		b.WriteString("\n")
+	}
+	return inv.out.text(b.String())
 }
