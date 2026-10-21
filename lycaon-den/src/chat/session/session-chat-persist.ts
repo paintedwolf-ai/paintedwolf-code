@@ -1,6 +1,7 @@
 import type {
   Message,
   BlueprintSummary,
+  QueueDraft,
   Session,
   TurnClock,
   TurnLoad,
@@ -119,6 +120,9 @@ export function parsePersistedSessionSnapshot(
     scope,
     touchedAt: raw.touchedAt,
     session,
+    queueDraft: isRecord(raw.queueDraft)
+      ? (raw.queueDraft as unknown as QueueDraft)
+      : undefined,
     transcript,
     transcriptWatermark: raw.transcriptWatermark,
     turnClocks: raw.turnClocks as TurnClock[],

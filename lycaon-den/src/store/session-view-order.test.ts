@@ -46,4 +46,18 @@ describe("session view snapshot ordering", () => {
     expect(store.state.currentSession?.id).toBe("s1");
     expect(store.state.progress?.revision).toBe(2);
   });
+
+  it("retains queueDrafts across session switch and invalidateSessionViewRequests", () => {
+    const store = fixture();
+    const queue = { revision: 1, queue_items: [{ id: "q1", prompt: "first", created_at: "t" }], hold: false, sending: false };
+    store.actions.setQueueDraft("s1", store.state.sessionViewEpoch, queue);
+    expect(store.state.queueDraft?.queue_items[0]?.prompt).toBe("first");
+
+    store.actions.setCurrentSession({ id: "s2", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p2", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    expect(store.state.queueDraft).toBeUndefined();
+    store.actions.invalidateSessionViewRequests();
+
+    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    expect(store.state.queueDraft?.queue_items[0]?.prompt).toBe("first");
+  });
 });
