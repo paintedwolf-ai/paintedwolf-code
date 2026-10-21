@@ -52,8 +52,17 @@ func encodePathCall(c pathCall) ([]byte, error) {
 	return buf, nil
 }
 
-// decodePathCall reads one frame, refusing anything malformed.
+// decodePathCall reads one frame, refusing anything malformed with an empty
+// call, so no part of a bad frame (such as its notification) is acted on.
 func decodePathCall(buf []byte) (pathCall, error) {
+	c, err := decodeFrame(buf)
+	if err != nil {
+		return pathCall{}, err
+	}
+	return c, nil
+}
+
+func decodeFrame(buf []byte) (pathCall, error) {
 	var c pathCall
 	if len(buf) < pathCallHeader || buf[3] != 0 || int(buf[0]) == 0 || int(buf[0]) >= len(callOps) || buf[2] > 2 {
 		return c, errors.New("malformed performer call")

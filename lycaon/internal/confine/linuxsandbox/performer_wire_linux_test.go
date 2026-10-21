@@ -27,7 +27,7 @@ func TestPathCallFramesRefuseMalformedInput(t *testing.T) {
 	if _, err := encodePathCall(pathCall{Op: callOpen, Dirs: 3}); err == nil {
 		t.Fatal("encoded three directories")
 	}
-	raw, err := encodePathCall(pathCall{Op: callSymlink, Dirs: 1, Path: "name", Content: "target"})
+	raw, err := encodePathCall(pathCall{Op: callSymlink, Dirs: 1, Notification: 9, Path: "name", Content: "target"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +46,8 @@ func TestPathCallFramesRefuseMalformedInput(t *testing.T) {
 		bad[mutate.name] = b
 	}
 	for name, b := range bad {
-		if _, err := decodePathCall(b); err == nil {
-			t.Errorf("%s: decoded a malformed frame", name)
+		if call, err := decodePathCall(b); err == nil || call != (pathCall{}) {
+			t.Errorf("%s: decoded a malformed frame as %+v", name, call)
 		}
 	}
 }

@@ -130,9 +130,17 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 	result, _ = do(pathCall{Op: callRename, Path: "stage", NewPath: ".agents", Flags: unix.RENAME_EXCHANGE}, dir, dir)
 	expect("exchange onto an ancestor of a floor", result, unix.EACCES, true)
 
-	result, _ = do(pathCall{Op: "chmod", Path: "x"}, dir)
-	expect("unknown call", result, unix.ENOSYS, false)
-	result, _, err := client.call(pathCall{Op: callMkdir, Path: "x", Dirs: 2}, []int{dir})
+	raw, err := encodePathCall(pathCall{Op: callMkdir, Path: "x", Notification: 9})
+	testutil.FailErr(t, "frame", err)
+	raw[3] = 1
+	testutil.FailErr(t, "send malformed frame", unix.Sendmsg(client.fd, raw, nil, nil, 0))
+	reply := make([]byte, 4096)
+	n, _, _, _, err := unix.Recvmsg(client.fd, reply, nil, 0)
+	testutil.FailErr(t, "malformed frame answer", err)
+	result = pathResult{}
+	testutil.FailErr(t, "decode answer", json.Unmarshal(reply[:n], &result))
+	expect("malformed frame", result, unix.EINVAL, false)
+	result, _, err = client.call(pathCall{Op: callMkdir, Path: "x", Dirs: 2}, []int{dir})
 	testutil.FailErr(t, "mismatched call", err)
 	expect("descriptor count mismatch", result, unix.EINVAL, false)
 	for _, absent := range []string{"deep/AGENTS.md", ".paintedwolf/mcp.yaml"} {
