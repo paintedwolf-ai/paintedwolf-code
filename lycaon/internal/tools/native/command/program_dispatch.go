@@ -44,7 +44,9 @@ type ProgramOwners struct {
 	Natives     map[string]NativeOperation
 	Publication commandprogram.OutputPublication
 	Input       commandprogram.InputRedirection
-	AdmitLaunch func(context.Context, tools.ToolContext) error
+	// Redirections binds redirect owners to a directory frame after cd.
+	Redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
+	AdmitLaunch  func(context.Context, tools.ToolContext) error
 }
 
 // ProgramDispatcher routes each reached simple command: catalog natives bound
@@ -56,6 +58,8 @@ type ProgramDispatcher struct {
 	builtins map[string]commandprogram.OperationDispatcher
 	natives  map[string]NativeOperation
 	binder   commandprogram.ArgvBinder
+	// redirections binds redirect owners to this frame's directory.
+	redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	// admitLaunch is the program's publication barrier for external launches.
 	admitLaunch func(context.Context, tools.ToolContext) error
 	// paths is this directory frame; cd moves it and Fork copies it.
@@ -182,6 +186,15 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
+	if reject := desktopCaptureRefusal(argv[0], line); reject != nil {
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: reject}
+		}
+		d.shared.mu.Unlock()
+		result := refusedResult("DESKTOP_CAPTURE_DISALLOWED")
+		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+	}
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
@@ -522,4 +535,14 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 	}
 	d.shared.definitions[key] = definition
 	return definition, nil
+}
+
+var _ commandprogram.FrameRedirections = (*ProgramDispatcher)(nil)
+
+// Redirections binds redirect targets from this frame's current directory.
+func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+	if d.redirections == nil {
+		return nil, nil
+	}
+	return d.redirections(d.paths)
 }

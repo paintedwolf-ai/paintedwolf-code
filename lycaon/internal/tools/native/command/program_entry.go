@@ -236,7 +236,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		listeners = lineage.SessionListeners
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher) {
 			if _, taken := builtins[name]; !taken {
@@ -474,6 +474,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			case commandsurface.SubstitutionPart:
 				out = append(out, node.SyntaxLocation)
 				list(node.Statements)
+			case commandsurface.ParameterPart:
+				words(node.Words())
+			case commandsurface.ArithmeticPart:
+				words(node.Words())
 			}
 		}
 	}

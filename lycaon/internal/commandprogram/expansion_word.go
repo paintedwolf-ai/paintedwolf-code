@@ -54,6 +54,8 @@ func (r *expansionRun) word(parts []commandsurface.WordNode) error {
 			err = r.double(part)
 		case commandsurface.ParameterPart:
 			err = r.parameter(part, r.document != nil)
+		case commandsurface.ArithmeticPart:
+			err = r.arithmetic(part, r.document != nil)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(part, r.document != nil)
 		default:
@@ -127,6 +129,8 @@ func (r *expansionRun) double(part commandsurface.DoubleQuotedPart) error {
 			err = r.literal(inner.Value, expand.DoubleQuotedText)
 		case commandsurface.ParameterPart:
 			err = r.parameter(inner, true)
+		case commandsurface.ArithmeticPart:
+			err = r.arithmetic(inner, true)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(inner, true)
 		default:
@@ -154,6 +158,9 @@ func (r *expansionRun) onlyEmptyPositional(parts []commandsurface.WordNode) bool
 }
 
 func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool) error {
+	if part.Operator != "" {
+		return r.operated(part, quoted)
+	}
 	if (part.Name == "@" || part.Name == "*") && !part.Length {
 		positional := r.scope.Positional()
 		if quoted && part.Name == "@" && r.mode == modeFields {

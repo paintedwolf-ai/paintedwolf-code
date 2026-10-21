@@ -198,13 +198,31 @@ type DoubleQuotedPart struct {
 
 func (DoubleQuotedPart) wordNode() {}
 
+// ParameterPart is $name, ${name}, ${#name}, or ${name OP word}. Operator is
+// one of -, :-, +, :+, ?, :?, #, ##, %, %%, ^, ^^, ",", ",,", /, //, /# or
+// /%; Argument is its word or pattern and Replacement the replacement of a
+// substitution operator.
 type ParameterPart struct {
 	SyntaxLocation
-	Name   string
-	Length bool
+	Name        string
+	Length      bool
+	Operator    string
+	Argument    *DeferredWord
+	Replacement *DeferredWord
 }
 
 func (ParameterPart) wordNode() {}
+
+// Words lists the operator words nested in the parameter.
+func (p ParameterPart) Words() []DeferredWord {
+	var out []DeferredWord
+	for _, word := range []*DeferredWord{p.Argument, p.Replacement} {
+		if word != nil {
+			out = append(out, *word)
+		}
+	}
+	return out
+}
 
 type SubstitutionPart struct {
 	SyntaxLocation

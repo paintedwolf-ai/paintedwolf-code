@@ -70,7 +70,7 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 		"printf changed > ./output; if false; then echo 'unterminated; fi",
 		"printf changed > ./output; if false; then eval dangerous; fi",
 		"echo <(cat ./input)", "echo $((1+2))", "((1+2))", "a=(one two)",
-		"echo ${name:-fallback}", "echo ${name/x/y}", "echo ${!name}", "echo $-", "echo $$",
+		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
 		"echo {one,two}", "case x in x) true;; esac", "until false; do :; done",
 		"select x in one; do :; done", "coproc echo x", "trap true EXIT", "set -e",
 		"cat <<< value", "cat 3> ./output", "cat 2>&3", "cat 1<> ./input",

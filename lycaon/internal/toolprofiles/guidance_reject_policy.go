@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
@@ -82,4 +83,19 @@ func policyBlockObservation(eval platform.PolicyContext) *toolrejection.ToolReje
 		code = "COORDINATOR_TOOL_DENIED"
 	}
 	return &toolrejection.ToolReject{Code: code, Data: data}
+}
+
+// FreezeCommandProfile delegates the command program's effect boundary to the
+// wrapped engine; a wrapped engine without one refuses programs.
+func (p *GuidanceRejectPolicy) FreezeCommandProfile(ctx context.Context, profileID string) (context.Context, toolcontract.CommandEffects, error) {
+	if p == nil {
+		return ctx, 0, errors.New("command profile effect boundary required")
+	}
+	source, ok := p.inner.(interface {
+		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
+	})
+	if !ok {
+		return ctx, 0, errors.New("command profile effect boundary required")
+	}
+	return source.FreezeCommandProfile(ctx, profileID)
 }

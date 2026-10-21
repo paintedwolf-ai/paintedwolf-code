@@ -101,17 +101,26 @@ func rejectDisallowedDesktopCapture(tctx tools.ToolContext, args map[string]any)
 	plan, err := tctx.CommandPlan(args)
 	if err == nil {
 		for _, stage := range plan.Stages {
-			base := strings.ToLower(filepath.Base(strings.TrimSpace(stage.Name)))
-			if base == "screencapture" || base == "scrot" || base == "xwd" {
-				return toolrejection.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
-					"command": CanonicalCommandKey(tctx, args),
-					"reason":  "desktop_screen_capture_disallowed",
-					"instead": "Use command with snapshot_capture or APP_SNAPSHOT to render views offscreen in-process without OS permissions",
-				})
+			if reject := desktopCaptureRefusal(stage.Name, CanonicalCommandKey(tctx, args)); reject != nil {
+				return reject
 			}
 		}
 	}
 	return nil
+}
+
+// desktopCaptureRefusal refuses launching a desktop screen capture program by
+// its executable identity; offscreen snapshots need no OS screen permission.
+func desktopCaptureRefusal(program, line string) error {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(program)))
+	if base != "screencapture" && base != "scrot" && base != "xwd" {
+		return nil
+	}
+	return toolrejection.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
+		"command": line,
+		"reason":  "desktop_screen_capture_disallowed",
+		"instead": "Use command with snapshot_capture or APP_SNAPSHOT to render views offscreen in-process without OS permissions",
+	})
 }
 
 // SessionWriteRoots is the chat write-root overlay; empty without a gate.

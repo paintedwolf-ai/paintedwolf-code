@@ -126,13 +126,75 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 		case *syntax.DblQuoted:
 			out = append(out, DoubleQuotedPart{SyntaxLocation: loc, Parts: c.parts(p.Parts)})
 		case *syntax.ParamExp:
-			out = append(out, ParameterPart{SyntaxLocation: loc, Name: strings.Clone(p.Param.Value), Length: p.Length})
+			out = append(out, c.parameter(p, loc))
+		case *syntax.ArithmExp:
+			out = append(out, ArithmeticPart{SyntaxLocation: loc, Expression: c.arithmetic(p.X)})
 		case *syntax.CmdSubst:
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Backquotes: p.Backquotes, Statements: c.statements(p.Stmts)})
 		}
 	}
 	return out
 }
+func (c *programCompiler) parameter(p *syntax.ParamExp, loc SyntaxLocation) ParameterPart {
+	out := ParameterPart{SyntaxLocation: loc, Name: strings.Clone(p.Param.Value), Length: p.Length}
+	operand := func(w *syntax.Word) *DeferredWord {
+		word := c.word(w)
+		if w == nil {
+			word.SyntaxLocation = loc
+		}
+		return &word
+	}
+	switch {
+	case p.Exp != nil:
+		out.Operator = p.Exp.Op.String()
+		if p.Exp.Word != nil || parameterNeedsWord(out.Operator) {
+			out.Argument = operand(p.Exp.Word)
+		}
+	case p.Repl != nil:
+		out.Operator = "/"
+		if p.Repl.All {
+			out.Operator = "//"
+		}
+		pattern := operand(p.Repl.Orig)
+		if anchor, rest, ok := replacementAnchor(pattern.Parts); ok && !p.Repl.All {
+			out.Operator += anchor
+			pattern.Parts = rest
+		}
+		out.Argument, out.Replacement = pattern, operand(p.Repl.With)
+	}
+	return out
+}
+
+// parameterNeedsWord reports operators whose absent word is an empty word.
+func parameterNeedsWord(operator string) bool {
+	switch operator {
+	case "^", "^^", ",", ",,":
+		return false
+	}
+	return true
+}
+
+// replacementAnchor splits an unquoted leading # or % from a replacement
+// pattern, which anchors the match at the start or end of the value.
+func replacementAnchor(parts []WordNode) (string, []WordNode, bool) {
+	if len(parts) == 0 {
+		return "", parts, false
+	}
+	literal, ok := parts[0].(LiteralPart)
+	if !ok || literal.Value == "" || (literal.Value[0] != '#' && literal.Value[0] != '%') {
+		return "", parts, false
+	}
+	anchor := literal.Value[:1]
+	rest := append([]WordNode(nil), parts...)
+	if literal.Value == anchor {
+		rest = rest[1:]
+	} else {
+		literal.Value = literal.Value[1:]
+		rest[0] = literal
+	}
+	return anchor, rest, true
+}
+
 func (c *programCompiler) test(t syntax.TestExpr) TestNode {
 	switch v := t.(type) {
 	case *syntax.Word:

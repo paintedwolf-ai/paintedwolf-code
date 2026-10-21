@@ -203,6 +203,12 @@ type Dispatch interface {
 	Fork(context.Context) (Dispatch, func(), error)
 }
 
+// FrameRedirections is implemented by a Dispatch frame whose redirect owners
+// resolve targets from that frame's current directory.
+type FrameRedirections interface {
+	Redirections() (InputRedirection, OutputPublication)
+}
+
 // InputDestination is one reached `<` redirection after target expansion.
 type InputDestination struct {
 	Invocation toolcontract.OperationInvocation

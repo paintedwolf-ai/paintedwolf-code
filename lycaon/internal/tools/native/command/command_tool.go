@@ -31,7 +31,7 @@ type CommandTool struct {
 	Background      *bgprocess.Registry
 	FailureTracker  *CommandFailureTracker
 	WriteRootGate   SandboxWriteRootGate
-	// Programs is the v1 program entry the command registration switches to.
+	// Programs is the v1 program entry every non-capture call runs through.
 	Programs *ProgramRuntime
 }
 

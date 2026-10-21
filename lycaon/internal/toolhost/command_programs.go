@@ -44,6 +44,10 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
+			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
+				return publication, publication
+			},
 		}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)

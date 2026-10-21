@@ -91,6 +91,8 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		}
 	case *syntax.ParamExp:
 		c.validateParameter(v)
+	case *syntax.ArithmExp, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+		c.validateArithmetic(v)
 	case *syntax.DeclClause:
 		if v.Variant.Value != "export" {
 			c.unsupported(n, "export")
@@ -158,8 +160,16 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 	}
 }
 func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
-	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Repl != nil || p.Names != 0 || p.Exp != nil {
-		c.unsupported(p, "$name, ${name}, ${#name} or supported positional/status parameters")
+	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Names != 0 || (p.Length && (p.Exp != nil || p.Repl != nil)) {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Exp != nil && !supportedParameterOperators[p.Exp.Op.String()] {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Exp != nil && !parameterNeedsWord(p.Exp.Op.String()) && p.Exp.Word != nil {
+		c.unsupported(p, "case conversion without a pattern")
 		return
 	}
 	name := p.Param.Value
@@ -167,6 +177,15 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 		c.unsupported(p, "invocation variables and supported positional/status parameters")
 	}
 }
+
+const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name^^} or supported positional/status parameters"
+
+// supportedParameterOperators have fixed semantics that never assign state.
+var supportedParameterOperators = map[string]bool{
+	"-": true, ":-": true, "+": true, ":+": true, "?": true, ":?": true,
+	"#": true, "##": true, "%": true, "%%": true, "^": true, "^^": true, ",": true, ",,": true,
+}
+
 func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 	fd := ""
 	if r.N != nil {

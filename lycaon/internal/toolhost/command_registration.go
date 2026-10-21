@@ -13,10 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 )
 
-// commandProgramEntry routes the command tool to the v1 program entry. It
-// flips with the statement evaluator; the legacy argv path is then removed.
-const commandProgramEntry = true
-
 func registerCommandTools(
 	reg *tools.DefaultRegistry,
 	runner *hostcmd.Runner,
@@ -47,11 +43,7 @@ func registerCommandTools(
 	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
 	*commandOutputTool = &command.CommandOutputTool{}
 	*commandStopTool = &command.CommandStopTool{}
-	handler := (*commandTool).Run
-	if commandProgramEntry {
-		handler = programs.Run
-	}
-	if err := reg.Register("command", handler); err != nil {
+	if err := reg.Register("command", (*commandTool).Run); err != nil {
 		return err
 	}
 	if err := reg.Register("verify", (*verifyTool).Run); err != nil {
