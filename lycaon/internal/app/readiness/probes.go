@@ -28,6 +28,9 @@ type Probes struct {
 	path    userpath.Snapshot
 }
 
+// runningNix reports the running Nix package generation, if any.
+var runningNix = configlayout.RunningNix
+
 func New(service *llm.Service, decider decide.Decider, path userpath.Snapshot) *Probes {
 	return &Probes{service: service, decider: decider, path: path}
 }
@@ -46,6 +49,11 @@ func (b *Probes) Environment() preflight.Env {
 		b.browser,
 		b.decision,
 	)
+	// A Nix generation runs on the C library in its own closure, so the host's
+	// libc has no bearing on whether its executables load.
+	if layout, err := runningNix(); err == nil && layout != nil {
+		env.LibcVersion = nil
+	}
 	env.LiteSlotUnavailable = b.utility
 	env.UserPathSource = b.path.Source()
 	env.UserPathFailure = b.path.Failure()

@@ -2,6 +2,7 @@ package readiness
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -10,10 +11,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -128,5 +131,31 @@ func TestPreflightRefusesUnusableExplicitBrowserWithoutProvisioning(t *testing.T
 	env := New(nil, nil, userpath.Snapshot{}).Environment()
 	if reason, err := env.CheckBrowser(t.Context()); reason != preflight.ReasonBrowserUnusable || err == nil {
 		t.Fatalf("unusable explicit browser was accepted: %q, %v", reason, err)
+	}
+}
+
+func TestNixGenerationIsNotHeldToTheHostLibcFloor(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	previous := runningNix
+	t.Cleanup(func() { runningNix = previous })
+	probes := New(nil, decide.Absent{}, userpath.Snapshot{})
+	// Linux compares the host C library the native package links against.
+	host := preflight.DefaultEnv("", nil, nil, nil, nil, nil).LibcVersion != nil
+	for _, tc := range []struct {
+		name    string
+		layout  *configlayout.NixLayout
+		err     error
+		checked bool
+	}{
+		{"native package", nil, nil, host},
+		{"nix generation", &configlayout.NixLayout{Output: "/nix/store/" + strings.Repeat("0", 32) + "-painted-wolf-code"}, nil, false},
+		{"malformed nix receipt", nil, errors.New("malformed receipt"), host},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runningNix = func() (*configlayout.NixLayout, error) { return tc.layout, tc.err }
+			if got := probes.Environment().LibcVersion != nil; got != tc.checked {
+				t.Fatalf("host libc checked = %v, want %v", got, tc.checked)
+			}
+		})
 	}
 }
