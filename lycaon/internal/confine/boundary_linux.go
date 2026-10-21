@@ -22,12 +22,38 @@ import (
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
-// probeTimeout bounds the one helper run that establishes availability.
+// probeTimeout bounds one helper run that establishes availability.
 const probeTimeout = 15 * time.Second
 
-var linuxHost struct {
-	once sync.Once
-	caps linuxsandbox.Capabilities
+// capabilityRetryInterval bounds how often an engine re-probes a host whose
+// confinement was unavailable: a probe that timed out under load, or a
+// restriction lifted by installing the package's AppArmor profile, recovers
+// without restarting the engine.
+const capabilityRetryInterval = 30 * time.Second
+
+var linuxHost = capabilityCache{probe: probeCapabilities, now: time.Now}
+
+// capabilityCache keeps an applied boundary for the process's lifetime and an
+// unavailable one only until the retry interval passes.
+type capabilityCache struct {
+	mu       sync.Mutex
+	probe    func() linuxsandbox.Capabilities
+	now      func() time.Time
+	caps     linuxsandbox.Capabilities
+	probed   bool
+	probedAt time.Time
+}
+
+func (c *capabilityCache) get() linuxsandbox.Capabilities {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.probed && (c.caps.Available() || c.now().Sub(c.probedAt) < capabilityRetryInterval) {
+		return c.caps
+	}
+	c.caps = c.probe()
+	c.probed = true
+	c.probedAt = c.now()
+	return c.caps
 }
 
 // Available reports whether confined commands can run: every kernel capability
@@ -38,16 +64,15 @@ func Available() bool { return linuxCapabilities().Available() }
 // why confinement is unavailable.
 func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxCapabilities(), true }
 
-func linuxCapabilities() linuxsandbox.Capabilities {
-	linuxHost.once.Do(func() {
-		caps := linuxsandbox.Facts()
-		if caps.FloorMet() {
-			stderr, err := probeHelper()
-			caps.RecordRun(err, stderr)
-		}
-		linuxHost.caps = caps
-	})
-	return linuxHost.caps
+func linuxCapabilities() linuxsandbox.Capabilities { return linuxHost.get() }
+
+func probeCapabilities() linuxsandbox.Capabilities {
+	caps := linuxsandbox.Facts()
+	if caps.FloorMet() {
+		stderr, err := probeHelper()
+		caps.RecordRun(err, stderr)
+	}
+	return caps
 }
 
 // probeHelper runs the helper once against a plan that only attests, so
