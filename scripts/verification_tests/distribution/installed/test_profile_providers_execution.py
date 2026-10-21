@@ -30,7 +30,7 @@ class ProfileProviderTests(unittest.TestCase):
         self.stack.enter_context(patch.object(profile_observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(profile_observer, 'engine_image', return_value=(1, 2, 3)))
         self.row = {'id': 'owned-fixture-1', 'kind': GUI_KIND, 'label': GUI_LABEL,
-            'base_url': GUI_ENDPOINT, 'requires_api_key': False, 'api_key_env': '', 'models': [{'id': MODEL}]}
+            'base_url': GUI_ENDPOINT, 'requires_api_key': True, 'api_key_env': '', 'models': [{'id': MODEL}]}
 
     def write(self, rows):
         self.path.write_text(json.dumps({'providers': rows}))
@@ -44,7 +44,7 @@ class ProfileProviderTests(unittest.TestCase):
         with patch.object(observer.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
-            'requires_api_key': False, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
+            'requires_api_key': True, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse(opened.call_args.args[1] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC))
@@ -58,7 +58,7 @@ class ProfileProviderTests(unittest.TestCase):
             self.assertNotIn('SECRET', str(refusal.exception))
 
     def test_changed_endpoint_authentication_or_ambiguous_identity_never_matches_canary(self):
-        changes = [{'base_url': 'http://127.0.0.1:1/v1'}, {'requires_api_key': True},
+        changes = [{'base_url': 'http://127.0.0.1:1/v1'}, {'requires_api_key': False},
                    {'requires_api_key': 0}, {'api_key_env': 'SECRET_ENV'}, {'ambient_auth': 'ambient'}]
         for changed in changes:
             with self.subTest(changed=changed), self.assertRaises(ValueError):
