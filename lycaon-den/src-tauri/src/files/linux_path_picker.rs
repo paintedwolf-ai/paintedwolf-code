@@ -20,7 +20,7 @@ pub(super) fn pick(window: &tauri::WebviewWindow, options: PickOptions) -> Resul
                     return;
                 }
             };
-            show(&parent, options, send);
+            show(parent.upcast_ref(), options, send);
         })
         .map_err(|error| error.to_string())?;
     receive
@@ -32,11 +32,19 @@ fn dimensions(width: i32, height: i32) -> (i32, i32) {
     (760.min((width - 48).max(1)), 560.min((height - 48).max(1)))
 }
 
+/// The chooser dialog and the widget whose selection it returns.
+struct Shown {
+    #[cfg_attr(not(test), allow(dead_code))]
+    dialog: gtk::Dialog,
+    #[cfg_attr(not(test), allow(dead_code))]
+    chooser: gtk::FileChooserWidget,
+}
+
 fn show(
-    parent: &gtk::ApplicationWindow,
+    parent: &gtk::Window,
     options: PickOptions,
     send: mpsc::Sender<Result<Selection, String>>,
-) {
+) -> Shown {
     // Keep actions in the bottom action area. A header containing both actions
     // and a long title can itself exceed a small monitor's logical width.
     let dialog = gtk::Dialog::builder()
@@ -77,7 +85,7 @@ fn show(
     viewport.set_propagate_natural_height(false);
     viewport.add(&chooser);
     dialog.content_area().pack_start(&viewport, true, true, 0);
-    let display = gtk::prelude::WidgetExt::display(parent);
+    let display = WidgetExt::display(parent);
     let monitor = parent
         .window()
         .and_then(|surface| display.monitor_at_window(&surface))
@@ -115,6 +123,7 @@ fn show(
         }
     });
     dialog.show_all();
+    Shown { dialog, chooser }
 }
 
 
@@ -143,6 +152,9 @@ fn valid_selection(path: &std::path::Path, mode: Option<GrantMode>) -> bool {
             && (!path.exists() || path.is_file()),
     }
 }
+
+#[cfg(test)]
+mod display_tests;
 
 #[cfg(test)]
 mod tests {
