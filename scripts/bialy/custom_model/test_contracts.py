@@ -28,11 +28,11 @@ class Contracts(unittest.TestCase):
         self.db.executescript("""
         CREATE TABLE model_outputs(id,session_id,message_id,scripted,settled_at,turn_attempt_id);
         INSERT INTO model_outputs VALUES('output','session','message',0,'now','attempt');
-        CREATE TABLE invocation_receipts(id,session_id,assistant_message_id,tool_call_id,tool_name,status,invoked,settled_at,args_digest);
+        CREATE TABLE invocation_receipts(id,session_id,assistant_message_id,tool_call_id,tool_name,status,invoked,settled_at,args_digest,started_at);
         """)
         self.args = {"path":"file.txt"}
-        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?)",
-                        ('receipt','session','message','call','read','completed',1,'now',digest(self.args)))
+        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        ('receipt','session','message','call','read','completed',1,'now',digest(self.args),'2'))
         self.record = {"schema":"pw-training-turn/1","epoch":"legacy-1","dispatches":1,"settled":True,
                        "output_id":"output","session_id":"session","message_id":"message","call_id":"request",
                        "request":{"messages":[{"role":"system","content":"Be precise"},{"role":"user","content":"Read file"}],
@@ -76,6 +76,44 @@ class Contracts(unittest.TestCase):
         self.record["request"]["tool_choice"] = "none"
         with self.assertRaisesRegex(ValueError, "request control"):
             self.row()
+
+    def command_call(self, surface):
+        self.identity["tool_surface"] = surface
+        self.args.clear()
+        self.args["program"] = "go test ./..."
+        self.record["response"]["tool_calls"][0]["name"] = "command"
+        self.db.execute("UPDATE invocation_receipts SET tool_name='command', args_digest=?", (digest(self.args),))
+
+    def children(self, receipt_id, *effects):
+        self.db.executescript("CREATE TABLE IF NOT EXISTS program_operations(program_receipt_id, operation, status, effect);")
+        for index, effect in enumerate(effects):
+            self.db.execute("INSERT INTO program_operations VALUES(?,?,?,?)", (receipt_id, "%s-op%d" % (receipt_id, index), "completed", effect))
+
+    def test_command_surface_requires_settled_child_effects(self):
+        self.command_call("command-v1")
+        with self.assertRaisesRegex(ValueError, "child receipts unavailable"):
+            self.row()
+        self.children("receipt")
+        with self.assertRaisesRegex(ValueError, "no child operation receipts"):
+            self.row()
+        self.children("receipt", "completed", "none")
+        self.assertEqual(self.row()["validation"]["invocation_receipt_ids"], ["receipt", "receipt-op0", "receipt-op1"])
+        self.children("receipt", "unknown")
+        with self.assertRaisesRegex(ValueError, "partial or unknown effects"):
+            self.row()
+
+    def test_whole_program_replay_after_partial_effects_is_excluded(self):
+        self.command_call("command-v1")
+        self.children("receipt", "completed")
+        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        ('earlier','session','message','call0','command','error',1,'then',digest(self.args),'1'))
+        self.children("earlier", "completed", "partial")
+        with self.assertRaisesRegex(ValueError, "whole-program replay"):
+            self.row()
+
+    def test_legacy_surface_admits_command_receipts_without_child_facts(self):
+        self.command_call("legacy")
+        self.assertEqual(self.row()["validation"]["invocation_receipt_ids"], ["receipt"])
 
     def test_masks_prompt_and_preserves_tool_arguments(self):
         row = self.row()

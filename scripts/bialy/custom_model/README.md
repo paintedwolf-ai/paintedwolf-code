@@ -30,6 +30,14 @@ reasons (`unsupported_response` for a reasoning-bearing teacher reply,
 `ambiguous_dispatch` for a retried call, `secret_screen_changed_payload`), so a
 calibration report shows why rows were lost.
 
+On the `command-v1` surface a `command` call is admitted only when its child
+operation receipts all settled with known effects; a program that left partial
+or unknown effects, a whole-program replay of such a program, or a store without
+child receipts fails closed (`command_contract.py`, written against the P32 and
+P33 contracts; its table and column names are the adaptation point when those
+receipts are persisted). The legacy surface admits command receipts like any
+other tool's.
+
 Teacher servers must run with thinking disabled (llama-server
 `--reasoning-budget 0`) and without context shift: a reply that carries
 reasoning is excluded, and a shifted context would record a prompt the model
