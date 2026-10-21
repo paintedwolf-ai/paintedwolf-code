@@ -5,7 +5,7 @@
     ],
     "check-fast": [
       "build",
-      "lint:fast",
+      "lint:full",
       "budgets",
       "den:typecheck",
       "den:lint",
@@ -759,7 +759,7 @@
         "den:typecheck",
         "den:lint"
       ],
-      "minutes": 30,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
@@ -768,9 +768,9 @@
       "preflight": [
         "test:contract",
         "--",
-        "./test/contract/release",
-        "-run",
-        "^TestHosted"
+        "./test/contract/hosted",
+        "./test/contract/runner",
+        "./test/contract/evidence"
       ]
     },
     "limits": {

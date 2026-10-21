@@ -121,7 +121,7 @@ that mechanism is the subject of the test.
 
 Contract suites live in domain packages under `lycaon/test/contract/`:
 `agentcontext`, `architecture`, `catalogs`, `evidence`, `files`, `frontend`,
-`host`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
+`host`, `hosted`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
 `runner`, `scanning`, `security`, `sessions`, `tools`, `wire`, and `workflows`.
 The root package keeps the source-snapshot tests. The `test:contract` target
 discovers the complete subtree. Shared support lives under `internal/`: `check`
@@ -681,13 +681,18 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the focused hosted workflow and capacity contracts,
-then compiles the host and runs `lint:full`, size budgets, Den typecheck, and Den
-lint. The lane has a thirty-minute execution budget. Full Go lint catches the
-same analyzer findings before queue admission and on the exact landing commit.
-The admission contracts run through `test:contract` with an explicit package and
-test selection; failure or interruption stops the lane before its remaining work.
-The planner restricts this selection to the release contract package.
+job, `ready`: it first runs the hosted policy, runner, and verification-evidence
+contract packages, then compiles the host and runs `lint:full`, size budgets, Den
+typecheck, and Den lint. These checks are covered by `./task check-fast`, which
+also runs product tests and changed coverage. The admission contracts run through
+`test:contract` with explicit packages, without a test-name filter. Failure or
+interruption stops the lane before its remaining work. Catalog validation accepts
+existing contract packages and rejects selectors, traversal, and duplicate packages.
+
+The execution budget is two hours, allowing the integration lint lane's existing
+ninety-minute allowance plus the contracts and remaining checks. This is a
+conservative ceiling, not a measured duration; broad-change hosted timings are
+required before tightening it or claiming an admission latency improvement.
 
 The merge queue runs changed coverage and the complete affected integration
 selection. Its `limits` and `lint` lanes start first, and the group stops at its
@@ -917,7 +922,7 @@ not run is planned at its budget, so it starts early.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a thirty-minute execution budget |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
 A newer run replaces a pending one in its group and a started run finishes, so
 a long nightly or qualification never multiplies. The maintenance workflows
@@ -939,6 +944,12 @@ uses more PR time but prevents deterministic analyzer failures from occupying
 speculative integration groups. Caps do not establish queue latency guarantees.
 On macOS, qualification, warming, and nightly hold one runner each and a release
 two, five in all; the merge queue and the admission tier run on Linux.
+
+The earlier measured lane schedule placed `limits`, `lint`, and both behavior
+shards in the first wave: about 32 minutes at a cap of four, compared with about
+26 uncapped and 44 at a cap of three. An early limits failure stopped the group
+in about six minutes. Those measurements justify the cap; later source changes,
+setup costs, and runner contention can change the observed wall time.
 
 Increase integration parallelism only with a revised capacity model that still
 fits every bounded class and a ready PR. Reduce repeated compilation, preparation,

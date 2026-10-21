@@ -9,7 +9,7 @@ from verification_plan import catalog, expand
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
-ADMISSION_STAGES = {"build", "lint:full", "budgets", "den:typecheck", "den:lint"}
+FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
@@ -65,14 +65,17 @@ def lanes():
         if "fast" in lane["profiles"] or "preflight" in lane:
             command = lane.get("preflight", [])
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
-                    or not isinstance(command, list) or len(command) != 5
-                    or command[:3] != ["test:contract", "--", "./test/contract/release"]
-                    or command[3:] != ["-run", "^TestHosted"] or not all(isinstance(arg, str) and arg for arg in command)):
+                    or not isinstance(command, list) or len(command) < 3
+                    or command[:2] != ["test:contract", "--"]
+                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or len(set(command[2:])) != len(command[2:])):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    if set(fast) != ADMISSION_STAGES or max(fast.values(), default=0) != 1:
-        raise ValueError(f"CI fast tier must run admission stages once each: {dict(fast)}")
+    extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
+    if not fast or extra or max(fast.values()) > 1:
+        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and "platform" not in lane
                      for stage in expand(lane["targets"]))

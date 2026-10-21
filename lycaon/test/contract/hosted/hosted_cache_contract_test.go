@@ -37,7 +37,7 @@ func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 	}
 }
 
-func TestHostedReleaseBuildReusesTheSharedGoCache(t *testing.T) {
+func TestReleaseBuildReusesTheSharedGoCache(t *testing.T) {
 	t.Parallel()
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/actions/cache-release-build/action.yml")
 	if !strings.Contains(data, "uses: ./.github/actions/cache-go") {
@@ -48,7 +48,7 @@ func TestHostedReleaseBuildReusesTheSharedGoCache(t *testing.T) {
 	}
 }
 
-func TestHostedMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
+func TestMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
 	t.Parallel()
 	var workflow struct {
 		Concurrency struct {
@@ -63,7 +63,7 @@ func TestHostedMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
 	}
 }
 
-func TestHostedNestedCachePublicationRunsAfterPreparation(t *testing.T) {
+func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-webkit-atspi-images"} {
