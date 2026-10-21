@@ -17,6 +17,8 @@ import (
 // derived from argument text. Resolved credential values are not input to this
 // producer. The original opaque review identity stays in the receipt separately.
 type ProgramInputCapture struct {
+	// State is the actual aggregate program lease, distinct from Outputs session storage.
+	State                      toolcontract.ReviewStateAdmission
 	Outputs                    *ProgramOutputRetention
 	Projector                  *captureprojection.Projector
 	ProgramID                  string
@@ -74,23 +76,23 @@ func (p ProgramInputCapture) RetainReviewedProgressInputs(ctx context.Context, i
 }
 
 func (p ProgramInputCapture) retain(ctx context.Context, execution string, review toolcontract.ReviewedOperationInputs, attach func(string, *tooloutput.StreamSpill, bool) (*tooloutput.RetainedStreamBody, error)) (string, error) {
-	if p.Outputs == nil || p.Outputs.resources == nil || ctx == nil {
+	if p.Outputs == nil || p.Outputs.resources == nil || p.State == nil || p.Scope.SessionID != p.Outputs.sessionID || ctx == nil {
 		return "", fmt.Errorf("reviewed input capture requires invocation output lifetime")
 	}
 	if err := validateReviewedInputs(review); err != nil {
 		return "", err
 	}
-	arguments, releaseArguments, err := review.Arguments(ctx, p.Outputs.resources)
+	arguments, releaseArguments, err := review.Arguments(ctx, p.State)
 	if err != nil {
 		return "", err
 	}
 	defer releaseArguments()
-	projected, metadata, releaseProjection, err := p.project(ctx, p.Outputs.resources, arguments)
+	projected, metadata, releaseProjection, err := p.project(ctx, p.State, arguments)
 	if err != nil {
 		return "", err
 	}
 	defer releaseProjection()
-	screened, releaseEncoding, err := toolcontract.NewReviewedOperationInputs(ctx, p.Outputs.resources, projected)
+	screened, releaseEncoding, err := toolcontract.NewReviewedOperationInputs(ctx, p.State, projected)
 	if err != nil {
 		return "", err
 	}

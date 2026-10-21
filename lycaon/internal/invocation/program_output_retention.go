@@ -5,14 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
-// ProgramOutputResources is the invocation/session accounting shared with live
-// streams. Boot must reconstruct all durable references before admitting work.
+// ProgramOutputResources is session output-lifetime accounting. It is not a new
+// command's per-program state budget. The existing session output lifecycle owns
+// one retention instance and reconstructs its session before admitting streams.
 type ProgramOutputResources interface {
 	tooloutput.SpillAdmission
 	tooloutput.StreamStateAdmission
@@ -27,6 +29,7 @@ type ProgramOutputRetention struct {
 	recorder  *SQLRecorder
 	store     blobstore.Store
 	resources ProgramOutputResources
+	sessionID string
 	mu        sync.Mutex
 	entries   map[string]*programRetainedBody
 	ready     bool
@@ -40,11 +43,11 @@ type programRetainedBody struct {
 	release   func()
 }
 
-func NewProgramOutputRetention(ctx context.Context, recorder *SQLRecorder, store blobstore.Store, resources ProgramOutputResources) (*ProgramOutputRetention, error) {
-	if ctx == nil || recorder == nil || recorder.database == nil || resources == nil {
+func NewProgramOutputRetention(ctx context.Context, recorder *SQLRecorder, store blobstore.Store, sessionID string, resources ProgramOutputResources) (*ProgramOutputRetention, error) {
+	if ctx == nil || sessionID == "" || recorder == nil || recorder.database == nil || resources == nil {
 		return nil, fmt.Errorf("program output retention requires recorder and resource admission")
 	}
-	release, err := resources.ReserveProgramState(ctx, 4096)
+	release, err := resources.ReserveProgramState(ctx, 4096+int64(len(sessionID))*2)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +56,7 @@ func NewProgramOutputRetention(ctx context.Context, recorder *SQLRecorder, store
 	}
 	store = recorder.ProgramBlobStore(store)
 	store.Dir = tooloutput.ToolOutputSpillDir
-	return &ProgramOutputRetention{recorder: recorder, store: store, resources: resources, entries: make(map[string]*programRetainedBody), release: release}, nil
+	return &ProgramOutputRetention{recorder: recorder, store: store, resources: resources, sessionID: strings.Clone(sessionID), entries: make(map[string]*programRetainedBody), release: release}, nil
 }
 
 // Attach retains the actual body after the existing receipt operation commits.
@@ -67,6 +70,13 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 	defer r.mu.Unlock()
 	if !r.ready || r.release == nil {
 		return fmt.Errorf("program output recovery is incomplete")
+	}
+	var scoped bool
+	if err := r.recorder.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_programs p JOIN invocation_receipts i ON i.id=p.parent_receipt_id WHERE p.id=? AND i.session_id=?)`, program, r.sessionID).Scan(&scoped); err != nil {
+		return err
+	}
+	if !scoped {
+		return fmt.Errorf("output attachment belongs to another session")
 	}
 	claim := spill.RetentionClaimID()
 	if r.entries[claim] != nil {
@@ -96,8 +106,8 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 // Open names an actual durable reference in this session/program. It neither
 // establishes delivered-source evidence nor treats readable bytes as completion.
 func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, reference string) (io.ReadCloser, error) {
-	if r == nil || ctx == nil {
-		return nil, fmt.Errorf("output read requires context")
+	if r == nil || ctx == nil || session != r.sessionID {
+		return nil, fmt.Errorf("output read requires actual session scope")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -156,6 +166,9 @@ func (r *ProgramOutputRetention) Collect(ctx context.Context) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.release == nil {
+		return nil
+	}
 	var failures error
 	for claim, entry := range r.entries {
 		var retained bool
@@ -186,6 +199,12 @@ func (r *ProgramOutputRetention) Collect(ctx context.Context) error {
 // quota. A blocked Close keeps this lifetime available for reconciliation.
 func (r *ProgramOutputRetention) Close(ctx context.Context) error {
 	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	closed := r.release == nil
+	r.mu.Unlock()
+	if closed {
 		return nil
 	}
 	if err := r.Collect(ctx); err != nil {

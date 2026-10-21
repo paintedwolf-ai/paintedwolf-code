@@ -40,7 +40,7 @@ func (r *ProgramOutputRetention) Restore(ctx context.Context) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	var bytes, count int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(sum(length(CAST(retention_claim_id AS BLOB))+length(CAST(initiating_claim_id AS BLOB))+length(CAST(blob_json AS BLOB))),0),count(*) FROM invocation_program_outputs`).Scan(&bytes, &count)
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(sum(length(CAST(retention_claim_id AS BLOB))+length(CAST(initiating_claim_id AS BLOB))+length(CAST(blob_json AS BLOB))),0),count(*) FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts i ON i.id=p.parent_receipt_id WHERE i.session_id=?`, r.sessionID).Scan(&bytes, &count)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (r *ProgramOutputRetention) Restore(ctx context.Context) error {
 		return fmt.Errorf("output recovery metadata returned no lease")
 	}
 	defer release()
-	rows, err := tx.QueryContext(ctx, `SELECT retention_claim_id,initiating_claim_id,blob_json FROM invocation_program_outputs ORDER BY retention_claim_id`)
+	rows, err := tx.QueryContext(ctx, `SELECT o.retention_claim_id,o.initiating_claim_id,o.blob_json FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts i ON i.id=p.parent_receipt_id WHERE i.session_id=? ORDER BY o.retention_claim_id`, r.sessionID)
 	if err != nil {
 		return err
 	}

@@ -33,7 +33,7 @@ func TestProgramReviewedInputCaptureScreensOriginalBytesAndRetainsIndependentPro
 	f := newProgramReceiptFixture(t)
 	child := f.child(t)
 	quota := &inputCaptureQuota{}
-	outputs, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, blobstore.Store{Root: t.TempDir()}, quota)
+	outputs, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, blobstore.Store{Root: t.TempDir()}, f.session, quota)
 	testutil.FailErr(t, "admit real invocation output lifetime", err)
 	testutil.FailErr(t, "reconstruct prior durable outputs", outputs.Restore(t.Context()))
 	const protected = "fixture-protected-value"
@@ -41,7 +41,7 @@ func TestProgramReviewedInputCaptureScreensOriginalBytesAndRetainsIndependentPro
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "token", Secret: protected, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})
-	capture := invocation.ProgramInputCapture{Outputs: outputs, Projector: captureprojection.New(matcher, nil), ProgramID: f.program, Scope: captureprojection.Scope{RootSessionID: f.session, SessionID: f.session}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
+	capture := invocation.ProgramInputCapture{Outputs: outputs, State: quota, Projector: captureprojection.New(matcher, nil), ProgramID: f.program, Scope: captureprojection.Scope{RootSessionID: f.session, SessionID: f.session}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
 	original := map[string]any{"path": "raw\xff/" + protected, "count": json.Number("9007199254740993")}
 	reviewed, releaseReview, err := toolcontract.NewReviewedOperationInputs(t.Context(), quota, original)
 	testutil.FailErr(t, "freeze real lossless opaque-reference input", err)
