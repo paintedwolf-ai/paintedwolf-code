@@ -4,7 +4,6 @@ package command_test
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -19,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -165,15 +163,26 @@ func (f *pathsFixture) stdout(t *testing.T, source string) string {
 	t.Helper()
 	out, err := f.Call(t, t.Context(), source)
 	testutil.FailErr(t, "run program", err)
-	var outcome command.ProgramOutcome
-	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(out), &outcome))
-	if outcome.Status != 0 {
+	outcome := decodeOutcome(t, out)
+	if outcome.Status != 0 || outcome.Refusal != nil {
 		t.Fatalf("program status %d stderr %q", outcome.Status, outcome.Stderr)
 	}
 	return outcome.Stdout
 }
 
 func lines(values ...string) string { return strings.Join(values, "\n") + "\n" }
+
+// refused runs a program the host stops and returns its outcome.
+func (f *pathsFixture) refused(t *testing.T, source, code string) command.ProgramOutcome {
+	t.Helper()
+	out, err := f.Call(t, t.Context(), source)
+	testutil.FailErr(t, "run refused program", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Refusal == nil || outcome.Refusal.Code != code || !strings.Contains(outcome.Refusal.Feedback, code) {
+		t.Fatalf("%s: refusal = %+v stderr %q, want %s", source, outcome.Refusal, outcome.Stderr, code)
+	}
+	return outcome
+}
 
 func TestProgramMovesBetweenAttachedFoldersWithAbsolutePaths(t *testing.T) {
 	f := newPathsFixture(t)
@@ -229,23 +238,18 @@ cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
 
 func TestUnknownAndStaleLabelsAtEntry(t *testing.T) {
 	f := newPathsFixture(t)
-	_, err := f.Call(t, t.Context(), "cat @missing/file")
-	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "UNKNOWN_ROOT_LABEL" || reject.Data["root_label"] != "missing" {
-		t.Fatalf("unknown label = %v", err)
-	}
+	f.refused(t, "cat @missing/file", "UNKNOWN_ROOT_LABEL")
 	// The web folder is removed between turns.
 	f.history.Record(testdbseed.DefaultProjectID, f.roots, []projectroot.RootRef{f.api})
 	f.roots = []projectroot.RootRef{f.api}
-	for _, source := range []string{"cat @web/index.html", "cat " + filepath.Join(f.web.Path, "index.html"), "cd " + f.web.Path, f.echo("@web/src")} {
-		_, err := f.Call(t, t.Context(), source)
-		reject := toolrejection.AsToolReject(err)
-		if reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_label"] != "web" {
-			t.Fatalf("%s = %v", source, err)
-		}
-		folders, _ := reject.Data["attached_folders"].([]string)
-		if len(folders) != 2 || folders[0] != "api → "+f.api.Path {
-			t.Fatalf("%s folders = %v", source, reject.Data["attached_folders"])
+	for _, source := range []string{"cat " + filepath.Join(f.web.Path, "index.html"), "cd " + f.web.Path} {
+		f.refused(t, source, tools.RootNotAttachedCode)
+	}
+	// A stale label refuses at its word, in shell voice too, for native and
+	// external argv alike.
+	for _, source := range []string{"cat @web/index.html", f.echo("@web/src")} {
+		if outcome := f.refused(t, source, tools.RootNotAttachedCode); !strings.Contains(outcome.Stderr, "@web: not attached here [ROOT_NOT_ATTACHED]") {
+			t.Fatalf("%s stderr = %q", source, outcome.Stderr)
 		}
 	}
 }
@@ -255,10 +259,9 @@ func TestRootRemovedMidProgramRefusesLaterEffects(t *testing.T) {
 	f.onHead = func() {
 		f.history.Record(testdbseed.DefaultProjectID, []projectroot.RootRef{f.api, f.web}, []projectroot.RootRef{f.api})
 	}
-	out, err := f.Call(t, t.Context(), "cat @web/index.html; head; cat @web/src/app.js")
-	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_status"] != "removed" {
-		t.Fatalf("mid-program removal = %q, %v", out, err)
+	// The read before the removal keeps its output beside the refusal.
+	if outcome := f.refused(t, "cat @web/index.html; head; cat @web/src/app.js", tools.RootNotAttachedCode); outcome.Stdout != "<p>web</p>\n" {
+		t.Fatalf("settled output = %q", outcome.Stdout)
 	}
 	// The read before the removal ran; the one after never reached its owner.
 	if executions := f.Executions(t); strings.Count(executions["cat"], ";") != 1 || strings.Count(executions["head"], ";") != 1 {
@@ -271,10 +274,7 @@ func TestRootRemovedMidProgramRefusesLaterEffects(t *testing.T) {
 	f.onHead = func() {
 		f.history.Record(testdbseed.DefaultProjectID, []projectroot.RootRef{f.api, f.web}, []projectroot.RootRef{f.api})
 	}
-	_, err = f.Call(t, t.Context(), "head; "+f.echo("after"))
-	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode {
-		t.Fatalf("launch after removal = %v", err)
-	}
+	f.refused(t, "head; "+f.echo("after"), tools.RootNotAttachedCode)
 }
 
 func TestPrimaryReplacementMovesWhereProgramsStart(t *testing.T) {
@@ -286,8 +286,5 @@ func TestPrimaryReplacementMovesWhereProgramsStart(t *testing.T) {
 	if got := f.stdout(t, "pwd; cd; pwd"); got != lines(web.Path, web.Path) {
 		t.Fatalf("after primary removal programs start at %q", got)
 	}
-	_, err := f.Call(t, t.Context(), "cat "+filepath.Join(f.api.Path, "go.mod"))
-	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_label"] != "api" {
-		t.Fatalf("old primary path = %v", err)
-	}
+	f.refused(t, "cat "+filepath.Join(f.api.Path, "go.mod"), tools.RootNotAttachedCode)
 }
