@@ -279,7 +279,12 @@ func (r *grepRun) patternFile(spelling string) ([]byte, error) {
 	if bound.Null {
 		return nil, nil
 	}
-	return r.inv.capture(bound)
+	content, err := r.inv.capture(bound)
+	if reason, ok := ordinary(err); ok {
+		r.inv.fail(false, "%s: %s", spelling, reason)
+		return nil, errUsage
+	}
+	return content, err
 }
 
 func (r *grepRun) count(key string) (int, bool, error) {

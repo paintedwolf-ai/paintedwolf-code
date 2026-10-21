@@ -21,6 +21,20 @@ type reference struct {
 	kind string // "bsd", "gnu" or "rg"
 }
 
+func lookReferencePath(name string) (string, error) {
+	if path, err := exec.LookPath(name); err == nil {
+		return path, nil
+	}
+	if !strings.Contains(name, "/") {
+		for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin"} {
+			if path, err := exec.LookPath(dir + "/" + name); err == nil {
+				return path, nil
+			}
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
 func references(t *testing.T) []reference {
 	t.Helper()
 	var out []reference
@@ -33,7 +47,7 @@ func references(t *testing.T) []reference {
 		{"gnu find", "/usr/bin/find", "gnu-find"},
 		{"gnu find", "gfind", "gnu-find"},
 	} {
-		path, err := exec.LookPath(candidate.path)
+		path, err := lookReferencePath(candidate.path)
 		if err != nil {
 			continue
 		}
@@ -176,12 +190,12 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"grep", "--line-buffered", "alpha", "input"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "-a", "alpha", "bin.dat"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "-I", "alpha", "bin.dat", "input"}, kinds: []string{"gnu", "bsd"}},
-	{argv: []string{"grep", "-c", "--binary-files=without-match", "alpha", "bin.dat"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-c", "--binary-files=without-match", "alpha", "bin.dat"}, kinds: []string{"gnu"}},
 	{argv: []string{"grep", "-G", "-o", `\(ab\)\1`, "repeat"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "--silent", "alpha", "a.txt"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "-1", "six", "a.txt"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "-d", "skip", "alpha", "sub", "input"}, kinds: []string{"gnu", "bsd"}},
-	{argv: []string{"grep", "-r", "--include-dir=deep", "alpha", "sub"}, kinds: []string{"bsd"}, sorted: true},
+	{argv: []string{"grep", "-r", "--include-dir=sub", "--include-dir=*deep", "alpha", "sub"}, kinds: []string{"bsd"}, sorted: true},
 	{argv: []string{"grep", "-u", "-U", "alpha", "input"}, kinds: []string{"bsd"}},
 	{argv: []string{"grep", "-H", "--label=piped", "alpha", "-"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}},

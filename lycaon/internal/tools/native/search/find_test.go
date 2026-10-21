@@ -110,35 +110,48 @@ func TestFindPreservesHostileNames(t *testing.T) {
 
 func TestFindRefusals(t *testing.T) {
 	h := newHarness(t, findTree)
+	h.exec("", "find", "tree", "-not-a-version-1-option").refused(t, "unsupported primary", "COMMAND_OPTION_UNSUPPORTED")
+}
+
+func TestFindUtilityErrors(t *testing.T) {
+	h := newHarness(t, findTree)
 	for _, c := range []struct {
-		name string
-		argv []string
-		code string
+		name   string
+		argv   []string
+		stderr string
 	}{
-		{"unsupported primary", []string{"find", "tree", "-not-a-version-1-option"}, "COMMAND_OPTION_UNSUPPORTED"},
-		{"unsupported type", []string{"find", "tree", "-type", "x"}, "COMMAND_OPERAND_INVALID"},
-		{"bad size", []string{"find", "tree", "-size", "1q"}, "COMMAND_OPERAND_INVALID"},
-		{"bad mtime", []string{"find", "tree", "-mtime", "x"}, "COMMAND_OPERAND_INVALID"},
-		{"bad depth", []string{"find", "tree", "-maxdepth", "-1"}, "COMMAND_OPERAND_INVALID"},
-		{"path after expression", []string{"find", "tree", "-name", "a", "extra"}, "COMMAND_OPERAND_INVALID"},
-		{"unbalanced close", []string{"find", "tree", ")"}, "COMMAND_OPERAND_INVALID"},
-		{"unbalanced open", []string{"find", "tree", "(", "-name", "a"}, "COMMAND_OPERAND_INVALID"},
-		{"empty parentheses", []string{"find", "tree", "(", ")"}, "COMMAND_OPERAND_INVALID"},
-		{"dangling operator", []string{"find", "tree", "-name", "a", "-o"}, "COMMAND_OPERAND_INVALID"},
-		{"leading operator", []string{"find", "tree", "-o", "-name", "a"}, "COMMAND_OPERAND_INVALID"},
-		{"invalid regex", []string{"find", "tree", "-regex", "(a"}, "GREP_REGEX_INVALID"},
-		{"exec needs terminator", []string{"find", "tree", "-exec", "printf", "{}"}, "COMMAND_OPERAND_INVALID"},
-		{"second braces in batch", []string{"find", "tree", "-exec", "printf", "{}x", "{}", "+"}, "COMMAND_OPERAND_INVALID"},
-		{"printf directive", []string{"find", "tree", "-printf", "%Z"}, "COMMAND_OPERAND_INVALID"},
-		{"printf escape", []string{"find", "tree", "-printf", "\\q"}, "COMMAND_OPERAND_INVALID"},
-		{"bad perm", []string{"find", "tree", "-perm", "u+x"}, "COMMAND_OPERAND_INVALID"},
-		{"user name", []string{"find", "tree", "-user", "root"}, "COMMAND_OPERAND_INVALID"},
-		{"group name", []string{"find", "tree", "-group", "wheel"}, "COMMAND_OPERAND_INVALID"},
-		{"leading option after paths", []string{"find", "tree", "-E"}, "COMMAND_OPERAND_INVALID"},
-		{"bad mmin", []string{"find", "tree", "-mmin", "x"}, "COMMAND_OPERAND_INVALID"},
+		{"invalid regex", []string{"find", "tree", "-regex", "(a"}, "find: failed to compile regular expression '(a': Unmatched ( or \\(\n"},
+		{"unsupported type", []string{"find", "tree", "-type", "x"}, ""},
+		{"bad size", []string{"find", "tree", "-size", "1q"}, ""},
+		{"bad mtime", []string{"find", "tree", "-mtime", "x"}, ""},
+		{"bad depth", []string{"find", "tree", "-maxdepth", "-1"}, ""},
+		{"path after expression", []string{"find", "tree", "-name", "a", "extra"}, ""},
+		{"unbalanced close", []string{"find", "tree", ")"}, ""},
+		{"unbalanced open", []string{"find", "tree", "(", "-name", "a"}, ""},
+		{"empty parentheses", []string{"find", "tree", "(", ")"}, ""},
+		{"dangling operator", []string{"find", "tree", "-name", "a", "-o"}, ""},
+		{"leading operator", []string{"find", "tree", "-o", "-name", "a"}, ""},
+		{"exec needs terminator", []string{"find", "tree", "-exec", "printf", "{}"}, ""},
+		{"second braces in batch", []string{"find", "tree", "-exec", "printf", "{}x", "{}", "+"}, ""},
+		{"printf directive", []string{"find", "tree", "-printf", "%Z"}, ""},
+		{"printf escape", []string{"find", "tree", "-printf", "\\q"}, ""},
+		{"bad perm", []string{"find", "tree", "-perm", "u+x"}, ""},
+		{"user name", []string{"find", "tree", "-user", "root"}, ""},
+		{"group name", []string{"find", "tree", "-group", "wheel"}, ""},
+		{"leading option after paths", []string{"find", "tree", "-E"}, ""},
+		{"bad mmin", []string{"find", "tree", "-mmin", "x"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h.exec("", c.argv...).refused(t, c.name, c.code)
+			r := h.exec("", c.argv...)
+			if r.err != nil || r.result.Terminal != toolcontract.ProducerCompleted || r.result.Status != 1 || r.stdout != "" || r.result.PublicationEligible {
+				t.Fatalf("%s: want utility error status 1, got result %+v err %v stdout %q stderr %q", c.name, r.result, r.err, r.stdout, r.stderr)
+			}
+			if c.stderr != "" && r.stderr != c.stderr {
+				t.Fatalf("%s: stderr %q, want %q", c.name, r.stderr, c.stderr)
+			}
+			if r.stderr == "" {
+				t.Fatalf("%s: empty stderr", c.name)
+			}
 		})
 	}
 }
@@ -295,7 +308,11 @@ func TestFindUserMatchesNumericOwner(t *testing.T) {
 	h.exec("", "find", "tree/sub", "-type", "f", "-user", uid).expect(t, "own files", "tree/sub/c.go\ntree/sub/empty.txt\n", "", 0)
 	h.exec("", "find", "tree/sub", "-type", "f", "-user", strconv.Itoa(os.Getuid()+1)).expect(t, "other owner", "", "", 0)
 	h.exec("", "find", "tree/sub/c.go", "-printf", "%U\\n").expect(t, "printf uid", uid+"\n", "", 0)
-	gid := strconv.Itoa(os.Getgid())
+	gidRun := h.exec("", "find", "tree/sub/c.go", "-printf", "%G")
+	if gidRun.err != nil || gidRun.stdout == "" {
+		t.Fatalf("printf gid: %q %v", gidRun.stdout, gidRun.err)
+	}
+	gid := gidRun.stdout
 	h.exec("", "find", "tree/sub", "-type", "f", "-uid", uid, "-gid", gid).expect(t, "uid and gid", "tree/sub/c.go\ntree/sub/empty.txt\n", "", 0)
 	h.exec("", "find", "tree/sub/c.go", "-group", gid).expect(t, "group", "tree/sub/c.go\n", "", 0)
 }

@@ -47,7 +47,7 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 		return nil, false, err
 	}
 	snapshot, err := s.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{Path: path, RootID: rootID}, AdmitEditable)
-	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourceBinary) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) {
+	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourceBinary) || errors.Is(err, projectsource.ErrSourceUnsupportedEncoding) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) || errors.Is(err, ErrReadOnly) {
 		return nil, false, nil
 	}
 	if err != nil {

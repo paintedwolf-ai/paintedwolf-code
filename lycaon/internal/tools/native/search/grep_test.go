@@ -250,22 +250,9 @@ func TestSearchRefusals(t *testing.T) {
 		code string
 	}{
 		{"unsupported option", []string{"grep", "--not-a-version-1-option", "x"}, "COMMAND_OPTION_UNSUPPORTED"},
-		{"conflicting matchers", []string{"grep", "-E", "-F", "x", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"egrep with fixed", []string{"egrep", "-F", "x", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"invalid BRE", []string{"grep", `\(`, "input"}, "GREP_REGEX_INVALID"},
 		{"unsupported PCRE", []string{"grep", "-P", "(?R)", "input"}, "GREP_REGEX_UNSUPPORTED"},
 		{"variable lookbehind", []string{"grep", "-P", "(?<=a+)b", "input"}, "GREP_REGEX_UNSUPPORTED"},
-		{"RE2 lacks references", []string{"rg", `(a)\1`, "input"}, "GREP_REGEX_INVALID"},
 		{"pattern budget", []string{"grep", string(make([]byte, 600)), "input"}, "GREP_MATCH_BUDGET"},
-		{"missing pattern", []string{"grep"}, "COMMAND_OPERAND_INVALID"},
-		{"bad max count", []string{"grep", "-m", "x", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"bad context", []string{"grep", "-A", "-1", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, "COMMAND_OPERAND_INVALID"},
-		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"color always", []string{"grep", "--color=always", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"basic with extended", []string{"grep", "-G", "-E", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"bad binary mode", []string{"grep", "--binary-files=maybe", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"bad directory action", []string{"grep", "-d", "maybe", "a", "input"}, "COMMAND_OPERAND_INVALID"},
 		{"BSD decompression", []string{"grep", "-J", "a", "input"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{"outside the roots", []string{"grep", "a", "/etc/hosts"}, ""},
 	} {
@@ -278,6 +265,45 @@ func TestSearchRefusals(t *testing.T) {
 				return
 			}
 			r.refused(t, c.name, c.code)
+		})
+	}
+}
+
+func TestSearchUtilityErrors(t *testing.T) {
+	h := newHarness(t, grepTree)
+	for _, c := range []struct {
+		name   string
+		argv   []string
+		stderr string
+	}{
+		{"invalid ERE", []string{"grep", "-E", "(", "input"}, "grep: Unmatched ( or \\(\n"},
+		{"invalid BRE", []string{"grep", `\(`, "input"}, "grep: Unmatched ( or \\(\n"},
+		{"RE2 lacks references", []string{"rg", `(a)\1`, "input"}, ""},
+		{"conflicting matchers", []string{"grep", "-E", "-F", "x", "input"}, "grep: one matcher; conflicting matchers specified\n"},
+		{"egrep with fixed", []string{"egrep", "-F", "x", "input"}, "egrep: one matcher; conflicting matchers specified\n"},
+		{"missing pattern", []string{"grep"}, "grep: a PATTERN operand or -e PATTERN\n"},
+		{"missing pattern option value", []string{"grep", "-e"}, "grep: -e: pattern value for -e\n"},
+		{"missing pattern file", []string{"grep", "-f", "missing", "input"}, "grep: missing: No such file or directory\n"},
+		{"bad max count", []string{"grep", "-m", "x", "a", "input"}, "grep: x: a nonnegative decimal count for -m\n"},
+		{"bad context", []string{"grep", "-A", "-1", "a", "input"}, "grep: -1: a nonnegative decimal count for -A\n"},
+		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, ""},
+		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "rg: $2: capture group $2 not defined by the pattern (it defines 1)\n"},
+		{"color always", []string{"grep", "--color=always", "a", "input"}, "grep: always: --color=never or --color=auto\n"},
+		{"basic with extended", []string{"grep", "-G", "-E", "a", "input"}, "grep: one matcher; conflicting matchers specified\n"},
+		{"bad binary mode", []string{"grep", "--binary-files=maybe", "a", "input"}, "grep: maybe: --binary-files=binary, text or without-match\n"},
+		{"bad directory action", []string{"grep", "-d", "maybe", "a", "input"}, "grep: maybe: -d read, skip or recurse\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := h.exec("", c.argv...)
+			if r.err != nil || r.result.Terminal != toolcontract.ProducerCompleted || r.result.Status != 2 || r.stdout != "" || r.result.PublicationEligible {
+				t.Fatalf("%s: want utility error status 2, got result %+v err %v stdout %q stderr %q", c.name, r.result, r.err, r.stdout, r.stderr)
+			}
+			if c.stderr != "" && r.stderr != c.stderr {
+				t.Fatalf("%s: stderr %q, want %q", c.name, r.stderr, c.stderr)
+			}
+			if r.stderr == "" {
+				t.Fatalf("%s: empty stderr", c.name)
+			}
 		})
 	}
 }
