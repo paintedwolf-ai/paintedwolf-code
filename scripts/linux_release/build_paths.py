@@ -1,7 +1,7 @@
 """Refuse first-party package executables that still carry the builder's paths.
 
 Release builds remap the builder's home, Rust toolchain, Cargo home and checkout
-(`scripts/rust-path-remap.sh`). A binary that still contains one of them exposes
+(`scripts/toolchain/rust-path-remap.sh`). A binary that still contains one of them exposes
 the build host's layout and shows that a build step bypassed the remap.
 """
 

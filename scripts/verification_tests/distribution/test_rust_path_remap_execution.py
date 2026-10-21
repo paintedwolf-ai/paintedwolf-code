@@ -9,7 +9,7 @@ import unittest
 from linux_release import build_paths
 
 SCRIPTS = Path(__file__).resolve().parents[2]
-HELPER = SCRIPTS / "rust-path-remap.sh"
+HELPER = SCRIPTS / "toolchain/rust-path-remap.sh"
 
 
 def remapped(environment, root, times=1):
