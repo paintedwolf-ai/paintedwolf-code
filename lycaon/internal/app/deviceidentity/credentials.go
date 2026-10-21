@@ -15,10 +15,12 @@ type Credentials struct {
 	Host      hostidentity.Identity
 }
 
-func Load() (Credentials, error) {
+// Load resolves the device's API bearer and host identity; delivered is the
+// token the desktop sent over the startup pipe, when it sent one.
+func Load(delivered string) (Credentials, error) {
 	var credentials Credentials
 	var err error
-	credentials.Token, credentials.Generated, err = ResolveToken()
+	credentials.Token, credentials.Generated, err = ResolveToken(delivered)
 	if err != nil {
 		return Credentials{}, fmt.Errorf("api token: %w", err)
 	}
@@ -32,7 +34,12 @@ func Load() (Credentials, error) {
 	}
 	return credentials, nil
 }
-func ResolveToken() (token string, generated bool, err error) {
+// ResolveToken prefers the delivered token, then LYCAON_API_TOKEN for a
+// standalone engine, then a generated one.
+func ResolveToken(delivered string) (token string, generated bool, err error) {
+	if token = strings.TrimSpace(delivered); token != "" {
+		return token, false, nil
+	}
 	if token = strings.TrimSpace(os.Getenv("LYCAON_API_TOKEN")); token != "" {
 		return token, false, nil
 	}

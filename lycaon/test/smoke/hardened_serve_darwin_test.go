@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -114,12 +113,3 @@ func hardenedCall(t *testing.T, baseURL, token, method, path string, body any, w
 	testutil.FailErr(t, "decode "+path, json.Unmarshal(payload, out))
 }
 
-func withoutEnv(env []string, name string) []string {
-	kept := env[:0:0]
-	for _, entry := range env {
-		if !strings.HasPrefix(entry, name+"=") {
-			kept = append(kept, entry)
-		}
-	}
-	return kept
-}

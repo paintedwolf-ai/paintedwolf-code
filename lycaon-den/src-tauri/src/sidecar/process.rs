@@ -11,6 +11,11 @@ use std::time::{Duration, Instant};
 
 const STARTUP_PROTOCOL_ENV: &str = "LYCAON_STARTUP_PROTOCOL";
 const CONTROL_STDIN_ENV: &str = "LYCAON_CONTROL_STDIN";
+/// The engine reads its API bearer as the first stdin frame. An initial
+/// environment stays readable through the process filesystem until the engine
+/// disables dumps, and to same-user processes on macOS for its whole life.
+const API_TOKEN_STDIN_ENV: &str = "LYCAON_API_TOKEN_STDIN";
+pub(super) const API_TOKEN_MAX_BYTES: usize = 512;
 const CONTROL_SHUTDOWN_FRAME: &[u8] = b"shutdown\n";
 pub(super) const VAULT_PASSWORD_MAX_BYTES: usize = 16 * 1024;
 /// Exceeds the engine's ordered shutdown budget.
@@ -105,17 +110,7 @@ pub(super) fn spawn_sidecar_process(
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
     let config_dir = crate::config_dir::ensure_host_config_dir()?;
-    let mut cmd = Command::new(&bin);
-    cmd.arg("serve")
-        .env("LYCAON_ADDR", "127.0.0.1:0")
-        .env("LYCAON_API_TOKEN", api_token)
-        .env("LYCAON_PRESENCE_PUBLIC_KEY", presence_public_key)
-        .env("LYCAON_CONFIG_DIR", &config_dir)
-        .env(STARTUP_PROTOCOL_ENV, STARTUP_PROTOCOL_VERSION.to_string())
-        .env(CONTROL_STDIN_ENV, "1")
-        .env("LYCAON_PARENT_PID", std::process::id().to_string())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped());
+    let mut cmd = engine_command(&bin, presence_public_key, &config_dir);
     if password.is_some() {
         cmd.env("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1");
     }
@@ -134,23 +129,58 @@ pub(super) fn spawn_sidecar_process(
         let path = engine_log_path();
         std::thread::spawn(move || drain_engine_stderr(stderr, path));
     }
-    if let Some(password) = password {
-        let Some(stdin) = child.stdin.as_mut() else {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("credential vault password pipe unavailable".to_string());
-        };
-        if let Err(err) = write_vault_password(stdin, password) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(err);
-        }
+    let Some(stdin) = child.stdin.as_mut() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("engine startup pipe unavailable".to_string());
+    };
+    let delivered = write_api_token(&mut *stdin, api_token).and_then(|()| match password {
+        Some(password) => write_vault_password(&mut *stdin, password),
+        None => Ok(()),
+    });
+    if let Err(err) = delivered {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(err);
     }
     let startup = child
         .stdout
         .take()
         .ok_or_else(|| "engine startup protocol pipe unavailable".to_string())?;
     Ok(SpawnedSidecar { child, startup })
+}
+
+/// The engine's command and environment. Secrets travel on its stdin.
+pub(super) fn engine_command(bin: &Path, presence_public_key: &str, config_dir: &Path) -> Command {
+    let mut cmd = Command::new(bin);
+    cmd.arg("serve")
+        .env_remove("LYCAON_API_TOKEN")
+        .env("LYCAON_ADDR", "127.0.0.1:0")
+        .env(API_TOKEN_STDIN_ENV, "1")
+        .env("LYCAON_PRESENCE_PUBLIC_KEY", presence_public_key)
+        .env("LYCAON_CONFIG_DIR", config_dir)
+        .env(STARTUP_PROTOCOL_ENV, STARTUP_PROTOCOL_VERSION.to_string())
+        .env(CONTROL_STDIN_ENV, "1")
+        .env("LYCAON_PARENT_PID", std::process::id().to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped());
+    cmd
+}
+
+/// Writes the engine's API bearer as a length-prefixed frame.
+pub(super) fn write_api_token<W: Write>(mut writer: W, token: &str) -> Result<(), String> {
+    if token.is_empty()
+        || token.len() > API_TOKEN_MAX_BYTES
+        || !token.bytes().all(|b| b.is_ascii_graphic())
+    {
+        return Err("engine api token must be 1 to 512 printable ASCII bytes".to_string());
+    }
+    let size =
+        u32::try_from(token.len()).map_err(|_| "engine api token is too large".to_string())?;
+    writer
+        .write_all(&size.to_be_bytes())
+        .and_then(|_| writer.write_all(token.as_bytes()))
+        .map_err(|err| format!("write engine api token: {err}"))
 }
 
 pub(super) fn write_vault_password<W: Write>(mut writer: W, password: &[u8]) -> Result<(), String> {
