@@ -13,11 +13,15 @@ PIN="${ROOT}/lycaon/config/runtime/ocrengine/pin.yaml"
 DEST="${OCRENGINE_DEST:-${ROOT}/lycaon-den/src-tauri/engine-root/ocr}"
 TARGET=""
 ARCHIVE="${OCRENGINE_ARCHIVE:-}"
+TRAINED_DATA_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)
       [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --target requires a platform triple" >&2; exit 2; }
       TARGET="$2"; shift ;;
+    --trained-data-dir)
+      [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --trained-data-dir requires a directory" >&2; exit 2; }
+      TRAINED_DATA_DIR="$2"; shift ;;
     --archive)
       [[ $# -ge 2 ]] || { echo "ocrengine-fetch: --archive requires a release archive" >&2; exit 2; }
       ARCHIVE="$2"; shift ;;
@@ -104,15 +108,42 @@ ARCHIVE_SHA="$(read_section "${PLATFORM_KEY}" sha256)"
 ARCHIVE_BYTES="$(read_section "${PLATFORM_KEY}" bytes)"
 BINARY_SHA="$(read_section "${PLATFORM_KEY}" binary_sha256)"
 BINARY_BYTES="$(read_section "${PLATFORM_KEY}" binary_bytes)"
-ENG_SHA="$(read_section eng_traineddata sha256)"
-ENG_BYTES="$(read_section eng_traineddata bytes)"
-OSD_SHA="$(read_section osd_traineddata sha256)"
-OSD_BYTES="$(read_section osd_traineddata bytes)"
-
-if [[ -z "${ENGINE_VERSION}" || -z "${URL_TMPL}" || -z "${ENG_SHA}" || -z "${OSD_SHA}" ]]; then
-  echo "error: incomplete pin in ${PIN}" >&2
+HAS_ENGLISH=0
+HAS_ORIENTATION=0
+DATA_LANGUAGES=()
+DATA_SHAS=()
+DATA_BYTES=()
+DATA_SOURCES=()
+while IFS= read -r key; do
+  [[ "${key}" =~ ^([a-z]{3}(_[a-z]{3,4})?)_traineddata$ ]] || { echo "error: invalid trained-data key" >&2; exit 1; }
+  language="${key%_traineddata}"
+  for previous in "${DATA_LANGUAGES[@]}"; do
+    [[ "${previous}" != "${language}" ]] || { echo "error: duplicate trained data" >&2; exit 1; }
+  done
+  [[ "${language}" != eng ]] || HAS_ENGLISH=1
+  [[ "${language}" != osd ]] || HAS_ORIENTATION=1
+  digest="$(read_section "${key}" sha256)"
+  bytes="$(read_section "${key}" bytes)"
+  [[ "${digest}" =~ ^[0-9a-f]{64}$ && "${bytes}" =~ ^[1-9][0-9]*$ ]] || { echo "error: unpinned trained data" >&2; exit 1; }
+  source="$(read_section "${key}" source)"
+  [[ -z "${source}" || "${source}" == tessdata-fast ]] || { echo "error: unknown trained-data source" >&2; exit 1; }
+  if [[ "${language}" == eng || "${language}" == osd ]]; then
+    [[ -z "${source}" ]] || { echo "error: base OCR models must come from the producer archive" >&2; exit 1; }
+  fi
+  DATA_SOURCES+=("${source}")
+  DATA_LANGUAGES+=("${language}")
+  DATA_SHAS+=("${digest}")
+  DATA_BYTES+=("${bytes}")
+done < <(awk '
+  $0 == "trained_data:" { inside = 1; next }
+  inside && /^[^[:space:]]/ { exit }
+  inside && /^  [^[:space:]]+:/ { key = $1; sub(/:$/, "", key); print key }
+' "${PIN}")
+if [[ -z "${ENGINE_VERSION}" || -z "${URL_TMPL}" || "${HAS_ENGLISH}" != 1 || "${HAS_ORIENTATION}" != 1 || ${#DATA_LANGUAGES[@]} -lt 2 || ${#DATA_LANGUAGES[@]} -gt 9 ]]; then
+  echo "error: incomplete or oversized OCR pin in ${PIN}" >&2
   exit 1
 fi
+
 if [[ -z "${ARCHIVE_SHA}" || "${ARCHIVE_BYTES}" == "0" || -z "${BINARY_SHA}" ]]; then
   echo "error: the ${PLATFORM_KEY} OCR engine is not published: ${PIN} carries no archive digest for it" >&2
   exit 1
@@ -140,10 +171,12 @@ verify_payload() {
 
 verify_tree() {
   local root="$1"
-  verify_payload "${root}/bin/tesseract" "${BINARY_SHA}" "${BINARY_BYTES}" &&
-    verify_payload "${root}/tessdata/eng.traineddata" "${ENG_SHA}" "${ENG_BYTES}" &&
-    verify_payload "${root}/tessdata/osd.traineddata" "${OSD_SHA}" "${OSD_BYTES}" &&
-    [[ -x "${root}/bin/tesseract" ]]
+  verify_payload "${root}/bin/tesseract" "${BINARY_SHA}" "${BINARY_BYTES}" || return 1
+  local index
+  for ((index=0; index<${#DATA_LANGUAGES[@]}; index++)); do
+    verify_payload "${root}/tessdata/${DATA_LANGUAGES[index]}.traineddata" "${DATA_SHAS[index]}" "${DATA_BYTES[index]}" || return 1
+  done
+  [[ -x "${root}/bin/tesseract" ]]
 }
 
 if [[ -f "${DEST}/VERSION" && "$(tr -d '[:space:]' < "${DEST}/VERSION")" == "${ENGINE_VERSION}" ]] && verify_tree "${DEST}" 2>/dev/null; then
@@ -187,6 +220,25 @@ if [[ "$(tr -d '[:space:]' < "${STAGE}/VERSION")" != "${ENGINE_VERSION}" ]]; the
   echo "error: archive VERSION $(cat "${STAGE}/VERSION") differs from the pin ${ENGINE_VERSION}" >&2
   exit 1
 fi
+MODEL_REPOSITORY="$(read_mapping trained_data_source repository)"
+MODEL_COMMIT="$(read_mapping trained_data_source commit)"
+for ((index=0; index<${#DATA_LANGUAGES[@]}; index++)); do
+  [[ "${DATA_SOURCES[index]}" == tessdata-fast ]] || continue
+  if [[ "${MODEL_REPOSITORY}" != tesseract-ocr/tessdata_fast || ! "${MODEL_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "error: supplemental OCR models require an immutable tessdata_fast source" >&2
+    exit 1
+  fi
+  model="${DATA_LANGUAGES[index]}.traineddata"
+  payload="${TMP_DIR}/${model}"
+  if [[ -n "${TRAINED_DATA_DIR}" ]]; then
+    cp "${TRAINED_DATA_DIR}/${model}" "${payload}"
+  else
+    curl -fsSL --max-filesize "${DATA_BYTES[index]}" -o "${payload}" \
+      "https://raw.githubusercontent.com/${MODEL_REPOSITORY}/${MODEL_COMMIT}/${model}"
+  fi
+  verify_payload "${payload}" "${DATA_SHAS[index]}" "${DATA_BYTES[index]}"
+  mv "${payload}" "${STAGE}/tessdata/${model}"
+done
 verify_tree "${STAGE}"
 chmod -R u+rwX,go+rX "${STAGE}"
 
