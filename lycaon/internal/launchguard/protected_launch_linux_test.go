@@ -217,6 +217,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.BrokerUserExec != "brokered-user-program" {
 		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
 	}
+	testutil.FailErr(t, "post-launch host mounts do not enter the module view", sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID)))
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}

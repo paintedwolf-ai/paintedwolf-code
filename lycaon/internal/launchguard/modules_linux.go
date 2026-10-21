@@ -17,8 +17,10 @@ import (
 // program interpreter, the policy's system executables and its library roots.
 // Every other mount, including each user-writable one, is noexec, so the
 // dynamic loader cannot map a module from a user-controlled path, however a
-// library names it. The mounts are owned by the initial user namespace, so
-// nothing inside the protected namespace can clear the attribute.
+// library names it. Propagation is private, so mounts created on the host
+// after launch cannot enter without noexec. The mounts are owned by the
+// initial user namespace, so nothing inside the protected namespace can clear
+// the attribute.
 //
 // The broker agent keeps the launch's original mount namespace: programs it
 // starts outside the protected namespace keep the caller's ordinary authority,
@@ -60,6 +62,9 @@ func moduleRoots(policy GenerationPolicy, interpreter string) []string {
 }
 
 func applyModuleView(policy GenerationPolicy, interpreter string) error {
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+		return fmt.Errorf("make module view private: %w", err)
+	}
 	noexec := unix.MountAttr{Attr_set: unix.MOUNT_ATTR_NOEXEC}
 	if err := unix.MountSetattr(unix.AT_FDCWD, "/", unix.AT_RECURSIVE, &noexec); err != nil {
 		return fmt.Errorf("mark mounts noexec: %w", err)
