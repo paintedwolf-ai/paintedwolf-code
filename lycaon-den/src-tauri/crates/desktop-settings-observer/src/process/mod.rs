@@ -277,9 +277,9 @@ mod tests {
         unsafe {
             libc::close(descriptor);
         }
+        let input = File::from(OwnedFd::from(child.stdin.take().unwrap()));
         let result = child.wait().unwrap();
         assert!(result.success());
-        let input = File::from(OwnedFd::from(child.stdin.take().unwrap()));
         stop(input, &mut child);
         assert!(child.try_wait().unwrap().is_some());
     }
