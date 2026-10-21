@@ -815,6 +815,8 @@ Repository generators take an exclusive writer slot (`repo-snapshot.lockdir` in 
 
 ### Generated-surface write paths
 
+**Browser page driver:** edit `lycaon-den/src/platform/semantic-driver/` → `./task codegen:browser-driver`. Commit the generated `lycaon/internal/browser/embed/semantic_driver.js` with the source changes; the Go host injects that bundle into browser pages.
+
 **Wire types and operations (same change):** edit `docs/openapi/**` → `./task openapi:bundle` → `./task codegen:den-types`. This generates Den and Go wire types plus operation bindings for both clients and handlers. Register each `/v1` handler through the generated operation in `Server.registerV1Operation`, so authorization, rate limits, and person-action recording share the declared route. Never edit generated files. Handwritten `pkg/api` files retain custom union decoding, validation, and support types. [API conventions](host-contract.md#11-api-conventions) define the route shapes.
 
 Mark an ordinary object schema `x-go-generate: true`. Required properties retain their JSON tags; optional properties use `omitempty`. Add `x-go-pointer: true` when an optional scalar must distinguish absence from an explicit zero or false. Nullable scalars also become pointers. `x-go-name` specifies a field's Go spelling, or on a schema its Go type name (references follow it); `x-go-type` supplies an explicit representation for raw JSON, custom unions, or numeric widths. `x-go-field-order` is needed only when the Go layout differs from schema property order. These annotations live on the modular schema, alongside its wire contract. Unsupported or ambiguous shapes fail generation rather than inventing a representation. Contract discovery checks generated and handwritten objects against the schema without a second DTO registry.
@@ -916,7 +918,7 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 | `/opt/painted-wolf-code/release-version`, `THIRD-PARTY-NOTICES.md` | release resources |
 | `/usr/share/applications/dev.paintedwolf.code.desktop`, `/usr/share/icons/hicolor/` | the desktop entry named by the bundle identifier and icons. The shell sets its GTK program name to that identifier, which GTK 3 uses as the Wayland app id and the X11 window class (`StartupWMClass=dev.paintedwolf.code`), and `enableGTKAppId` registers it as the GTK application id, so a second launch activates the running instance and exits. It is the only desktop entry; the assembler drops the product-named one Tauri always writes |
 
-`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only), `selinux/*.pp` (rpm only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile or SELinux module when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, so the rpm loads none. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
+`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
 
@@ -1003,6 +1005,30 @@ that has already seen its successor. A stable release that also advances the
 Preview feed is signed for its own version, so Preview clients install it like
 any other offer.
 
+**Linux package signatures.** `packaging/linux/signing/keys.json` selects the
+full OpenPGP fingerprint and generation for native Linux package and repository
+metadata signatures. `python3 -m scripts.linux_release.signing` provides isolated
+RPM signing, detached signatures and clear-signed apt `InRelease` generation.
+Each operation imports only the selected public key into a private keyring,
+checks the private identity when signing, verifies the result with RSA/SHA-512,
+and replaces the destination only after verification. The private key comes
+from the protected `LINUX_PACKAGE_SIGNING_KEY` environment or an explicitly
+selected owner-only file; it is never a command argument. This trust is distinct
+from updater/feed signatures and Nix cache trust.
+
+`./task release:rehearse:linux-signing -- --receipt /absolute/path/result.json`
+runs a local, non-publishing rehearsal with a disposable key and tiny RPM fixture.
+Add `--candidate-dir /absolute/path/candidates --require-architectures x86_64,aarch64`
+to exercise retained candidate packages without changing their original bytes.
+The candidate CI legs run this mode and retain its public receipt. It checks
+correct/wrong keys, unsigned and damaged RPMs, changed metadata, clear and detached
+signatures, and production rejection of fixture keys. Private fixture material
+and its agent/keyring are removed when the rehearsal finishes. No production
+credential or R2 request is needed. The verification queue admits it under its
+own `linux-signing-fixture` lock, apart from the credentialed `release:live-test`
+R2 rehearsal. Repository activation, key rotation and CDN consistency
+are verified by the format-specific publication work.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
@@ -1011,9 +1037,28 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 ### Release dry run
 
+The isolated R2 rehearsal uses S3 credentials with **Object Read & Write** permission scoped to its test bucket. Create `~/.config/paintedwolf/release-rehearsal.json`, owned by your user with mode `600` (or read-only `400`):
+
+```json
+{
+  "schema_version": 1,
+  "endpoint_url": "https://<account-id>.r2.cloudflarestorage.com",
+  "bucket": "paintedwolf-release-test",
+  "access_key_id": "<R2 S3 access key ID>",
+  "secret_access_key": "<R2 S3 secret access key>",
+  "download_base_url": "https://test-download.example.com"
+}
+```
+
+Use the bucket's actual S3 endpoint, including its jurisdiction suffix when applicable. `download_base_url` is the HTTPS origin serving that test bucket; it needs public reads and must exercise the intended CDN cache rules. An optional `session_token` supports temporary S3 credentials. The file is JSON, never sourced as shell code; symlinks, unknown fields, duplicate fields, and files readable by other users are refused. Keep it outside the repository. No Cloudflare account API token is needed.
+
+With AWS CLI v2, bun, curl, jq, Python 3, and Ruby installed, run `./task release:live-test`. Override the config path with `RELEASE_TEST_CONFIG=/absolute/path/config.json`. The rehearsal writes beneath a unique `release-system-tests/<run-id>/` prefix and cleans up only its recorded keys. Use a dedicated test bucket and download domain: this is a credentialed write/delete test, not an offline check or public release.
+
+The protected `release-rehearsal` GitHub environment uses `RELEASE_TEST_R2_ACCESS_KEY_ID` and `RELEASE_TEST_R2_SECRET_ACCESS_KEY` secrets, optional `RELEASE_TEST_R2_SESSION_TOKEN`, and `RELEASE_TEST_R2_ENDPOINT_URL`, `RELEASE_TEST_R2_BUCKET`, and `RELEASE_TEST_DOWNLOAD_BASE_URL` variables. These environment fields are the fallback when no local config file exists. Local execution clears inherited AWS profiles, role credentials, metadata discovery, and Cloudflare tokens before invoking S3. Production publication credentials are unchanged.
+
 Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
 
-The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, upgrade rehearsal, signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source.
+The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, sidecar/store rehearsal, the [desktop self-upgrade gate](#desktop-self-upgrade-release-gate), signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source. The trusted controller also supplies the macOS native notarization adapter: it retains Apple's accepted ticket contents and every staple/validation result, validates the app ticket before Tauri creates its updater archive, and refuses missing or failed operation receipts. Stapling gets at most three attempts, with 10- and 30-second delays; retries do not resubmit notarization or weaken final artifact verification. Evidence uploads even when packaging fails. Failed signed updater archives are retained for 14 days so ticket diagnosis can reuse their exact bytes without another build. This lets an unchanged, qualified application tag use repaired packaging control without replacing its source.
 
 ### Clean-Mac validation
 
@@ -1062,9 +1107,10 @@ Every release tag clears the same gate:
 4. `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
    clean source commit that landed on `main`.
 5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac (it only warns on hosted runners).
-6. The updater public key is real, the private key is available to Actions, and
+6. The [desktop self-upgrade gate](#desktop-self-upgrade-release-gate) completes before publication, using the exact signed candidate and supported automatic-updater sources. Its receipt distinguishes tested paths from excluded or inapplicable sources.
+7. The updater public key is real, the private key is available to Actions, and
    both closed channel endpoints match the egress inventory.
-7. Tag the selected fully qualified commit that landed on `main`. Main may advance
+8. Tag the selected fully qualified commit that landed on `main`. Main may advance
    afterward; unlanded source or qualification for another commit is refused.
    To publish an existing historical tag, dispatch the release workflow from
    `main` with that exact `release_tag`. Keep published tags immutable.
@@ -1077,3 +1123,86 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+### Upgrade source evidence
+
+The release controller authenticates prior channel pointers with the retained feed
+keys before selecting an upgrade source. `release_control.py snapshot` retains
+those exact pointer and signature bytes alongside `plan.json`. Its matrix keeps
+stable and preview preferences distinct, includes stable users opting into preview,
+and follows each retained trust bridge before offering the candidate. Withdrawn
+releases remain source installations; a withdrawn bridge cannot advance trust.
+Missing or invalid signatures fail selection rather than silently reducing coverage.
+
+The 1.0.0 and 1.0.1 clients use the Tauri updater plugin and require an explicit
+install action. Their exclusions identify `tauri-plugin-v1`; automatic cases name
+`native-v2` and support automatic preparation and startup activation. Each case
+records the source archive's signing generation separately from the installed
+app's embedded trust generation. These are
+released protocol boundaries, not runtime guesses from logs or file presence.
+
+Desktop rehearsal covers the automatic updater in the 1.0.2 line onward. Manual
+clients are recorded under `excluded_sources` with `requires_manual_installation`;
+they retain sidecar/store coverage through `upgrade:rehearse`. A desktop result
+with no automatic source records `no_automatic_upgrade_source`, never a pass.
+
+### Desktop self-upgrade release gate
+
+The release workflow rehearses automatic updates for direct-download macOS
+installations shipped in the 1.0.2 line and later. The existing sidecar/store
+rehearsal continues to cover earlier manual clients. A protected preparation job authenticates and freezes prior feeds,
+verifies prior archives and the exact candidate archive, and signs channel-bound
+candidate pointers. Retained bridge pointers and their signatures are served
+byte for byte from the authenticated source snapshot. Only public keys, signed
+pointers, archives, and corpus data reach the desktop runner; artifact-signing credentials stay in the build job and
+feed-signing credentials stay in preparation.
+
+After 1.0.2 ships, its immutable release manifest remains a permanent automatic
+updater baseline alongside the active stable and preview sources. This covers
+installations that skip releases even after both mutable pointers advance.
+Archived baseline metadata records `artifact_signature_required` until preparation
+verifies its exact version-bound archive signature against the retained public
+key. Executable fixtures require `artifact_signature_verified`; metadata alone
+cannot authorize a baseline app. Every skipped trust generation follows its
+registered channel bridge before reaching the candidate.
+
+Each source/channel case uses a fresh GitHub-hosted arm64 macOS runner with an
+absent product store and its actual account home. Cases run serially, isolating
+Keychain state as well as files while keeping the declared runner footprint.
+It refuses local and self-hosted execution.
+This makes the updater's normal LaunchServices relaunch use the same installation
+and data root without changing the shipped binary or adding runtime overrides.
+The runner launch environment sets `LYCAON_LLM_MOCK=1` across helper relaunches
+and restores its previous value during cleanup. A temporary CA, trusted only on
+that runner, and an owned `/etc/hosts` entry direct
+`downloads.paintedwolf.dev` to a local HTTPS fixture. The fixture serves exact
+allowlisted paths and retains request evidence. Cleanup removes its certificate
+and hosts entry and stops its captured server process; cleanup failures fail the
+gate. Cancellation records an interrupted result and attempts the same cleanup.
+
+`./task upgrade:rehearse -- --bundle --case <id> --fixtures <directory> --evidence <directory>`
+uses the prepared artifact without rebuilding the candidate. The protected job
+prepares it through the same target with `--prepare-bundle --manifest PATH
+--archives DIR --source DIR --output DIR`. Each case installs
+an unmodified prior app in writable scratch space, materializes its exact corpus,
+and enables automatic updates with rollout bucket zero. After automatic staging,
+it terminates the staged source process and stops its captured engine, then
+launches that installation again to exercise startup activation. The installed
+bundle must remain unchanged until that launch.
+The shipped helper performs activation and relaunch. Assertions require the
+prepared bundle's inode at the installation path, matching executable and release
+identities, healthy engine/schema, startup confirmation, old-bundle removal,
+retained corpus semantics, and another healthy restart. Preview promotion keeps
+the preview preference; retained generations advance through their bridge feeds.
+
+Upgrade fixtures and desktop evidence are retained for 14 days with attempt-specific
+artifact names. A retried desktop job consumes the successful preparation job's
+original artifact; retries preserve earlier diagnostics. Failed or cancelled
+preparation retains its public source pointers and candidate manifest separately.
+The receipt binds the selected source SHA, candidate version, fixture inventory,
+per-case transitions, and exclusions. Failed cases retain native records and
+engine diagnostics without API tokens. An empty automatic-source matrix records
+`not_applicable` and its reason; it does not claim a tested upgrade. Publication
+and activation depend on successful completion of the desktop gate. PR tests
+exercise preparation failures, TLS routing, runner admission, and receipt rules;
+only the protected signed release run qualifies a real old-to-new app upgrade.
