@@ -60,6 +60,10 @@ type protectedFacts struct {
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
+	BrokerOutput    string                      `json:"broker_output,omitempty"`
+	BrokerExit      int                         `json:"broker_exit"`
+	BrokerError     string                      `json:"broker_error,omitempty"`
+	AbandonedEnded  bool                        `json:"abandoned_ended"`
 }
 
 // launchFixture is one installed fixture layout.
@@ -318,7 +322,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	f := installLaunchFixture(t)
 	home := t.TempDir()
 	env := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LD_PRELOAD=/tmp/planted.so", "GTK_MODULES=planted", "LYCAON_SANDBOX=off", "SSL_CERT_FILE=/tmp/planted.pem"}
-	launch := startLaunch(t, f, env, "--fixture-argument")
+	launch := startLaunch(t, f, env, "--fixture-argument", "--broker-probe")
 	facts := launch.facts
 	uid, gid := os.Getuid(), os.Getgid()
 	if facts.ReadError != "" {
@@ -335,7 +339,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.Executable != filepath.Join(f.install, "bin/painted-wolf-code") {
 		t.Fatalf("desktop executable %q is not the logical generation path", facts.Executable)
 	}
-	if len(facts.Arguments) != 2 || facts.Arguments[1] != "--fixture-argument" {
+	if len(facts.Arguments) != 3 || facts.Arguments[1] != "--fixture-argument" {
 		t.Fatalf("desktop arguments %q", facts.Arguments)
 	}
 	for _, key := range facts.Environment {
@@ -361,6 +365,16 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
 	assertCallerCredentials(t, launch.cmd.Process.Pid)
+	// The broker starts programs outside the protected namespace, with the
+	// caller's ordinary authority, and ends one whose caller abandons it.
+	own, err := os.Readlink("/proc/self/ns/user")
+	testutil.FailErr(t, "own user namespace", err)
+	if facts.BrokerError != "" || facts.BrokerExit != 0 || !strings.Contains(facts.BrokerOutput, own) || !strings.Contains(facts.BrokerOutput, "NoNewPrivs:\t0") {
+		t.Fatalf("brokered program did not run in the caller's namespace without no_new_privs: %q exit %d error %q (want %s)", facts.BrokerOutput, facts.BrokerExit, facts.BrokerError, own)
+	}
+	if !facts.AbandonedEnded {
+		t.Fatal("an abandoned brokered program kept running")
+	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}

@@ -13,10 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/launchguard"
 	"github.com/lycaon/lycaon/internal/launchverify"
 )
 
@@ -38,6 +41,10 @@ type Facts struct {
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
+	BrokerOutput    string                      `json:"broker_output,omitempty"`
+	BrokerExit      int                         `json:"broker_exit"`
+	BrokerError     string                      `json:"broker_error,omitempty"`
+	AbandonedEnded  bool                        `json:"abandoned_ended"`
 }
 
 func main() {
@@ -72,6 +79,11 @@ func main() {
 	install := filepath.Dir(filepath.Dir(facts.Executable))
 	facts.InstallWrite = errnoName(os.WriteFile(filepath.Join(install, "planted"), []byte("x"), 0o644))
 	facts.Remount = errnoName(unix.Mount("", install, "", unix.MS_REMOUNT|unix.MS_BIND, ""))
+	for _, arg := range os.Args[1:] {
+		if arg == "--broker-probe" {
+			brokerProbe(&facts)
+		}
+	}
 	// Stay dumpable and traceable by anyone: only the namespace can refuse.
 	_ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0)
 	_ = unix.Prctl(unix.PR_SET_PTRACER, unix.PR_SET_PTRACER_ANY, 0, 0, 0)
@@ -79,6 +91,70 @@ func main() {
 		os.Exit(2)
 	}
 	_, _ = io.Copy(io.Discard, os.Stdin)
+}
+
+// brokerProbe runs one program through the supervisor's broker and reports
+// where it ran, then abandons a second one and reports whether it ended.
+func brokerProbe(facts *Facts) {
+	broker := os.NewFile(6, "broker")
+	null, err := os.Open("/dev/null")
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	defer func() { _ = null.Close() }()
+	read, write, err := os.Pipe()
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	channel, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+		Argv:        []string{"sh", "-c", "readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status"},
+		Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
+	}, null, write, write)
+	_ = write.Close()
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	output, _ := io.ReadAll(read)
+	facts.BrokerOutput = string(output)
+	for {
+		event, err := launchguard.ReadBrokerEvent(channel)
+		if err != nil {
+			facts.BrokerError = err.Error()
+			break
+		}
+		if event.Error != "" {
+			facts.BrokerError = event.Error
+			break
+		}
+		if event.Exited {
+			facts.BrokerExit = event.Code
+			break
+		}
+	}
+	_ = channel.Close()
+	sleeper, err := launchguard.SendBrokerRequest(broker, launchguard.BrokerRequest{
+		Argv: []string{"sleep", "60"}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
+	}, null, null, null)
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	started, err := launchguard.ReadBrokerEvent(sleeper)
+	_ = sleeper.Close()
+	if err != nil || started.Started <= 0 {
+		facts.BrokerError = "abandoned call never started"
+		return
+	}
+	for i := 0; i < 250; i++ {
+		if _, err := os.Stat("/proc/" + strconv.Itoa(started.Started)); err != nil {
+			facts.AbandonedEnded = true
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func errnoName(err error) string {
