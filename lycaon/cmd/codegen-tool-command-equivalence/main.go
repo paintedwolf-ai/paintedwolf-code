@@ -81,6 +81,9 @@ func main() {
 	if err := writeOrCheck(paths.generatedReadHabitGo, habitSrc, *check); err != nil {
 		fatal(err)
 	}
+	if err := generateLanguageCatalog(paths.root, *check); err != nil {
+		fatal(err)
+	}
 	if err := patchToolSchemas(paths.toolSchemasDir, eq, *check); err != nil {
 		fatal(err)
 	}
