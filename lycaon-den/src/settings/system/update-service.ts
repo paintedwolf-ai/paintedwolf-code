@@ -2,7 +2,7 @@ import type { UpdateError } from "./update-error.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { listenHostEvent } from "../../platform/windows/window-channel.ts";
 const UPDATE_STATE_EVENT = "update-state-changed";
-type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "unknown";
+type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "package_ownership_unknown" | "unknown";
 /** The running package and observed source facts; an upstream feed cannot establish ownership or a pin. */
 export type InstalledPackage = {
   family: "deb" | "rpm" | "pacman" | "nix"; name: string; version: string; update_command: string;

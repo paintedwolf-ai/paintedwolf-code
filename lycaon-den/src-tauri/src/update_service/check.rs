@@ -127,7 +127,15 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
             inner.state.channel,
         )
     };
-    let mut facts = super::persistence::detect_install_source();
+    // Ownership that was not established is queried again, off the async workers.
+    let mut facts = tauri::async_runtime::spawn_blocking(super::persistence::detect_install_source)
+        .await
+        .unwrap_or_else(|_| super::persistence::InstallFacts {
+            source: super::InstallSource::Unknown,
+            channel: None,
+            package: None,
+            error: Some(super::Failure::StateUnavailable.into()),
+        });
     let package = facts.package.take();
     let result = tokio::select! {
         result = async {

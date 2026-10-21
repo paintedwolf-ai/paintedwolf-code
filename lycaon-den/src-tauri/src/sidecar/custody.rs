@@ -78,7 +78,7 @@ fn engine_command(args: &[&str]) -> Result<Command, String> {
 fn read_custody() -> Result<CustodyReport, String> {
     if let Err(reason) = super::installation::ensure_current() {
         return Ok(CustodyReport {
-            mode: "restart_required".into(),
+            mode: if reason.restart_required() { "restart_required" } else { "installation_unverified" }.into(),
             service_verified: false,
             detail: Some(reason.guidance()),
         });
@@ -157,7 +157,7 @@ fn move_custody(
         });
     }
     super::installation::ensure_current().map_err(|reason| CustodyError {
-        code: "desktop_restart_required".into(),
+        code: if reason.restart_required() { "desktop_restart_required" } else { "installation_unverified" }.into(),
         message: reason.guidance(),
         engine_stopped: false,
     })?;

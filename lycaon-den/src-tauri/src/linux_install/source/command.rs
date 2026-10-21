@@ -2,12 +2,12 @@
 use super::QueryReason;
 use std::{io::Read, process::{Child, Command, Stdio}, sync::{Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, Instant}};
 
-pub(super) struct Output {
+pub(in crate::linux_install) struct Output {
     pub code: i32,
     pub stdout: String,
 }
 
-pub(super) trait Reader {
+pub(in crate::linux_install) trait Reader {
     fn read(&mut self, program: &str, args: &[&str]) -> Result<Output, QueryReason>;
 }
 

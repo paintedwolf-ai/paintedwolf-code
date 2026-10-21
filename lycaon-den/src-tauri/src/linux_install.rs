@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 mod source;
-pub use source::PackageSourceFacts;
+pub use source::{PackageSourceFacts, QueryReason};
 pub use source::refresh as refresh_source;
 
 pub const INSTALL_ROOT: &str = crate::installation_mode::LINUX_PACKAGE_ROOT;
@@ -81,17 +81,51 @@ pub fn package_layout(install_root: &Path) -> Option<PackageLayout> {
     present.then_some(layout)
 }
 
-/// The package that owns the running executable, resolved once per process.
-pub fn installed() -> Option<&'static InstalledPackage> {
-    static INSTALLED: OnceLock<Option<InstalledPackage>> = OnceLock::new();
-    INSTALLED
-        .get_or_init(|| {
-            if !cfg!(target_os = "linux") {
-                return None;
-            }
-            owner(running_executable()?)
-        })
-        .as_ref()
+/// Whether the package database owns the running executable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ownership {
+    Package(&'static InstalledPackage),
+    Unpackaged,
+    /// The database did not answer; no decision that depends on ownership may proceed.
+    Unknown(QueryReason),
+}
+
+impl Ownership {
+    pub fn package(self) -> Option<&'static InstalledPackage> {
+        match self {
+            Self::Package(package) => Some(package),
+            Self::Unpackaged | Self::Unknown(_) => None,
+        }
+    }
+}
+
+const OWNER_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// A definitive answer is kept for the process; an unknown one is asked again next time.
+pub fn installed() -> Ownership {
+    static RESOLVED: OnceLock<Option<InstalledPackage>> = OnceLock::new();
+    resolve(&RESOLVED, || {
+        if !cfg!(target_os = "linux") {
+            return Ok(None);
+        }
+        let executable = running_executable().ok_or(QueryReason::InvalidResponse)?;
+        owner(executable, &mut source::PerQuery(OWNER_QUERY_TIMEOUT))
+    })
+}
+
+fn resolve(
+    cache: &'static OnceLock<Option<InstalledPackage>>,
+    query: impl FnOnce() -> Result<Option<InstalledPackage>, QueryReason>,
+) -> Ownership {
+    let resolved = match cache.get() {
+        Some(resolved) => resolved,
+        None => match query() {
+            // Concurrent definitive answers read the same database; the first one stays.
+            Ok(found) => cache.get_or_init(|| found),
+            Err(reason) => return Ownership::Unknown(reason),
+        },
+    };
+    resolved.as_ref().map_or(Ownership::Unpackaged, Ownership::Package)
 }
 
 /// Preserve the executable's original installed path even after replacement unlinks it.
@@ -100,26 +134,51 @@ fn running_executable() -> Option<&'static Path> {
     EXECUTABLE.get_or_init(|| std::env::current_exe().ok()).as_deref()
 }
 
-fn owner(executable: &Path) -> Option<InstalledPackage> {
+fn owner(executable: &Path, reader: &mut impl source::Reader) -> Result<Option<InstalledPackage>, QueryReason> {
     if !executable.is_absolute() {
-        return None;
+        return Ok(None);
     }
-    query_dpkg(executable).or_else(|| query_rpm(executable)).or_else(|| query_pacman(executable))
+    if let Some(package) = query_dpkg(executable, reader)? {
+        return Ok(Some(package));
+    }
+    if let Some(package) = query_rpm(executable, reader)? {
+        return Ok(Some(package));
+    }
+    query_pacman(executable, reader)
 }
 
-fn run(program: &str, args: &[&str]) -> Option<String> {
-    source::read(program, args).ok()
+/// Exit status 1 is each manager's no-owner outcome and an absent manager owns nothing.
+/// Any other outcome leaves ownership unknown rather than unpackaged.
+fn claimed(reader: &mut impl source::Reader, program: &str, args: &[&str]) -> Result<Option<String>, QueryReason> {
+    match reader.read(program, args) {
+        Err(QueryReason::AdapterUnavailable) => Ok(None),
+        Err(reason) => Err(reason),
+        Ok(output) if output.code == 0 => Ok(Some(output.stdout)),
+        Ok(output) if output.code == 1 => Ok(None),
+        Ok(_) => Err(QueryReason::QueryFailed),
+    }
 }
 
-fn query_dpkg(executable: &Path) -> Option<InstalledPackage> {
-    let search = run("/usr/bin/dpkg-query", &["-S", &executable.to_string_lossy()])?;
-    let name = parse_dpkg_owner(&search, executable)?;
-    let version = run("/usr/bin/dpkg-query", &["-W", "-f=${Version}", &name])?;
+fn required(reader: &mut impl source::Reader, program: &str, args: &[&str]) -> Result<String, QueryReason> {
+    let output = reader.read(program, args)?;
+    if output.code != 0 {
+        return Err(QueryReason::QueryFailed);
+    }
+    Ok(output.stdout)
+}
+
+fn query_dpkg(executable: &Path, reader: &mut impl source::Reader) -> Result<Option<InstalledPackage>, QueryReason> {
+    let Some(search) = claimed(reader, "/usr/bin/dpkg-query", &["-S", &executable.to_string_lossy()])? else {
+        return Ok(None);
+    };
+    let name = parse_dpkg_owner(&search, executable).ok_or(QueryReason::InvalidResponse)?;
+    let version = required(reader, "/usr/bin/dpkg-query", &["-W", "-f=${Version}", &name])?;
     let version = version.trim();
-    (!version.is_empty())
-        .then(|| InstalledPackage::new(PackageFamily::Deb, name, version.to_owned()))
+    if version.is_empty() {
+        return Err(QueryReason::InvalidResponse);
+    }
+    Ok(Some(InstalledPackage::new(PackageFamily::Deb, name, version.to_owned())))
 }
-
 /// `dpkg-query -S` prints `name[:arch][, name...]: path` per owning package.
 fn parse_dpkg_owner(output: &str, executable: &Path) -> Option<String> {
     let wanted = executable.to_string_lossy();
@@ -139,27 +198,24 @@ fn parse_dpkg_owner(output: &str, executable: &Path) -> Option<String> {
     names.into_iter().next()
 }
 
-fn query_rpm(executable: &Path) -> Option<InstalledPackage> {
-    let output = run(
-        "/usr/bin/rpm",
-        &[
-            "-qf",
-            "--qf",
-            "%{NAME}\t%{VERSION}\n",
-            &executable.to_string_lossy(),
-        ],
-    )?;
-    parse_rpm_owner(&output)
+fn query_rpm(executable: &Path, reader: &mut impl source::Reader) -> Result<Option<InstalledPackage>, QueryReason> {
+    let args = ["-qf", "--qf", "%{NAME}\t%{VERSION}\n", &executable.to_string_lossy()];
+    let Some(output) = claimed(reader, "/usr/bin/rpm", &args)? else {
+        return Ok(None);
+    };
+    parse_rpm_owner(&output).map(Some).ok_or(QueryReason::InvalidResponse)
 }
 
-fn query_pacman(executable: &Path) -> Option<InstalledPackage> {
-    let name = run("/usr/bin/pacman", &["-Qoq", "--", &executable.to_string_lossy()])?;
+fn query_pacman(executable: &Path, reader: &mut impl source::Reader) -> Result<Option<InstalledPackage>, QueryReason> {
+    let Some(name) = claimed(reader, "/usr/bin/pacman", &["-Qoq", "--", &executable.to_string_lossy()])? else {
+        return Ok(None);
+    };
     let name = name.trim();
-    if !source::valid_package_name(name) { return None; }
-    let raw = run("/usr/bin/pacman", &["-Q", "--", name])?;
+    if !source::valid_package_name(name) { return Err(QueryReason::InvalidResponse); }
+    let raw = required(reader, "/usr/bin/pacman", &["-Q", "--", name])?;
     let fields: Vec<_> = raw.split_whitespace().collect();
-    if fields.len() != 2 || fields[0] != name { return None; }
-    Some(InstalledPackage::new(PackageFamily::Pacman, name.into(), fields[1].into()))
+    if fields.len() != 2 || fields[0] != name { return Err(QueryReason::InvalidResponse); }
+    Ok(Some(InstalledPackage::new(PackageFamily::Pacman, name.into(), fields[1].into())))
 }
 
 /// `rpm -qf --qf '%{NAME}\t%{VERSION}\n'` prints one line per owning package.
@@ -172,6 +228,9 @@ fn parse_rpm_owner(output: &str) -> Option<InstalledPackage> {
     (source::valid_package_name(name) && !version.is_empty() && !version.chars().any(char::is_control))
         .then(|| InstalledPackage::new(PackageFamily::Rpm, name.to_owned(), version.to_owned()))
 }
+
+#[cfg(test)]
+mod ownership_tests;
 
 #[cfg(test)]
 mod tests {
@@ -249,6 +308,6 @@ mod tests {
 
     #[test]
     fn relative_executables_are_never_package_owned() {
-        assert!(owner(Path::new("painted-wolf-code")).is_none());
+        assert_eq!(owner(Path::new("painted-wolf-code"), &mut source::PerQuery(OWNER_QUERY_TIMEOUT)), Ok(None));
     }
 }

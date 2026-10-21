@@ -136,6 +136,7 @@ describe("resolveCriticalStop", () => {
     ["credential_vault_uninitialized", "create_credential_vault"],
     ["credential_vault_corrupt", "reset_credential_vault"],
     ["desktop_restart_required", "quit_desktop"],
+    ["installation_unverified", "reconnect"],
   ] as const)("maps %s to its vault recovery", (startFailure, recovery) => {
     const stop = resolveCriticalStop({ sidecarStatus: "disconnected", startFailure });
     expect(stop?.code).toBe(startFailure);

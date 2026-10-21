@@ -6,25 +6,42 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::Path;
 
+use super::SidecarStartError;
+use crate::linux_install::{Ownership, QueryReason};
+
 pub(super) const RESTART_GUIDANCE: &str = "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.";
+pub(super) const UNVERIFIED_GUIDANCE: &str = "Painted Wolf Code could not confirm which package owns this installation, so it did not start new engine work. Wait for any package operation to finish, then try again. Your saved credentials are preserved.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RestartReason {
     ManifestUnavailable,
     DesktopIdentityChanged,
     RunningImageUnavailable,
+    /// Not a restart requirement: the replacement check could not run, and a retry asks again.
+    OwnershipUnknown(QueryReason),
 }
 
 impl RestartReason {
     pub(super) fn guidance(self) -> String {
-        format!(
-            "{RESTART_GUIDANCE} ({})",
-            match self {
-                Self::ManifestUnavailable => "manifest_unavailable",
-                Self::DesktopIdentityChanged => "desktop_identity_changed",
-                Self::RunningImageUnavailable => "running_image_unavailable",
-            }
-        )
+        let (copy, code) = match self {
+            Self::ManifestUnavailable => (RESTART_GUIDANCE, "manifest_unavailable"),
+            Self::DesktopIdentityChanged => (RESTART_GUIDANCE, "desktop_identity_changed"),
+            Self::RunningImageUnavailable => (RESTART_GUIDANCE, "running_image_unavailable"),
+            Self::OwnershipUnknown(_) => (UNVERIFIED_GUIDANCE, "package_ownership_unknown"),
+        };
+        format!("{copy} ({code})")
+    }
+
+    pub(super) fn restart_required(self) -> bool {
+        !matches!(self, Self::OwnershipUnknown(_))
+    }
+
+    pub(super) fn start_error(self) -> SidecarStartError {
+        if self.restart_required() {
+            SidecarStartError::DesktopRestartRequired(self.guidance())
+        } else {
+            SidecarStartError::InstallationUnverified(self.guidance())
+        }
     }
 }
 
@@ -45,15 +62,29 @@ struct Executable {
 /// This is an admission refusal for mutable native packages, never launcher trust.
 /// Nix closures need their resolved generation facts rather than this native root.
 pub(super) fn ensure_current() -> Result<(), RestartReason> {
-    if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
+    if !cfg!(target_os = "linux") {
+        return Ok(());
+    }
+    admit(crate::linux_install::installed(), || {
         let root = Path::new(crate::linux_install::INSTALL_ROOT);
         let manifest = std::fs::File::open(root.join("manifest.json"))
             .map_err(|_| RestartReason::ManifestUnavailable)?;
         let running = std::fs::File::open("/proc/self/exe")
             .map_err(|_| RestartReason::RunningImageUnavailable)?;
-        return verify_current(root, manifest, running);
+        verify_current(root, manifest, running)
+    })
+}
+
+/// Unknown ownership fails closed: the replacement check cannot be skipped by a slow database.
+fn admit(
+    ownership: Ownership,
+    verify_package: impl FnOnce() -> Result<(), RestartReason>,
+) -> Result<(), RestartReason> {
+    match ownership {
+        Ownership::Package(_) => verify_package(),
+        Ownership::Unpackaged => Ok(()),
+        Ownership::Unknown(reason) => Err(RestartReason::OwnershipUnknown(reason)),
     }
-    Ok(())
 }
 
 fn verify_current(
@@ -144,6 +175,19 @@ mod tests {
             ),
             Err(RestartReason::ManifestUnavailable)
         );
+    }
+
+    #[test]
+    fn unknown_ownership_refuses_without_skipping_to_unpackaged_admission() {
+        let refused = admit(Ownership::Unknown(QueryReason::TimedOut), || panic!("no package to verify"));
+        assert_eq!(refused, Err(RestartReason::OwnershipUnknown(QueryReason::TimedOut)));
+        let reason = refused.unwrap_err();
+        assert!(!reason.restart_required());
+        assert!(matches!(reason.start_error(), SidecarStartError::InstallationUnverified(message)
+            if message.starts_with(UNVERIFIED_GUIDANCE) && message.ends_with("(package_ownership_unknown)")));
+        assert_eq!(admit(Ownership::Unpackaged, || panic!("no package to verify")), Ok(()));
+        let changed = RestartReason::DesktopIdentityChanged;
+        assert!(matches!(changed.start_error(), SidecarStartError::DesktopRestartRequired(message) if message.starts_with(RESTART_GUIDANCE)));
     }
 
     #[cfg(unix)]
