@@ -5,11 +5,11 @@
   "workstream": "linux-native-packages",
   "disposition": "retain",
   "reason": "Retain the measured 465-line cross-platform staging transaction within its existing 480-line ceiling. Final package names, complete tree audits and signature admission remain one transaction; the fixed extracted-engine diagnostic delegates root lease, sealed-byte identity, exact transient AppArmor attachment and cleanup to package_probe. No confinement policy or package-format parsing is duplicated in the shell. The pinned probe contracts drive the lease, manifest, ELF and attachment refusals and exact-profile cleanup through real fixture packages; the pacman candidate contracts bind the final retained bytes of every native family.",
-  "reviewed_commit": "44e9b36a07044f6be1d657dcea90fdb6aed1de65",
+  "reviewed_commit": "327064fa6dce73553c14397275da9b83373e89db",
   "ceiling": 480,
   "boundaries": {
     "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
     "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "be9b6f3dcc7cea9f3660cb6cf9898338a5ce5525fe31ca226c4e91b49a012a63",
-    "scripts/verification_tests/distribution/test_package_probe_execution.py": "d0c66c83b348ffe0e82a9f6ad2e732dd0d1cc9bbf08d97199f3451f66f15f264"
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "ab179ea75e1b54989cd89b15e73c85cf4884208ff8a606d6876e7b9111342689"
   }
 }
