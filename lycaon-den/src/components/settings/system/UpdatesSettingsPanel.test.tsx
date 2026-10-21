@@ -46,7 +46,8 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-brew-upgrade")).textContent).toContain("brew upgrade --cask painted-wolf-code");
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
-    expect(screen.queryByText(/installs them when you quit/)).not.toBeNull();
+    expect(screen.getByTestId("updates-package-hint").textContent).toContain("Updates install through Homebrew");
+    expect(screen.queryByText(/installs them when you quit/)).toBeNull();
   });
   it("attributes a package-managed refusal to the package manager, not Homebrew", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture({ last_error: { code: "package_managed" } }) })} />);

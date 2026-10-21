@@ -121,6 +121,13 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 		if err := resolveDriveFixtures(ctx, tctx, in.Routes, nil); err != nil {
 			return "", err
 		}
+		if in.ProjectDir != "" {
+			if _, err := browser.ResolveTarget(browser.CaptureRequest{
+				ProjectDir: in.ProjectDir, Path: in.Path, Routes: in.Routes,
+			}); err != nil {
+				return "", mapBrowserReject(err)
+			}
+		}
 		width, height := 0, 0
 		if in.Viewport != nil {
 			width, height = in.Viewport.Width, in.Viewport.Height
@@ -163,7 +170,9 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 
 // reopenHeld reloads the page already held for the target, or returns nil when there is none.
 func reopenHeld(ctx context.Context, pages *pagesession.Registry, tctx tools.ToolContext, in pageOpenArgs, width, height int) (*pagesession.Entry, error) {
-	target, err := browser.ResolveTarget(browser.CaptureRequest{URL: in.URL, ProjectDir: in.ProjectDir, Path: in.Path})
+	target, err := browser.ResolveTarget(browser.CaptureRequest{
+		URL: in.URL, ProjectDir: in.ProjectDir, Path: in.Path, Routes: in.Routes,
+	})
 	if err != nil {
 		return nil, nil //nolint:nilerr // An unresolvable target opens fresh and reports its own rejection.
 	}

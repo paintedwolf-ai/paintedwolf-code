@@ -3,6 +3,7 @@
 mod activation;
 mod delivery;
 mod identity;
+pub(super) mod launcher;
 
 use std::{
     cell::RefCell,
