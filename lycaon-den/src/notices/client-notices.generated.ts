@@ -19,6 +19,7 @@ export type ClientNoticeAction = "retry_contribution_frame";
 export type ClientNoticeKind =
   | "contribution_frame_unavailable"
   | "credential_vault_corrupt"
+  | "credential_vault_custodian_absent"
   | "credential_vault_custodian_unavailable"
   | "credential_vault_identity_missing"
   | "credential_vault_launcher_refused"
@@ -72,6 +73,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     suggestedAction: "The credential vault could not be reset. Quit and reopen the app, then try again.",
     scope: "app",
   },
+  credential_vault_custodian_absent: {
+    title: "Vault identity service is gone",
+    message: "The vault identity service that held the key to your saved credentials is not installed, not running, or cannot serve this computer. If an administrator can reinstall or re-enable it, do that and try again. Otherwise reset the vault: the key the service held cannot be recovered, so saved credentials are removed; projects and conversation history are not deleted.",
+    suggestedAction: "The vault identity service is still unavailable. Reinstall or re-enable it and try again, or reset the vault.",
+    scope: "app",
+  },
   credential_vault_custodian_unavailable: {
     title: "Credential custodian is unavailable",
     message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app. An app password can open this vault only after its key has been exported to password custody.",
@@ -80,8 +87,8 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   credential_vault_identity_missing: {
     title: "Credential vault key is missing",
-    message: "The key for this credential vault is missing from its custodian. Your encrypted credentials are preserved. Restore the matching key or the original configuration root, then try again. A new password cannot replace a missing key.",
-    suggestedAction: "The matching credential vault key is still missing. Restore it before trying again.",
+    message: "The key that opens your saved credentials is no longer held by this device, so they cannot be opened. If you can restore the key, for example from a backup of the Keychain or the original configuration folder, restore it and try again. Otherwise reset the vault: saved credentials are removed, and projects and conversation history are not deleted.",
+    suggestedAction: "The key is still missing. Restore it and try again, or reset the vault.",
     scope: "app",
   },
   credential_vault_launcher_refused: {

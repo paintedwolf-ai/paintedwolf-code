@@ -93,6 +93,27 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 	}
 }
 
+func TestShippedParserDiagnostics(t *testing.T) {
+	policy := shippedToolCallRejections(t)
+	for _, tc := range []struct{ raw, diagnostic string }{
+		{"{\"content\":\"line\nbreak\"}", "unescaped_newline"},
+		{`{"content":"a\qb"}`, "invalid_escape"},
+		{`{"content":`, "unexpected_end"},
+		{`{"content":"\u12G4"}`, ""},
+		{`{"content":"say "hi""}`, ""},
+	} {
+		var args map[string]any
+		err := json.Unmarshal([]byte(tc.raw), &args)
+		if err == nil {
+			t.Fatalf("fixture accepted: %q", tc.raw)
+		}
+		rejection, ok := policy.Match(err.Error())
+		if !ok || rejection.Diagnostic != tc.diagnostic {
+			t.Errorf("%q: diagnostic = %q, want %q", err.Error(), rejection.Diagnostic, tc.diagnostic)
+		}
+	}
+}
+
 func TestOllamaTypesDroppedToolCall(t *testing.T) {
 	write := tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}
 	policy := shippedToolCallRejections(t)
