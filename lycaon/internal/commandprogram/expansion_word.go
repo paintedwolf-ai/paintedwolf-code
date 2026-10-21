@@ -89,7 +89,11 @@ func (r *expansionRun) literal(text string, context expand.QuoteContext) error {
 	var err error
 	expand.RemoveQuotes(text, context, func(piece string, escaped bool) {
 		if err == nil && piece != "" {
-			err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
+			if !escaped && context == expand.UnquotedText && r.mode == modeFields && r.document == nil {
+				err = r.assembly.split(piece)
+			} else {
+				err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
+			}
 		}
 	})
 	return err

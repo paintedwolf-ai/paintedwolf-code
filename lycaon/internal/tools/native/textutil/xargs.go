@@ -32,7 +32,7 @@ func runXargs(inv *invocation) error {
 	if len(command) == 0 {
 		command = commandprogram.Fields{{Value: "echo", Span: inv.request.Invocation.Span}}
 	}
-	batches, err := x.batches(command, lines, plan)
+	batches, err := plan.batches(inv, command, lines)
 	if err != nil {
 		return err
 	}

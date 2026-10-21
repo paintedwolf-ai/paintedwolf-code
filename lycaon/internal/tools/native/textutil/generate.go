@@ -60,7 +60,7 @@ func runSeq(inv *invocation) error {
 		buffer.WriteString(format(current))
 		count++
 		if buffer.Len() >= 32<<10 {
-			if err := inv.flushChunk(&buffer); err != nil {
+			if err := flushChunk(inv, &buffer); err != nil {
 				return err
 			}
 		}
@@ -68,11 +68,11 @@ func runSeq(inv *invocation) error {
 	if count > 0 {
 		buffer.WriteString(terminator)
 	}
-	return inv.flushChunk(&buffer)
+	return flushChunk(inv, &buffer)
 }
 
 // flushChunk writes a bounded chunk of generated output and checks for cancellation.
-func (inv *invocation) flushChunk(buffer *bytes.Buffer) error {
+func flushChunk(inv *invocation, buffer *bytes.Buffer) error {
 	if err := inv.ctx.Err(); err != nil {
 		return err
 	}

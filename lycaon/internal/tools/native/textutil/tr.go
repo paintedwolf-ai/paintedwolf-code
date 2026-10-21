@@ -236,7 +236,7 @@ func runTr(inv *invocation) error {
 			squeezed[c] = true
 		}
 	}
-	return inv.transformBytes(func(in []byte, out []byte, last *int) []byte {
+	return transformBytes(inv, func(in []byte, out []byte, last *int) []byte {
 		for _, c := range in {
 			if deleted[c] {
 				continue
@@ -268,7 +268,7 @@ func complementBytes(set []byte) []byte {
 }
 
 // transformBytes streams standard input through a byte transform in bounded chunks.
-func (inv *invocation) transformBytes(transform func(in, out []byte, last *int) []byte) error {
+func transformBytes(inv *invocation, transform func(in, out []byte, last *int) []byte) error {
 	const chunk = 32 << 10
 	if err := inv.reserve(2 * chunk); err != nil {
 		return err

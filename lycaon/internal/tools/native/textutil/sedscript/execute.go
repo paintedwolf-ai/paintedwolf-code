@@ -11,7 +11,7 @@ func (m *Machine) execute() (ending, error) {
 	commands := m.program.commands
 	for pc := 0; pc < len(commands); {
 		c := commands[pc]
-		selected, ends, err := m.selects(c)
+		selected, ends, err := c.selects(m)
 		if err != nil {
 			return endCycle, err
 		}
@@ -28,8 +28,8 @@ func (m *Machine) execute() (ending, error) {
 			continue
 		}
 		if c.name == 'b' || c.name == 't' || c.name == 'T' {
-			if m.branches(c) {
-				if err := m.step(); err != nil {
+			if m.stream.branches(c) {
+				if err := m.stream.step(m.ctx, m.config.StepLimit); err != nil {
 					return endCycle, err
 				}
 				pc = c.jump
@@ -45,15 +45,15 @@ func (m *Machine) execute() (ending, error) {
 }
 
 // branches reports whether b, t or T jumps; t and T reset the flag they test.
-func (m *Machine) branches(c *command) bool {
+func (s *inputState) branches(c *command) bool {
 	switch c.name {
 	case 't':
-		taken := m.stream.replaced
-		m.stream.replaced = false
+		taken := s.replaced
+		s.replaced = false
 		return taken
 	case 'T':
-		taken := !m.stream.replaced
-		m.stream.replaced = false
+		taken := !s.replaced
+		s.replaced = false
 		return taken
 	}
 	return true
@@ -63,12 +63,13 @@ func (m *Machine) branches(c *command) bool {
 func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 	out := m.stream.out
 	pattern := m.space.pattern
+	delimiter := m.config.Delimiter
 	var err error
 	switch c.name {
 	case 'd':
 		return endDelete, true, nil
 	case 'D':
-		i := bytes.IndexByte(pattern, m.config.Delimiter)
+		i := bytes.IndexByte(pattern, delimiter)
 		if i < 0 {
 			return endDelete, true, nil
 		}
@@ -79,7 +80,7 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 			return endCycle, true, nil
 		}
 		if c.name == 'n' && !m.config.Quiet {
-			if err := m.emit(out, pattern, m.stream.terminated); err != nil {
+			if err := out.emit(pattern, delimiter, m.stream.terminated); err != nil {
 				return endCycle, true, err
 			}
 		}
@@ -92,26 +93,26 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		return endQuitSilent, true, nil
 	case 'c':
 		if ends || c.negate {
-			err = m.text(out, c.text)
+			err = out.text(c.text)
 		}
 		return endDelete, true, err
 	case 'p':
-		err = m.emit(out, pattern, m.stream.terminated)
+		err = out.emit(pattern, delimiter, m.stream.terminated)
 	case 'P', 'W':
 		if c.name == 'W' {
 			out = m.outputs[c.arg]
 		}
-		if i := bytes.IndexByte(pattern, m.config.Delimiter); i >= 0 {
-			err = m.emit(out, pattern[:i], true)
+		if i := bytes.IndexByte(pattern, delimiter); i >= 0 {
+			err = out.emit(pattern[:i], delimiter, true)
 		} else {
-			err = m.emit(out, pattern, m.stream.terminated)
+			err = out.emit(pattern, delimiter, m.stream.terminated)
 		}
 	case 'w':
-		err = m.emit(m.outputs[c.arg], pattern, m.stream.terminated)
+		err = m.outputs[c.arg].emit(pattern, delimiter, m.stream.terminated)
 	case 'a':
 		m.appends = append(m.appends, appendItem{text: c.text})
 	case 'i':
-		err = m.text(out, c.text)
+		err = out.text(c.text)
 	case 'r':
 		m.appends = append(m.appends, appendItem{file: c.arg})
 	case 'R':
@@ -119,31 +120,30 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 			m.appends = append(m.appends, appendItem{text: line})
 		}
 	case '=':
-		err = m.text(out, strconv.AppendInt(nil, int64(m.stream.line), 10))
+		err = out.text(strconv.AppendInt(nil, int64(m.stream.line), 10))
 	case 'F':
-		err = m.text(out, []byte(m.stream.source))
+		err = out.text([]byte(m.stream.source))
 	case 'l':
-		err = m.raw(out, list(pattern, c.number))
+		err = out.raw(list(pattern, c.number))
 	case 's':
-		err = m.substitute(c.sub)
+		err = c.sub.apply(m)
 	default:
-		err = m.edit(c)
+		err = m.space.edit(c, delimiter, m.config.SpaceLimit, m.config.Reserve)
 	}
 	return endCycle, false, err
 }
 
 // edit runs the commands that only change pattern or hold space.
-func (m *Machine) edit(c *command) error {
-	s := &m.space
+func (s *spaces) edit(c *command, delimiter byte, limit int64, reserve func(int64) error) error {
 	switch c.name {
 	case 'g':
 		s.pattern = append(s.pattern[:0], s.hold...)
 	case 'G':
-		s.pattern = append(append(s.pattern, m.config.Delimiter), s.hold...)
+		s.pattern = append(append(s.pattern, delimiter), s.hold...)
 	case 'h':
 		s.hold = append(s.hold[:0], s.pattern...)
 	case 'H':
-		s.hold = append(append(s.hold, m.config.Delimiter), s.pattern...)
+		s.hold = append(append(s.hold, delimiter), s.pattern...)
 	case 'x':
 		s.pattern, s.hold = s.hold, s.pattern
 	case 'z':
@@ -162,28 +162,28 @@ func (m *Machine) edit(c *command) error {
 	default:
 		return nil
 	}
-	return m.account()
+	return s.account(limit, reserve)
 }
 
 // selects applies the command's addresses and reports whether this line ends
 // its selection. A range starts when its first address matches; a regex end
 // is searched from the next line; a numeric end at or before the start line
 // selects that line alone; every range ends with the input.
-func (m *Machine) selects(c *command) (selected, ends bool, err error) {
+func (c *command) selects(m *Machine) (selected, ends bool, err error) {
 	if c.first == nil {
 		return !c.negate, true, nil
 	}
 	if c.second == nil {
-		matched, err := m.matches(c.first)
+		matched, err := c.first.matches(m)
 		return matched != c.negate, true, err
 	}
 	if !c.span.active {
-		return m.startRange(c)
+		return c.startRange(m)
 	}
-	closes := m.lastLine()
+	closes := m.stream.lastLine()
 	switch second := c.second; second.kind {
 	case addrRegex:
-		matched, err := m.matches(second)
+		matched, err := second.matches(m)
 		if err != nil {
 			return false, false, err
 		}
@@ -195,7 +195,7 @@ func (m *Machine) selects(c *command) (selected, ends bool, err error) {
 		}
 		if m.stream.line > end {
 			c.span.active = false
-			return m.startRange(c)
+			return c.startRange(m)
 		}
 		closes = closes || m.stream.line == end
 	case addrMultiple:
@@ -205,8 +205,8 @@ func (m *Machine) selects(c *command) (selected, ends bool, err error) {
 	return !c.negate, closes, nil
 }
 
-func (m *Machine) startRange(c *command) (bool, bool, error) {
-	matched, err := m.matches(c.first)
+func (c *command) startRange(m *Machine) (bool, bool, error) {
+	matched, err := c.first.matches(m)
 	if err != nil || !matched {
 		return c.negate, true, err
 	}
@@ -220,17 +220,17 @@ func (m *Machine) startRange(c *command) (bool, bool, error) {
 	case addrMultiple:
 		active = second.step > 0 && m.stream.line%second.step != 0
 	}
-	c.span.active = active && !m.lastLine()
+	c.span.active = active && !m.stream.lastLine()
 	return !c.negate, !c.span.active, nil
 }
 
-func (m *Machine) matches(a *address) (bool, error) {
+func (a *address) matches(m *Machine) (bool, error) {
 	line := m.stream.line
 	switch a.kind {
 	case addrLine:
 		return line == a.line, nil
 	case addrLast:
-		return m.lastLine(), nil
+		return m.stream.lastLine(), nil
 	case addrStep:
 		if a.step <= 0 {
 			return line == a.line, nil

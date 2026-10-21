@@ -258,7 +258,7 @@ func awkProgram(inv *invocation) (commandprogram.Field, string, commandprogram.F
 	}
 	parts := make([]string, len(files))
 	for i, option := range files {
-		text, err := inv.scriptFile(option.Values[0])
+		text, err := readScriptFile(inv, option.Values[0])
 		if err != nil {
 			return commandprogram.Field{}, "", nil, err
 		}

@@ -134,7 +134,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 		c.span = rangeState{active: c.first != nil && c.first.kind == addrZero}
 	}
 	clear(m.cursors)
-	if err := m.fill(); err != nil {
+	if err := m.stream.fill(); err != nil {
 		return false, err
 	}
 	restart := false
@@ -149,7 +149,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 			return false, err
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.emit(m.stream.out, m.space.pattern, m.stream.terminated); err != nil {
+			if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {
 				return false, err
 			}
 		}
@@ -164,7 +164,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 		}
 		restart = end == endRestart
 		if restart {
-			if err := m.step(); err != nil {
+			if err := m.stream.step(m.ctx, m.config.StepLimit); err != nil {
 				return false, err
 			}
 		}
@@ -172,16 +172,16 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 }
 
 // fill reads the next record ahead.
-func (m *Machine) fill() error {
-	record, err := m.stream.in.Next()
+func (s *inputState) fill() error {
+	record, err := s.in.Next()
 	if errors.Is(err, io.EOF) {
-		m.stream.aheadOK = false
+		s.aheadOK = false
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	m.stream.ahead, m.stream.aheadOK = record, true
+	s.ahead, s.aheadOK = record, true
 	return nil
 }
 
@@ -203,60 +203,60 @@ func (m *Machine) next(appending bool) (bool, error) {
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
 	m.stream.replaced, m.stream.steps = false, 0
-	if err := m.account(); err != nil {
+	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
 		return false, err
 	}
-	return true, m.fill()
+	return true, m.stream.fill()
 }
 
-func (m *Machine) lastLine() bool { return !m.stream.aheadOK }
+func (s *inputState) lastLine() bool { return !s.aheadOK }
 
 // step charges one branch or restart that read no input.
-func (m *Machine) step() error {
-	if err := m.ctx.Err(); err != nil {
+func (s *inputState) step(ctx context.Context, limit int64) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	m.stream.steps++
-	if m.config.StepLimit > 0 && m.stream.steps > m.config.StepLimit {
-		return &LimitError{Resource: "query_work_steps", Maximum: m.config.StepLimit, Observed: m.stream.steps}
+	s.steps++
+	if limit > 0 && s.steps > limit {
+		return &LimitError{Resource: "query_work_steps", Maximum: limit, Observed: s.steps}
 	}
 	return nil
 }
 
 // account bounds pattern and hold space and reserves their growth.
-func (m *Machine) account() error {
-	for _, space := range [][]byte{m.space.pattern, m.space.hold} {
-		if limit := m.config.SpaceLimit; limit > 0 && int64(len(space)) > limit {
+func (s *spaces) account(limit int64, reserve func(int64) error) error {
+	for _, space := range [][]byte{s.pattern, s.hold} {
+		if limit > 0 && int64(len(space)) > limit {
 			return &LimitError{Resource: "record_bytes", Maximum: limit, Observed: int64(len(space))}
 		}
 	}
-	total := int64(cap(m.space.pattern) + cap(m.space.hold))
-	if total <= m.space.reserved || m.config.Reserve == nil {
+	total := int64(cap(s.pattern) + cap(s.hold))
+	if total <= s.reserved || reserve == nil {
 		return nil
 	}
-	if err := m.config.Reserve(total - m.space.reserved); err != nil {
+	if err := reserve(total - s.reserved); err != nil {
 		return err
 	}
-	m.space.reserved = total
+	s.reserved = total
 	return nil
 }
 
 // emit writes one record to an output. A record that lacked its delimiter is
 // written without it; later output first restores a newline.
-func (m *Machine) emit(o *output, record []byte, terminated bool) error {
-	if err := m.raw(o, record); err != nil {
+func (o *output) emit(record []byte, delimiter byte, terminated bool) error {
+	if err := o.raw(record); err != nil {
 		return err
 	}
 	if !terminated {
 		o.pending = true
 		return nil
 	}
-	_, err := o.w.Write([]byte{m.config.Delimiter})
+	_, err := o.w.Write([]byte{delimiter})
 	return err
 }
 
 // raw writes bytes after restoring a missing newline.
-func (m *Machine) raw(o *output, text []byte) error {
+func (o *output) raw(text []byte) error {
 	if o.pending {
 		if _, err := o.w.Write([]byte{'\n'}); err != nil {
 			return err
@@ -268,8 +268,8 @@ func (m *Machine) raw(o *output, text []byte) error {
 }
 
 // text writes a, i and c text and its newline.
-func (m *Machine) text(o *output, text []byte) error {
-	if err := m.raw(o, text); err != nil {
+func (o *output) text(text []byte) error {
+	if err := o.raw(text); err != nil {
 		return err
 	}
 	_, err := o.w.Write([]byte{'\n'})
@@ -281,9 +281,9 @@ func (m *Machine) dumpAppends() error {
 	for _, item := range m.appends {
 		var err error
 		if item.file != "" {
-			err = m.raw(m.stream.out, m.config.Files[item.file])
+			err = m.stream.out.raw(m.config.Files[item.file])
 		} else {
-			err = m.text(m.stream.out, item.text)
+			err = m.stream.out.text(item.text)
 		}
 		if err != nil {
 			return err

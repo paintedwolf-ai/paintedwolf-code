@@ -31,15 +31,15 @@ func (s *batchStop) Unwrap() error { return s.cause }
 // launches nothing. -I replaces the placeholder per line, -L takes that many
 // lines, -n that many items; otherwise a batch takes as many items as
 // argv_bytes and expanded_fields admit.
-func (x xargsRun) batches(command commandprogram.Fields, lines [][]string, plan xargsPlan) ([]commandprogram.Fields, error) {
-	argumentLimit := x.inv.limit("argument_bytes")
+func (plan xargsPlan) batches(inv *invocation, command commandprogram.Fields, lines [][]string) ([]commandprogram.Fields, error) {
+	argumentLimit := inv.limit("argument_bytes")
 	for _, line := range lines {
 		for _, item := range line {
 			if int64(len(item)) > argumentLimit {
 				return nil, nativeutility.LimitExceeded("argument_bytes", argumentLimit, int64(len(item)))
 			}
 			if strings.IndexByte(item, 0) >= 0 {
-				return nil, x.inv.usage(x.inv.commandWord(), "items without NUL bytes")
+				return nil, inv.usage(inv.commandWord(), "items without NUL bytes")
 			}
 		}
 	}
@@ -47,7 +47,7 @@ func (x xargsRun) batches(command commandprogram.Fields, lines [][]string, plan 
 	var err error
 	switch {
 	case plan.replacing:
-		out, err = x.replaced(command, lines, plan.placeholder.Value)
+		out, err = plan.replaced(inv, command, lines)
 	case plan.lines > 0:
 		for start := 0; start < len(lines) && err == nil; start += plan.lines {
 			var items []string
@@ -55,7 +55,7 @@ func (x xargsRun) batches(command commandprogram.Fields, lines [][]string, plan 
 				items = append(items, line...)
 			}
 			var group []commandprogram.Fields
-			group, err = x.filled(command, items, 0, plan)
+			group, err = plan.filled(inv, command, items, 0)
 			out = append(out, group...)
 		}
 	default:
@@ -63,19 +63,20 @@ func (x xargsRun) batches(command commandprogram.Fields, lines [][]string, plan 
 		for _, line := range lines {
 			items = append(items, line...)
 		}
-		out, err = x.filled(command, items, plan.count, plan)
+		out, err = plan.filled(inv, command, items, plan.count)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if limit := x.inv.limit("child_executions"); int64(len(out)) > limit {
+	if limit := inv.limit("child_executions"); int64(len(out)) > limit {
 		return nil, nativeutility.LimitExceeded("child_executions", limit, int64(len(out)))
 	}
 	return out, nil
 }
 
-func (x xargsRun) replaced(command commandprogram.Fields, lines [][]string, placeholder string) ([]commandprogram.Fields, error) {
-	argumentLimit, argvLimit := x.inv.limit("argument_bytes"), x.inv.limit("argv_bytes")
+func (plan xargsPlan) replaced(inv *invocation, command commandprogram.Fields, lines [][]string) ([]commandprogram.Fields, error) {
+	placeholder := plan.placeholder.Value
+	argumentLimit, argvLimit := inv.limit("argument_bytes"), inv.limit("argv_bytes")
 	var out []commandprogram.Fields
 	for _, line := range lines {
 		item := line[0]
@@ -101,9 +102,9 @@ func (x xargsRun) replaced(command commandprogram.Fields, lines [][]string, plac
 // under argv_bytes, -s and expanded_fields. Each batch's items follow the
 // command, or replace BSD -J's placeholder argument. With -x a batch cut short
 // of its -n count by the size cap refuses.
-func (x xargsRun) filled(command commandprogram.Fields, items []string, count int, plan xargsPlan) ([]commandprogram.Fields, error) {
-	span := x.inv.request.Invocation.Span
-	fieldLimit := x.inv.limit("expanded_fields")
+func (plan xargsPlan) filled(inv *invocation, command commandprogram.Fields, items []string, count int) ([]commandprogram.Fields, error) {
+	span := inv.request.Invocation.Span
+	fieldLimit := inv.limit("expanded_fields")
 	base := int64(0)
 	for _, word := range command {
 		base += int64(len(word.Value))

@@ -1,9 +1,6 @@
 package sedscript
 
-import (
-	"strconv"
-	"unicode/utf8"
-)
+import "strconv"
 
 // address reads one address. Line 0, first~step and the second-address
 // forms +N and ~N follow GNU sed.
@@ -85,7 +82,7 @@ func (p *parser) compile(pattern string, fold bool) (Regex, error) {
 // delimited reads up to an unescaped delimiter. An escaped delimiter is the
 // literal delimiter and \n is a newline; other escapes stay for the regex
 // grammar.
-func (p *parser) delimited(delimiter byte) (string, error) {
+func (p *scriptCursor) delimited(delimiter byte) (string, error) {
 	var out []byte
 	for p.pos < len(p.src) {
 		c := p.src[p.pos]
@@ -177,7 +174,7 @@ func (p *parser) flags(sub *substitution) (fold bool, err error) {
 
 // replacement reads & and \0..\9 (the match and groups), \L \U \E \l \u case
 // conversion, \n \t \r \f \v \a, \cX, \dNNN, \oNNN, \xHH and escaped bytes.
-func (p *parser) replacement(sub *substitution, delimiter byte) error {
+func (p *scriptCursor) replacement(sub *substitution, delimiter byte) error {
 	var literal []byte
 	flush := func() {
 		if len(literal) > 0 {
@@ -224,7 +221,7 @@ var caseEscapes = map[byte]pieceKind{'U': pieceUpper, 'L': pieceLower, 'E': piec
 
 // escape decodes the byte after a backslash in replacement and y text; an
 // unknown escape is the byte itself.
-func (p *parser) escape(e byte) []byte {
+func (p *scriptCursor) escape(e byte) []byte {
 	if b, ok := controlEscapes[e]; ok {
 		return []byte{b}
 	}
@@ -269,73 +266,4 @@ func digitValue(c byte) int {
 		return int(c-'A') + 10
 	}
 	return 99
-}
-
-// translation reads y/SOURCE/DEST/: equal-length scalar lists where \\, the
-// escaped delimiter and the control escapes stand for one scalar.
-func (p *parser) translation() (map[rune]rune, error) {
-	delimiter := p.peek()
-	if delimiter == 0 || delimiter == '\n' || delimiter == '\\' {
-		return nil, p.fail("a y delimiter other than newline or backslash")
-	}
-	p.pos++
-	var lists [2][]rune
-	for i := range lists {
-		var text []byte
-		for {
-			if p.pos >= len(p.src) || p.src[p.pos] == '\n' {
-				return nil, p.fail("a terminating " + string(delimiter))
-			}
-			c := p.src[p.pos]
-			p.pos++
-			if c == delimiter {
-				break
-			}
-			if c == '\\' && p.pos < len(p.src) {
-				e := p.src[p.pos]
-				p.pos++
-				if e == delimiter || e == '\\' {
-					text = append(text, e)
-				} else if b, ok := controlEscapes[e]; ok {
-					text = append(text, b)
-				} else {
-					return nil, p.fail("y escapes \\\\, \\n, \\t or the delimiter")
-				}
-				continue
-			}
-			text = append(text, c)
-		}
-		for len(text) > 0 {
-			r, size := decodeScalar(text)
-			lists[i] = append(lists[i], r)
-			text = text[size:]
-		}
-	}
-	if len(lists[0]) != len(lists[1]) {
-		return nil, p.fail("y source and destination of equal length")
-	}
-	out := make(map[rune]rune, len(lists[0]))
-	for i, r := range lists[0] {
-		if _, ok := out[r]; !ok {
-			out[r] = lists[1][i]
-		}
-	}
-	return out, nil
-}
-
-// decodeScalar decodes one UTF-8 scalar; an invalid byte is its own scalar
-// in the surrogate range, so y and case conversion keep it exactly.
-func decodeScalar(b []byte) (rune, int) {
-	r, size := utf8.DecodeRune(b)
-	if r == utf8.RuneError && size == 1 {
-		return rune(0xDC00 + int(b[0])), 1
-	}
-	return r, size
-}
-
-func appendScalar(out []byte, r rune) []byte {
-	if r >= 0xDC80 && r <= 0xDCFF {
-		return append(out, byte(r-0xDC00))
-	}
-	return utf8.AppendRune(out, r)
 }

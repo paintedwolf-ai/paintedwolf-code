@@ -42,12 +42,12 @@ func (l *lines) Next() (Record, error) {
 }
 
 type fixture struct {
-	script    string
-	extended  bool
-	quiet     bool
-	nul       bool
-	files     map[string][]byte
-	inputs    []string
+	script   string
+	extended bool
+	quiet    bool
+	nul      bool
+	files    map[string][]byte
+	inputs   []string
 }
 
 // run parses and runs a script over each input as one stream (or one stream

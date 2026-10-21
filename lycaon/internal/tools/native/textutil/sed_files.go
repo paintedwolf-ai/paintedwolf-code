@@ -45,7 +45,7 @@ func (r *sedRun) readFiles() (map[string][]byte, error) {
 	if len(r.program.ReadFiles()) == 0 {
 		return files, nil
 	}
-	paths, err := r.inv.paths()
+	paths, err := newPaths(r.inv)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (r *sedRun) inPlace(files commandprogram.Fields, suffix string) error {
 	if len(files) == 0 {
 		return inv.usage(inv.commandWord(), "a PATH to edit in place")
 	}
-	paths, err := inv.paths()
+	paths, err := newPaths(inv)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (r *sedRun) inPlace(files commandprogram.Fields, suffix string) error {
 		if err != nil {
 			return err
 		}
-		reader, err := inv.captureExisting(paths, operand)
+		reader, err := captureExisting(inv, paths, operand)
 		if err != nil || reader == nil {
 			if abandon := stage.Abandon(context.WithoutCancel(inv.ctx)); err != nil || abandon != nil {
 				return errors.Join(err, abandon)

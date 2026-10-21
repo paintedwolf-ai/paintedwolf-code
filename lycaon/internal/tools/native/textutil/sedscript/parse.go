@@ -6,13 +6,19 @@ import (
 	"strings"
 )
 
+// scriptCursor scans tokens, delimited patterns, escapes and literal text
+// blocks from a sed script string.
+type scriptCursor struct {
+	src string
+	pos int
+}
+
 // parser reads GNU sed: addresses (N, $, /re/ and \cREc with I, first~step,
 // 0,/re/, addr,+N, addr,~N), !, {}, labels and every command except e and
 // the M regex mode, which run a shell or need a multiline engine.
 type parser struct {
+	scriptCursor
 	ctx      context.Context
-	src      string
-	pos      int
 	extended bool
 	compiler Compiler
 	program  *Program
@@ -24,7 +30,7 @@ type parser struct {
 // Parse compiles a complete script. Scripts from several -e and -f sources
 // are joined with newlines by the caller.
 func Parse(ctx context.Context, script string, extended bool, compiler Compiler) (*Program, error) {
-	p := &parser{ctx: ctx, src: script, extended: extended, compiler: compiler, program: &Program{}, labels: map[string]int{}}
+	p := &parser{scriptCursor: scriptCursor{src: script}, ctx: ctx, extended: extended, compiler: compiler, program: &Program{}, labels: map[string]int{}}
 	p.program.quiet = script == "#n" || strings.HasPrefix(script, "#n\n")
 	for {
 		p.skip(" \t\n;")
@@ -53,21 +59,21 @@ func Parse(ctx context.Context, script string, extended bool, compiler Compiler)
 	return p.program, nil
 }
 
-func (p *parser) fail(expected string) error {
+func (p *scriptCursor) fail(expected string) error {
 	return &ScriptError{Offset: p.pos, Expected: expected}
 }
 
-func (p *parser) unsupported(expected string) error {
+func (p *scriptCursor) unsupported(expected string) error {
 	return &ScriptError{Offset: p.pos, Expected: expected, Unsupported: true}
 }
 
-func (p *parser) skip(set string) {
+func (p *scriptCursor) skip(set string) {
 	for p.pos < len(p.src) && strings.IndexByte(set, p.src[p.pos]) >= 0 {
 		p.pos++
 	}
 }
 
-func (p *parser) peek() byte {
+func (p *scriptCursor) peek() byte {
 	if p.pos < len(p.src) {
 		return p.src[p.pos]
 	}
@@ -195,7 +201,7 @@ func (p *parser) addresses(c *command) error {
 }
 
 // end requires a separator after a command that takes no text.
-func (p *parser) end() error {
+func (p *scriptCursor) end() error {
 	p.skip(" \t")
 	switch p.peek() {
 	case 0, ';', '\n', '}', '#':
@@ -205,7 +211,7 @@ func (p *parser) end() error {
 }
 
 // label reads a label up to a newline or semicolon, without surrounding blanks.
-func (p *parser) label() string {
+func (p *scriptCursor) label() string {
 	p.skip(" \t")
 	start := p.pos
 	for p.pos < len(p.src) && p.src[p.pos] != '\n' && p.src[p.pos] != ';' {
@@ -215,7 +221,7 @@ func (p *parser) label() string {
 }
 
 // filename reads a file name to the end of the line, as GNU sed does.
-func (p *parser) filename() string {
+func (p *scriptCursor) filename() string {
 	p.skip(" \t")
 	start := p.pos
 	for p.pos < len(p.src) && p.src[p.pos] != '\n' {
@@ -240,7 +246,7 @@ func (p *parser) file(name byte, file string) {
 }
 
 // number reads an optional decimal argument (q 5, l 40); -1 when absent.
-func (p *parser) number() int {
+func (p *scriptCursor) number() int {
 	p.skip(" \t")
 	start := p.pos
 	for p.pos < len(p.src) && p.src[p.pos] >= '0' && p.src[p.pos] <= '9' {
@@ -259,7 +265,7 @@ func (p *parser) number() int {
 // text reads a, i and c text in the POSIX form (a\ then lines, a trailing
 // backslash continuing) and the GNU one-line form (a text, leading blanks
 // removed). A backslash quotes the next byte.
-func (p *parser) text() ([]byte, error) {
+func (p *scriptCursor) text() ([]byte, error) {
 	p.skip(" \t")
 	switch {
 	case strings.HasPrefix(p.src[p.pos:], "\\\n"):

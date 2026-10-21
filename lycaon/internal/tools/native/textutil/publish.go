@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func (inv *invocation) paths() (*projectpaths.ProgramPaths, error) {
+func newPaths(inv *invocation) (*projectpaths.ProgramPaths, error) {
 	return projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
 }
 
@@ -46,7 +46,7 @@ func settleStage(ctx context.Context, stage commandprogram.StagedOutput, err err
 
 // captureExisting pins an in-place file's source; a missing or unreadable file
 // is an ordinary failure that stops the run before anything is staged for it.
-func (inv *invocation) captureExisting(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
+func captureExisting(inv *invocation, paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
 	reader, _, err := inv.capture(paths, operand)
 	if err == nil {
 		return reader, nil

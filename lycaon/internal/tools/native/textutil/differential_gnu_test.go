@@ -62,6 +62,7 @@ func TestDifferentialAgainstGNU(t *testing.T) {
 		"sed": {
 			{"sed ':a;N;$!ba;s/\\n/,/g'", []string{":a;N;$!ba;s/\\n/,/g"}, "a\nb\nc\n", false},
 			{"sed -n '1!G;h;$p'", []string{"-n", "1!G;h;$p"}, "a\nb\nc\n", false},
+			{"sed '1!G;h;$!d'", []string{"1!G;h;$!d"}, "a\nb\nc\nd\n", false},
 			{"sed '$!N;P;D'", []string{"$!N;P;D"}, "a\na\nb\n", false},
 			{"sed 'n;d'", []string{"n;d"}, "1\n2\n3\n", false},
 			{"sed 'N;s/\\n/-/'", []string{"N;s/\\n/-/"}, "1\n2\n3\n", false},
@@ -135,6 +136,8 @@ func TestDifferentialAgainstGNU(t *testing.T) {
 			{"tr abc 'x[y*]'", []string{"abc", "x[y*]"}, "abc\n", false},
 			{"tr a-c '[x*2]z'", []string{"a-c", "[x*2]z"}, "abc\n", false},
 			{"tr '[=a=]' b", []string{"[=a=]", "b"}, "aa\n", false},
+			{"tr -s '[:lower:]' '[:upper:]'", []string{"-s", "[:lower:]", "[:upper:]"}, "aabbccDD\n", false},
+			{"tr -ds a-c x-z", []string{"-ds", "a-c", "x-z"}, "abxxcyyz\n", false},
 		},
 		"paste": {
 			{"paste - -", []string{"-", "-"}, "a\nb\nc\n", false},

@@ -38,7 +38,7 @@ func runColumn(inv *invocation) error {
 	}
 	var out []byte
 	if inv.flag("-t") {
-		out = inv.table(lines)
+		out = formatTable(inv, lines)
 	} else {
 		out = fillColumns(lines, width, inv.flag("-x"))
 	}
@@ -46,7 +46,7 @@ func runColumn(inv *invocation) error {
 	return err
 }
 
-func (inv *invocation) table(lines [][]byte) []byte {
+func formatTable(inv *invocation, lines [][]byte) []byte {
 	separators := " \t"
 	if value, ok := inv.value("-s"); ok {
 		separators = value.Value

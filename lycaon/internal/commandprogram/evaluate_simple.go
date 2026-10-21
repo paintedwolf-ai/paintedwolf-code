@@ -174,6 +174,9 @@ func (f *frame) predicates() PredicateRuntime {
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
 	}
+	if runtime.Patterns == nil {
+		runtime.Patterns = NativePredicatePatterns{Memory: runtime.Memory, LocalBoundsOnly: runtime.LocalBoundsOnly}
+	}
 	return runtime
 }
 

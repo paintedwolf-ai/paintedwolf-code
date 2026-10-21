@@ -152,7 +152,7 @@ type sedSource struct {
 
 // sedScript joins -e scripts and -f files with newlines in argv order, or
 // takes the first operand when neither is given, and resolves the in-place
-// suffix: GNU -i[SUFFIX], BSD -i '' and -I SUFFIX, and BSD -i SUFFIX SCRIPT,
+// suffix: GNU -i[SUFFIX], BSD -i ” and -I SUFFIX, and BSD -i SUFFIX SCRIPT,
 // recognized when the word after -i is not a script and the next one is.
 func sedScript(inv *invocation) (sedSource, error) {
 	operands := inv.operands()
@@ -179,7 +179,7 @@ func sedScript(inv *invocation) (sedSource, error) {
 			parts = append(parts, value.Value)
 			continue
 		}
-		text, err := inv.scriptFile(value)
+		text, err := readScriptFile(inv, value)
 		if err != nil {
 			return out, err
 		}
@@ -216,12 +216,12 @@ func (o *Owners) bsdSuffix(ctx context.Context, argv commandprogram.BoundArgv, o
 	return err == nil
 }
 
-// scriptFile reads one -f script through the pinned capture of any input.
-func (inv *invocation) scriptFile(word commandprogram.Field) (string, error) {
+// readScriptFile reads one -f script through the pinned capture of any input.
+func readScriptFile(inv *invocation, word commandprogram.Field) (string, error) {
 	if word.Value == "-" {
 		return "", inv.usage(word, "a script file; standard input is the data")
 	}
-	paths, err := inv.paths()
+	paths, err := newPaths(inv)
 	if err != nil {
 		return "", err
 	}

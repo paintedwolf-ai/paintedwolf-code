@@ -57,6 +57,7 @@ func TestSedGolden(t *testing.T) {
 		{`sed -E 's/(a|ab)(c|bcd)(d*)/[\1|\2|\3]/'`, "abcd\n", "[ab|c|d]\n", 0},
 		{`sed 's/a\tb/X/'`, "a\tb\n", "X\n", 0},
 		{"sed 's/é/e/g'", "café é\n", "cafe e\n", 0},
+		{"sed '1!G;h;$!d'", lines, "d\nc\nb\na\n", 0},
 	})
 }
 
@@ -190,6 +191,7 @@ func TestSedDifferentialAgainstHost(t *testing.T) {
 		{"sed -e s/a/b/ -e s/b/c/", []string{"-e", "s/a/b/", "-e", "s/b/c/"}},
 		{`sed -E 's/(a|al)(l|lpha)(.*)/[\1|\2|\3]/'`, []string{"-E", `s/(a|al)(l|lpha)(.*)/[\1|\2|\3]/`}},
 		{`sed 's/\(a\)\(.*\)\1/<\2>/'`, []string{`s/\(a\)\(.*\)\1/<\2>/`}},
+		{"sed '1!G;h;$!d'", []string{"1!G;h;$!d"}},
 	} {
 		cmd := exec.Command(hostTool(t, "sed"), c.argv...)
 		cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin"}
