@@ -4,12 +4,12 @@
   "kind": "construction",
   "workstream": "linux-native-packages",
   "disposition": "retain",
-  "reason": "Retain the measured 465-line cross-platform staging transaction within its existing 480-line ceiling. Final package names, complete tree audits and signature admission remain one transaction; the fixed extracted-engine diagnostic now delegates root lease, sealed-byte identity, exact transient AppArmor attachment and cleanup to package_probe. The actual Noble differential passed with global restriction unchanged and confined document execution; 528 managed contracts cover refusal and cleanup. No confinement policy or package-format parsing is duplicated in the shell. The reviewed diagnostic retains its unreaped leader until owned-group cleanup and removes an attempted exact profile after uncertain parser completion; the final restricted-kernel differential and negative contracts verify both lifecycle boundaries. The process-group fixture now declares its Linux-only domain explicitly; the coherent Mac composition passed 645 contracts with two platform skips, while the unchanged production helper retains actual native 528-contract and restricted-kernel proof.",
-  "reviewed_commit": "4c75e6886d9d4e45f4abc989a9ea76ff6731dd47",
+  "reason": "Retain the measured 465-line cross-platform staging transaction within its existing 480-line ceiling. Final package names, complete tree audits and signature admission remain one transaction; the fixed extracted-engine diagnostic delegates root lease, sealed-byte identity, exact transient AppArmor attachment and cleanup to package_probe. No confinement policy or package-format parsing is duplicated in the shell. The pinned probe contracts drive the lease, manifest, ELF and attachment refusals and exact-profile cleanup through real fixture packages; the pacman candidate contracts bind the final retained bytes of every native family.",
+  "reviewed_commit": "44e9b36a07044f6be1d657dcea90fdb6aed1de65",
   "ceiling": 480,
   "boundaries": {
     "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
     "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "be9b6f3dcc7cea9f3660cb6cf9898338a5ce5525fe31ca226c4e91b49a012a63",
-    "scripts/verification_tests/distribution/test_package_probe_execution.py": "55822efb209e9b8e0b7cca6fb62ab0463c3e50f4b148f4c110f8904615df9cf2"
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "d0c66c83b348ffe0e82a9f6ad2e732dd0d1cc9bbf08d97199f3451f66f15f264"
   }
 }
