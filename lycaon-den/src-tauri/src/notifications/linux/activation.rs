@@ -39,8 +39,15 @@ pub(super) fn activate(app: &AppHandle, session_id: Option<String>, token: Optio
         if let Some(window) = target.get_webview_window("main") {
             if let Ok(native) = window.gtk_window() {
                 let wayland = native.display().type_().name() == WAYLAND_DISPLAY_TYPE;
+                // A closed workspace is hidden, not destroyed; the token set
+                // before mapping activates it as it is shown.
                 match raise(wayland, token.is_some()) {
-                    Raise::Token => native.set_startup_id(token.as_deref().unwrap_or_default()),
+                    Raise::Token => {
+                        native.set_startup_id(token.as_deref().unwrap_or_default());
+                        if !native.is_visible() {
+                            let _ = window.show();
+                        }
+                    }
                     Raise::TokenThenPresent => {
                         native.set_startup_id(token.as_deref().unwrap_or_default());
                         native.present();
