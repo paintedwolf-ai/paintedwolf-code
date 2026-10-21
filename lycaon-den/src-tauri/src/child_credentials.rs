@@ -52,7 +52,8 @@ mod tests {
         if std::env::var_os(MARKER).is_some() {
             let (mut real, mut effective, mut saved): (libc::gid_t, libc::gid_t, libc::gid_t) = (0, 0, 0);
             assert_eq!(unsafe { libc::getresgid(&mut real, &mut effective, &mut saved) }, 0);
-            println!("observed-groups={real},{effective},{saved}");
+            // A single-threaded harness prints the test name on the same line first.
+            println!("\nobserved-groups={real},{effective},{saved}");
             return;
         }
         let gid = unsafe { libc::getgid() };
