@@ -112,6 +112,7 @@ func IngestReferences(deps ReferenceDeps, previewBudget *TurnPreviewBudget, refs
 			}
 			out.Parts = append(out.Parts, part)
 			if img != nil {
+				img.PartIndex = len(out.Parts) - 1
 				out.Images = append(out.Images, *img)
 			}
 		case ref.PathFolder != nil:
@@ -127,6 +128,7 @@ func IngestReferences(deps ReferenceDeps, previewBudget *TurnPreviewBudget, refs
 			}
 			out.Parts = append(out.Parts, part)
 			if img != nil {
+				img.PartIndex = len(out.Parts) - 1
 				out.Images = append(out.Images, *img)
 			}
 		case ref.ExternalFolder != nil:

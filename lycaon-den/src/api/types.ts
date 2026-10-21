@@ -10182,6 +10182,11 @@ export interface components {
             source?: string;
             /** @description Optional MIME type for this text projection. */
             media_type?: string;
+            /**
+             * Format: uuid
+             * @description Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
+             */
+            artifact_id?: string;
             /** @description Stable blob ID for a payload attachment, used to restage Edit/rewind. */
             blob_id?: string;
             /** @description Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices). */
