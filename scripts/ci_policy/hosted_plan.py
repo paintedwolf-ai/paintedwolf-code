@@ -32,8 +32,11 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform"}:
+                        "platform", "arguments"}:
             raise ValueError(f"unknown CI lane fields: {name}")
+        if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
+                                    or not all(isinstance(value, str) and value for value in lane["arguments"])):
+            raise ValueError(f"CI lane {name} arguments belong to exactly one target")
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
@@ -119,7 +122,10 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "setup": lane["setup"],
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],
-                           "browser": BROWSER_TARGET in lane["targets"],
+                           "browser": BROWSER_TARGET in lane["targets"]
+                           and "browser" in lane.get("arguments", ["browser"]),
+                           "nix": any(target.startswith("nix:") for target in lane["targets"])
+                           or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:

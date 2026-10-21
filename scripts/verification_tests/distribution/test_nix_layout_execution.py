@@ -32,6 +32,17 @@ class NixFinalLayoutTests(unittest.TestCase):
     def seal(self, output, architecture="x86_64"):
         return nix_layout.seal(output, architecture, "1.0.2-rc6", Path("/selected-nix/bin/nix-store"))
 
+    def test_generation_ships_a_user_namespace_grant_for_its_exact_engine_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, root = self.fixture(directory)
+            self.seal(output)
+            engine = str(root / "bin/pw")
+            name = "paintedwolf-engine-" + hashlib.sha256(engine.encode()).hexdigest()
+            profiles = list((output / "share/painted-wolf-code/apparmor").iterdir())
+            self.assertEqual([path.name for path in profiles], [name])
+            self.assertEqual(profiles[0].read_text(), "abi <abi/4.0>,\n\n"
+                             f'profile {name} "{engine}" flags=(unconfined) {{\n  userns,\n}}\n')
+
     def test_both_native_architectures_retain_final_fixup_bytes_and_generation_paths(self):
         for architecture in nix_layout.MACHINES:
             with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory:

@@ -9,6 +9,8 @@ from pathlib import Path
 import stat
 import struct
 
+from . import nix_apparmor
+
 ROLES = ("painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy", "pw-desktop-settings")
 MACHINES = {"x86_64": 62, "aarch64": 183}
 
@@ -70,6 +72,7 @@ def seal(output: Path, architecture: str, version: str, nix_store: Path) -> dict
     receipt = {"format_version": 1, "output": str(output), "nix_store": str(nix_store)}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (root / "nix-layout.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    nix_apparmor.write("engine", root / "bin/pw", output)
     return manifest
 
 

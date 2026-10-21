@@ -61,7 +61,7 @@ impl DesktopSettingsFacts {
             text_scaling_factor: text_scaling_factor(snapshot),
             increase_contrast: any_true([
                 match lookup(snapshot, APPEARANCE_NS, "contrast") {
-                    Some(SettingValue::U32(level)) => Some(*level >= 1),
+                    Some(SettingValue::U32(level)) => Some(*level == 1),
                     _ => None,
                 },
                 match lookup(snapshot, GNOME_A11Y_NS, "high-contrast") {

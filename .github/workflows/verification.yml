@@ -98,6 +98,7 @@ jobs:
           # build them from each distribution as it ships that day.
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
           browser: ${{ matrix.browser }}
+          nix: ${{ matrix.nix }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy

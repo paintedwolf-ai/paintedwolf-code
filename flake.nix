@@ -49,11 +49,18 @@
             scannerIdentityFile = "${resources}/scanner-identity.base64";
             gsettingsExecutable = "${pkgs.glib.bin}/bin/gsettings";
           };
+          desktop-settings-observer = pkgs.callPackage ./packaging/nix/desktop-settings.nix { source = self; };
+          application = pkgs.callPackage ./packaging/nix/application.nix {
+            source = self;
+            engine = bound-engine;
+            desktopSettings = desktop-settings-observer;
+            inherit shell bialy document-core resources;
+          };
         in {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
-          inherit frontend resources shell bialy document-core bound-engine;
+          inherit frontend resources shell bialy document-core bound-engine desktop-settings-observer;
           desktop-shell-check = shell.overrideAttrs (_: {
             doCheck = true;
             cargoCheckType = "release";
@@ -88,11 +95,12 @@
             cargoTestFlags = [ "--package" "painted-wolf-code" "--lib"
               "windows::linux_desktop_settings::portal::tests" ];
           });
-          desktop-settings-observer = pkgs.callPackage ./packaging/nix/desktop-settings.nix { source = self; };
-          default = pkgs.callPackage ./packaging/nix/application.nix {
+          default = application;
+          closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
-            engine = bound-engine;
-            inherit shell bialy document-core resources;
+            inherit application;
+            components = [ shell bound-engine bialy document-core desktop-settings-observer resources frontend ];
+            nixpkgsRevision = nixpkgs.rev;
           };
           browser = resources.inputs.browser;
           gitengine = resources.inputs.gitengine;

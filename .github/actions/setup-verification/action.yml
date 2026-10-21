@@ -20,6 +20,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  nix:
+    description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -200,6 +203,11 @@ runs:
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision pinned Nix and locked inputs
+      if: inputs.nix == 'true'
+      shell: bash
+      run: ./task nix:check -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

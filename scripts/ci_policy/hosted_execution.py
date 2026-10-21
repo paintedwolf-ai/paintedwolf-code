@@ -99,6 +99,8 @@ def run_lane(name, shard=""):
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
     command = ["./task", *hosted_plan.invocation(targets)]
+    if "arguments" in lane:
+        command += ["--", *lane["arguments"]]
     if scope and name == "behavior":
         from ci_policy.impact import go_scope
         packages = go_scope(scope)
