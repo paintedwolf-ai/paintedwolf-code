@@ -146,6 +146,72 @@ impl Module for ModernBertMLP {
     }
 }
 
+/// ModernBERT's bias-free layer norm. On CPU in f32 it runs as one parallel pass with the
+/// exact arithmetic of candle's bias-free path, whose separate sum, centre, square, divide
+/// and scale operators each ran on a single thread.
+fn normalize(norm: &LayerNorm, xs: &Tensor) -> Result<Tensor> {
+    if norm.bias().is_none() && norm.remove_mean() && xs.device().is_cpu() && xs.dtype() == DType::F32 {
+        xs.contiguous()?.apply_op2_no_bwd(norm.weight(), &CpuLayerNorm { eps: norm.eps() })
+    } else {
+        xs.apply(norm)
+    }
+}
+
+struct CpuLayerNorm {
+    eps: f64,
+}
+
+impl candle_core::CustomOp2 for CpuLayerNorm {
+    fn name(&self) -> &'static str {
+        "cpu-layer-norm"
+    }
+
+    fn cpu_fwd(
+        &self,
+        storage: &candle_core::CpuStorage,
+        layout: &candle_core::Layout,
+        weight: &candle_core::CpuStorage,
+        weight_layout: &candle_core::Layout,
+    ) -> Result<(candle_core::CpuStorage, candle_core::Shape)> {
+        use candle_core::cpu::kernels::VecOps;
+        use rayon::prelude::*;
+        let (
+            candle_core::CpuStorage::F32(values),
+            candle_core::CpuStorage::F32(weight),
+            Some((start, end)),
+            Some((weight_start, weight_end)),
+        ) = (storage, weight, layout.contiguous_offsets(), weight_layout.contiguous_offsets())
+        else {
+            candle_core::bail!("cpu-layer-norm needs contiguous f32 values and weight");
+        };
+        let width = *layout.shape().dims().last().unwrap_or(&0);
+        let weight = &weight[weight_start..weight_end];
+        if width == 0 || weight.len() != width {
+            candle_core::bail!("cpu-layer-norm weight has {} values for width {width}", weight.len());
+        }
+        // The scalar steps reproduce candle's affine operators: divide is multiply-by-reciprocal.
+        let (inverse, eps) = ((1. / width as f64) as f32, self.eps as f32);
+        let mut normed = vec![0f32; end - start];
+        normed.par_chunks_mut(width).zip(values[start..end].par_chunks(width)).for_each(|(out, row)| {
+            let mut sum = 0f32;
+            unsafe { f32::vec_reduce_sum(row.as_ptr(), &mut sum, width) };
+            let mean = sum * inverse + 0.;
+            for (out, &x) in out.iter_mut().zip(row) {
+                *out = x - mean;
+            }
+            let squares: Vec<f32> = out.iter().map(|&x| x * x).collect();
+            let mut variance = 0f32;
+            unsafe { f32::vec_reduce_sum(squares.as_ptr(), &mut variance, width) };
+            let deviation = (variance * inverse + 0.) * 1. + eps;
+            let deviation = deviation.sqrt();
+            for (out, &weight) in out.iter_mut().zip(weight) {
+                *out = *out / deviation * weight;
+            }
+        });
+        Ok((candle_core::CpuStorage::F32(normed), layout.shape().clone()))
+    }
+}
+
 /// GeGLU over the last dimension, `gelu_erf(x[..n]) * x[n..]`, in one pass over all CPU
 /// threads. candle's element-wise CPU operators run on a single thread, which left the
 /// activation and its two half copies as the serial share of every encoder layer. The
@@ -223,7 +289,7 @@ impl ModernBertLayer {
         let residual = xs.clone();
         let mut xs = xs.clone();
         if let Some(norm) = &self.attn_norm {
-            xs = xs.apply(norm)?;
+            xs = normalize(norm, &xs)?;
         }
 
         let attention_mask = if self.uses_local_attention {
@@ -233,7 +299,7 @@ impl ModernBertLayer {
         };
         let xs = self.attn.forward(&xs, attention_mask)?;
         let xs = (xs + residual)?;
-        let mlp_out = xs.apply(&self.mlp_norm)?.apply(&self.mlp)?;
+        let mlp_out = normalize(&self.mlp_norm, &xs)?.apply(&self.mlp)?;
         let xs = (xs + mlp_out)?;
         Ok(xs)
     }
@@ -355,11 +421,11 @@ impl ModernBert {
             self.dtype,
             xs.device(),
         )?;
-        let mut xs = xs.apply(&self.word_embeddings)?.apply(&self.norm)?;
+        let mut xs = normalize(&self.norm, &xs.apply(&self.word_embeddings)?)?;
         for layer in self.layers.iter() {
             xs = layer.forward(&xs, &global_attention_mask, &local_attention_mask)?;
         }
-        let xs = xs.apply(&self.final_norm)?;
+        let xs = normalize(&self.final_norm, &xs)?;
         Ok(xs)
     }
 }
@@ -384,6 +450,19 @@ mod tests {
         assert_eq!(gated.dims(), &[3, 5, 37]);
         let gated = gated.flatten_all().unwrap().to_vec1::<f32>().unwrap();
         assert!(reference.iter().zip(&gated).all(|(a, b)| a.to_bits() == b.to_bits()));
+    }
+
+    /// The parallel CPU layer norm returns exactly what candle's bias-free path computes.
+    #[test]
+    fn cpu_layer_norm_matches_candles_bias_free_layer_norm_bit_for_bit() {
+        let width = 768;
+        let values: Vec<f32> = (0..7 * width).map(|i| ((i * 104729) % 4099) as f32 / 97.0 - 21.0).collect();
+        let xs = Tensor::from_vec(values, (7, width), &Device::Cpu).unwrap();
+        let weight: Vec<f32> = (0..width).map(|i| 0.5 + (i % 13) as f32 / 7.0).collect();
+        let norm = LayerNorm::new_no_bias(Tensor::from_vec(weight, width, &Device::Cpu).unwrap(), 1e-5);
+        let reference = xs.apply(&norm).unwrap().flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let fused = normalize(&norm, &xs).unwrap().flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        assert!(reference.iter().zip(&fused).all(|(a, b)| a.to_bits() == b.to_bits()));
     }
 
     #[test]
