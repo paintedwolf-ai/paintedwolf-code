@@ -134,7 +134,8 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 	}{
 		{"cat --not-a-version-1-option input", "COMMAND_OPTION_UNSUPPORTED"},
 		{"tail -f input", "COMMAND_OPTION_UNSUPPORTED"},
-		{"ls --color input", "COMMAND_OPTION_UNSUPPORTED"},
+		{"ls --hyperlink input", "COMMAND_OPTION_UNSUPPORTED"},
+		{"ls --color=always input", "COMMAND_OPERAND_INVALID"},
 		{"wc -x input", "COMMAND_OPTION_UNSUPPORTED"},
 		{"head -n abc input", "COMMAND_OPERAND_INVALID"},
 		{"head -n -1 input", "COMMAND_OPERAND_INVALID"},
@@ -147,7 +148,7 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 		{"xxd -s x input", "COMMAND_OPERAND_INVALID"},
 		{"hexdump input", "COMMAND_OPERAND_INVALID"},
 		{"hexdump -C -s -1 input", "COMMAND_OPERAND_INVALID"},
-		{"stat input", "COMMAND_OPERAND_INVALID"},
+		{"stat -c %-5q input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %s -f %z input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %q input", "COMMAND_OPERAND_INVALID"},
 		{"stat -c %s", "COMMAND_OPERAND_INVALID"},
