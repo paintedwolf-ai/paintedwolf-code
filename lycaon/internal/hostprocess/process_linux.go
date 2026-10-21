@@ -44,12 +44,38 @@ func inspect(pid int) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	var stat unix.Stat_t
-	if err := unix.Stat(path, &stat); err != nil {
+	uid, err := effectiveUID(path)
+	if err != nil {
 		return Process{}, err
 	}
 	executable, _ := os.Readlink(path + "/exe")
-	return Process{PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
+	return Process{PID: pid, ParentPID: parent, UID: uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
+}
+
+// effectiveUID reads the process's effective uid from its status. The owner
+// of the /proc entry is not that fact: a non-dumpable process's entry belongs
+// to root whoever runs it.
+func effectiveUID(path string) (uint32, error) {
+	raw, err := os.ReadFile(path + "/status")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		ids, ok := strings.CutPrefix(line, "Uid:")
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(ids)
+		if len(fields) != 4 {
+			return 0, ErrStale
+		}
+		uid, err := strconv.ParseUint(fields[1], 10, 32)
+		if err != nil {
+			return 0, ErrStale
+		}
+		return uint32(uid), nil
+	}
+	return 0, ErrStale
 }
 
 func signalInstance(process Process, name string) error {

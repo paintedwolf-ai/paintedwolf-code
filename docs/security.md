@@ -150,7 +150,7 @@ Settled approval metadata accompanies the model-visible tool receipt as structur
 
 ### Host processes and exceptional execution
 
-Native `process_list` and `process_signal` provide reviewed inspection and signaling without opening a command sandbox. Inspection omits arguments and environment values. Signals target task-bound process instances, rechecked before delivery, so PID reuse cannot redirect an approved signal. macOS uses audit tokens; Linux uses pidfds. References expire on host restart, and delivery does not establish exit.
+Native `process_list` and `process_signal` provide reviewed inspection and signaling without opening a command sandbox. Inspection omits arguments and environment values and reports each process's effective user, including a process that has disabled dumping, whose Linux process entry belongs to root. Signals target task-bound process instances, rechecked before delivery, so PID reuse cannot redirect an approved signal. macOS uses audit tokens; Linux uses pidfds. References expire on host restart, and delivery does not establish exit.
 
 For operations these tools cannot express, `command` and `verify` accept explicit capabilities on each invocation:
 
