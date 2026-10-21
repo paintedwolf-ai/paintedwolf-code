@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // SocketEnv carries the per-invocation service socket to the helper Git runs.
@@ -32,15 +34,27 @@ type ServeOptions struct {
 
 // Service answers the credential-helper protocol for one Git invocation over
 // a private socket. Identity is the calling process: the peer must run this
-// executable, share this uid and descend from the served git process.
+// executable, share this uid and descend from the served git process that
+// Bind names.
 type Service struct {
 	listener  *net.UnixListener
 	directory string
 	store     backend
 	gitBinary string
 	helper    string
+	deadline  time.Duration
+	served    servedProcess
+	bound     chan struct{}
+	bindOnce  sync.Once
 	wg        sync.WaitGroup
 	once      sync.Once
+}
+
+// servedProcess is the started invocation, by process id and start time so a
+// reused id cannot stand in for it.
+type servedProcess struct {
+	pid   int
+	start int64
 }
 
 // Serve starts a service bound to ctx; Close releases its socket.
@@ -69,7 +83,10 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	if store == nil {
 		store = VaultBackend()
 	}
-	service := &Service{listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper}
+	service := &Service{
+		listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper,
+		deadline: requestDeadline, bound: make(chan struct{}),
+	}
 	service.wg.Add(1)
 	go service.accept()
 	context.AfterFunc(ctx, func() { _ = service.Close() })
@@ -84,6 +101,26 @@ func socketRoot() string {
 		}
 	}
 	return os.TempDir()
+}
+
+// Bind names the started process of the served invocation: the git process
+// itself or the supervisor that runs it. Peers are answered only beneath it; a
+// peer that connects first waits for it within its request deadline.
+func (s *Service) Bind(pid int) error {
+	start, ok := osprocess.StartTime(pid)
+	if !ok {
+		return fmt.Errorf("git credential service: served process %d is not running", pid)
+	}
+	bound := false
+	s.bindOnce.Do(func() {
+		s.served = servedProcess{pid: pid, start: start}
+		close(s.bound)
+		bound = true
+	})
+	if !bound {
+		return errors.New("git credential service is already bound to its invocation")
+	}
+	return nil
 }
 
 // Path is the socket the helper connects to.
@@ -117,10 +154,16 @@ func (s *Service) accept() {
 }
 
 func (s *Service) handle(conn *net.UnixConn) error {
-	if err := conn.SetDeadline(time.Now().Add(requestDeadline)); err != nil {
+	deadline := time.Now().Add(s.deadline)
+	if err := conn.SetDeadline(deadline); err != nil {
 		return err
 	}
-	if err := verifyPeer(conn, s.helper, s.gitBinary); err != nil {
+	select {
+	case <-s.bound:
+	case <-time.After(time.Until(deadline)):
+		return errors.New("git credential service was never bound to its invocation")
+	}
+	if err := verifyPeer(conn, s.helper, s.gitBinary, s.served); err != nil {
 		return err
 	}
 	reader := bufio.NewReader(io.LimitReader(conn, maxCredentialInputBytes+maxOperation+2))

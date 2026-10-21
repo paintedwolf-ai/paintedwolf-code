@@ -12,15 +12,18 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // maxAncestry bounds the walk from the helper to the served git process.
 const maxAncestry = 16
 
 // verifyPeer admits a connection only from this executable, running as this
-// user, underneath the git process the service was started for. The kernel
-// supplies every fact: peer credentials, each process's executable and parent.
-func verifyPeer(conn *net.UnixConn, helper, gitBinary string) error {
+// user, underneath the served invocation: a git process at or below the
+// started process the service is bound to. The kernel supplies every fact:
+// peer credentials, each process's executable, parent and start time.
+func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProcess) error {
 	raw, err := conn.SyscallConn()
 	if err != nil {
 		return err
@@ -42,15 +45,26 @@ func verifyPeer(conn *net.UnixConn, helper, gitBinary string) error {
 	if exe, err := processExecutable(peer); err != nil || !sameFile(exe, helper) {
 		return errors.New("credential helper peer is not this executable")
 	}
-	for pid, hops := peer, 0; pid > 1 && hops < maxAncestry; hops++ {
-		exe, err := processExecutable(pid)
-		if err == nil && sameFile(exe, gitBinary) {
-			return nil
+	return descendsFromServedGit(peer, gitBinary, served)
+}
+
+// descendsFromServedGit walks up from the peer to the served process and
+// requires a git process on the way, the served process included.
+func descendsFromServedGit(peer int, gitBinary string, served servedProcess) error {
+	sawGit := false
+	pid, err := parentProcess(peer)
+	for hops := 0; err == nil && pid > 1 && hops < maxAncestry; hops++ {
+		if exe, exeErr := processExecutable(pid); exeErr == nil && sameFile(exe, gitBinary) {
+			sawGit = true
 		}
-		pid, err = parentProcess(pid)
-		if err != nil {
+		if pid == served.pid {
+			start, ok := osprocess.StartTime(pid)
+			if ok && start == served.start && sawGit {
+				return nil
+			}
 			break
 		}
+		pid, err = parentProcess(pid)
 	}
 	return errors.New("credential helper peer does not descend from the served git process")
 }
