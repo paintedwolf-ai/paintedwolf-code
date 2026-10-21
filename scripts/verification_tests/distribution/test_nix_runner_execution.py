@@ -71,6 +71,15 @@ class NixRunnerTests(unittest.TestCase):
                 self.install(environment)
         self.assertEqual(self.commands, [])
 
+    def test_only_supported_linux_architectures_install(self):
+        for system, machine in (("Darwin", "x86_64"), ("Linux", "riscv64")):
+            with self.subTest(system=system, machine=machine), \
+                    patch.object(nix_runner.platform, "system", return_value=system), \
+                    patch.object(nix_runner.platform, "machine", return_value=machine), \
+                    self.assertRaisesRegex(ValueError, "amd64 and arm64"):
+                nix_runner.install(HOSTED, fetch=self.fetch, run=self.run_installer)
+        self.assertEqual(self.commands, [])
+
     def test_an_existing_installation_is_used_without_downloading(self):
         self.profile.mkdir()
         (self.profile / "nix").write_text("")

@@ -80,5 +80,26 @@ class ClosureNoticeTests(unittest.TestCase):
             self.assertFalse((root / "again").exists())
 
 
+class ClosureNoticeCommandTests(unittest.TestCase):
+    def test_main_writes_outputs_and_refuses_without_creating_them(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = {"format_version": 1, "nixpkgs_revision": "f" * 40, "application": APPLICATION["outputs"][0],
+                       "source_commit": None, "packages": [GLIBC, APPLICATION]}
+            (root / "catalog.json").write_text(json.dumps(catalog))
+            (root / "paths").write_text(GLIBC["outputs"][0] + "\n")
+            arguments = ["notices", "--catalog", str(root / "catalog.json"), "--store-paths", str(root / "paths")]
+            with patch.object(sys, "argv", arguments + ["--out", str(root / "out")]):
+                self.assertEqual(notices.main(), 0)
+            self.assertIn("glibc 2.42", (root / "out/CLOSURE-NOTICES.md").read_text())
+            (root / "paths").write_text(store("missing") + "\n")
+            with patch.object(sys, "argv", arguments + ["--out", str(root / "refused")]):
+                self.assertEqual(notices.main(), 1)
+            self.assertFalse((root / "refused").exists())
+        with self.assertRaisesRegex(ValueError, "unsupported format"):
+            notices.attribute({"format_version": 2, "packages": []}, [])
+
+
 if __name__ == "__main__":
     unittest.main()

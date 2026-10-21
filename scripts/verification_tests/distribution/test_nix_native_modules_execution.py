@@ -79,5 +79,21 @@ class NativeModuleSelectionTests(unittest.TestCase):
         self.assertEqual(output, str(module / "build/Release/addon.node").encode() + b"\0")
 
 
+class NativeModuleCommandTests(unittest.TestCase):
+    def test_module_command_writes_selected_paths_in_process(self):
+        import io
+        import runpy
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "package.json").write_text("{}")
+            (root / "addon.node").write_bytes(elf(183))
+            stdout = io.TextIOWrapper(io.BytesIO())
+            with patch.object(sys, "argv", ["native-modules.py", str(root), "aarch64"]), patch.object(sys, "stdout", stdout):
+                runpy.run_path(str(SOURCE), run_name="__main__")
+                stdout.flush()
+                self.assertEqual(stdout.buffer.getvalue(), str(root / "addon.node").encode() + b"\0")
+
+
 if __name__ == "__main__":
     unittest.main()

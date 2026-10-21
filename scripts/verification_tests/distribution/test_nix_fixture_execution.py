@@ -54,5 +54,24 @@ class NixFixtureTests(unittest.TestCase):
             self.build(machine="riscv64")
 
 
+class NixFixtureCommandTests(unittest.TestCase):
+    def test_command_prints_shell_exports_or_fails_without_output(self):
+        import contextlib
+        import io
+        values = {"PW_NIX_FIXTURE_BASH": TOOLS["bash"], "PW_NIX_FIXTURE_STDENV": TOOLS["stdenv"] + "'x"}
+        output = io.StringIO()
+        with patch.object(nix_fixture, "build", return_value=values), contextlib.redirect_stdout(output):
+            self.assertEqual(nix_fixture.main(), 0)
+        self.assertEqual(output.getvalue().splitlines(),
+                         [f"export PW_NIX_FIXTURE_BASH={TOOLS['bash']}",
+                          f"export PW_NIX_FIXTURE_STDENV='{TOOLS['stdenv']}'\"'\"'x'"])
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(nix_fixture, "build", side_effect=ValueError("did not build")), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            self.assertEqual(nix_fixture.main(), 1)
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("did not build", errors.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

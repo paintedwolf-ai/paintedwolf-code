@@ -106,6 +106,22 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
                 self.assertEqual(list(report["nonflake"]), ["x86_64-linux"])
                 del self.environment[variable]
 
+    def test_nonflake_identity_stops_when_the_flake_cannot_evaluate(self):
+        with patch.object(nix.subprocess, "run", return_value=subprocess.CompletedProcess([], 9, "")) as run:
+            result, identities = nix.nonflake_identity(self.root, {})
+        self.assertEqual((result.returncode, identities, run.call_count), (9, {}, 1))
+
+    def test_prepare_provisions_through_the_runner_without_credentials(self):
+        with patch.object(nix.nix_runner, "prepare", return_value=0) as prepare, \
+                patch.dict(os.environ, {"GH_TOKEN": "private"}), \
+                patch.object(sys, "argv", ["nix", "check", "--prepare"]):
+            self.assertEqual(nix.main(), 0)
+        self.assertNotIn("GH_TOKEN", prepare.call_args.args[2])
+        with patch.object(nix.nix_runner, "prepare") as prepare, \
+                patch.object(sys, "argv", ["nix", "build", "--prepare"]):
+            self.assertEqual(nix.main(), 1)
+        prepare.assert_not_called()
+
     def test_failures_have_a_failed_report_and_missing_lock_never_runs_nix(self):
         self.environment["NIX_FIXTURE_EXIT"] = "29"
         self.assertEqual(self.invoke("check"), 29)
