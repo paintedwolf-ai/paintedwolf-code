@@ -232,6 +232,7 @@ func (s *supervisor) accept(h handoff, fd int) {
 		s.run(tun, func() { serveGateway(tun, s.network, s.refusals) })
 	case handoffNotify:
 		s.setupDone = true
+		syncWakeUp(fd)
 		// A performer that cannot take the listener answers nothing; its
 		// calls are then refused as unexamined, never left waiting.
 		if s.performer != nil {
