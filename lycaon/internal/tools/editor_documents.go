@@ -13,6 +13,10 @@ var ErrEditorDocumentMoved = errors.New("editor document changed since it was re
 
 var ErrEditorReadRequired = errors.New("read the shared document before editing it")
 
+// ErrEditorExecutionConflict reports that a pinned program edit's document or
+// published file moved after capture. It is never retried or rebased.
+var ErrEditorExecutionConflict = errors.New("editor document changed since the program captured it")
+
 // EditorDocumentText is what an open editor document presents for one
 // project-tree path: the text the person sees, whatever the file holds.
 type EditorDocumentText struct {
@@ -22,9 +26,11 @@ type EditorDocumentText struct {
 	Text string
 	// SHA256 identifies the bytes a save of this draft writes; for a clean
 	// document it is the saved file's hash.
-	SHA256   string
-	Dirty    bool
-	Diverged bool
+	SHA256 string
+	// BaseSHA256 is the published file the document sits on; empty when absent.
+	BaseSHA256 string
+	Dirty      bool
+	Diverged   bool
 	// Absent says the path has no file on disk; the document holds a draft
 	// for it, and a write recreates the file.
 	Absent bool
@@ -49,6 +55,17 @@ type EditorDocumentEdit struct {
 	Turn             int
 	ToolCallID       string
 	ToolName         string
+	// Pin admits a program edit only at its captured state: no read basis,
+	// anchoring or retry. ExpectedRevision equals Pin.Revision.
+	Pin *EditorDocumentPin
+}
+
+// EditorDocumentPin is the accepted revision and published base a program
+// operation captured before preparing its change.
+type EditorDocumentPin struct {
+	Revision   int64
+	BaseSHA256 string
+	Absent     bool
 }
 
 // EditorDocumentApplied reports where an accepted agent edit landed: Saved
@@ -89,4 +106,7 @@ type EditorDocuments interface {
 	ApplyAgentEdit(ctx context.Context, projectID string, edit EditorDocumentEdit) (EditorDocumentApplied, error)
 	// ApplyAgentEdits commits a validated document set before publishing individual files.
 	ApplyAgentEdits(ctx context.Context, projectID string, edits []EditorDocumentEdit) ([]EditorDocumentApplied, error)
+	// PublishedThrough reports whether the file holds the accepted revision or a
+	// later save of it. It never saves a draft.
+	PublishedThrough(ctx context.Context, projectID, documentID string, revision int64) (bool, error)
 }
