@@ -1,10 +1,7 @@
 name: Linux desktop environment rehearsal
+# Prepares and measures the hosted Ubuntu graphical account the installed
+# rehearsal uses, without installing the application.
 on:
-  push:
-    branches: [test/linux-installed-campaign-execution]
-    paths:
-      - .github/workflows/linux-desktop-environment-rehearsal.yml
-      - scripts/linux_release/hosted_desktop.py
   workflow_dispatch:
     inputs:
       architecture:
@@ -16,32 +13,22 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: linux-desktop-environment-${{ inputs.architecture || 'arm64' }}
+  group: linux-desktop-environment-${{ inputs.architecture }}
   cancel-in-progress: false
 jobs:
   prepare:
-    if: github.repository == 'paintedwolf-ai/paintedwolf-code' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/test/linux-installed-campaign-execution'))
+    if: github.repository == 'paintedwolf-ai/paintedwolf-code'
     runs-on: ${{ inputs.architecture == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-          no-cache: true
-      - name: Verify controller contracts
-        run: ./task test:runner
       - name: Prepare the disposable graphical account
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PYTHONPATH="$GITHUB_WORKSPACE/scripts" /usr/bin/python3 -m linux_release.hosted_desktop \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime desktop \
             --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/paintedwolf-desktop/facts.json"
       - name: Retain startup diagnostics on failure
         if: failure()
@@ -54,6 +41,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: desktop-environment-${{ inputs.architecture || 'arm64' }}-${{ github.run_id }}
+          name: desktop-environment-${{ inputs.architecture }}-${{ github.run_id }}
           path: ${{ runner.temp }}/paintedwolf-desktop/*
           if-no-files-found: warn

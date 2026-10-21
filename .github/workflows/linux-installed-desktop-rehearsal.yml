@@ -1,91 +1,81 @@
 name: Linux installed desktop rehearsal
+# A nonpublishing rehearsal of the installed lane on a GitHub-hosted Ubuntu
+# desktop. Native guest qualification runs locally through
+# ./task test:linux:installed; no self-hosted runner takes part.
 on:
-  push:
-    branches: [test/linux-installed-campaign-execution]
-    paths:
-      - .github/workflows/linux-installed-desktop-rehearsal.yml
-      - packaging/linux/installed-desktop-rehearsal.json
   workflow_dispatch:
+    inputs:
+      architecture:
+        description: Native hosted CPU architecture
+        type: choice
+        options: [amd64, arm64]
+        required: true
+      candidate_run_id:
+        description: Run that produced the candidate packages
+        required: true
+      candidate_artifact_id:
+        description: Candidate artifact in that run
+        required: true
+      candidate_controller_commit:
+        description: Workflow commit of the candidate run
+        required: true
+      source_commit:
+        description: Application source commit the candidate was built from
+        required: true
+      source_tree:
+        description: Application source tree the candidate was built from
+        required: true
+      partial:
+        description: Partial diagnostic packages (first-launch diagnosis only)
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: linux-installed-desktop-rehearsal
+  group: linux-installed-desktop-rehearsal-${{ inputs.architecture }}
   cancel-in-progress: false
 jobs:
-  select:
-    runs-on: ubuntu-24.04
-    outputs:
-      configured: ${{ steps.config.outputs.configured }}
-      controller_commit: ${{ steps.config.outputs.controller_commit }}
-      controller_tree: ${{ steps.config.outputs.controller_tree }}
-      architecture: ${{ steps.config.outputs.architecture }}
-      source_commit: ${{ steps.config.outputs.source_commit }}
-      source_tree: ${{ steps.config.outputs.source_tree }}
-      candidate_controller_commit: ${{ steps.config.outputs.candidate_controller_commit }}
-      candidate_run_id: ${{ steps.config.outputs.candidate_run_id }}
-      candidate_artifact_id: ${{ steps.config.outputs.candidate_artifact_id }}
-      partial: ${{ steps.config.outputs.partial }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache: false
-      - id: config
-        name: Select an explicitly frozen rehearsal
-        run: |
-          if test -f packaging/linux/installed-desktop-rehearsal.json; then
-            ./task test:linux:installed -- --prepare-hosted-plan \
-              --selection packaging/linux/installed-desktop-rehearsal.json --github-output "$GITHUB_OUTPUT"
-            echo 'configured=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'configured=false' >> "$GITHUB_OUTPUT"
-          fi
   observe:
-    needs: select
-    if: needs.select.outputs.configured == 'true' && github.repository == 'paintedwolf-ai/paintedwolf-code'
-    runs-on: ${{ needs.select.outputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
-    timeout-minutes: 120
+    if: github.repository == 'paintedwolf-ai/paintedwolf-code'
+    runs-on: ${{ inputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # Setup plus the per-case budgets enforced by the case runner.
+    timeout-minutes: 150
     env:
-      CONTROLLER_COMMIT: ${{ needs.select.outputs.controller_commit }}
-      CONTROLLER_TREE: ${{ needs.select.outputs.controller_tree }}
-      APPLICATION_COMMIT: ${{ needs.select.outputs.source_commit }}
-      APPLICATION_TREE: ${{ needs.select.outputs.source_tree }}
+      APPLICATION_COMMIT: ${{ inputs.source_commit }}
+      APPLICATION_TREE: ${{ inputs.source_tree }}
+      SELECTION: ${{ runner.temp }}/installed-selection.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: workflow
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.select.outputs.controller_commit }}
           fetch-depth: 0
           path: controller
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.select.outputs.source_commit }}
+          ref: ${{ inputs.source_commit }}
           path: application-source
           persist-credentials: false
       - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
           go-version-file: controller/lycaon/go.mod
           cache: false
-      - name: Select exact candidate bytes
+      - name: Select the candidate against this controller checkout
         working-directory: controller
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN: ${{ needs.select.outputs.candidate_run_id }}
-          CANDIDATE_ARTIFACT: ${{ needs.select.outputs.candidate_artifact_id }}
-          CANDIDATE_CONTROLLER: ${{ needs.select.outputs.candidate_controller_commit }}
-          ARCHITECTURE: ${{ needs.select.outputs.architecture }}
-          PARTIAL: ${{ needs.select.outputs.partial }}
+          ARCHITECTURE: ${{ inputs.architecture }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_CONTROLLER: ${{ inputs.candidate_controller_commit }}
+          PARTIAL: ${{ inputs.partial }}
         run: |
           arguments=()
           if test "$PARTIAL" = true; then arguments+=(--partial); fi
+          ./task test:linux:installed -- --prepare-hosted-plan --checkout "$GITHUB_WORKSPACE/controller" \
+            --architecture "$ARCHITECTURE" --candidate-run-id "$CANDIDATE_RUN" --candidate-artifact-id "$CANDIDATE_ARTIFACT" \
+            --candidate-controller-commit "$CANDIDATE_CONTROLLER" --source-commit "$APPLICATION_COMMIT" \
+            --source-tree "$APPLICATION_TREE" --output "$SELECTION" "${arguments[@]}"
           ./task test:linux:installed -- --prepare-candidate \
             --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
             --run-id "$CANDIDATE_RUN" --artifact-id "$CANDIDATE_ARTIFACT" --controller-commit "$CANDIDATE_CONTROLLER" \
@@ -96,66 +86,50 @@ jobs:
         working-directory: controller
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PYTHONPATH="$GITHUB_WORKSPACE/controller/scripts" /usr/bin/python3 -m linux_release.hosted_desktop \
-            --checkout "$GITHUB_WORKSPACE/controller" --controller-commit "$CONTROLLER_COMMIT" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime desktop \
+            --checkout "$GITHUB_WORKSPACE/controller" --controller-commit "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/installed-desktop/facts.json"
       - id: prepare
-        if: needs.select.outputs.partial == 'false'
+        if: ${{ !inputs.partial }}
         name: Stage the selected package and bind the fresh execution
         working-directory: controller
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare --selection "$SELECTION" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
             --candidate "$RUNNER_TEMP/installed-candidate"
-      - name: Observe package-only bootstrap and restore product absence
-        working-directory: controller
-        if: needs.select.outputs.partial == 'false'
-        run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime bootstrap \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime bootstrap --selection "$SELECTION" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
-      - name: Freeze the independent postinstall snapshot before qualification
-        if: needs.select.outputs.partial == 'false'
-        working-directory: controller
-        run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime freeze \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime freeze --selection "$SELECTION" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json"
       - id: diagnostic-prepare
-        if: needs.select.outputs.partial == 'true'
+        if: ${{ inputs.partial }}
         name: Stage partial bytes without pre-installing the application
         working-directory: controller
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare-diagnostic \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime prepare-diagnostic --selection "$SELECTION" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
             --candidate "$RUNNER_TEMP/installed-candidate"
-      - id: leaf
-        if: needs.select.outputs.partial == 'false'
-        name: Execute actual installed cases as the graphical user
-        continue-on-error: true
+      - name: Execute the installed cases as the graphical user
+        if: ${{ !inputs.partial }}
         run: |
           contract=/var/lib/paintedwolf-installed-rehearsal/contract.json
           go_bin="$(dirname "$(command -v go)")"
-          snapshot="$(jq -c .snapshot "$contract")"
           sudo -H -u paintedwolf-test /bin/bash -c 'cd /home/paintedwolf-test/controller && exec "$@"' -- \
             env "PATH=$go_bin:/usr/bin:/bin" ./task test:linux:installed -- --run-cases \
-            --source-commit "$APPLICATION_COMMIT" --driver-tree "$CONTROLLER_TREE" \
+            --source-commit "$APPLICATION_COMMIT" --driver-tree "$(jq -r .controller_tree "$SELECTION")" \
             --artifact-id "$(jq -r .artifact_id "$contract")" --environment-id "$(jq -r .environment_id "$contract")" \
-            --variant-id "$(jq -r .variant_id "$contract")" --snapshot "$snapshot" \
+            --variant-id "$(jq -r .variant_id "$contract")" --snapshot "$(jq -c .snapshot "$contract")" \
             --execution-nonce "$(jq -r .execution_nonce "$contract")" \
             --final-artifacts /var/lib/paintedwolf-installed-rehearsal/final-artifacts.json \
             --file-root /var/lib/paintedwolf-installed-rehearsal/packages --install-root /opt/painted-wolf-code \
             --case-inputs /var/lib/paintedwolf-installed-rehearsal/case-inputs.json \
             --output /home/paintedwolf-test/installed-observations
-      - name: Diagnose the actual first package launch on the native CPU
-        if: needs.select.outputs.partial == 'true'
-        continue-on-error: true
+      - name: Diagnose the first package launch on the native CPU
+        if: ${{ inputs.partial }}
         run: |
           contract=/var/lib/paintedwolf-installed-rehearsal/contract.json
           go_bin="$(dirname "$(command -v go)")"
@@ -166,24 +140,19 @@ jobs:
             --candidate-run-id "$(jq -r .candidate_provenance.run_id "$contract")" \
             --candidate-artifact-id "$(jq -r .candidate_provenance.artifact_id "$contract")" \
             --candidate-controller-commit "$(jq -r .candidate_provenance.controller_commit "$contract")" \
-            --source-commit "$APPLICATION_COMMIT" --source-tree "$APPLICATION_TREE" --driver-tree "$CONTROLLER_TREE" \
+            --source-commit "$APPLICATION_COMMIT" --source-tree "$APPLICATION_TREE" \
+            --driver-tree "$(jq -r .controller_tree "$SELECTION")" \
             --execution-nonce "$(jq -r .execution_nonce "$contract")" --output /home/paintedwolf-test/installed-observations
-      - name: Retain bounded partial diagnostics without campaign admission
-        if: always() && steps.diagnostic-prepare.outcome == 'success'
+      # Retention runs after failures too, and fails the job unless the
+      # complete campaign is accepted (or the partial diagnosis passed).
+      - name: Retain and admit the observations
+        if: always() && (steps.prepare.outcome == 'success' || steps.diagnostic-prepare.outcome == 'success')
         working-directory: controller
+        env:
+          MODE: ${{ inputs.partial && 'retain-diagnostic' || 'retain' }}
         run: |
           sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime retain-diagnostic \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
-            --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
-            --output "$RUNNER_TEMP/installed-rehearsal"
-      - name: Retain fresh observations without granting release authority
-        if: always() && steps.prepare.outcome == 'success'
-        working-directory: controller
-        run: |
-          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_ARCH,GITHUB_RUN_ID,GITHUB_SHA \
-            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime retain \
-            --selection "$GITHUB_WORKSPACE/workflow/packaging/linux/installed-desktop-rehearsal.json" \
+            env PATH="$PATH" ./task test:linux:installed -- --hosted-runtime "$MODE" --selection "$SELECTION" \
             --checkout "$GITHUB_WORKSPACE/controller" --facts "$RUNNER_TEMP/installed-desktop/facts.json" \
             --output "$RUNNER_TEMP/installed-rehearsal"
       - name: Retain graphical startup diagnostics on failure
@@ -195,8 +164,9 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: installed-desktop-rehearsal-${{ needs.select.outputs.architecture }}-${{ github.run_id }}
+          name: installed-desktop-rehearsal-${{ inputs.architecture }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/installed-rehearsal/
             ${{ runner.temp }}/installed-desktop/
+            ${{ runner.temp }}/installed-selection.json
           if-no-files-found: warn

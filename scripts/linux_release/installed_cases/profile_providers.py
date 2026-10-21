@@ -6,7 +6,7 @@ import re
 import stat
 
 from .profile_observer import profile
-from .provider import GUI_ENDPOINT, GUI_LABEL, GUI_KIND, MODEL
+from .provider import GUI_LABEL, GUI_KIND, MODEL
 from .package_payload import stable
 from .records import CaseUnavailable
 
@@ -47,7 +47,7 @@ def document(raw: bytes):
     return value['providers']
 
 
-def selected(rows):
+def selected(rows, endpoint: str):
     seen, matches = set(), []
     for row in rows:
         if (not isinstance(row, dict) or not isinstance(row.get('id'), str)
@@ -61,7 +61,7 @@ def selected(rows):
     if not matches:
         return None
     row = matches[0]
-    if (row.get('kind') != GUI_KIND or row.get('base_url') != GUI_ENDPOINT
+    if (row.get('kind') != GUI_KIND or row.get('base_url') != endpoint
             or row.get('requires_api_key') is not True or row.get('api_key_env', '') not in {'', 'LITELLM_MASTER_KEY'}
             or row.get('ambient_auth', '') != ''):
         raise ValueError('owned GUI provider differs from its fixed local credential transport')
@@ -76,7 +76,8 @@ def selected(rows):
             'models': identifiers, 'observer': 'owned-provider-YAML'}
 
 
-def find_gui_provider(app):
+def find_gui_provider(app, endpoint: str):
+    """The GUI fixture provider registered for `endpoint`, the running fixture's bound URL."""
     with profile(app) as directory:
         path = directory / 'providers.local.yaml'
         if not os.path.lexists(path):
@@ -90,4 +91,4 @@ def find_gui_provider(app):
             raw = stream.read(LIMIT + 1)
             if stable(before) != stable(os.fstat(stream.fileno())) or stable(before) != stable(path.lstat()):
                 raise CaseUnavailable('owned-provider-catalog-changed-during-observation')
-        return selected(document(raw))
+        return selected(document(raw), endpoint)

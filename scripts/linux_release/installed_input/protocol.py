@@ -6,7 +6,7 @@ import json
 import re
 
 from ..installed_evidence import IDENTIFIER
-from ..installed_cases.provider import GUI_LABEL, GUI_ENDPOINT, GUI_API_KEY
+from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -36,8 +36,15 @@ def _literal_steps(value: str) -> tuple[tuple[str, ...], ...]:
 
 
 _PROVIDER_STEPS = {'provider-name-v1': _literal_steps(GUI_LABEL),
-                   'provider-endpoint-v1': _literal_steps(GUI_ENDPOINT),
                    'provider-fixture-credential-v1': _literal_steps(GUI_API_KEY)}
+_ENDPOINT_OPERATION = re.compile(r'provider-endpoint-v1-([0-9]{4,5})')
+
+
+def endpoint_operation(port: int) -> str:
+    """The endpoint operation for a fixture bound to `port`: the only parameter is a validated port."""
+    gui_endpoint(port)
+    return f'provider-endpoint-v1-{port}'
+
 
 
 _EDITOR_STEPS = _editor_steps()
@@ -50,6 +57,9 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
         raise ValueError('native input requires a fixed declared operation')
     if operation in _PROVIDER_STEPS:
         return _PROVIDER_STEPS[operation]
+    endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
+    if endpoint:
+        return _literal_steps(gui_endpoint(int(endpoint.group(1))))
     if operation == 'editor-replace-save-v1':
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':

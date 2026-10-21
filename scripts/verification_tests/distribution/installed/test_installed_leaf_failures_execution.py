@@ -67,6 +67,32 @@ class InstalledLeafFailureTests(unittest.TestCase):
                 stream = [record for record in case['evidence'] if record['path'].endswith('.bin')][0]
                 self.assertEqual((output / 'evidence' / stream['path']).read_bytes(), b'owned fixture crash')
 
+    def test_a_case_past_its_time_budget_fails_and_the_next_case_runs(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            self.fixture(stack, lambda *args: None)
+            row = {'environment': 'guest', 'installation': 'deb', 'architecture': 'amd64', 'capability': 'conversation',
+                   'cases': ['slow', 'quick'], 'id': 'row', 'tier': 'supported'}
+            stack.enter_context(patch.object(leaf, 'expand', return_value=[row]))
+            stack.enter_context(patch.object(leaf, 'case_family', return_value='fixture_family'))
+            def slow_or_quick(binding, capability, case, root):
+                if case == 'slow':
+                    import time
+                    time.sleep(5)
+                return {'id': case, 'status': 'passed', 'evidence': [retain(binding, capability, case, root, 'passed', {})['evidence'][0]]}
+            family = SimpleNamespace(execute=slow_or_quick, TIME_BUDGET_SECONDS=1)
+            stack.enter_context(patch.dict(sys.modules, {leaf.__package__ + '.installed_cases.fixture_family': family}))
+            stack.enter_context(patch.object(leaf.importlib.util, 'find_spec', return_value=object()))
+            stack.enter_context(patch.object(leaf.evidence, 'retained_file', return_value=None))
+            output = Path(directory) / 'leaf'
+            cases = self.invoke(output)['results'][0]['cases']
+            self.assertEqual([(case['id'], case['status']) for case in cases], [('slow', 'failed'), ('quick', 'passed')])
+            record = json.loads((output / 'evidence' / cases[0]['evidence'][0]['path']).read_text())
+            self.assertEqual(record['observations'], {'reason': 'case-time-budget-exceeded', 'budget_seconds': 1})
+
+    def test_the_budget_timer_is_cleared_after_each_case(self):
+        self.assertEqual(leaf.within_budget(1, lambda: 'done'), 'done')
+        self.assertEqual(leaf.signal.getitimer(leaf.signal.ITIMER_REAL), (0.0, 0.0))
+
     def test_failed_installation_never_binds_a_missing_or_partially_installed_payload(self):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             binder = self.fixture(stack, lambda *args: {'status': 'failed'})

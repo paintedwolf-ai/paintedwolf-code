@@ -13,18 +13,17 @@ from linux_release import hosted_installed_plan as plan
 
 def selected():
     return {'format_version': 1, 'controller_commit': 'a' * 40, 'controller_tree': 'b' * 40,
-            'components': {'native_candidates': 'c' * 40, 'support_variants': 'd' * 40, 'installed_execution': 'e' * 40},
             'architecture': 'arm64', 'candidate_run_id': 12, 'candidate_artifact_id': 34,
             'candidate_controller_commit': 'f' * 40, 'source_commit': '1' * 40, 'source_tree': '2' * 40, 'partial': False}
 
 
 class HostedSelectionTests(unittest.TestCase):
-    def test_selection_requires_every_frozen_component_and_typed_run(self):
+    def test_selection_requires_exact_typed_identities(self):
         value = selected()
         self.assertEqual(plan.selection(value), value)
-        for mutate in (lambda item: item['components'].pop('native_candidates'),
-                       lambda item: item.update(candidate_artifact_id=True),
+        for mutate in (lambda item: item.update(candidate_artifact_id=True),
                        lambda item: item.update(controller_commit='main'),
+                       lambda item: item.update(architecture='riscv64'),
                        lambda item: item.update(partial='false'),
                        lambda item: item.update(extra='untrusted')):
             bad = copy.deepcopy(value)
@@ -32,16 +31,56 @@ class HostedSelectionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 plan.selection(bad)
 
-    def test_checkout_verifies_exact_tree_clean_source_and_component_ancestry(self):
-        results = [SimpleNamespace(stdout=value) for value in ('a' * 40, 'b' * 40, '', '', '', '')]
-        with patch.object(plan.subprocess, 'run', side_effect=results) as git:
+    def test_checkout_is_observed_clean_and_must_match_the_selection(self):
+        clean = lambda: [SimpleNamespace(stdout=value) for value in ('', 'a' * 40, 'b' * 40)]
+        with patch.object(plan.subprocess, 'run', side_effect=clean()):
             plan.controller(Path('/controller'), selected())
-        self.assertEqual(git.call_count, 6)
-        self.assertEqual(git.call_args_list[-1].args[0][-4:], ['merge-base', '--is-ancestor', 'e' * 40, 'a' * 40])
-        for values in (['0' * 40], ['a' * 40, '0' * 40], ['a' * 40, 'b' * 40, ' M scripts/linux_release/hosted_installed.py']):
-            with patch.object(plan.subprocess, 'run', side_effect=[SimpleNamespace(stdout=value) for value in values]):
-                with self.assertRaises(ValueError):
-                    plan.controller(Path('/controller'), selected())
+        with patch.object(plan.subprocess, 'run', side_effect=clean()), self.assertRaisesRegex(ValueError, 'differs'):
+            plan.controller(Path('/controller'), {**selected(), 'controller_tree': 'c' * 40})
+        dirty = [SimpleNamespace(stdout=' M scripts/linux_release/hosted_installed.py')]
+        with patch.object(plan.subprocess, 'run', side_effect=dirty), self.assertRaisesRegex(ValueError, 'outside its immutable'):
+            plan.observed_controller(Path('/controller'))
+
+    def test_dispatch_inputs_become_one_selection_bound_to_the_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'selection.json'
+            arguments = ['--checkout', '/controller', '--architecture', 'arm64', '--candidate-run-id', '12',
+                         '--candidate-artifact-id', '34', '--candidate-controller-commit', 'f' * 40,
+                         '--source-commit', '1' * 40, '--source-tree', '2' * 40, '--output', str(output)]
+            with patch.object(plan, 'observed_controller', return_value=('a' * 40, 'b' * 40)):
+                self.assertEqual(plan.main(arguments), 0)
+            self.assertEqual(plan.read(output), selected())
+            with patch.object(plan, 'observed_controller', return_value=('a' * 40, 'b' * 40)), \
+                    self.assertRaises(SystemExit):
+                plan.main(arguments)
+            with patch.object(plan, 'observed_controller', return_value=('a' * 40, 'b' * 40)), \
+                    self.assertRaises(SystemExit):
+                plan.main([*arguments[:-1], str(Path(temporary) / 'other.json'), '--architecture', 'riscv64'])
+
+
+class HostedRuntimeEntryTests(unittest.TestCase):
+    def arguments(self, mode, directory):
+        return [mode, '--selection', str(directory / 's.json'), '--checkout', '/controller',
+                '--facts', str(directory / 'f.json'), '--output', str(directory / 'out')]
+
+    def test_retention_fails_the_step_unless_the_campaign_or_diagnosis_is_accepted(self):
+        from linux_release import hosted_installed_diagnostic as diagnostic
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            with patch.object(runtime, 'selection', return_value=selected()), patch.object(runtime, 'read', return_value={}):
+                for accepted, code in ((True, 0), (False, 2)):
+                    report = {'complete_matrix_accepted': accepted, 'case_counts': {'passed': 1, 'failed': 0, 'unverified': 1}}
+                    with self.subTest(accepted=accepted), patch.object(runtime, 'retain', return_value=report):
+                        self.assertEqual(runtime.main(self.arguments('retain', directory)), code)
+                for status, code in (('passed', 0), ('unverified', 2), ('failed', 2)):
+                    with self.subTest(status=status), patch.object(diagnostic, 'retain', return_value={'status': status}):
+                        self.assertEqual(runtime.main(self.arguments('retain-diagnostic', directory)), code)
+
+    def test_desktop_preparation_runs_through_the_lane(self):
+        from linux_release import hosted_desktop
+        with patch.object(hosted_desktop, 'prepare') as prepare:
+            self.assertEqual(runtime.main(['desktop', '--checkout', '/controller', '--output', '/facts.json']), 0)
+        prepare.assert_called_once_with(Path('/controller'), Path('/facts.json'), None)
 
 
 class HostedRuntimeCustodyTests(unittest.TestCase):

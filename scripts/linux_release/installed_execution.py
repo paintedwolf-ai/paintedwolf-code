@@ -8,6 +8,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+import signal
 import subprocess
 import sys
 
@@ -19,6 +20,30 @@ from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, observe
 from .installed_monitors import prepare as prepare_monitors
+
+# Each case runs within its own time budget; a driver family may declare a
+# longer one as TIME_BUDGET_SECONDS. A case past its budget fails and the
+# campaign continues with the next case.
+CASE_TIME_BUDGET_SECONDS = 900
+
+
+class CaseTimeBudgetExceeded(Exception):
+    def __init__(self, budget: int):
+        super().__init__(f"installed case exceeded its {budget} second time budget")
+        self.budget = budget
+
+
+def within_budget(budget: int, call):
+    def expire(signum, frame):
+        raise CaseTimeBudgetExceeded(budget)
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, budget)
+    try:
+        return call()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
 
 SECURITY = {"session", "vault", "confinement", "processes", "browser"}
 NIX = {"updates", "development", "distribution"}
@@ -70,11 +95,12 @@ def registry(catalog: dict, installation: str) -> dict:
 
 def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
     family = case_family(capability, case, binding["artifact"]["installation"])
-    module_name = "scripts.linux_release.installed_cases." + family if family else None
+    module_name = __package__ + ".installed_cases." + family if family else None
     if module_name is None or importlib.util.find_spec(module_name) is None:
         return retain(binding, capability, case, root, "unverified", {"reason": "native-case-driver-required"})
     module = importlib.import_module(module_name)
-    result = module.execute(binding, capability, case, root)
+    budget = getattr(module, "TIME_BUDGET_SECONDS", CASE_TIME_BUDGET_SECONDS)
+    result = within_budget(budget, lambda: module.execute(binding, capability, case, root))
     if result.get("status") == "unverified" and not result.get("evidence"):
         return retain(binding, capability, case, root, "unverified", {"reason": result.get("reason", "native-case-driver-required")})
     case_result = evidence.object_fields(result, {"id", "status", "evidence"})
@@ -158,6 +184,9 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
             try:
                 result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
                           if variant_error else execute_case(binding, row["capability"], case, retained))
+            except CaseTimeBudgetExceeded as error:
+                result = retain(binding, row["capability"], case, retained, "failed",
+                                {"reason": "case-time-budget-exceeded", "budget_seconds": error.budget})
             except CaseFailed as error:
                 failed_case = case if not (retained / row["capability"] / case).exists() else case + "-product-failure"
                 result = retain(binding, row["capability"], failed_case, retained, "failed",

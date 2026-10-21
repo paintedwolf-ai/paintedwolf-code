@@ -124,6 +124,9 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "--run-cases":
         from .installed_execution import main as execute
         return execute(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] in {"--prepare-qualification", "--retain-qualification"}:
+        from .installed_qualification_producer import main as qualification
+        return qualification(["prepare" if sys.argv[1] == "--prepare-qualification" else "retain", *sys.argv[2:]])
     if len(sys.argv) > 1 and sys.argv[1] == "--execute-plan":
         from .installed_campaign import main as execute_plan
         return execute_plan(sys.argv[2:])

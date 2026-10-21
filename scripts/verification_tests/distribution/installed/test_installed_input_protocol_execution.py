@@ -51,6 +51,19 @@ class InstalledInputProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             protocol.request(request, binding)
 
+    def test_endpoint_operation_types_only_the_bound_loopback_endpoint(self):
+        operation = protocol.endpoint_operation(41234)
+        rows = protocol.steps(operation)
+        typed = ''.join(':' if row == ('shift', 'semicolon') else '/' if row == ('slash',) else '.' if row == ('dot',)
+                        else row[0] for row in rows[1:])
+        self.assertEqual((rows[0], typed), (('ctrl', 'a'), 'http://127.0.0.1:41234/v1'))
+        for port in (80, 1023, 65536, True):
+            with self.subTest(port=port), self.assertRaises(ValueError):
+                protocol.endpoint_operation(port)
+        for operation in ('provider-endpoint-v1-80', 'provider-endpoint-v1-99999', 'provider-endpoint-v1-4123x', 'provider-endpoint-v1'):
+            with self.subTest(operation=operation), self.assertRaises(ValueError):
+                protocol.steps(operation)
+
     def test_embedded_entry_with_exact_active_owned_frame_is_structurally_bound(self):
         binding, request, ack = self.fixture()
         self.assertIs(protocol.request(request, binding), request)
