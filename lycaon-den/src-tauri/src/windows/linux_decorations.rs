@@ -274,11 +274,11 @@ mod tests {
     }
 
     #[test]
-    fn the_wire_shape_uses_lowercase_control_names() {
+    fn the_wire_shape_uses_lowercase_names() {
         let json = serde_json::to_string(&parse_button_layout("appmenu:close").unwrap()).unwrap();
         assert_eq!(
             json,
-            r#"{"left":["appmenu"],"right":["close"],"source":"portal"}"#
+            r#"{"left":["appmenu"],"right":["close"],"source":"portal","actions":{"double_click":"toggle-maximize","middle_click":"none","right_click":"menu"}}"#
         );
     }
 }
