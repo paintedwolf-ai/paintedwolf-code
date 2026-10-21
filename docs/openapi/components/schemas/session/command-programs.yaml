@@ -29,7 +29,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         program_id: {type: string, format: uuid}
-        node_id: {type: string}
+        node_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Host syntax node identity within its program.}
         parent_execution_id: {type: string, format: uuid}
         owner: {type: string}
         lifecycle: {type: string}
@@ -62,7 +62,7 @@ components:
         evidence_ref: {type: string}
         owner_ref: {type: string}
         recovery_ref: {type: string}
-        held_version_id: {type: string}
+        held_version_id: {type: string, format: uuid}
         accepted_revision: {type: string}
         published_revision: {type: string}
         detail_ref: {type: string}
@@ -73,8 +73,8 @@ components:
       additionalProperties: false
       required: [id, source_unit_id, start_byte, end_byte, line, column, state]
       properties:
-        id: {type: string}
-        source_unit_id: {type: string}
+        id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Host syntax node identity within its program.}
+        source_unit_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$', description: Captured syntax unit identity within its program.}
         start_byte: {type: integer, format: int64}
         end_byte: {type: integer, format: int64}
         line: {type: integer}
