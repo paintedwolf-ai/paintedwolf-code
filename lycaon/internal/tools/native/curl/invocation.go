@@ -128,11 +128,17 @@ func (inv *invocation) run() error {
 	if inv.opts.fail && resp.Status >= 400 {
 		return &curlFailure{code: 22, message: fmt.Sprintf("The requested URL returned error: %d", resp.Status), certainty: toolcontract.EffectCompleted}
 	}
+	received := resp.Body
+	if inv.opts.compressed {
+		if received, err = decodeContent(resp.Headers, received, inv.owners.limits["stream_bytes"]); err != nil {
+			return err
+		}
+	}
 	var body bytes.Buffer
 	if inv.opts.include || inv.opts.head {
 		body.WriteString(headers)
 	}
-	if err := inv.screen(resp.Body, &body); err != nil {
+	if err := inv.screen(received, &body); err != nil {
 		return err
 	}
 	if output != nil {

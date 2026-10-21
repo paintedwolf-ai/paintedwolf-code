@@ -16,12 +16,21 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 	args := map[string]any{"url": o.url}
 	method := o.method
 	headers := make([]any, 0, len(o.headers)+2)
-	hasContentType := false
+	set := map[string]bool{}
 	for _, h := range o.headers {
-		if strings.EqualFold(h[0], "content-type") {
-			hasContentType = true
-		}
+		set[strings.ToLower(h[0])] = true
 		headers = append(headers, map[string]any{"name": h[0], "value": h[1]})
+	}
+	addDefault := func(name, value string) {
+		if !set[strings.ToLower(name)] {
+			headers = append(headers, map[string]any{"name": name, "value": value})
+		}
+	}
+	if o.userAgent != "" {
+		addDefault("User-Agent", o.userAgent)
+	}
+	if o.compressed {
+		addDefault("Accept-Encoding", "deflate, gzip")
 	}
 	if cookieHeader != "" {
 		headers = append(headers, map[string]any{"name": "Cookie", "value": cookieHeader})
@@ -40,15 +49,30 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 		if method == "" {
 			method = "POST"
 		}
+	case o.get && len(o.data) > 0:
+		query, err := inv.dataBody()
+		if err != nil {
+			return nil, err
+		}
+		args["url"] = withQuery(o.url, query)
+	case len(o.json) > 0:
+		body, err := inv.jsonBody()
+		if err != nil {
+			return nil, err
+		}
+		args["body_text"] = body
+		addDefault("Content-Type", "application/json")
+		addDefault("Accept", "application/json")
+		if method == "" {
+			method = "POST"
+		}
 	case len(o.data) > 0:
 		body, err := inv.dataBody()
 		if err != nil {
 			return nil, err
 		}
 		args["body_text"] = body
-		if !hasContentType {
-			headers = append(headers, map[string]any{"name": "Content-Type", "value": "application/x-www-form-urlencoded"})
-		}
+		addDefault("Content-Type", "application/x-www-form-urlencoded")
 		if method == "" {
 			method = "POST"
 		}
@@ -134,6 +158,37 @@ func (inv *invocation) dataBody() (string, error) {
 		parts = append(parts, value)
 	}
 	return strings.Join(parts, "&"), nil
+}
+
+// jsonBody concatenates --json values without a separator, as curl does;
+// @file values are read as exact bytes.
+func (inv *invocation) jsonBody() (string, error) {
+	var b strings.Builder
+	for _, value := range inv.opts.json {
+		if file, ok := strings.CutPrefix(value, "@"); ok {
+			data, err := inv.readFile(file)
+			if err != nil {
+				return "", err
+			}
+			value = string(data)
+		}
+		b.WriteString(value)
+	}
+	return b.String(), nil
+}
+
+// withQuery appends -G data to the URL's query, before any fragment.
+func withQuery(raw, query string) string {
+	base, fragment, hasFragment := strings.Cut(raw, "#")
+	separator := "?"
+	if strings.Contains(base, "?") {
+		separator = "&"
+	}
+	out := base + separator + query
+	if hasFragment {
+		out += "#" + fragment
+	}
+	return out
 }
 
 // urlencoded applies curl's --data-urlencode forms: content, =content,

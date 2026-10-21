@@ -3,13 +3,16 @@ package mutation
 import (
 	"crypto/rand"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -45,7 +48,15 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
+		info, statErr := os.Lstat(bound.Resolved.Abs)
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
+		for _, deleted := range result.Deleted {
+			if deleted == bound.Resolved.Abs && statErr == nil && info.IsDir() {
+				inv.verbose("removed directory %s", quote(operand))
+			} else {
+				inv.verbose("removed %s", quote(displayed(deleted, bound.Resolved.Abs, operand)))
+			}
+		}
 		return len(result.Deleted), err
 	})
 }
@@ -93,6 +104,9 @@ func runMv(inv *invocation) error {
 			return 0, err
 		}
 		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
+		if len(result.Moved) > 0 {
+			inv.verbose("renamed %s -> %s", quote(operand), quote(inv.destinationDisplay(dest, to)))
+		}
 		return len(result.Moved), err
 	})
 }
@@ -102,11 +116,17 @@ func runCp(inv *invocation) error {
 	if err != nil {
 		return err
 	}
-	recursive, noClobber := inv.flag("-r"), inv.flag("-n")
+	archive := inv.flag("-a")
+	recursive, noClobber, preserve := inv.flag("-r") || archive, inv.flag("-n"), inv.flag("-p") || archive
 	return inv.each(sources, func(operand string) (int, error) {
 		source, err := inv.bind(operand, false)
 		if err != nil {
 			return 0, err
+		}
+		if archive {
+			if err := inv.refuseLinks(operand, source.Resolved.Abs); err != nil {
+				return 0, err
+			}
 		}
 		if info, err := os.Lstat(source.Resolved.Abs); err == nil && info.IsDir() && !recursive {
 			inv.fail(operand, "-r not specified; omitting directory")
@@ -116,8 +136,12 @@ func runCp(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"),
+		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: preserve,
 			MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.tc)
+		shown := inv.destinationDisplay(dest, to)
+		for _, copied := range result.Copied {
+			inv.verbose("%s -> %s", quote(displayed(copied.From, source.Resolved.Abs, operand)), quote(displayed(copied.To, to, shown)))
+		}
 		return len(result.Copied), err
 	})
 }
@@ -151,7 +175,42 @@ func runMkdir(inv *invocation) error {
 			}
 		}
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{bound.Resolved.Abs}, Mode: mode}, inv.tc)
+		for _, dir := range created {
+			inv.verbose("mkdir: created directory %s", quote(ancestorDisplay(dir, bound.Resolved.Abs, operand)))
+		}
 		return len(created), err
+	})
+}
+
+// ancestorDisplay names a created parent of PATH as the matching prefix of
+// the operand, as mkdir -pv does.
+func ancestorDisplay(dir, boundAbs, operand string) string {
+	rel, err := filepath.Rel(dir, boundAbs)
+	if err != nil || rel == "." {
+		return operand
+	}
+	shown := strings.TrimSuffix(operand, "/")
+	for range strings.Split(rel, string(filepath.Separator)) {
+		shown = strings.TrimSuffix(path.Dir(shown), "/")
+	}
+	return shown
+}
+
+// refuseLinks stops cp -a before copying a tree that holds a symbolic link:
+// -a copies links as links, and no owner creates links.
+func (inv *invocation) refuseLinks(operand, abs string) error {
+	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
+	return filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if seen++; seen > maximum {
+			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a preserves symbolic links as links; native link creation is unavailable, so use cp -R -p to copy the link targets")
+		}
+		return nil
 	})
 }
 
@@ -179,7 +238,12 @@ func runTouch(inv *invocation) error {
 		return inv.usage(inv.name(), "at least one PATH")
 	}
 	now := time.Now()
-	access, modify := &now, &now
+	accessAt, modifyAt, err := inv.touchTimes(now)
+	if err != nil {
+		return err
+	}
+	explicit := !accessAt.Equal(now) || !modifyAt.Equal(now)
+	access, modify := &accessAt, &modifyAt
 	if inv.flag("-a") && !inv.flag("-m") {
 		modify = nil
 	}
@@ -206,8 +270,59 @@ func runTouch(inv *invocation) error {
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
 			return 0, err
 		}
+		if explicit {
+			if _, err := inv.owners.Operations.Times.SetTimes(inv.ctx, []string{bound.Resolved.Abs}, access, modify, inv.tc); err != nil {
+				return 1, err
+			}
+		}
 		return 1, nil
 	})
+}
+
+// touchTimes resolves -t, -d or -r into the access and modification times;
+// without them both are the invocation's captured clock.
+func (inv *invocation) touchTimes(now time.Time) (time.Time, time.Time, error) {
+	stamp, hasStamp := inv.value("-t")
+	date, hasDate := inv.value("-d")
+	reference, hasReference := inv.value("-r")
+	switch {
+	case btoi(hasStamp)+btoi(hasDate)+btoi(hasReference) > 1:
+		return now, now, inv.usage(inv.name(), "at most one of -t, -d and -r")
+	case hasStamp:
+		t, ok := parseStamp(stamp, now)
+		if !ok {
+			return now, now, inv.usage(stamp, "a time as [[CC]YY]MMDDhhmm[.ss]")
+		}
+		return t, t, nil
+	case hasDate:
+		t, ok := parseDate(date, now)
+		if !ok {
+			return now, now, inv.usage(date, "a date such as 2026-10-20 12:00:00, 2026-10-20T12:00:00Z, @SECONDS, yesterday or 2 hours ago")
+		}
+		return t, t, nil
+	case hasReference:
+		bound, err := inv.bind(reference, false)
+		if err != nil {
+			return now, now, err
+		}
+		info, err := os.Stat(bound.Resolved.Abs)
+		if err != nil {
+			return now, now, inv.usage(reference, "an existing reference file")
+		}
+		accessed, ok := fseffect.AccessTime(info)
+		if !ok {
+			accessed = info.ModTime()
+		}
+		return accessed, info.ModTime(), nil
+	}
+	return now, now, nil
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // runChown accepts the numeric UID[:GID] form the catalog declares and applies

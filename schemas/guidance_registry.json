@@ -626,6 +626,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
+    "COMMAND_TLS_VERIFICATION_REQUIRED": {
+      "branch_instruction": "Send the request without -k; do not retry through an external program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "The request asked to skip TLS certificate verification."
+    },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",
       "category": "recoverable",

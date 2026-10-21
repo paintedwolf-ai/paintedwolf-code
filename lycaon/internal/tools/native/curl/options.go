@@ -45,6 +45,10 @@ type options struct {
 	maxTime        time.Duration
 	connectTimeout time.Duration
 	unixSocket     string
+	compressed     bool
+	userAgent      string
+	get            bool
+	json           []string
 }
 
 func usage(word, expected string) error {
@@ -75,8 +79,18 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 			o.head = true
 		case "-L":
 			o.location = true
-		case "--fail":
+		case "-f":
 			o.fail = true
+		case "-k":
+			return options{}, &toolrejection.ToolReject{Code: "COMMAND_TLS_VERIFICATION_REQUIRED", Data: map[string]any{"command": "curl", "option": option.Spelling}}
+		case "--compressed":
+			o.compressed = true
+		case "-A":
+			o.userAgent = value
+		case "-G":
+			o.get = true
+		case "--json":
+			o.json = append(o.json, value)
 		case "-X":
 			o.method = value
 		case "-H":
@@ -139,8 +153,14 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 	if !strings.Contains(o.url, "://") {
 		o.url = "http://" + o.url
 	}
-	if len(o.forms) > 0 && len(o.data) > 0 {
+	if len(o.forms) > 0 && (len(o.data) > 0 || len(o.json) > 0) {
 		return options{}, usage("-F", "either -F or -d style data, not both")
+	}
+	if len(o.json) > 0 && len(o.data) > 0 {
+		return options{}, usage("--json", "either --json or -d style data, not both")
+	}
+	if o.get && len(o.forms) > 0 {
+		return options{}, usage("-G", "query data from -d forms, not -F parts")
 	}
 	if o.head && (len(o.forms) > 0 || len(o.data) > 0) {
 		return options{}, usage("-I", "a HEAD request without a body")

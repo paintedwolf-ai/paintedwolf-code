@@ -89,7 +89,7 @@ func TestCurlBodyHeadersAndWriteOut(t *testing.T) {
 	if r := h.curl(t.Context(), "-w", "%{num_redirects}", server.URL); r.err == nil {
 		t.Fatal("unsupported -w variable accepted")
 	}
-	if r := h.curl(t.Context(), "-k", server.URL); r.err == nil {
+	if r := h.curl(t.Context(), "--not-a-version-1-option", server.URL); r.err == nil {
 		t.Fatal("unsupported option bound")
 	}
 }
