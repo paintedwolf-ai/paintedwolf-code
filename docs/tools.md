@@ -625,7 +625,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned task-bound instance references. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
