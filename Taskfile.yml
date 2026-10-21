@@ -1747,15 +1747,29 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
+  release:candidate:select:
+    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    silent: true
+    cmds:
+      - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
+
   release:candidate:diagnostics:
     desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
     cmds:
       - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Isolated release:live-test rehearsal; --local-linux-signing uses disposable local keys, default uses test R2 credentials'
+    desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
+    preconditions:
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
+        msg: bun, curl, jq, python3, and ruby required for release:live-test
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+
+  release:rehearse:linux-signing:
+    desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
+    cmds:
+      - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
