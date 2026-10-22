@@ -1,15 +1,49 @@
 package command_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
+
+func TestProcessAgeSelectionDoesNotClaimUnobservedNativeJob(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"head": {
+			Tool: "read",
+			Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("head"), request.Argv)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Review: bound.Review("read"), Invoke: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					<-ctx.Done()
+					return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, ctx.Err()
+				}}, nil
+			},
+		}}}, nil
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	out, err := f.call(t, ctx, `head -n 7391 & job=$!; pgrep -n -f -x 'head -n 7391'; found=$?; pkill -o -f -x 'head -n 7391'; stopped=$?; kill "$job"; wait "$job"; waited=$?; external -- /bin/echo "found=$found stopped=$stopped waited=$waited"`)
+	testutil.FailErr(t, "select native job without OS age", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 0 || got.Stdout != "found=1 stopped=1 waited=143\n" || got.Stderr != "" {
+		t.Fatalf("unobserved-age selection changed the job: %+v", got)
+	}
+}
 
 func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	f := newProgramFixture(t)

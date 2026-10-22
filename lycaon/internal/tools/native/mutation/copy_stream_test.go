@@ -80,3 +80,61 @@ func TestCopyNewFilesKeepsSourcePermissionsAndExistingFilesKeepTheirMode(t *test
 		}
 	}
 }
+
+func TestRecursiveCopySharesLimitsAcrossAllSources(t *testing.T) {
+	for _, sources := range []struct {
+		name, first, second, firstResult, secondResult string
+	}{
+		{"trees", "left", "right", "dest/left/a", "dest/right/b"},
+		{"file_then_tree", "first", "right", "dest/first", "dest/right/b"},
+		{"tree_then_file", "left", "second", "dest/left/a", "dest/second"},
+		{"files", "first", "second", "dest/first", "dest/second"},
+	} {
+		for _, bound := range []struct {
+			name string
+			caps native.RecursiveCaps
+			fail bool
+		}{
+			{"at", native.RecursiveCaps{Files: 2, Bytes: 4}, false},
+			{"bytes_over", native.RecursiveCaps{Files: 2, Bytes: 3}, true},
+			{"files_over", native.RecursiveCaps{Files: 1, Bytes: 4}, true},
+		} {
+			t.Run(sources.name+"/"+bound.name, func(t *testing.T) {
+				h := newHarness(t, map[string]string{"left/a": "aa", "right/b": "bb", "first": "aa", "second": "bb", "dest/": ""})
+				h.owners.Operations.Copy.Caps = bound.caps
+				r := h.run("", "cp", "-r", sources.first, sources.second, "dest")
+				if bound.fail {
+					if r.err == nil || !h.absent(sources.secondResult) {
+						t.Fatalf("aggregate cap escaped: result=%+v error=%v", r.result, r.err)
+					}
+				} else if r.err != nil || r.result.Status != 0 || h.read(sources.secondResult) != "bb" {
+					t.Fatalf("copy at aggregate cap: result=%+v error=%v", r.result, r.err)
+				}
+				if got := h.read(sources.firstResult); got != "aa" {
+					t.Fatalf("earlier completed copy changed: %q", got)
+				}
+			})
+		}
+	}
+}
+
+func TestRecursiveCopyKeepsPublishedBytesChargedAfterMetadataFailure(t *testing.T) {
+	h := newHarness(t, map[string]string{"left/a": "aa", "right/b": "bb", "dest/": ""})
+	h.owners.Operations.Copy.Caps = native.RecursiveCaps{Files: 2, Bytes: 3}
+	failedMetadata := false
+	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		for _, change := range changes {
+			if change.Path == h.path("dest/left/a") {
+				if _, err := os.Stat(change.Path); err == nil {
+					failedMetadata = true
+					return os.ErrNotExist
+				}
+			}
+		}
+		return nil
+	}
+	r := h.run("", "cp", "-r", "-p", "left", "right", "dest")
+	if !failedMetadata || r.err == nil || h.read("dest/left/a") != "aa" || !h.absent("dest/right/b") {
+		t.Fatalf("metadata failure reset published-byte use: injected=%v result=%+v error=%v", failedMetadata, r.result, r.err)
+	}
+}

@@ -103,6 +103,10 @@ func runCp(inv *invocation) error {
 		return err
 	}
 	recursive, noClobber := inv.flag("-r"), inv.flag("-n")
+	operation, err := inv.owners.Operations.Copy.Begin(native.CopyInput{Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"), MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")})
+	if err != nil {
+		return err
+	}
 	return inv.each(sources, func(operand string) (int, error) {
 		source, err := inv.bind(operand, false)
 		if err != nil {
@@ -116,8 +120,7 @@ func runCp(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"),
-			MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.tc)
+		result, err := operation.CopyPair(inv.ctx, native.FilePair{From: source.Resolved.Abs, To: to}, inv.tc)
 		return len(result.Copied), err
 	})
 }

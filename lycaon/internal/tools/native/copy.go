@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"math"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -80,12 +80,19 @@ func (t *CopyTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	return string(raw), nil
 }
 
-// Copy writes each destination through the reviewed, recoverable stream door.
-func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContext) (CopyResult, error) {
-	var result CopyResult
+// CopyOperation keeps recursive admission across every source in one utility
+// invocation, including sources handled after an ordinary operand failure.
+type CopyOperation struct {
+	tool         *CopyTool
+	input        CopyInput
+	caps, used   RecursiveCaps
+	maxFileBytes int64
+}
+
+func (t *CopyTool) Begin(in CopyInput) (*CopyOperation, error) {
 	caps, err := t.Caps.resolve()
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	maxBytes := in.MaxFileBytes
 	if maxBytes <= 0 {
@@ -95,28 +102,58 @@ func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContex
 			maxBytes = defaultCopyMaxBytes
 		}
 	}
-	prof := tctx.ProfileID()
+	in.Pairs = nil
+	return &CopyOperation{tool: t, input: in, caps: caps, maxFileBytes: maxBytes}, nil
+}
+
+// Copy writes a complete batch through one operation's mutation streams.
+func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContext) (CopyResult, error) {
+	var result CopyResult
+	op, err := t.Begin(in)
+	if err != nil {
+		return result, err
+	}
 	for _, pair := range in.Pairs {
-		if err := ctx.Err(); err != nil {
-			return result, err
-		}
-		if in.Recursive {
-			source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, prof)
-			if err != nil {
-				return result, err
-			}
-			if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
-				if err := t.copyTree(ctx, tctx, source, pair, in, caps, &result); err != nil {
-					return result, err
-				}
-				continue
-			}
-		}
-		if err := t.copyFile(ctx, tctx, pair, in, maxBytes, &result); err != nil {
+		copied, err := op.CopyPair(ctx, pair, tctx)
+		result.Copied = append(result.Copied, copied.Copied...)
+		result.Skipped = append(result.Skipped, copied.Skipped...)
+		if err != nil {
 			return result, err
 		}
 	}
 	return result, nil
+}
+
+// CopyPair retains operation use while the caller handles utility diagnostics.
+func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools.ToolContext) (CopyResult, error) {
+	var result CopyResult
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	in, t := op.input, op.tool
+	if in.Recursive {
+		source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, tctx.ProfileID())
+		if err != nil {
+			return result, err
+		}
+		if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
+			err := t.copyTree(ctx, tctx, source, pair, in, op.caps, &op.used, &result)
+			return result, err
+		}
+	}
+	limit := op.maxFileBytes
+	if in.Recursive {
+		op.used.Files++
+		if err := copyTreeWithinCaps(op.used.Files, op.used.Bytes, op.caps, filepath.ToSlash(pair.From)); err != nil {
+			return result, err
+		}
+		limit = min(limit, op.caps.Bytes-op.used.Bytes)
+	}
+	err := t.copyFile(ctx, tctx, pair, in, limit, &result)
+	if in.Recursive && len(result.Copied) > 0 {
+		op.used.Bytes += result.Copied[len(result.Copied)-1].Bytes
+	}
+	return result, err
 }
 
 func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, in CopyInput, maxBytes int64, result *CopyResult) error {

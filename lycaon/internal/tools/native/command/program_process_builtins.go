@@ -249,11 +249,11 @@ func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pgrep", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
 		}
-		if len(matches) == 0 {
-			return readResult(1), nil
-		}
 		if newest || oldest {
 			matches = selectProcessAge(matches, newest)
+		}
+		if len(matches) == 0 {
+			return readResult(1), nil
 		}
 		var out strings.Builder
 		for _, m := range matches {
@@ -324,6 +324,9 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 		}
 		if newest || oldest {
 			owned = selectProcessAge(owned, newest)
+		}
+		if len(owned) == 0 {
+			return readResult(1), nil
 		}
 		for _, m := range owned {
 			ref := m.handle

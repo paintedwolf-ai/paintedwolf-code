@@ -16,7 +16,7 @@ import (
 // copyTree preflights without retaining a tree-sized plan, then routes every
 // entry through the same mutation owners as a single-file copy. The second
 // pass measures actual streamed bytes so growth cannot exceed admission.
-func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, in CopyInput, caps RecursiveCaps, result *CopyResult) error {
+func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, in CopyInput, caps RecursiveCaps, used *RecursiveCaps, result *CopyResult) error {
 	destination, err := assertCopyWritePath(ctx, t.Boundary, tc, pair.To, tc.ProfileID())
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 	}
 	defer func() { _ = root.Close() }()
 	base := source.EffectLocation().Rel
-	var files, bytes int64
+	files, bytes := used.Files, used.Bytes
 	inspect := func(rel string, info os.FileInfo) error {
 		if _, err := assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.To, rel), tc.ProfileID()); err != nil {
 			return err
@@ -64,7 +64,6 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 	if err := mkdirAgentPath(ctx, tc, resolvedMutationTarget(destination), 0o755); err != nil {
 		return err
 	}
-	files, bytes = 0, 0
 	copyEntry := func(rel string, info os.FileInfo) error {
 		to := filepath.Join(pair.To, rel)
 		if info.IsDir() {
@@ -74,22 +73,20 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 			}
 			return mkdirAgentPath(ctx, tc, resolvedMutationTarget(target), 0o755)
 		}
-		files++
-		if err := copyTreeWithinCaps(files, bytes, caps, filepath.ToSlash(pair.From)); err != nil {
+		used.Files++
+		if err := copyTreeWithinCaps(used.Files, used.Bytes, caps, filepath.ToSlash(pair.From)); err != nil {
 			return err
 		}
-		remaining := caps.Bytes - bytes
+		remaining := caps.Bytes - used.Bytes
 		if in.MaxFileBytes > 0 {
 			remaining = min(remaining, in.MaxFileBytes)
 		}
 		before := len(result.Copied)
-		if err := t.copyFile(ctx, tc, FilePair{From: filepath.Join(pair.From, rel), To: to}, in, remaining, result); err != nil {
-			return err
-		}
+		err := t.copyFile(ctx, tc, FilePair{From: filepath.Join(pair.From, rel), To: to}, in, remaining, result)
 		if len(result.Copied) > before {
-			bytes += result.Copied[len(result.Copied)-1].Bytes
+			used.Bytes += result.Copied[len(result.Copied)-1].Bytes
 		}
-		return nil
+		return err
 	}
 	finishDir := func(rel string, _ os.FileInfo) error {
 		if !in.Preserve {
