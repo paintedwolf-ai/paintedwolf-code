@@ -94,6 +94,29 @@ class CaseTests(unittest.TestCase):
     def test_upgraded_health_must_report_the_candidate_schema(self):
         self.exercise(fault="schema")
 
+    def test_diagnostic_write_failure_preserves_the_activation_failure_and_cleanup(self):
+        write = Path.write_text
+        def fail_observation(path, *args, **kwargs):
+            if path.name == "startup-observation.json":
+                raise OSError("evidence disk unavailable")
+            return write(path, *args, **kwargs)
+        with patch.object(Path, "write_text", fail_observation), patch.object(driver, "retain_state") as retain:
+            self.exercise(fault="channel")
+            retain.assert_called_once()
+
+    def test_cleanup_attempts_every_operation_and_retains_primary_error(self):
+        primary = ValueError("activation failed")
+        installation = Mock(last_observation={})
+        installation.stop.side_effect = OSError("stop failed")
+        with patch.object(Path, "write_text", side_effect=OSError("write failed")), \
+                patch.object(driver, "retain_state", side_effect=OSError("retain failed")) as retain:
+            driver.finish_case(installation, Path("config"), Path("records"), Path("evidence"), primary)
+            installation.stop.assert_called_once()
+            retain.assert_called_once()
+            self.assertEqual(len(primary.__notes__), 3)
+            with self.assertRaisesRegex(OSError, "write failed"):
+                driver.finish_case(installation, Path("config"), Path("records"), Path("evidence"), None)
+
     def test_semantics_verification_syncs_the_desktop_engine_token(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

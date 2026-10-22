@@ -71,3 +71,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertLess(upgrade.index("uses: ./.github/actions/setup-verification"), upgrade.index("run: ./task upgrade:rehearse"))
         self.assertLess(upgrade.index("brew install minisign"), upgrade.index("run: ./task upgrade:rehearse"))
         self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
+
+    def test_release_rehearsal_builds_its_candidate_only_inside_the_managed_target(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        upgrade = workflow.split("  upgrade:\n", 1)[1].split("  ship-gates:\n", 1)[0]
+        self.assertIn("run: ./task upgrade:rehearse", upgrade)
+        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
