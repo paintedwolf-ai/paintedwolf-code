@@ -15,8 +15,8 @@ func TestLinuxNativeSetupRestoresExactArchivesBeforeInstallation(t *testing.T) {
 	var action struct {
 		Runs struct {
 			Steps []struct {
-				Name, Run, Uses, If string
-				With                map[string]string
+				Name, Run, Uses, If, ID string
+				With                    map[string]string
 			}
 		}
 	}
@@ -29,6 +29,9 @@ func TestLinuxNativeSetupRestoresExactArchivesBeforeInstallation(t *testing.T) {
 			phases = append(phases, "plan")
 		case strings.HasPrefix(step.Uses, "actions/cache/restore@"):
 			phases = append(phases, "restore")
+			if step.ID != "cache" {
+				t.Error("archive restore must expose its hit result to publication")
+			}
 			if step.With["restore-keys"] != "" {
 				t.Error("native package archives must restore only their exact resolved key")
 			}
