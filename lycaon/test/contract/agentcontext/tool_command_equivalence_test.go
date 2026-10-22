@@ -151,8 +151,8 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 			t.Errorf("runner-operating-procedure still contains stale guidance %q", stale)
 		}
 	}
-	if !strings.Contains(runnerUnit, "Egress is mediated by default.") {
-		t.Errorf("runner-operating-procedure missing mediated egress guidance: %s", runnerUnit)
+	if !strings.Contains(runnerUnit, "Network access goes through a proxy automatically") {
+		t.Errorf("runner-operating-procedure missing proxy guidance: %s", runnerUnit)
 	}
 
 	surfaceVars := map[string]any{
@@ -196,6 +196,8 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 		"confinement", "will be unobserved", "landlock", "seatbelt",
 		"command_argv_required", "cwd_", "catalog help", "effect counts", "writes publish", "wired utilities",
 		"background: true", "never `kill`",
+		"code:", "egress", "mediated", "host runner", "runner internals",
+		"boundary condition", "transport mechanics", "listed id", "truncated: true",
 	}
 	stalePhrases := []string{
 		"Runs as an argv sequence without a shell",
@@ -305,6 +307,27 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 					tc.name, strings.TrimSpace(cmdSurface), strings.TrimSpace(runnerUnit), strings.TrimSpace(hostRunnerUnit), strings.TrimSpace(sandboxConfinement))
 			}
 
+			// Note: runnerUnit includes capability-request-grammar.md, so renderedGuidance
+			// holds the four rendered blocks without double-counting capGrammar.
+			renderedGuidance := strings.Join([]string{cmdSurface, runnerUnit, hostRunnerUnit, sandboxConfinement}, "\n")
+			seenSentences := make(map[string]bool)
+			for _, line := range strings.Split(renderedGuidance, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "- ") {
+					continue
+				}
+				for _, rawSentence := range strings.Split(line, ". ") {
+					norm := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(rawSentence, ".")))
+					if len(norm) < 12 {
+						continue
+					}
+					if seenSentences[norm] {
+						t.Errorf("sentence appears more than once across rendered command guidance: %q\n%s", rawSentence, renderedGuidance)
+					}
+					seenSentences[norm] = true
+				}
+			}
+
 			combined := strings.Join([]string{cmdSurface, capGrammar, sandboxConfinement, runnerUnit, hostRunnerUnit}, "\n")
 			lower := strings.ToLower(combined)
 			for _, jargon := range forbiddenJargon {
@@ -342,6 +365,9 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 				if strings.TrimSpace(hostRunnerUnit) != "" {
 					t.Errorf("read-only surface must not render coordinator-host-runner, got:\n%s", hostRunnerUnit)
 				}
+				if !strings.Contains(sandboxConfinement, "`capability_request` cannot widen a read-only surface.") || strings.Contains(sandboxConfinement, "deliverable files") {
+					t.Errorf("read-only sandbox-confinement must not advertise widening or deliverable files:\n%s", sandboxConfinement)
+				}
 			} else {
 				// External selector iff !externalHidden on mutation surface
 				wantExternal := !tc.externalHidden
@@ -377,15 +403,20 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 					t.Errorf("read-only surface must not render outside-folder write approval copy:\n%s", cmdSurface)
 				}
 			} else {
-				for _, unexpected := range []string{"These folders are the project", "@label", "non-primary", "Roots:"} {
-					if strings.Contains(cmdSurface, unexpected) {
-						t.Errorf("no-folder surface must not render %q:\n%s", unexpected, cmdSurface)
+				for _, unexpected := range []string{"These folders are the project", "@label", "non-primary", "Roots:", "outside the project", "Keep deliverable files in attached project folders"} {
+					if strings.Contains(renderedGuidance, unexpected) {
+						t.Errorf("no-folder surface must not render %q:\n%s", unexpected, renderedGuidance)
 					}
 				}
-				if !tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached; writes ask the person first.") {
-					t.Errorf("no-folder surface missing no-folder notice:\n%s", cmdSurface)
-				}
-				if tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached.") {
+				if !tc.readOnly {
+					wantStrict := tc.posture.ReviewsConfinedWrites()
+					if strings.Contains(cmdSurface, "No project folders are attached; writes outside `@scratch`, including system temporary folders, ask the person first.") != wantStrict {
+						t.Errorf("strict no-folder copy present=%v, want %v:\n%s", strings.Contains(cmdSurface, "No project folders are attached; writes outside `@scratch`, including system temporary folders, ask the person first."), wantStrict, cmdSurface)
+					}
+					if strings.Contains(cmdSurface, "No project folders are attached; writes outside `@scratch` and temporary or cache folders ask the person first.") != !wantStrict {
+						t.Errorf("balanced no-folder copy present=%v, want %v:\n%s", strings.Contains(cmdSurface, "No project folders are attached; writes outside `@scratch` and temporary or cache folders ask the person first."), !wantStrict, cmdSurface)
+					}
+				} else if !strings.Contains(cmdSurface, "No project folders are attached.") {
 					t.Errorf("no-folder read-only surface missing no-folder notice:\n%s", cmdSurface)
 				}
 			}

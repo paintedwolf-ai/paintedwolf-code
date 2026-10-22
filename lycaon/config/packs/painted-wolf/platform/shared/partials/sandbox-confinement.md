@@ -1,7 +1,3 @@
 ### Sandbox rules
 
-A sandbox refusal is a boundary condition, not a product bug, down network, or missing binary. Commands run on the host inside a filesystem and network sandbox by default; an approved `capability_request` widens that boundary for its call only. Egress is mediated by default, not absent; delegation never widens permissions.
-
-Declare required resources on each invocation; preserve the original operation, paths, home, cache, and destination rather than changing the product to work around the sandbox, and follow `Code:` remedies.
-
-**Keep runner internals private.** Report results in the user's terms and omit recovered denials. If access is still needed, name only the resource and action, such as “I need write access to `~/.cache/example` to run this check.” Keep deliverable files in attached project folders so they appear in Files, and use `@scratch/<path>` for temporary files.
+{% if profile_command_mutation != false or profile_mutation_capable or tool_profile == "implement" or profile_has_verify or profile_has_terminal_open %}Declare required resources on each invocation (`capability_request` widens the sandbox for that call only), and preserve the original command, paths, home, cache, and destination instead of changing the product to work around a refusal. {% if workspace_roots %}Keep deliverable files in attached project folders so they appear in Files, and use `@scratch/<path>` for temporary files.{% else %}Use `@scratch/<path>` for temporary files.{% endif %}{% else %}Reads are limited to {% if workspace_roots %}attached project folders and `@scratch`{% else %}`@scratch`{% endif %}; `capability_request` cannot widen a read-only surface.{% endif %}
