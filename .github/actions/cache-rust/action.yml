@@ -16,7 +16,9 @@ runs:
       run: |
         set -euo pipefail
         printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
-        printf 'prefix=den-rust-v1-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}-${DEVELOPER_DIR:-system}" >> "${GITHUB_OUTPUT}"
+        toolchain=system
+        if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
+        printf 'prefix=den-rust-v1-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

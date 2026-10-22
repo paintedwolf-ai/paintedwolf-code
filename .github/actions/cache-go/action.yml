@@ -25,9 +25,7 @@ runs:
           printf 'key_prefix=go-v2-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(go env GOVERSION)"
         } >> "${GITHUB_OUTPUT}"
 
-    # Keys follow the module graph, so main saves once per dependency change.
-    # Saving starts clean rather than from an older entry, which would carry
-    # superseded dependencies forward.
+    # Main publishes one trimmed payload per module graph.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: budget
       uses: ./.github/actions/cache-budget

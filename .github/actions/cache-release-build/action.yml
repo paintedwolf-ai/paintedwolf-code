@@ -21,16 +21,11 @@ runs:
         } >> "${GITHUB_OUTPUT}"
 
     # Go compiler entries validate their inputs across verification and release.
-    # Restore the shared main cache rather than retaining a second Go payload.
     - uses: ./.github/actions/cache-go
 
     - uses: ./.github/actions/cache-notices-tools
 
-    # Keys follow the toolchains and dependency locks, so main saves once per
-    # change instead of once per commit; a release recompiles its own crate.
-    # Saving starts clean so superseded dependencies do not accumulate.
-    # Compiler caches are content-checked, so a tag release may
-    # start from an older entry.
+    # Cargo validates compiler inputs restored from an earlier lockfile generation.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: budget
       uses: ./.github/actions/cache-budget

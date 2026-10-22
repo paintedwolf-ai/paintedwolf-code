@@ -973,6 +973,32 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
+### Compiler cache storage admission
+
+Only the serialized main warmer publishes compiler caches. Each publication
+measures its payload, reserves uncompressed bytes plus archive overhead against
+an 8 GiB repository budget, and retires superseded entries in its platform
+family before upload. If needed, it retires the least recently used compiler
+entries it owns; it never deletes another ref or an unknown family. Oversized
+payloads are reported and left unpublished. The remaining allowance leaves
+headroom for tool caches; concurrent writes and GitHub eviction can still
+displace entries.
+This is write admission, not a storage reservation or a pinned cache.
+
+The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
+combined module/build payload. Hosted development Rust builds omit debug data,
+and desktop/decision-engine keys retain Xcode identity only on macOS. Go, desktop Rust,
+decision-engine, and release caches publish explicitly after successful warming;
+publication summaries record bytes, retired entry IDs, and skipped writes.
+Consumers remain read-only and rebuild safely on a miss.
+
+Linux native setup resolves archives from signed APT indexes, verifies each size
+and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
+share a four-minute deadline, with a 30-second origin budget and a canonical
+Ubuntu fallback for recognized Ubuntu package paths. Installation uses only the
+verified local archives. The step summary separates restored and downloaded
+archives and records download time.
+
 ### Runner capacity
 
 The GitHub Free plan runs twenty hosted jobs at once across the organization,
@@ -1083,28 +1109,3 @@ Fixtures are deterministic, repository-local, and safe to run without credential
 The paid coordinator benchmark drives the real application with candidate
 models and grades environment outcomes, not transcripts. It is opt-in, never
 part of `check` or CI, and has its own page: [Coordinator benchmark](coordinator-benchmark.md).
-
-### Compiler cache storage admission
-
-Only the serialized main warmer publishes compiler caches. Each publication
-measures its payload, reserves uncompressed bytes plus archive overhead against
-an 8 GiB repository budget, and retires superseded entries in its platform
-family before upload. If needed, it retires the least recently used compiler
-entries it owns; it never deletes another ref or an unknown family. Oversized
-payloads are reported and left unpublished. The remaining allowance covers small
-tool caches and concurrent external writes; GitHub still controls global eviction.
-This is write admission, not a storage reservation or a pinned cache.
-
-The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
-combined module/build payload. Hosted development Rust builds omit debug data,
-and decision-engine keys retain Xcode identity only on macOS. Go, desktop Rust,
-decision-engine, and release caches publish explicitly after successful warming;
-publication summaries record bytes, retired entry IDs, and skipped writes.
-Consumers remain read-only and rebuild safely on a miss.
-
-Linux native setup resolves archives from signed APT indexes, verifies each size
-and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
-share a four-minute deadline, with a 30-second origin budget and a canonical
-Ubuntu fallback for recognized Ubuntu package paths. Installation uses only the
-verified local archives. The step summary separates restored and downloaded
-archives and records download time.

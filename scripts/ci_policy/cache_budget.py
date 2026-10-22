@@ -58,7 +58,7 @@ def plan(rows, key, size, limit=LIMIT):
         return {"allowed": False, "reason": "no cache payload", "delete": []}
     if any(row["key"] == key and row["ref"] == "refs/heads/main" for row in rows):
         return {"allowed": False, "reason": "exact key already exists", "delete": []}
-    # Uncompressed bytes plus archive overhead bound the next compressed upload.
+    # Reserve uncompressed bytes and archive headroom before the upload.
     reserve = size + size // 20 + 1024**2
     total = sum(row["size_in_bytes"] for row in rows)
     owned = [row for row in rows if row["ref"] == "refs/heads/main" and family(row["key"]) is not None]
