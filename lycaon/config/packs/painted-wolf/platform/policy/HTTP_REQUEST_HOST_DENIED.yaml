@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   tool:
   - http_request
+  - command
 requires:
   facts:
   - paintedwolf.rejection_code
