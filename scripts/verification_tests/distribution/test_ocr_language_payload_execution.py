@@ -13,6 +13,27 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class OCRLanguagePayloadTests(unittest.TestCase):
+    def test_empty_and_duplicate_language_maps_fail_with_pin_diagnostics(self):
+        for mapping, diagnostic in [("", "incomplete or oversized OCR pin"),
+                                    ("  eng_traineddata:\n    sha256: " + "a" * 64 +
+                                     "\n    bytes: 1\n" + "  eng_traineddata:\n", "duplicate trained data")]:
+            with self.subTest(diagnostic=diagnostic), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "scripts").mkdir()
+                shutil.copyfile(ROOT / "scripts/ocrengine-fetch.sh", root / "scripts/ocrengine-fetch.sh")
+                pin = root / "lycaon/config/runtime/ocrengine/pin.yaml"
+                pin.parent.mkdir(parents=True)
+                pin.write_text("engine_version: fixture\ntrained_data:\n" + mapping +
+                               "platforms:\n  linux-amd64:\n    url: fixture\n")
+                result = subprocess.run(["bash", str(root / "scripts/ocrengine-fetch.sh"), "--target",
+                                         "x86_64-unknown-linux-gnu", "--archive", str(root / "absent")],
+                                        env={**os.environ, "OCRENGINE_DEST": str(root / "staged")},
+                                        text=True, capture_output=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertNotIn("unbound variable", result.stderr)
+                self.assertFalse((root / "staged").exists())
+
     def test_cached_tree_checks_each_language_before_reuse(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

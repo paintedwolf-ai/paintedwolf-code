@@ -117,7 +117,7 @@ DATA_SOURCES=()
 while IFS= read -r key; do
   [[ "${key}" =~ ^([a-z]{3}(_[a-z]{3,4})?)_traineddata$ ]] || { echo "error: invalid trained-data key" >&2; exit 1; }
   language="${key%_traineddata}"
-  for previous in "${DATA_LANGUAGES[@]}"; do
+  for previous in ${DATA_LANGUAGES[@]+"${DATA_LANGUAGES[@]}"}; do
     [[ "${previous}" != "${language}" ]] || { echo "error: duplicate trained data" >&2; exit 1; }
   done
   [[ "${language}" != eng ]] || HAS_ENGLISH=1
