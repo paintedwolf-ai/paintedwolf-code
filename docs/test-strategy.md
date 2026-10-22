@@ -858,6 +858,32 @@ request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
 
+##### Integration capacity experiment
+
+The capacity catalog in
+[`verification-plan.json`](../scripts/verification-plan.json) and
+`TestBoundedClassesFitTheHostedRunners` define the available integration budget
+from workflow concurrency groups, background reservations, and the PR admission
+reservation. Calculate that envelope before changing the integration cap; keep
+both one-PR groups and the admission reservation.
+
+For each successful run, the runtime lower bound is
+`max(total runner-minutes / lane cap, longest job duration)`. Use complete job
+durations, including setup and evidence publication. Extra lanes cannot shorten
+the longest job, so compare preparation costs before treating more parallelism
+as a throughput improvement. Retain dated measurements, run links, catalog
+revision, and capacity arithmetic in the rollout PR rather than this policy.
+
+After preparation and cache publication stabilize, compare at least ten
+successful groups at each cap. Record matrix size and affected scope, setup
+versus execution duration, ready-to-start wait, total runner-minutes, queue-to-merge
+time, PR admission wait, and failed or invalidated attempts separately. Change
+only `capacity.max_parallel.integration` for the six-lane comparison; retain the
+same recipes, shard count, queue settings, and required checks. Keep six only
+if completed merges per hour and queue-to-merge time improve without consuming
+the admission reservation or increasing failed attempts. Return the cap to four
+if those conditions do not hold. Retain both measurement sets with the rollout PR.
+
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
 prints the proposed ruleset while preserving unrelated protections. Add `--apply`
