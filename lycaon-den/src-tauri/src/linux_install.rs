@@ -21,6 +21,7 @@ const ENGINE_MARKER: &str = "schemas/oar/oar.schema.json";
 pub enum PackageFamily {
     Deb,
     Rpm,
+    Nix,
 }
 
 impl PackageFamily {
@@ -29,6 +30,7 @@ impl PackageFamily {
         match self {
             Self::Deb => format!("sudo apt update && sudo apt install --only-upgrade {package}"),
             Self::Rpm => format!("sudo dnf upgrade {package}"),
+            Self::Nix => "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation.".into(),
         }
     }
 }
@@ -82,6 +84,9 @@ pub fn installed() -> Option<&'static InstalledPackage> {
                 return None;
             }
             let executable = std::env::current_exe().ok()?;
+            if let Ok(Some(generation)) = crate::linux_generation::running() {
+                return Some(InstalledPackage::new(PackageFamily::Nix, PACKAGE_NAME.into(), generation.version.clone()));
+            }
             owner(&executable)
         })
         .as_ref()
