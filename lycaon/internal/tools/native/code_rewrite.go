@@ -93,7 +93,7 @@ func (t *CodeRewriteTool) runSingleApply(ctx context.Context, tctx tools.ToolCon
 
 	fullPath := resolved.Abs
 	path = resolved.DisplayPath
-	return retryEditorDocument(ctx, path, func() (string, error) {
+	return retryEditorOperation(ctx, path, func() (string, error) {
 		st, err := loadRewriteSource(ctx, tctx, resolved, dryRun)
 		if err != nil {
 			if os.IsNotExist(err) {

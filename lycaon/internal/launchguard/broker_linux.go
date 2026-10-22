@@ -20,10 +20,16 @@ import (
 // installation root, and has no authority over the protected processes. Only
 // protected processes hold its socket. The protocol is launchbroker's.
 
-// brokerCall is one started program the supervisor's reaper reports on.
+// maxConcurrentBrokerCalls bounds the simultaneous active calls one launch's
+// broker agent accepts, preventing a runaway caller from exhausting file
+// descriptors or process slots.
+const maxConcurrentBrokerCalls = 128
+
+// brokerCall is one started program the broker agent's reaper reports on.
 type brokerCall struct {
 	channel int
 	pid     int
+	detach  bool
 	// abandoned marks a call whose caller closed the channel first.
 	abandoned bool
 }
@@ -39,6 +45,8 @@ func startBrokered(request launchbroker.Request, fds []int) (int, error) {
 			return 0, err
 		}
 		path = resolved
+	case !filepath.IsAbs(path) || filepath.Clean(path) != path:
+		return 0, errors.New("broker program path must be absolute and clean")
 	}
 	files := make([]uintptr, 0, len(fds)-1)
 	for _, fd := range fds[1:] {

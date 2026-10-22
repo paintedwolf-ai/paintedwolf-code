@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -18,21 +19,41 @@ import (
 // kills closes its call channel, and the broker ends that supervisor.
 var relayedSignals = []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGCONT}
 
+// parseRelayTarget decodes a relayed supervisor or a relayed prepared command
+// into the extra-descriptor count and the request argv for the broker.
+func parseRelayTarget(program string, args []string) (int, []string, bool) {
+	if len(args) > 0 && args[0] == supervisorCommand {
+		target, ok := parseSupervisorTarget(args[1:])
+		if !ok {
+			return 0, nil, false
+		}
+		// The supervisor's descriptors: the target's, its lifetime pipe and its
+		// startup report.
+		return target.extraFiles + 2, append([]string{program, supervisorCommand}, args[1:]...), true
+	}
+	if len(args) < 3 || args[1] == "" {
+		return 0, nil, false
+	}
+	count, err := strconv.Atoi(args[0])
+	if err != nil || count < 0 {
+		return 0, nil, false
+	}
+	return count, append([]string{args[1]}, args[3:]...), true
+}
+
 // runBrokerRelay starts, through the protected launch's broker, the command
-// supervisor its arguments describe, with its own standard streams and the
-// supervisor's descriptors, and mirrors that supervisor's exit. The broker
-// is its last descriptor.
+// or command supervisor its arguments describe, with its own standard streams
+// and extra descriptors, and mirrors that process's exit. The broker is its
+// last descriptor.
 func runBrokerRelay(args []string) int {
-	if len(args) < 1 || args[0] != supervisorCommand {
+	program, err := os.Readlink("/proc/self/exe")
+	if err != nil {
 		return 125
 	}
-	target, ok := parseSupervisorTarget(args[1:])
+	extras, argv, ok := parseRelayTarget(program, args)
 	if !ok {
 		return 125
 	}
-	// The supervisor's descriptors: the target's, its lifetime pipe and its
-	// startup report.
-	extras := target.extraFiles + 2
 	brokerFD := 3 + extras
 	if _, err := launchbroker.CheckSocket(brokerFD); err != nil {
 		fmt.Fprintf(os.Stderr, "broker relay: %v\n", err)
@@ -57,22 +78,25 @@ func runBrokerRelay(args []string) int {
 	}
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, relayedSignals...)
-	program, err := os.Readlink("/proc/self/exe")
-	if err != nil {
-		return 125
-	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return 125
 	}
 	_, termErr := unix.IoctlGetTermios(0, unix.TCGETS)
 	request := launchbroker.Request{
-		Argv:        append([]string{program, supervisorCommand}, args[1:]...),
+		Argv:        argv,
 		Environment: os.Environ(),
 		Dir:         dir,
 		Terminal:    termErr == nil,
 	}
-	channel, err := launchbroker.Send(broker, request, os.Stdin, os.Stdout, os.Stderr, files...)
+	channel, err := launchbroker.Send(
+		broker,
+		request,
+		os.NewFile(0, "relay-stdin"),
+		os.NewFile(1, "relay-stdout"),
+		os.NewFile(2, "relay-stderr"),
+		files...,
+	)
 	// The supervisor holds its own copies now; the startup report must reach
 	// end-of-file once that supervisor is done with it.
 	for _, file := range files {
