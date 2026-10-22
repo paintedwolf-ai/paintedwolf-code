@@ -150,6 +150,13 @@ jobs:
           tools: all
           save: 'true'
 
+      # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
+      - name: Publish WebKitGTK accessibility images
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/setup-webkit-atspi-images
+        with:
+          save: 'true'
+
       # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
       - name: Record lint diagnostics
         if: runner.os == 'Linux'
@@ -162,12 +169,6 @@ jobs:
         with:
           save: 'true'
 
-      # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
-      - name: Publish WebKitGTK accessibility images
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
-        uses: ./.github/actions/setup-webkit-atspi-images
-        with:
-          save: 'true'
 
   usage:
     if: always()
@@ -186,7 +187,7 @@ jobs:
           {
             echo '### Repository caches'
             gh api "repos/${REPO}/actions/cache/usage" \
-              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB of the 10 GiB limit"'
+              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB stored"'
             echo
             echo '| Ref | MiB | Key |'
             echo '|---|---|---|'
