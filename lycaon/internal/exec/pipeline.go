@@ -74,7 +74,7 @@ func ProcessEnvironment(opts ExecOpts) ([]string, error) {
 
 func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
 	provided := opts.Env
-	if provided == nil && opts.Launch.reduced() {
+	if opts.Launch.reduced() {
 		provided = ReducedEnviron()
 	}
 	if len(opts.Launch.ExtraEnv) > 0 {
