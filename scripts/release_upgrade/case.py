@@ -169,6 +169,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
                 "steps": observations, "restart_health": restart["health"]}
     finally:
+        (evidence / "startup-observation.json").write_text(json.dumps(installation.last_observation, indent=2) + "\n")
         try:
             installation.stop()
         finally:
