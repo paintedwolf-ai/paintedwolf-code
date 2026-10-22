@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine/linuxsandbox",
+  "kind": "module",
+  "workstream": "linux-confinement",
+  "disposition": "retain",
+  "reason": "The 28 source files implement one Linux sandbox boundary. The control transport is a focused OS descriptor boundary beside namespace, seccomp, and network mediation; it does not introduce a second policy owner. Retain this package with the current member set and focused descriptor and socket-policy contracts.",
+  "reviewed_commit": "8ad02c97dd554a235fa714fe3f5cc3bc3641dd63",
+  "ceiling": 28,
+  "reviewed_shape": "b57e4213bfe260c82720d7db4cd81bb0295099512e710d7d4c89b188af9c066d",
+  "boundaries": {
+    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "b3793672f8d082c9ee322cf1b71cd69f66babbeb8d7c444ba89873017b183735",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8"
+  }
+}
