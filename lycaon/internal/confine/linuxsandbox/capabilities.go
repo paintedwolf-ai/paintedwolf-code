@@ -48,6 +48,12 @@ const (
 	// RemedyEnableUserNamespaces asks the administrator to allow unprivileged
 	// user namespaces.
 	RemedyEnableUserNamespaces Remedy = "enable_user_namespaces"
+	// RemedyReviewNamespaceLimits asks the administrator to inspect the exhausted
+	// namespace quota and the workloads consuming it.
+	RemedyReviewNamespaceLimits Remedy = "review_namespace_limits"
+	// RemedyReviewHostPolicy asks the administrator to inspect the policy denying
+	// namespace creation, without attributing it to an unobserved cause.
+	RemedyReviewHostPolicy Remedy = "review_host_policy"
 	// RemedyUpgradeKernel asks for a kernel at the platform floor.
 	RemedyUpgradeKernel Remedy = "upgrade_kernel"
 	// RemedyAllowSupervision asks the administrator to let a process inspect
@@ -69,6 +75,7 @@ const (
 	UnavailableUserNamespacesAppArmor    = "user_namespaces_denied_apparmor"
 	UnavailableUserNamespacesDenied      = "user_namespaces_denied"
 	UnavailableUserNamespacesUnsupported = "user_namespaces_unsupported"
+	UnavailableNamespaceLimit            = "namespace_limit_reached"
 	UnavailableLandlock                  = "landlock_unavailable"
 	UnavailableLandlockABI               = "landlock_abi_below_floor"
 	UnavailableSeccomp                   = "seccomp_unavailable"
