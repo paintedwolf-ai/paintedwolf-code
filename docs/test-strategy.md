@@ -995,7 +995,8 @@ Consumers remain read-only and rebuild safely on a miss.
 Linux native setup resolves archives from signed APT indexes, verifies each size
 and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
 share a four-minute deadline, with a 30-second origin budget and a canonical
-Ubuntu fallback for recognized Ubuntu package paths. Installation uses only the
+Ubuntu fallback for recognized Ubuntu package paths. Each origin is attempted
+at most twice within that shared deadline. Installation uses only the
 verified local archives. The step summary separates restored and downloaded
 archives and records download time.
 

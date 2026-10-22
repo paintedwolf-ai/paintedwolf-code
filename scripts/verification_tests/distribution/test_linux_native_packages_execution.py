@@ -128,6 +128,28 @@ elif 'install' in sys.argv:
         self.assertEqual(NATIVE.origins("https://packages.example.test/pool/a.deb"),
                          ["https://packages.example.test/pool/a.deb"])
 
+    def test_single_origin_transient_failure_has_a_bounded_retry(self):
+        row = NATIVE.archives(PLAN.replace("http://mirror", "https://mirror"))[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "partial").mkdir()
+            calls = []
+
+            def transfer(uri, path, received, deadline):
+                calls.append(uri)
+                if len(calls) == 1:
+                    raise NATIVE.HTTPException("truncated response")
+                path.write_bytes(PAYLOAD)
+
+            with patch.object(NATIVE, "transfer", side_effect=transfer):
+                self.assertEqual(NATIVE.fetch(row, root, time.monotonic() + 60), "downloaded")
+            self.assertEqual(calls, [row["uri"], row["uri"]])
+            (root / row["name"]).unlink()
+            with patch.object(NATIVE, "transfer", side_effect=OSError("unavailable")) as transfer:
+                with self.assertRaises(ValueError):
+                    NATIVE.fetch(row, root, time.monotonic() + 60)
+            self.assertEqual(transfer.call_count, 2)
+
     def test_download_refuses_corruption_oversize_and_expired_deadline(self):
         row = NATIVE.archives(PLAN)[0]
         with tempfile.TemporaryDirectory() as directory:

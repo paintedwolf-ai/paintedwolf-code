@@ -1,6 +1,7 @@
 """Install the native package closure resolved from the runner's signed APT indexes."""
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -111,13 +112,13 @@ def fetch(row, directory, deadline):
         return "cached"
     temporary = directory / "partial" / row["name"]
     failures = []
-    for uri in origins(row["uri"]):
+    for uri in origins(row["uri"]) * 2:
         try:
             transfer(uri, temporary, row, min(deadline, time.monotonic() + TRANSFER_SECONDS))
             temporary.replace(destination)
             print(f"Native package verified: {row['name']} from {urlsplit(uri).hostname}", flush=True)
             return "downloaded"
-        except (OSError, ValueError) as error:
+        except (OSError, HTTPException, ValueError) as error:
             failures.append(f"{urlsplit(uri).hostname}: {error}")
         finally:
             temporary.unlink(missing_ok=True)
