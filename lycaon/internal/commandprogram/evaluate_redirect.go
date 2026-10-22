@@ -2,6 +2,7 @@ package commandprogram
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 
@@ -50,9 +51,12 @@ func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run 
 
 // stagedRedirect is one opened output destination and its own execution.
 type stagedRedirect struct {
-	frame  *frame
-	run    *childRun
-	output StagedOutput
+	frame       *frame
+	run         *childRun
+	operator    string
+	target      string
+	errorStream io.Writer
+	output      StagedOutput
 }
 
 func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
@@ -63,9 +67,15 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	}
 	published, err := o.output.Publish(ctx)
 	if err != nil {
-		return o.frame.settle(o.run, ownerResult(err), err)
+		result := ownerResult(err)
+		writeRedirectRefusal(o.errorStream, o.operator, o.target, result.StopCode)
+		return o.frame.settle(o.run, result, err)
 	}
-	o.run.settle(toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
+	certainty := toolcontract.EffectCompleted
+	if published.PublishedRevision == "" {
+		certainty = toolcontract.NoEffect
+	}
+	o.run.settle(toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
 	return nil
 }
 
@@ -103,7 +113,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			return nil, true, g.redirectFailure(child, err)
+			return nil, true, g.redirectFailure(child, r.Operator, target, err)
 		}
 		g.streams.Input = input
 		child.settle(ordinaryResult(0), nil)
@@ -112,8 +122,9 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	_, outputs := g.redirections()
 	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
-		return nil, true, g.redirectFailure(child, err)
+		return nil, true, g.redirectFailure(child, r.Operator, target, err)
 	}
+	errorStream := g.streams.Error
 	switch r.Operator {
 	case "&>", "&>>":
 		g.streams.Output, g.streams.Error = staged, staged
@@ -124,17 +135,32 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 			g.streams.Output = staged
 		}
 	}
-	return &stagedRedirect{frame: g, run: child, output: staged}, false, nil
+	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, false, nil
 }
 
 // redirectFailure records a refused open: owner stops latch, other failures
 // leave an ordinary status 1 and the command unrun.
-func (g *frame) redirectFailure(child *childRun, err error) error {
+func (g *frame) redirectFailure(child *childRun, operator, target string, err error) error {
 	result := ownerResult(err)
+	writeRedirectRefusal(g.streams.Error, operator, target, result.StopCode)
 	if settleErr := g.settle(child, result, err); settleErr != nil {
 		return settleErr
 	}
 	return nil
+}
+
+func writeRedirectRefusal(w io.Writer, operator, target, code string) {
+	if w == nil || code == "" {
+		return
+	}
+	detail := "not supported here"
+	switch code {
+	case "SURVEY_PATH_ESCAPE":
+		detail = "path is outside the project root; use a relative path inside the workspace"
+	case "COMMAND_REVISION_CONFLICT":
+		detail = "destination changed since capture; re-read before writing"
+	}
+	_, _ = fmt.Fprintf(w, "redirect %s: %s: %s [%s]\n", operator, target, detail, code)
 }
 
 // hereDocument expands the body once through the expander's document rules

@@ -3,8 +3,10 @@ package toolhost
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -13,8 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/gitcmd"
+	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/native/query"
 	"github.com/lycaon/lycaon/internal/tools/native/search"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
@@ -28,6 +33,9 @@ type programOwnerTools struct {
 	repo       *reposurvey.RepoTool
 	operations mutation.Operations
 	catalog    *sourcecatalog.Catalog
+	// git is the Git owner; nil leaves git to its unsupported refusal.
+	git      *git.Manager
+	registry *tools.DefaultRegistry
 }
 
 // compose builds the literal and mutation owners once and returns the
@@ -42,6 +50,10 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
+	queryOwners, err := query.NewOwners(revisions, recorder, t.operations.Write)
+	if err != nil {
+		return nil, err
+	}
 	searchOwners, err := search.NewOwners(revisions, recorder, search.DeleteRemover{Delete: t.operations.Delete})
 	if err != nil {
 		return nil, err
@@ -52,6 +64,14 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		return nil, err
 	}
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
+		return nil, err
+	}
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, t.boundary)
+	if err != nil {
+		return nil, err
+	}
+	gitNative, err := t.gitOperation()
+	if err != nil {
 		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
@@ -73,7 +93,17 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 					text.Spills = spills
 					release = func() { _ = spills.Close() }
 				}
-				return textOwners.Builtins(text), release, nil
+				builtins := textOwners.Builtins(text)
+				var bound hostenv.NativeBindings
+				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {
+					bound = b
+				}
+				for name, builtin := range hostenvOwners.Builtins(ports.ToolContext, ports.Nested, bound) {
+					if _, taken := builtins[name]; !taken {
+						builtins[name] = builtin
+					}
+				}
+				return builtins, release, nil
 			},
 			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
 				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
@@ -97,7 +127,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Mode: search.EffectMode(prepared.Argv), Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
 		for _, name := range mutationOwners.Commands() {
@@ -107,9 +137,59 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
+		}
+		for _, name := range queryOwners.Commands() {
+			tool, _ := queryOwners.Operation(name)
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := queryOwners.Prepare(query.Program{Paths: frame, Barrier: barrier}, request)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+			}}
+		}
+		if gitNative.Prepare != nil {
+			owners.Natives["git"] = gitNative
 		}
 		return owners, nil
 	}, nil
+}
+
+// gitOperation serves the git umbrella command: each bound form keeps its
+// structured Git tool's identity where one is registered, and otherwise runs
+// as the catalog command's own read execution.
+func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
+	if t.git == nil {
+		return command.NativeOperation{}, nil
+	}
+	owners, err := gitcmd.NewOwners(git.CommandReader{})
+	if err != nil {
+		return command.NativeOperation{}, err
+	}
+	registered := func(tool string) bool {
+		if tool == "" || t.registry == nil {
+			return false
+		}
+		_, ok := t.registry.Definition(tool)
+		return ok
+	}
+	var identities []string
+	for _, name := range owners.Commands() {
+		if tool := owners.Operation(name); registered(tool) {
+			identities = append(identities, tool)
+		}
+	}
+	return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		prepared, err := owners.PrepareGit(frame, request)
+		if err != nil {
+			return command.NativePrepared{}, err
+		}
+		tool := prepared.Operation
+		if !registered(tool) {
+			tool = ""
+		}
+		return command.NativePrepared{Command: prepared.Command, Tool: tool, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+	}}, nil
 }

@@ -48,6 +48,15 @@ func TestDifferentialAgainstHostUtilities(t *testing.T) {
 		{"tr a-z A-Z", []string{"a-z", "A-Z"}, "Hello, world\n\xff\n"},
 		{"tr -d '[:digit:]'", []string{"-d", "[:digit:]"}, "a1b2c3\n"},
 		{"tr -s ' '", []string{"-s", " "}, "a   b  c\n"},
+		{"cut -d : -f 2 -s", []string{"-d", ":", "-f", "2", "-s"}, "a:b\nnone\n"},
+		{"tr -c a-z _", []string{"-c", "a-z", "_"}, "ab-c 1\n"},
+		{"tr -cs '[:alnum:]' '\\n'", []string{"-cs", "[:alnum:]", "\\n"}, "a  b,,c\n"},
+		{"rev", nil, "abc\nxy\n"},
+		{"paste -s -d , -", []string{"-s", "-d", ",", "-"}, "a\nb\nc\n"},
+		{"fold -w 3", []string{"-w", "3"}, "abcdefg\nhi\n"},
+		{"seq 3", []string{"3"}, ""},
+		{"seq 2 3 11", []string{"2", "3", "11"}, ""},
+		{"fold -w 4", []string{"-w", "4"}, "a\tb\n"},
 		{"printf '%s-%d|%5.2f|%x\\n' a 42 3.14159 255", []string{"%s-%d|%5.2f|%x\\n", "a", "42", "3.14159", "255"}, ""},
 	}
 	h := newHarness(t)

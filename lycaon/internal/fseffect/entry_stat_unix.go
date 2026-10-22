@@ -73,5 +73,7 @@ func entryStat(name string, st *unix.Stat_t) EntryStat {
 	return EntryStat{
 		Name: name, Mode: mode, Size: st.Size, ModTime: time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UTC(),
 		POSIX: true, UID: st.Uid, GID: st.Gid, Inode: uint64(st.Ino), Links: uint64(st.Nlink), Device: uint64(st.Dev),
+		Blocks: int64(st.Blocks), BlockSize: int64(st.Blksize),
+		AccessTime: time.Unix(int64(st.Atim.Sec), int64(st.Atim.Nsec)).UTC(), ChangeTime: time.Unix(int64(st.Ctim.Sec), int64(st.Ctim.Nsec)).UTC(),
 	}
 }
