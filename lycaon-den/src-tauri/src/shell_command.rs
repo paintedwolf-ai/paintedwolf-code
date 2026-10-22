@@ -123,8 +123,15 @@ fn package_status(location: &InstallLocation, pw_link: &Path, pw_logs_link: &Pat
     let resolve = |link: &Path| fs::canonicalize(link).ok().map(|target| target.display().to_string());
     let pw_target = resolve(pw_link);
     let pw_logs_target = resolve(pw_logs_link);
+    let valid = |path: &Path| match &location.mode {
+        crate::installation_mode::InstallationMode::Package { root } => {
+            crate::linux_install::entry_points::matches(root, path)
+        }
+        _ => crate::linux_install::entry_points::executable(path),
+    };
+    let installed = valid(pw_link) && valid(pw_logs_link);
     ShellCommandStatus {
-        installed: pw_target.is_some() && pw_logs_target.is_some(),
+        installed,
         installation_mode: location.mode.label(),
         managed_by_package: true,
         bin_dir: location.bin_dir.display().to_string(),
@@ -132,7 +139,7 @@ fn package_status(location: &InstallLocation, pw_link: &Path, pw_logs_link: &Pat
         pw_logs_link: pw_logs_link.display().to_string(),
         pw_target,
         pw_logs_target,
-        unavailable_reason: None,
+        unavailable_reason: (!installed).then(|| "Package command entry points are missing, changed or not executable. Repair them through your package manager.".to_owned()),
     }
 }
 
@@ -383,35 +390,6 @@ mod tests {
         assert!(!status.installed);
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn package_status_reports_present_entry_points_without_bundle_links() {
-        let root = TempDir::new("shell-cmd-package");
-        let bin_dir = root.path().join("usr-bin");
-        fs::create_dir_all(&bin_dir).unwrap();
-        let location = InstallLocation {
-            bin_dir: bin_dir.clone(),
-            managed_by_package: true,
-            mode: InstallationMode::Package { root: root.path().join("opt") },
-        };
-        let status = status_with(&location, Err("no bundle".into()));
-        assert!(!status.installed);
-        assert!(status.managed_by_package);
-        assert_eq!(status.installation_mode, "package");
-        assert_eq!(status.unavailable_reason, None);
-
-        write_exe(&bin_dir.join(ENGINE_NAME));
-        std::os::unix::fs::symlink(root.path().join("missing-target"), bin_dir.join(LOGS_NAME)).unwrap();
-        let status = status_with(&location, Err("no bundle".into()));
-        assert!(!status.installed, "a dangling entry point is not installed");
-
-        fs::remove_file(bin_dir.join(LOGS_NAME)).unwrap();
-        write_exe(&bin_dir.join(LOGS_NAME));
-        let status = status_with(&location, Err("no bundle".into()));
-        assert!(status.installed);
-        assert_eq!(status.pw_target.as_deref(), fs::canonicalize(bin_dir.join(ENGINE_NAME)).unwrap().to_str());
-    }
-
     #[test]
     fn refuses_foreign_file_at_link_path() {
         let root = TempDir::new("shell-cmd-foreign");
@@ -614,3 +592,7 @@ mod tests {
         assert_eq!(shell_single_quote(path), "'O'\\''Brien/bin'");
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "shell_command/package_status_tests.rs"]
+mod package_status_tests;
