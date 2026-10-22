@@ -1,4 +1,4 @@
-package commandsurface
+package toolcontract
 
 // LanguageVersion is the syntax contract frozen before runtime implementation.
 const LanguageVersion = 1
