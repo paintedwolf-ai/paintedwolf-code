@@ -2,9 +2,12 @@ package textutil
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // runPrintf validates the whole format, then applies it repeatedly until
@@ -15,14 +18,18 @@ func runPrintf(inv *invocation) error {
 	if len(operands) == 0 {
 		return inv.usage(inv.commandWord(), "a FORMAT operand")
 	}
-	format, err := parseFormat(operands[0].Value)
+	format, release, err := parseFormat(inv.ctx, inv.ports.Memory, operands[0].Value)
 	if err != nil {
-		return inv.usage(operands[0], err.Error())
+		if _, invalid := err.(formatError); invalid {
+			return inv.usage(operands[0], err.Error())
+		}
+		return err
 	}
+	defer release()
 	args := operands[1:].Values()
-	workspace := int64(32<<10 + 128*len(format) + 2*len(operands[0].Value))
+	workspace := int64(32<<10 + 2*len(operands[0].Value))
 	for _, arg := range args {
-		workspace = max(workspace, int64(32<<10+128*len(format)+2*len(operands[0].Value)+2*len(arg)))
+		workspace = max(workspace, int64(32<<10+2*len(operands[0].Value)+2*len(arg)))
 	}
 	if err := inv.reserve(workspace); err != nil {
 		return err
@@ -54,8 +61,18 @@ type formatError string
 
 func (e formatError) Error() string { return string(e) }
 
-func parseFormat(text string) (printfFormat, error) {
-	var out printfFormat
+func parseFormat(ctx context.Context, memory *toolcontract.ProgramMemory, text string) (out printfFormat, release func(), err error) {
+	// Every percent can introduce a conversion and adjacent literal. Reserve
+	// slice growth and literal-buffer overlap before the parser allocates them.
+	bound := int64(192*(2*strings.Count(text, "%")+1) + 4*len(text) + 1024)
+	if err := memory.ReserveBytes(ctx, bound); err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			memory.ReleaseBytes(bound)
+		}
+	}()
 	var literal bytes.Buffer
 	flush := func() {
 		if literal.Len() > 0 {
@@ -88,7 +105,7 @@ func parseFormat(text string) (printfFormat, error) {
 			d.precision = "." + text[start:j]
 		}
 		if j == len(text) {
-			return nil, formatError("a complete % conversion")
+			return nil, nil, formatError("a complete % conversion")
 		}
 		d.verb = text[j]
 		if d.verb == '%' && j == i+1 {
@@ -97,14 +114,16 @@ func parseFormat(text string) (printfFormat, error) {
 			continue
 		}
 		if strings.IndexByte("sbcdiouxXfFeEgG", d.verb) < 0 {
-			return nil, formatError("a %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G or %% conversion")
+			return nil, nil, formatError("a %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G or %% conversion")
 		}
 		flush()
 		out = append(out, d)
 		i = j
 	}
 	flush()
-	return out, nil
+	actual := int64(96*cap(out) + 2*len(text))
+	memory.ReleaseBytes(bound - actual)
+	return out, func() { memory.ReleaseBytes(actual) }, nil
 }
 
 // apply writes one pass of the format and reports the arguments it consumed.

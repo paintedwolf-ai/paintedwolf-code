@@ -2,7 +2,13 @@
 
 package textutil
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"strings"
+	"testing"
+)
 
 func TestPrintfPaddingUsesBoundedWorkingMemory(t *testing.T) {
 	h := newHarness(t)
@@ -57,5 +63,43 @@ func TestPrintfWideNumericPadding(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPrintfFormatAdmissionPrecedesParsing(t *testing.T) {
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1024, State: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An invalid final conversion would require parsing the entire prefix. With
+	// no admission the parser must never reach it or allocate its directives.
+	text := strings.Repeat("%s", 8192) + "%q"
+	allocations := testing.AllocsPerRun(20, func() {
+		format, release, err := parseFormat(context.Background(), memory, text)
+		var refused *toolcontract.ProgramMemoryLimitError
+		if !errors.As(err, &refused) || format != nil || release != nil {
+			t.Fatalf("parse before admission: %v", err)
+		}
+	})
+	if allocations > 4 || memory.Peak().Working != 0 || memory.Reservations() != 0 {
+		t.Fatalf("refused parser allocated %.0f objects, peak=%d reservations=%d", allocations, memory.Peak().Working, memory.Reservations())
+	}
+}
+
+func TestPrintfFormatReleasesParserGrowthAtRepresentationBoundary(t *testing.T) {
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 8 << 20, State: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	format, release, err := parseFormat(t.Context(), memory, strings.Repeat("%s", 8192))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(format) != 8192 || memory.InUse().Working <= 0 || memory.InUse().Working >= memory.Peak().Working {
+		t.Fatalf("plan len=%d held=%d peak=%d", len(format), memory.InUse().Working, memory.Peak().Working)
+	}
+	release()
+	if memory.InUse().Working != 0 {
+		t.Fatal("parsed format retained its reservation")
 	}
 }

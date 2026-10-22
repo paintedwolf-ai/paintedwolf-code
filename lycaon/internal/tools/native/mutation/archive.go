@@ -581,20 +581,13 @@ func (inv *invocation) replaceCompressed(input, output string, data []byte) (int
 
 func runZcat(inv *invocation) error {
 	if len(inv.operands()) == 0 {
-		data, err := io.ReadAll(io.LimitReader(inv.input, inv.owners.limit("archive_input_bytes")+1))
-		if err != nil {
-			return err
-		}
-		if int64(len(data)) > inv.owners.limit("archive_input_bytes") {
-			return limitRefusal("archive_input_bytes", "bytes", inv.owners.limit("archive_input_bytes"), int64(len(data)))
-		}
-		return inv.gunzipStream(data)
+		return inv.gunzipStream(inv.input, -1)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
 		data, _, err := inv.readBound(operand, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
 		if err != nil {
 			return 0, err
 		}
-		return 0, inv.gunzipStream(data)
+		return 0, inv.gunzipStream(bytes.NewReader(data), int64(len(data)))
 	})
 }

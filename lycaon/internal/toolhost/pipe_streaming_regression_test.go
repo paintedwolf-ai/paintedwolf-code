@@ -1,7 +1,12 @@
 package toolhost
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -54,5 +59,30 @@ func TestPipeSemanticsPrintfPaddingIntoEarlyConsumer(t *testing.T) {
 		if outcome.Status != 0 || outcome.Stdout != item.want {
 			t.Fatalf("padding %s: %+v", item.format, outcome)
 		}
+	}
+}
+
+func TestPipeSemanticsGzipBeforeUpstreamEOF(t *testing.T) {
+	env := newPipeSemanticsEnv(t)
+	payload := make([]byte, 128<<10)
+	_, err := rand.New(rand.NewSource(1)).Read(payload)
+	testutil.FailErr(t, "seed deterministic payload", err)
+	copy(payload, "ready\n")
+	var encoded bytes.Buffer
+	writer := gzip.NewWriter(&encoded)
+	_, err = writer.Write(payload)
+	testutil.FailErr(t, "compress payload", err)
+	testutil.FailErr(t, "flush gzip prefix", writer.Flush())
+	prefix := encoded.Len()
+	testutil.FailErr(t, "close gzip", writer.Close())
+	testutil.FailErr(t, "write prefix", os.WriteFile(filepath.Join(env.Dir, "prefix.gz"), encoded.Bytes()[:prefix], 0o600))
+	testutil.FailErr(t, "write suffix", os.WriteFile(filepath.Join(env.Dir, "suffix.gz"), encoded.Bytes()[prefix:], 0o600))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	out, err := env.Call(t, ctx, `external -- /bin/sh -c 'cat prefix.gz; while [ ! -f downstream.ready ]; do sleep .01; done; cat suffix.gz' | zcat | external -- /bin/sh -c 'IFS= read -r line; printf "%s\n" "$line"; : > downstream.ready'`)
+	testutil.FailErr(t, "gzip before upstream EOF", err)
+	result := decodePipeOutcome(t, out)
+	if result.Status != 0 || result.Stdout != "ready\n" {
+		t.Fatalf("gzip progress: %+v", result)
 	}
 }
