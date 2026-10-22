@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -98,3 +99,39 @@ class LinuxPayloadTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(log.exists())
             self.assertEqual(state.read_text(), "preserve")
+
+    def test_apparmor_profile_attaches_only_to_the_packaged_engine_path(self):
+        config = module("linux-package-config")
+        catalog = load()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tauri = root / "lycaon-den/src-tauri"
+            target = "x86_64-unknown-linux-gnu"
+            for path in (
+                tauri / "target" / target / "release/painted-wolf-code",
+                tauri / "engine-root",
+                tauri / "THIRD-PARTY-NOTICES.md",
+                root / "VERSION",
+                root / "manifest.json",
+                root / "packaging/linux" / f"{config.APP_ID}.desktop",
+                *(tauri / "binaries" / f"{helper}-{target}" for helper in catalog["helpers"]),
+                *(root / "packaging/linux/bin" / entry for entry in catalog["entry_points"]),
+            ):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture", encoding="utf-8")
+            staged = config.required_files(root, tauri, target, root / "manifest.json")
+        engine_path = f"{config.INSTALL_ROOT}/bin/pw"
+        self.assertIn("pw", catalog["helpers"])
+        self.assertIn(engine_path, staged)
+        profile = (ROOT / "packaging/linux/apparmor/painted-wolf-code").read_text(encoding="utf-8")
+        uncommented = "\n".join(line.split("#", 1)[0] for line in profile.splitlines())
+        attachments = re.findall(r"^\s*profile\s+\S+\s+(\S+)\s+flags=", uncommented, flags=re.MULTILINE)
+        self.assertEqual(attachments, [engine_path])
+        for token in ("*", "?", "[", "{", "^"):
+            self.assertNotIn(token, attachments[0])
+        for helper in catalog["helpers"]:
+            if helper != "pw":
+                self.assertNotIn(f"{config.INSTALL_ROOT}/bin/{helper}", uncommented)
+        for entry in catalog["entry_points"]:
+            self.assertNotIn(f"/usr/bin/{entry}", uncommented)
+
