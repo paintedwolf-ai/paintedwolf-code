@@ -860,27 +860,19 @@ established by timeout settings.
 
 ##### Integration capacity experiment
 
-The current envelope reserves twelve runners outside merge-group integration:
-qualification (3), cache preparation (1), nightly (2), release work (2),
-maintenance (1), maintainability reporting (1), commit certification (1), and
-one pull request admission (1). Two groups at four lanes use the remaining
-eight of the twenty runners. `TestBoundedClassesFitTheHostedRunners` derives
-these reservations from workflow concurrency groups and the capacity catalog.
-Six lanes for each group require twenty-four runners with those reservations.
-Keep the live cap at four until that capacity is available; preserve the two
-one-PR groups and the admission reservation.
+The capacity catalog in
+[`verification-plan.json`](../scripts/verification-plan.json) and
+`TestBoundedClassesFitTheHostedRunners` define the available integration budget
+from workflow concurrency groups, background reservations, and the PR admission
+reservation. Calculate that envelope before changing the integration cap; keep
+both one-PR groups and the admission reservation.
 
-The October 22 review measured three successful groups at 46.9, 56.4, and
-58.9 minutes, consuming 175.2, 187.8, and 204.6 runner-minutes respectively
-([first](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39757233180),
-[second](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39757236585),
-[third](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39763252240)).
-At six lanes, their work-volume lower bounds are 29.2, 31.3, and 34.1 minutes.
-These are lower bounds, not predicted runtimes: long individual jobs, setup,
-runner availability, and lane ordering can prevent reaching them. The third
-run's native setup alone took 36.9 minutes, including a 29.4-minute package
-fetch, so preparation must improve before extra parallelism can remove that
-critical path.
+For each successful run, the runtime lower bound is
+`max(total runner-minutes / lane cap, longest job duration)`. Use complete job
+durations, including setup and evidence publication. Extra lanes cannot shorten
+the longest job, so compare preparation costs before treating more parallelism
+as a throughput improvement. Retain dated measurements, run links, catalog
+revision, and capacity arithmetic in the rollout PR rather than this policy.
 
 After preparation and cache publication stabilize, compare at least ten
 successful groups at each cap. Record matrix size and affected scope, setup
