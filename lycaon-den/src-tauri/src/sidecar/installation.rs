@@ -104,10 +104,18 @@ mod tests {
     }
 
     #[test]
-    fn fresh_install_with_format_2_manifest_starts_without_restart() {
+    fn fresh_install_with_format_1_or_2_manifest_starts_without_restart() {
         let dir = crate::test_support::TempDir::new("fresh-install-v2");
         let desktop = stage_generation(dir.path(), b"fresh desktop image");
         assert_eq!(verify_root(dir.path(), &desktop), Ok(()));
+
+        let root = Path::new("/opt/painted-wolf-code");
+        let desktop_path = root.join("bin/painted-wolf-code");
+        let mut v1 = fixture_json(root, std::env::consts::ARCH, &[(&desktop_path, b"desktop v1")], &[]);
+        v1["format_version"] = serde_json::json!(1);
+        v1.as_object_mut().unwrap().remove("payload");
+        let raw = serde_json::to_vec(&v1).unwrap();
+        assert_eq!(verify_current(root, raw.as_slice(), b"desktop v1".as_slice()), Ok(()));
     }
 
     #[test]
@@ -148,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_v1_unknown_versions_and_unsealed_payloads_are_refused() {
+    fn unknown_versions_and_mismatched_or_unsealed_payloads_are_refused() {
         let root = Path::new("/opt/painted-wolf-code");
         let desktop = root.join("bin/painted-wolf-code");
         let base = fixture_json(root, std::env::consts::ARCH, &[(&desktop, b"desktop")], &[]);
@@ -160,14 +168,21 @@ mod tests {
                 verify_current(root, raw.as_slice(), b"desktop".as_slice()),
                 Err(RestartReason::ManifestUnavailable)
             );
+            if version != 1 {
+                bad.as_object_mut().unwrap().remove("payload");
+                let raw_no_payload = serde_json::to_vec(&bad).unwrap();
+                assert_eq!(
+                    verify_current(root, raw_no_payload.as_slice(), b"desktop".as_slice()),
+                    Err(RestartReason::ManifestUnavailable)
+                );
+            }
         }
         for mutate in [
             |m: &mut serde_json::Value| {
-                m["format_version"] = serde_json::json!(1);
                 m.as_object_mut().unwrap().remove("payload");
             },
             |m: &mut serde_json::Value| {
-                m.as_object_mut().unwrap().remove("payload");
+                m["payload"] = serde_json::Value::Null;
             },
             |m: &mut serde_json::Value| {
                 m["payload"] = serde_json::json!([]);
