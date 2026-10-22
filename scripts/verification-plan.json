@@ -1060,6 +1060,7 @@
         "build",
         "licenses:notices"
       ],
+      "timing_source": "build",
       "minutes": 120,
       "profiles": [
         "integration"
