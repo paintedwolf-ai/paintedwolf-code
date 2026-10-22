@@ -366,8 +366,12 @@ func resolveCaptureTarget(req CaptureRequest) (captureTarget, error) {
 		if err != nil {
 			return captureTarget{}, err
 		}
+		entry = normalizeStaticEntry(dir, abs, entry)
 		nav, err := JoinStaticEntry(entry)
 		if err != nil {
+			return captureTarget{}, err
+		}
+		if err := requireStaticEntry(abs, entry, nav, req.Routes); err != nil {
 			return captureTarget{}, err
 		}
 		return captureTarget{URL: nav, Origin: StaticOrigin, RootDir: abs}, nil
