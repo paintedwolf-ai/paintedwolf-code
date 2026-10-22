@@ -815,8 +815,8 @@ platform, and E2E checkout uses the selected source. The final aggregate require
 every stage and publishes `qualification-source-<attempt>`, binding the source
 commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
 request cannot qualify a source. Release admission verifies that binding and a
-successful aggregate job; qualification without a source receipt applies only
-to its own workflow commit. Selected candidates share the same three-runner
+successful aggregate job and an unexpired source receipt. Runs without that
+receipt must be qualified again before release. Selected candidates share the same three-runner
 capacity as background main qualification.
 
 Nightly retains race, fuzz, WebKit, stress, and performance coverage. A release
