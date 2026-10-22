@@ -63,7 +63,7 @@ func Verify(ctx context.Context, root string) (report Report, err error) {
 	return VerifyArtifact(ctx, root, manifest)
 }
 
-// VerifyArtifact qualifies explicit build-selected authority without runtime configuration overrides.
+// VerifyArtifact qualifies explicit build-selected authority without runtime overrides.
 func VerifyArtifact(ctx context.Context, root string, manifest *bundled.Manifest) (report Report, err error) {
 	report = Report{SchemaVersion: 1, Status: "failed", Code: "artifact_refused", GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, EngineRoot: root}
 	defer func() {
