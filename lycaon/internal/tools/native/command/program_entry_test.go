@@ -426,7 +426,7 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
 		f := newProgramFixture(t)
 		out := &tools.ToolInvocationOut{}
-		f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+		f.Context = func(_ string, tc *tools.ToolContext) { tc.Effects.Out = out }
 		_, err := f.call(t, t.Context(), c.program)
 		testutil.FailErr(t, "run "+c.program, err)
 		switch {

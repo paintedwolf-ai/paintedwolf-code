@@ -58,7 +58,7 @@ func TestProgramEnvNeverLeaksEngineOrSecretVarsAndMatchesExternalChild(t *testin
 
 	f := newProgramFixture(t)
 	scratch := t.TempDir()
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratch
 	}
 

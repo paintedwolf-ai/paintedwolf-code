@@ -438,6 +438,11 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set { data[key] = value }
+				}
+			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
 			enrichProgramReject(reject, refusal.Command, span)
 			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)

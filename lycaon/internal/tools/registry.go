@@ -167,8 +167,11 @@ type InvocationSource struct {
 	ModelSourceContext *api.SourceContext
 	// EditorReadBases freezes reads known before this response executes tools;
 	// the response's own accepted writes advance it.
-	EditorReadBases     *AgentReadBases
-	Roots               []projectroot.RootRef
+	EditorReadBases *AgentReadBases
+	Roots           []projectroot.RootRef
+	// RootHistory is the project's attachment generation when Roots was
+	// captured; it answers stale spellings and later removals from facts.
+	RootHistory         projectroot.HistoryView
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
