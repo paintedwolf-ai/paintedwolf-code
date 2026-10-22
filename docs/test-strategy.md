@@ -1052,6 +1052,21 @@ within the declared footprint. They also require the classes, the merge queue
 at its queue settings, and one pull request's CI run to fit the plan together,
 and a pull request's run to hold one runner.
 
+### Upgrade rehearsal preparation and startup evidence
+
+Nightly upgrade rehearsal uses the shared verification setup for the pinned
+Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
+public feed verifier. The managed rehearsal task owns its development sidecar
+build. Bundle execution restores the shared Go compiler cache and consumes the
+prepared signed fixture artifact.
+
+Every bundle case retains `startup-observation.json` before cleanup. It records
+the expected version, captured process identities, daemon PID/port, and the last
+structured startup state. Timeout errors include the same observation. Engine
+and updater logs and transaction records remain attached. Missing startup is a
+failed gate; these observations distinguish rejection reasons without weakening
+ownership, health, schema, activation, or restart requirements.
+
 ## Released-version compatibility
 
 These suites hold the current host to what releases shipped:

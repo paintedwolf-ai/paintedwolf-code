@@ -40,6 +40,7 @@ class Installation:
         info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
         self.executable = app / "Contents/MacOS" / info["CFBundleExecutable"]
         self.owned = {}
+        self.last_observation = {"state": "not_observed"}
 
     def launch(self):
         subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(self.app)], check=True, timeout=30)
@@ -69,36 +70,49 @@ class Installation:
 
     def observe(self, version: str):
         self.capture_owned()
+        self.last_observation = {"state": "daemon_missing", "expected_version": version,
+                                 "owned": {pid: {"identity": identity, "kind": kind}
+                                           for pid, (identity, kind) in self.owned.items()}}
         daemon = read_json(self.config / "daemon.json")
         if not isinstance(daemon, dict) or type(daemon.get("pid")) is not int or type(daemon.get("port")) is not int:
             return None
         pid, port = daemon["pid"], daemon["port"]
+        self.last_observation.update(engine_pid=pid, port=port, state="engine_not_owned")
         if pid <= 1 or not 1 <= port <= 65535:
             raise ValueError("invalid rehearsal daemon identity")
         engine = process_identity(pid)
         if self.owned.get(pid) != (engine, 2):
             return None
+        self.last_observation["state"] = "parent_unavailable"
         parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True, timeout=5)
         if parent.returncode or not parent.stdout.strip().isdigit():
             return None
         app_pid = int(parent.stdout.strip())
         app_identity = process_identity(app_pid)
+        self.last_observation.update(app_pid=app_pid, app_identity=app_identity, state="app_not_owned")
         if self.owned.get(app_pid) != (app_identity, 1):
             return None
         self.owned[pid] = (engine, 2)
         self.owned[app_pid] = (app_identity, 1)
+        self.last_observation["state"] = "health_unavailable"
         try:
             client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with client.open(f"http://127.0.0.1:{port}/health", timeout=2) as response:
                 health = json.load(response)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as error:
+            self.last_observation["health_error"] = type(error).__name__
             return None
+        self.last_observation.update(state="health_mismatch", health=health)
         if not isinstance(health, dict) or health.get("version") != version or health.get("status") != "ok":
             return None
+        self.last_observation["state"] = "healthy"
         return {"health": health, "engine_pid": pid, "app_pid": app_pid, "port": port}
 
     def healthy(self, version: str):
-        return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
+        try:
+            return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
+        except TimeoutError as error:
+            raise TimeoutError(f"{error}; last observation: {json.dumps(self.last_observation, sort_keys=True)}") from error
 
     def stop(self, crash_app=False):
         self.capture_owned()

@@ -13,6 +13,7 @@ class ProcessTests(unittest.TestCase):
         installation.app = Path("/test/Product.app")
         installation.config = Path("/test/config")
         installation.executable = installation.app / "Contents/MacOS/Product"
+        installation.last_observation = {"state": "not_observed"}
         return installation
 
     def test_cleanup_orders_owned_processes_and_does_not_signal_a_reused_pid(self):
@@ -101,3 +102,18 @@ class ProcessTests(unittest.TestCase):
              patch.object(process.os, "kill", side_effect=kill):
             installation.stop(crash_app=True)
         self.assertEqual(signals, [(10, signal.SIGKILL), (11, signal.SIGTERM)])
+
+    def test_health_timeout_explains_the_last_structured_rejection(self):
+        installation = self.installation()
+        installation.last_observation = {"state": "engine_not_owned", "engine_pid": 10}
+        with patch.object(process, "wait_for", side_effect=TimeoutError("startup")):
+            with self.assertRaisesRegex(TimeoutError, "engine_not_owned"):
+                installation.healthy("1.1.0")
+
+    def test_missing_daemon_retains_process_evidence_without_accepting_health(self):
+        installation = self.installation()
+        installation.owned = {10: ("app", 1)}
+        with patch.object(installation, "capture_owned"), patch.object(process, "read_json", return_value=None):
+            self.assertIsNone(installation.observe("1.1.0"))
+        self.assertEqual(installation.last_observation["state"], "daemon_missing")
+        self.assertEqual(installation.last_observation["owned"][10], {"identity": "app", "kind": 1})

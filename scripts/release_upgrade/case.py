@@ -169,10 +169,27 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
                 "steps": observations, "restart_health": restart["health"]}
     finally:
+        finish_case(installation, config, records, evidence, sys.exc_info()[1])
+
+
+def finish_case(installation, config, records, evidence, primary_error):
+    errors = []
+    actions = (
+        ("write startup observation", lambda: (evidence / "startup-observation.json").write_text(
+            json.dumps(installation.last_observation, indent=2) + "\n")),
+        ("stop installation", installation.stop),
+        ("retain installation state", lambda: retain_state(config, records, evidence)),
+    )
+    for label, action in actions:
         try:
-            installation.stop()
-        finally:
-            retain_state(config, records, evidence)
+            action()
+        except Exception as error:
+            errors.append(error)
+            if primary_error is not None:
+                primary_error.add_note(f"{label}: {type(error).__name__}: {error}")
+            print(f"{label}: {type(error).__name__}: {error}", file=sys.stderr)
+    if errors and primary_error is None:
+        raise errors[0]
 
 
 def retain_state(config, records, evidence):
