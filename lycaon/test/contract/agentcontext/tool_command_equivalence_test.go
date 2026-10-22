@@ -151,23 +151,24 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 			t.Errorf("runner-operating-procedure still contains stale guidance %q", stale)
 		}
 	}
-	if !strings.Contains(runnerUnit, "ordinary bash programs") {
-		t.Errorf("runner-operating-procedure missing bash program guidance: %s", runnerUnit)
+	if !strings.Contains(runnerUnit, "Egress is mediated by default.") {
+		t.Errorf("runner-operating-procedure missing mediated egress guidance: %s", runnerUnit)
 	}
 
-	cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", map[string]any{
-		"tool_profile":          "implement",
-		"profile_has_command":   true,
-		"workspace_roots":       []projectroot.RootRef{{ID: "r1", Label: "main", Path: "/workspace", IsPrimary: true}},
-		"command_roots_listing": "Roots: @main=/workspace (scratch: @scratch)",
-	})
+	surfaceVars := map[string]any{
+		"tool_profile":        "implement",
+		"profile_has_command": true,
+		"session_scratch_dir": "/scratch/s1",
+	}
+	prompts.MergeWorkspaceRootsVars(surfaceVars, []projectroot.RootRef{{ID: "r1", Label: "main", Path: "/workspace", IsPrimary: true}}, "/workspace")
+	cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", surfaceVars)
 	contractcheck.FailErr(t, "render command-surface", err)
 	for _, stale := range stalePhrases {
 		if strings.Contains(cmdSurface, stale) {
 			t.Errorf("command-surface still contains stale guidance %q", stale)
 		}
 	}
-	for _, want := range []string{"GNU and BSD", "CMD --help", "$(...)", "Roots: @main=/workspace (scratch: @scratch)"} {
+	for _, want := range []string{"GNU and BSD", "CMD --help", "$(...)", "`@main` → /workspace (primary)", "`@scratch` → /scratch/s1"} {
 		if !strings.Contains(cmdSurface, want) {
 			t.Errorf("command-surface missing %q: %s", want, cmdSurface)
 		}
@@ -324,9 +325,12 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 			if strings.Contains(cmdSurface, "(coordinator)") != tc.isCoordinator {
 				t.Errorf("coordinator header present=%v, want %v:\n%s", strings.Contains(cmdSurface, "(coordinator)"), tc.isCoordinator, cmdSurface)
 			}
+			if strings.Contains(combined, ".. ") || strings.Contains(combined, "..\n") {
+				t.Errorf("rendered command guidance contains double period '..':\n%s", combined)
+			}
 			// Read-only vs mutation
 			if tc.readOnly {
-				if strings.Count(cmdSurface, "read-only surface") != 1 || !strings.Contains(cmdSurface, "external program launches are refused") {
+				if strings.Count(cmdSurface, "read-only surface") != 1 || !strings.Contains(cmdSurface, "external programs are refused") {
 					t.Errorf("read-only surface must state read-only refusal once:\n%s", cmdSurface)
 				}
 				if strings.Contains(cmdSurface, "external -- NAME") {
@@ -354,17 +358,19 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 			}
 			// Folders and posture
 			if len(tc.roots) > 0 {
-				if !strings.Contains(cmdSurface, "These folders are the project") || !strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`") {
-					t.Errorf("folder surface missing folder coverage/navigation:\n%s", cmdSurface)
+				if !strings.Contains(cmdSurface, "These folders are the project") {
+					t.Errorf("folder surface missing folder coverage:\n%s", cmdSurface)
 				}
-				if !tc.readOnly {
-					wantStrict := tc.posture.ReviewsConfinedWrites()
-					if strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first.") != wantStrict {
-						t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
-					}
-					if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
-						t.Errorf("balanced outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
-					}
+				wantMultiFolderCd := len(tc.roots) > 1
+				if strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`") != wantMultiFolderCd {
+					t.Errorf("multi-folder cd guidance present=%v, want %v:\n%s", strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`"), wantMultiFolderCd, cmdSurface)
+				}
+				wantStrict := tc.posture.ReviewsConfinedWrites()
+				if strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first.") != wantStrict {
+					t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
+				}
+				if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
+					t.Errorf("balanced outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
 				}
 			} else {
 				for _, unexpected := range []string{"These folders are the project", "@label", "non-primary", "Roots:"} {
@@ -372,8 +378,11 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 						t.Errorf("no-folder surface must not render %q:\n%s", unexpected, cmdSurface)
 					}
 				}
-				if !tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached; file writes ask the person first") {
-					t.Errorf("no-folder mutation surface missing no-folder write notice:\n%s", cmdSurface)
+				if !tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached; writes ask the person first.") {
+					t.Errorf("no-folder surface missing no-folder notice:\n%s", cmdSurface)
+				}
+				if tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached.") {
+					t.Errorf("no-folder read-only surface missing no-folder notice:\n%s", cmdSurface)
 				}
 			}
 		})
