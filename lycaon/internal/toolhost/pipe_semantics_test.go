@@ -62,7 +62,7 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	scratchDir := t.TempDir()
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir
 	}
 	return &pipeSemanticsEnv{Fixture: f, scratchDir: scratchDir}
