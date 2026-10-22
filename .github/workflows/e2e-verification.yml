@@ -54,6 +54,21 @@ jobs:
       - name: Set up maintained OpenGrep
         uses: ./.github/actions/setup-opengrep
 
+      - name: Allow E2E engines to create user namespaces
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+            profile="$RUNNER_TEMP/paintedwolf-e2e"
+            {
+              cat .github/actions/setup-verification/apparmor-verification-userns
+              printf '\nprofile paintedwolf-e2e-sidecar "%s/e2e-state/**/runtime/sidecar" flags=(unconfined) {\n  userns,\n}\n' \
+                "$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")"
+            } > "$profile"
+            sudo install -m 0644 "$profile" /etc/apparmor.d/paintedwolf-e2e
+            sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-e2e
+          fi
+
       - name: Playwright web E2E (Tier B)
         timeout-minutes: 40
         env:

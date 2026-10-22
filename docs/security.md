@@ -82,6 +82,8 @@ The host serves its owner over loopback. Loopback prevents ordinary LAN access b
 
 The host trusts the installed binary and its shipped catalogs, the operating system's enforcement primitives, protected credential storage, and explicit human decisions over host-authored plans.
 
+Linux native presence also requires an observed active graphical session with an unlocked state. Screen lock, suspend and lock-observer loss invalidate in-flight native confirmations; the host invalidates pending challenges and rejects delayed unlock commits from before that boundary.
+
 Primary risks are unauthorized local API use, path escape, subprocess boundary failure, unmediated egress, secret disclosure, runaway work, and treating untrusted content as authority.
 
 ---

@@ -765,7 +765,8 @@
         "lint:full",
         "budgets",
         "den:typecheck",
-        "den:lint"
+        "den:lint",
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [
@@ -778,7 +779,9 @@
         "--",
         "./test/contract/hosted",
         "./test/contract/runner",
-        "./test/contract/evidence"
+        "./test/contract/evidence",
+        "./test/contract/host",
+        "./test/contract/security"
       ]
     },
     "limits": {
