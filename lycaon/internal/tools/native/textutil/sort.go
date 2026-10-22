@@ -91,8 +91,13 @@ type sorter struct {
 	chunkBytes int64
 	releases   []func()
 	runs       []SpillRun
-	held       map[SpillRun][]func()
+	held       map[SpillRun]spillReservation
 	spilled    int64
+}
+
+type spillReservation struct {
+	size    int64
+	release func()
 }
 
 func (s *sorter) read(r io.Reader) error {
@@ -150,12 +155,17 @@ func (s *sorter) spill() error {
 		return nativeutility.LimitExceeded("sort_memory_bytes", s.inv.limit("sort_memory_bytes"), s.chunkBytes)
 	}
 	slices.SortStableFunc(s.chunk, s.order.compare)
-	run, err := s.newRun()
+	var size int64
+	for _, record := range s.chunk {
+		size += int64(len(record)) + binary.MaxVarintLen64
+	}
+	run, err := s.newRun(size)
 	if err != nil {
 		return err
 	}
+	s.runs = append(s.runs, run)
 	for _, record := range s.chunk {
-		if err := s.writeRun(run, record); err != nil {
+		if err := run.WriteRecord(record); err != nil {
 			return err
 		}
 	}
@@ -169,32 +179,27 @@ func (s *sorter) spill() error {
 	return nil
 }
 
-func (s *sorter) newRun() (SpillRun, error) {
-	run, err := s.inv.ports.Spills.Create(s.inv.ctx)
-	if err != nil {
-		return nil, err
-	}
-	s.runs = append(s.runs, run)
-	return run, nil
-}
-
-// writeRun admits the framed record against spill_bytes and the program's
-// spill quota before writing it.
-func (s *sorter) writeRun(run SpillRun, record []byte) error {
-	size := int64(len(record)) + binary.MaxVarintLen64
+// newRun admits the complete known run before creating it. One reservation per
+// run keeps admission bookkeeping independent of its number of records.
+func (s *sorter) newRun(size int64) (SpillRun, error) {
 	if limit := s.inv.limit("spill_bytes"); s.spilled+size > limit {
-		return nativeutility.LimitExceeded("spill_bytes", limit, s.spilled+size)
+		return nil, nativeutility.LimitExceeded("spill_bytes", limit, s.spilled+size)
 	}
 	release, err := s.inv.ports.Admission.ReserveSpill(s.inv.ctx, size)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	run, err := s.inv.ports.Spills.Create(s.inv.ctx)
+	if err != nil {
+		release()
+		return nil, err
 	}
 	if s.held == nil {
-		s.held = map[SpillRun][]func(){}
+		s.held = map[SpillRun]spillReservation{}
 	}
-	s.held[run] = append(s.held[run], release)
+	s.held[run] = spillReservation{size: size, release: release}
 	s.spilled += size
-	return run.WriteRecord(record)
+	return run, nil
 }
 
 // merge combines runs in passes of at most sort_merge_fan_in readers, then
@@ -209,11 +214,15 @@ func (s *sorter) merge() error {
 				next = append(next, group[0])
 				continue
 			}
-			run, err := s.inv.ports.Spills.Create(s.inv.ctx)
+			var size int64
+			for _, run := range group {
+				size += s.held[run].size
+			}
+			run, err := s.newRun(size)
 			if err != nil {
 				return err
 			}
-			err = s.mergeRuns(group, func(record []byte) error { return s.writeRun(run, record) })
+			err = s.mergeRuns(group, func(record []byte) error { return run.WriteRecord(record) })
 			if err == nil {
 				err = run.Finish()
 			}
@@ -279,14 +288,12 @@ func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
 // remove deletes a run and returns its spill admission.
 func (s *sorter) remove(run SpillRun) {
 	_ = run.Remove()
-	for _, release := range s.held[run] {
-		release()
-	}
+	s.held[run].release()
 	delete(s.held, run)
 }
 
 func (s *sorter) cleanup() {
-	for _, run := range s.runs {
+	for run := range s.held {
 		s.remove(run)
 	}
 	for _, release := range s.releases {

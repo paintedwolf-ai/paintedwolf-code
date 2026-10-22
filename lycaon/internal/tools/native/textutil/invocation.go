@@ -142,7 +142,7 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 }
 
 // capture binds one operand under the invocation cwd, pins its accepted
-// revision and returns its captured bytes.
+// revision and returns a reader over its bytes.
 func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, *toolcontract.ExecutionRevision, error) {
 	bound, err := paths.Bind(inv.ctx, operand.Value, false)
 	if err != nil {
@@ -152,25 +152,20 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 		return io.NopCloser(strings.NewReader("")), nil, nil
 	}
 	tc := inv.ports.ToolContext
-	captured, err := inv.owners.Revisions.CaptureSource(inv.ctx, tc, bound.Resolved.Abs)
+	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, tc, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := inv.reserve(int64(len(captured.Content))); err != nil {
-		return nil, nil, err
-	}
-	// A credential file's bytes reach no stream until their exposure is recorded.
-	if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
-		return nil, nil, fmt.Errorf("record credential file read: %w", err)
-	}
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if execution == "" {
+		_ = streamed.Reader.Close()
 		return nil, nil, errors.New("file operands require a program execution identity")
 	}
-	if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, captured.Revision); err != nil {
+	if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, streamed.Revision); err != nil {
+		_ = streamed.Reader.Close()
 		return nil, nil, err
 	}
-	return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
+	return streamed.Reader, &streamed.Revision, nil
 }
 
 // pathRejection projects a path owner's typed refusal with the operand span.

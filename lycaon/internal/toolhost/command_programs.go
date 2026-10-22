@@ -2,7 +2,6 @@ package toolhost
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -89,16 +88,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
-				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
-					return nil, nil, err
-				}
-				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}
-				release := func() {}
-				if spills != nil {
-					text.Spills = spills
-					release = func() { _ = spills.Close() }
-				}
+				spills := &textutil.Spills{}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication, Spills: spills}
+				release := func() { _ = spills.Close() }
 				builtins := textOwners.Builtins(text)
 				var bound hostenv.NativeBindings
 				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {

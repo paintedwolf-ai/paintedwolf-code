@@ -33,8 +33,16 @@ type invocation struct {
 	// comparison marks diff's complete status-one result as publishable.
 	comparison bool
 	diffVisits int64
+	closers    []io.Closer
 	pinMu      sync.Mutex
 	pins       []toolcontract.ExecutionRevision
+}
+
+func (inv *invocation) closeInputs() {
+	for _, c := range inv.closers {
+		_ = c.Close()
+	}
+	inv.closers = nil
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {

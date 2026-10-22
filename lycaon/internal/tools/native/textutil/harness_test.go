@@ -108,7 +108,7 @@ type harness struct {
 	owners      *Owners
 	pins        *pinLog
 	memory      *toolcontract.ProgramMemory
-	spills      string
+	spills      *Spills
 	quota       *spillQuota
 	nested      commandprogram.NestedCommand
 	env         []string
@@ -143,7 +143,7 @@ func newHarness(t *testing.T) *harness {
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
 	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, Tools: tc}
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}, publication: publication}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: &Spills{}, quota: &spillQuota{maximum: 1 << 30}, publication: publication}
 }
 
 func (h *harness) seed(name, content string) {
@@ -154,7 +154,7 @@ func (h *harness) seed(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: h.spills, Admission: h.quota, Nested: h.nested, Publication: h.publication}
 }
 
 func (h *harness) read(name string) string {

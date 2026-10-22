@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -195,6 +196,22 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 		return captured.Bytes, &pin, nil
 	}
 	return captured.Bytes, nil, nil
+}
+
+// openPinnedStream pins one file operand and returns a stream over its bytes.
+func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, inv.owners.readBytes())
+	if err != nil {
+		return native.ExecutionStream{}, nil, err
+	}
+	if err := inv.recordPin(streamed.Revision); err != nil {
+		_ = streamed.Reader.Close()
+		return native.ExecutionStream{}, nil, err
+	}
+	if pin, ok := streamed.Revision.SourcePin(); ok {
+		return streamed, &pin, nil
+	}
+	return streamed, nil, nil
 }
 
 // readAll gathers stdin whole, refusing rather than truncating input above

@@ -138,6 +138,11 @@ func (r *findRun) visit(e entry) error {
 	if err := r.inv.ctx.Err(); err != nil {
 		return err
 	}
+	if !r.actions {
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
+	}
 	inRange := e.depth >= r.minDepth && (r.maxDepth < 0 || e.depth <= r.maxDepth)
 	descend := e.dir() && !e.link && (r.maxDepth < 0 || e.depth < r.maxDepth) && (!r.sameDevice || e.stat.Device == r.device)
 	if descend && (r.followAll || r.followArgs) {

@@ -131,16 +131,10 @@ func runGunzip(inv *invocation) error {
 		return inv.gzipList()
 	}
 	if len(inv.operands()) == 0 {
-		data, err := inv.stdinBounded("archive_input_bytes")
-		if err != nil {
-			return err
+		if inv.flag("-t") {
+			inv.stdout = io.Discard
 		}
-		decoded, err := inv.gunzipBytes(data)
-		if err != nil {
-			return err
-		}
-		_, err = inv.stdout.Write(decoded)
-		return err
+		return inv.gunzipStream(inv.input, -1)
 	}
 	toStdout, testOnly := inv.flag("-c"), inv.flag("-t")
 	return inv.each(inv.operands(), func(operand string) (int, error) {
@@ -268,7 +262,7 @@ func (inv *invocation) gunzipBytes(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = gz.Close() }()
-	return io.ReadAll(&boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
+	return io.ReadAll(&boundedReader{r: gz, maximum: inv.decodeLimit(int64(len(data)))})
 }
 
 // replaceCompressed publishes the new file, refusing to replace an existing
@@ -291,23 +285,13 @@ func (inv *invocation) replaceCompressed(input, output string, data []byte) (int
 
 func runZcat(inv *invocation) error {
 	if len(inv.operands()) == 0 {
-		data, err := inv.stdinBounded("archive_input_bytes")
-		if err != nil {
-			return err
-		}
-		decoded, err := inv.gunzipBytes(data)
-		if err != nil {
-			return err
-		}
-		_, err = inv.stdout.Write(decoded)
-		return err
+		return inv.gunzipStream(inv.input, -1)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
-		decoded, err := inv.gunzipFile(operand)
+		data, _, err := inv.readBound(operand, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
 		if err != nil {
 			return 0, err
 		}
-		_, err = inv.stdout.Write(decoded)
-		return 0, err
+		return 0, inv.gunzipStream(bytes.NewReader(data), int64(len(data)))
 	})
 }

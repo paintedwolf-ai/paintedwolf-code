@@ -12,9 +12,14 @@ import (
 
 // ErrConsumerClosed distinguishes a deliberate downstream stop from producer
 // failure. The evaluator still settles the producer independently of this pipe.
-var ErrConsumerClosed = errors.New("command stream consumer closed")
+var ErrConsumerClosed error = consumerClosedError{}
 
-// BytePipe carries already-screened bytes without a display projection or an
+type consumerClosedError struct{}
+
+func (consumerClosedError) Error() string        { return "command stream consumer closed" }
+func (consumerClosedError) ConsumerClosed() bool { return true }
+
+// BytePipe carries exact producer bytes without a display projection or an
 // intermediate buffer. io.Pipe provides backpressure even for slow consumers.
 type BytePipe struct {
 	reader        *io.PipeReader
@@ -77,6 +82,9 @@ func (p *BytePipe) Write(b []byte) (int, error) {
 		}
 		return 0, terminalErr
 	}
+	if len(b) == 0 {
+		return 0, nil
+	}
 	if err := p.budget.Charge(int64(len(b))); err != nil {
 		p.finish(StreamBudgetExceeded, err)
 		return 0, err
@@ -109,6 +117,13 @@ func (p *BytePipe) CloseProducer(err error) error {
 func (p *BytePipe) CloseConsumer() error {
 	p.finish(StreamConsumerClosed, ErrConsumerClosed)
 	return nil
+}
+
+// ConsumerClosed reports whether the downstream consumer closed this pipe.
+func (p *BytePipe) ConsumerClosed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.completion.Termination == StreamConsumerClosed
 }
 
 // ConsumerEnd is the stdin endpoint for Streams.Input; Close is CloseConsumer.

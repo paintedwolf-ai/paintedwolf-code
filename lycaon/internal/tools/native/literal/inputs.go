@@ -64,6 +64,22 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 	if bound.Null {
 		return &input{label: operand, data: []byte{}, bound: bound}, nil
 	}
+	if !whole {
+		streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, inv.owners.readBytes())
+		if err != nil {
+			return inv.ordinaryInput(operand, err)
+		}
+		inv.closers = append(inv.closers, streamed.Reader)
+		if err := inv.recordPin(streamed.Revision); err != nil {
+			return nil, err
+		}
+		pin, ok := streamed.Revision.SourcePin()
+		in := &input{label: operand, stream: streamed.Reader, bound: bound}
+		if ok {
+			in.pin = &pin
+		}
+		return in, nil
+	}
 	captured, err := inv.owners.Revisions.CaptureBytes(inv.ctx, inv.tc, bound.Resolved.Abs, inv.owners.readBytes())
 	if err != nil {
 		return inv.ordinaryInput(operand, err)

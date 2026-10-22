@@ -126,8 +126,24 @@ func headInput(inv *invocation, in *input, w window) error {
 			end := min(w.count, int64(len(in.data)))
 			return inv.out.literal(in, in.data[:end], 0)
 		}
-		_, err := io.Copy(inv.out, io.LimitReader(in.stream, w.count))
-		return err
+		var offset int64
+		buf := make([]byte, 32*1024)
+		lr := io.LimitReader(in.stream, w.count)
+		for {
+			n, err := lr.Read(buf)
+			if n > 0 {
+				if writeErr := inv.out.literal(in, buf[:n], offset); writeErr != nil {
+					return writeErr
+				}
+				offset += int64(n)
+			}
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
 	}
 	if w.count == 0 {
 		return nil

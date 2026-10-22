@@ -119,16 +119,15 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 		}
 		// The native byte-endpoint exception never applies to an external
 		// producer; only the executor's own SIGPIPE classification may.
-		if i < len(pipes) && !r.external {
+		var executor ExecutorClosure
+		if i < len(pipes) && errors.As(r.cause, &executor) {
+			outcomes[i].Closure = ExternalConsumerClosure(executor, r.executionID, results[i+1].executionID)
+		} else if i < len(pipes) && !r.external {
 			cause := r.cause
 			if errors.Is(cause, ErrConsumerClosed) {
 				cause = ErrConsumerClosed
 			}
 			outcomes[i].Closure = NativeConsumerClosure(pipes[i], cause, r.executionID, results[i+1].executionID)
-		}
-		var executor ExecutorClosure
-		if i < len(pipes) && r.external && errors.As(r.cause, &executor) {
-			outcomes[i].Closure = ExternalConsumerClosure(executor, r.executionID, results[i+1].executionID)
 		}
 		if stageErr == nil && r.err != nil {
 			stageErr = r.err
