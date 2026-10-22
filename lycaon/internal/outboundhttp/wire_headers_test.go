@@ -15,7 +15,7 @@ func TestWireCaptureKeepsFinalBlockInReceivedOrder(t *testing.T) {
 		capture.record([]byte(chunk))
 	}
 	wire := capture.headers(201)
-	if wire == nil || wire.StatusLine != "HTTP/1.1 201 Created" || len(wire.Headers) != 2 || wire.Headers[0] != (Header{Name: "Z-First", Value: "1"}) || wire.Headers[1] != (Header{Name: "A-Last", Value: "two"}) {
+	if wire == nil || wire.StatusLine != "HTTP/1.1 201 Created" || len(wire.Headers) != 3 || wire.Headers[0] != (Header{Name: "Z-First", Value: "1"}) || wire.Headers[1] != (Header{Name: "Set-Cookie", Value: "s=1"}) || wire.Headers[2] != (Header{Name: "A-Last", Value: "two"}) || wire.Raw != "HTTP/1.1 201 Created\r\nZ-First: 1\r\nSet-Cookie: s=1\r\nA-Last:  two\r\n\r\n" {
 		t.Fatalf("wire headers %+v", wire)
 	}
 	if capture.headers(200) != nil {

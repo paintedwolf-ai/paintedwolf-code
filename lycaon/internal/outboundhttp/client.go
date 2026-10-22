@@ -140,12 +140,13 @@ type Response struct {
 	// such as "HTTP/1.1 200 OK".
 	StatusLine string `json:"-"`
 	// Wire is the final response's header block as received, when requested
-	// and observable; Set-Cookie and Proxy-Authenticate stay withheld.
+	// and observable.
 	Wire *WireHeaders `json:"-"`
 }
 
 // WireHeaders is one received header block in wire order and spelling.
 type WireHeaders struct {
+	Raw        string
 	StatusLine string
 	Headers    []Header
 }
@@ -261,6 +262,9 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			hopTiming.Total = time.Since(ioStarted).Milliseconds()
 			transport.CloseIdleConnections()
 			ioCancel()
+			if in.WireHeaders {
+				result.Headers = responseHeaders(resp.Header, true)
+			}
 			result.DurationMS = ioElapsed.Milliseconds()
 			result.Timing = hopTiming
 			result.TLS = tlsInfo
@@ -278,7 +282,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		if err != nil {
 			return Response{}, err
 		}
-		adv.record.StatusLine, adv.record.Headers = statusLine(resp), responseHeaders(resp.Header)
+		adv.record.StatusLine, adv.record.Headers = statusLine(resp), responseHeaders(resp.Header, in.WireHeaders)
 		if wire != nil {
 			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
@@ -503,7 +507,7 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 			timing.Transfer = time.Since(readStart).Milliseconds()
 		}
 		return Response{
-			Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
+			Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 			Redirects: hops, ContentType: resp.Header.Get("Content-Type"), StatusLine: statusLine(resp),
 		}, nil
 	}
@@ -529,7 +533,7 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 	}
 	sum := sha256.Sum256(body)
 	return Response{
-		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
+		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 		Redirects: hops, Body: body, Bytes: int64(len(body)), SHA256: hex.EncodeToString(sum[:]),
 		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp),
 	}, nil
@@ -586,7 +590,7 @@ func streamResponse(resp *http.Response, finalURL string, hops []Hop, limit int6
 		return Response{}, err
 	}
 	return Response{
-		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header),
+		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 		Redirects: hops, Bytes: bounded.n, SHA256: hex.EncodeToString(hasher.Sum(nil)),
 		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp),
 	}, nil
@@ -709,12 +713,14 @@ func validHeaderValue(value string) bool {
 	return true
 }
 
-func responseHeaders(in http.Header) []Header {
+func responseHeaders(in http.Header, complete bool) []Header {
 	out := make([]Header, 0, len(in))
 	for name, values := range in {
 		switch strings.ToLower(name) {
 		case "set-cookie", "proxy-authenticate":
-			continue
+			if !complete {
+				continue
+			}
 		}
 		for _, value := range values {
 			out = append(out, Header{Name: name, Value: value})
