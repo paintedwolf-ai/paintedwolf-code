@@ -858,6 +858,40 @@ request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
 
+##### Integration capacity experiment
+
+The current envelope reserves twelve runners outside merge-group integration:
+qualification (3), cache preparation (1), nightly (2), release work (2),
+maintenance (1), maintainability reporting (1), commit certification (1), and
+one pull request admission (1). Two groups at four lanes use the remaining
+eight of the twenty runners. `TestBoundedClassesFitTheHostedRunners` derives
+these reservations from workflow concurrency groups and the capacity catalog.
+Six lanes for each group require twenty-four runners with those reservations.
+Keep the live cap at four until that capacity is available; preserve the two
+one-PR groups and the admission reservation.
+
+The October 22 review measured three successful groups at 46.9, 56.4, and
+58.9 minutes, consuming 175.2, 187.8, and 204.6 runner-minutes respectively
+([first](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39757233180),
+[second](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39757236585),
+[third](https://github.com/paintedwolf-ai/paintedwolf-code/actions/runs/39763252240)).
+At six lanes, their work-volume lower bounds are 29.2, 31.3, and 34.1 minutes.
+These are lower bounds, not predicted runtimes: long individual jobs, setup,
+runner availability, and lane ordering can prevent reaching them. The third
+run's native setup alone took 36.9 minutes, including a 29.4-minute package
+fetch, so preparation must improve before extra parallelism can remove that
+critical path.
+
+After preparation and cache publication stabilize, compare at least ten
+successful groups at each cap. Record matrix size and affected scope, setup
+versus execution duration, ready-to-start wait, total runner-minutes, queue-to-merge
+time, PR admission wait, and failed or invalidated attempts separately. Change
+only `capacity.max_parallel.integration` for the six-lane comparison; retain the
+same recipes, shard count, queue settings, and required checks. Keep six only
+if completed merges per hour and queue-to-merge time improve without consuming
+the admission reservation or increasing failed attempts. Return the cap to four
+if those conditions do not hold. Retain both measurement sets with the rollout PR.
+
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
 prints the proposed ruleset while preserving unrelated protections. Add `--apply`
