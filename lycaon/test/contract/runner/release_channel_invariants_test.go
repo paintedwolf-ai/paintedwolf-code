@@ -112,7 +112,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
-		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
 		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
 		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
 		"name: linux-candidate-${{ matrix.updater_key }}",
@@ -126,8 +126,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	// Candidate runs carry no branch-scoped triggers, use one source checkout,
-	// and prepare the user namespace locally without a probe lease.
+	// Candidate runs use one source checkout and prepare their own user namespace.
 	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
 		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
 		"PW_PACKAGE_PROBE_LEASE"} {

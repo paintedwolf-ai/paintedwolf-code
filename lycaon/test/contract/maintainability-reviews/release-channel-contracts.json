@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/contract/runner/release_channel_invariants_test.go",
+  "kind": "test_suite",
+  "workstream": "release-admission",
+  "disposition": "retain",
+  "reason": "The measured 603 code-bearing lines hold release channel, manifest, and candidate isolation invariants across the packaging path. Keep these fixture-backed publication contracts together at that ceiling; the hosted capacity suite separately owns caller scheduling and runner bounds.",
+  "reviewed_commit": "f1b979762ef516fb786b49211f311e5e2a85030f",
+  "ceiling": 603,
+  "boundaries": {
+    "lycaon/test/contract/runner/release_channel_invariants_test.go": "f61d94ff9d9578141abea85c14151e215cdfe85eae959d4bef4889e7afa475c7",
+    "lycaon/test/contract/hosted/linux_candidate_capacity_contract_test.go": "4f180c4c9a1e652cb05efd2e8e48da185a5468fe155eca8b6a484449c143481f"
+  }
+}

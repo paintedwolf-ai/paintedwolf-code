@@ -1,0 +1,37 @@
+name: Linux candidate requests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/linux-candidates.yml'
+      - '.github/workflows/linux-candidate-requests.yml'
+      - '.github/workflows/release.yml'
+      - '.github/actions/setup-*/**'
+      - 'packaging/**'
+      - 'scripts/*linux*'
+      - 'scripts/*engine*'
+      - 'scripts/*bundle*'
+      - 'scripts/release-stage-platform-artifacts.sh'
+      - 'lycaon-den/src-tauri/Cargo.*'
+      - 'lycaon-den/src-tauri/tauri*.json'
+      - 'rust-toolchain.toml'
+      - '.bun-version'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  candidates:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    uses: ./.github/workflows/linux-candidates.yml
+    with:
+      source_sha: ${{ github.sha }}
