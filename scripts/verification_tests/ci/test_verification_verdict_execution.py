@@ -64,7 +64,8 @@ class VerificationVerdictTests(unittest.TestCase):
     def test_historical_source_uses_a_receipt_bound_to_the_current_controller(self):
         from ci_policy import qualification_receipt
         sha, controller = "a" * 40, "b" * 40
-        run = dict(id=42, run_attempt=1, head_sha=controller, head_branch="main", conclusion="success", event="workflow_dispatch")
+        run = dict(id=42, run_attempt=1, head_sha=controller, head_branch="main", conclusion="success", event="workflow_dispatch",
+                   display_title=f"Qualification {sha}")
         proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="workflow_dispatch",
                      source_sha=sha, source_tree="c" * 40, controller_sha=controller,
                      checks={name: "success" for name in qualification_receipt.CHECKS})
@@ -78,3 +79,21 @@ class VerificationVerdictTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         ci.require_qualification("owner/repo", sha)
+
+    def test_dispatch_lookup_skips_unrelated_candidates_without_downloading_receipts(self):
+        from ci_policy import qualification_receipt
+        from urllib.parse import parse_qs, urlparse
+        sha = "a" * 40
+        unrelated = dict(id=7, head_branch="main", conclusion="success", event="workflow_dispatch",
+                         display_title="Qualification " + "b" * 40)
+        with patch.object(ci, "api", return_value={"workflow_runs": []}) as direct, \
+                patch.object(ci, "pages", return_value=[unrelated]) as pages, \
+                patch.object(qualification_receipt, "from_run") as read, \
+                patch.object(qualification_receipt, "aggregate_passed") as jobs:
+            self.assertIsNone(ci.qualified_run("owner/repo", sha))
+            read.assert_not_called()
+            jobs.assert_not_called()
+            for request in (direct.call_args.args[0], pages.call_args.args[0]):
+                created = parse_qs(urlparse(request).query)["created"][0]
+                self.assertTrue(created.startswith(">="))
+                self.assertTrue(created.endswith("Z"))

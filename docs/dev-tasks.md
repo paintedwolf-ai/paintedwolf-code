@@ -1239,6 +1239,19 @@ the selected source to the controller and workflow attempt; publication checks
 that evidence before accepting the source. A failed or canceled request supplies
 no qualification. Source selection does not publish or tag a release.
 
+The selected source and controller must have identical `.github/`, `scripts/`,
+`task`, and `Taskfile.yml` content. Admission refuses incompatible tooling before
+any candidate checks start. Select a newer main commit when those interfaces
+change; qualification never combines an old script API with a new workflow.
+
+Rollout requires a fresh qualified candidate after this policy lands. Existing
+successful runs without a source receipt do not qualify release sources. Finish
+any already selected release before adopting this gate, or select and qualify a
+main commit containing it before requesting a release. Receipts expire after
+90 days; requalify expired candidates within the tooling compatibility rule.
+Historical dispatch lookup searches that retention window and filters the source
+SHA in the run title before downloading and verifying the receipt.
+
 Both preview and stable publication run the controller's compatibility check
 against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
 release's commit once and uses it for catalog and OpenAPI comparisons. An

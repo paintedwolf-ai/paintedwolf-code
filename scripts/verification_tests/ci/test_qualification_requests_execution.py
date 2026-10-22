@@ -1,6 +1,7 @@
 """Selected candidates retain source identity and share one qualification executor."""
 import io
 import json
+import subprocess
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -60,6 +61,24 @@ class QualificationRequestTests(unittest.TestCase):
                     self.assertRaises(ValueError):
                 requests.commit(value)
             git.assert_not_called()
+
+    def test_incompatible_tooling_refuses_before_candidate_execution(self):
+        for code in (1, 128):
+            result = subprocess.CompletedProcess([], code)
+            with self.subTest(code=code), patch.object(requests.subprocess, "run", return_value=result) as run:
+                with self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                    requests.require_compatible_tooling(SOURCE, CONTROLLER)
+                self.assertEqual(run.call_args.args[0], ["git", "diff", "--quiet", SOURCE, CONTROLLER, "--",
+                                                       ".github", "scripts", "task", "Taskfile.yml"])
+        with patch.object(requests.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+            requests.require_compatible_tooling(SOURCE, CONTROLLER)
+        with patch.object(requests, "require_compatible_tooling", side_effect=ValueError("tooling differs")) as check:
+            with self.assertRaisesRegex(ValueError, "tooling differs"):
+                self.choose(ENVIRONMENT)
+            check.assert_called_once_with(SOURCE, CONTROLLER)
+        with patch.object(requests, "require_compatible_tooling") as check:
+            self.choose({**ENVIRONMENT, "GITHUB_EVENT_NAME": "push", "GITHUB_SHA": SOURCE})
+            check.assert_not_called()
 
 
 class QualificationReceiptTests(unittest.TestCase):

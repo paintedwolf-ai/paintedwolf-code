@@ -1,4 +1,5 @@
 name: Qualification
+run-name: Qualification ${{ inputs.source-sha || github.sha }}
 
 on:
   push:
@@ -84,7 +85,7 @@ jobs:
       source-sha: ${{ needs.select.outputs.source-sha }}
 
   qualification:
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.select.outputs.admitted == 'true' }}
     needs: [select, verification, platform, platform-lanes, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5

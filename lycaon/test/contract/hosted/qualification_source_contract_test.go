@@ -63,6 +63,9 @@ func TestQualificationCheckoutsBindSourceAndControllerSeparately(t *testing.T) {
 func TestQualificationPublishesOnlyTheCompletedAttemptReceipt(t *testing.T) {
 	t.Parallel()
 	job := hostedJobs(t, "qualification")["qualification"]
+	if job.If != "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}" {
+		t.Fatal("unadmitted requests must skip the aggregate before asynchronous cancellation completes")
+	}
 	verified, published := false, false
 	for _, step := range job.Steps {
 		if step.Run == "python3 -m ci_policy.qualification_receipt" {

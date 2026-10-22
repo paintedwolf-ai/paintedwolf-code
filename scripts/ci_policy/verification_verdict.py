@@ -1,4 +1,5 @@
 """Required-job and exact-commit release qualification verdicts."""
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 import re
 
@@ -24,7 +25,8 @@ def qualified_run(repository, sha):
     from ci_policy import qualification_receipt
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("qualification requires a full source commit SHA")
-    query = urlencode({"head_sha": sha, "per_page": 100})
+    retained_since = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    query = urlencode({"head_sha": sha, "per_page": 100, "created": ">=" + retained_since})
     direct = api(f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}")["workflow_runs"]
     seen = set()
 
@@ -41,9 +43,11 @@ def qualified_run(repository, sha):
     for run in direct:
         if accepts(run):
             return run
-    path = f"repos/{repository}/actions/workflows/qualification.yml/runs?event=workflow_dispatch&branch=main&status=success"
+    query = urlencode({"event": "workflow_dispatch", "branch": "main", "status": "success",
+                       "created": ">=" + retained_since})
+    path = f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}"
     for run in pages(path, "workflow_runs"):
-        if accepts(run):
+        if run.get("display_title") == f"Qualification {sha}" and accepts(run):
             return run
     return None
 

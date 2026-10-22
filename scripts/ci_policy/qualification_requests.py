@@ -17,6 +17,19 @@ def commit(value):
     return subprocess.check_output(["git", "rev-parse", "--verify", value + "^{commit}"], cwd=ROOT, text=True).strip()
 
 
+# Reusable workflow interfaces and checked-out execution tooling must agree.
+EXECUTION_PATHS = (".github", "scripts", "task", "Taskfile.yml")
+
+
+def require_compatible_tooling(source, controller):
+    if source == controller:
+        return
+    result = subprocess.run(["git", "diff", "--quiet", source, controller, "--", *EXECUTION_PATHS], cwd=ROOT)
+    if result.returncode == 1:
+        raise ValueError("qualification source has different CI tooling; select a main commit with the controller's .github, scripts, task, and Taskfile.yml")
+    result.check_returncode()
+
+
 def select(environment):
     repository = environment["GITHUB_REPOSITORY"]
     event = environment["GITHUB_EVENT_NAME"]
@@ -37,6 +50,8 @@ def select(environment):
     if event == "push" and source != tip:
         reason = "superseded main snapshot"
     admitted = event == "workflow_dispatch" or source == tip
+    if admitted:
+        require_compatible_tooling(source, controller)
     tree = subprocess.check_output(["git", "rev-parse", source + "^{tree}"], cwd=ROOT, text=True).strip()
     return {"version": 1, "repository": repository, "run_id": run_id,
             "run_attempt": int(environment["GITHUB_RUN_ATTEMPT"]), "event": event,
