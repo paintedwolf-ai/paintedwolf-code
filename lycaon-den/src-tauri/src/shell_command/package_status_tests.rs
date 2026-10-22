@@ -40,11 +40,20 @@ fn status_accepts_exact_package_wrappers_without_bundle_links() {
     assert_eq!(status.installation_mode, "package");
     assert_eq!(status.unavailable_reason, None);
     assert_eq!(status.pw_target.as_deref(), fs::canonicalize(location.bin_dir.join(ENGINE_NAME)).unwrap().to_str());
+
+    let InstallationMode::Package { root } = &location.mode else { unreachable!() };
+    let manifest_path = root.join("manifest.json");
+    let mut v1: serde_json::Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    v1["format_version"] = serde_json::json!(1);
+    v1.as_object_mut().unwrap().remove("payload");
+    fs::write(&manifest_path, serde_json::to_vec(&v1).unwrap()).unwrap();
+    let v1_status = status_with(&location, Err("no bundle".into()));
+    assert!(v1_status.installed);
 }
 
 #[test]
 fn directories_nonexecutables_foreign_links_and_missing_helpers_are_not_installed() {
-    for condition in ["directory", "nonexecutable", "foreign-link", "dangling-link", "missing-helper", "changed-wrapper", "manifest", "legacy-v1-manifest", "future-v3-manifest"] {
+    for condition in ["directory", "nonexecutable", "foreign-link", "dangling-link", "missing-helper", "changed-wrapper", "manifest", "v1-manifest-with-payload", "v2-manifest-without-payload", "future-v3-manifest"] {
         let (directory, location) = stage();
         let path = location.bin_dir.join(ENGINE_NAME);
         match condition {
@@ -67,11 +76,15 @@ fn directories_nonexecutables_foreign_links_and_missing_helpers_are_not_installe
                 let InstallationMode::Package { root } = &location.mode else { unreachable!() };
                 fs::write(root.join("manifest.json"), b"{}").unwrap();
             }
-            "legacy-v1-manifest" | "future-v3-manifest" => {
+            "v1-manifest-with-payload" | "v2-manifest-without-payload" | "future-v3-manifest" => {
                 let InstallationMode::Package { root } = &location.mode else { unreachable!() };
                 let manifest_path = root.join("manifest.json");
                 let mut raw: serde_json::Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
-                raw["format_version"] = serde_json::json!(if condition == "legacy-v1-manifest" { 1 } else { 3 });
+                match condition {
+                    "v1-manifest-with-payload" => raw["format_version"] = serde_json::json!(1),
+                    "v2-manifest-without-payload" => { raw.as_object_mut().unwrap().remove("payload"); }
+                    _ => raw["format_version"] = serde_json::json!(3),
+                }
                 fs::write(&manifest_path, serde_json::to_vec(&raw).unwrap()).unwrap();
             }
             _ => unreachable!(),
