@@ -45,7 +45,7 @@ def main(mode):
     directory.mkdir(parents=True, exist_ok=True)
     if mode == "plan":
         apt("update")
-        plan = apt("-o", "Acquire::ForceHash=sha256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)
+        plan = apt("-o", "Acquire::ForceHash=SHA256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)
         key = archive_identity(plan, names, os.environ)
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"archives={directory}\nkey={key}\n")

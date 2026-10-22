@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -74,7 +73,7 @@ elif 'install' in sys.argv:
                         NATIVE.main("install")
                 records = [json.loads(line) for line in calls.read_text().splitlines()]
                 self.assertIn("update", records[0])
-                self.assertIn("Acquire::ForceHash=sha256", records[1])
+                self.assertIn("Acquire::ForceHash=SHA256", records[1])
                 self.assertIn("APT::Keep-Downloaded-Packages=true", records[2])
                 self.assertEqual(records[2][-2:], ["xclip", "sway"])
 
