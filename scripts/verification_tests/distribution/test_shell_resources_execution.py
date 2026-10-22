@@ -21,15 +21,26 @@ class ShellResourcesTests(unittest.TestCase):
             (scripts / "licenses-notices.sh").write_text(
                 '#!/bin/bash\nset -eu\n'
                 'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
+                'printf "notices\\n" >> "$root/operations"\n'
                 'printf "qualified notices" > "$root/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"\n')
             (scripts / "ensure-tauri-binaries.sh").write_text(
                 '#!/bin/bash\nset -eu\n'
                 'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
-                'test -s "$root/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"\n')
+                'test -s "$root/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"\n'
+                'printf "stage\\n" >> "$root/operations"\n')
+            (scripts / "test-source-snapshot.sh").write_text(
+                '#!/bin/bash\nset -eu\n'
+                'if [[ "$1" == holding ]]; then [[ "${WARM_SNAPSHOT:-}" == 1 ]]; exit; fi\n'
+                '[[ "$1" == run && "$2" == -- ]]\nshift 2\n'
+                'export WARM_SNAPSHOT=1\nexec "$@"\n')
+            (scripts / "artifact-paths.sh").write_text(
+                'export PW_COMPILER_CACHE_DIR="' + str(root / "compiler") + '"\n')
+            (scripts / "decide-features.sh").write_text("#!/bin/bash\necho cpu\n")
+            (scripts / "build-decide.sh").write_text("#!/bin/bash\nexit 0\n")
             binary = root / "bin"
             binary.mkdir()
             cargo = binary / "cargo"
-            cargo.write_text('#!/bin/bash\nset -eu\ntest -s THIRD-PARTY-NOTICES.md\n')
+            cargo.write_text('#!/bin/bash\nset -eu\ncase "$*" in *--manifest-path*) exit 0 ;; esac\ntest -s THIRD-PARTY-NOTICES.md\n')
             cargo.chmod(0o755)
             env = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ['PATH']}")
 
@@ -42,6 +53,9 @@ class ShellResourcesTests(unittest.TestCase):
                     result = prepare(flag)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(notices.read_text(), "qualified notices")
+                    operations = (root / "operations").read_text().splitlines()
+                    self.assertEqual(operations, ["notices"] if flag == "--shell-resources" else ["notices", "stage"])
+                    (root / "operations").unlink()
                     notices.unlink()
 
             (scripts / "licenses-notices.sh").write_text("#!/bin/bash\nexit 42\n")

@@ -5,7 +5,7 @@
     ],
     "check-fast": [
       "build",
-      "lint:fast",
+      "lint:full",
       "budgets",
       "den:typecheck",
       "den:lint",
@@ -754,17 +754,24 @@
     "ready": {
       "targets": [
         "build",
-        "lint:fast",
+        "lint:full",
         "budgets",
         "den:typecheck",
         "den:lint"
       ],
-      "minutes": 15,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "preflight": [
+        "test:contract",
+        "--",
+        "./test/contract/hosted",
+        "./test/contract/runner",
+        "./test/contract/evidence"
+      ]
     },
     "limits": {
       "targets": [
@@ -880,7 +887,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "frontend"
     },
     "native": {
       "targets": [
