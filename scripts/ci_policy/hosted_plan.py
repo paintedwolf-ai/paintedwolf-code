@@ -3,7 +3,7 @@ from collections import Counter
 from pathlib import Path
 import re
 
-from ci_policy.timings import row_key
+from ci_policy.hosted_schedule import order
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -126,15 +126,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    # A capped matrix starts jobs in order: the cheap lanes that fail most often come first, so a
-    # failing group stops early, then the longest lanes, so they don't finish last. A lane main's
-    # qualification has not measured is planned at its budget, so it starts early.
-    measured = (timings or {}).get("lanes", {})
-
-    def expected(row):
-        return measured.get(row_key(row["lane"], row["shard"]), row["minutes"] * 60)
-
-    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -expected(row)))}
+    return {"include": order(result, values, timings)}
 
 
 def invocation(targets):
