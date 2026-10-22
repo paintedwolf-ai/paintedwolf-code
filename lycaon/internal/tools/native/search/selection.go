@@ -33,6 +33,7 @@ type selection struct {
 	rg           bool
 	rules        []nameRule
 	excludeDirs  []*regexp.Regexp
+	includeDirs  []*regexp.Regexp
 	globs        []rgGlob
 	types        []*regexp.Regexp
 	notTypes     []*regexp.Regexp
@@ -60,6 +61,8 @@ func newSelection(inv *invocation, rg bool) selection {
 			s.rules = append(s.rules, nameRule{include: item.Option.Key == "--include", glob: s.compile(item.Option.Values[0].Value, 0)})
 		case "--exclude-dir":
 			s.excludeDirs = append(s.excludeDirs, s.compile(item.Option.Values[0].Value, 0))
+		case "--include-dir":
+			s.includeDirs = append(s.includeDirs, s.compile(item.Option.Values[0].Value, 0))
 		case "-u":
 			s.unrestricted++
 		}
@@ -163,6 +166,9 @@ func (s *selection) admit(e entry) (bool, error) {
 			if re.MatchString(e.name) {
 				return false, nil
 			}
+		}
+		if len(s.includeDirs) > 0 && !slices.ContainsFunc(s.includeDirs, func(re *regexp.Regexp) bool { return re.MatchString(e.name) }) {
+			return false, nil
 		}
 	} else if !s.included(func(re *regexp.Regexp) bool { return re.MatchString(e.name) }) {
 		return false, nil
