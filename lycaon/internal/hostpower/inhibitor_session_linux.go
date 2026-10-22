@@ -26,12 +26,11 @@ const (
 	powerManagementInhibit = "org.freedesktop.PowerManagement.Inhibit"
 )
 
-// sessionLease holds an inhibition that lives as long as its bus connection.
+// sessionLease holds an inhibition while its unique service owner stays present.
 type sessionLease struct {
-	bus          *dbus.Conn
+	service      *sessionService
 	name         string
 	release      func(context.Context) error
-	responses    chan *dbus.Signal
 	request      dbus.ObjectPath
 	done         chan error
 	stop         chan struct{}
@@ -40,8 +39,8 @@ type sessionLease struct {
 	releaseError error
 }
 
-func newSessionLease(bus *dbus.Conn, name string, release func(context.Context) error, responses chan *dbus.Signal, request dbus.ObjectPath) *sessionLease {
-	held := &sessionLease{bus: bus, name: name, release: release, responses: responses, request: request, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
+func newSessionLease(service *sessionService, name string, release func(context.Context) error, request dbus.ObjectPath) *sessionLease {
+	held := &sessionLease{service: service, name: name, release: release, request: request, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
 	return held
 }
@@ -57,17 +56,16 @@ func (l *sessionLease) watch() {
 		select {
 		case <-l.stop:
 			return
-		case <-l.bus.Context().Done():
-			l.done <- errors.New("sleep inhibitor service disconnected")
+		case <-l.service.bus.Context().Done():
+			l.done <- unavailable(ReasonDisconnected, "sleep inhibitor bus disconnected")
 			return
-		case response, ok := <-l.responses:
-			if !ok {
-				l.done <- errors.New("sleep inhibitor service disconnected")
+		case response, ok := <-l.service.signals:
+			if !ok || response == nil || l.service.lost(response) {
+				l.done <- unavailable(ReasonDisconnected, "sleep inhibitor service owner disconnected")
 				return
 			}
-			// Every signal on the connection arrives here; only the request's
-			// own Response ends the lease.
-			if response.Path != l.request || response.Name != portalRequest+".Response" {
+			// A different client's request cannot settle this lease.
+			if response.Sender != l.service.owner || response.Path != l.request || response.Name != portalRequest+".Response" {
 				continue
 			}
 			code := uint32(0)
@@ -84,12 +82,16 @@ func (l *sessionLease) Release() error {
 	l.once.Do(func() {
 		close(l.stop)
 		<-l.stopped
-		if l.bus.Context().Err() == nil {
+		if l.service.bus.Context().Err() == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
 			l.releaseError = l.release(ctx)
 			cancel()
+			var remote dbus.Error
+			if errors.As(l.releaseError, &remote) && (remote.Name == "org.freedesktop.DBus.Error.NameHasNoOwner" || remote.Name == "org.freedesktop.DBus.Error.ServiceUnknown" || remote.Name == "org.freedesktop.DBus.Error.Disconnected") {
+				l.releaseError = nil
+			}
 		}
-		_ = l.bus.Close()
+		_ = l.service.bus.Close()
 	})
 	return l.releaseError
 }
@@ -115,15 +117,16 @@ func (p portalProvider) Check(ctx context.Context) error {
 	if err := nameAvailableOn(ctx, bus, portalName); err != nil {
 		return err
 	}
-	return p.attribute(ctx, bus)
+	return p.attribute(ctx, bus, portalName)
 }
 
 func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
-	bus, err := p.connect(ctx)
+	service, err := openSessionService(ctx, p.connect, portalName)
 	if err != nil {
 		return nil, fmt.Errorf("connect to desktop portal: %w", err)
 	}
-	if err := p.attribute(ctx, bus); err != nil {
+	bus := service.bus
+	if err := p.attribute(ctx, bus, service.owner); err != nil {
 		_ = bus.Close()
 		return nil, err
 	}
@@ -132,30 +135,27 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		_ = bus.Close()
 		return nil, err
 	}
-	responses := make(chan *dbus.Signal, 4)
-	bus.Signal(responses)
+	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchSender(service.owner), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+		_ = bus.Close()
+		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
+	}
 	options := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(token),
 		"reason":       dbus.MakeVariant("Painted Wolf Code: active work"),
 	}
 	var request dbus.ObjectPath
-	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend|portalFlagIdle, options).Store(&request)
+	err = bus.Object(service.owner, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend|portalFlagIdle, options).Store(&request)
 	if err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
-	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(request), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
-		_ = bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
-		_ = bus.Close()
-		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
-	}
 	release := func(ctx context.Context) error {
-		if err := bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
+		if err := bus.Object(service.owner, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
 			return fmt.Errorf("release portal inhibitor: %w", err)
 		}
 		return nil
 	}
-	return newSessionLease(bus, p.Name(), release, responses, request), nil
+	return newSessionLease(service, p.Name(), release, request), nil
 }
 
 func requestToken() (string, error) {
@@ -178,23 +178,24 @@ func (p powerManagementProvider) Check(ctx context.Context) error {
 }
 
 func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
-	bus, err := p.connect(ctx)
+	service, err := openSessionService(ctx, p.connect, powerManagementName)
 	if err != nil {
 		return nil, fmt.Errorf("connect to power management service: %w", err)
 	}
+	bus := service.bus
 	var cookie uint32
-	err = bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".Inhibit", 0, "Painted Wolf Code", "Active work").Store(&cookie)
+	err = bus.Object(service.owner, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".Inhibit", 0, "Painted Wolf Code", "Active work").Store(&cookie)
 	if err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire power management inhibitor: %w", err)
 	}
 	release := func(ctx context.Context) error {
-		if err := bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".UnInhibit", 0, cookie).Err; err != nil {
+		if err := bus.Object(service.owner, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".UnInhibit", 0, cookie).Err; err != nil {
 			return fmt.Errorf("release power management inhibitor: %w", err)
 		}
 		return nil
 	}
-	return newSessionLease(bus, p.Name(), release, nil, ""), nil
+	return newSessionLease(service, p.Name(), release, ""), nil
 }
 
 func nameServed(ctx context.Context, connect busConnector, name string) error {
