@@ -159,7 +159,8 @@ func pruneNixRoots(directory string) error {
 		}
 		file := os.NewFile(uintptr(fd), path)
 		var st unix.Stat_t
-		if unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uint32(os.Getuid()) && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
+		uid, uidOK := currentNixUID()
+		if uidOK && unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uid && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
 			link := strings.TrimSuffix(path, ".lock")
 			if removeNixLink(link) == nil {
 				_ = os.Remove(path)
@@ -179,7 +180,7 @@ func removeNixLink(path string) error {
 		return err
 	}
 	if st.Mode()&os.ModeSymlink == 0 {
-		return errors.New("Nix root path is not an owned symlink")
+		return errors.New("nix root path is not an owned symlink")
 	}
 	return os.Remove(path)
 }
