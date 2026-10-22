@@ -47,18 +47,16 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 			for _, want := range []string{
 				"## command",
 				"pipelines",
-				"`&&`",
 				"$(...)",
 				"GNU and BSD",
 				"--help",
 				"@scratch",
-				"COMMAND_ARGV_REQUIRED",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("profile %q surface missing %q", profile.ID, want)
 				}
 			}
-			for _, forbid := range []string{"argv host runner", "not a shell", "COMMAND_NOT_ARGV", "external --", "separate command calls", "separate `command` calls", "pipes never execute"} {
+			for _, forbid := range []string{"argv host runner", "not a shell", "COMMAND_NOT_ARGV", "COMMAND_ARGV_REQUIRED", "external --", "separate command calls", "separate `command` calls", "pipes never execute"} {
 				if strings.Contains(strings.ToLower(out), strings.ToLower(forbid)) {
 					t.Fatalf("profile %q surface must not include %q", profile.ID, forbid)
 				}
@@ -128,8 +126,8 @@ func TestWorkerPersonasWithCommandIncludeCommandSurface(t *testing.T) {
 			got, err := prompts.RenderPersona(context.Background(), engine, agentID, nil)
 			contractcheck.FailErr(t, "RenderPersona", err)
 			for _, want := range []string{
-				"## command", "pipelines", "`&&`", "$(...)",
-				"GNU and BSD", "--help", "COMMAND_ARGV_REQUIRED",
+				"## command", "pipelines", "$(...)",
+				"GNU and BSD", "--help",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("persona missing %q", want)

@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -504,10 +505,13 @@ func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "load profiles", err)
 
-	schemaBytesForTools := func(names []string) int {
+	schemaBytesForTools := func(names []string, readOnly bool) int {
 		total := 0
 		for _, name := range names {
 			if meta, ok := schemaCfg.ToolMeta(name); ok {
+				if readOnly && name == "command" {
+					meta.ArgsSchema = tools.PruneCommandReadOnlySchema(meta.ArgsSchema)
+				}
 				raw, _ := json.Marshal(meta)
 				total += len(raw)
 			}
@@ -524,7 +528,7 @@ func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
 		contractcheck.FailErr(t, "load floor "+surfaceID, err)
 		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-size", surfaceID, floor, nil)
 		contractcheck.FailErr(t, "render procedures "+surfaceID, err)
-		return len(prompt) + len(proc) + schemaBytesForTools(floor)
+		return len(prompt) + len(proc) + schemaBytesForTools(floor, !prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID))
 	}
 
 	measureWorkerProfile := func(agentPromptRef, profileID string) int {
@@ -552,7 +556,8 @@ func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
 		contractcheck.FailErr(t, "render worker prompt "+agentPromptRef, err)
 		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-worker-size", profileID, sortStrings, nil)
 		contractcheck.FailErr(t, "render worker procedures "+profileID, err)
-		return len(sysPrompt) + len(proc) + schemaBytesForTools(sortStrings)
+		mutating, _ := vars["profile_command_mutation"].(bool)
+		return len(sysPrompt) + len(proc) + schemaBytesForTools(sortStrings, !mutating)
 	}
 
 	// Baseline measurements on main before retiring routine schemas from the floor and compacting command guidance:

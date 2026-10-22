@@ -88,11 +88,9 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
 		}
 	case "command":
-		// Utility help comes from the active catalog; option detail stays on demand.
-		if utilities, err := toolcontract.NativeUtilitiesLine(); err == nil {
-			meta.Description = strings.TrimSpace(meta.Description) + " " + utilities
-		}
-		if !e.externalHidden && e.profileAllowsExternalExec(ctx, profileID) {
+		if !e.profileAllowsExternalExec(ctx, profileID) {
+			meta.ArgsSchema = tools.PruneCommandReadOnlySchema(meta.ArgsSchema)
+		} else if !e.externalHidden {
 			meta.Description = strings.TrimSpace(meta.Description) + " " + toolcommand.ExternalSelectorLine
 		}
 	}

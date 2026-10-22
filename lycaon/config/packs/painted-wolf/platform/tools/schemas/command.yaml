@@ -1,39 +1,34 @@
 tags: [process, terminal]
 description: >-
-  Runs a bash program (`$(...)`, pipes, redirects, `&` jobs). Common utilities
-  run natively (GNU/BSD flags; `CMD --help` prints help); refusals name the
-  command, flag, and replacement. Other binaries run inside a sandbox.
-  Variables and `cd` last for this call only.
+  Runs a bash program (`$(...)`, pipes, redirects, `&` jobs; `CMD --help`
+  prints native help).
 schema:
   type: object
   properties:
-    secret_use: {type: object, additionalProperties: false, required: [services], description: "HTTP origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Authorized HTTP origin URLs., items: {type: string, maxLength: 1024}}}}
-    verification: {type: boolean, default: false, description: Validation evidence.}
-    command: {type: string, description: Bash program.}
-    cwd: {type: string, description: "Relative to active root, `@label/...`, or `@scratch/...`."}
-    timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline in ms.}
-    terminal_capture: {type: object, additionalProperties: false, description: One-shot PTY capture., properties: {winsize: {type: object, additionalProperties: false, description: Terminal dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Column count.}, rows: {type: integer, minimum: 1, maximum: 120, description: Row count.}}}, caption: {type: string, maxLength: 240, description: Capture label.}}}
-    snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Output path variable name.}, view: {type: string, description: Optional view selector.}, scale: {type: number, default: 2.0, description: Render scale factor.}, caption: {type: string, maxLength: 240, description: Snapshot label.}}}
-    socks_proxy: {type: boolean, default: false, description: ALL_PROXY (SOCKS5h) for non-HTTP TCP.}
+    secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
+    verification: {type: boolean, default: false, description: Validation check.}
+    command: {type: string, description: Bash source.}
+    cwd: {type: string, description: "Folder path, `@label/...`, or `@scratch/...`."}
+    timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
+    terminal_capture: {type: object, additionalProperties: false, description: One-shot PTY capture., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
+    snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Variable.}, view: {type: string, description: View.}, scale: {type: number, default: 2.0, description: Scale.}, caption: {type: string, maxLength: 240, description: Label.}}}
+    socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}
     capability_request:
       type: object
       additionalProperties: false
       minProperties: 1
-      description: >-
-        Extra access this call needs: direct_ip, host_resources,
-        socket_paths, local_listen, loopback_connect, write_root, read_path,
-        process_control, host_execution.
+      description: Extra access this call needs.
       properties:
-        host_resources: {type: array, minItems: 1, maxItems: 16, description: Listed local service names., items: {type: string}}
-        socket_paths: {type: array, minItems: 1, maxItems: 1, items: {type: string}, description: Absolute AF_UNIX socket path.}
-        process_control: {description: Signal or inspect external processes., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
-        host_execution: {description: Run outside sandbox., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
+        host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
+        socket_paths: {type: array, minItems: 1, maxItems: 1, items: {type: string}, description: Socket path.}
+        process_control: {description: Process access., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
+        host_execution: {description: Unsandboxed., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
         direct_ip:
-          description: Direct IP (`true` or destinations) for UDP or clients that ignore proxy variables.
-          oneOf: [{type: boolean}, {type: array, maxItems: 16, items: {type: string, maxLength: 256}}, {type: object, additionalProperties: false, properties: {declared_destinations: {type: array, maxItems: 16, description: Target IP or host:port list., items: {type: string, maxLength: 256}}}}]
-        local_listen: {type: object, additionalProperties: false, description: Loopback TCP listen ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: TCP port numbers., items: {type: integer, minimum: 1, maximum: 65535}}}}
-        loopback_connect: {type: object, additionalProperties: false, description: Loopback TCP client ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: TCP port numbers., items: {type: integer, minimum: 1, maximum: 65535}}}}
-        write_root: {type: string, maxLength: 1024, description: Path outside folders to write.}
-        read_path: {type: string, maxLength: 1024, description: Protected path to read.}
+          description: Direct IP for UDP or clients that ignore proxy variables.
+          oneOf: [{type: boolean}, {type: array, maxItems: 16, items: {type: string, maxLength: 256}}, {type: object, additionalProperties: false, properties: {declared_destinations: {type: array, maxItems: 16, items: {type: string, maxLength: 256}}}}]
+        local_listen: {type: object, additionalProperties: false, description: Listen ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: Ports., items: {type: integer, minimum: 1, maximum: 65535}}}}
+        loopback_connect: {type: object, additionalProperties: false, description: Client ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: Ports., items: {type: integer, minimum: 1, maximum: 65535}}}}
+        write_root: {type: string, maxLength: 1024, description: Write path.}
+        read_path: {type: string, maxLength: 1024, description: Read path.}
   required: [command]
   additionalProperties: false
