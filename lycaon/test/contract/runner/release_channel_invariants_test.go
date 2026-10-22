@@ -126,7 +126,8 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	// Candidate runs carry no branch-scoped triggers, use one source checkout, and prepare userns locally without a probe lease.
+	// Candidate runs carry no branch-scoped triggers, use one source checkout,
+	// and prepare userns locally without a probe lease.
 	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
 		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
 		"PW_PACKAGE_PROBE_LEASE"} {
