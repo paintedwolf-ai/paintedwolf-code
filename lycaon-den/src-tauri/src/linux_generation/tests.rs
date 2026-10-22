@@ -34,21 +34,32 @@ fn fixture(output: &Path, desktop: &[u8], helper: &[u8]) -> PathBuf {
 }
 
 #[test]
-fn generation_refuses_legacy_v1_and_unknown_manifest_versions() {
+fn generation_accepts_format_1_and_2_and_refuses_unknown_or_mismatched_versions() {
     let temporary = crate::test_support::TempDir::new("nix-manifest-version");
     let desktop = fixture(&temporary, b"desktop", b"\x7fELFhelper");
     let root = desktop.parent().unwrap().parent().unwrap();
     let manifest_path = root.join("manifest.json");
-    let mut raw: serde_json::Value =
+    let base: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let mut v1 = base.clone();
+    v1["format_version"] = serde_json::json!(1);
+    v1.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v1).unwrap()).unwrap();
+    assert!(capture(&desktop, File::open(&desktop).unwrap()).is_ok());
+
     for bad_version in [0, 1, 3, 99] {
+        let mut raw = base.clone();
         raw["format_version"] = serde_json::json!(bad_version);
         std::fs::write(&manifest_path, serde_json::to_vec(&raw).unwrap()).unwrap();
         assert!(
             capture(&desktop, File::open(&desktop).unwrap()).is_err(),
-            "format_version {bad_version} must be refused"
+            "format_version {bad_version} with payload must be refused"
         );
     }
+    let mut v2_no_payload = base;
+    v2_no_payload.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v2_no_payload).unwrap()).unwrap();
+    assert!(capture(&desktop, File::open(&desktop).unwrap()).is_err());
 }
 
 #[test]
