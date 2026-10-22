@@ -820,6 +820,13 @@ prepared build inputs.
 
 Required integration execution has a Linux network namespace containing only
 loopback. It runs as the normal runner account after namespace creation.
+Linux native setup resolves its APT dependency set before restoring exact package
+archives. The key includes package digests, the runner image version, and the
+architecture; no prefix restore mixes package sets. Native X11, Wayland, and
+Vulkan dependencies remain installed, including clipboard fixture peers. Only
+main publishes archives, after successful installation. Package candidates still
+follow the runner's distribution repositories.
+
 Pinned Go, Cargo, frontend, scanner, and generator inputs are provisioned first;
 Go and Cargo offline modes reject missing inputs during execution. Dependency
 service outages can still prevent provisioning, and cache availability is not
