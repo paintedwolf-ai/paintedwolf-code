@@ -42,11 +42,21 @@ func run(args []string) error {
 	state := fs.String("state", os.Getenv("STATE_DIRECTORY"), "directory holding per-user identities")
 	manifest := fs.String("manifest", pkgmanifest.DefaultPath, "installed executable manifest")
 	procRoot := fs.String("proc", "/proc", "process filesystem root")
+	idle := fs.Duration("idle-exit", idleExit, "idle shutdown duration; zero serves until stopped")
+	dedicated := fs.Bool("require-dedicated-protection", false, "require a dedicated non-root service uid and only CAP_SYS_PTRACE before listening")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *state == "" {
 		return errors.New("a state directory is required (STATE_DIRECTORY or --state)")
+	}
+	if *idle < 0 {
+		return errors.New("idle-exit must not be negative")
+	}
+	if *dedicated {
+		if err := requireDedicatedProtection(); err != nil {
+			return err
+		}
 	}
 	if err := osprocess.DisableDumps(); err != nil {
 		return fmt.Errorf("disable dumps: %w", err)
@@ -63,7 +73,7 @@ func run(args []string) error {
 		Verifier: launchverify.Verifier{ProcRoot: *procRoot},
 		Manifest: *manifest,
 		PeerOf:   peerCredentials,
-		IdleExit: idleExit,
+		IdleExit: *idle,
 		Log:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 	return server.Serve(ctx, listener)

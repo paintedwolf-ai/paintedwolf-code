@@ -9,6 +9,7 @@ pub(crate) mod entry_points;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+mod pacman;
 
 pub const INSTALL_ROOT: &str = crate::installation_mode::LINUX_PACKAGE_ROOT;
 pub const PACKAGE_NAME: &str = "painted-wolf-code";
@@ -21,6 +22,7 @@ const ENGINE_MARKER: &str = "schemas/oar/oar.schema.json";
 pub enum PackageFamily {
     Deb,
     Rpm,
+    Pacman,
 }
 
 impl PackageFamily {
@@ -29,6 +31,7 @@ impl PackageFamily {
         match self {
             Self::Deb => format!("sudo apt update && sudo apt install --only-upgrade {package}"),
             Self::Rpm => format!("sudo dnf upgrade {package}"),
+            Self::Pacman => "sudo pacman -Syu".into(),
         }
     }
 }
@@ -91,7 +94,7 @@ fn owner(executable: &Path) -> Option<InstalledPackage> {
     if !executable.is_absolute() {
         return None;
     }
-    query_dpkg(executable).or_else(|| query_rpm(executable))
+    query_dpkg(executable).or_else(|| query_rpm(executable)).or_else(|| pacman::owner(executable))
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
