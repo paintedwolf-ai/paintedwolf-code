@@ -1,11 +1,13 @@
 package contract
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -155,10 +157,33 @@ func pythonString(value string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), "'", `\'`) + "'"
 }
 
+// stableReleaseTag names a published stable release; preview tags may be cut without publishing.
+var stableReleaseTag = regexp.MustCompile(`^v([1-9][0-9]*\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$`)
+
+// publishedStableVersions lists the stable releases whose migration identities the checkout must keep.
+func publishedStableVersions(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "tag", "--list", "v*").Output()
+	contractcheck.FailErr(t, "list release tags", err)
+	versions := []string{}
+	for _, tag := range strings.Fields(string(out)) {
+		if match := stableReleaseTag.FindStringSubmatch(tag); match != nil {
+			versions = append(versions, match[1])
+		}
+	}
+	if len(versions) == 0 {
+		t.Fatal("no published stable release tags; fetch tags before running release contracts")
+	}
+	raw, err := json.Marshal(versions)
+	contractcheck.FailErr(t, "encode published versions", err)
+	return string(raw)
+}
+
 func TestReleaseCompatibility(t *testing.T) {
 	t.Parallel()
 	repo := contractcheck.RepoRoot(t)
-	cmd := exec.CommandContext(t.Context(), "go", "run", "./cmd/release-contracts", "--check-all")
+	cmd := exec.CommandContext(t.Context(), "go", "run", "./cmd/release-contracts", "--check-all",
+		"--published-versions", publishedStableVersions(t, repo))
 	cmd.Dir = filepath.Join(repo, "lycaon")
 	cmd.Env = append(os.Environ(), "LYCAON_ENGINE_ROOT="+filepath.Join(repo, "lycaon-den/src-tauri/engine-root"))
 	out, err := cmd.CombinedOutput()
