@@ -93,7 +93,7 @@ type Proof struct {
 
 // Verified is a consumed challenge whose signature the shell's key produced.
 type Verified struct {
-	epoch         *revocation
+	revoked       *revocation
 	ChallengeID   string
 	Purpose       Purpose
 	PersonID      string
@@ -115,7 +115,7 @@ type payload struct {
 }
 
 type pending struct {
-	epoch    *revocation
+	revoked  *revocation
 	payload  payload
 	encoded  string
 	key      string
@@ -125,7 +125,7 @@ type pending struct {
 
 // Broker issues and consumes presence challenges in memory.
 type Broker struct {
-	epoch      atomic.Pointer[revocation]
+	revoked    atomic.Pointer[revocation]
 	mu         sync.Mutex
 	now        func() time.Time
 	publicKey  ed25519.PublicKey
@@ -227,7 +227,7 @@ func (b *Broker) Begin(claim Claim) (Challenge, error) {
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(raw)
 	b.challenges[doc.ChallengeID] = pending{
-		payload: doc, encoded: encoded, key: key, personID: personID, deadline: deadline, epoch: b.epoch.Load(),
+		payload: doc, encoded: encoded, key: key, personID: personID, deadline: deadline, revoked: b.revoked.Load(),
 	}
 	return Challenge{ID: doc.ChallengeID, ProofPayload: encoded, ExpiresAt: doc.ExpiresAt}, nil
 }
@@ -265,11 +265,11 @@ func (b *Broker) Complete(proof Proof, purpose Purpose, personID string) (Verifi
 		!ed25519.Verify(key, SigningMessage(issued.encoded, authenticator), signature) {
 		return Verified{}, ErrDenied
 	}
-	if issued.epoch != b.epoch.Load() {
+	if issued.revoked != b.revoked.Load() {
 		return Verified{}, ErrChallengeNotFound
 	}
 	return Verified{
-		epoch:       issued.epoch,
+		revoked:     issued.revoked,
 		ChallengeID: issued.payload.ChallengeID, Purpose: issued.payload.Purpose, PersonID: issued.personID,
 		WindowLabel: issued.payload.WindowLabel, Authenticator: authenticator,
 		Subject: issued.payload.Subject, VerifiedAt: now,

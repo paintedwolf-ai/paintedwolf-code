@@ -7,6 +7,6 @@ type revocation struct{ reason EndReason }
 func (b *Broker) invalidate(reason EndReason) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.epoch.Store(&revocation{reason: reason})
+	b.revoked.Store(&revocation{reason: reason})
 	clear(b.challenges)
 }

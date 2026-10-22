@@ -47,7 +47,7 @@ func IsLockReason(reason EndReason) bool {
 // Unlock is one chat's open unlock: a person verified presence, so the
 // chat's approved uses of values that person holds may proceed.
 type Unlock struct {
-	epoch *revocation
+	revoked *revocation
 	// ID is the presence challenge that opened the unlock.
 	ID            string
 	ChatSessionID string
@@ -62,8 +62,8 @@ type Unlock struct {
 func NewUnlock(chatSessionID string, verified Verified) Unlock {
 	at := verified.VerifiedAt.UTC()
 	return Unlock{
-		epoch: verified.epoch,
-		ID:    verified.ChallengeID, ChatSessionID: chatSessionID, PersonID: verified.PersonID,
+		revoked: verified.revoked,
+		ID:      verified.ChallengeID, ChatSessionID: chatSessionID, PersonID: verified.PersonID,
 		Authenticator: verified.Authenticator, WindowLabel: verified.WindowLabel,
 		UnlockedAt: at, LastUsedAt: at,
 	}
@@ -137,12 +137,12 @@ func (u *Unlocks) SetObserver(observer UnlockObserver) {
 func (u *Unlocks) Open(opened Unlock) bool {
 	u.mu.Lock()
 	now := u.now().UTC()
-	if epoch := u.broker.epoch.Load(); opened.epoch != epoch {
+	if revoked := u.broker.revoked.Load(); opened.revoked != revoked {
 		observer := u.observer
 		u.mu.Unlock()
 		reason := EndRestart
-		if epoch != nil {
-			reason = epoch.reason
+		if revoked != nil {
+			reason = revoked.reason
 		}
 		u.notify(observer, []unlockEnd{{opened, reason}}, now, opened.ChatSessionID)
 		return false
