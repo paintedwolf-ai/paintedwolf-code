@@ -121,7 +121,7 @@ that mechanism is the subject of the test.
 
 Contract suites live in domain packages under `lycaon/test/contract/`:
 `agentcontext`, `architecture`, `catalogs`, `evidence`, `files`, `frontend`,
-`host`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
+`host`, `hosted`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
 `runner`, `scanning`, `security`, `sessions`, `tools`, `wire`, and `workflows`.
 The root package keeps the source-snapshot tests. The `test:contract` target
 discovers the complete subtree. Shared support lives under `internal/`: `check`
@@ -681,14 +681,22 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-static job, `ready`: it compiles the host and runs `lint:fast`, size budgets,
-Den typecheck, and Den lint, in about ten minutes with setup, `lint:fast` being
-the longest stage at about seven. The planner requires its stages to be a subset
-of `./task check-fast`. Nothing that runs tests runs here: repository
-contracts, changed coverage, and every suite wait for the merge queue, which
-starts each group with its cheapest, most frequently failing lanes (`limits`,
-for budgets and changed coverage, and `lint`) and stops the group at its first
-failure, freeing its runners for the next.
+job, `ready`: it first runs the hosted policy, runner, and verification-evidence
+contract packages, then compiles the host and runs `lint:full`, size budgets, Den
+typecheck, and Den lint. These checks are covered by `./task check-fast`, which
+also runs product tests and changed coverage. The admission contracts run through
+`test:contract` with explicit packages, without a test-name filter. Failure or
+interruption stops the lane before its remaining work. Catalog validation accepts
+existing contract packages and rejects selectors, traversal, and duplicate packages.
+
+The execution budget is two hours, allowing the integration lint lane's existing
+ninety-minute allowance plus the contracts and remaining checks. This is a
+conservative ceiling, not a measured duration; broad-change hosted timings are
+required before tightening it or claiming an admission latency improvement.
+
+The merge queue runs changed coverage and the complete affected integration
+selection. Its `limits` and `lint` lanes start first, and the group stops at its
+first failure. The PR's pass does not replace verification of the landing commit.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty
@@ -714,11 +722,41 @@ policy expand to the full `check` profile. A missing Git base fails planning;
 an unresolved Go graph runs the full Go recipe. An empty shard never passes as
 an empty test run. Selection and source identities travel with each lane receipt.
 
+Native Rust source has explicit verification dependencies in
+[`native_impact.py`](../scripts/ci_policy/native_impact.py). Tauri source runs native,
+frontend, and WebKitGTK accessibility checks beside the repository baseline.
+Document-core source seeds its Go subtree's reverse import closure, including test
+callers, and runs the frontend consumers against the native executable. It does
+not select the unrelated Tauri and decision-engine tests. Decision-engine source
+runs its Rust tests; the Go baseline does not establish integration with a newly
+built decision-engine binary. A missing document-core dependency in the resolved
+Go graph falls back to the full Go recipe. Cargo manifests and lockfiles, build
+scripts, fixtures, assets, and unrecognized native paths still widen to full
+verification. Mixed changes union their lane and package obligations.
+
+Hosted lane ordering uses one comparable set of estimates. A selected matrix
+uses measured durations only when every row has a valid measurement; otherwise
+all rows use their catalog budgets. A new or resharded lane therefore switches
+the whole selected matrix to budgets until qualification measures its rows.
+Partial receipts from a cancelled run cannot
+mix short measured times with large timeout fallbacks. Shards share their lane's
+longest estimate because package balancing changes which packages each shard runs.
+Fail-fast lanes retain their declared priority, and runner caps are unchanged.
+The catalog declares `integration-build` with `timing_source: build`: qualification
+measures build plus cross compilation, a conservative estimate for the smaller
+integration build. Timing sources must run in qualification, cover the receiving
+lane's stages, and use the same execution configuration.
+
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
-newest qualification that recorded them and hands every shard of the run the
-same package durations, so the shards partition the selection identically:
+newest valid measurement for each row and package from check and release platform
+receipts in at most 20 completed qualifications, filling gaps from older runs.
+History stops once the rows qualification actually runs have measurements. The
+job summary records the estimate basis, missing timing rows, source runs, and
+matrix order, including declared timing sources.
+Every shard receives the same package durations, so the shards partition the
+selection identically:
 packages go longest first to the least loaded shard, so the longest package
 starts first and the shards finish together. A selection smaller than the split
 repeats packages rather than leave a shard empty. Without measurements, such as
@@ -768,6 +806,15 @@ pending one, so a busy main qualifies its newest commit rather than every
 commit. Nightly retains race, fuzz, WebKit, stress, and performance
 coverage. A release requires a successful **Qualification** run for its exact
 commit on main; passing merge admission is insufficient.
+
+Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
+analysis-tool caches immediately after compiler preparation. Optional lint
+diagnostics run afterward and publish their own result separately. A failed or
+cancelled preparation cannot publish these caches; only trusted main writes them.
+The Go cache captures completed build preparation before lint adds test-variant
+compilation and vet facts; lint lanes may need to compute those entries themselves.
+Lint diagnostics remain a separate cache. A long diagnostic run cannot delay the
+prepared build inputs.
 
 #### Determinism and capacity
 
@@ -901,10 +948,9 @@ gate's cap. The `capacity` table in
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
-cheap ones that fail most often, then the rest longest first by the durations
-main's qualification measured, so a capped matrix neither finishes on its
-slowest lane nor runs long before a cheap failure. A lane qualification does
-not run is planned at its budget, so it starts early.
+cheap ones that fail most often, then the rest longest first. Complete measured
+coverage uses each lane's longest shard duration; incomplete coverage uses catalog
+budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
@@ -914,7 +960,7 @@ not run is planned at its budget, so it starts early.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
 A newer run replaces a pending one in its group and a started run finishes, so
 a long nightly or qualification never multiplies. The maintenance workflows
@@ -927,29 +973,28 @@ fifteen minutes.
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
-footprint is small and each pull request's is a single job of about ten
-minutes. Nothing reorders or preempts runs.
+footprint is small and each pull request's is a single bounded job. Nothing reorders or preempts runs.
 
 At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
-merge queue 8, leaving three that long work never claims; a pull request's CI
-run holds one. Under a burst of ten pull request pushes at once, their ten jobs
-queue ahead of a merge-queue job. With every bounded class at its widest, the
-three spare runners serve them four rounds of about ten minutes, so the
-merge-queue job starts after at most about 40 minutes. That worst case needs
-qualification, nightly, a release, warming, maintenance, and both groups all at
-their widest together. With the queue's two groups, qualification, and nightly
-running (13 runners), the ten jobs take seven runners at once and the
-merge-queue job starts with the last three, after about ten minutes. On macOS,
-qualification, warming, and nightly hold one runner each and a release two,
-five in all; the merge queue and the fast tier run on Linux. With `limits`,
-`lint`, and both behavior shards in its first wave, a full-scope group capped
-at four finishes in about 32 minutes of measured lane times, against about 26
-uncapped and about 44 at a cap of three; a group whose budgets or changed
-coverage fail stops after about six. A third group of four would not fit
-beside the other classes.
+merge queue 8, leaving three runners outside those classes. Ready PR jobs share
+that remaining capacity and may wait during bursts. Full lint before admission
+uses more PR time but prevents deterministic analyzer failures from occupying
+speculative integration groups. Caps do not establish queue latency guarantees.
+On macOS, qualification, warming, and nightly hold one runner each and a release
+two, five in all; the merge queue and the admission tier run on Linux.
+
+The earlier measured lane schedule placed `limits`, `lint`, and both behavior
+shards in the first wave: about 32 minutes at a cap of four, compared with about
+26 uncapped and 44 at a cap of three. An early limits failure stopped the group
+in about six minutes. Those measurements justify the cap; later source changes,
+setup costs, and runner contention can change the observed wall time.
+
+Increase integration parallelism only with a revised capacity model that still
+fits every bounded class and a ready PR. Reduce repeated compilation, preparation,
+and unnecessary broad selection before adding runners to each group.
 
 Contract tests in
-[`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
+[`hosted_capacity_contract_test.go`](../lycaon/test/contract/hosted/hosted_capacity_contract_test.go)
 compute each workflow's widest set of jobs that can run at once, following
 `needs`, event conditions, matrix caps, and reusable workflows, and require it
 within the declared footprint. They also require the classes, the merge queue
