@@ -183,8 +183,11 @@ evidence together so one architectural review can address related measurements.
 reconciles cleanup issues after a completed Qualification push on main. It checks
 that the commit is the current main tip and is associated with a PR merged into
 this repository's main branch. PR, merge-group, foreign-repository, direct-push,
-and qualification-dispatch observations cannot create issues. A qualification
-failure in another lane does not hide maintainability debt already merged.
+and qualification-dispatch observations cannot create issues. Only successful
+and failed qualifications are considered: canceled and other conclusions may
+not retain the limits receipt needed to validate the complete inventory. A
+qualification failure in another lane does not hide maintainability debt already
+merged.
 
 The maintainability report contains a complete inventory of every artifact above
 `warn`, including untouched artifacts and artifacts admitted by an exception.
