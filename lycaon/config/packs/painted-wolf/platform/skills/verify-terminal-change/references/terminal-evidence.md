@@ -7,9 +7,9 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 | Need | Runner | Evidence |
 |---|---|---|
 | Exit status, bounded stdout/stderr, non-interactive tests | `command` / `verify` | Command result; not a terminal-screen claim |
-| One-shot terminal picture, including direct-network CLI output | `command` with `terminal_capture` | `surface_snapshot{tui}` plus optional visual `artifact_id` |
-| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI | `terminal_open` plus handle tools | `surface_snapshot{tui}` from the virtual screen |
-| Picture of a held terminal state | `terminal_snapshot` | `surface_snapshot{tui}` plus optional visual `artifact_id` |
+| One-shot terminal picture, including direct-network CLI output | `command` with `terminal_capture` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
+| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI | `terminal_open` plus handle tools | `tui#` terminal screen evidence from the virtual screen |
+| Picture of a held terminal state | `terminal_snapshot` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
 
 `terminal_capture` runs the exact one-shot process inside a sealed PTY; it is not a pipe or a replay. Piping or redirecting a TUI through ordinary `command` removes the controlling terminal and cannot establish what its screen rendered. Do not use expect-style shell scripts as a substitute for the PTY tools.
 
@@ -17,7 +17,7 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 
 1. Put the exact program argv, working directory, capability request, `terminal_capture`, size, and caption on one `command` call.
 2. Use it when no input is needed and one settled screen establishes the claim. It is the required route when the action needs direct network authority, which cannot be held across turns.
-3. Inspect the returned terminal state and screen. Cite the `surface_snapshot{tui}` handle and present the visual artifact when useful.
+3. Inspect the returned terminal state and screen. Cite the `tui#` handle and present the visual artifact when useful.
 4. Do not run a weaker second invocation for the screenshot, replay saved output, or print a prior result into another PTY.
 
 ## Drive a held screen

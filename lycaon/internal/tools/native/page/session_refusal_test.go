@@ -126,3 +126,32 @@ func TestPageOpenRefusesProjectRootEscapeBeforeBrowserAccess(t *testing.T) {
 		t.Fatalf("project escape out=%q err=%v", out, err)
 	}
 }
+
+func TestPageToolsRefuseMissingStaticEntryBeforeBrowserAccess(t *testing.T) {
+	pages := pagesession.NewRegistry(pagesession.Config{MaxPages: 1})
+	t.Cleanup(func() { pages.Close(t.Context()) })
+	root := t.TempDir()
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "session"},
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}},
+	}
+	for _, item := range []struct {
+		name      string
+		handle    tools.ToolHandler
+		args      map[string]any
+		wantEntry string
+	}{
+		{"page_open missing root index", OpenHandler(nil, pages, nil, nil), map[string]any{"project_dir": "."}, "index.html"},
+		{"page_open missing explicit path", OpenHandler(nil, pages, nil, nil), map[string]any{"project_dir": ".", "path": "board.html"}, "board.html"},
+		{"capture_page missing root index", CaptureHandler(nil, nil, nil), map[string]any{"project_dir": "."}, "index.html"},
+		{"measure_page missing root index", MeasureHandler(nil, pages, nil), map[string]any{"project_dir": ".", "selectors": []string{"body"}}, "index.html"},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			out, err := item.handle(t.Context(), item.args, tc)
+			var reject *toolrejection.ToolReject
+			if out != "" || !errors.As(err, &reject) || reject.Code != "CAPTURE_STATIC_ENTRY_MISSING" || reject.Data["entry"] != item.wantEntry {
+				t.Fatalf("out=%q err=%v want CAPTURE_STATIC_ENTRY_MISSING entry=%q", out, err, item.wantEntry)
+			}
+		})
+	}
+}
