@@ -103,20 +103,36 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
 	}
-	// Linux candidates build both package families natively without publication authority.
-	candidates := extractYAMLJob(workflow, "linux-candidates")
-	for _, needle := range []string{
-		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "./task den:bundle",
-		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
-		"retention-days: 90", "Verify the catalog row for this candidate",
-	} {
-		if !strings.Contains(candidates, needle) {
-			t.Fatalf("linux-candidates job is missing %q", needle)
+	// Release and independent candidate runs share one non-publishing build path.
+	call := extractYAMLJob(workflow, "linux-candidates")
+	for _, needle := range []string{"uses: ./.github/workflows/linux-candidates.yml", "source_sha: ${{ needs.classify.outputs.source_sha }}"} {
+		if !strings.Contains(call, needle) {
+			t.Fatalf("release candidate caller is missing %q", needle)
 		}
 	}
-	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-"} {
+	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
+	for _, needle := range []string{
+		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
+		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
+		"name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90", "Verify the catalog row for this candidate",
+		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
+		"./task release:candidate:diagnostics --",
+		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
+		"TMPDIR: /tmp",
+	} {
+		if !strings.Contains(candidates, needle) {
+			t.Fatalf("Linux candidate workflow is missing %q", needle)
+		}
+	}
+	// Candidate runs carry no branch-scoped triggers, use one source checkout,
+	// and prepare the user namespace locally without a probe lease.
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
+		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
+		"PW_PACKAGE_PROBE_LEASE"} {
 		if strings.Contains(candidates, forbidden) {
-			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
+			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}
 	}
 	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
@@ -574,13 +590,30 @@ func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 	}
 	if !strings.Contains(pointer, `feed_signing.py" --file "${SIGNED_COPY}"`) ||
 		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --pointer "${SIGNED_COPY}" --file "${FEED_NAME}"`) ||
-		strings.Index(pointer, "publish_signature()") > strings.Index(pointer, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`) {
+		!pointerPublishesFollowSignature(pointer) {
 		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")
 	}
 	stage := contractcheck.ReadRepoFile(t, root, "scripts/release-stage-platform-artifacts.sh")
 	if !strings.Contains(stage, `verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"`) {
 		t.Fatal("artifact staging must verify the signature's bound version")
 	}
+}
+
+// pointerPublishesFollowSignature reports whether every pointer write is
+// immediately preceded by publishing its signature, on either transport.
+func pointerPublishesFollowSignature(script string) bool {
+	lines := strings.Split(script, "\n")
+	writes := 0
+	for i, line := range lines {
+		if strings.TrimSpace(line) != `publish_object "${OBJECT_KEY}" "${FILE}" application/json` {
+			continue
+		}
+		writes++
+		if i == 0 || strings.TrimSpace(lines[i-1]) != "publish_signature" {
+			return false
+		}
+	}
+	return writes > 0 && !strings.Contains(script, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`)
 }
 
 // testUpdaterSignature encodes an unverifiable minisign document whose trusted

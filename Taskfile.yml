@@ -7,6 +7,8 @@ vars:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py bin {{.ROOT_DIR}}
   BUILD_DIR:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py build {{.ROOT_DIR}}
+  COMPILER_CACHE_DIR:
+    sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py compiler-cache {{.ROOT_DIR}}
   ARTIFACT_DIR:
     sh: python3 {{.SCRIPTS_DIR}}/artifact_paths.py artifacts {{.ROOT_DIR}}
 
@@ -129,6 +131,7 @@ tasks:
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
+      - scripts/toolchain/rust-path-remap.sh
     generates:
       - '{{.BUILD_DIR}}/bialy'
     preconditions:
@@ -365,10 +368,15 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
       # The scope contract derives this applied-confinement inventory.
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce)$'
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./cmd/opengrep-artifact/... ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$'
       - |
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+
+  test:linux:installed:
+    desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
+    cmds:
+      - python3 -m scripts.linux_release.installed_results {{.CLI_ARGS}}
 
   test:confine:linux:
     desc: 'Applied Linux confinement on this architecture: confine live suites, command supervisor, confined pinned browser (--full, linux; optional legs, e.g. -- browser)'
@@ -651,8 +659,8 @@ tasks:
       - Cargo.toml
       - Cargo.lock
     env:
-      CARGO_TARGET_DIR: '{{.BUILD_DIR}}/decide-target'
-      MLX_RS_METAL_PATH: '{{.BUILD_DIR}}/mlx-metal'
+      CARGO_TARGET_DIR: '{{.COMPILER_CACHE_DIR}}/decide'
+      MLX_RS_METAL_PATH: '{{.BIN_DIR}}/mlx-metal'
     preconditions:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
@@ -1099,10 +1107,15 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - internal/toolcontract/language_catalog.go
+      - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
@@ -1112,9 +1125,14 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
+      - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
+      - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - internal/toolcontract/language_catalog.go
+      - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
       - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
+      - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
 
@@ -1803,13 +1821,29 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
+  release:candidate:select:
+    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    silent: true
+    cmds:
+      - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
+
+  release:candidate:diagnostics:
+    desc: 'Retain partial native Linux package bytes after a failed candidate build, without candidate authority'
+    cmds:
+      - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
+
   release:live-test:
     desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
     preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby
-        msg: bun, curl, jq, python3, and ruby required for release:live-test
+      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby && command -v aws
+        msg: bun, curl, jq, python3, ruby, and AWS CLI v2 required for release:live-test
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+
+  release:rehearse:linux-signing:
+    desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
+    cmds:
+      - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
@@ -1879,7 +1913,7 @@ tasks:
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags integration --name test:scanners -- \
           ./internal/scan/... ./test/security/... \
-          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepUsesAbsoluteRuleConfigsFromProjectWorkingDirectory|TestOpenGrepEmbeddedSourceRecovery)$'
+          -run '^(TestAPIScanMaintainedSASTE2E|TestAPIScanBundledScannerFindingsE2E|TestAPIScanPackBundledFindingsE2E|TestAPIScanPackMatchesPerCategoryAPIRuns|TestAPIScanPackNativeQueryE2E|TestAPIScanServePathSASTE2E|TestAPIScanRetainsTargetFailureAlongsideUsableFindings|TestIngesterBundledSASTProducesGuidance|TestOpenGrepBundledAdapterFixture|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestInstalledScannerProductCases)$'
 
   check-fast:
     desc: Handoff gate on one stable source snapshot

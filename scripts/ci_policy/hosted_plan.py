@@ -3,6 +3,7 @@ from collections import Counter
 from pathlib import Path
 import re
 
+from ci_policy.hosted_schedule import order, validate_sources
 from ci_policy.timings import row_key
 from verification_plan import catalog, expand
 
@@ -11,7 +12,7 @@ PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
-SETUPS = {"verification", "shell", "harness"}
+SETUPS = {"verification", "shell", "harness", "frontend"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
@@ -32,7 +33,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "arguments"}:
+                        "platform", "arguments", "preflight", "timing_source"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -47,6 +48,8 @@ def lanes():
             raise ValueError(f"invalid CI profiles: {name}")
         if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
+        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test"}):
+            raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
@@ -58,17 +61,28 @@ def lanes():
                                    or lane.get("runner", "ubuntu-latest") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
+    validate_sources(values)
     expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
                          f"missing={expected - actual}, extra={actual - expected}")
+    for name, lane in values.items():
+        if "fast" in lane["profiles"] or "preflight" in lane:
+            command = lane.get("preflight", [])
+            if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
+                    or not isinstance(command, list) or len(command) < 3
+                    or command[:2] != ["test:contract", "--"]
+                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or len(set(command[2:])) != len(command[2:])):
+                raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
     extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
     if not fast or extra or max(fast.values()) > 1:
-        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
+        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and "platform" not in lane
                      for stage in expand(lane["targets"]))
@@ -117,7 +131,9 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
             continue
         count = lane.get("shards", 1)
         for index in range(1, count + 1):
-            result.append({"lane": name, "shard": f"{index}/{count}" if count > 1 else "",
+            result.append({"lane": name,
+                           "timing_row": row_key(lane.get("timing_source", name), f"{index}/{count}" if count > 1 else ""),
+                           "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
                            "setup": lane["setup"],
                            "notices": "licenses:notices" in lane["targets"],
@@ -130,15 +146,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    # A capped matrix starts jobs in order: the cheap lanes that fail most often come first, so a
-    # failing group stops early, then the longest lanes, so they don't finish last. A lane main's
-    # qualification has not measured is planned at its budget, so it starts early.
-    measured = (timings or {}).get("lanes", {})
-
-    def expected(row):
-        return measured.get(row_key(row["lane"], row["shard"]), row["minutes"] * 60)
-
-    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -expected(row)))}
+    return {"include": order(result, values, timings)}
 
 
 def invocation(targets):
