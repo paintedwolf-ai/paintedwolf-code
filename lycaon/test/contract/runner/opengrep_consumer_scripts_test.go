@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestOpenGrepConsumerModesUseExplicitArtifactOwner(t *testing.T) {
@@ -23,9 +25,7 @@ func TestOpenGrepConsumerModesUseExplicitArtifactOwner(t *testing.T) {
 				args = append(args, "-root", root, "-consumer-recipe", "/recipe with spaces.json")
 			}
 			_, err := f.run(t, "resolve-opengrep.sh", args)
-			if err != nil {
-				t.Fatal(err)
-			}
+			contractcheck.FailErr(t, "f.run failed", err)
 			calls := f.calls(t)
 			want := "run|./cmd/opengrep-artifact|-mode|" + selected + "|-artifact-directory|/original producer|-evidence-root|/source config|-audit-output|/audit.json" + suffix
 			if strings.Count(calls, "go|") != 1 || !strings.Contains(calls, want) || strings.Contains(calls, "|-mode|fetch|") {

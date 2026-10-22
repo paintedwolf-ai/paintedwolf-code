@@ -93,7 +93,7 @@ func (relocator consumerELFRelocator) relocate(name string, raw []byte) ([]byte,
 		arguments = append(arguments, "--set-interpreter", relocator.loader)
 	}
 	arguments = append(arguments, fileName)
-	// #nosec G204 -- build-only tool pinned by the closed consumer recipe; arguments are constructed here.
+	// #nosec G204 -- build-only tool pinned by the closed consumer recipe.
 	command := exec.CommandContext(relocator.ctx, relocator.recipe.ToolPath, arguments...)
 	var output relocationToolOutput
 	command.Stdout, command.Stderr = io.Discard, &output
