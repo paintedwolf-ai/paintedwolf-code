@@ -69,7 +69,7 @@ func (e *Metadata) List(ctx context.Context, filter platform.ToolFilter) ([]tool
 			continue
 		}
 		if decision != nil && decision.Allowed {
-			enriched := e.enrichToolMeta(meta, filter)
+			enriched := e.enrichToolMeta(ctx, meta, filter)
 			enriched.Deferred = decision.Deferred
 			out = append(out, enriched)
 		}
@@ -77,7 +77,7 @@ func (e *Metadata) List(ctx context.Context, filter platform.ToolFilter) ([]tool
 	return out, nil
 }
 
-func (e *Metadata) enrichToolMeta(meta tools.ToolMeta, filter platform.ToolFilter) tools.ToolMeta {
+func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filter platform.ToolFilter) tools.ToolMeta {
 	profileID := filter.ProfileID
 	if profileID == "" {
 		return meta
@@ -92,11 +92,29 @@ func (e *Metadata) enrichToolMeta(meta tools.ToolMeta, filter platform.ToolFilte
 		if utilities, err := toolcontract.NativeUtilitiesLine(); err == nil {
 			meta.Description = strings.TrimSpace(meta.Description) + " " + utilities
 		}
-		if !e.externalHidden {
+		if !e.externalHidden && e.profileAllowsExternalExec(ctx, profileID) {
 			meta.Description = strings.TrimSpace(meta.Description) + " " + toolcommand.ExternalSelectorLine
 		}
 	}
 	return meta
+}
+
+func (e *Metadata) profileAllowsExternalExec(ctx context.Context, profileID string) bool {
+	if e == nil || e.policy == nil {
+		return true
+	}
+	source, ok := e.policy.(interface {
+		CommandEffects(context.Context, string) (toolcontract.CommandEffects, error)
+	})
+	if !ok {
+		return true
+	}
+	effects, err := source.CommandEffects(ctx, profileID)
+	if err != nil || effects == 0 {
+		return true
+	}
+	externalExec, err := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	return err == nil && effects.Allows(externalExec)
 }
 
 func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {
@@ -124,6 +142,11 @@ func (e *Metadata) SetCommandExternalHidden(hidden bool) {
 	if e != nil {
 		e.externalHidden = hidden
 	}
+}
+
+// CommandExternalHidden reports whether the explicit external selector is hidden.
+func (e *Metadata) CommandExternalHidden() bool {
+	return e != nil && e.externalHidden
 }
 
 func (e *Metadata) SetPolicy(policy platform.PolicyEngine) {

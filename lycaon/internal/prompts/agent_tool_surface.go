@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -59,7 +60,13 @@ type AgentPromptSurface struct {
 	Skills               []AgentSkillView
 	HostResources        []AgentHostResourceView
 	HostResourcesOmitted int // rows the ambient budget dropped
-	Fingerprint          string
+	// SessionScratchDir is the session's resolved scratch directory when available.
+	SessionScratchDir string
+	// Posture is the session's effective approval posture for workspace_roots vars.
+	Posture gate.Posture
+	// CommandExternalHidden reports whether the explicit external selector is hidden.
+	CommandExternalHidden bool
+	Fingerprint           string
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -77,7 +84,8 @@ type AgentToolSurfaceData struct {
 	RejectCodes []AgentRejectCodeView
 	WriteGlobs  []string
 	// CommandEffects bounds what command may do on this profile.
-	CommandEffects toolcontract.CommandEffects
+	CommandEffects  toolcontract.CommandEffects
+	CommandDeferred bool
 }
 
 // AgentPromptSurfaceTemplateVars maps the prompt surface to template vars.
@@ -93,6 +101,10 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_skills":                 skills,
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
+		"session_scratch_dir":          strings.TrimSpace(surface.SessionScratchDir),
+		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
+		"command_external_hidden":      surface.CommandExternalHidden,
+		"command_external_shown":       !surface.CommandExternalHidden,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 	}
 }
@@ -179,7 +191,8 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		RejectCodes: recoverableRejectCodes(hintCodes, toolNames),
 		WriteGlobs:  append([]string(nil), profile.WriteGlobs...),
 		// Read-only profiles offer command for inspection only.
-		CommandEffects: profile.CommandEffects,
+		CommandEffects:  profile.CommandEffects,
+		CommandDeferred: profile.ToolDeferred("command"),
 	}, nil
 }
 
@@ -317,10 +330,43 @@ func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hint
 		data.Skills = skills
 	}
 	for k, v := range AgentToolSurfaceTemplateVars(data) {
+		if isPreservedEnvironmentFact(k, into) {
+			continue
+		}
 		into[k] = v
 	}
+	syncCommandExternalFacts(into)
 	mergeVisualShowVarsFromSurface(data, into)
 	return nil
+}
+
+func isPreservedEnvironmentFact(key string, into map[string]any) bool {
+	switch key {
+	case "reviews_confined_writes", "command_external_hidden", "command_external_shown":
+		_, ok := into[key].(bool)
+		return ok
+	case "platform_os", "session_scratch_dir":
+		s, ok := into[key].(string)
+		return ok && strings.TrimSpace(s) != ""
+	default:
+		return false
+	}
+}
+
+func syncCommandExternalFacts(into map[string]any) {
+	if into == nil {
+		return
+	}
+	if hidden, ok := into["command_external_hidden"].(bool); ok {
+		into["command_external_shown"] = !hidden
+		return
+	}
+	if shown, ok := into["command_external_shown"].(bool); ok {
+		into["command_external_hidden"] = !shown
+		return
+	}
+	into["command_external_hidden"] = false
+	into["command_external_shown"] = true
 }
 
 func agentSkillViewsFromVars(into map[string]any) []AgentSkillView {

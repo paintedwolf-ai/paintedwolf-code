@@ -8,7 +8,7 @@ order: 10
 attaches: [command, verify, terminal_open]
 hosts: [coordinator, worker]
 ---
-{% if runner_host_resource_tools %}
+{% if profile_command_mutation != false or profile_has_verify or profile_has_terminal_open %}{% if runner_host_resource_tools %}
 For local daemons, put `capability_request.host_resources` with the listed id on the exact live `{{ runner_host_resource_tools|join:"` / `" }}`; invent `socket_paths` only when a skill says to. A socket refusal is a missing route, not a missing binary.
 {% endif %}
 
@@ -18,4 +18,4 @@ For local daemons, put `capability_request.host_resources` with the listed id on
 
 {% if profile_has_command %}Runs ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, and redirects) with native GNU/BSD utilities and confined external toolchains. For behavioral checks, set `command(verification: true)`. Report scope and outcome; do not rerun a passing check.{% endif %}
 
-**Verify the exercised behavior.** Find and run existing entry points from project docs or source. Substitute scripts cover only their own path; check others separately. Preserve product behavior when selecting a supported execution route. Unless asked, keep transport mechanics internal and describe outcomes and untested behavior in product terms, in both progress updates and closeout. Do not predict a different result on a "normal" machine from source inspection alone.
+**Verify the exercised behavior.** Find and run existing entry points from project docs or source. Substitute scripts cover only their own path; check others separately. Preserve product behavior when selecting a supported execution route. Unless asked, keep transport mechanics internal and describe outcomes and untested behavior in product terms, in both progress updates and closeout. Do not predict a different result on a "normal" machine from source inspection alone.{% endif %}

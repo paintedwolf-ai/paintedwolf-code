@@ -2,15 +2,24 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -116,7 +125,6 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 		"COMMAND_NOT_ARGV",
 		"here-documents (`<<`) reject",
 		"`$()`/backticks reject",
-		"external --",
 		`list_dir({"path":"."})`,
 		"call `read`/`list_dir`/`grep` with them",
 		"Use bounded `read`/`grep` for more detail",
@@ -170,6 +178,338 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 		help, ok := langCatalog.CommandHelp(cmd)
 		if !ok || !strings.HasPrefix(help, cmd+"\n") || !strings.Contains(help, "\n-") {
 			t.Errorf("CommandHelp(%q) = (%q, %v), want catalog help with options", cmd, help, ok)
+		}
+	}
+}
+
+func TestCommandGuidanceRenderMatrix(t *testing.T) {
+	t.Parallel()
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load tool profiles", err)
+
+	forbiddenJargon := []string{
+		"posture", "gate", "lease", "grant", "floor", "owner", "oar",
+		"approval card", "the host raises", "the host asks", "missing grant", "task lease",
+	}
+	stalePhrases := []string{
+		"Runs as an argv sequence without a shell",
+		"COMMAND_NOT_ARGV",
+		"here-documents (`<<`) reject",
+		"`$()`/backticks reject",
+	}
+
+	multiRoots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+		{ID: "r2", Label: "web", Path: "/workspace/web", IsPrimary: false},
+	}
+
+	type matrixCase struct {
+		name           string
+		isCoordinator  bool
+		scopeID        string
+		commandOnFloor bool
+		readOnly       bool
+		externalHidden bool
+		posture        gate.Posture
+		roots          []projectroot.RootRef
+		platformOS     string
+	}
+
+	var cases []matrixCase
+	for _, role := range []struct {
+		isCoordinator bool
+		readOnly      bool
+		scopeID       string
+	}{
+		{isCoordinator: true, readOnly: false, scopeID: "implement_investigate"},
+		{isCoordinator: true, readOnly: true, scopeID: "observe_investigate"},
+		{isCoordinator: false, readOnly: false, scopeID: "implement"},
+		{isCoordinator: false, readOnly: true, scopeID: "explore_readonly"},
+	} {
+		for _, externalHidden := range []bool{false, true} {
+			for _, posture := range []gate.Posture{gate.PostureStrict, gate.PostureLight} {
+				for _, hasRoots := range []bool{false, true} {
+					for _, osName := range []string{"darwin", "linux"} {
+						var roots []projectroot.RootRef
+						if hasRoots {
+							roots = multiRoots
+						}
+						cases = append(cases, matrixCase{
+							name:           strings.Join([]string{role.scopeID, map[bool]string{false: "ext_shown", true: "ext_hidden"}[externalHidden], string(posture), map[bool]string{false: "no_folders", true: "multi_folders"}[hasRoots], osName}, "/"),
+							isCoordinator:  role.isCoordinator,
+							scopeID:        role.scopeID,
+							commandOnFloor: true,
+							readOnly:       role.readOnly,
+							externalHidden: externalHidden,
+							posture:        posture,
+							roots:          roots,
+							platformOS:     osName,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+				SessionScratchDir:     "/scratch/sess-1",
+				Posture:               tc.posture,
+				CommandExternalHidden: tc.externalHidden,
+			})
+			projectDir := ""
+			if len(tc.roots) > 0 {
+				projectDir = tc.roots[0].Path
+			}
+			prompts.MergeWorkspaceRootsVars(vars, tc.roots, projectDir)
+			if tc.isCoordinator {
+				vars["tool_profile"] = prompts.CoordinatorProfileID
+				contractcheck.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars(tc.scopeID, profiles, vars, prompts.SurfaceTurn{}))
+			} else {
+				contractcheck.FailErr(t, "merge agent surface", prompts.MergeAgentToolSurfaceVars(tc.scopeID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+			}
+			vars["platform_os"] = tc.platformOS
+			vars["command_on_floor"] = tc.commandOnFloor
+
+			cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+			contractcheck.FailErr(t, "render command-surface", err)
+			capGrammar, err := engine.Render(context.Background(), "partials/capability-request-grammar.md", vars)
+			contractcheck.FailErr(t, "render capability-request-grammar", err)
+			sandboxConfinement, err := engine.Render(context.Background(), "partials/sandbox-confinement.md", vars)
+			contractcheck.FailErr(t, "render sandbox-confinement", err)
+			runnerUnit, err := engine.Render(context.Background(), "units/runner-operating-procedure.md", vars)
+			contractcheck.FailErr(t, "render runner-operating-procedure", err)
+			hostRunnerUnit, err := engine.Render(context.Background(), "units/coordinator-host-runner.md", vars)
+			contractcheck.FailErr(t, "render coordinator-host-runner", err)
+
+			combined := strings.Join([]string{cmdSurface, capGrammar, sandboxConfinement, runnerUnit, hostRunnerUnit}, "\n")
+			lower := strings.ToLower(combined)
+			for _, jargon := range forbiddenJargon {
+				if strings.Contains(lower, jargon) {
+					t.Errorf("leaked forbidden internal jargon %q in:\n%s", jargon, combined)
+				}
+			}
+			for _, stale := range stalePhrases {
+				if strings.Contains(combined, stale) {
+					t.Errorf("leaked stale guidance %q in:\n%s", stale, combined)
+				}
+			}
+
+			// Coordinator vs worker header
+			if strings.Contains(cmdSurface, "— coordinator") != tc.isCoordinator {
+				t.Errorf("coordinator header present=%v, want %v", strings.Contains(cmdSurface, "— coordinator"), tc.isCoordinator)
+			}
+			// Native utilities wired from toolcontract.NativeUtilities()
+			for _, util := range []string{"cat", "edit", "grep", "find", "ls", "jq", "git"} {
+				if !strings.Contains(cmdSurface, util) {
+					t.Errorf("command-surface missing native utility %q", util)
+				}
+			}
+			// Read-only vs mutation
+			if tc.readOnly {
+				if !strings.Contains(cmdSurface, "read-only surface") || !strings.Contains(cmdSurface, "external program launches are refused") {
+					t.Errorf("read-only surface missing read-only refusal statement:\n%s", cmdSurface)
+				}
+				if strings.Contains(cmdSurface, "external -- NAME") {
+					t.Errorf("read-only surface must not advertise external -- NAME:\n%s", cmdSurface)
+				}
+				if strings.TrimSpace(runnerUnit) != "" {
+					t.Errorf("read-only surface must not render runner-operating-procedure, got:\n%s", runnerUnit)
+				}
+				if strings.TrimSpace(hostRunnerUnit) != "" {
+					t.Errorf("read-only surface must not render coordinator-host-runner, got:\n%s", hostRunnerUnit)
+				}
+			} else {
+				// External selector iff !externalHidden on mutation surface
+				wantExternal := !tc.externalHidden
+				if strings.Contains(cmdSurface, "external -- NAME") != wantExternal {
+					t.Errorf("external -- NAME present=%v, want %v:\n%s", strings.Contains(cmdSurface, "external -- NAME"), wantExternal, cmdSurface)
+				}
+				// Platform OS sandbox
+				wantDarwin := tc.platformOS == "darwin"
+				wantLinux := tc.platformOS == "linux"
+				if strings.Contains(cmdSurface, "macOS Seatbelt") != wantDarwin {
+					t.Errorf("macOS Seatbelt present=%v, want %v", strings.Contains(cmdSurface, "macOS Seatbelt"), wantDarwin)
+				}
+				if strings.Contains(cmdSurface, "Linux Landlock+seccomp") != wantLinux {
+					t.Errorf("Linux Landlock+seccomp present=%v, want %v", strings.Contains(cmdSurface, "Linux Landlock+seccomp"), wantLinux)
+				}
+			}
+			// Folders and posture
+			if len(tc.roots) > 0 {
+				if !strings.Contains(cmdSurface, "These folders are the project") || !strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`") {
+					t.Errorf("multi-folder surface missing folder coverage/navigation:\n%s", cmdSurface)
+				}
+				if !tc.readOnly {
+					wantStrict := tc.posture.ReviewsConfinedWrites()
+					if strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first.") != wantStrict {
+						t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
+					}
+					if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
+						t.Errorf("light outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
+					}
+				}
+			} else {
+				if strings.Contains(cmdSurface, "These folders are the project") {
+					t.Errorf("no-folder surface must not render attached-folder coverage:\n%s", cmdSurface)
+				}
+			}
+		})
+	}
+}
+
+func TestCommandGuidanceDebugCaptureInLLMRequestsJSONL(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "llm-requests.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	observability.CloseLLMDebug()
+	t.Cleanup(observability.CloseLLMDebug)
+
+	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
+		ProfileID:             prompts.CoordinatorProfileID,
+		SurfaceID:             "implement_investigate",
+		IsCoordinator:         true,
+		OfferedTools:          []string{"command", "command_output", "command_stop", "wait", "process_list", "process_signal", "request_tools"},
+		DeferredTools:         []string{"read", "edit", "grep", "find", "list_dir", "jq"},
+		RootCount:             2,
+		ProjectDir:            "/workspace/app",
+		SessionScratchDir:     "/scratch/sess-debug",
+		Posture:               gate.PostureStrict,
+		CommandExternalHidden: false,
+	})
+	observability.LogLLMRequest(
+		"mock", "mock-model", "stream",
+		[]api.Message{{Role: api.MessageRoleUser, Content: "inspect repo"}},
+		nil,
+		observability.LLMRequestTiming{DurationMs: 10, TTFTMs: 4},
+		observability.LLMUsageCapture{PromptTokens: 100, CompletionTokens: 10},
+		observability.LLMRequestDebug{
+			SessionID: "sess-debug",
+			ProfileID: prompts.CoordinatorProfileID,
+			Surface:   "implement_investigate",
+			Iteration: 1,
+			CommandGuidance: &observability.LLMCommandGuidanceCapture{
+				Templates: templates,
+				Facts:     facts,
+			},
+		},
+		nil, "",
+	)
+
+	raw, err := os.ReadFile(logPath)
+	contractcheck.FailErr(t, "read llm-requests.jsonl", err)
+	var row struct {
+		CommandGuidance *observability.LLMCommandGuidanceCapture `json:"command_guidance"`
+	}
+	contractcheck.FailErr(t, "unmarshal capture row", json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &row))
+	if row.CommandGuidance == nil {
+		t.Fatal("capture row missing command_guidance")
+	}
+	for _, wantTmpl := range []string{
+		"tools/schemas/command.yaml",
+		"partials/command-surface.md",
+		"units/coordinator-host-runner.md",
+		"units/secure-by-default-run.md",
+		"units/runner-operating-procedure.md",
+		"partials/capability-request-grammar.md",
+	} {
+		if !slices.Contains(row.CommandGuidance.Templates, wantTmpl) {
+			t.Errorf("command_guidance.templates = %v, missing %q", row.CommandGuidance.Templates, wantTmpl)
+		}
+	}
+	for _, key := range prompts.CommandGuidanceFactKeys() {
+		if key == "workspace_roots" {
+			continue
+		}
+		if _, ok := row.CommandGuidance.Facts[key]; !ok {
+			t.Errorf("command_guidance.facts missing key %q", key)
+		}
+	}
+}
+
+func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+	renderer := prompts.NewInjectRenderer(engine)
+	schemaCfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "load schemas", err)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load profiles", err)
+
+	schemaBytesForTools := func(names []string) int {
+		total := 0
+		for _, name := range names {
+			if meta, ok := schemaCfg.ToolMeta(name); ok {
+				raw, _ := json.Marshal(meta)
+				total += len(raw)
+			}
+		}
+		return total
+	}
+
+	measureCoordinatorSurface := func(surfaceID string) int {
+		prompt := renderCoordinatorTripartiteForRunContext(
+			t, root, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
+			"Inspect the project", nil, surfaceID,
+		)
+		floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID)
+		contractcheck.FailErr(t, "load floor "+surfaceID, err)
+		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-size", surfaceID, floor, nil)
+		contractcheck.FailErr(t, "render procedures "+surfaceID, err)
+		return len(prompt) + len(proc) + schemaBytesForTools(floor)
+	}
+
+	measureWorkerProfile := func(agentPromptRef, profileID string) int {
+		vars := map[string]any{}
+		contractcheck.FailErr(t, "merge worker surface "+profileID, prompts.MergeAgentToolSurfaceVars(profileID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+		var offered []string
+		for _, p := range profiles {
+			if p.ID == profileID {
+				for tool, sticky := range p.StickyTools {
+					if sticky && p.ToolAllowed(tool) {
+						offered = append(offered, tool)
+					}
+				}
+			}
+		}
+		sortStrings := append([]string(nil), offered...)
+		slices.Sort(sortStrings)
+		catalog, err := prompts.UnitCatalogForEngine(engine)
+		contractcheck.FailErr(t, "unit catalog", err)
+		sel := prompts.UnitSelectionVars(promptunit.HostWorker, "", sortStrings, sortStrings, nil)
+		blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)
+		contractcheck.FailErr(t, "render worker units", err)
+		prompts.MergeUnitVars(vars, blocks)
+		sysPrompt, err := engine.Render(context.Background(), agentPromptRef, vars)
+		contractcheck.FailErr(t, "render worker prompt "+agentPromptRef, err)
+		proc, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "sess-worker-size", profileID, sortStrings, nil)
+		contractcheck.FailErr(t, "render worker procedures "+profileID, err)
+		return len(sysPrompt) + len(proc) + schemaBytesForTools(sortStrings)
+	}
+
+	// Baseline measurements on main before retiring routine schemas from the floor and compacting command guidance:
+	// - implement_investigate: floor included read, grep, find, list_dir + 6,858B command.yaml + 4 native-*-tool.md units (57,652 chars)
+	// - observe_investigate: floor included read, grep, find, list_dir, jq + 5 native-*-tool.md units (45,158 chars)
+	// - implementer (implement): sticky included read, grep, find, list_dir, jq + 6,858B command.yaml + 5 native-*-tool.md units (100,704 chars)
+	// - path-explorer (explore_readonly): sticky included read, grep, find, list_dir, jq + 5 native-*-tool.md units (52,693 chars)
+	baselines := map[string]struct {
+		before int
+		after  int
+	}{
+		"coordinator/implement_investigate":        {before: 57652, after: measureCoordinatorSurface("implement_investigate")},
+		"coordinator_readonly/observe_investigate": {before: 45158, after: measureCoordinatorSurface("observe_investigate")},
+		"worker/implementer":                       {before: 100704, after: measureWorkerProfile("agents/implementer.md", "implement")},
+		"worker_readonly/path-explorer":            {before: 52693, after: measureWorkerProfile("agents/path-explorer.md", "explore_readonly")},
+	}
+
+	for name, row := range baselines {
+		t.Logf("SIZE_COMPARISON %s: main=%d branch=%d delta=%d", name, row.before, row.after, row.after-row.before)
+		if row.after >= row.before {
+			t.Errorf("%s total rendered size %d is not strictly smaller than main baseline %d", name, row.after, row.before)
 		}
 	}
 }

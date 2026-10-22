@@ -3,6 +3,7 @@ package profiles
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -31,10 +32,14 @@ type Service struct {
 	workspace          *sessionscope.Service
 	projects           Projects
 	Agents             AgentProfileResolver
-	skillsGate         *settings.ProjectSurfaceGate
-	skillsCache        skills.ProjectCache
-	hostResources      *hostresources.Service
-	coordinatorProfile func(context.Context, string) string
+	skillsGate            *settings.ProjectSurfaceGate
+	skillsCache           skills.ProjectCache
+	hostResources         *hostresources.Service
+	approvals             *settings.ApprovalStore
+	postureObserver       func(context.Context, string, gate.Posture)
+	commandExternalHidden func() bool
+	scratchDir            func(context.Context, *api.Session) string
+	coordinatorProfile    func(context.Context, string) string
 }
 
 func New(store SessionReader, catalog *catalog.Service, workspace *sessionscope.Service) *Service {
@@ -42,6 +47,18 @@ func New(store SessionReader, catalog *catalog.Service, workspace *sessionscope.
 }
 func (m *Service) SetProjects(projects Projects)                { m.projects = projects }
 func (m *Service) SetAgentRegistry(agents AgentProfileResolver) { m.Agents = agents }
+func (m *Service) SetApprovals(approvals *settings.ApprovalStore) {
+	m.approvals = approvals
+}
+func (m *Service) SetPostureObserver(observer func(context.Context, string, gate.Posture)) {
+	m.postureObserver = observer
+}
+func (m *Service) SetCommandExternalHidden(fn func() bool) {
+	m.commandExternalHidden = fn
+}
+func (m *Service) SetScratchDir(fn func(context.Context, *api.Session) string) {
+	m.scratchDir = fn
+}
 func (m *Service) SetCoordinatorProfile(resolve func(context.Context, string) string) {
 	m.coordinatorProfile = resolve
 }

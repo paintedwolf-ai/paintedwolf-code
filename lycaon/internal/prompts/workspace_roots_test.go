@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -143,5 +144,103 @@ func TestRootsChangedKickTemplateDetachToZero(t *testing.T) {
 	testutil.FailErr(t, "engine.RenderKick failed", err)
 	if !strings.Contains(out, "no folder attached") {
 		t.Fatalf("kick output = %q", out)
+	}
+}
+
+func TestCommandSurfaceProjectCoverageAndPostureCopy(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
+	const (
+		coverage   = "These folders are the project; search indexing, history and undo cover only them."
+		strictLn   = "Other paths, including temporary folders, ask the person first."
+		nonStrictLn = "Other paths ask the person first, except temporary and cache folders."
+	)
+	for _, tc := range []struct {
+		name     string
+		posture  gate.Posture
+		wantLine string
+		omitLine string
+	}{
+		{
+			name:     "strict asks for temporary folders too",
+			posture:  gate.PostureStrict,
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "balanced exempts temporary and cache folders",
+			posture:  gate.PostureBalanced,
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
+		},
+		{
+			name:     "light exempts temporary and cache folders",
+			posture:  gate.PostureLight,
+			wantLine: nonStrictLn,
+			omitLine: strictLn,
+		},
+		{
+			name:     "unset posture fails closed to strict",
+			posture:  "",
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+		{
+			name:     "unknown posture fails closed to strict",
+			posture:  gate.Posture("unknown"),
+			wantLine: strictLn,
+			omitLine: nonStrictLn,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+				SessionScratchDir: "/scratch/s1",
+				Posture:           tc.posture,
+			})
+			vars["tool_profile"] = "implement"
+			prompts.MergeWorkspaceRootsVars(vars, roots, "/workspace/app")
+			out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+			testutil.FailErr(t, "render command-surface", err)
+			if !strings.Contains(out, coverage) {
+				t.Fatalf("missing project coverage sentence:\n%s", out)
+			}
+			if !strings.Contains(out, tc.wantLine) {
+				t.Fatalf("missing outside-folder sentence %q:\n%s", tc.wantLine, out)
+			}
+			if strings.Contains(out, tc.omitLine) {
+				t.Fatalf("unexpected outside-folder sentence %q:\n%s", tc.omitLine, out)
+			}
+			for _, term := range []string{"posture", "gate", "lease", "grant", "floor", "owner", "oar"} {
+				if strings.Contains(strings.ToLower(out), term) {
+					t.Fatalf("command-surface leaked internal term %q:\n%s", term, out)
+				}
+			}
+		})
+	}
+}
+
+func TestPostureChangedNoticeCopy(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	const strictNotice = "The person now wants to approve writes outside the project, including temporary folders."
+	for _, p := range []gate.Posture{gate.PostureStrict, "", gate.Posture("unknown")} {
+		strictOut, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(p))
+		testutil.FailErr(t, "render strict posture notice", err)
+		if strings.TrimSpace(strictOut) != strictNotice {
+			t.Fatalf("posture %q notice = %q", p, strictOut)
+		}
+	}
+	for _, p := range []gate.Posture{gate.PostureBalanced, gate.PostureLight} {
+		out, err := engine.RenderKick(context.Background(), "coordinator-posture-changed", prompts.PostureChangedKickData(p))
+		testutil.FailErr(t, "render non-strict posture notice", err)
+		if strings.TrimSpace(out) != "The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first." {
+			t.Fatalf("%s notice = %q", p, out)
+		}
+		for _, term := range []string{"posture", "gate", "lease", "grant", "floor", "owner", "oar"} {
+			if strings.Contains(strings.ToLower(out), term) || strings.Contains(strings.ToLower(strictNotice), term) {
+				t.Fatalf("posture notice leaked internal term %q", term)
+			}
+		}
 	}
 }

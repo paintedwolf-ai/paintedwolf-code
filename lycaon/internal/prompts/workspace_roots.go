@@ -1,6 +1,9 @@
 package prompts
 
 import (
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
@@ -9,6 +12,9 @@ import (
 func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activePath string) {
 	if vars == nil {
 		return
+	}
+	if _, ok := vars["reviews_confined_writes"].(bool); !ok {
+		vars["reviews_confined_writes"] = true
 	}
 	vars["root_count"] = len(roots)
 	if activePath != "" {
@@ -84,6 +90,22 @@ func RootsChangedKickData(before, after []projectroot.RootRef, activeRootID stri
 		}
 	}
 	return data
+}
+
+// PostureChangedKickNeeded reports whether an approval-posture change moves the
+// prompt's outside-folder write review rule.
+func PostureChangedKickNeeded(before, after gate.Posture) bool {
+	if strings.TrimSpace(string(before)) == "" || strings.TrimSpace(string(after)) == "" {
+		return false
+	}
+	return before.ReviewsConfinedWrites() != after.ReviewsConfinedWrites()
+}
+
+// PostureChangedKickData builds kick template context for coordinator-posture-changed.md.
+func PostureChangedKickData(after gate.Posture) map[string]any {
+	return map[string]any{
+		"reviews_confined_writes": after.ReviewsConfinedWrites(),
+	}
 }
 
 func rootsKickRows(roots []projectroot.RootRef) []map[string]any {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -266,13 +265,7 @@ func wireEgressPolicy(runtime *AuthorityServices, store *settings.ApprovalStore)
 }
 
 func effectiveEgressApprovalConfig(store *settings.ApprovalStore, cmd confine.EgressCommand) settings.ApprovalConfig {
-	if store == nil {
-		return settings.ApprovalConfig{Posture: gate.DefaultPosture}
-	}
-	if projectDir := filepath.Clean(cmd.ProjectDir); cmd.ProjectDir != "" && projectDir != "." {
-		return store.Get(llm.SettingsScopeProject, settings.ProjectRef{ID: cmd.ProjectID, Dir: projectDir})
-	}
-	return store.Get(llm.SettingsScopeGlobal, settings.ProjectRef{})
+	return store.EffectiveConfig(settings.ProjectRef{ID: cmd.ProjectID, Dir: cmd.ProjectDir})
 }
 
 // ReleaseEgressPolicy detaches this host's process policy callback.

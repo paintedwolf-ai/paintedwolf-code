@@ -318,6 +318,16 @@ anchors:
         folder: { type: string }
         roots: { type: "object[]" }
 
+  - id: project.posture.changed
+    title: Project approval posture changed
+    description: An approval posture change altered whether writes outside the project ask first.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        reviews_confined_writes: { type: bool, required: true }
+
   - id: project.root.detach_canceled
     title: Root detach canceled work
     description: DELETE root?force=true stopped workers, overlays, or busy sessions.

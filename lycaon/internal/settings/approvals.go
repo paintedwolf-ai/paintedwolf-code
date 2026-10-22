@@ -303,6 +303,40 @@ type ProjectRef struct {
 	Dir string
 }
 
+// ScopeForProjectRef selects the project settings layer when ref carries a
+// project identity or an active folder, and the global layer otherwise.
+func ScopeForProjectRef(ref ProjectRef) (llm.SettingsScope, ProjectRef) {
+	ref = ProjectRef{ID: strings.TrimSpace(ref.ID), Dir: strings.TrimSpace(ref.Dir)}
+	if dir := filepath.Clean(ref.Dir); ref.Dir != "" && dir != "." {
+		ref.Dir = dir
+	} else {
+		ref.Dir = ""
+	}
+	if ref.ID != "" || ref.Dir != "" {
+		return llm.SettingsScopeProject, ref
+	}
+	return llm.SettingsScopeGlobal, ref
+}
+
+// EffectiveConfig returns the merged device-and-project approval policy for ref.
+func (s *ApprovalStore) EffectiveConfig(ref ProjectRef) ApprovalConfig {
+	scope, ref := ScopeForProjectRef(ref)
+	if s == nil {
+		posture := gate.DefaultPosture
+		if scope == llm.SettingsScopeProject && ref.Dir != "" {
+			posture = gate.Stricter(posture, readProjectApprovals(ref.Dir).Config.Posture)
+		}
+		return ApprovalConfig{Posture: posture}
+	}
+	return s.Get(scope, ref)
+}
+
+// EffectivePosture returns the active approval posture for ref, tightening the
+// device posture with any committed project overlay at ref.Dir.
+func (s *ApprovalStore) EffectivePosture(ref ProjectRef) gate.Posture {
+	return s.EffectiveConfig(ref).Posture
+}
+
 // Get returns effective approval policy for a scope.
 func (s *ApprovalStore) Get(scope llm.SettingsScope, ref ProjectRef) ApprovalConfig {
 	s.mu.RLock()

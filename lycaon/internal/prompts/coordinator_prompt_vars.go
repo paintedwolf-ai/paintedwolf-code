@@ -1,6 +1,9 @@
 package prompts
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // CoordinatorPromptGates are turn-scoped prompt conditions.
 type CoordinatorPromptGates struct {
@@ -29,10 +32,11 @@ func MergeCoordinatorPromptVars(
 	into["execution_mode_previous"] = strings.TrimSpace(transition.ExecutionModePrevious)
 	into["execution_mode_entered"] = strings.TrimSpace(transition.ExecutionModeEntered)
 	into["execution_mode_left"] = strings.TrimSpace(transition.ExecutionModeLeft)
-	offered, err := LoadCoordinatorSurfaceFloor(surfaceID)
+	floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
 	if err != nil {
 		return err
 	}
+	offered := floor
 	if set, ok := into["surface_offered"].([]string); ok {
 		offered = set
 	}
@@ -47,6 +51,9 @@ func MergeCoordinatorPromptVars(
 			requestable = append(requestable, name)
 		}
 	}
+	into["is_coordinator"] = true
+	into["command_on_floor"] = slices.Contains(floor, "command")
+	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
 	cardLabel, cardRule, err := LoadCoordinatorSurfaceCard(surfaceID)
 	if err != nil {
 		return err
