@@ -198,21 +198,21 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 				if strings.TrimSpace(hostRunnerUnit) != "" {
 					t.Errorf("read-only surface must not render coordinator-host-runner, got:\n%s", hostRunnerUnit)
 				}
-				if !strings.Contains(sandboxConfinement, "approval cannot enable writes or external programs on this read-only surface.") || strings.Contains(sandboxConfinement, "Reads are limited to") || strings.Contains(sandboxConfinement, "deliverable files") {
+				if !strings.Contains(sandboxConfinement, "approval cannot allow writes or external programs.") || strings.Contains(sandboxConfinement, "Reads are limited to") || strings.Contains(sandboxConfinement, "deliverable files") {
 					t.Errorf("read-only guidance must distinguish path permission from operation restrictions:\n%s", sandboxConfinement)
 				}
 			} else {
 				for _, rule := range []string{
-					"Declare known access needs in `capability_request` on each call",
-					"If access is blocked, follow the error's remedy",
-					"Run the existing entry point from project docs or source",
-					"do not rerun a passing check on unchanged source",
+					"Declare access needs in `capability_request` on each call",
+					"follow their remedy, not a workaround",
+					"Exercise existing entry points from docs or source",
+					"do not repeat a passing check on unchanged source",
 				} {
 					if strings.Count(renderedGuidance, rule) != 1 {
 						t.Errorf("execution rule %q must appear once:\n%s", rule, renderedGuidance)
 					}
 				}
-				if tc.isCoordinator && !strings.Contains(hostRunnerUnit, "Delegate additional independent work with `task`") {
+				if tc.isCoordinator && !strings.Contains(hostRunnerUnit, "Use `task` for independent work") {
 					t.Errorf("coordinator must delegate independent work:\n%s", hostRunnerUnit)
 				}
 				if strings.Contains(renderedGuidance, "Do not run parallel commands alongside active workers") {

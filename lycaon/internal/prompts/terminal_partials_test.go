@@ -24,7 +24,7 @@ func TestHostRunnerPartialTeachesBoundaryBeforeActivation(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"Sandbox and worker checks", "sandbox", "delegation never widens sandbox permissions",
+		"Sandbox and worker checks", "sandbox", "Delegation never widens sandbox permissions",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in host-runner guidance; got %q", want, out)

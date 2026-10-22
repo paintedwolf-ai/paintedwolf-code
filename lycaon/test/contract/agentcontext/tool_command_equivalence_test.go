@@ -152,7 +152,7 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 			t.Errorf("runner-operating-procedure still contains stale guidance %q", stale)
 		}
 	}
-	if !strings.Contains(runnerUnit, "Network access goes through a proxy automatically") {
+	if !strings.Contains(runnerUnit, "HTTP(S) uses `HTTP_PROXY` / `HTTPS_PROXY` automatically") {
 		t.Errorf("runner-operating-procedure missing proxy guidance: %s", runnerUnit)
 	}
 
