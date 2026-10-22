@@ -124,3 +124,11 @@ func (a *AsyncPipeline) Done() <-chan struct{} {
 	}
 	return a.done
 }
+
+// PID returns the OS process ID of the launched stage, or 0.
+func (a *AsyncPipeline) PID() int {
+	if a == nil || a.run == nil {
+		return 0
+	}
+	return a.run.pid()
+}

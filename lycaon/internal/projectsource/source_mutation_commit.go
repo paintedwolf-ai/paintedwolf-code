@@ -57,7 +57,7 @@ func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRo
 	defer func() { _ = tx.Rollback() }()
 	response := append(json.RawMessage(nil), row.Plan.Response...)
 	updatedAt := time.Now().UTC()
-	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, prepared)
+	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, s.History.recoveryQuotaBytes(), prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRo
 	return delivery, nil
 }
 
-func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
+func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {
 		if prepared != nil {
@@ -82,7 +82,7 @@ func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutation
 			return nil, err
 		}
 	}
-	if err := commitSourceHistoryTx(ctx, tx, row.Plan, history, updatedAt); err != nil {
+	if err := commitSourceHistoryTx(ctx, tx, row.Plan, history, quotaBytes, updatedAt); err != nil {
 		return nil, err
 	}
 	completedPlan, err := committedAgentEffectPlan(row.Plan)

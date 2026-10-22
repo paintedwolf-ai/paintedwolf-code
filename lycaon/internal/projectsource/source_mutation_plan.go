@@ -83,6 +83,7 @@ type sourceMutationRecovery struct {
 	RecoveryCount int64                `json:"recovery_count,omitempty"`
 	Disposal      sourceDisposal       `json:"disposal,omitempty"`
 	TreeSHA       string               `json:"tree_sha256,omitempty"`
+	Unrecoverable bool                 `json:"unrecoverable,omitempty"`
 }
 
 type sourceMutationPlan struct {

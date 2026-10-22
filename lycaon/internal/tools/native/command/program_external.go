@@ -59,7 +59,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
-	if streams.Input != nil {
+	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
@@ -75,6 +75,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	noteJobProcess(ctx, async.PID(), commandLine)
 	select {
 	case <-async.Done():
 	case <-ctx.Done():

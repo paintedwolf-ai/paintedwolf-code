@@ -28,6 +28,65 @@ type Process struct {
 	Instance   string `json:"instance"`
 }
 
+// VisibleProcess is a read-only process observation for shell ps and pgrep.
+type VisibleProcess struct {
+	PID        int
+	ParentPID  int
+	UID        uint32
+	Name       string
+	Executable string
+	Command    string
+}
+
+// VisibleProcesses lists processes visible to the current user in PID order.
+func VisibleProcesses(ctx context.Context) ([]VisibleProcess, error) {
+	pids, err := listPIDs()
+	if err != nil {
+		return nil, err
+	}
+	sort.Ints(pids)
+	out := make([]VisibleProcess, 0, len(pids))
+	for _, candidate := range pids {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if candidate <= 0 {
+			continue
+		}
+		p, err := inspect(candidate)
+		if err != nil {
+			continue
+		}
+		cmd := strings.TrimSpace(readCommandLine(candidate))
+		if cmd == "" {
+			cmd = strings.TrimSpace(p.Executable)
+		}
+		if cmd == "" {
+			cmd = strings.TrimSpace(p.Name)
+		}
+		out = append(out, VisibleProcess{
+			PID:        p.PID,
+			ParentPID:  p.ParentPID,
+			UID:        p.UID,
+			Name:       p.Name,
+			Executable: p.Executable,
+			Command:    cmd,
+		})
+	}
+	return out, nil
+}
+
+// ProcessExists reports whether pid currently exists on the host.
+func ProcessExists(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if _, err := inspect(pid); err == nil {
+		return true
+	}
+	return processExistsFallback(pid)
+}
+
 type Snapshot struct {
 	Processes    []Process
 	NextAfterPID int

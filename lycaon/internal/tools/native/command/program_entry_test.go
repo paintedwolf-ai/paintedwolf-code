@@ -185,7 +185,7 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+	for _, reference := range []string{"not-a-session-job", "%2", "9999999"} {
 		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
 		testutil.FailErr(t, "run foreign kill", err)
 		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {

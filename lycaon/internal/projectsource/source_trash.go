@@ -54,7 +54,7 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if plan.NativeTrash != nil {
 		return s.applyNativeTrash(ctx, row)
 	}
-	if plan.RecoveryCount == 0 {
+	if !plan.Unrecoverable && plan.RecoveryCount == 0 {
 		return ErrSourceRecoveryFailed
 	}
 	identity, err := fspath.EntryIdentity(plan.AbsPath)
@@ -67,6 +67,9 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if plan.DeleteStarted && identity != plan.DeleteIdentity {
 		return ErrSourceMutationDiverged
 	}
+	if !plan.DeleteStarted && plan.Unrecoverable && plan.EntryIdentity != "" && identity != plan.EntryIdentity {
+		return ErrSourceMutationDiverged
+	}
 	resolved, _, err := resolveLifecyclePath(plan.RootPath, plan.Path)
 	if err != nil {
 		return err
@@ -74,8 +77,10 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if resolved != plan.AbsPath {
 		return ErrSourceMutationDiverged
 	}
-	if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
-		return err
+	if !plan.Unrecoverable {
+		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
+			return err
+		}
 	}
 	if err := s.startSourceEffect(ctx, row); err != nil {
 		return err

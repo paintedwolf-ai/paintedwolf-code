@@ -10,7 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+)
+
+const (
+	defaultDeleteRecoveryMaxBytes int64 = 100 << 20 // 100 MiB
 )
 
 // DeleteTool removes files and empty directories within write scope.
@@ -93,112 +98,103 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 			}
 			return result, fmt.Errorf("delete %s: %w", path, err)
 		}
-		entries := []string{resolved.Abs}
 		if info.IsDir() {
 			if in.FilesOnly {
 				return result, &toolrejection.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
 			}
-			if entries, err = deletionOrder(t.Caps, resolved.Abs, relSlash, in.Recursive); err != nil {
-				return result, err
+			children, readErr := os.ReadDir(resolved.Abs)
+			if readErr != nil {
+				return result, fmt.Errorf("delete %s: %w", relSlash, readErr)
+			}
+			if len(children) > 0 && !in.Recursive {
+				return result, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": len(children)}}
+			}
+			if len(children) > 0 {
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof)
+				if inspectErr != nil {
+					return result, inspectErr
+				}
+				unrecoverable := t.isOversizeForRecovery(summary.bytes)
+				displayPath := relSlash
+				if resolved.DisplayPath != "" {
+					displayPath = filepath.ToSlash(resolved.DisplayPath)
+				} else if resolved.ScopeRel != "" {
+					displayPath = filepath.ToSlash(resolved.ScopeRel)
+				}
+				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.files, summary.bytes, unrecoverable); err != nil {
+					return result, fmt.Errorf("delete %s: %w", relSlash, err)
+				}
+				result.Deleted = append(result.Deleted, relSlash)
+				afterSuccessfulMutation(ctx, tctx, relSlash)
+				continue
 			}
 		}
-		for _, entry := range entries {
-			if err := ctx.Err(); err != nil {
-				return result, err
-			}
-			target, err := assertDeleteWritePath(ctx, t.Boundary, tctx, entry, prof)
-			if err != nil {
-				return result, err
-			}
-			rel := filepath.ToSlash(target.ScopeRel)
-			if entry == resolved.Abs {
-				rel = relSlash
-			}
-			if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(target)); err != nil {
-				return result, fmt.Errorf("delete %s: %w", rel, err)
-			}
-			result.Deleted = append(result.Deleted, rel)
-			afterSuccessfulMutation(ctx, tctx, rel)
+		if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved)); err != nil {
+			return result, fmt.Errorf("delete %s: %w", relSlash, err)
 		}
+		result.Deleted = append(result.Deleted, relSlash)
+		afterSuccessfulMutation(ctx, tctx, relSlash)
 	}
 	return result, nil
 }
 
-// deletionOrder lists a directory's entries children first. Without recursion
-// only an empty directory is removable. Links are entries, never descended.
-func deletionOrder(caps RecursiveCaps, dir, relSlash string, recursive bool) ([]string, error) {
-	children, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("delete %s: %w", relSlash, err)
-	}
-	if len(children) > 0 && !recursive {
-		return nil, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": len(children)}}
-	}
-	var order []string
-	err = walkRecursiveTree(caps, dir, relSlash, func(path string, isDir bool) error {
-		order = append(order, path)
-		return nil
-	})
-	return order, err
+type deleteTreeSummary struct {
+	files int64
+	bytes int64
 }
 
-// walkRecursiveTree visits a tree children first after measuring it against
-// the catalog's recursive mutation caps, so no visit runs for a tree that
-// recovery could not hold. Links are entries and are never followed.
-func walkRecursiveTree(caps RecursiveCaps, dir, relSlash string, visit func(path string, isDir bool) error) error {
-	caps, err := caps.resolve()
-	if err != nil {
-		return err
+func (t *DeleteTool) isOversizeForRecovery(bytes int64) bool {
+	maxBytes := defaultDeleteRecoveryMaxBytes
+	if t.Caps.Bytes > 0 {
+		maxBytes = t.Caps.Bytes
 	}
-	maxFiles, maxBytes := caps.Files, caps.Bytes
-	type entry struct {
-		path  string
-		isDir bool
-	}
-	var order []entry
-	var files, bytes int64
-	var walk func(string) error
-	walk = func(path string) error {
-		children, err := os.ReadDir(path)
+	return bytes > maxBytes
+}
+
+func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, root projectpaths.Resolved, prof string) (deleteTreeSummary, error) {
+	var summary deleteTreeSummary
+	checkPins := len(tctx.Turn.TurnWritePinGlobs) > 0
+	var walk func(absDir, relDir string) error
+	walk = func(absDir, relDir string) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		children, err := os.ReadDir(absDir)
 		if err != nil {
 			return err
 		}
 		for _, child := range children {
-			full := filepath.Join(path, child.Name())
-			info, err := os.Lstat(full)
+			full := filepath.Join(absDir, child.Name())
+			childRel := filepath.ToSlash(filepath.Join(relDir, child.Name()))
+			info, err := child.Info()
 			if err != nil {
-				return err
+				info, err = os.Lstat(full)
+				if err != nil {
+					return err
+				}
+			}
+			_, policy := tctx.AgentPolicyTarget(full)
+			_, deniedGit := tools.IsGitInternalsWritePath(childRel)
+			if checkPins || policy || deniedGit || tools.IsSensitivePath(childRel) {
+				if _, err := assertDeleteWritePath(ctx, b, tctx, full, prof); err != nil {
+					return err
+				}
 			}
 			if info.IsDir() {
-				if err := walk(full); err != nil {
+				if err := walk(full, childRel); err != nil {
 					return err
 				}
 				continue
 			}
-			files++
+			summary.files++
 			if info.Mode().IsRegular() {
-				bytes += info.Size()
+				summary.bytes += info.Size()
 			}
-			if files > maxFiles {
-				return recursiveCapRefusal("recursive_mutation_files", "files", maxFiles, files, relSlash)
-			}
-			if bytes > maxBytes {
-				return recursiveCapRefusal("recursive_mutation_bytes", "bytes", maxBytes, bytes, relSlash)
-			}
-			order = append(order, entry{full, false})
 		}
-		order = append(order, entry{path, true})
 		return nil
 	}
-	if err := walk(dir); err != nil {
-		return err
-	}
-	for _, e := range order {
-		if err := visit(e.path, e.isDir); err != nil {
-			return err
-		}
-	}
-	return nil
+	err := walk(root.Abs, filepath.ToSlash(root.ScopeRel))
+	return summary, err
 }
 
 // RecursiveCaps bound one recursive mutation's files and regular-file bytes so

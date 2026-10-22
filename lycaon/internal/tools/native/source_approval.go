@@ -73,6 +73,10 @@ func agentMutationPreview(tc tools.ToolContext, m agentMutation, target, from fs
 		}
 	}
 	if m.IsDir {
+		if m.MetadataChange != "" {
+			p.PreviewNote = m.MetadataChange
+			return p
+		}
 		p.PreviewNote = "This changes a directory."
 		return p
 	}

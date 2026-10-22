@@ -4,10 +4,12 @@ package hostprocess
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -70,4 +72,26 @@ func signalInstance(process Process, name string) error {
 		return ErrStale
 	}
 	return unix.PidfdSendSignal(fd, signal, nil, 0)
+}
+
+func readCommandLine(pid int) string {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil || len(raw) == 0 {
+		return ""
+	}
+	raw = bytes.TrimRight(raw, "\x00")
+	if len(raw) == 0 {
+		return ""
+	}
+	parts := bytes.Split(raw, []byte{0})
+	args := make([]string, 0, len(parts))
+	for _, p := range parts {
+		args = append(args, string(p))
+	}
+	return strings.Join(args, " ")
+}
+
+func processExistsFallback(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }

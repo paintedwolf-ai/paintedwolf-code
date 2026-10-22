@@ -209,8 +209,8 @@ func TestRecursiveRemoveIsRecoverableAndRoundTrips(t *testing.T) {
 	if r.err != nil || r.result.Status != 0 || r.result.EffectCertainty != toolcontract.EffectCompleted || !h.absent("tree") {
 		t.Fatalf("rm -rf %+v %v %q", r.result, r.err, r.stderr)
 	}
-	// Three files and three directories, each its own recoverable removal.
-	h.undoAll(6)
+	// Whole-tree removal is one recoverable removal.
+	h.undoAll(1)
 	for name, content := range tree {
 		if h.read(name) != content {
 			t.Fatalf("%s did not round-trip", name)

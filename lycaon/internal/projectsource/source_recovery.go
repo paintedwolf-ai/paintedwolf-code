@@ -392,6 +392,10 @@ func (c *sourceRecoveryCapture) finish(ctx context.Context) error {
 		} else {
 			plan.After, plan.AfterSHA, plan.AfterSize = c.root.body, c.rootSHA, c.root.size
 		}
+	} else if plan.Kind == "delete" {
+		plan.BeforeSize = c.progress.bytes
+	} else {
+		plan.AfterSize = c.progress.bytes
 	}
 	c.progress.report(true)
 	return nil

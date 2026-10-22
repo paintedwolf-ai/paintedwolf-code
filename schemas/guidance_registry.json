@@ -1808,6 +1808,12 @@
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
     },
+    "PROCESS_NOT_OWNED": {
+      "branch_instruction": "Use ps or pgrep to inspect non-session processes read-only; use kill or pkill only on this session's jobs",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This process is not owned by the current session."
+    },
     "PROCESS_REFERENCE_STALE": {
       "branch_instruction": "Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.",
       "category": "recoverable",

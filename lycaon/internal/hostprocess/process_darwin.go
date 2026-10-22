@@ -30,11 +30,16 @@ static int pw_signal(int pid, uint32_t version, int sig) {
 import "C"
 
 import (
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 func listPIDs() ([]int, error) {
@@ -94,4 +99,40 @@ func signalInstance(process Process, name string) error {
 		return syscall.Errno(code)
 	}
 	return nil
+}
+
+func readCommandLine(pid int) string {
+	raw, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil || len(raw) < 4 {
+		return ""
+	}
+	argc := int(binary.LittleEndian.Uint32(raw[:4]))
+	if argc <= 0 || argc > 4096 {
+		return ""
+	}
+	rest := raw[4:]
+	nul := bytes.IndexByte(rest, 0)
+	if nul < 0 {
+		return ""
+	}
+	rest = rest[nul:]
+	for len(rest) > 0 && rest[0] == 0 {
+		rest = rest[1:]
+	}
+	args := make([]string, 0, min(argc, 64))
+	for len(rest) > 0 && len(args) < argc {
+		end := bytes.IndexByte(rest, 0)
+		if end < 0 {
+			args = append(args, string(rest))
+			break
+		}
+		args = append(args, string(rest[:end]))
+		rest = rest[end+1:]
+	}
+	return strings.Join(args, " ")
+}
+
+func processExistsFallback(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }

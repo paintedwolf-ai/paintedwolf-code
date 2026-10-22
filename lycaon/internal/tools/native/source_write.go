@@ -15,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -201,6 +202,38 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 	return discardAgentEntry(ctx, tctx, target, mutation)
 }
 
+func removeAgentTree(ctx context.Context, tctx tools.ToolContext, target mutationTarget, relSlash string, files, bytes int64, unrecoverable bool) error {
+	mutation := agentMutation{
+		Op:            api.SourceChangeOpDelete,
+		AbsPath:       target.Abs,
+		BeforeSize:    bytes,
+		IsDir:         true,
+		Recursive:     true,
+		Unrecoverable: unrecoverable,
+	}
+	if unrecoverable {
+		mutation.MetadataChange = fmt.Sprintf("Delete %s (%s, %d files) permanently without recovery.", relSlash, formatDeleteByteSize(bytes), files)
+	}
+	reportMutationIntent(tctx, mutation, target.Location, fseffect.Location{}, api.AgentIntentOperationDelete)
+	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, unrecoverable); err != nil {
+		return err
+	}
+	return discardAgentEntry(ctx, tctx, target, mutation)
+}
+
+func formatDeleteByteSize(bytes int64) string {
+	switch {
+	case bytes >= 1<<30:
+		return fmt.Sprintf("%.1f GiB", float64(bytes)/float64(1<<30))
+	case bytes >= 1<<20:
+		return fmt.Sprintf("%.1f MiB", float64(bytes)/float64(1<<20))
+	case bytes >= 1<<10:
+		return fmt.Sprintf("%.1f KiB", float64(bytes)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 // discardAgentEntry removes a reviewed entry. Inside an attached root the
 // entry is kept for recovery first, so the removal can be undone from Files
 // history whatever its size; elsewhere it is removed as `rm` would.
@@ -218,6 +251,14 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 	journal, err := prepareAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false)
 	if err != nil {
 		return err
+	}
+	if mutation.Recursive {
+		identity, idErr := fspath.EntryIdentity(target.Abs)
+		if idErr != nil {
+			_ = finishAgentMutation(ctx, tctx, mutation, journal, idErr)
+			return idErr
+		}
+		return finishAgentMutation(ctx, tctx, mutation, journal, fseffect.RemoveTreeGuarded(target.Location, identity))
 	}
 	remove := fseffect.RemoveRequest{Location: target.Location}
 	if mutation.BeforeSHA256 != "" {
@@ -331,7 +372,14 @@ func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.R
 	if !located {
 		return sourceeffect.Removal{}, false
 	}
-	return sourceeffect.Removal{Record: in, Change: change, RootPath: root.Path, ReviewedSHA256: m.BeforeSHA256}, true
+	return sourceeffect.Removal{
+		Record:         in,
+		Change:         change,
+		RootPath:       root.Path,
+		ReviewedSHA256: m.BeforeSHA256,
+		Recursive:      m.Recursive,
+		Unrecoverable:  m.Unrecoverable,
+	}, true
 }
 
 func chmodAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mode os.FileMode) error {
@@ -434,6 +482,8 @@ type agentMutation struct {
 	BeforeSize     int64
 	AfterSize      int64
 	IsDir          bool
+	Recursive      bool
+	Unrecoverable  bool
 }
 
 type agentFileEvidence struct {

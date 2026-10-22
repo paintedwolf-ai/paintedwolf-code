@@ -15,14 +15,41 @@ import (
 )
 
 type SourceHistory struct {
-	db         db.Handle
-	recovery   *sourceRecovery
-	stateMu    sync.Mutex
-	history    map[string]*sourceHistoryEntry
-	historySeq int64
+	db          db.Handle
+	recovery    *sourceRecovery
+	stateMu     sync.Mutex
+	history     map[string]*sourceHistoryEntry
+	historySeq  int64
+	quotaBytes  int64
 }
 
-const sourceHistoryLimit = 100
+const (
+	sourceHistoryLimit                     = 100
+	DefaultSourceHistoryRecoveryQuotaBytes = 256 << 20 // 256 MiB
+)
+
+// SetRecoveryQuotaBytes overrides the retained recovery byte quota per project.
+func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
+	if s == nil {
+		return
+	}
+	s.stateMu.Lock()
+	s.quotaBytes = quota
+	s.stateMu.Unlock()
+}
+
+func (s *SourceHistory) recoveryQuotaBytes() int64 {
+	if s == nil {
+		return DefaultSourceHistoryRecoveryQuotaBytes
+	}
+	s.stateMu.Lock()
+	quota := s.quotaBytes
+	s.stateMu.Unlock()
+	if quota > 0 {
+		return quota
+	}
+	return DefaultSourceHistoryRecoveryQuotaBytes
+}
 
 var ErrSourceHistoryChanged = errors.New("source history changed")
 
@@ -231,7 +258,7 @@ func (s *SourceMutationService) validatePendingHistoryHead(ctx context.Context, 
 }
 
 func (s *SourceHistory) buildSourceHistoryEntry(ctx context.Context, operationID string, plan *sourceMutationPlan) (*sourceHistoryEntry, error) {
-	if plan == nil || plan.AgentEffect != nil || plan.HistoryEntryID != "" || !plan.Changed {
+	if plan == nil || plan.AgentEffect != nil || plan.HistoryEntryID != "" || !plan.Changed || plan.Unrecoverable {
 		return nil, nil
 	}
 	if plan.Kind != "create" && plan.Kind != "rename" && plan.Kind != "copy" && plan.Kind != "delete" {

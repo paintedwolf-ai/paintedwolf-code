@@ -1,0 +1,69 @@
+package mutation
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
+)
+
+func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"oversize/a.txt": strings.Repeat("a", 32),
+		"oversize/b.txt": strings.Repeat("b", 32),
+	})
+	h.owners.Operations.Delete.Caps = native.RecursiveCaps{Files: 1, Bytes: 16}
+	var notes []string
+	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		for _, ch := range changes {
+			notes = append(notes, ch.Preview.PreviewNote)
+		}
+		return errors.New("person declined permanent deletion")
+	}
+	r := h.run("", "rm", "-rf", "oversize")
+	if r.err == nil || h.absent("oversize/a.txt") || h.absent("oversize/b.txt") {
+		t.Fatalf("declined oversize delete should leave tree intact: %+v %v", r.result, r.err)
+	}
+	if len(notes) != 1 || notes[0] != "Delete oversize (64 B, 2 files) permanently without recovery." {
+		t.Fatalf("unexpected approval copy: %v", notes)
+	}
+}
+
+func TestRegenerableDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
+	h := newHarness(t, nil)
+	// Set a 4 KiB recovery quota so repeated recoverable deletes of regenerable
+	// directories must evict older history entries and sweep their blobs.
+	h.service.History.SetRecoveryQuotaBytes(4096)
+
+	chunk := strings.Repeat("regenerable-build-artifact-line\n", 48) // 1536 bytes per file
+	for round := 0; round < 5; round++ {
+		for _, dir := range []string{"node_modules/pkg", "dist/assets"} {
+			full := h.path(filepath.Join(dir, fmt.Sprintf("bundle-%d.js", round)))
+			testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(filepath.Dir(full), 0o755))
+			testutil.FailErr(t, "write "+full, os.WriteFile(full, []byte(chunk), 0o644))
+		}
+		if r := h.run("", "rm", "-rf", "node_modules"); r.err != nil || r.result.Status != 0 || !h.absent("node_modules") {
+			t.Fatalf("round %d rm node_modules: %+v %v", round, r.result, r.err)
+		}
+		if r := h.run("", "rm", "-rf", "dist"); r.err != nil || r.result.Status != 0 || !h.absent("dist") {
+			t.Fatalf("round %d rm dist: %+v %v", round, r.result, r.err)
+		}
+	}
+
+	var historyCount int
+	testutil.FailErr(t, "count history entries", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_history_entries WHERE project_id = ?`, h.project.ID).Scan(&historyCount))
+	if historyCount > 2 {
+		t.Fatalf("expected regenerable directory history to stay bounded (<= 2 entries), got %d", historyCount)
+	}
+	var totalRecoveryBytes int64
+	testutil.FailErr(t, "sum recovery bytes", h.db.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(size), 0) FROM source_blob_objects`).Scan(&totalRecoveryBytes))
+	if totalRecoveryBytes > 4096 {
+		t.Fatalf("recovery blobs exceeded 4096-byte quota: %d bytes", totalRecoveryBytes)
+	}
+}

@@ -28,6 +28,11 @@ type Removal struct {
 	// ReviewedSHA256 is the file content the review showed; a file that no
 	// longer matches is refused. Empty for directories and links.
 	ReviewedSHA256 string `json:"reviewed_sha256,omitempty"`
+	// Recursive allows removing a non-empty directory tree as one operation.
+	Recursive bool `json:"recursive,omitempty"`
+	// Unrecoverable skips recovery capture after explicit user approval of an
+	// oversize tree deletion.
+	Unrecoverable bool `json:"unrecoverable,omitempty"`
 }
 
 // Pending records completion of a prepared file effect.
