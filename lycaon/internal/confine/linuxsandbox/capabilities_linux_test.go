@@ -32,6 +32,7 @@ func TestClassifyLaunchSeparatesQuotaFromHostPolicy(t *testing.T) {
 		{"untyped failure", errors.New("opaque launch failure"), true, UnavailableHelper, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := classifyLaunch(fmt.Errorf("launch: %w", tc.err), tc.restricted)
 			if got.Code != tc.code || got.Remedy != tc.remedy {
 				t.Fatalf("launch failure = %+v, want %s / %s", got, tc.code, tc.remedy)
