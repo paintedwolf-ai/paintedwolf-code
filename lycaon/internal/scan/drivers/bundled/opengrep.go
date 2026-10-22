@@ -160,6 +160,10 @@ func (o *OpenGrepScanner) scanTargets(ctx context.Context, projectDir, bin strin
 }
 
 func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles) (*scanoutput.Result, error) {
+	targets, err := opengrepRelativeTargets(projectDir, targets)
+	if err != nil {
+		return nil, err
+	}
 	args, err := (opengrep.Invocation{Analysis: analysis, Output: runFiles.jsonPath, Rules: rulePaths, Targets: targets, Jobs: o.jobs, Excludes: excludes}).Args()
 	if err != nil {
 		return nil, err
