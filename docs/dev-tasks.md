@@ -1227,6 +1227,18 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 
 ### Tag gate
 
+Select a release source explicitly when main is moving:
+
+```bash
+gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
+```
+
+The request remains queued until the shared executor can run it. Main pushes
+cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+the selected source to the controller and workflow attempt; publication checks
+that evidence before accepting the source. A failed or canceled request supplies
+no qualification. Source selection does not publish or tag a release.
+
 Both preview and stable publication run the controller's compatibility check
 against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
 release's commit once and uses it for catalog and OpenAPI comparisons. An

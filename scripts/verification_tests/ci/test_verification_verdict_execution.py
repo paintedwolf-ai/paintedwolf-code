@@ -33,11 +33,48 @@ class VerificationVerdictTests(unittest.TestCase):
                 ci.require_success(results, ["platform"], draft=True)
 
     def test_release_commit_needs_exact_main_qualification(self):
-        good = {"head_sha": "abc", "head_branch": "main", "conclusion": "success", "event": "push"}
-        with patch.object(ci, "api", return_value={"workflow_runs": [good]}) as api:
-            ci.require_qualification("owner/repo", "abc")
-            api.assert_called_once_with("repos/owner/repo/actions/workflows/qualification.yml/runs?head_sha=abc&per_page=100")
-        for changed in ({"head_sha": "other"}, {"head_branch": "feature"}, {"conclusion": "failure"},
+        from ci_policy import qualification_receipt
+        sha = "a" * 40
+        good = {"id": 42, "run_attempt": 1, "head_sha": sha, "head_branch": "main", "conclusion": "success", "event": "push"}
+        proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="push",
+                     source_sha=sha, source_tree="c" * 40, controller_sha=sha,
+                     checks={name: "success" for name in qualification_receipt.CHECKS})
+        with patch.object(ci, "api", return_value={"workflow_runs": [good]}), \
+                patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
+                patch.object(qualification_receipt, "from_run", return_value=proof):
+            self.assertEqual(ci.require_qualification("owner/repo", sha), good)
+        for changed in ({}, {"head_sha": "b" * 40}, {"head_branch": "feature"}, {"conclusion": "failure"},
                         {"event": "merge_group"}, {"event": "pull_request"}):
-            with patch.object(ci, "api", return_value={"workflow_runs": [{**good, **changed}]}), self.assertRaises(ValueError):
-                ci.require_qualification("owner/repo", "abc")
+            with patch.object(ci, "api", return_value={"workflow_runs": [{**good, **changed}]}), \
+                    patch.object(ci, "pages", return_value=[]), \
+                    patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
+                    patch.object(qualification_receipt, "from_run", return_value=None), self.assertRaises(ValueError):
+                ci.require_qualification("owner/repo", sha)
+
+    def test_successful_run_with_skipped_aggregate_cannot_qualify_a_source(self):
+        from ci_policy import qualification_receipt
+        sha = "a" * 40
+        run = dict(id=42, run_attempt=1, head_sha=sha, head_branch="main", conclusion="success", event="push")
+        with patch.object(ci, "api", return_value={"workflow_runs": [run]}), patch.object(ci, "pages", return_value=[]), \
+                patch.object(qualification_receipt, "aggregate_passed", return_value=False), \
+                patch.object(qualification_receipt, "from_run") as read, self.assertRaises(ValueError):
+            ci.require_qualification("owner/repo", sha)
+        read.assert_not_called()
+
+    def test_historical_source_uses_a_receipt_bound_to_the_current_controller(self):
+        from ci_policy import qualification_receipt
+        sha, controller = "a" * 40, "b" * 40
+        run = dict(id=42, run_attempt=1, head_sha=controller, head_branch="main", conclusion="success", event="workflow_dispatch")
+        proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="workflow_dispatch",
+                     source_sha=sha, source_tree="c" * 40, controller_sha=controller,
+                     checks={name: "success" for name in qualification_receipt.CHECKS})
+        for receipt, accepted in [(proof, True), ({**proof, "run_attempt": 2}, False), (None, False)]:
+            with self.subTest(receipt=receipt), patch.object(ci, "api", return_value={"workflow_runs": []}), \
+                    patch.object(ci, "pages", return_value=[run]), \
+                    patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
+                    patch.object(qualification_receipt, "from_run", return_value=receipt):
+                if accepted:
+                    self.assertEqual(ci.require_qualification("owner/repo", sha), run)
+                else:
+                    with self.assertRaises(ValueError):
+                        ci.require_qualification("owner/repo", sha)

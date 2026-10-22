@@ -45,9 +45,8 @@ def evidence(run):
 
 
 def qualified(sha):
-    return any(r['head_sha'] == sha and r['head_branch'] == 'main' and r['conclusion'] == 'success'
-               and r['event'] in {'push', 'workflow_dispatch'}
-               for r in pages(f'{repository()}/actions/workflows/qualification.yml/runs?head_sha={sha}', 'workflow_runs'))
+    from .verification_verdict import qualified_run
+    return qualified_run(os.environ['GITHUB_REPOSITORY'], sha) is not None
 
 
 def revert_candidate(run, commit, pulls, parent_qualified, main):

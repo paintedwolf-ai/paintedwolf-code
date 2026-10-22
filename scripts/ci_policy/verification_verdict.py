@@ -1,7 +1,8 @@
 """Required-job and exact-commit release qualification verdicts."""
 from urllib.parse import urlencode
+import re
 
-from ci_policy.github import api
+from ci_policy.github import api, pages
 
 
 def require_success(results, skipped=(), draft=False):
@@ -19,11 +20,37 @@ def require_success(results, skipped=(), draft=False):
         raise ValueError("required verification did not pass: " + ", ".join(failed))
 
 
-def require_qualification(repository, sha):
-    """Release eligibility comes from qualification of this exact commit."""
+def qualified_run(repository, sha):
+    from ci_policy import qualification_receipt
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("qualification requires a full source commit SHA")
     query = urlencode({"head_sha": sha, "per_page": 100})
-    runs = api(f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}")["workflow_runs"]
-    if not any(run["head_sha"] == sha and run["head_branch"] == "main"
-               and run["event"] in {"push", "workflow_dispatch"}
-               and run["conclusion"] == "success" for run in runs):
+    direct = api(f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}")["workflow_runs"]
+    seen = set()
+
+    def accepts(run):
+        if (run.get("id") in seen or run.get("head_branch") != "main" or run.get("conclusion") != "success"
+                or run.get("event") not in {"push", "workflow_dispatch"}):
+            return False
+        seen.add(run.get("id"))
+        if not qualification_receipt.aggregate_passed(repository, run):
+            return False
+        receipt = qualification_receipt.from_run(repository, run)
+        return receipt is not None and qualification_receipt.matches(receipt, repository, sha, run)
+
+    for run in direct:
+        if accepts(run):
+            return run
+    path = f"repos/{repository}/actions/workflows/qualification.yml/runs?event=workflow_dispatch&branch=main&status=success"
+    for run in pages(path, "workflow_runs"):
+        if accepts(run):
+            return run
+    return None
+
+
+def require_qualification(repository, sha):
+    """Release eligibility requires completed qualification of the selected source."""
+    run = qualified_run(repository, sha)
+    if run is None:
         raise ValueError(f"{sha} has no passing exact-commit qualification; qualify it before releasing")
+    return run

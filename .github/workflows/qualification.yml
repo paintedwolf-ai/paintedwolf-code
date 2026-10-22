@@ -4,18 +4,49 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source-sha:
+        description: Main commit to qualify; blank selects the dispatch commit
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
-# One run at a time: a newer push replaces a pending run, and a running one finishes.
+# One executor preserves explicit requests and drops superseded pushes at admission.
 concurrency:
   group: qualification
+  queue: max
   cancel-in-progress: false
 
 # The stages run in turn, so one run holds at most three runners.
 jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      admitted: ${{ steps.source.outputs.admitted }}
+      source-sha: ${{ steps.source.outputs.source-sha }}
+      record: ${{ steps.source.outputs.record }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+      - name: Select qualification source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUALIFICATION_SOURCE: ${{ inputs.source-sha }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.qualification_requests
+
   verification:
+    needs: select
+    if: needs.select.outputs.admitted == 'true'
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -23,15 +54,18 @@ jobs:
       actions: read
     with:
       profile: check
+      source-sha: ${{ needs.select.outputs.source-sha }}
 
   platform:
-    needs: verification
+    needs: [select, verification]
     uses: ./.github/workflows/platform-verification.yml
+    with:
+      source-sha: ${{ needs.select.outputs.source-sha }}
 
   # Release's platform lanes, such as arm64 confinement, one at a time beside the platform gates;
   # the check run above covers the rest of release.
   platform-lanes:
-    needs: verification
+    needs: [select, verification]
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -39,22 +73,34 @@ jobs:
       actions: read
     with:
       profile: release
+      source-sha: ${{ needs.select.outputs.source-sha }}
       platform: true
 
   e2e:
-    needs: [platform, platform-lanes]
+    needs: [select, platform, platform-lanes]
     uses: ./.github/workflows/e2e-verification.yml
     with:
       web-parallel: 2
+      source-sha: ${{ needs.select.outputs.source-sha }}
 
   qualification:
     if: ${{ !cancelled() }}
-    needs: [verification, platform, platform-lanes, e2e]
+    needs: [select, verification, platform, platform-lanes, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
       - name: Require exact-commit qualification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_verification.py gate
+          QUALIFICATION_RECORD: ${{ needs.select.outputs.record }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.qualification_receipt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: qualification-source-${{ github.run_attempt }}
+          path: qualification-source.json
+          if-no-files-found: error
+          retention-days: 90
