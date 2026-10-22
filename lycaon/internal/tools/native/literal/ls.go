@@ -67,7 +67,7 @@ func runLs(inv *invocation) error {
 		}
 	}
 	sortEntries(files, opts)
-	if err := inv.listEntries(files, opts); err != nil {
+	if err := inv.listEntries(files, opts, false); err != nil {
 		return err
 	}
 	dirEntries := make([]lsEntry, len(dirs))
@@ -81,7 +81,7 @@ func runLs(inv *invocation) error {
 	first := len(files) == 0
 	var walk func(label string, entry lsEntry, operand bool) error
 	walk = func(label string, entry lsEntry, operand bool) error {
-		children, err := inv.children(entry.bound, opts, &visited, visits, operand)
+		children, readable, err := inv.children(entry.bound, opts, &visited, visits, operand)
 		if err != nil {
 			return err
 		}
@@ -96,11 +96,11 @@ func runLs(inv *invocation) error {
 				return err
 			}
 		}
-		if children == nil {
+		if !readable {
 			return nil
 		}
 		sortEntries(children, opts)
-		if err := inv.listEntries(children, opts); err != nil {
+		if err := inv.listEntries(children, opts, true); err != nil {
 			return err
 		}
 		if !opts.recursive {
@@ -127,7 +127,7 @@ func runLs(inv *invocation) error {
 // children reads one directory's entries itself: no ignore rules or map.
 // An unreadable directory is reported and yields no entries; GNU treats an
 // unreadable command-line operand as serious (2) and a nested one as minor.
-func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, error) {
+func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visited *int64, maximum int64, operand bool) ([]lsEntry, bool, error) {
 	names, err := dir.ReadDir()
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
@@ -137,9 +137,9 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 				status = 2
 			}
 			inv.status = max(inv.status, status)
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if opts.all {
 		names = append([]string{"."}, names...)
@@ -151,7 +151,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		}
 		*visited++
 		if maximum > 0 && *visited > maximum {
-			return nil, limitExceeded("traversal_visits", maximum, *visited)
+			return nil, false, limitExceeded("traversal_visits", maximum, *visited)
 		}
 		child := dir
 		if name != "." {
@@ -163,7 +163,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 				inv.fail(1, path.Join(dir.Resolved.DisplayPath, name), reason)
 				continue
 			}
-			return nil, err
+			return nil, false, err
 		}
 		entry := lsEntry{name: name, stat: st, bound: child}
 		out = append(out, entry)
@@ -173,7 +173,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 			out = append(out, parent)
 		}
 	}
-	return out, nil
+	return out, true, nil
 }
 
 // parentEntry describes ".." through the parent's own binding when it is
@@ -210,7 +210,9 @@ func sortEntries(entries []lsEntry, opts lsOptions) {
 	}
 }
 
-func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions) error {
+// listEntries prints one listing; a directory's long listing starts with
+// GNU's total of allocated space (1 KiB units, or -h IEC size).
+func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions, total bool) error {
 	if !opts.long {
 		for _, entry := range entries {
 			name := entry.name
@@ -225,10 +227,12 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions) error {
 	}
 	rows := make([][]string, len(entries))
 	widths := make([]int, 5)
+	blocks := int64(0)
 	for i, entry := range entries {
 		if !entry.stat.POSIX {
 			return platformUnavailable("ls", "POSIX owner and link metadata")
 		}
+		blocks += entry.stat.Blocks
 		size := strconv.FormatInt(entry.stat.Size, 10)
 		if opts.human {
 			size = humanSize(entry.stat.Size)
@@ -236,6 +240,15 @@ func (inv *invocation) listEntries(entries []lsEntry, opts lsOptions) error {
 		rows[i] = []string{modeString(entry.stat.Mode), strconv.FormatUint(entry.stat.Links, 10), strconv.FormatUint(uint64(entry.stat.UID), 10), strconv.FormatUint(uint64(entry.stat.GID), 10), size}
 		for column, value := range rows[i] {
 			widths[column] = max(widths[column], len(value))
+		}
+	}
+	if total {
+		amount := strconv.FormatInt((blocks+1)/2, 10)
+		if opts.human {
+			amount = humanSize(blocks * 512)
+		}
+		if err := inv.out.text("total " + amount + "\n"); err != nil {
+			return err
 		}
 	}
 	for i, entry := range entries {

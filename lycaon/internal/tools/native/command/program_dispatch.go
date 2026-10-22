@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"strings"
 	"sync"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -22,8 +23,13 @@ import (
 // the catalog operation identity Tool. Prepare binds argv from the current
 // directory frame and returns the reviewed form; it runs nothing.
 type NativeOperation struct {
-	Tool    string
-	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.OperationRequest) (NativePrepared, error)
+	Tool string
+	// Prepare binds a reached request in its directory frame; dispatch is that
+	// frame, through which owners such as find -exec run their children.
+	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
+	// Tools are further identities Prepare may select per bound form (one
+	// umbrella command whose subcommands have their own tools).
+	Tools []string
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -34,6 +40,13 @@ type NativePrepared struct {
 	Mode   string
 	Review commandprogram.ArgvReview
 	Invoke func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	// Command is the catalog command the bound form resolved to (git status
+	// for git -C DIR status); empty keeps the dispatched command.
+	Command string
+	// Tool is the operation identity the bound form selected; empty keeps
+	// NativeOperation.Tool. With neither, the owner runs as the catalog
+	// command's own host execution, as builtins do.
+	Tool string
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -43,7 +56,22 @@ type ProgramOwners struct {
 	Natives     map[string]NativeOperation
 	Publication commandprogram.OutputPublication
 	Input       commandprogram.InputRedirection
-	AdmitLaunch func(context.Context, tools.ToolContext) error
+	// Redirections binds redirect owners to a directory frame after cd.
+	Redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
+	AdmitLaunch  func(context.Context, tools.ToolContext) error
+	// Builtins are in-process utility owners bound to this program's ports;
+	// release runs once the program and its jobs have settled.
+	Builtins func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
+}
+
+// BuiltinPorts are one program's resources for in-process utility owners.
+type BuiltinPorts struct {
+	ToolContext tools.ToolContext
+	Memory      *toolcontract.ProgramMemory
+	ProgramID   string
+	Nested      commandprogram.NestedCommand
+	Publication commandprogram.OutputPublication
+	Admission   tooloutput.SpillAdmission
 }
 
 // ProgramDispatcher routes each reached simple command: catalog natives bound
@@ -55,6 +83,8 @@ type ProgramDispatcher struct {
 	builtins map[string]commandprogram.OperationDispatcher
 	natives  map[string]NativeOperation
 	binder   commandprogram.ArgvBinder
+	// redirections binds redirect owners to this frame's directory.
+	redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	// admitLaunch is the program's publication barrier for external launches.
 	admitLaunch func(context.Context, tools.ToolContext) error
 	// paths is this directory frame; cd moves it and Fork copies it.
@@ -87,7 +117,9 @@ func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func
 }
 
 // Launch runs a confined external program from this frame's directory.
-func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
+	streams, retain := d.run.childOutputs(request, streams)
+	defer func() { retain(ctx) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -115,9 +147,12 @@ func (d *ProgramDispatcher) firstRejection() *nativeRejection {
 }
 
 var _ commandprogram.Dispatch = (*ProgramDispatcher)(nil)
+var _ commandprogram.NativeGaps = (*ProgramDispatcher)(nil)
 
 // Invoke admits, records, dispatches and settles one child.
-func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
+	streams, retain := d.run.childOutputs(request, streams)
+	defer func() { retain(ctx) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -137,92 +172,103 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		request.Invocation.Scope.Directory = d.paths.Cwd().DisplayPath
 		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
-	return d.refuseUnimplemented(ctx, spec, request)
+	return d.refuseUnimplemented(ctx, spec, request, streams)
 }
 
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.EffectMode == "" {
+		if m, ok := builtin.(interface {
+			EffectMode(commandprogram.OperationRequest) string
+		}); ok {
+			request.EffectMode = m.EffectMode(request)
+		}
+	}
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
 	if err := d.start(ctx, child); err != nil {
-		result := refusedResult("TOOL_OWNER_FAILED")
+		result := ownerFailure(err)
 		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
 	}
-	result, runErr := builtin.Invoke(ctx, request, streams)
+	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
+	runStreams := streams
+	runStreams.Error = tracker
+	result, runErr := builtin.Invoke(ctx, request, runStreams)
 	if result.Terminal == "" {
 		result = ownerFailure(runErr)
+	}
+	if reject := toolrejection.AsToolReject(runErr); reject != nil {
+		if !tracker.wrote {
+			writeRejectRefusal(streams, spec.Name, request, reject)
+		}
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: child.bound, cause: runErr}
+		}
+		d.shared.mu.Unlock()
 	}
 	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
 }
 
+// invokeExternal admits one confined launch as its own child through the
+// executor's existing approval, detection-pack and policy evaluation, over
+// the literal argv and directory it will run with, then launches it once.
 func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	spec := d.run.commands["external"]
-	child, err := d.prepare(ctx, spec, request, map[string]any{"operation_id": "external", "argv": externalArgv(request.Argv.Values())})
+	argv := externalArgv(request.Argv.Values())
+	if len(argv) == 0 {
+		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": "requires a program"})
+	}
+	definition, err := d.run.externalDefinition()
 	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return refusedResult("TOOL_OWNER_FAILED"), err
 	}
-	defer child.release()
-	if err := d.start(ctx, child); err != nil {
-		result := refusedResult("TOOL_OWNER_FAILED")
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
-	}
-	result, runErr := ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs}.Launch(ctx, request, streams)
-	if result.Terminal == "" {
-		result = ownerFailure(runErr)
-	}
-	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
-}
-
-// refuseUnimplemented settles a catalogued name with no host owner here. It
-// never falls back to an installed binary of the same name.
-func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest) (toolcontract.ProducerResult, error) {
-	cause := toolrejection.RejectInvalidArguments("COMMAND_NATIVE_FORM_UNSUPPORTED", map[string]any{"command": spec.Name, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
-	child, err := d.prepare(ctx, spec, request, nil)
-	if err != nil {
-		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), errors.Join(cause, err)
-	}
-	defer child.release()
-	result := refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED")
-	return result, errors.Join(cause, d.settle(ctx, child, result, false, ""))
-}
-
-func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	definition, ok := d.run.registry.Definition(operation.Tool)
-	if !ok {
-		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native operation %s is not registered", operation.Tool)
-	}
-	prepared, err := operation.Prepare(ctx, d.paths, request)
-	if err != nil {
-		return d.refuseArgv(ctx, spec, request, err)
-	}
-	mode := prepared.Mode
-	if mode == "" {
-		mode = request.EffectMode
-	}
-	if mode == "" && len(spec.Effects) > 0 {
-		mode = spec.Effects[0].Mode
-	}
-	bound, err := toolcontract.BindOperation(definition.Operation, request.Invocation, spec.Name, mode, nil)
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, nil)
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
-	review := prepared.Review
-	effect := toolexecution.NativeEffect{
-		Operation: bound, Streams: streams, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Operation.Facts().Identity, Argv: request.Argv.Values()},
-		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
-		},
-	}
-	child, err := d.prepareDefinition(ctx, definition.Operation, request, review.Arguments())
+	cwd, display := d.paths.Cwd().Abs, d.paths.Cwd().DisplayPath
+	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
+	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
-	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
-	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
+	if d.run.externalHidden && request.Argv[0].Value == "external" {
+		writeHostRefusal(streams, "external", "", "COMMAND_EXTERNAL_HIDDEN")
+		reject := toolrejection.RejectInvalidArguments("COMMAND_EXTERNAL_HIDDEN", map[string]any{"command": "external", "program": argv[0], "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: reject}
+		}
+		d.shared.mu.Unlock()
+		result := refusedResult("COMMAND_EXTERNAL_HIDDEN")
+		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+	}
+	if reject := desktopCaptureRefusal(argv[0], line); reject != nil {
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: reject}
+		}
+		d.shared.mu.Unlock()
+		result := refusedResult("DESKTOP_CAPTURE_DISALLOWED")
+		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+	}
+	effect := toolexecution.NativeEffect{
+		Operation: bound, Streams: streams, Inspection: d.run.capture,
+		// The existing command review, detection and policy read these fields.
+		Arguments: d.run.launchArguments(line, display),
+		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
+		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				return ExternalStages{ToolContext: admitted, Dir: cwd}.Launch(ctx, request, streams)
+			}}, nil
+		},
+	}
+	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
+	launched, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if toolrejection.AsToolReject(runErr) != nil {
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -230,18 +276,155 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		d.shared.mu.Unlock()
 	}
-	return native.Producer, errors.Join(runErr, d.settle(ctx, child, native.Producer, native.OwnerInvoked, native.HostStopCode))
+	return launched.Producer, errors.Join(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked || marker.started, launched.HostStopCode))
 }
 
-func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
+// refuseUnimplemented runs a catalogued name with no host owner here as its
+// installed program, recorded as a native gap; without one it refuses.
+func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if d.GapLaunchable(request) {
+		request.Gap = &toolcontract.NativeGap{Command: spec.Name, Code: "COMMAND_NATIVE_FORM_UNSUPPORTED"}
+		return d.invokeExternal(ctx, request, streams)
+	}
+	writeHostRefusal(streams, spec.Name, "", "COMMAND_NATIVE_FORM_UNSUPPORTED")
+	cause := toolrejection.RejectInvalidArguments("COMMAND_NATIVE_FORM_UNSUPPORTED", map[string]any{"command": spec.Name, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
+	child, err := d.prepare(ctx, spec, request, nil)
+	if err != nil {
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), errors.Join(cause, err)
+	}
+	defer child.release()
+	result := refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED")
+	settleErr := d.settle(ctx, child, result, false, "")
+	d.shared.mu.Lock()
+	if d.shared.rejected == nil {
+		d.shared.rejected = &nativeRejection{operation: child.bound, cause: cause}
+	}
+	d.shared.mu.Unlock()
+	return result, errors.Join(cause, settleErr)
+}
+
+func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	prepared, err := operation.Prepare(ctx, d.paths, d, request)
+	if err != nil {
+		if gap := unsupportedForm(spec, err); gap != nil && d.GapLaunchable(request) {
+			request.Gap = gap
+			return d.invokeExternal(ctx, request, streams)
+		}
+		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
+	if prepared.Command != "" {
+		resolved, ok := d.run.catalogCommand(prepared.Command)
+		if !ok {
+			return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("native command %s is not catalogued", prepared.Command)
+		}
+		spec = resolved
+	}
+	tool := prepared.Tool
+	if tool == "" {
+		tool = operation.Tool
+	}
+	if tool == "" {
+		return d.invokeHosted(ctx, spec, prepared, request, streams)
+	}
+	definition, ok := d.run.registry.Definition(tool)
+	if !ok || !definitionHasCommand(definition.Operation, spec.Name) {
+		return d.invokeHosted(ctx, spec, prepared, request, streams)
+	}
+	operationDef := programOperationDefinition(definition.Operation)
+	mode := prepared.Mode
+	if mode == "" {
+		mode = request.EffectMode
+	}
+	mode = selectEffectMode(spec, mode)
+	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	if err != nil {
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
+	}
+	review := prepared.Review
+	review.OperationID = operationDef.Facts().Identity
+	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
+	runStreams := streams
+	runStreams.Error = tracker
+	effect := toolexecution.NativeEffect{
+		Operation: bound, Streams: runStreams, Argv: &review, Inspection: d.run.capture,
+		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
+		},
+	}
+	child, err := d.prepareDefinition(ctx, operationDef, request, review.Arguments())
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
+	defer child.release()
+	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
+	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
+	if reject := toolrejection.AsToolReject(runErr); reject != nil {
+		if !tracker.wrote {
+			writeRejectRefusal(streams, spec.Name, request, reject)
+		}
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: bound, cause: runErr}
+		}
+		d.shared.mu.Unlock()
+	}
+	return native.Producer, errors.Join(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.started, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
+}
+
+// invokeHosted runs an owner whose bound form has no structured tool as the
+// catalog command's own execution: recorded, started and settled like a
+// builtin, on this frame.
+func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if prepared.Mode != "" && request.EffectMode == "" {
+		request.EffectMode = prepared.Mode
+	}
+	child, err := d.prepare(ctx, spec, request, prepared.Review.Arguments())
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
+	defer child.release()
+	if err := d.start(ctx, child); err != nil {
+		result := ownerFailure(err)
+		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	}
+	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
+	runStreams := streams
+	runStreams.Error = tracker
+	result, runErr := prepared.Invoke(ctx, d.run.tc, runStreams)
+	if result.Terminal == "" {
+		result = ownerFailure(runErr)
+	}
+	if reject := toolrejection.AsToolReject(runErr); reject != nil {
+		if !tracker.wrote {
+			writeRejectRefusal(streams, spec.Name, request, reject)
+		}
+		d.shared.mu.Lock()
+		if d.shared.rejected == nil {
+			d.shared.rejected = &nativeRejection{operation: child.bound, cause: runErr}
+		}
+		d.shared.mu.Unlock()
+	}
+	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
+}
+
+func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	rejection := argvRejection(spec, cause)
-	result := refusedResult(toolrejection.AsToolReject(rejection).Code)
+	reject := toolrejection.AsToolReject(rejection)
+	writeRejectRefusal(streams, spec.Name, request, reject)
+	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
 		return result, errors.Join(rejection, err)
 	}
 	defer child.release()
-	return result, errors.Join(rejection, d.settle(ctx, child, result, false, ""))
+	settleErr := d.settle(ctx, child, result, false, "")
+	d.shared.mu.Lock()
+	if d.shared.rejected == nil {
+		d.shared.rejected = &nativeRejection{operation: child.bound, cause: rejection}
+	}
+	d.shared.mu.Unlock()
+	return result, errors.Join(rejection, settleErr)
 }
 
 type programChild struct {
@@ -258,6 +441,14 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	if err != nil {
 		return programChild{}, err
 	}
+	var bound toolcontract.BoundOperation
+	if len(spec.Effects) > 0 {
+		mode := selectEffectMode(spec, request.EffectMode)
+		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+		if err != nil {
+			return programChild{}, err
+		}
+	}
 	if inputs == nil {
 		inputs = map[string]any{"operation_id": spec.Name, "argv": request.Argv.Values()}
 	}
@@ -265,13 +456,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	if err != nil {
 		return programChild{}, err
 	}
-	if len(spec.Effects) > 0 {
-		child.bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, nil)
-	}
-	if err != nil {
-		child.release()
-		return programChild{}, err
-	}
+	child.bound = bound
 	return child, nil
 }
 
@@ -282,20 +467,34 @@ func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition to
 	if err != nil {
 		return programChild{}, err
 	}
-	return d.prepareInvocation(ctx, definition, request.Invocation, display, inputs)
+	return d.prepareInvocation(ctx, definition, request.Invocation, display, inputs, request.Gap)
 }
 
-func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any) (programChild, error) {
-	review, release, err := toolcontract.NewReviewedOperationInputs(ctx, d.run.memory, inputs)
+func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any, gap *toolcontract.NativeGap) (programChild, error) {
+	prepareCtx := context.WithoutCancel(ctx)
+	review, release, err := toolcontract.NewReviewedOperationInputs(prepareCtx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	reference, err := d.run.capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display})
+	reference, err := d.run.capture.PrepareChild(prepareCtx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display, NativeGap: gap})
 	if err != nil {
 		release()
 		return programChild{}, err
 	}
 	return programChild{id: invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
+}
+
+type admissionMarker struct {
+	invocation.ProgramAdmissionRecorder
+	started bool
+}
+
+func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, toolCallID string, reviewed toolcontract.ReviewedOperationInputs) error {
+	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, toolCallID, reviewed); err != nil {
+		return err
+	}
+	m.started = true
+	return nil
 }
 
 // start commits the durable owner-start marker for a host-run child.
@@ -305,8 +504,15 @@ func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {
-	publishable := result.PublicationEligible && hostStop == ""
-	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, toolcontract.ProgramChildSettlement{Result: result, HostStopCode: hostStop, OutputPublishable: publishable, OwnerInvoked: ownerInvoked, DetailReference: child.reference})
+	return d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result, HostStopCode: hostStop, OwnerInvoked: ownerInvoked})
+}
+
+// settleWith records a child's settlement with its typed receipt facts: the
+// job a & statement started and a destination's revision conflict.
+func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, settlement toolcontract.ProgramChildSettlement) error {
+	settlement.OutputPublishable = settlement.Result.PublicationEligible && settlement.HostStopCode == ""
+	settlement.DetailReference = child.reference
+	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
 // catalogDefinition compiles one definition per catalog command without a
@@ -360,6 +566,17 @@ func ownerFailure(err error) toolcontract.ProducerResult {
 }
 
 // commandIndex maps every catalog name and alias to its specification.
+// catalogCommand finds any catalog command by its full name, including
+// multi-word subcommand forms the dispatch index leaves out.
+func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecification, bool) {
+	for _, spec := range r.catalog.Commands {
+		if spec.Name == name {
+			return spec, true
+		}
+	}
+	return toolcontract.CommandSpecification{}, false
+}
+
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {
@@ -372,124 +589,4 @@ func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.
 		}
 	}
 	return index
-}
-
-var _ commandprogram.NestedCommand = (*ProgramDispatcher)(nil)
-
-// RunNested runs a utility's command operand (env COMMAND) as its own child
-// of the parent statement, with exactly the given environment, through the
-// same admission and receipts as any reached command.
-func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram.OperationRequest, argv commandprogram.Fields, environment map[string]string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	if len(argv) == 0 {
-		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("nested command requires a program")
-	}
-	entries := make([]string, 0, len(environment))
-	for name, value := range environment {
-		entries = append(entries, name+"="+value)
-	}
-	sort.Strings(entries)
-	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
-	child.Scope = parent.Invocation.Scope
-	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
-	spec, native := d.run.commands[argv[0].Value]
-	if !native || spec.Name == "external" {
-		request.OperationID = "external"
-		return d.Launch(ctx, request, streams)
-	}
-	request.OperationID = spec.Name
-	if _, err := d.binder.Bind(spec, argv); err != nil {
-		return d.refuseArgv(ctx, spec, request, err)
-	}
-	return d.Invoke(ctx, request, streams)
-}
-
-var _ commandprogram.ExecutionRecorder = (*ProgramDispatcher)(nil)
-
-// BeginExecution records an execution the evaluator runs itself. A catalog
-// builtin (true, test, [[, export) also commits its owner-start marker; a
-// structural execution (pipeline, group, function, substitution, job,
-// redirection) owns no effect of its own.
-func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
-	spec, native := d.run.commands[command]
-	definition, err := d.structuralDefinition(command)
-	if native {
-		definition, err = d.catalogDefinition(spec)
-	}
-	if err != nil {
-		return err
-	}
-	display := d.run.source
-	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
-		display = display[span.StartByte:span.EndByte]
-	}
-	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command})
-	if err != nil {
-		return err
-	}
-	invoked := false
-	if native && len(spec.Effects) > 0 {
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil); err == nil {
-			err = d.start(ctx, child)
-		}
-		if err != nil {
-			child.release()
-			return err
-		}
-		invoked = true
-	}
-	d.shared.mu.Lock()
-	if d.shared.evaluated == nil {
-		d.shared.evaluated = map[string]evaluatedChild{}
-	}
-	d.shared.evaluated[invocation.Identity.ExecutionID] = evaluatedChild{child: child, ownerInvoked: invoked}
-	d.shared.mu.Unlock()
-	return nil
-}
-
-// SettleExecution settles a recorded execution once with the evaluator's record.
-func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation toolcontract.OperationInvocation, record commandprogram.ChildRecord) error {
-	d.shared.mu.Lock()
-	entry, ok := d.shared.evaluated[invocation.Identity.ExecutionID]
-	delete(d.shared.evaluated, invocation.Identity.ExecutionID)
-	d.shared.mu.Unlock()
-	if !ok {
-		return fmt.Errorf("execution %s was not recorded", invocation.Identity.ExecutionID)
-	}
-	defer entry.child.release()
-	result := record.Result
-	if !record.Executed || result.Validate() != nil {
-		result = toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}
-	}
-	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted {
-		// Descendants own their effects; a structural node only aggregates them.
-		result.EffectCertainty = toolcontract.EffectUnknown
-	}
-	return d.settle(ctx, entry.child, result, entry.ownerInvoked, "")
-}
-
-// structuralDefinition compiles one definition per evaluator construct.
-func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
-	d.shared.mu.Lock()
-	defer d.shared.mu.Unlock()
-	key := "construct " + construct
-	if definition, ok := d.shared.definitions[key]; ok {
-		return definition, nil
-	}
-	contract, ok := toolcontract.Lookup("command")
-	if !ok {
-		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
-	}
-	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
-		Identity: "program " + construct, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
-		Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
-		Streams: toolcontract.StreamContract{Input: "program streams", Output: "program streams", Error: "typed owner rejection; prose is diagnostic", Statuses: map[int]string{0: "aggregate status of the construct"}},
-	})
-	if err != nil {
-		return toolcontract.OperationDefinition{}, err
-	}
-	if d.shared.definitions == nil {
-		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
-	}
-	d.shared.definitions[key] = definition
-	return definition, nil
 }

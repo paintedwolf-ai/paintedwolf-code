@@ -57,7 +57,7 @@ func TestExecutorListConcurrentCommandSchema(t *testing.T) {
 					continue
 				}
 				found = true
-				if !strings.Contains(meta.Description, "`$()`/backticks reject") {
+				if !strings.Contains(meta.Description, "`$()` substitutions") {
 					t.Errorf("command description omits substitution guidance at root count %d", rc)
 				}
 				props, _ := meta.ArgsSchema["properties"].(map[string]any)

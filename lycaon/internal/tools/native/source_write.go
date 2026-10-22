@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -340,6 +341,26 @@ func chmodAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 		})
 		return err
 	})
+}
+
+// timesAgentPath sets access and modification times through the reviewed
+// metadata path; a nil time is left unchanged.
+func timesAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, access, modify *time.Time) error {
+	return applyAgentMetadataChange(ctx, tctx, target, timesDescription(access, modify), func() error {
+		_, err := fseffect.ChangeTimes(fseffect.TimesRequest{Location: target.Location, Access: access, Modify: modify})
+		return err
+	})
+}
+
+func timesDescription(access, modify *time.Time) string {
+	parts := make([]string, 0, 2)
+	if access != nil {
+		parts = append(parts, "access time "+access.UTC().Format(time.RFC3339))
+	}
+	if modify != nil {
+		parts = append(parts, "modification time "+modify.UTC().Format(time.RFC3339))
+	}
+	return "Set " + strings.Join(parts, " and ") + "."
 }
 
 func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, uid, gid int) error {

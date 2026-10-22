@@ -54,6 +54,8 @@ func (r *expansionRun) word(parts []commandsurface.WordNode) error {
 			err = r.double(part)
 		case commandsurface.ParameterPart:
 			err = r.parameter(part, r.document != nil)
+		case commandsurface.ArithmeticPart:
+			err = r.arithmetic(part, r.document != nil)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(part, r.document != nil)
 		default:
@@ -87,7 +89,11 @@ func (r *expansionRun) literal(text string, context expand.QuoteContext) error {
 	var err error
 	expand.RemoveQuotes(text, context, func(piece string, escaped bool) {
 		if err == nil && piece != "" {
-			err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
+			if !escaped && context == expand.UnquotedText && r.mode == modeFields && r.document == nil {
+				err = r.assembly.split(piece)
+			} else {
+				err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
+			}
 		}
 	})
 	return err
@@ -127,6 +133,8 @@ func (r *expansionRun) double(part commandsurface.DoubleQuotedPart) error {
 			err = r.literal(inner.Value, expand.DoubleQuotedText)
 		case commandsurface.ParameterPart:
 			err = r.parameter(inner, true)
+		case commandsurface.ArithmeticPart:
+			err = r.arithmetic(inner, true)
 		case commandsurface.SubstitutionPart:
 			err = r.substitution(inner, true)
 		default:
@@ -154,6 +162,9 @@ func (r *expansionRun) onlyEmptyPositional(parts []commandsurface.WordNode) bool
 }
 
 func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool) error {
+	if part.Operator != "" {
+		return r.operated(part, quoted)
+	}
 	if (part.Name == "@" || part.Name == "*") && !part.Length {
 		positional := r.scope.Positional()
 		if quoted && part.Name == "@" && r.mode == modeFields {
@@ -178,14 +189,56 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 		}
 		return r.emit(strings.Join(positional, " "), quoted)
 	}
+	if (part.Name == "PIPESTATUS[@]" || part.Name == "PIPESTATUS[*]") && !part.Length {
+		statuses := scopePipeStatuses(r.scope)
+		if quoted && part.Name == "PIPESTATUS[@]" && r.mode == modeFields {
+			for i, value := range statuses {
+				if i > 0 {
+					if err := r.assembly.push(); err != nil {
+						return err
+					}
+				}
+				if err := r.assembly.add(value, true); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		joined := 0
+		for _, value := range statuses {
+			joined += len(value) + 1
+		}
+		if err := r.charge(int64(joined)); err != nil {
+			return err
+		}
+		return r.emit(strings.Join(statuses, " "), quoted)
+	}
+	if err := r.unbound(part); err != nil {
+		return err
+	}
 	value, err := parameterValue(r.scope, part)
 	if err != nil {
 		return err
 	}
-	if part.Length && part.Name != "@" && part.Name != "*" {
+	if part.Length && part.Name != "@" && part.Name != "*" && part.Name != "PIPESTATUS[@]" && part.Name != "PIPESTATUS[*]" {
 		value = strconv.Itoa(utf8.RuneCountInString(value))
 	}
 	return r.emit(value, quoted)
+}
+
+func scopePipeStatuses(scope ExpansionScope) []string {
+	var raw []int
+	if ps, ok := scope.(interface{ PipeStatus() []int }); ok {
+		raw = ps.PipeStatus()
+	}
+	if len(raw) == 0 {
+		raw = []int{scope.LastStatus()}
+	}
+	out := make([]string, len(raw))
+	for i, status := range raw {
+		out[i] = strconv.Itoa(status)
+	}
+	return out
 }
 
 // parameterValue reads one parameter; @ and * reach it only as ${#@} and ${#*}.
@@ -193,6 +246,17 @@ func parameterValue(scope ExpansionScope, part commandsurface.ParameterPart) (st
 	switch name := part.Name; {
 	case name == "@" || name == "*" || name == "#":
 		return strconv.Itoa(len(scope.Positional())), nil
+	case name == "PIPESTATUS[@]" || name == "PIPESTATUS[*]":
+		return strconv.Itoa(len(scopePipeStatuses(scope))), nil
+	case name == "PIPESTATUS":
+		return scopePipeStatuses(scope)[0], nil
+	case strings.HasPrefix(name, "PIPESTATUS[") && strings.HasSuffix(name, "]"):
+		index, err := strconv.Atoi(name[len("PIPESTATUS[") : len(name)-1])
+		statuses := scopePipeStatuses(scope)
+		if err != nil || index < 0 || index >= len(statuses) {
+			return "", nil
+		}
+		return statuses[index], nil
 	case name == "?":
 		return strconv.Itoa(scope.LastStatus()), nil
 	case name == "!":
@@ -268,4 +332,29 @@ func (r *expansionRun) join(pieces []expansionPiece, maximum int64, id string) (
 		value.WriteString(piece.text)
 	}
 	return value.String(), nil
+}
+
+// unbound refuses an unset variable or positional parameter under set -u.
+func (r *expansionRun) unbound(part commandsurface.ParameterPart) error {
+	scope, ok := r.scope.(interface{ Nounset() bool })
+	if !ok || !scope.Nounset() || part.Length {
+		return nil
+	}
+	set := true
+	switch {
+	case part.Name == "PIPESTATUS":
+		set = true
+	case strings.HasPrefix(part.Name, "PIPESTATUS[") && strings.HasSuffix(part.Name, "]"):
+		index, err := strconv.Atoi(part.Name[len("PIPESTATUS[") : len(part.Name)-1])
+		set = err == nil && index >= 0 && index < len(scopePipeStatuses(r.scope))
+	case VariableName(part.Name):
+		_, set = r.scope.Variable(part.Name)
+	case positionalName(part.Name):
+		index, err := strconv.Atoi(part.Name)
+		set = err == nil && index <= len(r.scope.Positional())
+	}
+	if set {
+		return nil
+	}
+	return invalidValue(part.Span, part.Name+": unbound variable")
 }

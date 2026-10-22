@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -27,10 +28,13 @@ type moveResponse struct {
 }
 
 // MoveInput is one complete move operation. NoClobber leaves an existing
-// destination in place and skips that pair.
+// destination in place and skips that pair. Directories admits directory
+// sources, renamed whole within one root onto an absent destination; the
+// rename is journaled like a file rename, so Files history can undo it.
 type MoveInput struct {
-	Pairs     []FilePair
-	NoClobber bool
+	Pairs       []FilePair
+	NoClobber   bool
+	Directories bool
 }
 
 // MoveResult lists completed and skipped pairs in order.
@@ -74,8 +78,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			return result, err
 		}
 		fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
-		srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "move",
-			"MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
+		srcResolved, err := t.moveSource(ctx, tctx, pair.From, in.Directories)
 		if err != nil {
 			return result, err
 		}
@@ -100,4 +103,21 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 		afterSuccessfulMutation(ctx, tctx, fromSlash, toSlash)
 	}
 	return result, nil
+}
+
+// moveSource resolves a file source, or with directories a directory entry
+// itself; a link to a directory stays a file-style entry.
+func (t *MoveTool) moveSource(ctx context.Context, tctx tools.ToolContext, from string, directories bool) (projectpaths.Resolved, error) {
+	prof := tctx.ProfileID()
+	if directories {
+		resolved, err := assertMoveWritePath(ctx, t.Boundary, tctx, from, prof)
+		if err != nil {
+			return projectpaths.Resolved{}, err
+		}
+		if info, err := os.Lstat(resolved.Abs); err == nil && info.IsDir() {
+			return resolved, nil
+		}
+	}
+	return assertMutationFileSource(ctx, t.Boundary, tctx, from, prof, "move",
+		"MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
 }

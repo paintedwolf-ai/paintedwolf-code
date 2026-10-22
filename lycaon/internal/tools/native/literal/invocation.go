@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -30,6 +33,7 @@ type invocation struct {
 	// comparison marks diff's complete status-one result as publishable.
 	comparison bool
 	diffVisits int64
+	pinMu      sync.Mutex
 	pins       []toolcontract.ExecutionRevision
 }
 
@@ -87,13 +91,22 @@ var failureForms = map[string]string{
 // usage refuses a form the catalog admits syntactically but whose value is invalid.
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv,
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv,
 	}}
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
+}
+
+// pinOpened records the published revision of a file a domain owner opens.
+func (inv *invocation) pinOpened(resolved projectpaths.Resolved, file *os.File) error {
+	revision, ok, err := inv.owners.Revisions.PinOpened(resolved, file)
+	if err != nil || !ok {
+		return err
+	}
+	return inv.recordPin(revision)
 }
 
 // platformUnavailable refuses metadata this platform cannot observe; it never

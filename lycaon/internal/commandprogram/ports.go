@@ -34,6 +34,9 @@ type OperationRequest struct {
 	Argv        Fields
 	Environment []string
 	EffectMode  string
+	// Gap is set when a native name's form has no native owner and the
+	// launch would run the installed program; dispatch decides whether it may.
+	Gap *toolcontract.NativeGap
 }
 
 // Validate binds the plan node to the child invocation it is dispatched as.
@@ -201,6 +204,24 @@ type Dispatch interface {
 	OperationDispatcher
 	ExternalLauncher
 	Fork(context.Context) (Dispatch, func(), error)
+}
+
+// NativeGaps is implemented by a Dispatch that can run a native name's
+// unsupported form as the installed program, recorded as a native gap.
+type NativeGaps interface {
+	GapLaunchable(OperationRequest) bool
+}
+
+// FramePredicates is implemented by a Dispatch frame whose file predicates
+// resolve operands from that frame's current directory.
+type FramePredicates interface {
+	PredicateFiles() PredicateFiles
+}
+
+// FrameRedirections is implemented by a Dispatch frame whose redirect owners
+// resolve targets from that frame's current directory.
+type FrameRedirections interface {
+	Redirections() (InputRedirection, OutputPublication)
 }
 
 // InputDestination is one reached `<` redirection after target expansion.

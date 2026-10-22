@@ -518,6 +518,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif %}"
     },
+    "COMMAND_EXTERNAL_HIDDEN": {
+      "branch_instruction": "Run the command by its ordinary name without external --",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The external selector is turned off on this host, so this statement did not run."
+    },
     "COMMAND_FAILURE_LOOP": {
       "branch_instruction": "Diagnose the failed outcome before retrying; changed source must be observed by the host.",
       "category": "recoverable",
@@ -536,6 +542,12 @@
       "emit": "guard:command_job",
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_JOB_UNKNOWN": {
+      "branch_instruction": "Use jobs and a %N job number or $!; do not signal host processes",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The job reference names no job of this session."
+    },
     "COMMAND_LIMIT_EXCEEDED": {
       "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
       "category": "recoverable",
@@ -543,7 +555,7 @@
       "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
     },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",
+      "branch_instruction": "Branch on Code; use a supported form and keep the earlier outcomes in this result.",
       "category": "recoverable",
       "emit": "guard:command_native_admission",
       "summary": "The requested native form was refused before its effect attempt."
@@ -573,10 +585,10 @@
       "summary": "The operation at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }} is outside profile **{{ permission_profile }}**."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
-      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "branch_instruction": "Use the supported form of {{ paintedwolf.command }} shown here; earlier output and effects in this result stand.",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
-      "summary": "An option is unsupported for native {{ paintedwolf.command }}."
+      "summary": "An option of {{ paintedwolf.command }} is not supported here; the refused word is in these details."
     },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
@@ -1227,6 +1239,12 @@
       "category": "recoverable",
       "emit": "guard:grep",
       "summary": "grep received an invalid regex pattern: {{ paintedwolf.detail }}."
+    },
+    "GREP_REGEX_UNSUPPORTED": {
+      "branch_instruction": "Branch on Code; rewrite the pattern within the declared grammar",
+      "category": "recoverable",
+      "emit": "guard:grep",
+      "summary": "The search pattern uses a construct outside its declared regex dialect."
     },
     "GREP_SCOPE_REQUIRED": {
       "branch_instruction": "Branch on Code; re-emit grep with path or a narrowing path_glob",
@@ -3136,6 +3154,12 @@
       "emit": "guard:tool_owner",
       "summary": "The subsystem owner could not settle the action."
     },
+    "TOOL_OWNER_INTERRUPTED": {
+      "branch_instruction": "Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work",
+      "category": "recoverable",
+      "emit": "guard:tool_owner",
+      "summary": "The subsystem owner stopped the action before it settled."
+    },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",
       "category": "recoverable",
@@ -3691,6 +3715,12 @@
       "category": "recoverable",
       "emit": "guard:write",
       "summary": "{{ tool }} refused the proposed text for {{ paintedwolf.path }} ({{ paintedwolf.bytes }} bytes)."
+    },
+    "WRITE_PATH_DENIED": {
+      "branch_instruction": "Branch on Code WRITE_PATH_DENIED; preserve the protected-path boundary",
+      "category": "recoverable",
+      "emit": "guard:write",
+      "summary": "Writing is denied for {{ paintedwolf.path }}."
     },
     "WRITE_SCOPE_DENIED": {
       "branch_instruction": "Preserve the intended destination and respect the active write scope",
