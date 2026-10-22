@@ -809,7 +809,8 @@ commit on main; passing merge admission is insufficient.
 
 Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
 analysis-tool caches immediately after compiler preparation. Optional lint
-diagnostics run afterward and publish their own result separately. A failed or
+diagnostics run afterward and publish their own result separately. WebKitGTK images
+also publish before diagnostics, so diagnostic cleanup cannot block their reuse. A failed or
 cancelled preparation cannot publish these caches; only trusted main writes them.
 The Go cache captures completed build preparation before lint adds test-variant
 compilation and vet facts; lint lanes may need to compute those entries themselves.
