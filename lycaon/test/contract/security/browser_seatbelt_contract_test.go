@@ -16,7 +16,10 @@ func TestBrowserLaunchUsesSeatbelt(t *testing.T) {
 	path := filepath.Join(root, "lycaon", "internal", "browser", "session.go")
 	data, err := os.ReadFile(path)
 	contractcheck.FailErr(t, "read session.go", err)
-	text := string(data)
+	boundaryPath := filepath.Join(root, "lycaon", "internal", "browser", "session_boundary.go")
+	boundaryData, err := os.ReadFile(boundaryPath)
+	contractcheck.FailErr(t, "read session_boundary.go", err)
+	text := string(data) + "\n" + string(boundaryData)
 	for _, marker := range []string{
 		"BrowserConfinement",
 		"launchConfined",

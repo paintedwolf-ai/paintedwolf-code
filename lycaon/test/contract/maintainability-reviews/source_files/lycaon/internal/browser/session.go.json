@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/browser/session.go",
+  "kind": "module",
+  "workstream": "linux-browser-boundary",
+  "disposition": "retain",
+  "reason": "Browser boundary admission and capability diagnostics now live in session_boundary.go. The unchanged launch flow, process lifetime and shared pool remain together in the reduced session module; retain its current bounded scope while the focused launch-mode and boundary contracts protect the composition. Further lifecycle work must reconsider the launch and pool boundary before growing this module.",
+  "reviewed_commit": "c13ff11610ee770f81d14b51d86ff3959b7f058d",
+  "ceiling": 330,
+  "boundaries": {
+    "lycaon/internal/browser/session_boundary_test.go": "010892d7111884f761eb26704fb6c798470f2a228a5ee5384e35aba850bb50ea",
+    "lycaon/internal/browser/session_boundary_linux_test.go": "9720c501d7ab3781b413d15f6abacb5b56122c620936b17019fdcdbab870653b",
+    "lycaon/internal/browser/session_test.go": "304efcd15cff98e562d294c886170086e671a28e31e7e7a0a09923402fe9baba"
+  }
+}
