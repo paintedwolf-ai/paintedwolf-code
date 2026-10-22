@@ -166,12 +166,15 @@ func runEngineVault(raw string) {
 	_ = json.NewEncoder(os.Stdout).Encode(resp)
 }
 
+var heldBroker *os.File
+
 // brokerProbe runs one program through the supervisor's broker and reports
 // where it ran, abandons a second one and reports whether it ended, and
 // starts a detached background child that must outlive the launch without
 // holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
 	broker := os.NewFile(6, "broker")
+	heldBroker = broker
 	null, err := os.Open("/dev/null")
 	if err != nil {
 		facts.BrokerError = err.Error()
