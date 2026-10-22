@@ -3,6 +3,7 @@ package trainingcapture
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -29,7 +30,7 @@ func ObserveUtility(ctx context.Context, purpose string, err error) {
 	if truncated, ok := failure.AsProviderOutputTruncated(err); ok {
 		health.FinishReason = truncated.FinishReason
 	}
-	if err := writeArtifact(root, health); err != nil {
+	if err := writeArtifact(filepath.Join(root, "health"), health); err != nil {
 		slog.WarnContext(ctx, "write training health", "error", err)
 	}
 }

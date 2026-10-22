@@ -27,8 +27,6 @@ def collect(fleets, identity, catalog, out, quality=()):
     records, commits = [], {}
     for path in paths:
         value = json.loads(path.read_text())
-        if value.get("schema") == "pw-training-health/1":
-            continue
         if value.get("schema") == FACT_SCHEMA:
             if value.get("epoch") == identity["epoch"] and value.get("kind") == "turn_committed":
                 commits[(value["session_id"], value["message_id"])] = value["decided_at"]
