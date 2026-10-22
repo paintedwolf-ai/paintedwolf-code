@@ -42,8 +42,16 @@ jobs:
         timeout-minutes: 90
         run: ./task upgrade:corpus:boot
 
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: upgrade-corpus-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
       # The same target the arm64 lane runs, so both architectures cover one set.
       - name: Applied Linux confinement
+        id: confinement
         if: ${{ !cancelled() }}
         timeout-minutes: 90
         run: ./task test:confine:linux
@@ -52,8 +60,8 @@ jobs:
         if: always()
         timeout-minutes: 5
         with:
-          name: upgrade-corpus-${{ github.run_attempt }}
-          status: ${{ job.status }}
+          name: confinement-linux-amd64-${{ github.run_attempt }}
+          status: ${{ steps.confinement.outcome }}
 
   # Applied Seatbelt profiles, the managed browser under Seatbelt, and the owned
   # Git engine's parity matrix (darwin-arm64 only) share one macOS runner and one
