@@ -225,6 +225,9 @@ func TestVitestFastHasAnExplicitBoundary(t *testing.T) {
 		t.Fatal("fast Vitest canaries must not be empty")
 	}
 
+	if !slices.Contains(got, "src/platform/connection/tauri-ipc-parity.contract.test.ts") {
+		t.Fatal("admission canaries must verify native IPC registration parity")
+	}
 	seenTS, seenTSX := false, false
 	for _, rel := range got {
 		if !strings.HasPrefix(rel, "src/") || strings.Contains(rel, "..") || strings.ContainsAny(rel, "*?{[") || strings.Contains(rel, ".perf.test.") {
