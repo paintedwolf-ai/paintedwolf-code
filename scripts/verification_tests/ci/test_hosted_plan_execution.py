@@ -35,7 +35,7 @@ class HostedPlanTests(unittest.TestCase):
                          "./test/contract/host", "./test/contract/security"])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
-        # Product suites and changed coverage run on the landing commit.
+        # Full suites and changed coverage run on the landing commit.
         self.assertFalse(set(stages) & {"test:short", "test:contract", "coverage:changes",
                                          "den:coverage:changes"})
         self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
