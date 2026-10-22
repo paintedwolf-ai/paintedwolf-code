@@ -67,10 +67,45 @@ class MeasuredTimingsTests(unittest.TestCase):
 
         with patch.object(timings.github, "api", return_value=runs), \
                 patch.object(timings.github, "pages", side_effect=lambda path, key: artifacts[int(path.split("/")[-2])]), \
-                patch.object(timings, "download", side_effect=download):
+                patch.object(timings, "download", side_effect=download), \
+                patch.object(timings, "qualification_rows", return_value={"lint", "behavior 1/2"}):
             measured = timings.latest("owner/repo")
         self.assertEqual(downloaded, [(2, ["receipt-verification-check-lint-1", "receipt-verification-check-behavior-2-1"])])
-        self.assertEqual(measured, {"run": 2, "lanes": {"lint": 60, "behavior 1/2": 60}, "packages": {}})
+        self.assertEqual(measured, {"runs": [2], "lanes": {"lint": 60, "behavior 1/2": 60},
+                                    "packages": {}, "lane_runs": {"lint": 2, "behavior 1/2": 2}})
+
+    def test_history_fills_missing_rows_without_replacing_newer_measurements(self):
+        runs = {"workflow_runs": [{"id": 3}, {"id": 2}, {"id": 1}]}
+        data = {3: [{"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 1287.2,
+                     "packages": {"a": 3}}],
+                2: [{"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 1403.5,
+                     "packages": {"a": 8}},
+                    {"lane": "behavior", "shard": "2/2", "status": "passed", "seconds": 1279.7,
+                     "packages": {"b": 5}}]}
+        downloaded = []
+
+        def artifacts(path, key):
+            run = int(path.split("/")[-2])
+            return [{"name": f"receipt-verification-check-{index}", "expired": False}
+                    for index in range(len(data[run]))]
+
+        def download(repository, run, names, directory):
+            downloaded.append(run)
+            for index, row in enumerate(data[run]):
+                path = Path(directory) / names[index] / "ci" / "timings.json"
+                path.parent.mkdir(parents=True)
+                path.write_text(json.dumps(row))
+
+        with patch.object(timings.github, "api", return_value=runs) as api, \
+                patch.object(timings.github, "pages", side_effect=artifacts), \
+                patch.object(timings, "download", side_effect=download), \
+                patch.object(timings, "qualification_rows", return_value={"behavior 1/2", "behavior 2/2"}):
+            measured = timings.latest("example/repository")
+        self.assertIn("per_page=20", api.call_args.args[0])
+        self.assertEqual(downloaded, [3, 2])
+        self.assertEqual(measured, {"runs": [3, 2], "lanes": {"behavior 1/2": 1287.2, "behavior 2/2": 1279.7},
+                                    "packages": {"a": 3, "b": 5},
+                                    "lane_runs": {"behavior 1/2": 3, "behavior 2/2": 2}})
 
     def test_unavailable_measurements_plan_without_them(self):
         refused = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403: Resource not accessible")
@@ -82,13 +117,12 @@ class MeasuredTimingsTests(unittest.TestCase):
         lanes = hosted_plan.lanes()
         unmeasured = hosted_plan.matrix("integration")["include"]
         measured = {row["lane"] + (f" {row['shard']}" if row["shard"] else ""): 60 for row in unmeasured}
-        measured.update({"contracts": 300, "frontend": 800, "native": 600, "runner": 320})
-        del measured["webkit-gtk"]
+        measured.update({"contracts": 300, "frontend": 800, "native": 600, "runner": 320, "webkit-gtk": 900})
         rows = hosted_plan.matrix("integration", timings={"lanes": measured, "packages": {}})["include"]
-        self.assertEqual(sorted(map(json.dumps, rows)), sorted(map(json.dumps, unmeasured)))
+        selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
+        self.assertEqual(selection(rows), selection(unmeasured))
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
         rest = [row["lane"] for row in rows if not lanes[row["lane"]].get("first")]
-        # An unmeasured lane is planned at its budget, so it starts early.
         self.assertEqual(rest[:4], ["webkit-gtk", "frontend", "native", "runner"])
         self.assertLess(rest.index("runner"), rest.index("contracts"))
 

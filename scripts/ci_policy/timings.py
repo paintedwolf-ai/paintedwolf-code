@@ -1,5 +1,6 @@
 """Lane and package durations that main's qualification measures and later hosted plans read."""
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -9,11 +10,15 @@ from ci_policy import github
 
 WORKFLOW = "qualification.yml"
 RECEIPTS = "receipt-verification-check-"
-RECENT_RUNS = 10
+RECENT_RUNS = 20
 
 
 def row_key(lane, shard):
     return f"{lane} {shard}" if shard else lane
+
+
+def valid_seconds(value):
+    return type(value) in (int, float) and math.isfinite(value) and value > 0
 
 
 def record(root, run):
@@ -37,9 +42,10 @@ def merge(paths):
     lanes, packages = {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
-        if measured["status"] == "passed":
+        if measured["status"] == "passed" and valid_seconds(measured["seconds"]):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
-        packages.update(measured["packages"])
+        packages.update({name: seconds for name, seconds in measured["packages"].items()
+                         if type(seconds) in (int, float) and math.isfinite(seconds) and seconds >= 0})
     return {"lanes": lanes, "packages": packages}
 
 
@@ -50,9 +56,18 @@ def download(repository, run, names, directory):
     subprocess.run(command, check=True, capture_output=True, text=True)
 
 
+def qualification_rows():
+    from verification_plan import catalog
+    return {row_key(name, f"{index}/{count}" if count > 1 else "")
+            for name, lane in catalog()["ci"].items() if "check" in lane["profiles"]
+            for count in [lane.get("shards", 1)] for index in range(1, count + 1)}
+
+
 def latest(repository):
-    """Timings from the newest completed qualification on main whose lanes recorded them."""
+    """Newest measurements per row, filling incomplete qualifications from bounded main history."""
     path = f"repos/{repository}/actions/workflows/{WORKFLOW}/runs?branch=main&status=completed&per_page={RECENT_RUNS}"
+    result = {"runs": [], "lanes": {}, "packages": {}, "lane_runs": {}}
+    required = qualification_rows()
     for run in github.api(path)["workflow_runs"]:
         names = [artifact["name"] for artifact in github.pages(f"repos/{repository}/actions/runs/{run['id']}/artifacts",
                                                                 "artifacts")
@@ -62,9 +77,21 @@ def latest(repository):
         with tempfile.TemporaryDirectory() as directory:
             download(repository, run["id"], names, directory)
             measured = merge(sorted(Path(directory).glob("*/**/ci/timings.json")))
-        if measured["lanes"]:
-            return {"run": run["id"], **measured}
-    return {}
+        contributed = False
+        for key, seconds in measured["lanes"].items():
+            if key not in result["lanes"]:
+                result["lanes"][key] = seconds
+                result["lane_runs"][key] = run["id"]
+                contributed = True
+        for key, seconds in measured["packages"].items():
+            if key not in result["packages"]:
+                result["packages"][key] = seconds
+                contributed = True
+        if contributed:
+            result["runs"].append(run["id"])
+        if required <= result["lanes"].keys():
+            break
+    return result if result["lanes"] else {}
 
 
 def resolve(repository):

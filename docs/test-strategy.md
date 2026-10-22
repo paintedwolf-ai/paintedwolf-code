@@ -736,8 +736,11 @@ Fail-fast lanes retain their declared priority, and runner caps are unchanged.
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
-newest qualification that recorded them and hands every shard of the run the
-same package durations, so the shards partition the selection identically:
+newest valid measurement for each row and package from at most 20 completed
+qualifications, filling missing measurements from older runs. The job summary
+records the selected estimate basis, missing rows, source runs, and matrix order.
+Every shard receives the same package durations, so the shards partition the
+selection identically:
 packages go longest first to the least loaded shard, so the longest package
 starts first and the shards finish together. A selection smaller than the split
 repeats packages rather than leave a shard empty. Without measurements, such as
@@ -920,10 +923,9 @@ gate's cap. The `capacity` table in
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
-cheap ones that fail most often, then the rest longest first by the durations
-main's qualification measured, so a capped matrix neither finishes on its
-slowest lane nor runs long before a cheap failure. A lane qualification does
-not run is planned at its budget, so it starts early.
+cheap ones that fail most often, then the rest longest first. Complete measured
+coverage uses each lane's longest shard duration; incomplete coverage uses catalog
+budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
