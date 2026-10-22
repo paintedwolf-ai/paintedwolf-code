@@ -74,7 +74,11 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	got := hostedNeeds(t, job)
 	slices.Sort(got)
 	slices.Sort(dependencies)
-	if !slices.Equal(got, dependencies) || job.If != "${{ !cancelled() }}" {
+	expectedCondition := "${{ !cancelled() }}"
+	if gate == "qualification" {
+		expectedCondition = "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}"
+	}
+	if !slices.Equal(got, dependencies) || job.If != expectedCondition {
 		t.Fatalf("%s must judge every dependency unless the run is cancelled: got %v (%s), want %v", gate, got, job.If, dependencies)
 	}
 	for _, step := range job.Steps {
