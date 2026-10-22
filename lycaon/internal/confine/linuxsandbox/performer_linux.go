@@ -182,12 +182,12 @@ func servePathCalls(fd int) error {
 	listener := -1
 	oob := make([]byte, unix.CmsgSpace(4*2))
 	for {
-		n, oobn, _, _, err := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
-		if errors.Is(err, unix.EINTR) {
+		n, oobn, _, _, recvErr := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+		if errors.Is(recvErr, unix.EINTR) {
 			continue
 		}
-		if err != nil || (n == 0 && oobn == 0) {
-			return nil
+		if recvErr != nil || (n == 0 && oobn == 0) {
+			break
 		}
 		dirs := receivedFDs(oob[:oobn])
 		call, decodeErr := decodePathCall(buf[:n])
@@ -217,19 +217,23 @@ func servePathCalls(fd int) error {
 				continue
 			}
 		}
-		reply, _ := json.Marshal(result)
+		reply, err := json.Marshal(result)
+		if err != nil {
+			return fmt.Errorf("performer reply: %w", err)
+		}
 		var rights []byte
 		if opened >= 0 {
 			rights = unix.UnixRights(opened)
 		}
-		err = unix.Sendmsg(fd, reply, rights, nil, 0)
+		sendErr := unix.Sendmsg(fd, reply, rights, nil, 0)
 		if opened >= 0 {
 			_ = unix.Close(opened)
 		}
-		if err != nil {
-			return nil
+		if sendErr != nil {
+			break
 		}
 	}
+	return nil
 }
 
 // answerKernel completes the pending call: an opened descriptor is installed

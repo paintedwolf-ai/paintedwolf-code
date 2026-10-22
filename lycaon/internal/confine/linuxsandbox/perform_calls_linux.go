@@ -134,8 +134,7 @@ const maxSymlinkHops = 40
 // creates would follow it, so the floors see the name it would create.
 func followFinal(p parent) (parent, error) {
 	for hops := 0; hops < maxSymlinkHops; hops++ {
-		var st unix.Stat_t
-		if err := unix.Fstatat(p.fd, p.base, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil || st.Mode&unix.S_IFMT != unix.S_IFLNK {
+		if !isSymlinkAt(p.fd, p.base) {
 			return p, nil
 		}
 		target, err := readlinkat(p.fd, p.base)
@@ -155,6 +154,11 @@ func followFinal(p parent) (parent, error) {
 	}
 	p.close()
 	return parent{fd: -1}, unix.ELOOP
+}
+
+func isSymlinkAt(dirfd int, name string) bool {
+	var st unix.Stat_t
+	return unix.Fstatat(dirfd, name, &st, unix.AT_SYMLINK_NOFOLLOW) == nil && st.Mode&unix.S_IFMT == unix.S_IFLNK
 }
 
 func readlinkat(dirfd int, name string) (string, error) {

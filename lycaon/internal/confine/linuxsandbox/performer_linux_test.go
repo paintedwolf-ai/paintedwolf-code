@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -221,10 +222,10 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	for i := range long {
 		long[i] = 'a'
 	}
-	if _, err := target.readPath(uint64(uintptr(unsafe.Pointer(&long[0])))); err != unix.ENAMETOOLONG {
+	if _, err := target.readPath(uint64(uintptr(unsafe.Pointer(&long[0])))); !errors.Is(err, unix.ENAMETOOLONG) {
 		t.Fatalf("unterminated path: %v", err)
 	}
-	if _, err := target.readPath(0); err != unix.EFAULT {
+	if _, err := target.readPath(0); !errors.Is(err, unix.EFAULT) {
 		t.Fatalf("null path: %v", err)
 	}
 	runtime.KeepAlive(raw)
@@ -250,14 +251,14 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	again, err := target.openDir(int32(held))
 	testutil.FailErr(t, "open a held directory", err)
 	_ = unix.Close(again)
-	if _, err := target.openDir(-5); err != unix.EBADF {
+	if _, err := target.openDir(-5); !errors.Is(err, unix.EBADF) {
 		t.Fatalf("negative descriptor: %v", err)
 	}
 	var pipe [2]int
 	testutil.FailErr(t, "pipe", unix.Pipe2(pipe[:], unix.O_CLOEXEC))
 	_ = unix.Close(pipe[1])
 	testutil.FailErr(t, "close a tracked descriptor", fdCloser(pipe[0]).Close())
-	if err := fdCloser(pipe[0]).Close(); err != unix.EBADF {
+	if err := fdCloser(pipe[0]).Close(); !errors.Is(err, unix.EBADF) {
 		t.Fatalf("second close: %v", err)
 	}
 }
