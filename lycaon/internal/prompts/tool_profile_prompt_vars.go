@@ -237,7 +237,6 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_command_stop":        enabled["command_stop"],
 		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
 		"is_coordinator":                  data.ToolProfile == CoordinatorProfileID,
-		"command_output_scratch_files":    false,
 		"platform_os":                     runtime.GOOS,
 		"reviews_confined_writes":         true,
 		"command_external_hidden":         false,
