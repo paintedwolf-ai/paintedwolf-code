@@ -90,8 +90,8 @@ func (in *inputs) nextValue() (any, bool) {
 				return nil, false
 			}
 			in.rawOffset += int64(len(line))
-			if in.rawOffset > in.limit {
-				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
+			if in.rawOffset > limit {
+				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": limit})
 				return nil, false
 			}
 			if errors.Is(err, io.EOF) {
@@ -159,7 +159,7 @@ func (in *inputs) open(operand string) {
 		in.stream = nativejq.NewValueStream(data)
 		return
 	}
-	if in.raw && !in.yaml {
+	if raw && !in.yaml {
 		in.rawReader = bufio.NewReader(data)
 		in.rawOffset = 0
 		return
