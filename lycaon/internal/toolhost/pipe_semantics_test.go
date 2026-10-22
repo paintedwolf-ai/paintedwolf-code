@@ -84,8 +84,13 @@ func TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects(
 	testutil.FailErr(t, "build bundled secret matcher", err)
 	env.Runtime.Projector = captureprojection.New(matcher, nil)
 
-	awsKey := "AKIAIOSFODNN7EXAMPLE"
-	ghToken := "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+	awsKey := "AKIAQYJK5TXV4NZR7SGB"
+	ghToken := "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
+	for _, planted := range []string{awsKey, ghToken} {
+		if len(matcher.Screen(planted)) == 0 {
+			t.Fatal("planted secret must match the bundled screening policy")
+		}
+	}
 	keyLine := "AWS_KEY=" + awsKey + " GITHUB_KEY=" + ghToken + "\n"
 	fileBytes := []byte("header=plain\n" + keyLine + "footer=done\n")
 	testutil.FailErr(t, "seed secret file", os.WriteFile(filepath.Join(env.Dir, "f"), fileBytes, 0o600))
@@ -119,7 +124,7 @@ func TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects(
 	out, err = env.Call(t, t.Context(), "cat f")
 	testutil.FailErr(t, "cat f model-facing", err)
 	outcome := decodePipeOutcome(t, out)
-	if strings.Contains(outcome.Stdout, awsKey) || strings.Contains(outcome.Stdout, ghToken) || !strings.Contains(outcome.Stdout, "[REDACTED:") {
+	if strings.Contains(outcome.Stdout, awsKey) || strings.Contains(outcome.Stdout, ghToken) || !strings.Contains(outcome.Stdout, "[REDACTED]") {
 		t.Fatalf("model-facing stdout was not redacted: %q", outcome.Stdout)
 	}
 
@@ -135,13 +140,13 @@ func TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects(
 		if bytes.Contains(raw, []byte(awsKey)) || bytes.Contains(raw, []byte(ghToken)) {
 			t.Fatalf("retained blob %s leaked secret bytes: %q", path, raw)
 		}
-		if bytes.Contains(raw, []byte("[REDACTED:")) {
+		if bytes.Contains(raw, []byte("[REDACTED]")) {
 			redactedBlobs++
 		}
 		return nil
 	}))
 	if redactedBlobs == 0 {
-		t.Fatal("expected retained child outputs in blobstore to contain [REDACTED: markers")
+		t.Fatal("expected retained child outputs in blobstore to contain [REDACTED] markers")
 	}
 }
 
@@ -194,18 +199,19 @@ func TestPipeSemanticsStreamingAndEarlyTerminationWithBoundedMemory(t *testing.T
 }
 
 // TestPipeSemanticsIncrementalLineBufferedAndTerminalEnvironment verifies that
-// incremental progress lines reach downstream stages without waiting for slow
-// producers to finish, and that external commands see no TTY with TERM=dumb,
+// downstream progress releases a waiting producer, and external commands see
+// no TTY with TERM=dumb,
 // PAGER=cat and GIT_PAGER=cat.
 func TestPipeSemanticsIncrementalLineBufferedAndTerminalEnvironment(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 
-	start := time.Now()
-	out, err := env.Call(t, t.Context(), `external -- /bin/sh -c 'printf "=== RUN   TestFast\n--- PASS: TestFast\n"; sleep 8' | grep --line-buffered PASS | head -1`)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	out, err := env.Call(t, ctx, `external -- /bin/sh -c 'printf "=== RUN   TestFast\n--- PASS: TestFast\n"; while [ ! -f downstream.ready ]; do sleep .01; done' | grep --line-buffered PASS | external -- /bin/sh -c 'IFS= read -r line; printf "%s\n" "$line"; : > downstream.ready'`)
 	testutil.FailErr(t, "incremental line-buffered pipeline", err)
 	outcome := decodePipeOutcome(t, out)
-	if outcome.Status != 0 || outcome.Stdout != "--- PASS: TestFast\n" || time.Since(start) > 4*time.Second {
-		t.Fatalf("incremental pipeline took %v: %+v", time.Since(start), outcome)
+	if outcome.Status != 0 || outcome.Stdout != "--- PASS: TestFast\n" {
+		t.Fatalf("incremental pipeline = %+v", outcome)
 	}
 
 	t.Setenv("TERM", "xterm-256color")

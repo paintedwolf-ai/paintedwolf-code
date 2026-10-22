@@ -2,7 +2,6 @@ package textsearch
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -47,64 +46,6 @@ type ScanOptions struct {
 // StopScan ends a scan early without error when a yield returns it.
 var StopScan = errors.New("stop line scan")
 
-// ScanLines selects records of content with sel and yields selected and
-// context lines in order. It returns how many lines were selected. A record
-// error (pattern budget, cancellation) stops the scan and is returned.
-func ScanLines(ctx context.Context, content []byte, sel Selector, opts ScanOptions, yield func(Line) error) (int, error) {
-	s := lineScan{opts: opts, yield: yield}
-	if opts.MaxSelected == 0 {
-		return 0, nil
-	}
-	trailing := false
-	separator := byte('\n')
-	if opts.NullData {
-		separator = 0
-	}
-	for start, number := 0, 1; start < len(content); number++ {
-		if err := ctx.Err(); err != nil {
-			return s.selected, err
-		}
-		end := len(content)
-		if i := bytes.IndexByte(content[start:], separator); i >= 0 {
-			end = start + i
-		}
-		next := end + 1
-		recordEnd := end
-		if opts.TrimCR && !opts.NullData && recordEnd > start && content[recordEnd-1] == '\r' {
-			recordEnd--
-		}
-		line := Line{Number: number, Start: start, End: recordEnd, Text: content[start:recordEnd]}
-		start = next
-		if trailing {
-			if s.after == 0 {
-				break
-			}
-			if err := s.context(line); err != nil {
-				return s.finish(err)
-			}
-			continue
-		}
-		span, matched, err := sel.Select(ctx, line.Text)
-		if err != nil {
-			return s.selected, err
-		}
-		if matched == opts.Invert {
-			if err := s.unselected(line); err != nil {
-				return s.finish(err)
-			}
-			continue
-		}
-		if matched {
-			line.Span = span
-		}
-		if err := s.selectedLine(line); err != nil {
-			return s.finish(err)
-		}
-		trailing = opts.MaxSelected > 0 && s.selected >= opts.MaxSelected
-	}
-	return s.selected, nil
-}
-
 // ScanReader selects records from r with sel and yields selected and context
 // lines in order without materializing the entire input in memory. If maxBytes
 // is positive and the stream exceeds maxBytes before selection completes,
@@ -130,6 +71,9 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		var raw []byte
 		var readErr error
 		for {
+			if err := ctx.Err(); err != nil {
+				return s.selected, err
+			}
 			chunk, err := br.ReadSlice(separator)
 			raw = append(raw, chunk...)
 			if maxBytes > 0 && int64(start+len(raw)) > maxBytes {

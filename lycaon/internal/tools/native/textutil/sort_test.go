@@ -4,8 +4,6 @@ package textutil
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -68,13 +66,11 @@ func TestSortSpillsAndMergesInBoundedPasses(t *testing.T) {
 	slices.Sort(lines)
 	want := strings.Join(lines, "\n") + "\n"
 	h.run("sort", input.String()).expectOutput(t, "spilled sort", want, 0)
-	if h.quota.reservations == 0 || h.quota.used != 0 {
+	if h.quota.reservations == 0 || h.quota.reservations >= len(lines)/10 || h.quota.used != 0 {
 		t.Fatalf("spill admission reservations=%d still held=%d", h.quota.reservations, h.quota.used)
 	}
-	entries, err := os.ReadDir(h.spills)
-	testutil.FailErr(t, "read spill dir", err)
-	if len(entries) != 0 {
-		t.Fatalf("spill runs left behind: %d", len(entries))
+	if len(h.spills.runs) != 0 {
+		t.Fatalf("spill runs left behind: %d", len(h.spills.runs))
 	}
 	unique := h.run("sort -u -r", input.String()+input.String())
 	slices.Reverse(lines)
@@ -96,9 +92,8 @@ func TestSortSpillBoundaries(t *testing.T) {
 	if reject.Data["limit_id"] != "spill_bytes" {
 		t.Fatalf("limit %+v", reject.Data)
 	}
-	entries, _ := os.ReadDir(h.spills)
-	if len(entries) != 0 || h.quota.used != 0 {
-		t.Fatalf("refused sort left %d runs and %d admitted bytes", len(entries), h.quota.used)
+	if len(h.spills.runs) != 0 || h.quota.used != 0 {
+		t.Fatalf("refused sort left %d runs and %d admitted bytes", len(h.spills.runs), h.quota.used)
 	}
 	h.owners.limits["spill_bytes"] = 1 << 28
 	noSpill := newHarness(t)
@@ -144,56 +139,20 @@ func TestWorkingMemoryRefusal(t *testing.T) {
 	}
 }
 
-// A spilled sort keeps its runs in the program's private directory under the
-// session TMPDIR; settling the program and host loss both remove them.
-func TestSessionSpillsLiveUnderTheSessionAndAreReclaimed(t *testing.T) {
-	h := newHarness(t)
-	scratch := t.TempDir()
-	h.tc.Host.SessionScratchDir = scratch
-	spills, err := NewSessionSpills(h.tc, "program-1")
-	testutil.FailErr(t, "session spills", err)
-	h.owners.limits["sort_memory_bytes"] = 512
-	ports := h.ports()
-	ports.Spills = spills
-	input := strings.Repeat("b\na\nc\n", 200)
-	h.runWith(ports, "sort -u", input).expectOutput(t, "spilled sort", "a\nb\nc\n", 0)
-	dir := filepath.Join(scratch, spillRootName, "program-1")
-	entries, err := os.ReadDir(dir)
-	testutil.FailErr(t, "read program spill dir", err)
-	if len(entries) != 0 {
-		t.Fatalf("completed sort left %d runs", len(entries))
-	}
-	info, err := os.Stat(dir)
-	testutil.FailErr(t, "stat program spill dir", err)
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("spill dir mode %v", info.Mode().Perm())
-	}
+func TestSpillsReleaseInterruptedRunsAndRefuseAfterClose(t *testing.T) {
+	spills := &Spills{}
 	run, err := spills.Create(t.Context())
-	testutil.FailErr(t, "leftover run", err)
-	testutil.FailErr(t, "write leftover", run.WriteRecord([]byte("x")))
-	testutil.FailErr(t, "close program spills", spills.Close())
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("settled program kept its spill directory")
+	testutil.FailErr(t, "create run", err)
+	testutil.FailErr(t, "write record", run.WriteRecord([]byte("unfinished")))
+	testutil.FailErr(t, "close spills", spills.Close())
+	if len(spills.runs) != 0 {
+		t.Fatal("closed storage retained runs")
 	}
 	if _, err := spills.Create(t.Context()); err == nil {
-		t.Fatal("closed program spills accepted a run")
+		t.Fatal("closed storage accepted a run")
 	}
-	other, err := NewSessionSpills(h.tc, "program-2")
-	testutil.FailErr(t, "second program", err)
-	_, err = other.Create(t.Context())
-	testutil.FailErr(t, "second program run", err)
-	testutil.FailErr(t, "reclaim after host loss", ReclaimSessionSpills(h.tc))
-	if _, err := os.Stat(filepath.Join(scratch, spillRootName)); !os.IsNotExist(err) {
-		t.Fatal("host loss left session spills")
+	if _, err := run.Open(1024, func(int64) error { return nil }); err == nil {
+		t.Fatal("closed run accepted a reader")
 	}
-	for _, id := range []string{"", "../escape", ".hidden"} {
-		if _, err := NewSessionSpills(h.tc, id); err == nil {
-			t.Fatalf("program identity %q accepted", id)
-		}
-	}
-	h.tc.Host.SessionScratchDir = ""
-	if _, err := NewSessionSpills(h.tc, "program-3"); err == nil {
-		t.Fatal("spills without a session TMPDIR accepted")
-	}
-	testutil.FailErr(t, "reclaim without scratch", ReclaimSessionSpills(h.tc))
+	testutil.FailErr(t, "close again", spills.Close())
 }

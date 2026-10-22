@@ -294,7 +294,7 @@ func (inv *invocation) tarReader(archive string) (*tar.Reader, error) {
 	case "tar.bz2":
 		stream = bzip2.NewReader(stream)
 	}
-	return tar.NewReader(&boundedReader{r: stream, remaining: inv.decodeLimit(int64(len(data)))}), nil
+	return tar.NewReader(&boundedReader{r: stream, maximum: inv.decodeLimit(int64(len(data)))}), nil
 }
 
 func (inv *invocation) tarList(archive string, strip int) error {
@@ -473,7 +473,7 @@ func (inv *invocation) unzipList(zr *zip.Reader) error {
 }
 
 func (inv *invocation) unzipPipe(zr *zip.Reader, members []string, maximum int64) error {
-	reader := &boundedReader{remaining: maximum}
+	reader := &boundedReader{maximum: maximum}
 	for _, f := range zr.File {
 		if strings.HasSuffix(f.Name, "/") || (len(members) > 0 && !containsName(members, f.Name)) {
 			continue
@@ -499,20 +499,6 @@ func containsName(names []string, name string) bool {
 		}
 	}
 	return false
-}
-
-// boundedReader refuses decoded bytes past the expansion ceiling.
-type boundedReader struct {
-	r         io.Reader
-	remaining int64
-}
-
-func (b *boundedReader) Read(p []byte) (int, error) {
-	n, err := b.r.Read(p)
-	if b.remaining -= int64(n); b.remaining < 0 {
-		return 0, limitRefusal("archive_extract_bytes", "bytes", 0, -b.remaining)
-	}
-	return n, err
 }
 
 // runGzip replaces each PATH with PATH.gz; the original is removed through
@@ -575,17 +561,7 @@ func (inv *invocation) gunzipBytes(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = gz.Close() }()
-	return io.ReadAll(&boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
-}
-
-func (inv *invocation) gunzipStream(data []byte) error {
-	gz, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	defer func() { _ = gz.Close() }()
-	_, err = io.Copy(inv.stdout, &boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
-	return err
+	return io.ReadAll(&boundedReader{r: gz, maximum: inv.decodeLimit(int64(len(data)))})
 }
 
 // replaceCompressed publishes the new file, refusing to replace an existing

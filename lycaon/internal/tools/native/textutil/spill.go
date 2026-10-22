@@ -6,12 +6,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
@@ -37,31 +34,60 @@ type RunReader interface {
 	Close() error
 }
 
-// DirectorySpills keeps runs as files in a host-owned directory that no
-// program operand addresses.
-type DirectorySpills struct{ Dir string }
+// Spills owns a program's framed sort runs. Physical byte storage belongs to
+// scratch; sort admits storage and removes each run after its merge.
+type Spills struct {
+	mu     sync.Mutex
+	runs   map[*fileRun]struct{}
+	closed bool
+}
 
-var _ SpillStorage = DirectorySpills{}
-
-func (d DirectorySpills) Create(ctx context.Context) (SpillRun, error) {
+func (s *Spills) Create(ctx context.Context) (SpillRun, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	file, err := os.CreateTemp(d.Dir, "sort-run-*")
+	if s.closed {
+		return nil, errors.New("program sort spills are closed")
+	}
+	spool, err := scratch.NewByteSpool()
 	if err != nil {
 		return nil, err
 	}
-	return &fileRun{path: file.Name(), file: file, writer: bufio.NewWriterSize(file, 64<<10)}, nil
+	run := &fileRun{spool: spool, owner: s, writer: bufio.NewWriterSize(spool, 64<<10)}
+	if s.runs == nil {
+		s.runs = map[*fileRun]struct{}{}
+	}
+	s.runs[run] = struct{}{}
+	return run, nil
+}
+
+// Close releases runs left by interrupted operations and refuses later runs.
+func (s *Spills) Close() error {
+	s.mu.Lock()
+	s.closed = true
+	runs := s.runs
+	s.runs = nil
+	s.mu.Unlock()
+	var result error
+	for run := range runs {
+		result = errors.Join(result, run.Remove())
+	}
+	return result
 }
 
 type fileRun struct {
-	path   string
-	file   *os.File
+	spool  *scratch.ByteSpool
+	owner  *Spills
 	writer *bufio.Writer
 	frame  [binary.MaxVarintLen64]byte
 }
 
 func (r *fileRun) WriteRecord(record []byte) error {
+	if r.writer == nil {
+		return io.ErrClosedPipe
+	}
 	n := binary.PutUvarint(r.frame[:], uint64(len(record)))
 	if _, err := r.writer.Write(r.frame[:n]); err != nil {
 		return err
@@ -71,14 +97,11 @@ func (r *fileRun) WriteRecord(record []byte) error {
 }
 
 func (r *fileRun) Finish() error {
-	if r.file == nil {
+	if r.writer == nil {
 		return nil
 	}
 	err := r.writer.Flush()
-	if closeErr := r.file.Close(); err == nil {
-		err = closeErr
-	}
-	r.file = nil
+	r.writer = nil
 	return err
 }
 
@@ -86,23 +109,22 @@ func (r *fileRun) Open(maximumRecord int64, grow func(int64) error) (RunReader, 
 	if err := grow(64 << 10); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(r.path)
+	reader, err := r.spool.Reader()
 	if err != nil {
 		return nil, err
 	}
-	return &fileRunReader{file: file, reader: bufio.NewReaderSize(file, 64<<10), maximum: maximumRecord, grow: grow}, nil
+	return &fileRunReader{reader: bufio.NewReaderSize(reader, 64<<10), maximum: maximumRecord, grow: grow}, nil
 }
 
 func (r *fileRun) Remove() error {
-	_ = r.Finish()
-	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
+	r.owner.mu.Lock()
+	delete(r.owner.runs, r)
+	r.owner.mu.Unlock()
+	r.writer = nil
+	return r.spool.Close()
 }
 
 type fileRunReader struct {
-	file    *os.File
 	reader  *bufio.Reader
 	maximum int64
 	record  []byte
@@ -130,7 +152,7 @@ func (r *fileRunReader) Next() ([]byte, error) {
 	return r.record, nil
 }
 
-func (r *fileRunReader) Close() error { return r.file.Close() }
+func (r *fileRunReader) Close() error { r.reader = nil; r.record = nil; return nil }
 
 type mergeCursor struct {
 	reader RunReader
@@ -167,66 +189,4 @@ func (h *mergeHeap) Pop() any {
 	last := h.cursors[len(h.cursors)-1]
 	h.cursors = h.cursors[:len(h.cursors)-1]
 	return last
-}
-
-// spillRootName is the private directory under the session TMPDIR that holds
-// every program's sort runs; no program operand names it.
-const spillRootName = ".painted-wolf-sort-spills"
-
-// SessionSpills holds one program's sort runs in a private directory under
-// its session's TMPDIR. Byte quotas stay with the program's SpillAdmission;
-// this owner only places and removes runs. Close removes the program's
-// directory when the program settles; ReclaimSessionSpills removes every
-// program's leftovers for a session after host loss.
-type SessionSpills struct {
-	mu     sync.Mutex
-	dir    string
-	closed bool
-}
-
-var _ SpillStorage = (*SessionSpills)(nil)
-
-// NewSessionSpills is the program runtime's one-line wiring: one value per
-// program, closed when the program settles.
-func NewSessionSpills(tc tools.ToolContext, programID string) (*SessionSpills, error) {
-	scratch := strings.TrimSpace(tc.Host.SessionScratchDir)
-	if scratch == "" {
-		return nil, tools.ErrSessionScratchUnavailable
-	}
-	if programID == "" || filepath.Base(programID) != programID || strings.HasPrefix(programID, ".") {
-		return nil, errors.New("sort spills require a program identity")
-	}
-	return &SessionSpills{dir: filepath.Join(scratch, spillRootName, programID)}, nil
-}
-
-// Create opens a new run, creating the program's directory on first use.
-func (s *SessionSpills) Create(ctx context.Context) (SpillRun, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return nil, errors.New("program sort spills are closed")
-	}
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
-		return nil, err
-	}
-	return DirectorySpills{Dir: s.dir}.Create(ctx)
-}
-
-// Close removes every run of the program, including runs an interrupted
-// operation left behind, and refuses later runs.
-func (s *SessionSpills) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closed = true
-	return os.RemoveAll(s.dir)
-}
-
-// ReclaimSessionSpills removes all programs' sort runs for a session. The
-// host calls it after supervisor loss, when no program of the session runs.
-func ReclaimSessionSpills(tc tools.ToolContext) error {
-	scratch := strings.TrimSpace(tc.Host.SessionScratchDir)
-	if scratch == "" {
-		return nil
-	}
-	return os.RemoveAll(filepath.Join(scratch, spillRootName))
 }

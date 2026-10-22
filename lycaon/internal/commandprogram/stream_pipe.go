@@ -19,7 +19,7 @@ type consumerClosedError struct{}
 func (consumerClosedError) Error() string        { return "command stream consumer closed" }
 func (consumerClosedError) ConsumerClosed() bool { return true }
 
-// BytePipe carries already-screened bytes without a display projection or an
+// BytePipe carries exact producer bytes without a display projection or an
 // intermediate buffer. io.Pipe provides backpressure even for slow consumers.
 type BytePipe struct {
 	reader        *io.PipeReader

@@ -147,6 +147,10 @@ receipt, digest or truncation notice is never a pipeline source. Here-document
 and native-null inputs use the same exact byte endpoints; typed null sinks count
 ingress without opening a platform device or resolving secret references.
 
+Pipes and file redirects receive the exact producer bytes. Secret screening runs
+when output is delivered to the model or retained for the transcript and receipts;
+it does not rewrite bytes consumed by another stage or published to a file.
+
 `ScreenedPipe` connects the existing capture projection to that byte plane.
 Screening reserves actual payload/candidate capacities incrementally against the
 caller's aggregate working-memory ledger before allocation. It reuses the
@@ -789,6 +793,12 @@ A settled foreground result carries the last 8 KiB of screened output as `tail`.
 A confined result also lists `sandbox_refusals`: each operation the kernel refused the invocation's processes, with its target, process, count, and the capability that would admit it ([Denials are legible](security.md#denials-are-legible)). A running result and `command_output` list the refusals so far; a finished one lists the settled record.
 
 A run can fail for a reason its exit status does not carry. The foreground result, `command_output` for a job, and the job's completion then state `exec_failure` with a `kind` (`redirect_commit` when redirected output did not land, `stage_launch` when a later stage never started, `run` otherwise) and the error as `detail`. Such a run is never `ok`, and a verification check that ends this way fails. A timeout is reported by `termination_reason`, not here.
+
+Non-interactive external programs receive pipes rather than a terminal. Their
+default environment sets `TERM=dumb`, `PAGER=cat`, and `GIT_PAGER=cat`, and drops
+ambient `COLORTERM`. This avoids pagers and automatic terminal color; explicit
+program options still control their output. Interactive terminal sessions keep
+their terminal setup.
 
 ### Command job lifecycle
 

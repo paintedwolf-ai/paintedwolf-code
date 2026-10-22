@@ -12,7 +12,7 @@ import (
 func render(t *testing.T, content string, sel Selector, opts ScanOptions) (string, int) {
 	t.Helper()
 	var out strings.Builder
-	n, err := ScanLines(t.Context(), []byte(content), sel, opts, func(l Line) error {
+	n, err := ScanReader(t.Context(), strings.NewReader(content), 0, nil, sel, opts, func(l Line) error {
 		if l.Gap {
 			out.WriteString("--\n")
 		}
@@ -29,7 +29,7 @@ func render(t *testing.T, content string, sel Selector, opts ScanOptions) (strin
 	return out.String(), n
 }
 
-func TestScanLinesContextAndLimits(t *testing.T) {
+func TestScanReaderContextAndLimits(t *testing.T) {
 	m, err := Compile(t.Context(), Spec{Patterns: []string{"m"}, Dialect: Basic}, catalogLimits(t))
 	if err != nil {
 		t.Fatal(err)
@@ -71,9 +71,9 @@ func (f failingSelector) Select(context.Context, []byte) (Span, bool, error) {
 	return Span{}, false, f.err
 }
 
-func TestScanLinesStopsOnRecordErrorsAndStopScan(t *testing.T) {
+func TestScanReaderStopsOnRecordErrorsAndStopScan(t *testing.T) {
 	budget := &BudgetError{Resource: "regex_work_steps", Maximum: 1, Observed: 2}
-	if _, err := ScanLines(t.Context(), []byte("a\n"), failingSelector{budget}, ScanOptions{MaxSelected: -1}, func(Line) error { return nil }); !errors.Is(err, budget) {
+	if _, err := ScanReader(t.Context(), strings.NewReader("a\n"), 0, nil, failingSelector{budget}, ScanOptions{MaxSelected: -1}, func(Line) error { return nil }); !errors.Is(err, budget) {
 		t.Fatalf("record error: %v", err)
 	}
 	m, err := Compile(t.Context(), Spec{Patterns: []string{"a"}, Dialect: Fixed}, catalogLimits(t))
@@ -81,7 +81,7 @@ func TestScanLinesStopsOnRecordErrorsAndStopScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	seen := 0
-	n, err := ScanLines(t.Context(), []byte("a\na\na\n"), m, ScanOptions{MaxSelected: -1}, func(Line) error {
+	n, err := ScanReader(t.Context(), strings.NewReader("a\na\na\n"), 0, nil, m, ScanOptions{MaxSelected: -1}, func(Line) error {
 		seen++
 		return StopScan
 	})
@@ -90,7 +90,7 @@ func TestScanLinesStopsOnRecordErrorsAndStopScan(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := ScanLines(ctx, []byte("a\n"), m, ScanOptions{MaxSelected: -1}, func(Line) error { return nil }); !errors.Is(err, context.Canceled) {
+	if _, err := ScanReader(ctx, strings.NewReader("a\n"), 0, nil, m, ScanOptions{MaxSelected: -1}, func(Line) error { return nil }); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled scan: %v", err)
 	}
 }
