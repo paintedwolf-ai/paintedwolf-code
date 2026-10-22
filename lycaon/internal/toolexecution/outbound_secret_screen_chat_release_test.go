@@ -146,7 +146,7 @@ func TestApprovedHeldValueWaitsOnlyForTheUnlock(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			exec, _ := chatReleaseExecutor(gate.PostureLight)
 			exec.Secrets.SetPresenceAvailable(func() bool { return true })
-			unlocks := presence.NewUnlocks()
+			unlocks := presence.NewUnlocks(presence.NewBroker())
 			exec.Secrets.SetVaultUnlocks(unlocks)
 			if unlocked {
 				unlocks.Open(presence.NewUnlock("root-1", presence.Verified{
@@ -188,7 +188,7 @@ func TestApprovedHeldValueWaitsBehindTheChatsOpenCard(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			exec, _ := chatReleaseExecutor(gate.PostureLight)
 			exec.Secrets.SetPresenceAvailable(func() bool { return true })
-			registry := presence.NewUnlocks()
+			registry := presence.NewUnlocks(presence.NewBroker())
 			exec.Secrets.SetVaultUnlocks(registry)
 			closeCard := exec.Secrets.heldAsks.open("root-1")
 			go func() {

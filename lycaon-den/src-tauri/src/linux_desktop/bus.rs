@@ -68,7 +68,7 @@ pub(crate) fn call(
 
 /// The session bus address: the environment's Unix-only address, or the
 /// runtime directory's bus socket.
-fn session_address() -> Result<String, String> {
+pub(crate) fn session_address() -> Result<String, String> {
     session_address_from(
         std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref(),
         std::env::var("XDG_RUNTIME_DIR").ok().as_deref(),

@@ -41,7 +41,7 @@ func newHeldFixture(t *testing.T) heldFixture {
 	testutil.FailErr(t, "generate presence key", err)
 	broker := presence.NewBroker()
 	testutil.FailErr(t, "configure presence key", broker.Configure(base64.RawURLEncoding.EncodeToString(publicKey)))
-	unlocks, recorded := presence.NewUnlocks(), &recordedUnlocks{}
+	unlocks, recorded := presence.NewUnlocks(broker), &recordedUnlocks{}
 	mgr.Presence.SetVaultUnlock(broker, unlocks, recorded)
 	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	return heldFixture{

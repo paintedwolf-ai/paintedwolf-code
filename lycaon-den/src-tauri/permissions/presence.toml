@@ -7,3 +7,8 @@ commands.allow = ["reveal_managed_secret"]
 identifier = "allow-resolve-checkpoint-with-presence"
 description = "Approve one checkpoint option that releases values a person gave, after native user-presence verification."
 commands.allow = ["resolve_checkpoint_with_presence"]
+
+[[permission]]
+identifier = "allow-vault-lock-status"
+description = "Read the desktop session facts that revoke vault presence authority."
+commands.allow = ["vault_lock_status"]

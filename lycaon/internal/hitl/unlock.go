@@ -215,7 +215,9 @@ func (m *VaultPresence) RecordUnlockTx(ctx context.Context, tx *sql.Tx, projectI
 }
 
 func (m *VaultPresence) CommitUnlock(ctx context.Context, unlock presence.Unlock, answeredID string) {
-	m.vault.unlocks.Open(unlock)
+	if !m.vault.unlocks.Open(unlock) {
+		return
+	}
 	m.answerUnlockCards(ctx, unlock, answeredID)
 }
 

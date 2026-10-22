@@ -24,7 +24,7 @@ func (b *Runtime) BuildPresence(authority interface{ SetVaultUnlocks(*presence.U
 	if err := broker.Configure(key); err != nil {
 		return fmt.Errorf("configure presence verification: %w", err)
 	}
-	unlocks := presence.NewUnlocks()
+	unlocks := presence.NewUnlocks(broker)
 	// The audit and event sinks are built later; each change reads them then.
 	unlocks.SetObserver(presence.UnlockObserver{
 		Ended: func(unlock presence.Unlock, reason presence.EndReason, at time.Time) {

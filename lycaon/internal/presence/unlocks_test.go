@@ -12,7 +12,7 @@ func (c *unlockClock) advance(step time.Duration) { c.at = c.at.Add(step) }
 
 func recordingUnlocks() (*Unlocks, *unlockClock, *[]EndReason) {
 	clock := &unlockClock{at: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)}
-	unlocks := NewUnlocks()
+	unlocks := NewUnlocks(NewBroker())
 	unlocks.SetClock(clock.now)
 	var ended []EndReason
 	unlocks.SetObserver(UnlockObserver{Ended: func(_ Unlock, reason EndReason, _ time.Time) { ended = append(ended, reason) }})
