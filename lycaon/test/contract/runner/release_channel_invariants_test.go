@@ -119,14 +119,18 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"retention-days: 90", "Verify the catalog row for this candidate",
 		"CANDIDATE_RUNNER_LABEL:", "./task release:candidate:select", "./task release:rehearse:linux-signing --",
 		"./task release:candidate:diagnostics --",
+		"profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined)",
+		"TMPDIR: /tmp",
 	} {
 		if !strings.Contains(candidates, needle) {
 			t.Fatalf("Linux candidate workflow is missing %q", needle)
 		}
 	}
-	// Candidate runs carry no branch-scoped triggers and use one source checkout.
+	// Candidate runs carry no branch-scoped triggers, use one source checkout,
+	// and prepare the user namespace locally without a probe lease.
 	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-", "RUNNER_NAME:",
-		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test"} {
+		"push:", "refs/heads/", "path: .", "python3 .", "python3 scripts/linux_release", "release:live-test",
+		"PW_PACKAGE_PROBE_LEASE"} {
 		if strings.Contains(candidates, forbidden) {
 			t.Fatalf("Linux candidate workflow violates its isolation contract (%q)", forbidden)
 		}
