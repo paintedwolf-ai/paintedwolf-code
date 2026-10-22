@@ -21,7 +21,7 @@ jobs:
   # The confine live suites (namespaces, mounts, Landlock, seccomp, the
   # supervisor's network grants and refusal reports, toolchains) fail rather
   # than skip when the host cannot confine; setup-verification loads the
-  # profile that lets test binaries create user namespaces on Ubuntu.
+  # profiles that let verification engines create user namespaces on Ubuntu.
   upgrade-corpus:
     runs-on: ubuntu-latest
     timeout-minutes: 255
