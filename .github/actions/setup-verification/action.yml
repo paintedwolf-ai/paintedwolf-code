@@ -87,21 +87,11 @@ runs:
           sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-verification
         fi
 
-    - name: Install Tauri Linux build dependencies
+    - name: Provision Linux native test dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev xvfb \
-          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
-          sway wl-clipboard wtype xclip
-
-    # Lavapipe gives the decision engine's Vulkan parity tests a device on GPU-less runners.
-    - name: Install Mesa's Vulkan drivers
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+      uses: ./.github/actions/setup-linux-native
+      with:
+        save: ${{ inputs.save-caches }}
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       id: rust
