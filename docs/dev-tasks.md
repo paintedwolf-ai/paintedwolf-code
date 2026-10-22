@@ -571,7 +571,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:fast`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
 | `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
@@ -625,6 +625,22 @@ editing modular OpenAPI sources, run `./task openapi:bundle` and
 ### Digest captures and locking
 
 Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease-holder PID is gone. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
+
+
+Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
+directory under its artifact root. `PW_COMPILER_CACHE_DIR` preserves that path
+across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. The scheduler's `rust` resource lock prevents
+concurrent test runs from replacing shared test executables. Cargo serializes
+compilation, and the decision build holds a publication lock until its executable
+is staged. The decision cache warmer compiles both test and
+release profiles in the verification source slot. Prepared benchmarks set this
+cache path inside their run directory, outside the sealed source, so importing
+prepared artifacts omits compiler intermediates.
+
+Hosted frontend lanes install Bun, Node, Rust, ripgrep, and the native document
+core's pinned Cargo inputs. They skip the multi-gigabyte Go compiler cache,
+scanner provisioning, engine downloads, and Go generator tools. The catalog
+rejects this setup for targets that need those dependencies.
 
 Ordinary `./task` requests automatically share compatible verification on macOS
 and Linux: the oldest request admits up to 32 consecutive requests from the same
@@ -1032,6 +1048,25 @@ are verified by the format-specific publication work.
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
+
+### Linux candidate builds
+
+The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+builds the native amd64 and arm64 deb/rpm packages through the production bundle
+and staging path. It runs independently on relevant packaging pull requests
+once ready, weekly, or by manual dispatch on the selected branch. The release
+workflow calls the same job with its exact selected source commit. Candidate
+artifacts include checksums and the source commit and are retained for 90 days.
+The workflow has read-only repository access and no signing environment or
+publication credentials. Package signing rehearsals and installed-system
+qualification remain separate requirements; a candidate build alone does not
+qualify a release. Draft pull requests do not start candidate builds.
+
+When a package stage fails after the build starts, the workflow runs
+`./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
+from the same source checkout. It retains the canonical assembled packages with
+hashes and an explicit report that grants no complete-candidate, installed or
+publication authority.
 
 ### Release dry run
 

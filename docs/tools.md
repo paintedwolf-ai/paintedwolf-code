@@ -8,6 +8,61 @@ Tools are structured capabilities published with argument schema, execution poli
 
 ---
 
+## Portable command language version 1
+
+The [milestone 10](https://github.com/paintedwolf-ai/paintedwolf-code/milestone/10)
+contract is frozen independently from runtime activation. The currently shipped
+command path described below remains in use until its replacements land. The
+versioned catalog does not enable a shell fallback or qualify native execution.
+
+Machine sources live in
+[`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/).
+[`language.json`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json)
+defines the syntax/expansion subset, source coordinates, numeric limits and units,
+status/publication rules, representation, retained output and compact schema copy.
+Each utility family defines argv grammar, option spelling/arity/value role,
+effect modes, platform capabilities, status, encoding, examples and existing
+implementation/test references. The stock disposition inventory covers the live
+manifest, retaining domain operations and naming the future replacement work.
+No routine schema is retired by publishing these contracts.
+
+`./task codegen:tool-command-equivalence` compiles the same catalog into
+`toolcontract.LanguageV1`; its existing `:check` target detects drift.
+`CommandHelp` derives option help from these facts rather than maintaining a
+second executor/prompt option map. P04 consumes the typed facts in its parser;
+P03 binds executable operations through existing subsystem contracts. Pure catalog
+facts carry no grant or execution authority.
+
+The catalog freezes both GNU and BSD `sed -i` without backups, GNU `stat -c`
+and BSD `stat -f` formats, and Base64 `-d`/`-D` decoding. Empty xargs launches
+nothing; `wc -l` counts LF bytes. Ripgrep's conflicting short options retain
+ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
+explicit bounded contract; P13 selects and qualifies an engine rather than
+calling RE2 full PCRE. File signatures name format-identification evidence,
+not archive/database trust.
+
+Native document streams encode accepted text with the captured encoding, BOM
+and newline policy. A checksum and byte count cover that same representation;
+disk provenance remains separate. Exact delivered literal source windows may
+qualify conversational edit evidence, while internal execution reads do not.
+This deliberately replaces the old mixed editor-line/disk-byte wc projection
+for command output. Diff reuses the existing engine; complete stream bounds
+are independent from its old structured preview/context caps.
+
+Overwrite, append and in-place edits capture revisions before producers,
+stage complete output, review exact bytes, then publish each eligible target.
+Native grep no-match and diff differences have ordinary status 1 and complete
+publishable results. Actual utility errors, unknown external nonzero results,
+incomplete input, denied authority, stale revisions and cancellation discard
+uncommitted staging. Earlier committed effects remain; programs are not
+multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
+
+The golden program and option/limit fixture definitions are normative inputs
+for later acceptance suites. Catalog generation, reference probes and unit tests
+are distinct from executing native owners, live model qualification and installed
+platform evidence. macOS/Linux execution and installed qualification remain
+required; Windows-shaped paths and compile results never qualify native Windows.
+
 ## Altitude
 
 The preferred tool is the highest-level capability that completely expresses the action.
@@ -447,3 +502,11 @@ Requesting `command` does not automatically load `http_request`; the coordinator
 Direct search uses a catalogued set of keyless sources with declared roles, pacing, and normalization; user-configured providers join the effective set according to settings. Provider ids, endpoints, and enablement live in the generated catalog (`lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml`), not this page.
 
 Search results are untrusted inbound content. Provider text is normalized at one fan-in, provenance is retained, and fetched bodies are marked as data before entering model context. Outbound destination and secret policy still apply. Caching and pacing are explicit and bounded: a cached result states that it is a repeat, and provider cooldown does not turn one failure into a permanent absence. Privacy behavior and the outbound inventory are in [Privacy](privacy.md).
+
+### Shared operation invocation contracts
+
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P08 binds production admission.
+
+Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
+
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
