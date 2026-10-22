@@ -8,6 +8,8 @@ from pathlib import Path
 from common import digest, file_digest, read_rows, write_new
 from receipts import accepted_row, open_store
 
+FACT_SCHEMA = "pw-training-fact/1"
+
 
 def collect(fleets, identity, catalog, out, quality=()):
     out = Path(out)
@@ -22,15 +24,22 @@ def collect(fleets, identity, catalog, out, quality=()):
     stores = {p.parent.parent / "store.db" for p in paths}
     inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists()}
     before = {str(p): file_digest(p) for p in sorted(inputs)}
-    counts = Counter()
+    records, commits = [], {}
+    for path in paths:
+        value = json.loads(path.read_text())
+        if value.get("schema") == FACT_SCHEMA:
+            if value.get("epoch") == identity["epoch"] and value.get("kind") == "turn_committed":
+                commits[(value["session_id"], value["message_id"])] = value["decided_at"]
+            continue
+        records.append((path, value))
+    counts = Counter(turn_commits=len(commits))
     seen = set()
     with (out / "sft.receipts.jsonl").open("x") as stream:
-        for path in paths:
+        for path, record in records:
             try:
-                record = json.loads(path.read_text())
                 with closing(open_store(path.parent.parent / "store.db")) as db:
                     db.execute("BEGIN")
-                    row = accepted_row(record, db, identity, catalog)
+                    row = accepted_row(record, db, identity, catalog, commits)
                 key = (row["session"], row["request_capture"]["request_id"])
                 if key in seen:
                     raise ValueError("duplicate captured call")
@@ -42,6 +51,7 @@ def collect(fleets, identity, catalog, out, quality=()):
                 row["source"] = {"capture_sha256": before[str(path)], "store_sha256": before[str(path.parent.parent / "store.db")]}
                 stream.write(json.dumps(row, ensure_ascii=False) + "\n")
                 counts["accepted_candidates"] += 1
+                counts["accepted_by:" + report["acceptance"]] += 1
             except (ValueError, KeyError, TypeError) as exc:
                 counts["excluded:" + str(exc)] += 1
     after_inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists()}

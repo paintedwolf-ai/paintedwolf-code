@@ -1,6 +1,7 @@
 package modelcall
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -16,11 +17,25 @@ type RequestControlCapture struct {
 	Wire *WireCapture
 }
 
+// RecordDispatch records an adapter dispatch together with the request the
+// adapter serialized, so an opted-in collection can render that request again.
+func (c *RequestControlCapture) RecordDispatch(req CompletionRequest, body []byte) {
+	if c == nil {
+		return
+	}
+	c.Wire.record(&req, body)
+	c.recordControls(body)
+}
+
 func (c *RequestControlCapture) Record(body []byte) {
 	if c == nil {
 		return
 	}
 	c.Wire.Record(body)
+	c.recordControls(body)
+}
+
+func (c *RequestControlCapture) recordControls(body []byte) {
 	var wire map[string]json.RawMessage
 	if json.Unmarshal(body, &wire) != nil {
 		return
@@ -54,6 +69,13 @@ func (c *RequestControlCapture) Record(body []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.requests = append(c.requests, controls)
+}
+
+// RequestRenderer serializes a request exactly as an adapter would dispatch it,
+// without contacting the provider. Adapters that implement it can be the
+// serving target of a training collection.
+type RequestRenderer interface {
+	RenderRequest(ctx context.Context, req CompletionRequest) ([]byte, error)
 }
 
 func (c *RequestControlCapture) Snapshot() []map[string]json.RawMessage {

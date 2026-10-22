@@ -321,11 +321,11 @@ func (l *modelTurn) completeStream(
 	})
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
-	req = trainingcapture.Prepare(ctx, req)
+	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
-	trainingcapture.Observe(ctx, collected.completion, collectErr != nil)
+	trainingcapture.Observe(ctx, collected.completion, collectErr != nil, callProvider, callModel)
 	if collectErr != nil {
 		var recovered *modelcall.Completion
 		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
