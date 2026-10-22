@@ -200,7 +200,8 @@ func TestRedirectOutsideRootsIsRefusedWithoutEffect(t *testing.T) {
 		t.Fatal("refused redirect created a file")
 	}
 	r := h.run("", "rm", "-f", "--", outside)
-	if r.result.Terminal != toolcontract.ProducerRefused || toolrejection.AsToolReject(r.err) == nil || r.result.EffectCertainty != toolcontract.NoEffect || !strings.Contains(r.stderr, r.result.StopCode) {
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || reject == nil || reject.Code != r.result.StopCode || r.result.EffectCertainty != toolcontract.NoEffect {
 		t.Fatalf("rm outside roots %+v %v %q", r.result, r.err, r.stderr)
 	}
 }
