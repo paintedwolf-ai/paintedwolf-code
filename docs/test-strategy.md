@@ -683,8 +683,8 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
 job, `ready`: it first runs the complete repository contract tree, then compiles
 the host and runs `lint:full`, size budgets, Go changed coverage, comment checks,
-test failure-message checks, documentation links, Den typecheck, and Den lint.
-These checks are covered by `./task check-fast`, which also runs product tests
+test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests
 and Den changed coverage. Admission uses `test:contract -- ./test/contract/...`
 without a test-name filter. Failure or interruption stops the lane before its
 remaining work. Catalog validation accepts
@@ -814,8 +814,10 @@ commit on main; passing merge admission is insufficient.
 
 Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
 analysis-tool caches immediately after compiler preparation. Optional lint
-diagnostics run afterward and publish their own result separately. A failed or
-cancelled preparation cannot publish these caches; only trusted main writes them.
+diagnostics run afterward and publish their own result separately. WebKitGTK
+images also publish before diagnostics, so diagnostic cleanup cannot block
+their reuse. A failed or cancelled preparation cannot publish these caches;
+only trusted main writes them.
 The Go cache captures completed build preparation before lint adds test-variant
 compilation and vet facts; lint lanes may need to compute those entries themselves.
 Lint diagnostics remain a separate cache. A long diagnostic run cannot delay the
@@ -825,6 +827,13 @@ prepared build inputs.
 
 Required integration execution has a Linux network namespace containing only
 loopback. It runs as the normal runner account after namespace creation.
+Linux native setup resolves its APT dependency set before restoring exact package
+archives. The key includes package digests, the runner image version, and the
+architecture; no prefix restore mixes package sets. Native X11, Wayland, and
+Vulkan dependencies remain installed, including clipboard fixture peers. Only
+main publishes archives, after successful installation. Package candidates still
+follow the runner's distribution repositories.
+
 Pinned Go, Cargo, frontend, scanner, and generator inputs are provisioned first;
 Go and Cargo offline modes reject missing inputs during execution. Dependency
 service outages can still prevent provisioning, and cache availability is not
@@ -862,6 +871,32 @@ Merge-group CI is the only CI granted `actions: write`, for that call; pull
 request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
+
+##### Integration capacity experiment
+
+The capacity catalog in
+[`verification-plan.json`](../scripts/verification-plan.json) and
+`TestBoundedClassesFitTheHostedRunners` define the available integration budget
+from workflow concurrency groups, background reservations, and the PR admission
+reservation. Calculate that envelope before changing the integration cap; keep
+both one-PR groups and the admission reservation.
+
+For each successful run, the runtime lower bound is
+`max(total runner-minutes / lane cap, longest job duration)`. Use complete job
+durations, including setup and evidence publication. Extra lanes cannot shorten
+the longest job, so compare preparation costs before treating more parallelism
+as a throughput improvement. Retain dated measurements, run links, catalog
+revision, and capacity arithmetic in the rollout PR rather than this policy.
+
+After preparation and cache publication stabilize, compare at least ten
+successful groups at each cap. Record matrix size and affected scope, setup
+versus execution duration, ready-to-start wait, total runner-minutes, queue-to-merge
+time, PR admission wait, and failed or invalidated attempts separately. Change
+only `capacity.max_parallel.integration` for the six-lane comparison; retain the
+same recipes, shard count, queue settings, and required checks. Keep six only
+if completed merges per hour and queue-to-merge time improve without consuming
+the admission reservation or increasing failed attempts. Return the cap to four
+if those conditions do not hold. Retain both measurement sets with the rollout PR.
 
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`

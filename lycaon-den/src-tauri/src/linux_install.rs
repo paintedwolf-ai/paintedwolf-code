@@ -10,6 +10,9 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+mod source;
+pub use source::PackageSourceFacts;
+
 pub const INSTALL_ROOT: &str = crate::installation_mode::LINUX_PACKAGE_ROOT;
 pub const PACKAGE_NAME: &str = "painted-wolf-code";
 const BIN_DIR: &str = "bin";
@@ -21,6 +24,7 @@ const ENGINE_MARKER: &str = "schemas/oar/oar.schema.json";
 pub enum PackageFamily {
     Deb,
     Rpm,
+    Nix,
 }
 
 impl PackageFamily {
@@ -29,6 +33,7 @@ impl PackageFamily {
         match self {
             Self::Deb => format!("sudo apt update && sudo apt install --only-upgrade {package}"),
             Self::Rpm => format!("sudo dnf upgrade {package}"),
+            Self::Nix => "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation.".into(),
         }
     }
 }
@@ -39,6 +44,7 @@ pub struct InstalledPackage {
     pub name: String,
     pub version: String,
     pub update_command: String,
+    pub source: PackageSourceFacts,
 }
 
 impl InstalledPackage {
@@ -49,6 +55,7 @@ impl InstalledPackage {
             name,
             version,
             update_command,
+            source: PackageSourceFacts::for_family(family),
         }
     }
 }
@@ -162,7 +169,11 @@ mod tests {
     fn dpkg_owner_is_read_only_for_the_queried_path() {
         let exe = Path::new("/opt/painted-wolf-code/bin/painted-wolf-code");
         assert_eq!(
-            parse_dpkg_owner("painted-wolf-code: /opt/painted-wolf-code/bin/painted-wolf-code\n", exe).as_deref(),
+            parse_dpkg_owner(
+                "painted-wolf-code: /opt/painted-wolf-code/bin/painted-wolf-code\n",
+                exe
+            )
+            .as_deref(),
             Some("painted-wolf-code")
         );
         assert_eq!(
@@ -174,7 +185,11 @@ mod tests {
             Some("painted-wolf-code")
         );
         assert_eq!(
-            parse_dpkg_owner("diversion by foo from: /opt/painted-wolf-code/bin/painted-wolf-code\n", exe).as_deref(),
+            parse_dpkg_owner(
+                "diversion by foo from: /opt/painted-wolf-code/bin/painted-wolf-code\n",
+                exe
+            )
+            .as_deref(),
             Some("diversion by foo from")
         );
         assert!(parse_dpkg_owner("other: /usr/bin/other\n", exe).is_none());

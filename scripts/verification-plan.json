@@ -772,7 +772,8 @@
         "coverage:changes",
         "comments:check",
         "test:fail-messages:check",
-        "docs:links"
+        "docs:links",
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [
