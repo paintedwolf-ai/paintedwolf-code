@@ -80,7 +80,7 @@ func TestVisibleProcessesAndProcessExists(t *testing.T) {
 
 	child := exec.Command("/bin/sleep", "30")
 	if err := child.Start(); err != nil {
-		t.Skipf("start /bin/sleep: %v", err)
+		t.Fatalf("start /bin/sleep: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = child.Process.Kill()
@@ -102,7 +102,7 @@ func TestVisibleProcessesAndProcessExists(t *testing.T) {
 	for _, p := range procs {
 		if p.PID == childPID {
 			foundChild = true
-			if p.Command == "" || p.Name == "" {
+			if p.Command == "" || p.Name == "" || p.Instance == "" || p.StartOrder == 0 {
 				t.Fatalf("expected non-empty Command and Name for child: %+v", p)
 			}
 			break

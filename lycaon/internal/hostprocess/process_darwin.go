@@ -79,7 +79,8 @@ func inspect(pid int) (Process, error) {
 	}
 	return Process{PID: pid, ParentPID: int(info.pbi_ppid), UID: uint32(info.pbi_uid),
 		Name: C.GoString(&info.pbi_comm[0]), Executable: C.GoString(&path[0]),
-		Instance: fmt.Sprintf("%d:%d", uint64(before.unique_id), uint32(before.version))}, nil
+		StartOrder: uint64(info.pbi_start_tvsec)*1_000_000 + uint64(info.pbi_start_tvusec),
+		Instance:   fmt.Sprintf("%d:%d", uint64(before.unique_id), uint32(before.version))}, nil
 }
 
 func signalInstance(process Process, name string) error {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,12 +31,10 @@ type SessionJobs struct {
 	ProjectID     string
 	ToolCallID    string
 
-	mu         sync.Mutex
-	results    map[string]jobOutcome
-	signals    map[string]int
-	pids       map[string]string
-	handlePIDs map[string]int
-	commands   map[string]string
+	mu        sync.Mutex
+	results   map[string]jobOutcome
+	signals   map[string]int
+	processes map[string]jobProcess
 	// order lists handles in start order; %N names order[N-1].
 	order []string
 	// programOrder tracks handles started by the active program.
@@ -48,7 +47,15 @@ type jobOutcome struct {
 }
 
 // jobStatus is the registry's observation; a stop request is not an exit.
+type jobProcess struct {
+	Identity    hostprocess.Process
+	Name        string
+	CommandLine string
+}
+
 type jobStatus struct {
+	Process     hostprocess.Process
+	Name        string
 	Handle      string
 	PID         int
 	CommandLine string
@@ -59,24 +66,31 @@ type jobProcessKey struct{}
 type jobProcessTracker struct {
 	once     sync.Once
 	ready    chan struct{}
-	onRecord func(pid int, commandLine string)
+	onRecord func(jobProcess)
 }
 
-func noteJobProcess(ctx context.Context, pid int, commandLine string) {
+func noteJobProcess(ctx context.Context, pid int, args []string) {
 	t, _ := ctx.Value(jobProcessKey{}).(*jobProcessTracker)
 	if t == nil {
 		return
 	}
 	t.once.Do(func() {
 		if t.onRecord != nil {
-			t.onRecord(pid, commandLine)
+			p := jobProcess{CommandLine: strings.Join(args, " ")}
+			if len(args) > 0 {
+				p.Name = filepath.Base(args[0])
+			}
+			if pid > 0 {
+				p.Identity, _ = hostprocess.Observe(pid)
+			}
+			t.onRecord(p)
 		}
 		close(t.ready)
 	})
 }
 
-func noteJobNative(ctx context.Context, commandLine string) {
-	noteJobProcess(ctx, 0, commandLine)
+func noteJobNative(ctx context.Context, args []string) {
+	noteJobProcess(ctx, 0, args)
 }
 
 // BeginProgram prunes finished jobs from prior programs before a new program
@@ -95,6 +109,10 @@ func (j *SessionJobs) BeginProgram() {
 	for _, handle := range j.order {
 		if active[handle] {
 			kept = append(kept, handle)
+		} else {
+			delete(j.processes, handle)
+			delete(j.results, handle)
+			delete(j.signals, handle)
 		}
 	}
 	j.order = kept
@@ -145,8 +163,8 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	j.order = append(j.order, handle)
 	j.programOrder = append(j.programOrder, handle)
 	j.mu.Unlock()
-	tracker.onRecord = func(pid int, cmdLine string) {
-		j.recordProcess(handle, pid, cmdLine)
+	tracker.onRecord = func(process jobProcess) {
+		j.recordProcess(handle, process)
 	}
 	close(ready)
 	select {
@@ -160,41 +178,22 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	return handle, nil
 }
 
-func (j *SessionJobs) recordProcess(handle string, pid int, commandLine string) {
+func (j *SessionJobs) recordProcess(handle string, process jobProcess) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if commandLine != "" {
-		if j.commands == nil {
-			j.commands = map[string]string{}
-		}
-		j.commands[handle] = commandLine
+	if j.processes == nil {
+		j.processes = map[string]jobProcess{}
 	}
-	if pid > 0 {
-		if j.pids == nil {
-			j.pids = map[string]string{}
-		}
-		if j.handlePIDs == nil {
-			j.handlePIDs = map[string]int{}
-		}
-		j.pids[strconv.Itoa(pid)] = handle
-		j.handlePIDs[handle] = pid
-	}
+	j.processes[handle] = process
 }
 
-func (j *SessionJobs) pid(handle string) int {
+func (j *SessionJobs) process(handle string) jobProcess {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.handlePIDs[handle]
+	return j.processes[handle]
 }
 
-func (j *SessionJobs) commandLine(handle, fallback string) string {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if line := j.commands[handle]; line != "" {
-		return line
-	}
-	return fallback
-}
+func (j *SessionJobs) pid(handle string) int { return j.process(handle).Identity.PID }
 
 func (j *SessionJobs) signalStatus(handle string) int {
 	j.mu.Lock()
@@ -231,8 +230,15 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 			index = n - 1
 		}
 	default:
-		if handle, ok := j.pids[reference]; ok {
-			return handle, nil
+		if pid, err := strconv.Atoi(reference); err == nil && pid > 0 {
+			for handle, process := range j.processes {
+				if process.Identity.PID != pid {
+					continue
+				}
+				if hostprocess.IsCurrent(process.Identity) || !hostprocess.ProcessExists(pid) {
+					return handle, nil
+				}
+			}
 		}
 		if slices.Contains(j.order, reference) {
 			return reference, nil
@@ -337,11 +343,12 @@ func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command
 		}
-		out = append(out, jobStatus{
-			Handle:      job.Handle,
-			PID:         j.pid(job.Handle),
-			CommandLine: j.commandLine(job.Handle, line),
-		})
+		process := j.process(job.Handle)
+		if process.CommandLine != "" {
+			line = process.CommandLine
+		}
+		out = append(out, jobStatus{Handle: job.Handle, PID: process.Identity.PID,
+			Process: process.Identity, Name: process.Name, CommandLine: line})
 	}
 	return out, nil
 }

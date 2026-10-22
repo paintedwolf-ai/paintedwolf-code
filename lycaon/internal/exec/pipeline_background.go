@@ -70,6 +70,9 @@ func StartPipelineAsync(
 		done:   make(chan struct{}),
 		cancel: cancel,
 	}
+	if opts.Started != nil {
+		opts.Started(async.PID())
+	}
 	go async.wait(runCtx, opts, stdinReader, redirect)
 	return async, nil
 }

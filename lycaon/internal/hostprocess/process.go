@@ -26,16 +26,23 @@ type Process struct {
 	Name       string `json:"name"`
 	Executable string `json:"executable,omitempty"`
 	Instance   string `json:"instance"`
+	StartOrder uint64 `json:"-"`
 }
 
 // VisibleProcess is a read-only process observation for shell ps and pgrep.
 type VisibleProcess struct {
-	PID        int
-	ParentPID  int
-	UID        uint32
-	Name       string
-	Executable string
-	Command    string
+	Process
+	Command string
+}
+
+// Observe reads the kernel identity of a live process. Callers must retain the
+// instance, rather than treating a PID alone as ownership evidence.
+func Observe(pid int) (Process, error) { return inspect(pid) }
+
+// IsCurrent compares an observation with the current kernel instance.
+func IsCurrent(process Process) bool {
+	current, err := inspect(process.PID)
+	return err == nil && sameInstance(current, process)
 }
 
 // VisibleProcesses lists processes visible to the current user in PID order.
@@ -64,14 +71,11 @@ func VisibleProcesses(ctx context.Context) ([]VisibleProcess, error) {
 		if cmd == "" {
 			cmd = strings.TrimSpace(p.Name)
 		}
-		out = append(out, VisibleProcess{
-			PID:        p.PID,
-			ParentPID:  p.ParentPID,
-			UID:        p.UID,
-			Name:       p.Name,
-			Executable: p.Executable,
-			Command:    cmd,
-		})
+		current, err := inspect(candidate)
+		if err != nil || !sameInstance(p, current) {
+			continue
+		}
+		out = append(out, VisibleProcess{Process: p, Command: cmd})
 	}
 	return out, nil
 }

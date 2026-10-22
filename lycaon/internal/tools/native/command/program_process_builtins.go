@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"regexp/syntax"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,7 +26,10 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 		if err != nil {
 			return ownerFailure(err), err
 		}
-		visible, _ := hostprocess.VisibleProcesses(ctx)
+		visible, err := hostprocess.VisibleProcesses(ctx)
+		if err != nil {
+			return ownerFailure(err), err
+		}
 		ownedByPID := map[int]jobStatus{}
 		for _, job := range statuses {
 			if job.PID > 0 {
@@ -94,75 +99,18 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 			visible = filteredProcs
 		}
 
-		var out strings.Builder
-		if formatOpt, ok := bound.Last("-o"); ok && len(formatOpt.Values) > 0 {
-			writePsCustomFormat(&out, formatOpt.Values[0].Value, visible, statuses, ownedByPID, jobs)
-		} else if bsdAux {
-			out.WriteString("USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND\n")
-			seenHandles := map[string]bool{}
-			for _, proc := range visible {
-				cmdText := proc.Command
-				userText := strconv.FormatUint(uint64(proc.UID), 10)
-				if job, owned := ownedByPID[proc.PID]; owned {
-					seenHandles[job.Handle] = true
-					if job.CommandLine != "" {
-						cmdText = job.CommandLine
-					}
-					fmt.Fprintf(&out, "%s %d 0.0 0.0 0 0 ? S - 0:00 %s [session job #%d %s running]\n", userText, proc.PID, cmdText, jobs.Number(job.Handle), job.Handle)
-				} else {
-					fmt.Fprintf(&out, "%s %d 0.0 0.0 0 0 ? S - 0:00 %s\n", userText, proc.PID, cmdText)
-				}
-			}
-			for _, job := range statuses {
-				if seenHandles[job.Handle] {
-					continue
-				}
-				fmt.Fprintf(&out, "session %d 0.0 0.0 0 0 ? R - 0:00 [%d] %s running %s [session job]\n", job.PID, jobs.Number(job.Handle), job.Handle, job.CommandLine)
-			}
-		} else if fullFmt {
-			out.WriteString("UID PID PPID C STIME TTY TIME CMD\n")
-			seenHandles := map[string]bool{}
-			for _, proc := range visible {
-				cmdText := proc.Command
-				userText := strconv.FormatUint(uint64(proc.UID), 10)
-				if job, owned := ownedByPID[proc.PID]; owned {
-					seenHandles[job.Handle] = true
-					if job.CommandLine != "" {
-						cmdText = job.CommandLine
-					}
-					fmt.Fprintf(&out, "%s %d %d 0 - ? 00:00:00 %s [session job #%d %s running]\n", userText, proc.PID, proc.ParentPID, cmdText, jobs.Number(job.Handle), job.Handle)
-				} else {
-					fmt.Fprintf(&out, "%s %d %d 0 - ? 00:00:00 %s\n", userText, proc.PID, proc.ParentPID, cmdText)
-				}
-			}
-			for _, job := range statuses {
-				if seenHandles[job.Handle] {
-					continue
-				}
-				fmt.Fprintf(&out, "session %d 0 0 - ? 00:00:00 [%d] %s running %s [session job]\n", job.PID, jobs.Number(job.Handle), job.Handle, job.CommandLine)
-			}
-		} else {
-			out.WriteString("PID TTY TIME CMD\n")
-			seenHandles := map[string]bool{}
-			for _, proc := range visible {
-				cmdText := proc.Command
-				if job, owned := ownedByPID[proc.PID]; owned {
-					seenHandles[job.Handle] = true
-					if job.CommandLine != "" {
-						cmdText = job.CommandLine
-					}
-					fmt.Fprintf(&out, "%d ? 00:00:00 %s [session job #%d %s running]\n", proc.PID, cmdText, jobs.Number(job.Handle), job.Handle)
-				} else {
-					fmt.Fprintf(&out, "%d ? 00:00:00 %s\n", proc.PID, cmdText)
-				}
-			}
-			for _, job := range statuses {
-				if seenHandles[job.Handle] {
-					continue
-				}
-				fmt.Fprintf(&out, "[%d] %s running %s [session job]\n", jobs.Number(job.Handle), job.Handle, job.CommandLine)
-			}
+		columns := "pid,tty,time,command"
+		if bsdAux {
+			columns = "user,pid,pcpu,pmem,vsz,rss,tty,stat,start,time,command"
 		}
+		if fullFmt && !bsdAux {
+			columns = "uid,pid,ppid,c,stime,tty,time,cmd"
+		}
+		if formatOpt, ok := bound.Last("-o"); ok && len(formatOpt.Values) > 0 {
+			columns = formatOpt.Values[0].Value
+		}
+		var out strings.Builder
+		writePsCustomFormat(&out, columns, visible, statuses, ownedByPID, jobs)
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
 		}
@@ -170,95 +118,14 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 	})
 }
 
-func writePsCustomFormat(out *strings.Builder, spec string, visible []hostprocess.VisibleProcess, statuses []jobStatus, ownedByPID map[int]jobStatus, jobs *SessionJobs) {
-	rawCols := strings.FieldsFunc(spec, func(r rune) bool { return r == ',' || r == ' ' })
-	if len(rawCols) == 0 {
-		return
-	}
-	showHeader := true
-	cols := make([]string, 0, len(rawCols))
-	headers := make([]string, 0, len(rawCols))
-	for _, raw := range rawCols {
-		if strings.HasSuffix(raw, "=") {
-			showHeader = false
-			raw = strings.TrimSuffix(raw, "=")
-		}
-		col := strings.ToLower(strings.TrimSpace(raw))
-		cols = append(cols, col)
-		headers = append(headers, strings.ToUpper(col))
-	}
-	if showHeader {
-		out.WriteString(strings.Join(headers, " ") + "\n")
-	}
-	seenHandles := map[string]bool{}
-	for _, proc := range visible {
-		job, owned := ownedByPID[proc.PID]
-		if owned {
-			seenHandles[job.Handle] = true
-		}
-		fields := make([]string, 0, len(cols))
-		for _, col := range cols {
-			switch col {
-			case "pid":
-				fields = append(fields, strconv.Itoa(proc.PID))
-			case "ppid":
-				fields = append(fields, strconv.Itoa(proc.ParentPID))
-			case "pgid":
-				fields = append(fields, strconv.Itoa(proc.PID))
-			case "user", "uid":
-				fields = append(fields, strconv.FormatUint(uint64(proc.UID), 10))
-			case "stat", "state", "s":
-				fields = append(fields, "S")
-			case "comm":
-				fields = append(fields, proc.Name)
-			case "command", "args", "cmd":
-				cmdText := proc.Command
-				if owned {
-					cmdText += fmt.Sprintf(" [session job #%d %s running]", jobs.Number(job.Handle), job.Handle)
-				}
-				fields = append(fields, cmdText)
-			default:
-				fields = append(fields, "0")
-			}
-		}
-		out.WriteString(strings.Join(fields, " ") + "\n")
-	}
-	for _, job := range statuses {
-		if seenHandles[job.Handle] {
-			continue
-		}
-		fields := make([]string, 0, len(cols))
-		for _, col := range cols {
-			switch col {
-			case "pid":
-				if job.PID > 0 {
-					fields = append(fields, strconv.Itoa(job.PID))
-				} else {
-					fields = append(fields, job.Handle)
-				}
-			case "user", "uid":
-				fields = append(fields, "session")
-			case "stat", "state", "s":
-				fields = append(fields, "R")
-			case "comm":
-				fields = append(fields, firstCommandWord(job.CommandLine))
-			case "command", "args", "cmd":
-				fields = append(fields, fmt.Sprintf("[%d] %s running %s [session job]", jobs.Number(job.Handle), job.Handle, job.CommandLine))
-			default:
-				fields = append(fields, "0")
-			}
-		}
-		out.WriteString(strings.Join(fields, " ") + "\n")
-	}
-}
-
 type procCandidate struct {
-	id     string
-	pid    int
-	handle string
-	comm   string
-	cmd    string
-	owned  bool
+	id      string
+	pid     int
+	handle  string
+	comm    string
+	cmd     string
+	owned   bool
+	started uint64
 }
 
 func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern string, fullMatch, exactMatch bool) ([]procCandidate, error) {
@@ -274,7 +141,10 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	if err != nil {
 		return nil, err
 	}
-	visible, _ := hostprocess.VisibleProcesses(ctx)
+	visible, err := hostprocess.VisibleProcesses(ctx)
+	if err != nil {
+		return nil, err
+	}
 	ownedByPID := map[int]jobStatus{}
 	for _, job := range statuses {
 		if job.PID > 0 {
@@ -289,13 +159,14 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 			continue
 		}
 		job, owned := ownedByPID[proc.PID]
+		owned = owned && job.Process.Instance == proc.Instance
 		cmdLine := proc.Command
 		comm := proc.Name
 		if owned {
 			seenHandles[job.Handle] = true
 			if job.CommandLine != "" {
 				cmdLine = job.CommandLine
-				comm = firstCommandWord(job.CommandLine)
+				comm = job.Name
 			}
 		}
 		subject := comm
@@ -304,20 +175,21 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 		}
 		if re.MatchString(subject) || (!fullMatch && re.MatchString(proc.Name)) {
 			matches = append(matches, procCandidate{
-				id:     strconv.Itoa(proc.PID),
-				pid:    proc.PID,
-				handle: job.Handle,
-				comm:   comm,
-				cmd:    cmdLine,
-				owned:  owned,
+				id:      strconv.Itoa(proc.PID),
+				pid:     proc.PID,
+				handle:  job.Handle,
+				comm:    comm,
+				cmd:     cmdLine,
+				owned:   owned,
+				started: proc.StartOrder,
 			})
 		}
 	}
 	for _, job := range statuses {
-		if seenHandles[job.Handle] {
+		if seenHandles[job.Handle] || job.PID > 0 {
 			continue
 		}
-		comm := firstCommandWord(job.CommandLine)
+		comm := job.Name
 		subject := comm
 		if fullMatch {
 			subject = job.CommandLine
@@ -340,21 +212,6 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	return matches, nil
 }
 
-func firstCommandWord(commandLine string) string {
-	fields := strings.Fields(commandLine)
-	if len(fields) == 0 {
-		return ""
-	}
-	if len(fields) >= 3 && fields[0] == "external" && fields[1] == "--" {
-		fields = fields[2:]
-	}
-	word := fields[0]
-	if idx := strings.LastIndexByte(word, '/'); idx >= 0 {
-		word = word[idx+1:]
-	}
-	return word
-}
-
 func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) commandprogram.OperationDispatcher {
 	return jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		bound, err := (commandprogram.CatalogBinder{}).Bind(spec, request.Argv)
@@ -374,15 +231,16 @@ func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 
 		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
 		if err != nil {
+			if _, invalid := err.(*syntax.Error); !invalid {
+				return ownerFailure(err), err
+			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pgrep", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
 		}
 		if len(matches) == 0 {
 			return readResult(1), nil
 		}
-		if newest {
-			matches = matches[len(matches)-1:]
-		} else if oldest {
-			matches = matches[:1]
+		if newest || oldest {
+			matches = selectProcessAge(matches, newest)
 		}
 		var out strings.Builder
 		for _, m := range matches {
@@ -431,6 +289,9 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 
 		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
 		if err != nil {
+			if _, invalid := err.(*syntax.Error); !invalid {
+				return ownerFailure(err), err
+			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pkill", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
 		}
 		var owned, foreign []procCandidate
@@ -448,10 +309,8 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 			}
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: false, EffectCertainty: toolcontract.NoEffect}, nil
 		}
-		if newest {
-			owned = owned[len(owned)-1:]
-		} else if oldest {
-			owned = owned[:1]
+		if newest || oldest {
+			owned = selectProcessAge(owned, newest)
 		}
 		for _, m := range owned {
 			ref := m.handle
@@ -467,4 +326,24 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 		}
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectAttempted}, nil
 	})
+}
+
+func selectProcessAge(matches []procCandidate, newest bool) []procCandidate {
+	known := slices.DeleteFunc(slices.Clone(matches), func(p procCandidate) bool { return p.started == 0 })
+	if len(known) == 0 {
+		return nil
+	}
+	slices.SortStableFunc(known, func(a, b procCandidate) int {
+		if a.started < b.started {
+			return -1
+		}
+		if a.started > b.started {
+			return 1
+		}
+		return a.pid - b.pid
+	})
+	if newest {
+		return known[len(known)-1:]
+	}
+	return known[:1]
 }

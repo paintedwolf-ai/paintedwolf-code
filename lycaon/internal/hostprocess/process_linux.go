@@ -51,7 +51,11 @@ func inspect(pid int) (Process, error) {
 		return Process{}, err
 	}
 	executable, _ := os.Readlink(path + "/exe")
-	return Process{PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
+	started, err := strconv.ParseUint(fields[19], 10, 64)
+	if err != nil {
+		return Process{}, err
+	}
+	return Process{StartOrder: started, PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
 }
 
 func signalInstance(process Process, name string) error {

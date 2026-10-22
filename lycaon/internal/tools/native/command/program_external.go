@@ -68,6 +68,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
+	opts.Started = func(pid int) { noteJobProcess(ctx, pid, argv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -75,7 +76,6 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
 	}
-	noteJobProcess(ctx, async.PID(), commandLine)
 	select {
 	case <-async.Done():
 	case <-ctx.Done():
