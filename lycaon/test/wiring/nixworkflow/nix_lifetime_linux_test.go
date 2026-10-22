@@ -1,6 +1,6 @@
 //go:build linux && nixworkflow
 
-package confine_test
+package nixworkflow_test
 
 import (
 	"bufio"

@@ -1,6 +1,6 @@
 //go:build linux && nixworkflow
 
-package confine_test
+package nixworkflow_test
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func TestLinuxNixExplicitMCPToolchainRetainsProtocolAndEnvironment(t *testing.T)
 	testutil.FailErr(t, "start required MCP action broker", err)
 	t.Cleanup(func() { _ = confine.StopEgressBroker() })
 	peer := filepath.Join(t.TempDir(), "mcp-peer")
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", peer, "../mcp/testdata/fake_stdio_server")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", peer, filepath.Join(testutil.CheckoutRoot(t), "lycaon/internal/mcp/testdata/fake_stdio_server"))
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build existing MCP protocol fixture: %v\n%s", err, output)
 	}

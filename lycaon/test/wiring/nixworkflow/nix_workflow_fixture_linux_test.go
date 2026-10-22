@@ -1,6 +1,6 @@
 //go:build linux && nixworkflow
 
-package confine_test
+package nixworkflow_test
 
 import (
 	"bytes"
@@ -9,9 +9,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -123,4 +127,98 @@ func nixResult(t *testing.T, result *execpkg.PipelineResult, err error) []byte {
 		t.Fatalf("Nix workflow failed: result=%+v error=%v", result, err)
 	}
 	return bytes.TrimSpace(result.Output)
+}
+
+// The integration fixture owns its action feed and helper lifetime through public APIs.
+func TestMain(m *testing.M) {
+	confine.SetKeyMaterialPathsSource(func() []string {
+		return []string{"~/.ssh/", "~/.gnupg/", "~/.age/", "~/.config/sops/age/", "~/.docker/trust/", "~/Library/Keychains/", "~/.password-store/", "~/.local/share/keyrings/"}
+	})
+	code := m.Run()
+	confine.StopRefusalWatch()
+	os.Exit(code)
+}
+
+var helperBuild struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+func requireLinuxSandbox(t *testing.T) string {
+	t.Helper()
+	caps, _ := confine.LinuxCapabilities()
+	if !caps.Available() {
+		report, _ := json.MarshalIndent(caps, "", "  ")
+		t.Fatalf("linux confinement unavailable on this host:\n%s", report)
+	}
+	self, err := os.Executable()
+	testutil.FailErr(t, "resolve Nix workflow process helper", err)
+	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
+		helperBuild.once.Do(func() {
+			helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // All fixture children share the coverage helper build.
+			helperBuild.path = filepath.Join(os.TempDir(), "pw-nix-helper-"+strconv.Itoa(os.Getpid()))
+			build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain", "-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path,
+				filepath.Join(testutil.CheckoutRoot(t), "lycaon/internal/confine/testdata/helpermain"))
+			if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
+				helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
+			}
+		})
+		testutil.FailErr(t, "build Nix workflow coverage helper", helperBuild.err)
+		return helperBuild.path
+	}
+	return self
+}
+
+func denyConfinement(roots ...string) confine.Confinement {
+	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
+		roots = append(roots, dir)
+	}
+	return confine.Confinement{Roots: roots, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+}
+
+func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []string, name string, args ...string) (syscall.WaitStatus, string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, self, name, args, c)
+	testutil.FailErr(t, "launch Nix workflow action", err)
+	defer cleanup()
+	cmd.Env = env
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	_ = cmd.Run()
+	if cmd.ProcessState == nil {
+		t.Fatalf("%s did not start: %s", name, out.String())
+	}
+	return cmd.ProcessState.Sys().(syscall.WaitStatus), out.String()
+}
+
+func boundConfinement(t *testing.T, c confine.Confinement) (*confine.Confinement, *confine.ActionLease) {
+	t.Helper()
+	confine.StartRefusalWatch(context.Background(), t.TempDir())
+	t.Cleanup(confine.StopRefusalWatch)
+	lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: "call-" + t.Name(), ToolName: "command", CommandLine: "probe"})
+	testutil.FailErr(t, "bind Nix workflow action", err)
+	t.Cleanup(func() { lease.Close(context.Background()) })
+	if w := lease.Refusals().Witness; w != confine.WitnessIncomplete {
+		t.Fatalf("Nix workflow action has refusal witness %q", w)
+	}
+	return &c, lease
+}
+
+func refusalTargets(r confine.SandboxRefusals) map[string]confine.RefusalRecovery {
+	out := map[string]confine.RefusalRecovery{}
+	for _, x := range r.Refusals {
+		out[x.Operation+" "+x.Target] = x.Recovery
+	}
+	return out
+}
+
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "pw-nix-") //nolint:usetesting // Keep actual Unix socket fixture names within the kernel path limit.
+	testutil.FailErr(t, "create short Nix workflow socket fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
