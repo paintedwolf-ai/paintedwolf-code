@@ -1,8 +1,8 @@
 ## command{% if is_coordinator %} (coordinator){% endif %}
 
-{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Runs a bash program (`$(...)`, pipelines, loops, variables, functions, globs, `<<`, redirects, `&`). Common utilities run natively, accept GNU and BSD flags, and print help on `CMD --help`. Variables, functions, and `cd` last for this program only.
+{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}Utilities run natively with GNU and BSD flags; use `CMD --help`. Shell state lasts for this program only.
 
-{% if workspace_roots %}Programs start in {{ project_dir }} (`pwd`, `$PWD`, and `$OLDPWD` are absolute;{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`;{% endif %} relative paths resolve from the current directory). Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects (quote to pass literally):
+{% if workspace_roots %}Programs start in {{ project_dir }}; `pwd`, `$PWD` and `$OLDPWD` are absolute.{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`.{% endif %} Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects (quote to pass literally):
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
 {% endfor %}These folders are the project; search indexing, history and undo cover only them.{% if profile_command_mutation != false %} {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}{% endif %}
 {% else %}No project folders are attached{% if profile_command_mutation != false %}; {% if reviews_confined_writes == false %}writes outside `@scratch` and temporary or cache folders ask the person first{% else %}writes outside `@scratch`, including system temporary folders, ask the person first{% endif %}{% endif %}.

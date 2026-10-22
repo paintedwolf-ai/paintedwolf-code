@@ -169,10 +169,17 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 			t.Errorf("command-surface still contains stale guidance %q", stale)
 		}
 	}
-	for _, want := range []string{"GNU and BSD", "CMD --help", "$(...)", "`@main` → /workspace (primary)", "`@scratch` → /scratch/s1"} {
+	for _, want := range []string{"GNU and BSD", "CMD --help", "`@main` → /workspace (primary)", "`@scratch` → /scratch/s1"} {
 		if !strings.Contains(cmdSurface, want) {
 			t.Errorf("command-surface missing %q: %s", want, cmdSurface)
 		}
+	}
+
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "load command schema", err)
+	command, ok := schemas.ToolMeta("command")
+	if !ok || !strings.Contains(command.Description, "bash program") || !strings.Contains(command.Description, "$(...)") {
+		t.Errorf("command schema must invite ordinary bash programs: %+v", command)
 	}
 
 	langCatalog, err := toolcontract.LanguageV1()
