@@ -248,7 +248,8 @@ func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, 
 }
 
 // rootsFingerprint keys the stable prompt by every root label and path it
-// renders and the scratch path, so a rename, move or swap re-renders it.
+// renders, the scratch path, and command environment facts, so any change
+// re-renders it.
 func rootsFingerprint(vars map[string]any) string {
 	count, _ := vars["root_count"].(int)
 	out := []string{fmt.Sprint(count)}
@@ -262,6 +263,9 @@ func rootsFingerprint(vars map[string]any) string {
 	}
 	if reviews, ok := vars["reviews_confined_writes"].(bool); ok {
 		out = append(out, fmt.Sprintf("reviews_confined_writes=%t", reviews))
+	}
+	if hidden, ok := vars["command_external_hidden"].(bool); ok {
+		out = append(out, fmt.Sprintf("command_external_hidden=%t", hidden))
 	}
 	return strings.Join(out, ";")
 }

@@ -52,23 +52,16 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 // owner, then runs it in the current frame. A capture, encoding or syntax
 // refusal latches before any sourced statement; earlier parent effects stay.
 func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields Fields) error {
-	if len(fields) > 1 && fields[1].Value != "--" && strings.HasPrefix(fields[1].Value, "-") {
-		return f.builtinStatus(s.SyntaxLocation, "source", 2)
-	}
-	spec, _, err := ResolveCommand(fields)
-	if err != nil {
+	if _, _, err := ResolveCommand(fields); err != nil {
 		return err
 	}
-	bound, err := f.e.ports.Binder.Bind(spec, fields)
-	var argv *ArgvError
-	if errors.As(err, &argv) {
-		return f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
+	operands := fields[1:]
+	endOfOptions := false
+	if len(operands) > 0 && operands[0].Value == "--" {
+		endOfOptions = true
+		operands = operands[1:]
 	}
-	if err != nil {
-		return err
-	}
-	operands := bound.Operands()
-	if len(operands) != 1 || (!bound.EndOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
+	if len(operands) != 1 || (!endOfOptions && strings.HasPrefix(operands[0].Value, "-")) {
 		return f.builtinStatus(s.SyntaxLocation, "source", 2)
 	}
 	if int64(f.sources+1) > f.e.limits["source_depth"] {

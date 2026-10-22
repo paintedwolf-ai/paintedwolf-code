@@ -159,6 +159,11 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	if resolved, ok, err := commandprogram.ResolveCommand(request.Argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, request.Argv); err == nil && bound.Help {
+			return d.invokeBuiltin(ctx, resolved, commandprogram.HelpDispatcher(resolved), request, streams)
+		}
+	}
 	spec, native := d.run.commands[request.Argv[0].Value]
 	switch {
 	case !native || spec.Name == "external":
@@ -580,10 +585,10 @@ func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecificat
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {
+		index[spec.Name] = spec
 		if strings.Contains(spec.Name, " ") {
 			continue
 		}
-		index[spec.Name] = spec
 		for _, alias := range spec.Aliases {
 			index[alias] = spec
 		}

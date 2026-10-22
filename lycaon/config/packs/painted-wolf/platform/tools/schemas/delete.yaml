@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Remove files and empty directories within write scope; the person can undo each removal. Replaces command: rm(1)."
+description: "Remove files and empty directories within write scope; the person can undo each removal."
 schema:
   type: object
   properties:

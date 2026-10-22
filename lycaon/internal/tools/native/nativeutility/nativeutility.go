@@ -47,6 +47,7 @@ func ArgvRejection(err error, spec toolcontract.CommandSpecification) error {
 	}
 	return errors.Join(err, toolrejection.RejectInvalidArguments(argvErr.Code, map[string]any{
 		"command": spec.Name, "word": argvErr.Word, "expected": argvErr.Expected, "expected_form": spec.Argv,
+		"supported_options": toolcontract.CommandSpellings(spec),
 		"source_start_byte": argvErr.Span.StartByte, "source_end_byte": argvErr.Span.EndByte, "source_line": argvErr.Span.Line, "source_column": argvErr.Span.Column,
 	}))
 }

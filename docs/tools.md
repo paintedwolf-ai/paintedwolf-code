@@ -4,7 +4,7 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
@@ -865,7 +865,7 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
 
 ## Web research sources
 
@@ -882,3 +882,18 @@ The registry publishes one immutable operation declaration with the existing sch
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
 Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+
+### Command schema, guidance, and floor cutover
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles (`read_only` on read-only profiles and surfaces), replacing `read`, `grep`, `find`, `list_dir`, and `jq` on the floor while keeping `survey_repo`, `summarize`, `edit`, `replace_lines`, `code_rewrite`, and `jq_edit` loadable. Any catalog utility invoked as `CMD --help` prints its catalog help (`CommandSpecification.Help`) in-process without external execution or `COMMAND_OPTION_UNSUPPORTED`.
+
+| Surface / artifact | Cutover action |
+|--------------------|----------------|
+| `platform/tools/schemas/command.yaml` | Rewritten for ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, redirects, background `&` jobs), native GNU/BSD utilities, `CMD --help`, direct external toolchains, and real `capability_request` keys |
+| `platform/shared/partials/command-surface.md` | Rewritten from `argv host runner` (`COMMAND_NOT_ARGV`, no here-docs/`$()`) to portable command language v1 with `{{ command_roots_listing }}` slot |
+| `platform/shared/units/native-{read,grep,find,list-dir,jq}-tool.md` | Removed |
+| `USE_*_NATIVE` policy redirects & `tool-command-equivalence.yaml` | Removed (`USE_READ_NATIVE`, `USE_GREP_REGEX`, `USE_FIND_NOT_COMMAND`, `USE_LIST_DIR_NATIVE`, `USE_JQ_NATIVE`, `USE_STAT_NATIVE`, `USE_WC_NATIVE`, `USE_WRITE_NATIVE`, `USE_CHMOD_NATIVE`, `USE_CHOWN_NATIVE`, `USE_COPY_NATIVE`, `USE_DELETE_NATIVE`, `USE_MKDIR_NATIVE`, `USE_MOVE_NATIVE`, `USE_GIT_STATUS_NATIVE`, `USE_GIT_DIFF_NATIVE`, `USE_HTTP_REQUEST_NATIVE`, `USE_NATIVE_TOOL`); OAR rules route by `paintedwolf.operation` selector |
+| `platform/host/coordinator-surfaces.yaml` & `platform/tools/profiles/*.yaml` | `command` promoted to floor/sticky (`command_effects: [read_only]` on read-only surfaces/profiles); `read`, `grep`, `find`, `list_dir`, and `jq` removed from floors and demoted from sticky |
+| `platform/shared/units/{runner-operating-procedure,secure-by-default-read,native-edit-tool,native-summarize-tool,survey-first-pass}.md` | Updated to attach to and teach `command` (`cat`, `sed -n`, `grep -n`, `find`, `ls`, `jq`) instead of argv-only restrictions or routine floor tools |
+| `platform/shared/partials/{workspace-roots,coordinator-turn-recipe,multi-root-addressing,coordinator-synthesis-wrapup,coordinator-tool-discipline,coordinator-floor}.md` & `implement/shared/partials/implementer-scoped-file.md` | Updated to teach `command` for routine file reads, directory listings, and searches |
+| `platform/agents/prompts/{code-reviewer,coordinator-surface-build}.md`, `implement/agents/prompts/coordinator-mode-implement-routing.md`, `recon-pack/agents/{repo-researcher.yaml,prompts/path-explorer.md}`, and skills | Updated to reference `command` utilities instead of routine `read`/`grep`/`find`/`list_dir`/`jq` schemas |

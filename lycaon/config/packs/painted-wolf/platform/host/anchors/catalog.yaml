@@ -327,6 +327,8 @@ anchors:
     envelope:
       vars:
         reviews_confined_writes: { type: bool, required: true }
+        command_external_changed: { type: bool }
+        command_external_hidden: { type: bool }
 
   - id: project.root.detach_canceled
     title: Root detach canceled work

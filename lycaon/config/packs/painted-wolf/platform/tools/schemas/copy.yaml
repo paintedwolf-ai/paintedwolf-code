@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Copy files within write scope (files only; never use command cp). Replaces command: cp(1)."
+description: "Copy files within write scope (files only)."
 schema:
   type: object
   properties:

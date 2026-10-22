@@ -14,5 +14,5 @@ This project spans {{ root_count }} folders:
 {% include "partials/multi-root-addressing.md" %}
 {% endif %}
 {% if root_count > 0 %}
-User absolute paths: call `read`/`list_dir`/`grep` with them — expect an Approvals card or `Code:`; never refuse in prose or ask them to paste the file.
+User absolute paths: call `command` with them — expect an Approvals card or `Code:`; never refuse in prose or ask them to paste the file.
 {% endif %}

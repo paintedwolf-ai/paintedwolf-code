@@ -141,6 +141,12 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
 	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, tc, streams)
 	err := p.run(inv)
 	if err == nil {
