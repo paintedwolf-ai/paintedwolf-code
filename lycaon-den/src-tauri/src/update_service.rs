@@ -15,6 +15,8 @@ mod staging;
 pub(crate) mod startup;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod nix_tests;
 pub(crate) mod transaction;
 pub mod verification;
 pub use error::{UpdateError, UpdateErrorCode};
