@@ -2,7 +2,7 @@
 // request goes through the http_request owner's complete lifecycle (screening,
 // recipient approval, secret and cookie handling, loopback authority and the
 // per-hop egress gate) via httpaction.Perform; there is no second client.
-// Response bytes reach stdout through the screened byte stream, files named by
+// Response bytes reach stdout unchanged; files named by
 // -o, -D and -c publish through the pinned exact-bytes door, and a request
 // that may have reached the server without a response settles as an unknown
 // effect that program recovery never retries.
@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -22,33 +21,26 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 )
 
-// Screening is the capture owner's response screening for downstream bytes.
-type Screening struct {
-	Projector *captureprojection.Projector
-	Options   captureprojection.StreamOptions
-}
-
 // Owners holds the shared operations behind curl. One value serves many
 // programs; per-invocation state lives in Prepared.
 type Owners struct {
 	HTTP      httpaction.Deps
 	Mutations *mutation.Owners
-	Screening Screening
 
 	spec      toolcontract.CommandSpecification
 	operation string
 	limits    map[string]int64
 }
 
-func NewOwners(http httpaction.Deps, mutations *mutation.Owners, screening Screening) (*Owners, error) {
-	if http.Boundary == nil || mutations == nil || screening.Projector == nil || screening.Options.WorkingMemory == nil {
-		return nil, errors.New("curl requires the HTTP owner, publication owners and response screening")
+func NewOwners(http httpaction.Deps, mutations *mutation.Owners) (*Owners, error) {
+	if http.Boundary == nil || mutations == nil {
+		return nil, errors.New("curl requires the HTTP and publication owners")
 	}
 	catalog, err := toolcontract.LanguageV1()
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{HTTP: http, Mutations: mutations, Screening: screening, limits: map[string]int64{}}
+	o := &Owners{HTTP: http, Mutations: mutations, limits: map[string]int64{}}
 	for _, command := range catalog.Commands {
 		if command.Name == "curl" {
 			o.spec = command

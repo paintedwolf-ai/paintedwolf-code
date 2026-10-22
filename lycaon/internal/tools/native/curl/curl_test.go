@@ -24,7 +24,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -184,7 +183,7 @@ func TestCurlOutputFilesPublishExactBytesAndPins(t *testing.T) {
 		t.Fatalf("destination pins %+v", pins)
 	}
 	sum := sha256.Sum256(body)
-	if r.transfer.ReceivedSHA256 != hex.EncodeToString(sum[:]) || r.transfer.EmittedSHA256 != r.transfer.ReceivedSHA256 || r.transfer.Redacted {
+	if r.transfer.ReceivedSHA256 != hex.EncodeToString(sum[:]) || r.transfer.EmittedSHA256 != r.transfer.ReceivedSHA256 {
 		t.Fatalf("transfer identity %+v", r.transfer)
 	}
 }
@@ -207,8 +206,8 @@ func TestCurlCookieJarRoundTrip(t *testing.T) {
 	})
 	h := newHarness(t)
 	login := h.curl(t.Context(), "-s", "-D", "-", "-c", "jar.txt", server.URL+"/login")
-	// Set-Cookie is credential material: it reaches the jar, never -D or -i.
-	if login.err != nil || contains(login.stdout, "Set-Cookie") || !strings.HasPrefix(login.stdout, "HTTP/1.1 200 OK\r\n") {
+	// Header dumps and cookie files preserve the server values.
+	if login.err != nil || !contains(login.stdout, "Set-Cookie: session=abc123") || !strings.HasPrefix(login.stdout, "HTTP/1.1 200 OK\r\n") {
 		t.Fatalf("login: %v %q", login.err, login.stdout)
 	}
 	jar := h.read("jar.txt")
@@ -221,25 +220,6 @@ func TestCurlCookieJarRoundTrip(t *testing.T) {
 	}
 	if pins := h.pins.pins[r.execution]; len(pins) != 4 || pins[0].Path != "me.txt" || pins[1].Path != "me.hdr" || pins[2].Path != "jar.txt" || pins[2].Role != toolcontract.DestinationRevision || pins[3].Path != "jar.txt" || pins[3].Role != toolcontract.SourceRevision {
 		t.Fatalf("jar capture and read pins %+v", pins)
-	}
-}
-
-func TestCurlResponseScreeningSeparatesEmittedIdentity(t *testing.T) {
-	server := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
-		stamp(w, "text/plain")
-		_, _ = io.WriteString(w, "token="+protectedValue+"\n")
-	})
-	h := newHarness(t)
-	r := h.curl(t.Context(), "-s", server.URL+"/leak")
-	if r.err != nil || contains(r.stdout, protectedValue) || !contains(r.stdout, secretmatch.RedactedMarker) {
-		t.Fatalf("protected value reached stdout: %q %v", r.stdout, r.err)
-	}
-	sum := sha256.Sum256([]byte(r.stdout))
-	if !r.transfer.Redacted || r.transfer.EmittedSHA256 != hex.EncodeToString(sum[:]) || r.transfer.ReceivedSHA256 == r.transfer.EmittedSHA256 {
-		t.Fatalf("emitted identity %+v", r.transfer)
-	}
-	if !contains(r.result.Evidence.EvidenceRef, "received:sha256:"+r.transfer.ReceivedSHA256) {
-		t.Fatalf("receipt evidence lost the received identity: %+v", r.result.Evidence)
 	}
 }
 

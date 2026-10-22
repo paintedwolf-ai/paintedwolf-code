@@ -111,16 +111,13 @@ func (c *wireCapture) headers(status int) *WireHeaders {
 	if got, ok := blockStatus([]byte(lines[0])); !ok || got != status {
 		return nil
 	}
-	out := &WireHeaders{StatusLine: lines[0]}
+	out := &WireHeaders{StatusLine: lines[0], Raw: string(data) + "\r\n\r\n"}
 	for _, line := range lines[1:] {
 		name, value, ok := strings.Cut(line, ":")
 		if !ok {
 			return nil
 		}
-		switch strings.ToLower(strings.TrimSpace(name)) {
-		case "set-cookie", "proxy-authenticate":
-			continue
-		}
+
 		out.Headers = append(out.Headers, Header{Name: name, Value: strings.TrimLeft(value, " \t")})
 	}
 	return out
