@@ -10,10 +10,31 @@ fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hicolor/index.theme ]; then
   gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
 fi
+if [ "$1" = "purge" ]; then
+  # A generation a launch still held at removal stays until nothing holds its
+  # lifetime lock; the policy that selected it is gone.
+  rm -f /etc/paintedwolf/launch.json
+  rmdir /etc/paintedwolf 2>/dev/null || true
+  for generation in /opt/painted-wolf-code/generations/* /opt/painted-wolf-code/generations/.install-*; do
+    [ -d "$generation" ] && [ ! -L "$generation" ] || continue
+    identity=${generation##*/}
+    identity=${identity#.install-}
+    case "$identity" in
+      *[!0123456789abcdef]*|"") continue ;;
+    esac
+    [ "${#identity}" -eq 64 ] || continue
+    lock="/run/paintedwolf/generation-locks/${identity}.lock"
+    # Lifetime locks are root 0600; never let flock create one with another mode.
+    mkdir -p /run/paintedwolf/generation-locks
+    (umask 077 && : >> "$lock")
+    flock -n -x "$lock" rm -rf -- "$generation" || true
+  done
+fi
 case "$1" in
   remove|purge)
     if [ -d /opt/painted-wolf-code ]; then
-      find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || true
+      # Never inside generations: a held generation's empty directories are its bytes.
+      find /opt/painted-wolf-code -depth -type d -empty ! -path '/opt/painted-wolf-code/generations/*' -delete 2>/dev/null || true
     fi
     ;;
 esac

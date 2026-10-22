@@ -12,8 +12,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
-	"syscall"
 
 	"golang.org/x/sys/unix"
 
@@ -25,10 +25,13 @@ const PolicyPath = "/etc/paintedwolf/launch.json"
 
 // The installed layout. These are variables only so a test build can place a
 // root-owned fixture elsewhere at link time (-ldflags -X); no runtime input,
-// environment or argument selects them.
+// environment or argument selects them. Production builds anchor at "/" and
+// require uid 0 on every ancestor and object.
 var (
-	policyPath    = PolicyPath
-	lockDirectory = GenerationLockDirectory
+	policyPath          = PolicyPath
+	lockDirectory       = GenerationLockDirectory
+	trustAnchor         = "/"
+	trustedOwner uint32 = 0
 )
 
 // GenerationPolicy binds a physical immutable generation to its logical paths.
@@ -79,8 +82,9 @@ func (g *Generation) Close() {
 	}
 }
 
-// CaptureGeneration accepts only the installed policy. No caller-controlled
-// path or role can turn this bootstrap into an arbitrary privileged launcher.
+// CaptureGeneration accepts only the installed policy. It acquires the
+// generation's shared lifetime lock and then re-reads the policy so the policy
+// and retained generation come from the same locked state.
 func CaptureGeneration() (*Generation, error) {
 	policy, err := ReadPolicy()
 	if err != nil {
@@ -96,6 +100,13 @@ func CaptureGeneration() (*Generation, error) {
 			_ = lifetime.Close()
 		}
 	}()
+	rechecked, err := ReadPolicy()
+	if err != nil {
+		return nil, err
+	}
+	if !samePolicy(policy, rechecked) {
+		return nil, errors.New("launch policy changed before generation lock was acquired")
+	}
 	directory, err := openRootControlled(policy.GenerationRoot, true)
 	if err != nil {
 		return nil, err
@@ -113,7 +124,7 @@ func CaptureGeneration() (*Generation, error) {
 			generation.Close()
 		}
 	}()
-	manifest, err := root.Open("manifest.json")
+	manifest, err := openControlledAt(directory, "manifest.json", false)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +157,15 @@ func CaptureGeneration() (*Generation, error) {
 	}
 	success = true
 	return generation, nil
+}
+
+func samePolicy(a, b GenerationPolicy) bool {
+	return a.Version == b.Version &&
+		a.GenerationRoot == b.GenerationRoot &&
+		a.ManifestSHA256 == b.ManifestSHA256 &&
+		a.LogicalInstallRoot == b.LogicalInstallRoot &&
+		slices.Equal(a.SystemExecutables, b.SystemExecutables) &&
+		slices.Equal(a.LibraryRoots, b.LibraryRoots)
 }
 
 func decodePolicy(raw []byte) (GenerationPolicy, error) {
@@ -189,20 +209,7 @@ func (g *Generation) openRole(relative string) (*os.File, pkgmanifest.Executable
 	if !ok {
 		return nil, image, errors.New("generation omits a required bootstrap role")
 	}
-	// Every component is root-controlled and symlink-free. The retained root
-	// prevents a later policy replacement from changing this launch's selection.
-	parent := "."
-	for _, component := range strings.Split(relative, "/") {
-		parent = filepath.Join(parent, component)
-		info, err := g.Root.Lstat(parent)
-		if err != nil {
-			return nil, image, err
-		}
-		if err := trustedObject(info); err != nil {
-			return nil, image, err
-		}
-	}
-	file, err := g.Root.Open(relative)
+	file, err := openControlledAt(g.Directory, relative, false)
 	if err != nil {
 		return nil, image, err
 	}
@@ -218,92 +225,6 @@ func (g *Generation) openRole(relative string) (*os.File, pkgmanifest.Executable
 	return file, image, nil
 }
 
-func openRootControlled(path string, directory bool) (*os.File, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, errors.New("trusted path must be absolute and clean")
-	}
-	root, err := os.OpenRoot("/")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = root.Close() }()
-	current := "."
-	for _, component := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
-		current = filepath.Join(current, component)
-		info, err := root.Lstat(current)
-		if err != nil {
-			return nil, err
-		}
-		if err := trustedObject(info); err != nil {
-			return nil, fmt.Errorf("/%s: %w", current, err)
-		}
-	}
-	file, err := root.Open(current)
-	if err != nil {
-		return nil, err
-	}
-	info, err := file.Stat()
-	if err != nil || info.IsDir() != directory || (!directory && !info.Mode().IsRegular()) {
-		_ = file.Close()
-		return nil, errors.New("trusted path has an unexpected object type")
-	}
-	if err := trustedObject(info); err != nil {
-		_ = file.Close()
-		return nil, err
-	}
-	return file, nil
-}
-
-// ensureControlledDirectory opens path below base one component at a time,
-// creating each missing directory 0755 and requiring every component, new or
-// existing, to satisfy trusted. Creation is relative to the held parent, so a
-// component replaced concurrently is refused rather than followed.
-func ensureControlledDirectory(base *os.File, path string, trusted func(os.FileInfo) error) (*os.File, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
-		return nil, errors.New("trusted directory must be absolute, clean and below the root")
-	}
-	parent, err := unix.Dup(int(base.Fd()))
-	if err != nil {
-		return nil, err
-	}
-	current := os.NewFile(uintptr(parent), "/")
-	for _, component := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
-		if err := unix.Mkdirat(int(current.Fd()), component, 0o755); err == nil {
-			// The creator's umask must not decide the directory's mode.
-			if err := unix.Fchmodat(int(current.Fd()), component, 0o755, unix.AT_SYMLINK_NOFOLLOW); err != nil && !errors.Is(err, unix.EOPNOTSUPP) {
-				_ = current.Close()
-				return nil, err
-			}
-		} else if !errors.Is(err, unix.EEXIST) {
-			_ = current.Close()
-			return nil, err
-		}
-		fd, err := unix.Openat(int(current.Fd()), component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-		_ = current.Close()
-		if err != nil {
-			return nil, err
-		}
-		current = os.NewFile(uintptr(fd), component)
-		info, err := current.Stat()
-		if err == nil {
-			err = trusted(info)
-		}
-		if err != nil {
-			_ = current.Close()
-			return nil, err
-		}
-	}
-	return current, nil
-}
-
-func trustedObject(info os.FileInfo) error {
-	facts, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || facts.Uid != 0 || info.Mode()&os.ModeSymlink != 0 || (info.Mode().Perm()&0022 != 0 && !(info.IsDir() && info.Mode()&os.ModeSticky != 0)) {
-		return errors.New("launch path is not exclusively root-controlled")
-	}
-	return nil
-}
-
 // GenerationLockDirectory holds one persistent lifetime lock per generation.
 // It lives on the /run tmpfs, so it is absent after every boot until the first
 // privileged launch or package transaction creates it.
@@ -312,11 +233,15 @@ const GenerationLockDirectory = "/run/paintedwolf/generation-locks"
 // The package collector uses the same persistent lock inode and never unlinks
 // it during a boot. A selected generation cannot be reclaimed under a launch.
 func retainGeneration(digest string) (*os.File, error) {
-	root, err := os.Open("/")
+	anchor, rel, err := resolveAnchor(lockDirectory)
+	if err != nil || rel == "" {
+		return nil, errors.New("invalid generation lock directory")
+	}
+	root, err := openAnchor(anchor)
 	if err != nil {
 		return nil, err
 	}
-	directory, err := ensureControlledDirectory(root, lockDirectory, trustedObject)
+	directory, err := ensureControlledDirectory(root, "/"+rel, trustedObject)
 	_ = root.Close()
 	if err != nil {
 		return nil, err

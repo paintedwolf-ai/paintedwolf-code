@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "architectures": {
+    "amd64": {"multiarch": "x86_64-linux-gnu"},
+    "arm64": {"multiarch": "aarch64-linux-gnu"}
+  },
+  "families": {
+    "deb": {
+      "system_executables": [
+        "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitWebProcess",
+        "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitNetworkProcess",
+        "/usr/lib/{multiarch}/webkit2gtk-4.1/WebKitGPUProcess"
+      ],
+      "library_roots": ["/usr/lib/{multiarch}"]
+    },
+    "rpm": {
+      "system_executables": [
+        "/usr/libexec/webkit2gtk-4.1/WebKitWebProcess",
+        "/usr/libexec/webkit2gtk-4.1/WebKitNetworkProcess",
+        "/usr/libexec/webkit2gtk-4.1/WebKitGPUProcess"
+      ],
+      "library_roots": ["/usr/lib64"]
+    },
+    "pacman": {
+      "system_executables": [
+        "/usr/lib/webkit2gtk-4.1/WebKitWebProcess",
+        "/usr/lib/webkit2gtk-4.1/WebKitNetworkProcess",
+        "/usr/lib/webkit2gtk-4.1/WebKitGPUProcess"
+      ],
+      "library_roots": ["/usr/lib"]
+    }
+  }
+}

@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func fixture(t *testing.T, content string) (*os.Root, []byte) {
@@ -19,10 +21,10 @@ func fixture(t *testing.T, content string) (*os.Root, []byte) {
 	path := t.TempDir()
 	// t.TempDir honors the host umask; an installer stages with explicit modes.
 	if err := os.Chmod(path, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if err := os.Mkdir(filepath.Join(path, "bin"), 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	image := []byte("#!/bin/sh\nexit 0\n")
 	sum := sha256.Sum256(image)
@@ -30,11 +32,11 @@ func fixture(t *testing.T, content string) (*os.Root, []byte) {
 	dataSum := sha256.Sum256(data)
 	for name, raw := range map[string][]byte{"bin/pw": image, "resource.data": data} {
 		if err := os.WriteFile(filepath.Join(path, name), raw, 0644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 	}
 	if err := os.Chmod(filepath.Join(path, "bin/pw"), 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	m := map[string]any{"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2", "architecture": "x86_64", "install_root": "/opt/painted-wolf-code",
 		"executables": []map[string]any{{"path": "/opt/painted-wolf-code/bin/pw", "size": len(image), "sha256": hex.EncodeToString(sum[:])}},
@@ -43,16 +45,12 @@ func fixture(t *testing.T, content string) (*os.Root, []byte) {
 			{"path": "bin/pw", "kind": "file", "mode": 0755, "size": len(image), "sha256": hex.EncodeToString(sum[:]), "target": nil},
 			{"path": "resource.data", "kind": "file", "mode": 0644, "size": len(data), "sha256": hex.EncodeToString(dataSum[:]), "target": nil}}}
 	raw, err := json.Marshal(m)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "json.Marshal failed", err)
 	if err := os.WriteFile(filepath.Join(path, "manifest.json"), raw, 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	root, err := os.OpenRoot(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenRoot failed", err)
 	t.Cleanup(func() { _ = root.Close() })
 	return root, raw
 }
@@ -63,7 +61,7 @@ func testLayout(t *testing.T) layout {
 	t.Helper()
 	base := t.TempDir()
 	if err := os.Chmod(base, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	return layout{store: filepath.Join(base, "generations"), locks: filepath.Join(base, "locks"), anchor: base, owner: uint32(os.Geteuid())}
 }
@@ -72,16 +70,12 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 	source, raw := fixture(t, "old resource")
 	l := testLayout(t)
 	old, err := l.materialize(source, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	lock, err := l.openLifetime(old.ManifestSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.openLifetime failed", err)
 	defer lock.Close()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	current, err := l.materialize(source, raw)
 	if err != nil || current != old {
@@ -89,14 +83,12 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 	}
 	nextSource, nextRaw := fixture(t, "new resource")
 	next, err := l.materialize(nextSource, nextRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	if next.Root == old.Root {
 		t.Fatal("resource-only change reused old generation")
 	}
 	if err := source.WriteFile("resource.data", []byte("source overwritten"), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "source.WriteFile failed", err)
 	}
 	content, err := os.ReadFile(filepath.Join(old.Root, "resource.data"))
 	if err != nil || string(content) != "old resource" {
@@ -106,7 +98,7 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 		t.Fatalf("reclaimed live runtime=%v,%v", removed, err)
 	}
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_UN); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	if removed, err := l.reclaim(old.ManifestSHA256, func() (string, error) { return old.Root, nil }); removed || err != nil {
 		t.Fatalf("reclaimed selected runtime=%v,%v", removed, err)
@@ -122,11 +114,9 @@ func TestMaterializeRetainsWholeOldRuntimeAcrossSourceReplacement(t *testing.T) 
 func TestMaterializeRefusesWritableStagingRoot(t *testing.T) {
 	source, raw := fixture(t, "resource")
 	info, err := source.Stat(".")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "source.Stat failed", err)
 	if err := source.Chmod(".", 0775); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "source.Chmod failed", err)
 	}
 	l := testLayout(t)
 	_, err = l.materialize(source, raw)
@@ -142,18 +132,16 @@ func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *te
 	source, raw := fixture(t, "resource")
 	l := testLayout(t)
 	generation, err := l.materialize(source, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	refused := errors.New("policy commit refused")
 	if err := l.selectGeneration(generation.ManifestSHA256, func(Generation) error { return refused }); !errors.Is(err, refused) {
 		t.Fatal(err)
 	}
 	if err := source.WriteFile("resource.data", []byte("tampered"), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "source.WriteFile failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(generation.Root, "resource.data"), []byte("corrupt retained"), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if _, err := l.materialize(source, raw); err == nil {
 		t.Fatal("reinstall silently replaced corrupt retained generation")
@@ -172,20 +160,16 @@ func TestDamagedGenerationIsRepairedOnlyWhileNoRuntimeHoldsIt(t *testing.T) {
 	source, raw := fixture(t, "resource")
 	l := testLayout(t)
 	generation, err := l.materialize(source, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	damaged := filepath.Join(generation.Root, "resource.data")
 	if err := os.WriteFile(damaged, []byte("corrupt retained"), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	live, err := l.openLifetime(generation.ManifestSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.openLifetime failed", err)
 	defer live.Close()
 	if err := unix.Flock(int(live.Fd()), unix.LOCK_SH); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	if _, err := l.materialize(source, raw); err == nil || !strings.Contains(err.Error(), "in use") {
 		t.Fatalf("damaged generation in use was not refused: %v", err)
@@ -194,7 +178,7 @@ func TestDamagedGenerationIsRepairedOnlyWhileNoRuntimeHoldsIt(t *testing.T) {
 		t.Fatal("bytes held by a live runtime were rewritten")
 	}
 	if err := unix.Flock(int(live.Fd()), unix.LOCK_UN); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unix.Flock failed", err)
 	}
 	repaired, err := l.materialize(source, raw)
 	if err != nil || repaired != generation {
@@ -213,28 +197,26 @@ func TestInterruptedInstallationIsDiscardedUnderTheIdentityLock(t *testing.T) {
 	source, raw := fixture(t, "resource")
 	l := testLayout(t)
 	if err := os.MkdirAll(l.store, 0755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	identity := digest(raw)
 	leftover := filepath.Join(l.store, ".install-"+identity)
 	if err := os.MkdirAll(filepath.Join(leftover, "bin"), 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(leftover, "bin", "pw"), []byte("partial"), 0600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	generation, err := l.materialize(source, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "l.materialize failed", err)
 	if _, err := os.Lstat(leftover); !os.IsNotExist(err) {
 		t.Fatalf("interrupted staging survived installation: %v", err)
 	}
 	if err := os.Mkdir(leftover, 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(generation.Root, "resource.data"), []byte("corrupt retained"), 0644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	removed, err := l.reclaim(identity, func() (string, error) { return "", nil })
 	if err != nil || !removed {
