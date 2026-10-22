@@ -37,6 +37,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 		}
 		files, policies := map[string]bool{}, map[string]bool{}
 		for _, change := range changes {
+			action.Mutations.RecoveryLoss = action.Mutations.RecoveryLoss || change.RecoveryLoss
 			for _, path := range []string{change.Path, change.FromPath} {
 				if path != "" && !files[path] {
 					files[path] = true

@@ -2646,6 +2646,11 @@
       "emit": "guard:source_parse",
       "summary": "{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing could not finish."
     },
+    "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE": {
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."
+    },
     "SOURCE_VERSION_BASE_MISMATCH": {
       "branch_instruction": "Branch on Code; re-read current version from source_history",
       "category": "recoverable",

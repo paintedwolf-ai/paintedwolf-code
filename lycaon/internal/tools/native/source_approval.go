@@ -17,7 +17,7 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 	if metadata {
 		preview.PreviewNote = m.MetadataChange
 	}
-	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath}); err != nil {
+	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath, RecoveryLoss: m.Unrecoverable}); err != nil {
 		return err
 	}
 	verifyTarget := verifyMutationSnapshot

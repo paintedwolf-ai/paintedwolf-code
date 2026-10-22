@@ -360,23 +360,24 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 				}
 				r := h.run("", command...)
 				reject := toolrejection.AsToolReject(r.err)
-				if c.limit == "" {
-					if r.err != nil || r.result.Status != 0 {
-						t.Fatalf("at the limit refused: %+v %v", r.result, r.err)
-					}
-					return
-				}
 				if command[0] == "rm" {
 					if r.err != nil || r.result.Status != 0 || !h.absent("tree") {
-						t.Fatalf("oversize rm -rf should delete after approval without COMMAND_LIMIT_EXCEEDED: %+v %v", r.result, r.err)
+						t.Fatalf("whole-tree removal failed: %+v %v", r.result, r.err)
 					}
-					if len(reviewed) != 1 || !strings.HasPrefix(reviewed[0].Preview.PreviewNote, "Delete tree (") || !strings.HasSuffix(reviewed[0].Preview.PreviewNote, "permanently without recovery.") {
-						t.Fatalf("oversize rm -rf review copy = %+v", reviewed)
+					permanent := c.limit == "recursive_mutation_bytes"
+					if len(reviewed) != 1 || reviewed[0].RecoveryLoss != permanent {
+						t.Fatalf("recovery-loss decision = %+v, want %v", reviewed, permanent)
 					}
 					history, err := h.service.History.State(t.Context(), h.project.ID)
 					testutil.FailErr(t, "read history", err)
-					if history.Undo != nil {
-						t.Fatalf("oversize permanent delete left an undoable history entry: %+v", history.Undo)
+					if (history.Undo == nil) != permanent {
+						t.Fatalf("whole-tree recovery = %+v, permanent=%v", history.Undo, permanent)
+					}
+					return
+				}
+				if c.limit == "" {
+					if r.err != nil || r.result.Status != 0 {
+						t.Fatalf("at the copy limit refused: %+v %v", r.result, r.err)
 					}
 					return
 				}

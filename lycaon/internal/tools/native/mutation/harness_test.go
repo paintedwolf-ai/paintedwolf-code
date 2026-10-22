@@ -16,8 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -71,6 +73,7 @@ type harness struct {
 // be reached, and a real session scratch directory.
 func newHarness(t *testing.T, files map[string]string) *harness {
 	t.Helper()
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	raw := t.TempDir()
 	root, err := filepath.EvalSymlinks(raw)
 	testutil.FailErr(t, "resolve temp root", err)

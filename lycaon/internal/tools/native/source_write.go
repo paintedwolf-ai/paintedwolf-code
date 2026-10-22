@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -212,7 +213,11 @@ func removeAgentTree(ctx context.Context, tctx tools.ToolContext, target mutatio
 		Unrecoverable: unrecoverable,
 	}
 	if unrecoverable {
-		mutation.MetadataChange = fmt.Sprintf("Delete %s (%s, %d files) permanently without recovery.", relSlash, formatDeleteByteSize(bytes), files)
+		note, err := guidance.RenderGuidance(ctx, "source-remove-permanent", map[string]any{"path": relSlash, "size": formatDeleteByteSize(bytes), "files": files})
+		if err != nil {
+			return err
+		}
+		mutation.MetadataChange = note
 	}
 	reportMutationIntent(tctx, mutation, target.Location, fseffect.Location{}, api.AgentIntentOperationDelete)
 	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, unrecoverable); err != nil {

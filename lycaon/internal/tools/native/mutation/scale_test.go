@@ -3,12 +3,14 @@ package mutation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -65,5 +67,16 @@ func TestRegenerableDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 	testutil.FailErr(t, "sum recovery bytes", h.db.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(size), 0) FROM source_blob_objects`).Scan(&totalRecoveryBytes))
 	if totalRecoveryBytes > 4096 {
 		t.Fatalf("recovery blobs exceeded 4096-byte quota: %d bytes", totalRecoveryBytes)
+	}
+}
+
+func TestOversizeDeleteWithoutReviewerLeavesTreeIntact(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/a": "content"})
+	h.owners.Operations.Delete.Caps = native.RecursiveCaps{Bytes: 1}
+	h.tc.Files.FileChangeReview = nil
+	r := h.run("", "rm", "-rf", "tree")
+	reject := toolrejection.AsToolReject(r.err)
+	if reject == nil || reject.Code != "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE" || h.absent("tree/a") {
+		t.Fatalf("permanent removal escaped review: result=%+v error=%v", r.result, r.err)
 	}
 }

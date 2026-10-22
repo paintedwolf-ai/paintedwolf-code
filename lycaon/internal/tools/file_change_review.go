@@ -8,14 +8,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // FileChange binds a display preview to the resolved mutation paths.
 type FileChange struct {
-	Preview  api.ApprovalFileChange
-	Path     string
-	FromPath string
+	// RecoveryLoss requires consent for a removal the host cannot undo.
+	RecoveryLoss bool
+	Preview      api.ApprovalFileChange
+	Path         string
+	FromPath     string
 }
 
 // FileChangeReviewer runs the ordinary approval gate with prepared file evidence.
@@ -33,6 +36,9 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 		return ctx.Err()
 	}
 	for _, change := range changes {
+		if change.RecoveryLoss {
+			return &toolrejection.ToolReject{Code: "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": change.Path}}
+		}
 		if change.Preview.Target == "index" {
 			continue
 		}
