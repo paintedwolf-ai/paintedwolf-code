@@ -367,6 +367,9 @@ func approvalScopeRef(action hitl.ProposedAction) (llm.SettingsScope, ProjectRef
 
 // effectiveConfig is the merged device-and-project approval policy for one action.
 func (g *RuleApprovalGate) effectiveConfig(action hitl.ProposedAction) ApprovalConfig {
+	if g == nil || g.store == nil {
+		return ApprovalConfig{}
+	}
 	return g.store.EffectiveConfig(ProjectRef{ID: action.Scope.ProjectID, Dir: action.Scope.ProjectDir})
 }
 

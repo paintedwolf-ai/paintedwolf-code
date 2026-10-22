@@ -1,9 +1,9 @@
 // Package hostenv is the command frontend for the invocation environment,
 // command discovery and host identity utilities: env, printenv, which,
-// command, type, pwd, uname, whoami, id, hostname and date. Each binds argv
+// command, type, uname, whoami, id, hostname and date. Each binds argv
 // through the catalog and answers from the request's frozen environment, the
-// shared launch lookup, the invocation's logical paths and injected host
-// facts. No utility launches a process or reads ambient shell state.
+// shared launch lookup and injected host facts. pwd belongs to the program's
+// directory frame (projectpaths). No utility launches a process or reads ambient shell state.
 package hostenv
 
 import (
@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
@@ -26,8 +25,6 @@ type Owners struct {
 	Host HostFacts
 	// Clock is read once per date operation.
 	Clock func() time.Time
-	// Boundary is the read boundary pwd binds the invocation directory under.
-	Boundary *sandbox.Boundary
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -40,11 +37,11 @@ type utility func(*invocation) error
 var utilities = map[string]utility{
 	"env": runEnv, "printenv": runPrintenv,
 	"which": runWhich, "command": runCommand, "type": runType,
-	"pwd": runPwd, "uname": runUname, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
+	"uname": runUname, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
 }
 
 // NewOwners binds the frozen catalog. Host and Clock are required.
-func NewOwners(host HostFacts, clock func() time.Time, boundary *sandbox.Boundary) (*Owners, error) {
+func NewOwners(host HostFacts, clock func() time.Time) (*Owners, error) {
 	if host == nil || clock == nil {
 		return nil, errors.New("host environment utilities require host facts and a clock")
 	}
@@ -52,7 +49,7 @@ func NewOwners(host HostFacts, clock func() time.Time, boundary *sandbox.Boundar
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Host: host, Clock: clock, Boundary: boundary, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, natives: map[string]bool{}}
+	o := &Owners{Host: host, Clock: clock, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, natives: map[string]bool{}}
 	for _, command := range catalog.Commands {
 		if strings.Contains(command.Name, " ") {
 			continue

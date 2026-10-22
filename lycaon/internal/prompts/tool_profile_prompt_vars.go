@@ -33,30 +33,7 @@ var (
 	nativeFilesystemTools  []string
 	nativeTerminalTools    []string
 	nativeMutationTools    []string
-	nativeUtilitiesOnce    sync.Once
-	nativeUtilitiesCached  []string
 )
-
-// NativeUtilitiesForPrompt returns the sorted list of natively wired command utilities,
-// excluding shell HTTP clients so agent-facing prompts teach first-class HTTP tools.
-func NativeUtilitiesForPrompt() []string {
-	nativeUtilitiesOnce.Do(func() {
-		names, err := toolcontract.NativeUtilities()
-		if err == nil {
-			filtered := make([]string, 0, len(names))
-			for _, name := range names {
-				switch name {
-				case "curl", "wget", "httpie":
-					continue
-				default:
-					filtered = append(filtered, name)
-				}
-			}
-			nativeUtilitiesCached = filtered
-		}
-	})
-	return append([]string(nil), nativeUtilitiesCached...)
-}
 
 func loadNativeToolFamilies() {
 	nativeToolFamiliesOnce.Do(func() {
@@ -259,7 +236,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_command_stop":        enabled["command_stop"],
 		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
 		"is_coordinator":                  data.ToolProfile == CoordinatorProfileID,
-		"native_utilities":                NativeUtilitiesForPrompt(),
+		"command_output_scratch_files":    false,
 		"platform_os":                     runtime.GOOS,
 		"reviews_confined_writes":         true,
 		"command_external_hidden":         false,

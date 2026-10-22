@@ -60,13 +60,10 @@ type AgentPromptSurface struct {
 	Skills               []AgentSkillView
 	HostResources        []AgentHostResourceView
 	HostResourcesOmitted int // rows the ambient budget dropped
-	// SessionScratchDir is the session's resolved scratch directory when available.
-	SessionScratchDir string
-	// Posture is the session's effective approval posture for workspace_roots vars.
-	Posture gate.Posture
-	// CommandExternalHidden reports whether the explicit external selector is hidden.
-	CommandExternalHidden bool
 	Fingerprint           string
+	SessionScratchDir     string
+	Posture               gate.Posture
+	CommandExternalHidden bool
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -101,11 +98,11 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_skills":                 skills,
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
-		"session_scratch_dir":          strings.TrimSpace(surface.SessionScratchDir),
+		"prompt_surface_fingerprint":   surface.Fingerprint,
+		"session_scratch_dir":          surface.SessionScratchDir,
 		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
 		"command_external_hidden":      surface.CommandExternalHidden,
 		"command_external_shown":       !surface.CommandExternalHidden,
-		"prompt_surface_fingerprint":   surface.Fingerprint,
 	}
 }
 

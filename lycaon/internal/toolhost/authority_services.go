@@ -69,10 +69,10 @@ func (r *AuthorityServices) SetEgressDetectionSource(src confine.EgressDetection
 }
 
 func (r *AuthorityServices) ApprovalPosture(projectDir string) gate.Posture {
-	if r == nil || r.approvals == nil {
+	if r == nil {
 		return gate.DefaultPosture
 	}
-	return effectiveEgressApprovalConfig(r.approvals, confine.EgressCommand{ProjectDir: projectDir}).Posture
+	return r.approvals.EffectivePosture(settings.ProjectRef{Dir: projectDir})
 }
 
 func (r *AuthorityServices) ApprovalsDisabled(projectDir string) bool {

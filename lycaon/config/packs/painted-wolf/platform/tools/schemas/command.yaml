@@ -1,10 +1,9 @@
 tags: [process, terminal]
 description: >-
-  Runs a bash program (`$(...)`, pipes, redirects, `&` jobs). Wired utilities
-  run natively (GNU/BSD flags; `CMD --help` prints help) and return structured
-  output, status, and file effects per stage; refusals name the command, flag,
-  and replacement. Other binaries run confined. Writes publish per command;
-  state and `cd` last for this call only.
+  Runs a bash program (`$(...)`, pipes, redirects, `&` jobs). Common utilities
+  run natively (GNU/BSD flags; `CMD --help` prints help); refusals name the
+  command, flag, and replacement. Other binaries run inside a sandbox.
+  Variables and `cd` last for this call only.
 schema:
   type: object
   properties:
@@ -21,7 +20,7 @@ schema:
       additionalProperties: false
       minProperties: 1
       description: >-
-        Declares confinement this invocation needs: direct_ip, host_resources,
+        Extra access this call needs: direct_ip, host_resources,
         socket_paths, local_listen, loopback_connect, write_root, read_path,
         process_control, host_execution.
       properties:
@@ -30,7 +29,7 @@ schema:
         process_control: {oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
         host_execution: {oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
         direct_ip:
-          description: Direct IP (`true` or destinations). Actual destinations will be unobserved.
+          description: Direct IP (`true` or destinations) for UDP or clients that ignore proxy variables.
           oneOf: [{type: boolean}, {type: array, maxItems: 16, items: {type: string, maxLength: 256}}, {type: object, additionalProperties: false, properties: {declared_destinations: {type: array, maxItems: 16, items: {type: string, maxLength: 256}}}}]
         local_listen: {type: object, additionalProperties: false, properties: {ports: {type: array, minItems: 1, maxItems: 8, items: {type: integer, minimum: 1, maximum: 65535}}}}
         loopback_connect: {type: object, additionalProperties: false, properties: {ports: {type: array, minItems: 1, maxItems: 8, items: {type: integer, minimum: 1, maximum: 65535}}}}

@@ -158,6 +158,7 @@ func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T
 	cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", map[string]any{
 		"tool_profile":          "implement",
 		"profile_has_command":   true,
+		"workspace_roots":       []projectroot.RootRef{{ID: "r1", Label: "main", Path: "/workspace", IsPrimary: true}},
 		"command_roots_listing": "Roots: @main=/workspace (scratch: @scratch)",
 	})
 	contractcheck.FailErr(t, "render command-surface", err)
@@ -191,6 +192,9 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 	forbiddenJargon := []string{
 		"posture", "gate", "lease", "grant", "floor", "owner", "oar",
 		"approval card", "the host raises", "the host asks", "missing grant", "task lease",
+		"confinement", "will be unobserved", "landlock", "seatbelt",
+		"command_argv_required", "cwd_", "catalog help", "effect counts", "writes publish", "wired utilities",
+		"background: true", "never `kill`",
 	}
 	stalePhrases := []string{
 		"Runs as an argv sequence without a shell",
@@ -199,6 +203,9 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 		"`$()`/backticks reject",
 	}
 
+	singleRoot := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
 	multiRoots := []projectroot.RootRef{
 		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
 		{ID: "r2", Label: "web", Path: "/workspace/web", IsPrimary: false},
@@ -216,6 +223,15 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 		platformOS     string
 	}
 
+	rootSets := []struct {
+		label string
+		roots []projectroot.RootRef
+	}{
+		{label: "no_folders", roots: nil},
+		{label: "one_folder", roots: singleRoot},
+		{label: "two_folders", roots: multiRoots},
+	}
+
 	var cases []matrixCase
 	for _, role := range []struct {
 		isCoordinator bool
@@ -228,22 +244,18 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 		{isCoordinator: false, readOnly: true, scopeID: "explore_readonly"},
 	} {
 		for _, externalHidden := range []bool{false, true} {
-			for _, posture := range []gate.Posture{gate.PostureStrict, gate.PostureLight} {
-				for _, hasRoots := range []bool{false, true} {
+			for _, posture := range []gate.Posture{gate.PostureStrict, gate.PostureBalanced} {
+				for _, rs := range rootSets {
 					for _, osName := range []string{"darwin", "linux"} {
-						var roots []projectroot.RootRef
-						if hasRoots {
-							roots = multiRoots
-						}
 						cases = append(cases, matrixCase{
-							name:           strings.Join([]string{role.scopeID, map[bool]string{false: "ext_shown", true: "ext_hidden"}[externalHidden], string(posture), map[bool]string{false: "no_folders", true: "multi_folders"}[hasRoots], osName}, "/"),
+							name:           strings.Join([]string{role.scopeID, map[bool]string{false: "ext_shown", true: "ext_hidden"}[externalHidden], string(posture), rs.label, osName}, "/"),
 							isCoordinator:  role.isCoordinator,
 							scopeID:        role.scopeID,
 							commandOnFloor: true,
 							readOnly:       role.readOnly,
 							externalHidden: externalHidden,
 							posture:        posture,
-							roots:          roots,
+							roots:          rs.roots,
 							platformOS:     osName,
 						})
 					}
@@ -284,12 +296,23 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 			hostRunnerUnit, err := engine.Render(context.Background(), "units/coordinator-host-runner.md", vars)
 			contractcheck.FailErr(t, "render coordinator-host-runner", err)
 
+			switch tc.name {
+			case "implement_investigate/ext_hidden/balanced/two_folders/darwin",
+				"explore_readonly/ext_shown/strict/one_folder/darwin",
+				"implement_investigate/ext_shown/strict/no_folders/darwin":
+				t.Logf("RENDER_SAMPLE [%s]\n--- command-surface.md ---\n%s\n--- runner-operating-procedure.md ---\n%s\n--- coordinator-host-runner.md ---\n%s\n--- sandbox-confinement.md ---\n%s",
+					tc.name, strings.TrimSpace(cmdSurface), strings.TrimSpace(runnerUnit), strings.TrimSpace(hostRunnerUnit), strings.TrimSpace(sandboxConfinement))
+			}
+
 			combined := strings.Join([]string{cmdSurface, capGrammar, sandboxConfinement, runnerUnit, hostRunnerUnit}, "\n")
 			lower := strings.ToLower(combined)
 			for _, jargon := range forbiddenJargon {
 				if strings.Contains(lower, jargon) {
 					t.Errorf("leaked forbidden internal jargon %q in:\n%s", jargon, combined)
 				}
+			}
+			if strings.Contains(cmdSurface, "profile ") {
+				t.Errorf("command-surface heading leaked profile name:\n%s", cmdSurface)
 			}
 			for _, stale := range stalePhrases {
 				if strings.Contains(combined, stale) {
@@ -298,19 +321,13 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 			}
 
 			// Coordinator vs worker header
-			if strings.Contains(cmdSurface, "— coordinator") != tc.isCoordinator {
-				t.Errorf("coordinator header present=%v, want %v", strings.Contains(cmdSurface, "— coordinator"), tc.isCoordinator)
-			}
-			// Native utilities wired from toolcontract.NativeUtilities()
-			for _, util := range []string{"cat", "edit", "grep", "find", "ls", "jq", "git"} {
-				if !strings.Contains(cmdSurface, util) {
-					t.Errorf("command-surface missing native utility %q", util)
-				}
+			if strings.Contains(cmdSurface, "(coordinator)") != tc.isCoordinator {
+				t.Errorf("coordinator header present=%v, want %v:\n%s", strings.Contains(cmdSurface, "(coordinator)"), tc.isCoordinator, cmdSurface)
 			}
 			// Read-only vs mutation
 			if tc.readOnly {
-				if !strings.Contains(cmdSurface, "read-only surface") || !strings.Contains(cmdSurface, "external program launches are refused") {
-					t.Errorf("read-only surface missing read-only refusal statement:\n%s", cmdSurface)
+				if strings.Count(cmdSurface, "read-only surface") != 1 || !strings.Contains(cmdSurface, "external program launches are refused") {
+					t.Errorf("read-only surface must state read-only refusal once:\n%s", cmdSurface)
 				}
 				if strings.Contains(cmdSurface, "external -- NAME") {
 					t.Errorf("read-only surface must not advertise external -- NAME:\n%s", cmdSurface)
@@ -327,20 +344,18 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 				if strings.Contains(cmdSurface, "external -- NAME") != wantExternal {
 					t.Errorf("external -- NAME present=%v, want %v:\n%s", strings.Contains(cmdSurface, "external -- NAME"), wantExternal, cmdSurface)
 				}
-				// Platform OS sandbox
-				wantDarwin := tc.platformOS == "darwin"
-				wantLinux := tc.platformOS == "linux"
-				if strings.Contains(cmdSurface, "macOS Seatbelt") != wantDarwin {
-					t.Errorf("macOS Seatbelt present=%v, want %v", strings.Contains(cmdSurface, "macOS Seatbelt"), wantDarwin)
+				if !strings.Contains(cmdSurface, "inside a sandbox") {
+					t.Errorf("mutation surface missing 'inside a sandbox':\n%s", cmdSurface)
 				}
-				if strings.Contains(cmdSurface, "Linux Landlock+seccomp") != wantLinux {
-					t.Errorf("Linux Landlock+seccomp present=%v, want %v", strings.Contains(cmdSurface, "Linux Landlock+seccomp"), wantLinux)
+				wantLinux := tc.platformOS == "linux"
+				if strings.Contains(cmdSurface, "with an isolated process view") != wantLinux {
+					t.Errorf("isolated process view present=%v, want %v:\n%s", strings.Contains(cmdSurface, "with an isolated process view"), wantLinux, cmdSurface)
 				}
 			}
 			// Folders and posture
 			if len(tc.roots) > 0 {
 				if !strings.Contains(cmdSurface, "These folders are the project") || !strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`") {
-					t.Errorf("multi-folder surface missing folder coverage/navigation:\n%s", cmdSurface)
+					t.Errorf("folder surface missing folder coverage/navigation:\n%s", cmdSurface)
 				}
 				if !tc.readOnly {
 					wantStrict := tc.posture.ReviewsConfinedWrites()
@@ -348,12 +363,17 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 						t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
 					}
 					if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
-						t.Errorf("light outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
+						t.Errorf("balanced outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
 					}
 				}
 			} else {
-				if strings.Contains(cmdSurface, "These folders are the project") {
-					t.Errorf("no-folder surface must not render attached-folder coverage:\n%s", cmdSurface)
+				for _, unexpected := range []string{"These folders are the project", "@label", "non-primary", "Roots:"} {
+					if strings.Contains(cmdSurface, unexpected) {
+						t.Errorf("no-folder surface must not render %q:\n%s", unexpected, cmdSurface)
+					}
+				}
+				if !tc.readOnly && !strings.Contains(cmdSurface, "No project folders are attached; file writes ask the person first") {
+					t.Errorf("no-folder mutation surface missing no-folder write notice:\n%s", cmdSurface)
 				}
 			}
 		})

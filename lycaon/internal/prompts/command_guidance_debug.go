@@ -16,8 +16,8 @@ func CommandGuidanceFactKeys() []string {
 		"command_external_hidden",
 		"command_external_shown",
 		"command_on_floor",
+		"command_output_scratch_files",
 		"is_coordinator",
-		"native_utilities",
 		"platform_os",
 		"profile_command_mutation",
 		"profile_has_capture_page",
@@ -92,7 +92,7 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	vars["tool_profile"] = strings.TrimSpace(in.ProfileID)
 	vars["is_coordinator"] = in.IsCoordinator
 	vars["platform_os"] = runtime.GOOS
-	vars["native_utilities"] = NativeUtilitiesForPrompt()
+	vars["command_output_scratch_files"] = false
 	vars["root_count"] = in.RootCount
 	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
 	vars["session_scratch_dir"] = strings.TrimSpace(in.SessionScratchDir)

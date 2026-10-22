@@ -24,7 +24,7 @@ func TestHostRunnerPartialTeachesBoundaryBeforeActivation(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"Host runner", "confinement", "Egress is mediated",
+		"Host runner", "sandbox", "Egress is mediated",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in host-runner guidance; got %q", want, out)

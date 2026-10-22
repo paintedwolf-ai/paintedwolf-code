@@ -37,8 +37,8 @@ type Service struct {
 	hostResources         *hostresources.Service
 	approvals             *settings.ApprovalStore
 	postureObserver       func(context.Context, string, gate.Posture)
+	externalObserver      func(context.Context, string, gate.Posture, bool)
 	commandExternalHidden func() bool
-	scratchDir            func(context.Context, *api.Session) string
 	coordinatorProfile    func(context.Context, string) string
 }
 
@@ -53,11 +53,11 @@ func (m *Service) SetApprovals(approvals *settings.ApprovalStore) {
 func (m *Service) SetPostureObserver(observer func(context.Context, string, gate.Posture)) {
 	m.postureObserver = observer
 }
+func (m *Service) SetExternalObserver(observer func(context.Context, string, gate.Posture, bool)) {
+	m.externalObserver = observer
+}
 func (m *Service) SetCommandExternalHidden(fn func() bool) {
 	m.commandExternalHidden = fn
-}
-func (m *Service) SetScratchDir(fn func(context.Context, *api.Session) string) {
-	m.scratchDir = fn
 }
 func (m *Service) SetCoordinatorProfile(resolve func(context.Context, string) string) {
 	m.coordinatorProfile = resolve

@@ -150,6 +150,9 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	if !hostTurn {
 		m.PostTurn.EditFollowUp(ctx, sess, text)
 	}
+	if m.Preparation != nil && m.Preparation.Profiles != nil {
+		_ = m.Preparation.Profiles.EffectiveApprovalPosture(ctx, sess)
+	}
 	m.Settlement.Begin(id, m.Guidance.PendingIDs(ctx, id)...)
 	userPrompt := strings.TrimSpace(text)
 	if !hostTurn && (strings.TrimSpace(in.Text) != "" || len(in.ArtifactIDs) > 0) {

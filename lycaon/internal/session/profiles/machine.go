@@ -102,9 +102,6 @@ func (m *Service) PromptSurface(
 	if m == nil || sess == nil {
 		return out
 	}
-	if m.scratchDir != nil {
-		out.SessionScratchDir = m.scratchDir(ctx, sess)
-	}
 	out.Skills = agentSkillViews(loaded)
 	ambient := hostresources.ProjectAmbient(hostresources.AmbientInput{
 		Snapshot:        snapshot,
@@ -116,6 +113,9 @@ func (m *Service) PromptSurface(
 	out.Posture = m.EffectiveApprovalPosture(ctx, sess)
 	if m.commandExternalHidden != nil {
 		out.CommandExternalHidden = m.commandExternalHidden()
+		if m.externalObserver != nil && strings.TrimSpace(sess.ID) != "" {
+			m.externalObserver(ctx, sess.ID, out.Posture, out.CommandExternalHidden)
+		}
 	}
 	out.Fingerprint = promptSurfaceFingerprint(out)
 	return out

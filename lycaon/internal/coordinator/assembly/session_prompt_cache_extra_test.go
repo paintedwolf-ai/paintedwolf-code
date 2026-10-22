@@ -26,7 +26,7 @@ func TestSessionPromptCacheStableHit(t *testing.T) {
 	}
 }
 
-func TestStablePromptKeyFollowsEveryRenderedRootAndCommandFact(t *testing.T) {
+func TestStablePromptKeyFollowsEveryRenderedRoot(t *testing.T) {
 	vars := func(label, path, scratch string, reviewsConfinedWrites, externalHidden bool) map[string]any {
 		return map[string]any{
 			"root_count":              2,
@@ -48,10 +48,10 @@ func TestStablePromptKeyFollowsEveryRenderedRootAndCommandFact(t *testing.T) {
 		"command_external_hidden": vars("web", "/abs/web", "/scratch/s1", false, true),
 	} {
 		if rootsFingerprint(changed) == base {
-			t.Fatalf("%s kept the cached stable prompt", name)
+			t.Fatalf("%s root set kept the cached stable prompt", name)
 		}
 	}
 	if rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", false, false)) != base {
-		t.Fatal("identical root and fact set changed the stable prompt key")
+		t.Fatal("identical root set changed the stable prompt key")
 	}
 }

@@ -303,16 +303,17 @@ type ProjectRef struct {
 	Dir string
 }
 
-// ScopeForProjectRef selects the project settings layer when ref carries a
-// project identity or an active folder, and the global layer otherwise.
+// ScopeForProjectRef resolves the settings scope and cleaned reference for ref.
+// A reference carrying either project identity reads the project layer.
 func ScopeForProjectRef(ref ProjectRef) (llm.SettingsScope, ProjectRef) {
-	ref = ProjectRef{ID: strings.TrimSpace(ref.ID), Dir: strings.TrimSpace(ref.Dir)}
-	if dir := filepath.Clean(ref.Dir); ref.Dir != "" && dir != "." {
-		ref.Dir = dir
-	} else {
-		ref.Dir = ""
+	ref.ID = strings.TrimSpace(ref.ID)
+	ref.Dir = strings.TrimSpace(ref.Dir)
+	if ref.Dir != "" && filepath.Clean(ref.Dir) != "." {
+		ref.Dir = filepath.Clean(ref.Dir)
+		return llm.SettingsScopeProject, ref
 	}
-	if ref.ID != "" || ref.Dir != "" {
+	ref.Dir = ""
+	if ref.ID != "" {
 		return llm.SettingsScopeProject, ref
 	}
 	return llm.SettingsScopeGlobal, ref
@@ -331,8 +332,8 @@ func (s *ApprovalStore) EffectiveConfig(ref ProjectRef) ApprovalConfig {
 	return s.Get(scope, ref)
 }
 
-// EffectivePosture returns the active approval posture for ref, tightening the
-// device posture with any committed project overlay at ref.Dir.
+// EffectivePosture returns the effective approval posture for ref after
+// applying any repository .paintedwolf/approvals.yaml tightening.
 func (s *ApprovalStore) EffectivePosture(ref ProjectRef) gate.Posture {
 	return s.EffectiveConfig(ref).Posture
 }

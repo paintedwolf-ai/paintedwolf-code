@@ -9,13 +9,13 @@ attaches: [command, verify, terminal_open]
 hosts: [coordinator, worker]
 ---
 {% if profile_command_mutation != false or profile_has_verify or profile_has_terminal_open %}{% if runner_host_resource_tools %}
-For local daemons, put `capability_request.host_resources` with the listed id on the exact live `{{ runner_host_resource_tools|join:"` / `" }}`; invent `socket_paths` only when a skill says to. A socket refusal is a missing route, not a missing binary.
+For local daemons, pass `capability_request.host_resources` with the listed id on `{{ runner_host_resource_tools|join:"` / `" }}`; use `socket_paths` only when a skill names an exact socket.
 {% endif %}
 
-**Egress is mediated by default.**{% if profile_has_http_request %} Use `http_request` for API, webhook, and development-service actions; reserve runner networking for a process whose protocol is not represented by that schema.{% endif %} A host process gets HTTP(S) through the injected `HTTP_PROXY` / `HTTPS_PROXY` with no capability request; other TCP uses `socks_proxy: true`. Git over SSH is already wired.{% if profile_has_capture_page %} For static page preview, `capture_page` in `project_dir` mode needs no server.{% endif %} An application's network error is not a sandbox refusal; a refusal arrives as a `Code:` with its remedy{% if profile_has_command or profile_has_verify %}, and a live job's `command_output` reports its observed destinations under `network`{% endif %}.
+**Egress is mediated by default.**{% if profile_has_http_request %} Use `http_request` for API, webhook, and development-service calls; reserve runner networking for protocols outside that tool.{% endif %} Processes get HTTP(S) through `HTTP_PROXY` / `HTTPS_PROXY` automatically; other TCP uses `socks_proxy: true`, and git over SSH is already wired.{% if profile_has_capture_page %} For static page preview, `capture_page` in `project_dir` mode needs no server.{% endif %} An application network error is not a sandbox refusal; refusals return a `Code:` with a remedy{% if profile_has_command or profile_has_verify %}, and `command_output` reports observed destinations under `network`{% endif %}.
 
 {% include "partials/capability-request-grammar.md" %}
 
-{% if profile_has_command %}Runs ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, and redirects) with native GNU/BSD utilities and confined external toolchains. For behavioral checks, set `command(verification: true)`. Report scope and outcome; do not rerun a passing check.{% endif %}
+{% if profile_has_command %}For behavioral checks, set `command(verification: true)`. Report scope and outcome; do not rerun a passing check.{% endif %}
 
-**Verify the exercised behavior.** Find and run existing entry points from project docs or source. Substitute scripts cover only their own path; check others separately. Preserve product behavior when selecting a supported execution route. Unless asked, keep transport mechanics internal and describe outcomes and untested behavior in product terms, in both progress updates and closeout. Do not predict a different result on a "normal" machine from source inspection alone.{% endif %}
+**Verify the exercised behavior.** Run existing entry points from project docs or source. Substitute scripts cover only their own path; check others separately. Keep transport mechanics internal unless asked, and describe outcomes and untested behavior in product terms.{% endif %}
