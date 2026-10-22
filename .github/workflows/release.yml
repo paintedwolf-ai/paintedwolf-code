@@ -233,10 +233,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
       - uses: ./.github/actions/setup-bialy
-      - name: Build candidate sidecar
-        timeout-minutes: 60
-        run: ./task build:lycaon-dev
       - name: Install the public feed verifier
+        timeout-minutes: 5
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
       - name: Rehearse the prior-release upgrade
         timeout-minutes: 90
@@ -646,6 +644,7 @@ jobs:
         with:
           go-version-file: lycaon/go.mod
           cache: false
+      - uses: ./.github/actions/cache-go
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
