@@ -31,7 +31,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(sorted(stages), sorted(set(stages)))
         self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--",
-                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence"])
+                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence", "./test/contract/release"])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
         # Product suites and changed coverage run on the landing commit.

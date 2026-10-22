@@ -778,7 +778,8 @@
         "--",
         "./test/contract/hosted",
         "./test/contract/runner",
-        "./test/contract/evidence"
+        "./test/contract/evidence",
+        "./test/contract/release"
       ]
     },
     "limits": {
