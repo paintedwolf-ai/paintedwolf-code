@@ -16,7 +16,6 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
         printf 'target=%s/decide\n' "$(python3 scripts/artifact_paths.py compiler-cache "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
         printf 'metal=%s/mlx-metal\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
 
@@ -39,6 +38,12 @@ runs:
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
         key: decide-v3-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: ./.github/actions/cache-budget
+      with:
+        key: decide-v3-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+        record: ${{ steps.budget.outputs.record }}
+
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

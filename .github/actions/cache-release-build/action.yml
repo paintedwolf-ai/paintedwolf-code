@@ -21,9 +21,11 @@ runs:
         } >> "${GITHUB_OUTPUT}"
 
     # Go compiler entries validate their inputs across verification and release.
-    - uses: ./.github/actions/cache-go
+    - if: inputs.save != 'true'
+      uses: ./.github/actions/cache-go
 
-    - uses: ./.github/actions/cache-notices-tools
+    - if: inputs.save != 'true'
+      uses: ./.github/actions/cache-notices-tools
 
     # Cargo validates compiler inputs restored from an earlier lockfile generation.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
@@ -42,6 +44,12 @@ runs:
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
         key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: ./.github/actions/cache-budget
+      with:
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+        record: ${{ steps.budget.outputs.record }}
+
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

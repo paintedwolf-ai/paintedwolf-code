@@ -102,3 +102,39 @@ func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 		}
 	}
 }
+
+func TestCompilerCacheRetirementRequiresPostSaveInventory(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, name := range []string{"cache-go", "cache-decide", "cache-rust", "cache-release-build"} {
+		var action struct {
+			Runs struct {
+				Steps []struct {
+					Uses string
+					If   string
+					With map[string]string
+				}
+			}
+		}
+		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
+		contractcheck.FailErr(t, "decode compiler cache "+name, yaml.Unmarshal([]byte(data), &action))
+		saved, confirmed := false, false
+		for _, step := range action.Runs.Steps {
+			if strings.HasPrefix(step.Uses, "actions/cache/save@") {
+				saved = true
+			}
+			if step.Uses == "./.github/actions/cache-budget" && step.With["record"] != "" {
+				confirmed = saved && step.With["record"] == "${{ steps.budget.outputs.record }}"
+			}
+			if name == "cache-release-build" && (step.Uses == "./.github/actions/cache-go" || step.Uses == "./.github/actions/cache-notices-tools") && step.If != "inputs.save != 'true'" {
+				t.Error("release publication must not restore nested caches again")
+			}
+		}
+		if !confirmed {
+			t.Errorf("%s must confirm its admitted payload after saving", name)
+		}
+		if strings.Contains(data, "CARGO_PROFILE_") {
+			t.Errorf("%s must leave compiler profiles to setup", name)
+		}
+	}
+}

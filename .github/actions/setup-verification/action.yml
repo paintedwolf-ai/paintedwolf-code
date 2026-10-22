@@ -41,6 +41,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set verification compiler profiles
+      shell: bash
+      run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
+
     - name: Resolve artifact directory
       id: paths
       shell: bash

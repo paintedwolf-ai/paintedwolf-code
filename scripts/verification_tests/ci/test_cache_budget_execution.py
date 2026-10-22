@@ -16,7 +16,8 @@ class CacheBudgetTests(unittest.TestCase):
                 row(3, "go-Linux-X64-branch", 2, "refs/pull/1/merge"), row(4, "unknown", 2)]
         result = budget.plan(rows, "go-Linux-X64-new", 10, limit=2**22)
         self.assertTrue(result["allowed"])
-        self.assertEqual(result["delete"], [1])
+        self.assertEqual(result["delete"], [])
+        self.assertEqual(result["retire_after_save"], [1])
         self.assertEqual(budget.plan(rows, "go-Linux-X64-old", 10)["delete"], [])
 
     def test_budget_counts_unowned_storage_and_refuses_oversized_writes(self):
@@ -52,3 +53,29 @@ class CacheBudgetTests(unittest.TestCase):
             (root / "README").write_text("keep")
             self.assertEqual(budget.trim_go(root, 4), 4)
             self.assertEqual([p.name for p in root.iterdir()], ["README"])
+
+    def test_prior_generation_is_retired_only_after_inventory_confirms_the_new_payload(self):
+        old = row(1, "go-Linux-X64-old", 2**20)
+        record = {**budget.plan([old], "go-Linux-X64-new", 10), "key": "go-Linux-X64-new",
+                  "measured_compressed_bytes": 10}
+        self.assertEqual(record["delete"], [])
+        for inventory in ([old], [old, row(2, record["key"], 10, "refs/pull/1/merge")],
+                          [old, row(2, record["key"], 0)]):
+            result = budget.confirm(inventory, record)
+            self.assertFalse(result["published"])
+            self.assertEqual(result["delete"], [])
+        saved = row(2, record["key"], 12)
+        result = budget.confirm([old, saved], record)
+        self.assertTrue(result["published"])
+        self.assertEqual(result["delete"], [1])
+        self.assertEqual(result["stored_compressed_bytes"], 12)
+        self.assertEqual(result["measured_compressed_bytes"], 10)
+        changed_owner = {**old, "ref": "refs/pull/1/merge"}
+        self.assertEqual(budget.confirm([changed_owner, saved], record)["delete"], [])
+        self.assertEqual(budget.confirm([old, saved, {**saved, "id": 3}], record)["delete"], [])
+
+    def test_capacity_pressure_deletes_only_the_space_needed_before_save(self):
+        rows = [row(1, "go-Linux-X64-old", 2**20), row(2, "go-Linux-X64-older", 2**20)]
+        result = budget.plan(rows, "go-Linux-X64-new", 10, limit=3 * 2**20)
+        self.assertEqual(result["delete"], [1])
+        self.assertEqual(result["retire_after_save"], [2])

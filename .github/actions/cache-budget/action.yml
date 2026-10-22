@@ -5,9 +5,15 @@ inputs:
     required: true
     description: Cache key to publish
   path:
-    required: true
+    default: ''
     description: Cache paths and exclusions
+  record:
+    default: ''
+    description: Admission record to confirm after save
 outputs:
+  record:
+    description: Prepared admission record for confirmation
+    value: ${{ steps.budget.outputs.record }}
   allowed:
     description: Whether the payload fits the publication budget
     value: ${{ steps.budget.outputs.allowed }}
@@ -19,6 +25,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         CACHE_KEY: ${{ inputs.key }}
+        CACHE_RECORD: ${{ inputs.record }}
         CACHE_PATHS: ${{ inputs.path }}
         PYTHONPATH: scripts
       run: python3 -m ci_policy.cache_budget

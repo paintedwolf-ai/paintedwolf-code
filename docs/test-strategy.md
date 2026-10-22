@@ -976,20 +976,28 @@ remain a coverage gap; cancellation is reported separately from an attributed te
 ### Compiler cache storage admission
 
 Only the serialized main warmer publishes compiler caches. Each publication
-measures its payload, reserves uncompressed bytes plus archive overhead against
-an 8 GiB repository budget, and retires superseded entries in its platform
-family before upload. If needed, it retires the least recently used compiler
-entries it owns; it never deletes another ref or an unknown family. Oversized
+measures a tar payload compressed with zstd and reserves that size plus 5% and
+1 MiB for archive variance against an 8 GiB repository budget. Superseded platform
+entries remain available until GitHub's inventory confirms the new cache. Only
+when required to fit the upload does admission retire entries first, preferring
+superseded generations and then the least recently used owned compiler entries; it never deletes another ref or an unknown family. Oversized
 payloads are reported and left unpublished. The remaining allowance leaves
 headroom for tool caches; concurrent writes and GitHub eviction can still
 displace entries.
 This is write admission, not a storage reservation or a pinned cache.
 
 The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
-combined module/build payload. Hosted development Rust builds omit debug data,
+combined module/build payload. The desktop warmer removes workspace package
+outputs with Cargo's package-scoped cleanup, retaining dependency builds.
+Hosted development Rust profiles are configured explicitly by setup and the
+calling workflows; cache restore and save do not change compiler settings.
+Development builds omit debug data,
 and desktop/decision-engine keys retain Xcode identity only on macOS. Go, desktop Rust,
 decision-engine, and release caches publish explicitly after successful warming;
-publication summaries record bytes, retired entry IDs, and skipped writes.
+publication summaries record uncompressed bytes, measured compressed bytes,
+confirmed GitHub storage bytes, retired entry IDs, and skipped writes. A successful
+save step alone never permits retiring the prior cache because upload failures
+can be reported as warnings.
 Consumers remain read-only and rebuild safely on a miss.
 
 Linux native setup resolves archives from signed APT indexes, verifies each size

@@ -15,7 +15,6 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
         toolchain=system
         if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
         printf 'prefix=den-rust-v1-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
@@ -49,3 +48,8 @@ runs:
           lycaon-den/target
           !lycaon-den/target/**/incremental
         key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
+      uses: ./.github/actions/cache-budget
+      with:
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon-den/.cargo/config.toml') }}
+        record: ${{ steps.budget.outputs.record }}

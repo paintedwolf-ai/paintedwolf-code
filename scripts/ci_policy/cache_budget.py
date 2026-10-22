@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 from ci_policy.github import api, pages
+from ci_policy.cache_payload import compressed_size
 
 LIMIT = 8 * 1024**3
 GO_BUILD_LIMIT = 1024**3
@@ -58,7 +60,7 @@ def plan(rows, key, size, limit=LIMIT):
         return {"allowed": False, "reason": "no cache payload", "delete": []}
     if any(row["key"] == key and row["ref"] == "refs/heads/main" for row in rows):
         return {"allowed": False, "reason": "exact key already exists", "delete": []}
-    # Reserve uncompressed bytes and archive headroom before the upload.
+    # Reserve the measured compressed payload with archive variance headroom.
     reserve = size + size // 20 + 1024**2
     total = sum(row["size_in_bytes"] for row in rows)
     owned = [row for row in rows if row["ref"] == "refs/heads/main" and family(row["key"]) is not None]
@@ -67,14 +69,29 @@ def plan(rows, key, size, limit=LIMIT):
                     key=lambda row: (row.get("last_accessed_at", ""), -row["size_in_bytes"]))
     remove = []
     for row in replaced + others:
-        if row not in replaced and total + reserve <= limit:
+        if total + reserve <= limit:
             break
         total -= row["size_in_bytes"]
         remove.append(row["id"])
     allowed = total + reserve <= limit
     return {"allowed": allowed, "reason": "within budget" if allowed else "payload or unowned caches exceed budget",
-            "delete": remove if allowed else [], "stored_bytes": sum(row["size_in_bytes"] for row in rows),
+            "delete": remove if allowed else [],
+            "retire_after_save": [row["id"] for row in replaced if row["id"] not in remove] if allowed else [],
+            "stored_bytes": sum(row["size_in_bytes"] for row in rows),
             "reserved_bytes": reserve, "projected_bytes": total + reserve, "limit_bytes": limit}
+
+
+def confirm(rows, record):
+    key = record["key"]
+    saved = [row for row in rows if row["key"] == key and row["ref"] == "refs/heads/main" and row["size_in_bytes"] > 0]
+    if len(saved) != 1:
+        return {"published": False, "delete": [], "reason": "new cache entry not confirmed; retained prior generations"}
+    pending = set(record["retire_after_save"])
+    retired = [row["id"] for row in rows if row["id"] in pending and row["ref"] == "refs/heads/main"
+               and row["key"] != key and family(row["key"]) == family(key)]
+    return {"published": True, "delete": retired, "cache_id": saved[0]["id"],
+            "measured_compressed_bytes": record["measured_compressed_bytes"],
+            "stored_compressed_bytes": saved[0]["size_in_bytes"], "reserved_bytes": record["reserved_bytes"]}
 
 
 def main():
@@ -82,20 +99,31 @@ def main():
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
         raise ValueError("compiler publication requires the trusted main hosted warmer")
     key = os.environ["CACHE_KEY"]
-    if family(key) and family(key)[0] == "go":
-        path = Path(subprocess.check_output(["go", "env", "GOCACHE"], text=True).strip())
-        trim_go(path)
-    size = sum(path.stat().st_size for path in files(os.environ["CACHE_PATHS"]))
     repository = os.environ["GITHUB_REPOSITORY"]
-    rows = list(pages(f"repos/{repository}/actions/caches", "actions_caches"))
-    result = plan(rows, key, size)
+    inventory = f"repos/{repository}/actions/caches"
+    if os.environ.get("CACHE_RECORD"):
+        record = json.loads(Path(os.environ["CACHE_RECORD"]).read_text())
+        if key != record["key"] or not record["allowed"]:
+            raise ValueError("cache confirmation does not match its admitted publication")
+        result = confirm(list(pages(inventory, "actions_caches")), record)
+    else:
+        if family(key) and family(key)[0] == "go":
+            path = Path(subprocess.check_output(["go", "env", "GOCACHE"], text=True).strip())
+            trim_go(path)
+        payload = files(os.environ["CACHE_PATHS"])
+        size = compressed_size(payload)
+        result = {**plan(list(pages(inventory, "actions_caches")), key, size), "key": key,
+                  "uncompressed_bytes": sum(path.stat().st_size for path in payload), "measured_compressed_bytes": size}
+        with tempfile.NamedTemporaryFile(mode="w", prefix="cache-admission-", suffix=".json", delete=False,
+                                         dir=os.environ["RUNNER_TEMP"]) as record:
+            json.dump(result, record)
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"allowed={str(result['allowed']).lower()}\nrecord={record.name}\n")
     for cache_id in result["delete"]:
-        api(f"repos/{repository}/actions/caches/{cache_id}", "DELETE")
-    with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-        output.write(f"allowed={str(result['allowed']).lower()}\n")
+        api(f"{inventory}/{cache_id}", "DELETE")
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-        summary.write("### Compiler cache admission\n\n```json\n" + json.dumps({"key": key, **result}, indent=2) + "\n```\n")
-    if not result["allowed"]:
+        summary.write("### Compiler cache publication\n\n```json\n" + json.dumps({"key": key, **result}, indent=2) + "\n```\n")
+    if not result.get("allowed", result.get("published")):
         print(f"::notice::Compiler cache not published: {result['reason']}")
 
 
