@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -68,12 +69,12 @@ func (inv *invocation) value(key string) (string, bool) {
 
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // fail reports an ordinary input or query failure on stderr: jq's status 2.

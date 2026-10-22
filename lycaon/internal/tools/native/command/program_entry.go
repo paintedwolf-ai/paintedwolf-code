@@ -169,13 +169,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
-	if err != nil {
-		return "", err
-	}
-	if session == nil || session.OwnerPersonID == "" {
-		return "", fmt.Errorf("command program requires the session owner")
-	}
 	parsed, snapshot, err := parseProgram(ctx, memory, source)
 	if err != nil {
 		return "", err
@@ -190,17 +183,26 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}()
 
+	cwd, _ := args["cwd"].(string)
+	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, cwd)
+	if err != nil {
+		return "", err
+	}
+	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
+	if err != nil {
+		return "", err
+	}
+	if session == nil || session.OwnerPersonID == "" {
+		return "", fmt.Errorf("command program requires the session owner")
+	}
 	root := toolcontract.OperationInvocation{
 		Kind:         toolcontract.ProgramChildInvocation,
 		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
 		ActorID:      session.OwnerPersonID,
 		SessionID:    tc.Identity.SessionID,
-		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID},
+		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, Directory: cwd},
 		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
 		CatalogDigest: snapshot.Plan.CatalogDigest,
-	}
-	if cwd, _ := args["cwd"].(string); cwd != "" {
-		root.Scope.Directory = cwd
 	}
 	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: args}, memory)
 	if err != nil {
@@ -208,10 +210,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	releasePlan := release
 	release = func() { frame.Close(); releasePlan() }
-	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
-	if err != nil {
-		return "", err
-	}
 	// A validation run's source identity is captured before anything runs.
 	var verification func() commandSourceIdentity
 	if tc.Execution.VerificationCheck {

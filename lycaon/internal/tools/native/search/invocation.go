@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -95,13 +96,13 @@ func (inv *invocation) fail(quiet bool, format string, args ...any) {
 // invalid.
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.spec.Name, "word": word, "expected": reason, "expected_form": inv.spec.Argv,
+		"command": inv.spec.Name, "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv,
 	}}
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // ordinary classifies an input failure the utility reports on stderr and
@@ -221,8 +222,6 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, nil
 }
 
-const outputChunkBytes = 32 * 1024
-
 // output meters stdout against stream_bytes before each write and, when the
 // endpoint retains them, records exact source mappings for bytes copied from
 // a pinned capture. Prefixes, separators and replacements carry none.
@@ -279,30 +278,7 @@ func (o *output) flush() error {
 }
 
 func (o *output) Write(p []byte) (int, error) {
-	if o.maximum > 0 && o.written+int64(len(p)) > o.maximum {
-		return 0, limitExceeded("stream_bytes", o.maximum, o.written+int64(len(p)))
-	}
-	sent := 0
-	for len(p) > 0 {
-		if err := o.ctx.Err(); err != nil {
-			return sent, err
-		}
-		chunk := p[:min(len(p), outputChunkBytes)]
-		n, err := o.w.Write(chunk)
-		if n < 0 || n > len(chunk) {
-			return sent, io.ErrShortWrite
-		}
-		sent += n
-		o.written += int64(n)
-		if err != nil {
-			return sent, err
-		}
-		if n != len(chunk) {
-			return sent, io.ErrShortWrite
-		}
-		p = p[n:]
-	}
-	return sent, nil
+	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
 }
 
 func (o *output) text(parts ...string) error {

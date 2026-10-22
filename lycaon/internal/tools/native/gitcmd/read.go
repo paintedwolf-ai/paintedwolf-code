@@ -188,7 +188,7 @@ func has(bound commandprogram.BoundArgv, key string) bool {
 
 func operandInvalid(spec toolcontract.CommandSpecification, word, expected string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": spec.Name, "word": word, "expected": expected, "expected_form": spec.Argv}}
+		"command": spec.Name, "word": word, "expected": expected, "reason": expected, "expected_form": spec.Argv}}
 }
 
 // run resolves the directory and repository, then streams Git's output.
@@ -267,7 +267,7 @@ func (o *meteredOutput) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if o.maximum > 0 && o.written+int64(len(p)) > o.maximum {
-		o.err = &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": o.maximum, "observed": o.written + int64(len(p))}}
+		o.err = &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": o.maximum, "observed": o.written + int64(len(p))}}
 		return 0, o.err
 	}
 	n, err := o.w.Write(p)

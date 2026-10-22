@@ -75,7 +75,7 @@ func (inv *invocation) fail(operand, reason string) {
 
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
 }
 
 // unsupportedForm refuses a catalogued spelling this frontend cannot perform
