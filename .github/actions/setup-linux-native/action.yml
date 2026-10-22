@@ -12,7 +12,8 @@ runs:
       shell: bash
       run: python3 "$GITHUB_ACTION_PATH/provision.py" plan
 
-    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.packages.outputs.archives }}/*.deb
         key: ${{ steps.packages.outputs.key }}
@@ -22,7 +23,7 @@ runs:
       run: python3 "$GITHUB_ACTION_PATH/provision.py" install
 
     - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main'
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       with:
         path: ${{ steps.packages.outputs.archives }}/*.deb
         key: ${{ steps.packages.outputs.key }}

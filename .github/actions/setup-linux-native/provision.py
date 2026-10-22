@@ -24,6 +24,14 @@ def apt(*arguments, capture=False):
     return result.stdout
 
 
+def runner_image(environment):
+    fields = ("ImageOS", "ImageVersion", "RUNNER_ARCH")
+    missing = [name for name in fields if not environment.get(name)]
+    if missing:
+        raise ValueError("native package caching requires GitHub-hosted runner metadata: " + ", ".join(missing))
+    return [environment[name] for name in fields]
+
+
 def archive_identity(plan, names, environment):
     archives = []
     for line in plan.splitlines():
@@ -33,16 +41,17 @@ def archive_identity(plan, names, environment):
                 raise ValueError("APT archive plan must contain sizes and SHA256 digests")
             archives.append(fields[1:])
     identity = {"packages": names, "archives": sorted(archives),
-                "image": [environment[name] for name in ("ImageOS", "ImageVersion", "RUNNER_ARCH")]}
+                "image": runner_image(environment)}
     return "linux-native-v1-" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 def main(mode):
     if os.environ.get("RUNNER_OS") != "Linux":
         raise ValueError("native package preparation requires a Linux runner")
+    runner_image(os.environ)
     names = packages()
     directory = Path(os.environ["RUNNER_TEMP"]) / "paintedwolf-native-archives"
-    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "partial").mkdir(parents=True, exist_ok=True)
     if mode == "plan":
         apt("update")
         plan = apt("-o", "Acquire::ForceHash=SHA256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)

@@ -49,6 +49,7 @@ if '--print-uris' in sys.argv:
     print(os.environ['NATIVE_PLAN'])
 elif 'install' in sys.argv:
     archive = next(a.split('=', 1)[1] for a in sys.argv if a.startswith('Dir::Cache::archives='))
+    assert (pathlib.Path(archive) / 'partial').is_dir(), 'APT partial directory is missing'
     marker = pathlib.Path(archive) / 'a_1_amd64.deb'
     if os.environ['NATIVE_RESTORED'] == 'true':
         assert marker.read_bytes() == b'cached archive'
@@ -76,6 +77,18 @@ elif 'install' in sys.argv:
                 self.assertIn("Acquire::ForceHash=SHA256", records[1])
                 self.assertIn("APT::Keep-Downloaded-Packages=true", records[2])
                 self.assertEqual(records[2][-2:], ["xclip", "sway"])
+
+    def test_missing_runner_metadata_has_a_clear_error(self):
+        complete = {"ImageOS": "ubuntu24", "ImageVersion": "20261022.1", "RUNNER_ARCH": "X64"}
+        for name in complete:
+            with self.subTest(name=name):
+                incomplete = {key: value for key, value in complete.items() if key != name}
+                with self.assertRaisesRegex(ValueError, "GitHub-hosted runner metadata: " + name):
+                    NATIVE.archive_identity(PLAN, ["xclip"], incomplete)
+                with patch.dict(os.environ, {"RUNNER_OS": "Linux", **incomplete}, clear=True), \
+                        patch.object(NATIVE, "apt") as apt, self.assertRaises(ValueError):
+                    NATIVE.main("plan")
+                apt.assert_not_called()
 
     def test_invalid_package_names_and_non_linux_hosts_are_refused(self):
         with tempfile.TemporaryDirectory() as directory:

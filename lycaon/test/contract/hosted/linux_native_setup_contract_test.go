@@ -36,7 +36,7 @@ func TestLinuxNativeSetupRestoresExactArchivesBeforeInstallation(t *testing.T) {
 			phases = append(phases, "install")
 		case strings.HasPrefix(step.Uses, "actions/cache/save@"):
 			phases = append(phases, "save")
-			if step.If != "inputs.save == 'true' && github.ref == 'refs/heads/main'" {
+			if step.If != "inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'" {
 				t.Error("native archives publish only after successful trusted-main installation")
 			}
 		}
