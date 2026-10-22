@@ -98,10 +98,10 @@ def main():
     end = now.strftime('%Y-%m-%dT%H:%M:%SZ')
     since = (now - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     runs = [r for r in pages(f'{repository()}/actions/workflows/ci.yml/runs?created=>={since}', 'workflow_runs')
-            if r['event'] == 'merge_group' and r['status'] == 'completed']
+            if r['event'] == 'merge_group' and r['status'] == 'completed' and r['updated_at'] <= end]
     report = summarize(runs, evidence)
     report['window_start'] = since
-    merges = recent_merges(since)
+    merges = [pull for pull in recent_merges(since) if pull["mergedAt"] <= end]
     report['window_end'] = end
     report['throughput'] = throughput(runs, merges, since, end,
         lambda run: pages(f"{repository()}/actions/runs/{run['id']}/jobs?filter=all", 'jobs'))

@@ -98,9 +98,9 @@ def recover(run):
         return
     if run.get('path') not in {'.github/workflows/ci.yml', '.github/workflows/qualification.yml'}:
         return
-    if run.get('repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
+    if (run.get('repository') or {}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
         return
-    if run.get('head_repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
+    if (run.get('head_repository') or {}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
         return
     records, failures = evidence(run)
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))
