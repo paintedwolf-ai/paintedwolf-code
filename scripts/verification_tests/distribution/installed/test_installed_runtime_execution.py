@@ -117,10 +117,13 @@ class InstalledRuntimeTests(unittest.TestCase):
             path.write_text(json.dumps(base))
             result = manifest(root, "amd64")
             self.assertIn(str(root / "bin/pw-launch-entry"), result["images"])
+            v1 = {k: v for k, v in base.items() if k != "payload"}
+            v1["format_version"] = 1
+            path.write_text(json.dumps(v1))
+            self.assertIn(str(root / "bin/pw-launch-entry"), manifest(root, "amd64")["images"])
             for invalid in ({**base, "format_version": 0}, {**base, "format_version": 3},
                             {**base, "format_version": True}, {**base, "format_version": "2"},
                             {**base, "format_version": 1},
-                            {**{k: v for k, v in base.items() if k != "payload"}, "format_version": 1},
                             {k: v for k, v in base.items() if k != "payload"},
                             {**base, "payload": []},
                             {**base, "payload": [*payload, {"path": "manifest.json", "kind": "file", "mode": 0o644, "sha256": "a" * 64, "size": 1, "target": None}]},
