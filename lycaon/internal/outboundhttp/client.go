@@ -98,9 +98,8 @@ type Request struct {
 	// ConnectTimeout bounds each hop's connection establishment separately
 	// from Timeout; zero leaves only the exchange deadline.
 	ConnectTimeout time.Duration
-	// WireHeaders keeps a cleartext HTTP/1.x final response's header block in
-	// received order and spelling (Response.Wire); TLS responses keep only
-	// the normalized Headers.
+	// WireHeaders keeps complete response headers. Cleartext HTTP/1.x also
+	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders  bool
 	AllowAddress func(netip.Addr, uint16) bool
 	BeforeHop    func(context.Context, *url.URL) error
@@ -114,9 +113,9 @@ type Hop struct {
 	// Method is present only when the redirect changes it.
 	Method string     `json:"method,omitempty"`
 	Timing *HopTiming `json:"timing_ms,omitempty"`
-	// StatusLine and Headers are the redirect response as presented (with
-	// Set-Cookie and Proxy-Authenticate withheld); Wire keeps a cleartext
-	// block in received order when requested.
+	// StatusLine and Headers describe the redirect response. Credential
+	// headers are withheld unless WireHeaders requests a complete command
+	// response; Wire then keeps observable cleartext bytes.
 	StatusLine string       `json:"-"`
 	Headers    []Header     `json:"-"`
 	Wire       *WireHeaders `json:"-"`

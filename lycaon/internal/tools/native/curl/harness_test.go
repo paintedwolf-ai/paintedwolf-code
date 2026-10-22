@@ -74,6 +74,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 type run struct {
+	mode           string
 	stdout, stderr string
 	result         toolcontract.ProducerResult
 	err            error
@@ -100,7 +101,7 @@ func (h *harness) curl(ctx context.Context, words ...string) run {
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("curl %v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID, transfer: prepared.Transfer()}
+	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID, transfer: prepared.Transfer()}
 }
 
 func (h *harness) path(rel string) string { return filepath.Join(h.root, filepath.FromSlash(rel)) }
