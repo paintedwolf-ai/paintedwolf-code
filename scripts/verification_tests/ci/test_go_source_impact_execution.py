@@ -25,6 +25,17 @@ class GoSourceImpactTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (True, [path]))
 
+    def test_go_outside_the_module_graph_runs_the_whole_gate(self):
+        # Harness projects are nested modules other lanes copy and run; Go ignores testdata and _ or . directories.
+        for path in ["lycaon/test/fixtures/e2e/minimal-go-project/internal/app/app.go",
+                     "lycaon/test/fixtures/e2e/hostile-project/main.go", "lycaon/test/testdata/scan/vuln.go",
+                     "lycaon/internal/confine/testdata/probe/main.go", "lycaon/internal/a/_scratch/a.go",
+                     "lycaon/cmd/tool/.cache/a.go"]:
+            with self.subTest(path=path):
+                self.assertEqual(impact.broad_scope([path]), (True, [path]))
+        self.assertEqual(impact.broad_scope(["lycaon/test/wiring/fixtures/coordinator_batch/fixture.go"]),
+                         (False, []))
+
     def test_changed_test_support_reaches_importers_and_keeps_all_contracts_and_smoke(self):
         module = "github.com/lycaon/lycaon/"
         edges = {"test/support": {}, "test/security": {"TestImports": ["test/support"]},
