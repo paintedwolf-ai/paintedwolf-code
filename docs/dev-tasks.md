@@ -117,6 +117,66 @@ selection and staging recheck the archive. Isolated test checkouts reuse this
 cache while keeping their own release selection. Download failures can be
 retried normally and never start an engine source build.
 
+`pw scan engines verify-installed --root /absolute/engine-root` checks the
+packaged payload against the executable's embedded identity, then runs native
+and embedded-source positive cases plus ignored/comment-only controls through
+the product driver under required confinement. It emits JSON with the exact
+binary identity, capability facts, case results, and a structured failure code.
+Missing, changed, or wrong-architecture resources fail; this command never
+repairs the installation, downloads an engine, or searches a host-tool fallback.
+Run it from each installed package with its explicit resource root. A checkout
+probe does not establish an installed-package result.
+
+The selected producer qualification binds the original scanner bytes. Changing
+the ELF loader for Nix changes those bytes and requires a separate consumer
+finalization identity and qualification. The artifact build tool supports
+`-mode finalize-consumer -artifact-directory ORIGINAL -root FINAL_ROOT
+-consumer-recipe RECIPE.json -evidence-root SCANNER_CONFIG -audit-output AUDIT.json`.
+It emits the final base64 build identity only after the required product cases
+pass under confinement. The recipe is one closed JSON object with
+`schema_version: 1`, `kind: "nix-elf-relocation"`, the full `source_commit`,
+`flake_lock_sha256`, absolute `tool_path`, `tool_sha256`, and an `arguments`
+array. Declared inputs and observed ELF loader, dependencies, and RPATHs remain
+separate fields in the consumer record.
+
+The existing managed preparation entry point forwards these explicit build
+modes to that same tool:
+
+```sh
+./task scan:opengrep:stage -- --finalize-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --relocate-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --audit-consumer -artifact-directory "$ORIGINAL" -packaged-directory "$FINAL_ARTIFACT_DIRECTORY" -consumer-identity-file "$IDENTITY" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+```
+
+These modes refuse development overrides and do not fetch or repair resources.
+The Nix build graph uses the built artifact command as a derivation dependency;
+it performs the same offline admission before compiling the engine.
+
+For the pinned Linux Nuitka onefile scanner, use `--relocate-consumer` with
+`kind: "nix-nuitka-relocation"` and exactly four `arguments` entries:
+`["--set-interpreter", "/nix/store/…/lib/ld-linux-….so", "--set-rpath", "/nix/store/…-glibc/lib:/nix/store/…-libgcc/lib"]`.
+Start with an exact staged producer copy. The build tool patches its separated
+launcher and embedded ELF images, retains safe relative library paths, and
+rebuilds per-file checksums, compression, and the attached-data trailer. Each
+native dependency must have a declared payload or Nix store provider; host
+library fallback is refused. Ordinary `patchelf` on the complete scanner breaks
+its attached-data layout. Relocation alone grants no qualification authority;
+the same invocation runs the product cases before emitting an identity.
+
+The native consumer integration uses the existing scoped digest with
+`-tags integration,consumer_scanners -run '^TestConsumerFinalizationNativeScanner$'`
+for `./cmd/opengrep-artifact`. It requires `PW_SCANNER_CONSUMER_RECIPE` and
+`PW_SCANNER_PRODUCER_DIRECTORY`; absent inputs fail that selected campaign.
+Ordinary scanner tests continue to qualify unchanged producer resources.
+
+Package assembly must transform its own writable staged copy first, run this
+native finalizer, inject the emitted identity into the engine build, and then
+preserve every finalized resource byte. A later audit uses the original
+`-artifact-directory`, final `-packaged-directory`, and
+`-consumer-identity-file IDENTITY.txt` together. The original pinned archive
+and selection evidence remain required. Nix package caller integration and
+installed qualification for both architectures are tracked under #49 and #927.
+
 Development executables run under the hardened runtime releases ship with:
 `scripts/sign-dev-binary.sh` signs them with the stable development identity
 when it is provisioned and ad hoc otherwise, always with `--options runtime`.
