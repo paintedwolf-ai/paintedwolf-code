@@ -20,12 +20,13 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/sourceblob/store.go": "stream-then-name: the object's destination is its digest",
 
 	// Directory transactions promote and roll back whole trees.
-	"lycaon/internal/detectionpack/import.go":         "directory promotion with rollback of the replaced pack tree",
-	"lycaon/internal/extpacks/meta_install.go":        "directory promotion with backup and rollback",
-	"lycaon/internal/extpacks/meta_transaction.go":    "recoverable directory promotion with backup and rollback",
-	"lycaon/internal/extpacks/package_transaction.go": "directory promotion of a staged package tree",
-	"lycaon/internal/project/promotion_engine.go":     "reservation-based promotion: renames are the transaction, not a write",
-	"lycaon/internal/workspace/seed.go":               "directory promotion of a fully materialized seed tree",
+	"lycaon/internal/detectionpack/import.go":          "directory promotion with rollback of the replaced pack tree",
+	"lycaon/internal/extpacks/meta_install.go":         "directory promotion with backup and rollback",
+	"lycaon/internal/extpacks/meta_transaction.go":     "recoverable directory promotion with backup and rollback",
+	"lycaon/internal/extpacks/package_transaction.go":  "directory promotion of a staged package tree",
+	"lycaon/internal/packagegeneration/materialize.go": "directory promotion of a verified package generation tree",
+	"lycaon/internal/project/promotion_engine.go":      "reservation-based promotion: renames are the transaction, not a write",
+	"lycaon/internal/workspace/seed.go":                "directory promotion of a fully materialized seed tree",
 
 	// An external writer creates this staging file.
 	"lycaon/internal/db/store_schema.go": "SQLite VACUUM INTO writes the staged snapshot; the door uses its staging file",
@@ -43,6 +44,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/api/owner_only_posix.go":             "O_EXCL create so the 0600 mode is in force before any byte lands",
 	"lycaon/internal/api/owner_only_windows.go":           "owner-only ACL applied to a freshly created manifest",
 	"lycaon/internal/filelock/filelock.go":                "lock file opened for the flock it carries, not for its contents",
+	"lycaon/internal/packagegeneration/lifetime.go":       "lock file opened for the flock it carries, not for its contents",
 	"lycaon/internal/fileclone/clone_linux.go":            "O_EXCL destination for a reflink clone; the ioctl replaces the write",
 	"lycaon/internal/indexwatch/indexwatch.go":            "O_EXCL destination while copying index file",
 	"lycaon/internal/promptattach/docext/worker.go":       "O_EXCL request file handed to a one-shot extraction worker",
