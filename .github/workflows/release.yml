@@ -650,6 +650,9 @@ jobs:
         with:
           bun-version-file: .bun-version
           no-cache: true
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}

@@ -33,7 +33,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "timing_source"}:
+                        "platform", "preflight", "timing_source"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
@@ -65,11 +65,21 @@ def lanes():
     if actual != expected:
         raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
                          f"missing={expected - actual}, extra={actual - expected}")
+    for name, lane in values.items():
+        if "fast" in lane["profiles"] or "preflight" in lane:
+            command = lane.get("preflight", [])
+            if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
+                    or not isinstance(command, list) or len(command) < 3
+                    or command[:2] != ["test:contract", "--"]
+                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or len(set(command[2:])) != len(command[2:])):
+                raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
     extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
     if not fast or extra or max(fast.values()) > 1:
-        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
+        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and "platform" not in lane
                      for stage in expand(lane["targets"]))

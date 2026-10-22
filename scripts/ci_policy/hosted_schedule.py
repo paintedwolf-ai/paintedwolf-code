@@ -19,7 +19,7 @@ def validate_sources(lanes):
                for field, default in [("runner", "ubuntu-latest"), ("setup", None), ("workers", None), ("shards", 1)]):
             raise ValueError(f"CI lane {name} timing source must use the same execution configuration")
         stages = lambda value: Counter(stage["name"] for stage in expand(value["targets"]))
-        if not stages(lane) <= stages(source):
+        if stages(lane) - stages(source):
             raise ValueError(f"CI lane {name} timing source must cover its stages")
 
 
