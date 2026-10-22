@@ -35,6 +35,12 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
 	child.Scope = parent.Invocation.Scope
 	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
+	if resolved, ok, err := commandprogram.ResolveCommand(argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, argv); err == nil && bound.Help {
+			request.OperationID = resolved.Name
+			return d.Invoke(ctx, request, streams)
+		}
+	}
 	spec, native := d.run.commands[argv[0].Value]
 	if !native || spec.Name == "external" {
 		request.OperationID = "external"

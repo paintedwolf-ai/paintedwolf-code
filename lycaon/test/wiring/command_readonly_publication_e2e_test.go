@@ -44,3 +44,12 @@ func TestWorkflowReadOnlyFileRefusesNativePublication(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandProgramNestedNativeHelpKeepsItsOwner(t *testing.T) {
+	f := newCommandWorkflowFixture(t, []workflowTurn{{callID: "nested-help", command: "env git status --help"}})
+	f.run(t)
+	result := f.outcome(t, "nested-help")
+	if result.Status != 0 || result.Refusal != nil || result.Stdout == "" {
+		t.Fatalf("native help did not run through env: %+v", result)
+	}
+}
