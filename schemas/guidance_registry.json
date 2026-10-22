@@ -530,6 +530,12 @@
       "emit": "guard:command_job",
       "summary": "An awaited command job is already live for this session ({{ paintedwolf.handles_text }})."
     },
+    "COMMAND_LIMIT_EXCEEDED": {
+      "branch_instruction": "Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}."
+    },
     "COMMAND_NATIVE_FORM_UNSUPPORTED": {
       "branch_instruction": "Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission",
       "category": "recoverable",
@@ -548,11 +554,29 @@
       "emit": "guard:command_composition_redirect",
       "summary": "{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}` is not on PATH for this confined run.{% else %}An executable named in the command line is not on PATH for this confined run.{% endif %}"
     },
+    "COMMAND_OPERAND_INVALID": {
+      "branch_instruction": "Correct the operand using its typed details and the focused command help, then submit a new action after reviewing earlier effects.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "One command operand cannot be used as supplied."
+    },
+    "COMMAND_OPTION_UNSUPPORTED": {
+      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "An option is unsupported for native {{ paintedwolf.command }}."
+    },
     "COMMAND_OUTPUT_NO_LIVE_JOB": {
       "branch_instruction": "Use the retained execution outcome; stop polling this unavailable handle",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
+    },
+    "COMMAND_PLATFORM_UNAVAILABLE": {
+      "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "This native command operation is unavailable on the current platform."
     },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",

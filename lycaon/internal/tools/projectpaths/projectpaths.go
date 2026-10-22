@@ -41,7 +41,7 @@ func (r Resolved) EffectLocation() fseffect.Location {
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
 func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
-	abs := strings.TrimSpace(modelPath)
+	abs := modelPath
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
 	}
@@ -110,7 +110,7 @@ func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved
 	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
-	rel := strings.TrimSpace(resolved.ScopeRel)
+	rel := resolved.ScopeRel
 	if rel == "" {
 		return
 	}
@@ -353,7 +353,7 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if reject := tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)); reject != nil {
 		return "", "", reject
 	}
-	cwdClean := strings.TrimSpace(cwdArg)
+	cwdClean := cwdArg
 	if _, scratch := scratchRel(tctx, cwdClean); scratch {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
@@ -474,7 +474,7 @@ func scratchRel(tctx tools.ToolContext, path string) (string, bool) {
 // scratchRelOfAbs returns an absolute path's place inside the scratch folder,
 // comparing canonical forms so an alias of the folder still resolves there.
 func scratchRelOfAbs(dir, raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
+	// Operand whitespace is filename data.
 	if dir == "" || !filepath.IsAbs(raw) {
 		return "", false
 	}
