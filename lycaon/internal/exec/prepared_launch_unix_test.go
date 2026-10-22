@@ -238,7 +238,7 @@ func TestAgentPreparedLaunchPreservesExecuteOnlyNativeBinary(t *testing.T) {
 	defer lease.Close(context.Background())
 	plan := AgentLaunch(LaunchAgentCommand, "synthetic execute-only action", boundary)
 	plan.CurrentAuthority = func(ctx context.Context) error { return lease.ValidateLaunch(ctx, boundary, identity) }
-	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"-test.run=^TestExecuteOnlyNativePayload$", "literal value"}, ExecOpts{Launch: plan, Dir: root, Env: []string{"PATH=/usr/bin:/bin", "PW_EXECUTE_ONLY_NATIVE_PAYLOAD=1"}})
+	cmd, cleanup, err := PrepareCommand(t.Context(), entry, []string{"-test.run=^TestExecuteOnlyNativePayload$", "literal value"}, ExecOpts{Launch: plan, Dir: root, InlineEnv: map[string]string{"PW_EXECUTE_ONLY_NATIVE_PAYLOAD": "1"}})
 	testutil.FailErr(t, "capture without source read", err)
 	defer cleanup()
 	var output bytes.Buffer
