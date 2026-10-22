@@ -2,6 +2,9 @@ package wiring
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,10 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -292,7 +297,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 		`(false | true; echo "pipe:${PIPESTATUS[0]}:${PIPESTATUS[1]}:${PIPESTATUS[@]}") && ` +
 		`touch touched.txt && echo redirected > redirected.txt && printf 'teed\n' | tee teed.txt && ` +
 		`wc notes.txt teed.txt && ` +
-		`ps aux >/dev/null && env | grep -q '^PWD=' && ! (env | grep -q '^PATH='); ` +
+		`ps aux >/dev/null && env | grep -q '^PATH='; ` +
 		`sleep 30 & pid=$!; ps aux | grep -q running && kill $pid; wait; echo "sig:$?"`
 	gitengine.TestingEnableBundledBinary()
 	s := newCommandProgramSession(t, prog, "")
@@ -368,5 +373,138 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
+	envBin, err := exec.LookPath("env")
+	if err != nil {
+		t.Skip("env binary not found")
+	}
+	t.Setenv("LYCAON_ENGINE_SECRET", "must-not-leak")
+	t.Setenv("PW_CANARY_SECRET", "canary-secret")
+	t.Setenv("OPENAI_API_KEY", "sk-secret")
+	t.Setenv("USER", "paintedwolf")
+	t.Setenv("LANG", "en_US.UTF-8")
+
+	prog := `export EXPORTED_KEY=exported_val; ` +
+		`env | sort > native_env.txt; ` +
+		`external -- ` + envBin + ` | sort > external_env.txt`
+	s := newCommandProgramSession(t, prog, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+
+	nativeBytes, err := os.ReadFile(filepath.Join(s.dir, "native_env.txt"))
+	testutil.FailErr(t, "read native_env.txt", err)
+	externalBytes, err := os.ReadFile(filepath.Join(s.dir, "external_env.txt"))
+	testutil.FailErr(t, "read external_env.txt", err)
+
+	nativeText := string(nativeBytes)
+	externalText := string(externalBytes)
+	for _, secret := range []string{"LYCAON_ENGINE_SECRET", "PW_CANARY_SECRET", "OPENAI_API_KEY"} {
+		if strings.Contains(nativeText, secret) || strings.Contains(externalText, secret) {
+			t.Fatalf("leaked %s: native=%q external=%q", secret, nativeText, externalText)
+		}
+	}
+	for _, required := range []string{"PATH=", "USER=paintedwolf", "LANG=en_US.UTF-8", "EXPORTED_KEY=exported_val"} {
+		if !strings.Contains(nativeText, required) || !strings.Contains(externalText, required) {
+			t.Fatalf("missing %s: native=%q external=%q", required, nativeText, externalText)
+		}
+	}
+
+	sandboxKeys := map[string]bool{
+		"HTTP_PROXY": true, "HTTPS_PROXY": true, "ALL_PROXY": true, "NO_PROXY": true,
+		"http_proxy": true, "https_proxy": true, "all_proxy": true, "no_proxy": true,
+		"GIT_SSH_COMMAND": true, "LYCAON_SOCKS_PROXY": true, "LYCAON_SSH_KNOWN_HOSTS": true,
+	}
+	filterSandbox := func(text string) []string {
+		var out []string
+		for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+			if line == "" {
+				continue
+			}
+			key, _, ok := strings.Cut(line, "=")
+			if ok && sandboxKeys[key] {
+				continue
+			}
+			out = append(out, line)
+		}
+		return out
+	}
+	if gotNative, gotExt := filterSandbox(nativeText), filterSandbox(externalText); !slices.Equal(gotNative, gotExt) {
+		t.Fatalf("env | sort != external -- env | sort:\nnative:   %v\nexternal: %v", gotNative, gotExt)
+	}
+}
+
+func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
+	s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
+	state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
+	testutil.FailErr(t, "progress state", err)
+	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+		t.Fatal("expected root session to start without progress")
+	}
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	if strings.Contains(result, "PROGRESS_MISSING") {
+		t.Fatalf("unexpected PROGRESS_MISSING: %s", result)
+	}
+	redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
+	testutil.FailErr(t, "read redirected.txt", err)
+	teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
+	testutil.FailErr(t, "read teed.txt", err)
+	if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
+		t.Fatalf("redirected=%q teed=%q", redirected, teed)
+	}
+}
+
+func TestCommandProgramKillSignalStatusAndJobReferences(t *testing.T) {
+	prog := `sleep 30 & kill %1; wait; echo "pct1:$?"; ` +
+		`sleep 30 & pid=$!; kill "$pid"; wait "$pid"; echo "bang:$?:$pid"`
+	s := newCommandProgramSession(t, prog, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	if !strings.Contains(result, "pct1:143\nbang:143:") || strings.Contains(result, "bang:143:\n") {
+		t.Fatalf("unexpected kill/wait output: %q", result)
+	}
+}
+
+func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T) {
+	s := newCommandProgramSession(t, `echo "http_messages_visible"`, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+s.session+"/messages", nil)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	w := httptest.NewRecorder()
+	s.h.Server.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /v1/sessions/%s/messages status = %d body = %s", s.session, w.Code, w.Body.String())
+	}
+	var page wire.SessionTranscriptPage
+	testutil.FailErr(t, "decode transcript page", json.Unmarshal(w.Body.Bytes(), &page))
+	found := false
+	for _, m := range page.Messages {
+		if m.Role == wire.MessageRoleTool && m.ToolResult != nil && m.ToolResult.Tool == "command" {
+			found = true
+			if !strings.Contains(m.Content, "http_messages_visible") || !strings.Contains(m.ToolResult.Content, "http_messages_visible") {
+				t.Fatalf("HTTP message missing command output: content=%q tool_result.content=%q", m.Content, m.ToolResult.Content)
+			}
+			if m.ToolResult.CommandProgram == nil || m.ToolResult.CommandProgram.ID == "" || m.ToolResult.CommandProgram.State != "completed" {
+				t.Fatalf("HTTP message missing command_program receipt: %+v", m.ToolResult)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no command tool message in HTTP response: %+v", page.Messages)
+	}
+}
+
+func TestCommandProgramWcMultiFilePaddingMatchesGNU(t *testing.T) {
+	s := newCommandProgramSession(t, `wc -l one.txt ten.txt && wc one.txt ten.txt`, "")
+	testutil.FailErr(t, "seed one.txt", os.WriteFile(filepath.Join(s.dir, "one.txt"), []byte("a\n"), 0o644))
+	testutil.FailErr(t, "seed ten.txt", os.WriteFile(filepath.Join(s.dir, "ten.txt"), []byte("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"), 0o644))
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	want := " 1 one.txt\n10 ten.txt\n11 total\n 1  1  2 one.txt\n10 10 21 ten.txt\n11 11 23 total\n"
+	if !strings.Contains(result, want) {
+		t.Fatalf("wc output = %q, want substring %q", result, want)
 	}
 }

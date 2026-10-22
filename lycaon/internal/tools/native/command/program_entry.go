@@ -195,14 +195,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if session == nil || session.OwnerPersonID == "" {
 		return "", fmt.Errorf("command program requires the session owner")
 	}
+	branch, err := tc.SourceBranch(tc.Source.ActiveRootID)
+	if err != nil {
+		return "", err
+	}
 	root := toolcontract.OperationInvocation{
-		Kind:         toolcontract.ProgramChildInvocation,
-		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
-		ActorID:      session.OwnerPersonID,
-		SessionID:    tc.Identity.SessionID,
-		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, Directory: cwd},
-		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
-		CatalogDigest: snapshot.Plan.CatalogDigest,
+		Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
+		ActorID: session.OwnerPersonID, SessionID: tc.Identity.SessionID,
+		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, BranchID: branch.String(), Directory: cwd},
+		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: snapshot.Plan.CatalogDigest,
 	}
 	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: args}, memory)
 	if err != nil {
@@ -307,7 +308,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
-		Environment: programEnvironment(tc, paths),
+		Environment: programEnvironment(tc),
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome

@@ -91,6 +91,8 @@ var formCases = []formCase{
 	{argv: "wc -L utf8", stdout: "11 utf8\n"},
 	{argv: "wc -L crlf", stdout: "3 crlf\n"},
 	{argv: "wc -lwc input crlf", stdout: "1 2 10 input\n2 2 10 crlf\n3 4 20 total\n"},
+	{argv: "wc -l input ten", stdout: " 1 input\n15 ten\n16 total\n"},
+	{argv: "wc input ten", stdout: " 1  2 10 input\n15 15 36 ten\n16 17 46 total\n"},
 	{argv: "wc -l", stdin: "a\nb", stdout: "1\n"},
 	{argv: "wc missing input", stdout: "1 2 10 input\n1 2 10 total\n", stderr: "wc: missing: No such file or directory\n", status: 1},
 	{argv: "wc -m lines", stdout: "", stderr: "wc: lines: invalid UTF-8 encoding\n", status: 1},

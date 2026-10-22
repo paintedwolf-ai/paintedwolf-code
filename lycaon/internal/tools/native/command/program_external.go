@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // ExternalStages launches one confined external stage per request through the
@@ -53,7 +54,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, stripDefaultPathEnv(request.Environment), tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
@@ -102,7 +103,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, stripDefaultPathEnv(environment), l.ToolContext.Host.HostResourcePathExtra, l.ToolContext.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra, l.ToolContext.Files.PackageExecution != nil)
 	if err != nil {
 		return false
 	}
@@ -110,38 +111,21 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 	return err == nil
 }
 
-func programEnvironment(tc tools.ToolContext, paths *projectpaths.ProgramPaths) []string {
-	env := append([]string(nil), lycexec.ReducedEnviron()...)
-	if paths != nil {
-		env = append(env, "PWD="+paths.Cwd().DisplayPath)
+// programEnvironment builds the program's initial environment from the same
+// AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
+// uses for confined external child launches.
+func programEnvironment(tc tools.ToolContext) []string {
+	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
+	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
+	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra, tc.Files.PackageExecution != nil)
+	if err != nil {
+		return lycexec.ReducedEnviron()
 	}
-	if tc.Host.SessionScratchDir != "" {
-		env = append(env,
-			"TMPDIR="+tc.Host.SessionScratchDir,
-			"TMP="+tc.Host.SessionScratchDir,
-			"TEMP="+tc.Host.SessionScratchDir,
-			"SCRATCH_DIR="+tc.Host.SessionScratchDir,
-		)
+	env, err := lycexec.ProcessEnvironment(opts)
+	if err != nil {
+		return lycexec.ReducedEnviron()
 	}
 	return env
-}
-
-func stripDefaultPathEnv(environment []string) []string {
-	defaultPath := ""
-	for _, entry := range lycexec.ReducedEnviron() {
-		if k, v, ok := strings.Cut(entry, "="); ok && k == "PATH" {
-			defaultPath = v
-			break
-		}
-	}
-	out := make([]string, 0, len(environment))
-	for _, entry := range environment {
-		if k, v, ok := strings.Cut(entry, "="); ok && k == "PATH" && v == defaultPath {
-			continue
-		}
-		out = append(out, entry)
-	}
-	return out
 }
 
 // externalArgv drops the explicit "external --" selector.
