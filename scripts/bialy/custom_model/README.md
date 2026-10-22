@@ -184,3 +184,9 @@ support this bounded retention; no budget limit is raised.
 Implementation references: [Transformers chat templates](https://huggingface.co/docs/transformers/chat_templating),
 [PEFT LoRA](https://huggingface.co/docs/peft/package_reference/lora), and the pinned
 [llama.cpp converter](https://github.com/ggml-org/llama.cpp/blob/master/convert_hf_to_gguf.py).
+
+Collection runners also consume `pw-training-health/1` artifacts from the capture
+directory. These contain only the epoch, utility purpose, success, protocol finish
+reason and timestamp. They let a runner stop after repeated truncated compaction
+summaries without parsing provider error prose or capturing utility payloads. The
+receipt exporter ignores them; they are diagnostic evidence, never training rows.

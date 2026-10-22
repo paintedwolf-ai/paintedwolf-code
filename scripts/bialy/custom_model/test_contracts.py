@@ -1,9 +1,12 @@
 """Offline fixture contracts; no models, providers, or external services."""
 import json
+import tempfile
 import sqlite3
 import unittest
+from pathlib import Path
 
 from common import digest
+from collect import collect
 from data import encode, assert_disjoint, check_row
 from receipts import accepted_row
 
@@ -59,6 +62,20 @@ class Contracts(unittest.TestCase):
 
     def row(self):
         return accepted_row(self.record, self.db, self.identity, "c" * 64, self.commits)
+
+    def test_utility_health_is_not_a_training_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shard = root / "fleet/shards/s"
+            (shard / "training-captures").mkdir(parents=True)
+            with sqlite3.connect(shard / "store.db"):
+                pass
+            (shard / "training-captures/health.json").write_text(json.dumps({
+                "schema": "pw-training-health/1", "epoch": "legacy-1", "purpose": "compaction",
+                "success": False, "finish_reason": "length", "decided_at": "now"}))
+            counts = collect([root / "fleet"], self.identity, "c" * 64, root / "out")
+            self.assertEqual(counts, {"turn_commits": 0})
+            self.assertEqual((root / "out/sft.receipts.jsonl").read_text(), "")
 
     def test_receipt_is_necessary_and_quality_is_separate(self):
         row = self.row()
