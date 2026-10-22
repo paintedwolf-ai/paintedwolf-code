@@ -68,6 +68,7 @@ func (o *Owners) Operation() string { return o.operation }
 // Prepared is one bound curl invocation; InvokeOwner matches
 // toolexecution.PreparedNativeEffect, so streams arrive after admission.
 type Prepared struct {
+	Mode      string
 	Operation string
 	Argv      commandprogram.BoundArgv
 	Review    commandprogram.ArgvReview
@@ -112,7 +113,13 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err != nil {
 		return Prepared{}, err
 	}
-	return Prepared{Operation: o.operation, Argv: bound, Review: bound.Review(o.operation), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+	mode := "request"
+	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
+		if destination != "" && destination != "-" && destination != "/dev/null" {
+			mode = "-o--D--c-to-file"
+		}
+	}
+	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: bound.Review(o.operation), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
 }
 
 // InvokeOwner performs the request once and settles curl's exit status.
