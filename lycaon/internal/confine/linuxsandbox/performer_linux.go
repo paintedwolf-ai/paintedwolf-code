@@ -182,12 +182,9 @@ func servePathCalls(fd int) error {
 	listener := -1
 	oob := make([]byte, unix.CmsgSpace(4*2))
 	for {
-		n, oobn, _, _, recvErr := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
-		if errors.Is(recvErr, unix.EINTR) {
-			continue
-		}
-		if recvErr != nil || (n == 0 && oobn == 0) {
-			break
+		n, oobn, ok := recvPathCall(fd, buf, oob)
+		if !ok {
+			return nil
 		}
 		dirs := receivedFDs(oob[:oobn])
 		call, decodeErr := decodePathCall(buf[:n])
@@ -221,19 +218,35 @@ func servePathCalls(fd int) error {
 		if err != nil {
 			return fmt.Errorf("performer reply: %w", err)
 		}
-		var rights []byte
-		if opened >= 0 {
-			rights = unix.UnixRights(opened)
-		}
-		sendErr := unix.Sendmsg(fd, reply, rights, nil, 0)
-		if opened >= 0 {
-			_ = unix.Close(opened)
-		}
-		if sendErr != nil {
-			break
+		if !sendPathReply(fd, reply, opened) {
+			return nil
 		}
 	}
-	return nil
+}
+
+func recvPathCall(fd int, buf, oob []byte) (int, int, bool) {
+	for {
+		n, oobn, _, _, err := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil || (n == 0 && oobn == 0) {
+			return 0, 0, false
+		}
+		return n, oobn, true
+	}
+}
+
+func sendPathReply(fd int, reply []byte, opened int) bool {
+	var rights []byte
+	if opened >= 0 {
+		rights = unix.UnixRights(opened)
+	}
+	err := unix.Sendmsg(fd, reply, rights, nil, 0)
+	if opened >= 0 {
+		_ = unix.Close(opened)
+	}
+	return err == nil
 }
 
 // answerKernel completes the pending call: an opened descriptor is installed
