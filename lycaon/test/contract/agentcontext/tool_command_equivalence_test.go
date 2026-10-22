@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -23,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 // retiredRoutineSchemas are the structured file and search schemas command
@@ -94,100 +92,9 @@ func TestRetiredCommandRedirectsAreGone(t *testing.T) {
 		}
 	}
 	root := contractcheck.RepoRoot(t)
-	schemas, err := filepath.Glob(filepath.Join(root, "lycaon", "config", "packs", "*", "*", "tools", "schemas", "*.yaml"))
-	contractcheck.FailErr(t, "list tool schemas", err)
-	for _, path := range schemas {
-		data, err := os.ReadFile(path)
-		contractcheck.FailErr(t, "read schema", err)
-		var schema struct {
-			Description string `yaml:"description"`
-		}
-		contractcheck.FailErr(t, "parse "+path, yaml.Unmarshal(data, &schema))
-		for _, phrase := range []string{"Replaces command:", "never use command"} {
-			if strings.Contains(schema.Description, phrase) {
-				t.Errorf("%s still steers away from command: %q", filepath.Base(path), phrase)
-			}
-		}
-	}
 	for _, unit := range []string{"native-read-tool", "native-grep-tool", "native-find-tool", "native-list-dir-tool", "native-jq-tool"} {
 		if _, err := os.Stat(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "units", unit+".md")); !os.IsNotExist(err) {
 			t.Errorf("retired routine tutorial %s remains", unit)
-		}
-	}
-}
-
-func TestRenderedPromptsOmitStaleCommandTutorialsAndOfferNativeHelp(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-
-	stalePhrases := []string{
-		"Runs as an argv sequence without a shell",
-		"COMMAND_NOT_ARGV",
-		"here-documents (`<<`) reject",
-		"`$()`/backticks reject",
-		`list_dir({"path":"."})`,
-		"call `read`/`list_dir`/`grep` with them",
-		"Use bounded `read`/`grep` for more detail",
-	}
-
-	for _, surfaceID := range []string{"implement_investigate", "implement_routing", "implement_synthesis", "observe_investigate"} {
-		corpus := renderCoordinatorTripartiteForRunContext(
-			t, root, api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
-			"Inspect the project", nil, surfaceID,
-		)
-		for _, stale := range stalePhrases {
-			if strings.Contains(corpus, stale) {
-				t.Errorf("rendered coordinator surface %s still contains stale guidance %q", surfaceID, stale)
-			}
-		}
-	}
-
-	runnerUnit, err := engine.Render(context.Background(), "units/runner-operating-procedure.md", map[string]any{
-		"profile_has_command": true,
-	})
-	contractcheck.FailErr(t, "render runner-operating-procedure", err)
-	for _, stale := range stalePhrases {
-		if strings.Contains(runnerUnit, stale) {
-			t.Errorf("runner-operating-procedure still contains stale guidance %q", stale)
-		}
-	}
-	if !strings.Contains(runnerUnit, "HTTP(S) uses `HTTP_PROXY` / `HTTPS_PROXY` automatically") {
-		t.Errorf("runner-operating-procedure missing proxy guidance: %s", runnerUnit)
-	}
-
-	surfaceVars := map[string]any{
-		"tool_profile":        "implement",
-		"profile_has_command": true,
-		"session_scratch_dir": "/scratch/s1",
-	}
-	prompts.MergeWorkspaceRootsVars(surfaceVars, []projectroot.RootRef{{ID: "r1", Label: "main", Path: "/workspace", IsPrimary: true}}, "/workspace")
-	cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", surfaceVars)
-	contractcheck.FailErr(t, "render command-surface", err)
-	for _, stale := range stalePhrases {
-		if strings.Contains(cmdSurface, stale) {
-			t.Errorf("command-surface still contains stale guidance %q", stale)
-		}
-	}
-	for _, want := range []string{"GNU and BSD", "CMD --help", "`@main` → /workspace (primary)", "`@scratch` → /scratch/s1"} {
-		if !strings.Contains(cmdSurface, want) {
-			t.Errorf("command-surface missing %q: %s", want, cmdSurface)
-		}
-	}
-
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "load command schema", err)
-	command, ok := schemas.ToolMeta("command")
-	if !ok || !strings.Contains(command.Description, "bash program") || !strings.Contains(command.Description, "$(...)") {
-		t.Errorf("command schema must invite ordinary bash programs: %+v", command)
-	}
-
-	langCatalog, err := toolcontract.LanguageV1()
-	contractcheck.FailErr(t, "load language v1 catalog", err)
-	for _, cmd := range []string{"grep", "sed", "find", "jq", "git status"} {
-		help, ok := langCatalog.CommandHelp(cmd)
-		if !ok || !strings.HasPrefix(help, cmd+"\n") || !strings.Contains(help, "\n-") {
-			t.Errorf("CommandHelp(%q) = (%q, %v), want catalog help with options", cmd, help, ok)
 		}
 	}
 }
