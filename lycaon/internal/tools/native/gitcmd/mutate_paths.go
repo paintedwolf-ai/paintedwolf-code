@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -123,7 +124,7 @@ func expandRestorePaths(ctx context.Context, p Prepared, dir, repoRoot string, r
 				if rel != "." {
 					args = append(args, "--", rel)
 				}
-				if _, code, err := p.owners.Git.ReadCommand(ctx, repoRoot, args, nil, &buf); err == nil && code == 0 {
+				if _, code, err := (git.CommandReader{}).ReadCommand(ctx, repoRoot, args, nil, &buf); err == nil && code == 0 {
 					for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 						add(strings.TrimSpace(line))
 					}

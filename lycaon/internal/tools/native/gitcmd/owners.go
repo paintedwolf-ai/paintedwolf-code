@@ -23,7 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// Backend is the Git owner's read, mutation, worktree and network surface.
+// Backend is the Git owner's mutation, worktree and network surface.
 type Backend interface {
 	git.GitManager
 	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)

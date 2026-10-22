@@ -159,21 +159,8 @@ func (inv *invocation) run() error {
 // screen passes the owner's emitted body through the capture owner's
 // response screening and records both identities.
 func (inv *invocation) screen(body []byte, dst *bytes.Buffer) error {
-	budget, err := commandprogram.NewByteBudget("stream_bytes", inv.owners.limits["stream_bytes"])
-	if err != nil {
-		return err
-	}
 	scope := captureprojection.ScopeFor(inv.tc.Identity.ProjectID, inv.tc.ChatSessionID(), inv.tc.Identity.SessionID)
-	pipe, err := commandprogram.NewScreenedPipe(inv.ctx, inv.owners.Screening.Projector, scope, "curl response", io.NopCloser(bytes.NewReader(body)), inv.owners.Screening.Options, budget)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(dst, pipe)
-	_ = pipe.Close()
-	metadata, err := pipe.Wait(inv.ctx)
-	if copyErr != nil {
-		return copyErr
-	}
+	metadata, err := inv.owners.Screening.Projector.ScreenStream(inv.ctx, scope, "curl response", bytes.NewReader(body), dst, inv.owners.Screening.Options)
 	if err != nil {
 		return err
 	}
