@@ -119,7 +119,7 @@ func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func
 // Launch runs a confined external program from this frame's directory.
 func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
 	streams, retain := d.run.childOutputs(request, streams)
-	defer func() { retain(ctx) }()
+	defer func() { retain(ctx, result, err) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -152,7 +152,7 @@ var _ commandprogram.NativeGaps = (*ProgramDispatcher)(nil)
 // Invoke admits, records, dispatches and settles one child.
 func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
 	streams, retain := d.run.childOutputs(request, streams)
-	defer func() { retain(ctx) }()
+	defer func() { retain(ctx, result, err) }()
 	if err := request.Validate(); err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}

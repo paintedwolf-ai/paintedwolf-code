@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
@@ -39,11 +40,15 @@ func (r *SQLRecorder) ProgramBlobStore(store blobstore.Store) blobstore.Store {
 // TransferBody detaches its leases. On ambiguous commit error the wrapper remains
 // owned and must be reconciled, never discarded on the assumption of rollback.
 func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string, output RetainedOutput, spill *tooloutput.StreamSpill, memory tooloutput.StreamMemoryAdmission) (*tooloutput.RetainedStreamBody, error) {
-	if r == nil || r.database == nil || spill == nil || memory == nil || programID == "" || output.ExecutionID == "" || output.Reference == "" {
+	if r == nil || r.database == nil || spill == nil || memory == nil || programID == "" || output.Reference == "" {
 		return nil, fmt.Errorf("output attachment requires receipt, stream and admission")
 	}
 	switch output.Stream {
-	case "stdout", "stderr", "detail", "source", "arguments":
+	case "stdout", "stderr":
+	case "detail", "source", "arguments":
+		if output.ExecutionID == "" {
+			return nil, fmt.Errorf("output attachment requires receipt, stream and admission")
+		}
 	default:
 		return nil, fmt.Errorf("invalid retained program stream")
 	}
@@ -134,4 +139,28 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	preview, truncated := outputPreview(screenedPreview, reference.Blob.Size)
 	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// ReadProgramOutputMappings returns the retained blob metadata and exact source
+// mappings for a program output reference in the given session.
+func (r *SQLRecorder) ReadProgramOutputMappings(ctx context.Context, sessionID, programID, reference string) (blobstore.Blob, []toolcontract.StreamSourceMapping, error) {
+	if r == nil || r.database == nil {
+		return blobstore.Blob{}, nil, fmt.Errorf("invocation recorder is not configured")
+	}
+	var blobJSON, mappingsJSON string
+	err := r.database.QueryRowContext(ctx, `SELECT o.blob_json, o.mappings_json FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND rec.session_id=?`, programID, reference, sessionID).Scan(&blobJSON, &mappingsJSON)
+	if err != nil {
+		return blobstore.Blob{}, nil, err
+	}
+	var blob blobstore.Blob
+	if err := json.Unmarshal([]byte(blobJSON), &blob); err != nil {
+		return blobstore.Blob{}, nil, err
+	}
+	var mappings []toolcontract.StreamSourceMapping
+	if mappingsJSON != "" {
+		if err := json.Unmarshal([]byte(mappingsJSON), &mappings); err != nil {
+			return blobstore.Blob{}, nil, err
+		}
+	}
+	return blob, mappings, nil
 }

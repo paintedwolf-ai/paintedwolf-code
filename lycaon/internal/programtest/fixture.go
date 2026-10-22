@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -44,16 +46,36 @@ type Fixture struct {
 	Database   db.Handle
 	Session    string
 	Dir        string
+	ScratchDir string
 	Background *bgprocess.Registry
 	// Configure adjusts each call's tool context before the entry runs.
 	Configure func(*tools.ToolContext)
 	calls     int
+	mu        sync.Mutex
+	delivered []evidence.Record
 }
 
-type sessions struct{}
+type sessions struct {
+	fixture *Fixture
+}
 
 func (sessions) Get(_ context.Context, id string) (*api.Session, error) {
 	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
+}
+
+func (s sessions) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
+	s.fixture.mu.Lock()
+	defer s.fixture.mu.Unlock()
+	rec := observation.Record()
+	s.fixture.delivered = append(s.fixture.delivered, rec)
+	return fmt.Sprintf("read#%d", len(s.fixture.delivered)), nil
+}
+
+// Delivered returns all confirmed source deliveries recorded in this fixture.
+func (f *Fixture) Delivered() []evidence.Record {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]evidence.Record(nil), f.delivered...)
 }
 
 type progressFacts struct{ store progress.Store }
@@ -94,16 +116,19 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	scratchDir := t.TempDir()
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, Background: background}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{},
+		Sessions: sessions{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}
+	f.Runtime = runtime
+	return f
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
@@ -118,6 +143,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir = f.ScratchDir
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}

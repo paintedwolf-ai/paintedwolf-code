@@ -48,6 +48,8 @@ type ProgramRuntime struct {
 	Boundary *sandbox.Boundary
 	// Sessions names the person who started the session; the program acts for them.
 	Sessions SessionOwners
+	// SourceObserver confirms delivered source windows into the evidence ledger.
+	SourceObserver invocation.ProgramSourceObserver
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
@@ -112,18 +114,21 @@ type programRun struct {
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
-	ProgramID        string `json:"program_id"`
-	State            string `json:"state"`
-	Status           int    `json:"status"`
-	StopCode         string `json:"stop_code,omitempty"`
-	Stdout           string `json:"stdout"`
-	Stderr           string `json:"stderr"`
-	Truncated        bool   `json:"truncated,omitempty"`
-	ExecutedChildren int    `json:"executed_children"`
-	CompletedEffects int    `json:"completed_effects"`
-	UncertainEffects int    `json:"uncertain_effects"`
-	NativeGaps       int    `json:"native_gaps,omitempty"`
-	ReplayAvailable  bool   `json:"replay_available"`
+	ProgramID        string                `json:"program_id"`
+	State            string                `json:"state"`
+	Status           int                   `json:"status"`
+	StopCode         string                `json:"stop_code,omitempty"`
+	Stdout           string                `json:"stdout"`
+	Stderr           string                `json:"stderr"`
+	StdoutRef        string                `json:"stdout_ref,omitempty"`
+	StderrRef        string                `json:"stderr_ref,omitempty"`
+	Outputs          []ProgramOutputWindow `json:"outputs,omitempty"`
+	Truncated        bool                  `json:"truncated,omitempty"`
+	ExecutedChildren int                   `json:"executed_children"`
+	CompletedEffects int                   `json:"completed_effects"`
+	UncertainEffects int                   `json:"uncertain_effects"`
+	NativeGaps       int                   `json:"native_gaps,omitempty"`
+	ReplayAvailable  bool                  `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
@@ -135,8 +140,6 @@ type ProgramRefusal struct {
 	Code     string `json:"code"`
 	Feedback string `json:"feedback"`
 }
-
-const programOutputBytes = 64 << 10
 
 // Run parses and validates the whole submitted program before any effect,
 // freezes frame and surface, records the program, evaluates it under
@@ -302,7 +305,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			}
 		}
 	}
-	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	stdout, stderr := newProgramStream(maxRetainedProgramOutputBytes), newProgramStream(maxRetainedProgramOutputBytes)
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input,
@@ -338,7 +341,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
 	}
-	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
+	outcome, err := r.outcome(ctx, run, outputs, result, stdout, stderr, scope)
 	if err != nil {
 		return "", errors.Join(feedback, err)
 	}
@@ -470,30 +473,6 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), rendered)
 	}
 	return ensureProgramRefusalText(rendered, reject)
-}
-
-func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result toolcontract.ProducerResult, stdout, stderr *boundedBuffer, scope captureprojection.Scope, screening captureprojection.StreamOptions) (ProgramOutcome, error) {
-	projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 4)
-	if err != nil {
-		return ProgramOutcome{}, err
-	}
-	if run.tc.Effects.Out != nil {
-		receipt := projection.Program
-		run.tc.Effects.Out.CommandProgram = &receipt
-	}
-	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
-		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
-	for _, stream := range []struct {
-		buffer *boundedBuffer
-		target *string
-	}{{stdout, &out.Stdout}, {stderr, &out.Stderr}} {
-		var screened bytes.Buffer
-		if _, err := r.Projector.ScreenStream(ctx, scope, "capture.native", bytes.NewReader(stream.buffer.Bytes()), &screened, screening); err != nil {
-			return ProgramOutcome{}, err
-		}
-		*stream.target = screened.String()
-	}
-	return out, nil
 }
 
 func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (*invocation.ProgramOutputRetention, error) {
@@ -703,27 +682,27 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 // childOutputBytes bounds each child stream the output store retains.
 const childOutputBytes = 64 << 10
 
-// childOutputs tees a child's stdout and stderr into bounded buffers and
-// returns the streams to use and a function that retains what was written.
-func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context)) {
-	if r.retainOutput == nil {
-		return streams, func(context.Context) {}
-	}
-	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
+// childOutputs wraps a child's streams so source mappings on top-level stdout
+// carry their stream offset and only a failed child's stderr is retained per
+// execution; pipe stages produce no retention rows.
+func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context, toolcontract.ProducerResult, error)) {
 	teed := streams
-	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	if ps, ok := streams.Output.(*programStream); ok {
+		teed.Output = &childStreamView{stream: ps, baseOffset: ps.Len()}
+	}
+	if r.retainOutput == nil {
+		return teed, func(context.Context, toolcontract.ProducerResult, error) {}
+	}
+	stderr := &boundedBuffer{limit: childOutputBytes}
 	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
 	execution := request.Invocation.Identity.ExecutionID
-	return teed, func(ctx context.Context) {
-		for _, stream := range []struct {
-			name   string
-			buffer *boundedBuffer
-		}{{"stdout", stdout}, {"stderr", stderr}} {
-			if data := stream.buffer.Bytes(); len(data) > 0 {
-				// Retention is evidence for previews; a failure here never
-				// changes the child's settled outcome.
-				_ = r.retainOutput(context.WithoutCancel(ctx), execution, stream.name, data, !stream.buffer.truncated)
-			}
+	return teed, func(ctx context.Context, result toolcontract.ProducerResult, err error) {
+		failed := err != nil || result.Status != 0 || (result.Terminal != "" && result.Terminal != toolcontract.ProducerCompleted)
+		if !failed {
+			return
+		}
+		if data := stderr.Bytes(); len(data) > 0 {
+			_ = r.retainOutput(context.WithoutCancel(ctx), execution, "stderr", data, !stderr.truncated)
 		}
 	}
 }

@@ -241,6 +241,8 @@ type InvocationHost struct {
 	SessionScratchDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.
 	MaxToolSpillBytes int
+	// ModelContextWindow is the active model's context window in tokens.
+	ModelContextWindow int
 	// HostResources are exact catalog ids attached to the structured action.
 	HostResources        []string
 	HostResourceFamilies []string
