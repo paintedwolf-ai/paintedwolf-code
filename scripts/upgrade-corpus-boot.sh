@@ -173,6 +173,10 @@ boot_one() {
   finish() {
     local code=$1
     stop_sidecar || return 1
+    if (( code != 0 )); then
+      echo "fixture ${name}: sidecar log:" >&2
+      cat "${log}" >&2
+    fi
     rm -rf "${tmp}"
     return "${code}"
   }
