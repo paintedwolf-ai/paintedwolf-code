@@ -45,17 +45,9 @@ func TestHardenedEngineEditsADocument(t *testing.T) {
 	// The engine finds its core beside itself, as an installed app does.
 	proc.Env = append(withoutEnv(os.Environ(), "LYCAON_DOCUMENT_CORE_BINARY"),
 		"LYCAON_ADDR="+addr, "LYCAON_API_TOKEN="+token, "LYCAON_LLM_MOCK=1")
-	var stderr bytes.Buffer
-	proc.Stderr = &stderr
-	testutil.FailErr(t, "start hardened engine", proc.Start())
-	exited := make(chan error, 1)
-	go func() { exited <- proc.Wait() }()
-	t.Cleanup(func() {
-		_ = proc.Process.Kill()
-		<-exited
-	})
+	child := startSmokeProcess(t, proc)
 	baseURL := "http://" + addr
-	waitForHealth(t, baseURL)
+	child.waitForHealth(t, baseURL)
 
 	projectDir := t.TempDir()
 	testutil.FailErr(t, "write project file", os.WriteFile(filepath.Join(projectDir, "notes.txt"), []byte("before\n"), 0o600))
@@ -76,12 +68,7 @@ func TestHardenedEngineEditsADocument(t *testing.T) {
 	if edited.Revision <= opened.Revision || !edited.Dirty {
 		t.Fatalf("edited document revision %d (dirty %t), want a dirty revision past %d", edited.Revision, edited.Dirty, opened.Revision)
 	}
-	select {
-	case err := <-exited:
-		t.Fatalf("hardened engine exited during the edit: %v\n%s", err, stderr.String())
-	default:
-	}
-	waitForHealth(t, baseURL)
+	child.waitForHealth(t, baseURL)
 }
 
 func hardenedCopy(t *testing.T, source, target string) string {

@@ -33,16 +33,10 @@ func TestDenSidecarHandoffBearer(t *testing.T) {
 		"LYCAON_API_TOKEN="+apiToken,
 		"LYCAON_LLM_MOCK=1",
 	)
-	if err := proc.Start(); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = proc.Process.Kill()
-		_ = proc.Wait()
-	})
+	child := startSmokeProcess(t, proc)
 
 	baseURL := "http://" + addr
-	waitForHealth(t, baseURL)
+	child.waitForHealth(t, baseURL)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/projects", nil)
 	if err != nil {
