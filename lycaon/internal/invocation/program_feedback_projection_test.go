@@ -3,15 +3,18 @@ package invocation_test
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -24,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/curl"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -165,7 +169,15 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
 	remote := f.childFor(t, "http_request")
 	f.start(t, remote)
-	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
+	// The curl frontend owns the conversion: a request the owner started
+	// with no response received settles as an unknown effect, never retried.
+	// The host stop here is the program's, recorded beside that outcome.
+	_, sent := curl.TransportOutcome(&httpaction.TransportFailure{Reject: &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode},
+		Cause: &outboundhttp.ExchangeError{Method: "POST", RequestsStarted: 1, Err: io.ErrUnexpectedEOF}})
+	if sent.EffectCertainty != toolcontract.EffectUnknown {
+		t.Fatalf("curl settled a sent request without a response as %+v", sent)
+	}
+	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: sent, HostStopCode: toolrejection.ToolOwnerFailedCode, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
 	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
 	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
 	memory := feedbackMemory(t, 64<<20)
