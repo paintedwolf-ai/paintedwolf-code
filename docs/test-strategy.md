@@ -736,8 +736,9 @@ Fail-fast lanes retain their declared priority, and runner caps are unchanged.
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
-newest valid measurement for each row and package from at most 20 completed
-qualifications, filling missing measurements from older runs. The job summary
+newest valid measurement for each row and package from check and release platform
+receipts in at most 20 completed qualifications, filling gaps from older runs.
+The job summary
 records the selected estimate basis, missing rows, source runs, and matrix order.
 Every shard receives the same package durations, so the shards partition the
 selection identically:

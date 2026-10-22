@@ -47,6 +47,18 @@ class MeasuredTimingsTests(unittest.TestCase):
             self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "lint": 600},
                                                     "packages": {"a": 1, "b": 2}})
 
+    def test_invalid_durations_cannot_poison_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "timings.json"
+            for seconds in [True, 0, -1, float("nan"), float("inf"), "60", None]:
+                with self.subTest(seconds=seconds):
+                    path.write_text(json.dumps({"lane": "behavior", "shard": "1/2", "status": "passed",
+                                                "seconds": seconds,
+                                                "packages": {"valid": 2, "zero": 0, "negative": -1,
+                                                             "infinite": float("inf"), "boolean": True}}))
+                    self.assertEqual(timings.merge([path]),
+                                     {"lanes": {}, "packages": {"valid": 2, "zero": 0}})
+
     def test_latest_reads_the_newest_qualification_that_recorded_timings(self):
         runs = {"workflow_runs": [{"id": 3}, {"id": 2}, {"id": 1}]}
         artifacts = {3: [{"name": "verification-check-lint-1", "expired": False}],
@@ -81,13 +93,15 @@ class MeasuredTimingsTests(unittest.TestCase):
                 2: [{"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 1403.5,
                      "packages": {"a": 8}},
                     {"lane": "behavior", "shard": "2/2", "status": "passed", "seconds": 1279.7,
-                     "packages": {"b": 5}}]}
+                     "packages": {"b": 5}},
+                    {"lane": "webkit-gtk", "shard": "", "status": "passed", "seconds": 450,
+                     "packages": {}}]}
         downloaded = []
 
         def artifacts(path, key):
             run = int(path.split("/")[-2])
-            return [{"name": f"receipt-verification-check-{index}", "expired": False}
-                    for index in range(len(data[run]))]
+            return [{"name": f"receipt-verification-{'release' if row['lane'] == 'webkit-gtk' else 'check'}-{index}", "expired": False}
+                    for index, row in enumerate(data[run])]
 
         def download(repository, run, names, directory):
             downloaded.append(run)
@@ -99,13 +113,20 @@ class MeasuredTimingsTests(unittest.TestCase):
         with patch.object(timings.github, "api", return_value=runs) as api, \
                 patch.object(timings.github, "pages", side_effect=artifacts), \
                 patch.object(timings, "download", side_effect=download), \
-                patch.object(timings, "qualification_rows", return_value={"behavior 1/2", "behavior 2/2"}):
+                patch.object(timings, "qualification_rows", return_value={"behavior 1/2", "behavior 2/2", "webkit-gtk"}):
             measured = timings.latest("example/repository")
         self.assertIn("per_page=20", api.call_args.args[0])
         self.assertEqual(downloaded, [3, 2])
-        self.assertEqual(measured, {"runs": [3, 2], "lanes": {"behavior 1/2": 1287.2, "behavior 2/2": 1279.7},
+        self.assertEqual(measured, {"runs": [3, 2], "lanes": {"behavior 1/2": 1287.2, "behavior 2/2": 1279.7, "webkit-gtk": 450},
                                     "packages": {"a": 3, "b": 5},
-                                    "lane_runs": {"behavior 1/2": 3, "behavior 2/2": 2}})
+                                    "lane_runs": {"behavior 1/2": 3, "behavior 2/2": 2, "webkit-gtk": 2}})
+
+    def test_history_covers_the_current_check_and_integration_rows(self):
+        expected = {timings.row_key(row["lane"], row["shard"])
+                    for profile in ("check", "integration")
+                    for row in hosted_plan.matrix(profile)["include"]}
+        self.assertEqual(timings.qualification_rows(), expected)
+        self.assertTrue({"webkit-gtk", "confinement-arm64"} <= expected)
 
     def test_unavailable_measurements_plan_without_them(self):
         refused = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403: Resource not accessible")

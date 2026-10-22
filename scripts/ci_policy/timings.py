@@ -9,7 +9,7 @@ import tempfile
 from ci_policy import github
 
 WORKFLOW = "qualification.yml"
-RECEIPTS = "receipt-verification-check-"
+RECEIPTS = ("receipt-verification-check-", "receipt-verification-release-")
 RECENT_RUNS = 20
 
 
@@ -59,7 +59,7 @@ def download(repository, run, names, directory):
 def qualification_rows():
     from verification_plan import catalog
     return {row_key(name, f"{index}/{count}" if count > 1 else "")
-            for name, lane in catalog()["ci"].items() if "check" in lane["profiles"]
+            for name, lane in catalog()["ci"].items() if set(lane["profiles"]) & {"check", "integration"}
             for count in [lane.get("shards", 1)] for index in range(1, count + 1)}
 
 
