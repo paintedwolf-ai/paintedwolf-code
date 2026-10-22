@@ -121,10 +121,11 @@ if (mode === "seed") {
       const outboxDir = path.join(configDir, path.dirname(evidence.outbox_path));
       const header = JSON.parse(await fs.readFile(path.join(outboxDir, layout.header), "utf8"));
       const raw = await fs.readFile(path.join(outboxDir, header.log));
-      const relayed = Boolean(header.synchronized);
+      const checkpointFrame = header.frames.find(f => f.kind === "checkpoint");
+      const relayed = Boolean(header.synchronized || checkpointFrame?.synchronized);
       if (!relayed && digest(raw) !== evidence.outbox_sha256) throw new Error("Preserved editor bytes changed");
       const records = header.frames.map((frame) => JSON.parse(raw.subarray(frame.offset, frame.offset + frame.length)));
-      const checkpoint = records.find(r => r.kind === "checkpoint");
+      const checkpoint = records.find(r => r.kind === "checkpoint" && r.clientId === evidence.client_id) ?? records.find(r => r.kind === "checkpoint");
       if (digest(JSON.stringify(checkpoint.history)) !== evidence.history_sha256) throw new Error("Window undo history changed");
       const doc = new Y.Doc();
       Y.applyUpdate(doc, decode(checkpoint.state));
@@ -137,7 +138,7 @@ if (mode === "seed") {
       const document = await request(`/editor-documents/${evidence.document_id}/snapshots`, { client_id: evidence.client_id });
       const pending = records.find(r => r.kind === "update");
       if (relayed) {
-        if (!pending?.acknowledged || pending.operationId !== evidence.pending_operation_id) throw new Error("Relayed editor update acknowledgement missing");
+        if (!checkpointFrame?.synchronized || checkpointFrame.pending?.length || (pending && (!pending.acknowledged || pending.operationId !== evidence.pending_operation_id))) throw new Error("Relayed editor update acknowledgement missing");
         if (textOf(document) !== evidence.local_text || document.base_content !== evidence.accepted_text || !document.dirty) {
           throw new Error("Relayed editor draft or saved base changed");
         }
