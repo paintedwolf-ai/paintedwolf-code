@@ -45,6 +45,8 @@ runs:
           echo "::warning::${CURRENT} was not saved; keeping earlier lint diagnostics"
           exit 0
         fi
-        grep -vxF "${CURRENT}" <<<"${keys}" | while read -r key; do
-          gh cache delete --repo "${GITHUB_REPOSITORY}" "${key}"
-        done
+        while IFS= read -r key; do
+          if [[ -n "$key" && "$key" != "$CURRENT" ]]; then
+            gh cache delete --repo "${GITHUB_REPOSITORY}" "$key"
+          fi
+        done <<< "$keys"

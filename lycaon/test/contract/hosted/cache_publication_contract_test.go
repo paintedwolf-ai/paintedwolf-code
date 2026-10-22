@@ -33,7 +33,7 @@ func TestPreparedCachesPublishBeforeLintDiagnostics(t *testing.T) {
 			if !step.Continue || step.If != "runner.os == 'Linux'" || step.Run != "./task lint:full" {
 				t.Error("lint diagnostics must remain optional and Linux-only")
 			}
-			for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools"} {
+			for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {
 				if !published["./.github/actions/"+name] {
 					t.Errorf("%s is not published before lint diagnostics", name)
 				}
@@ -48,7 +48,7 @@ func TestPreparedCachesPublishBeforeLintDiagnostics(t *testing.T) {
 			}
 			continue
 		}
-		if strings.HasPrefix(step.Uses, "./.github/actions/cache-") {
+		if strings.HasPrefix(step.Uses, "./.github/actions/cache-") || step.Uses == "./.github/actions/setup-webkit-atspi-images" {
 			if !prepared || recorded {
 				t.Errorf("%s must publish between compilation and lint diagnostics", step.Uses)
 			}
