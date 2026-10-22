@@ -44,6 +44,12 @@ class DesktopSettingsPayloadTests(unittest.TestCase):
             observer = tauri / 'binaries' / ('pw-desktop-settings-' + target)
             self.assertEqual(set(row), {'path', 'sha256', 'size'})
             self.assertEqual(row['sha256'], hashlib.sha256(observer.read_bytes()).hexdigest())
+            valid = json.loads(args.output.read_text())
+            for version in (0, 1, 3, 99):
+                with self.assertRaises(ValueError):
+                    manifest.validate({**valid, 'format_version': version})
+            with self.assertRaises(ValueError):
+                manifest.validate({**valid, 'payload': []})
             observer.unlink()
             with self.assertRaises(FileNotFoundError):
                 manifest.generate(args)

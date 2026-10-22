@@ -3,8 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"os"
+	osexec "os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,23 +23,32 @@ import (
 // protected namespace: which namespace each program ran in, and whether
 // terminal interrupts and relay loss behaved.
 type ExecProbe struct {
-	HostOutput      string `json:"host_output"`
-	HostCode        int    `json:"host_code"`
-	HostError       string `json:"host_error,omitempty"`
-	HostExecOutput  string `json:"host_execution_output"`
-	HostExecCode    int    `json:"host_execution_code"`
-	HostExecError   string `json:"host_execution_error,omitempty"`
-	ConfinedOutput  string `json:"confined_output"`
-	ConfinedError   string `json:"confined_error,omitempty"`
-	ConfinedCode    int    `json:"confined_code"`
-	ConfinedStderr  string `json:"confined_stderr,omitempty"`
-	TerminalSurvive bool   `json:"terminal_survived_interrupt"`
-	TerminalError   string `json:"terminal_error,omitempty"`
-	RelayLossEnded  bool   `json:"relay_loss_ended_session"`
-	RelayLossError  string `json:"relay_loss_error,omitempty"`
+	HostOutput             string `json:"host_output"`
+	HostCode               int    `json:"host_code"`
+	HostError              string `json:"host_error,omitempty"`
+	HostExecOutput         string `json:"host_execution_output"`
+	HostExecCode           int    `json:"host_execution_code"`
+	HostExecError          string `json:"host_execution_error,omitempty"`
+	ConfinedOutput         string `json:"confined_output"`
+	ConfinedError          string `json:"confined_error,omitempty"`
+	ConfinedCode           int    `json:"confined_code"`
+	ConfinedStderr         string `json:"confined_stderr,omitempty"`
+	PreparedOutput         string `json:"prepared_output"`
+	PreparedCode           int    `json:"prepared_code"`
+	PreparedError          string `json:"prepared_error,omitempty"`
+	PreparedConfinedOutput string `json:"prepared_confined_output"`
+	PreparedConfinedCode   int    `json:"prepared_confined_code"`
+	PreparedConfinedError  string `json:"prepared_confined_error,omitempty"`
+	TerminalSurvive        bool   `json:"terminal_survived_interrupt"`
+	TerminalError          string `json:"terminal_error,omitempty"`
+	RelayLossEnded         bool   `json:"relay_loss_ended_session"`
+	RelayLossError         string `json:"relay_loss_error,omitempty"`
+	BrowserEngineLossEnded bool   `json:"browser_engine_loss_ended"`
+	BrowserEngineLossError string `json:"browser_engine_loss_error,omitempty"`
 }
 
 const namespaceScript = "readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status; exit 7"
+const preparedNamespaceScript = "read -r token && printf '%s\\n' \"$token\"; readlink /proc/self/ns/user; grep NoNewPrivs /proc/self/status; exit 7"
 
 func execProbe(scratch string) ExecProbe {
 	var probe ExecProbe
@@ -44,7 +56,7 @@ func execProbe(scratch string) ExecProbe {
 	_ = os.Setenv(exec.LaunchBrokerFDEnv, "6")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, _, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("protected launch probe")})
+	out, _, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
 	probe.HostOutput, probe.HostCode = string(out), code
 	if err != nil {
 		probe.HostError = err.Error()
@@ -64,9 +76,43 @@ func execProbe(scratch string) ExecProbe {
 	if err != nil {
 		probe.ConfinedError = err.Error()
 	}
+	probe.PreparedOutput, probe.PreparedCode, probe.PreparedError = preparedProbe(ctx, exec.HostLaunch("toolchain_version_probe"))
+	probe.PreparedConfinedOutput, probe.PreparedConfinedCode, probe.PreparedConfinedError = preparedProbe(ctx, exec.AgentLaunch(exec.LaunchLocalMCP, "protected prepared confined probe", confinement))
 	probe.TerminalSurvive, probe.TerminalError = terminalProbe(ctx)
 	probe.RelayLossEnded, probe.RelayLossError = relayLossProbe(ctx)
+	probe.BrowserEngineLossEnded, probe.BrowserEngineLossError = browserEngineLossProbe(scratch)
 	return probe
+}
+
+func preparedProbe(ctx context.Context, launch exec.LaunchPlan) (string, int, string) {
+	cmd, cleanup, err := exec.PrepareCommand(ctx, "sh", []string{"-c", preparedNamespaceScript}, exec.ExecOpts{Launch: launch})
+	if err != nil {
+		return "", -1, err.Error()
+	}
+	defer cleanup()
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", -1, err.Error()
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return "", -1, err.Error()
+	}
+	_, _ = stdin.Write([]byte("streamed-over-stdin\n"))
+	_ = stdin.Close()
+	waitErr := cmd.Wait()
+	code := 0
+	if waitErr != nil {
+		var exitErr *osexec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			code = exitErr.ExitCode()
+		} else {
+			return stdout.String(), -1, waitErr.Error()
+		}
+	}
+	return stdout.String(), code, stderr.String()
 }
 
 // terminal accumulates what a PTY session prints.
@@ -115,7 +161,7 @@ func (t *terminal) text() string {
 // terminalProbe runs an interactive interpreter on a brokered terminal and
 // requires it to survive Ctrl-C.
 func terminalProbe(ctx context.Context) (bool, string) {
-	session, err := exec.StartPTY(ctx, "python3", []string{"-i", "-q", "-u"}, exec.PTYOpts{Launch: exec.HostLaunch("protected terminal probe"), Timeout: 30 * time.Second})
+	session, err := exec.StartPTY(ctx, "python3", []string{"-i", "-q", "-u"}, exec.PTYOpts{Launch: exec.HostLaunch("toolchain_version_probe"), Timeout: 30 * time.Second})
 	if err != nil {
 		return false, err.Error()
 	}
@@ -129,6 +175,12 @@ func terminalProbe(ctx context.Context) (bool, string) {
 	send("\x03")
 	if !output.await("KeyboardInterrupt") {
 		return false, "no interrupt: " + output.text()
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		if strings.HasSuffix(strings.TrimRight(output.text(), " "), ">>>") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	send("print('interrupt' + '-survived')\n")
 	if !output.await("interrupt-survived") {
@@ -144,7 +196,7 @@ func terminalProbe(ctx context.Context) (bool, string) {
 // relayLossProbe kills the relay standing in for a brokered supervisor and
 // requires the program it started to end.
 func relayLossProbe(ctx context.Context) (bool, string) {
-	session, err := exec.StartPTY(ctx, "sh", []string{"-c", "echo started-$$; exec sleep 60"}, exec.PTYOpts{Launch: exec.HostLaunch("protected relay probe"), Timeout: 60 * time.Second})
+	session, err := exec.StartPTY(ctx, "sh", []string{"-c", "echo started-$$; exec sleep 60"}, exec.PTYOpts{Launch: exec.HostLaunch("toolchain_version_probe"), Timeout: 60 * time.Second})
 	if err != nil {
 		return false, err.Error()
 	}

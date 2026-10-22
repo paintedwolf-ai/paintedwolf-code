@@ -139,6 +139,10 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 		cleanup()
 		return nil, nil, err
 	}
+	if err := relayThroughBroker(cmd); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	return cmd, cleanup, nil
 }
 

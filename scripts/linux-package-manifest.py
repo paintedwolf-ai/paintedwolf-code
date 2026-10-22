@@ -22,11 +22,15 @@ import stat
 import sys
 
 from linux_release.payload import load as load_payload
-from linux_release.payload_inventory import collect as collect_payload, tree as payload_tree
+from linux_release.payload_inventory import (
+    FORMAT_VERSION,
+    collect as collect_payload,
+    tree as payload_tree,
+    validate_payload,
+)
 
 PAYLOAD = load_payload()
 
-FORMAT_VERSION = 2
 PACKAGE_NAME = "painted-wolf-code"
 INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/opt/painted-wolf-code/bin/painted-wolf-code"
@@ -129,6 +133,7 @@ def validate(manifest: dict) -> None:
                      BOOTSTRAP["path"]):
         if required not in seen:
             raise ValueError(f"manifest omits {required}")
+    validate_payload(manifest["payload"], rows, manifest["install_root"])
 
 
 def verify_tree(args: argparse.Namespace) -> int:

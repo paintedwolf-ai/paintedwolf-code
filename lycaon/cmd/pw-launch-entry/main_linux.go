@@ -7,23 +7,35 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/launchguard"
 )
 
+func init() {
+	launchguard.ScrubBootstrapEnvironment()
+}
+
 func main() {
+	os.Exit(run(os.Args, os.Stderr))
+}
+
+func run(args []string, stderr io.Writer) int {
 	var err error
 	switch {
-	case len(os.Args) == 1:
+	case len(args) == 1:
 		err = launchguard.EnterDesktop()
-	case len(os.Args) == 2 && os.Args[1] == launchguard.BrokerAgentArgument:
+	case len(args) == 2 && args[1] == launchguard.BrokerAgentArgument:
 		err = launchguard.RunBrokerAgent()
 	default:
 		err = fmt.Errorf("invalid protected entry invocation")
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
-		os.Exit(1)
+		if launchguard.DropPrivilegesForError() {
+			_, _ = fmt.Fprintf(stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
+		}
+		return 1
 	}
+	return 0
 }
