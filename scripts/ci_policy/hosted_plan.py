@@ -71,8 +71,10 @@ def lanes():
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
                     or not isinstance(command, list) or len(command) < 3
                     or command[:2] != ["test:contract", "--"]
-                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
-                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or (command != ["test:contract", "--", "./test/contract/..."]
+                        and any(not isinstance(package, str)
+                                or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                                or not (ROOT / "lycaon" / package).is_dir() for package in command[2:]))
                     or len(set(command[2:])) != len(command[2:])):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]

@@ -14,7 +14,10 @@
       "test:short",
       "test:contract",
       "coverage:changes",
-      "licenses:notices"
+      "licenses:notices",
+      "comments:check",
+      "test:fail-messages:check",
+      "docs:links"
     ],
     "oar:verify": [
       "test:oar",
@@ -766,6 +769,10 @@
         "budgets",
         "den:typecheck",
         "den:lint",
+        "coverage:changes",
+        "comments:check",
+        "test:fail-messages:check",
+        "docs:links",
         "den:test:fast"
       ],
       "minutes": 120,
@@ -777,11 +784,7 @@
       "preflight": [
         "test:contract",
         "--",
-        "./test/contract/hosted",
-        "./test/contract/runner",
-        "./test/contract/evidence",
-        "./test/contract/host",
-        "./test/contract/security"
+        "./test/contract/..."
       ]
     },
     "limits": {
