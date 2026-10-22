@@ -32,12 +32,13 @@ func TestLintCacheCleanupPreservesPublicationAndReportsDeletionFailures(t *testi
 		failDelete, wantErr bool
 	}{
 		{name: "current only", keys: "current\n"},
-		{name: "empty"},
+		{name: "no publication or prior entries"},
 		{name: "save absent", keys: "old\n"},
 		{name: "superseded", keys: "old\ncurrent\nolder\n", deleted: "old\nolder\n"},
 		{name: "delete failure", keys: "current\nold\n", deleted: "old\n", failDelete: true, wantErr: true},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			calls := filepath.Join(dir, "deleted")
 			stub := `#!/bin/bash
