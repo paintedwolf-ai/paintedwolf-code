@@ -8,10 +8,12 @@ import (
 	"os/exec"
 	"slices"
 	"strconv"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -87,8 +89,10 @@ func TestOutsideTheProtectedLaunchCommandsAreNotRelayed(t *testing.T) {
 	}
 }
 
-// Inside the protected launch every supervisor becomes a relay, a
-// confinement helper's included; a missing broker refuses instead.
+// Inside the protected launch every supervisor and every prepared command
+// becomes a relay, a confinement helper's included; a missing broker refuses
+// instead, and supervising a prepared command replaces its relay rather than
+// nesting two.
 func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	testutil.FailErr(t, "socket pair", err)
@@ -106,11 +110,142 @@ func TestEveryLaunchIsRelayedInsideTheProtectedLaunch(t *testing.T) {
 		if !relayedCommand(cmd) || cmd.Args[2] != supervisorCommand || cmd.ExtraFiles[len(cmd.ExtraFiles)-1] != broker {
 			t.Fatalf("%s launch not relayed with the broker last: %q", name, cmd.Args)
 		}
+		extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", cmd.Args[2:])
+		if !ok || extras != 2 || len(argv) < 2 || argv[1] != supervisorCommand {
+			t.Fatalf("%s supervisor relay target = (%d, %q, %v)", name, extras, argv, ok)
+		}
 		_ = lifetime.Close()
 		_ = status.Close()
+	}
+	profileRead, profileWrite, err := os.Pipe()
+	testutil.FailErr(t, "profile pipe", err)
+	defer func() { _ = profileRead.Close(); _ = profileWrite.Close() }()
+	prepared := &exec.Cmd{
+		Path:       "/opt/painted-wolf-code/bin/pw",
+		Args:       []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"},
+		ExtraFiles: []*os.File{profileRead},
+	}
+	testutil.FailErr(t, "relay prepared command", relayThrough(prepared, state))
+	if !relayedCommand(prepared) || commandSupervisor(prepared) || prepared.ExtraFiles[len(prepared.ExtraFiles)-1] != broker {
+		t.Fatalf("prepared command not relayed with broker last: %q", prepared.Args)
+	}
+	extras, argv, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", prepared.Args[2:])
+	if !ok || extras != 1 || !slices.Equal(argv, []string{"/opt/painted-wolf-code/bin/pw", "--confine-helper", "-profile-fd", "3", "--", "/usr/bin/git", "status"}) {
+		t.Fatalf("prepared relay target = (%d, %q, %v)", extras, argv, ok)
+	}
+	unrelayCommand(prepared)
+	if relayedCommand(prepared) || prepared.Path != "/opt/painted-wolf-code/bin/pw" || len(prepared.ExtraFiles) != 1 || prepared.ExtraFiles[0] != profileRead {
+		t.Fatalf("unrelayCommand did not restore prepared command: path=%q args=%q extra=%d", prepared.Path, prepared.Args, len(prepared.ExtraFiles))
+	}
+	unrelayCommand(prepared)
+	unrelayCommand(&exec.Cmd{Args: []string{"pw", relayCommand, "bad", "/bin/sh", "sh"}})
+	events := make(chan os.Signal, 4)
+	notifySupervisorSignals(events, true)()
+	notifySupervisorSignals(events, false)()
+	if code := runBrokerRelay(nil); code != 125 {
+		t.Fatalf("runBrokerRelay(nil) = %d, want 125", code)
+	}
+	if code := runBrokerRelay([]string{"0", "/bin/true", "true"}); code != 125 {
+		t.Fatalf("runBrokerRelay without broker socket = %d, want 125", code)
+	}
+	for _, invalid := range [][]string{
+		nil,
+		{supervisorCommand, "bad"},
+		{"-1", "/usr/bin/git", "git"},
+		{"x", "/usr/bin/git", "git"},
+		{"0", "", "git"},
+	} {
+		if _, _, ok := parseRelayTarget("/opt/painted-wolf-code/bin/pw", invalid); ok {
+			t.Fatalf("parseRelayTarget(%q) succeeded", invalid)
+		}
 	}
 	missing := protectedLaunch{protected: true, err: ErrLaunchBrokerUnavailable}
 	if err := relayThrough(&exec.Cmd{Args: []string{"pw", supervisorCommand}}, missing); !errors.Is(err, ErrLaunchBrokerUnavailable) {
 		t.Fatalf("a launch without the broker = %v, want refusal", err)
 	}
+	if _, _, err := StartInOwnGroup(&exec.Cmd{Path: "/nonexistent/binary", Args: []string{"binary"}}); err == nil {
+		t.Fatal("StartInOwnGroup with missing binary succeeded")
+	}
+
+	callPair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "call socket pair", err)
+	callClient := os.NewFile(uintptr(callPair[0]), "call-client")
+	defer func() { _ = callClient.Close(); _ = unix.Close(callPair[1]) }()
+	sigs := make(chan os.Signal, 2)
+	sigs <- syscall.Signal(0)
+	go func() {
+		launchbroker.SendEvent(callPair[1], launchbroker.Event{Started: os.Getpid()})
+		sigs <- syscall.Signal(0)
+		launchbroker.SendEvent(callPair[1], launchbroker.Event{Exited: true, Code: 7})
+	}()
+	if code := relayEvents(callClient, sigs); code != 7 {
+		t.Fatalf("relayEvents exit code = %d, want 7", code)
+	}
+
+	errPair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "error socket pair", err)
+	errClient := os.NewFile(uintptr(errPair[0]), "err-client")
+	defer func() { _ = errClient.Close(); _ = unix.Close(errPair[1]) }()
+	launchbroker.SendEvent(errPair[1], launchbroker.Event{Error: "broker error"})
+	if code := relayEvents(errClient, make(chan os.Signal)); code != 125 {
+		t.Fatalf("relayEvents error code = %d, want 125", code)
+	}
+
+	eofPair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "eof socket pair", err)
+	eofClient := os.NewFile(uintptr(eofPair[0]), "eof-client")
+	_ = unix.Close(eofPair[1])
+	defer func() { _ = eofClient.Close() }()
+	if code := relayEvents(eofClient, make(chan os.Signal)); code != 125 {
+		t.Fatalf("relayEvents eof code = %d, want 125", code)
+	}
+}
+
+func TestBrokerRelaySubprocess(t *testing.T) {
+	if os.Getenv("PW_TEST_BROKER_RELAY_SUBPROCESS") == "1" {
+		if code := runBrokerRelay([]string{"1", "/bin/true", "true"}); code != 9 {
+			t.Fatalf("runBrokerRelay = %d, want 9", code)
+		}
+		return
+	}
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate test binary", err)
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "broker socket pair", err)
+	brokerChild := os.NewFile(uintptr(pair[0]), "broker-child")
+	brokerServer := os.NewFile(uintptr(pair[1]), "broker-server")
+	defer func() { _ = brokerChild.Close(); _ = brokerServer.Close() }()
+
+	done := make(chan error, 1)
+	go func() {
+		payload := make([]byte, launchbroker.MaxRequest+1)
+		control := make([]byte, launchbroker.ControlSpace())
+		n, oobn, _, _, err := unix.Recvmsg(int(brokerServer.Fd()), payload, control, unix.MSG_CMSG_CLOEXEC)
+		if err != nil {
+			done <- err
+			return
+		}
+		_, fds, err := launchbroker.Decode(payload[:n], control[:oobn])
+		if err != nil {
+			done <- err
+			return
+		}
+		for _, fd := range fds[1:] {
+			_ = unix.Close(fd)
+		}
+		launchbroker.SendEvent(fds[0], launchbroker.Event{Started: os.Getpid()})
+		launchbroker.SendEvent(fds[0], launchbroker.Event{Exited: true, Code: 9})
+		_ = unix.Close(fds[0])
+		done <- nil
+	}()
+
+	cmd := exec.Command(self, "-test.run=^TestBrokerRelaySubprocess$", "-test.v=false")
+	cmd.Env = append(os.Environ(), "PW_TEST_BROKER_RELAY_SUBPROCESS=1")
+	if coverDir := os.Getenv("PW_GO_CHILD_COVERDIR"); coverDir != "" {
+		cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir)
+	}
+	// Slot 0 (fd 3) is nil to exercise closed-slot padding; slot 1 (fd 4) is the broker.
+	cmd.ExtraFiles = []*os.File{nil, brokerChild}
+	testutil.FailErr(t, "run broker relay subprocess", cmd.Run())
+	testutil.FailErr(t, "serve broker relay request", <-done)
 }

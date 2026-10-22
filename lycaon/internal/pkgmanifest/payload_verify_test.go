@@ -2,6 +2,7 @@ package pkgmanifest_test
 
 import (
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,31 +13,31 @@ func TestRetainedPayloadVerificationRejectsChangedResourcesAndInventory(t *testi
 		"intact": func(t *testing.T, root string) {},
 		"extra resource": func(t *testing.T, root string) {
 			if err := os.WriteFile(filepath.Join(root, "unlisted.data"), []byte("resource"), 0644); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write file", err)
 			}
 		},
 		"changed image": func(t *testing.T, root string) {
 			if err := os.WriteFile(filepath.Join(root, "bin/pw"), []byte("replacement"), 0755); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write file", err)
 			}
 		},
 		"changed mode": func(t *testing.T, root string) {
 			if err := os.Chmod(filepath.Join(root, "bin/pw"), 0777); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "os.Chmod failed", err)
 			}
 		},
 		"missing image": func(t *testing.T, root string) {
 			if err := os.Remove(filepath.Join(root, "bin/pw")); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "os.Remove failed", err)
 			}
 		},
 		"redirected image": func(t *testing.T, root string) {
 			name := filepath.Join(root, "bin/pw")
 			if err := os.Remove(name); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "os.Remove failed", err)
 			}
 			if err := os.Symlink("../manifest.json", name); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "os.Symlink failed", err)
 			}
 		},
 	}
@@ -44,15 +45,11 @@ func TestRetainedPayloadVerificationRejectsChangedResourcesAndInventory(t *testi
 		t.Run(name, func(t *testing.T) {
 			file, _ := fixture(t, nil)
 			m, err := pkgmanifest.Load(file)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "pkgmanifest.Load failed", err)
 			root := filepath.Dir(file)
 			change(t, root)
 			retained, err := os.OpenRoot(root)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "os.OpenRoot failed", err)
 			defer retained.Close()
 			err = m.VerifyPayload(retained)
 			if (name == "intact") != (err == nil) {
@@ -65,21 +62,17 @@ func TestRetainedPayloadVerificationRejectsChangedResourcesAndInventory(t *testi
 func TestPayloadVerificationKeepsTheRetainedRootAndRefusesClosedRoots(t *testing.T) {
 	file, _ := fixture(t, nil)
 	m, err := pkgmanifest.Load(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "pkgmanifest.Load failed", err)
 	root, err := os.OpenRoot(filepath.Dir(file))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.OpenRoot failed", err)
 	if err := m.VerifyPayload(root); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "m.VerifyPayload failed", err)
 	}
 	if _, err := root.Stat("bin/pw"); err != nil {
 		t.Fatal("verification closed caller root", err)
 	}
 	if err := root.Close(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "root.Close failed", err)
 	}
 	if err := m.VerifyPayload(root); err == nil {
 		t.Fatal("accepted closed root")

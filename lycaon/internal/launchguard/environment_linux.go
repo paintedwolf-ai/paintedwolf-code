@@ -5,16 +5,20 @@ package launchguard
 import (
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
-	"syscall"
+	"sync"
+
+	"golang.org/x/sys/unix"
 )
 
 // desktopEnvironmentKeys are the session facts the desktop needs to reach its
 // display, buses, locale, proxies, input method and tools. The bootstrap
 // executes as a privileged program for any caller, so nothing that selects
-// code, libraries, modules, loaders, interpreters or the engine's boundary
-// switches (LD_*, GTK_MODULES, GTK_PATH, GIO_*, GDK_PIXBUF_*, GST_*,
-// WEBKIT_*, LYCAON_*, SSL_CERT_*) crosses it.
+// code, libraries, modules, loaders, interpreters, runtime debug switches or
+// the engine's boundary switches (LD_*, GODEBUG, GOTRACEBACK, GOMEMLIMIT,
+// GOCOVERDIR, GTK_MODULES, GTK_PATH, GIO_*, GDK_PIXBUF_*, GST_*, WEBKIT_*,
+// LYCAON_*, SSL_CERT_*) crosses it.
 var desktopEnvironmentKeys = map[string]bool{
 	"DISPLAY": true, "WAYLAND_DISPLAY": true, "XAUTHORITY": true,
 	"XDG_RUNTIME_DIR": true, "XDG_SESSION_TYPE": true, "XDG_SESSION_ID": true, "XDG_SESSION_CLASS": true,
@@ -32,10 +36,30 @@ var desktopEnvironmentKeys = map[string]bool{
 	"KDE_FULL_SESSION": true, "KDE_SESSION_VERSION": true,
 }
 
-// DesktopEnvironment filters the caller's environment to the desktop's
-// session facts. The first value of a key wins; HOME must be a directory the
-// caller owns.
-func DesktopEnvironment(environment []string, uid uint32) []string {
+var (
+	scrubMu         sync.Mutex
+	scrubbedSession []string
+	scrubbedOnce    bool
+)
+
+// ScrubBootstrapEnvironment disables runtime tracebacks and clears the process
+// environment before privileged work runs, returning the allowlisted session
+// variables captured at entry without touching the filesystem.
+func ScrubBootstrapEnvironment() []string {
+	debug.SetTraceback("none")
+	scrubMu.Lock()
+	defer scrubMu.Unlock()
+	if !scrubbedOnce {
+		scrubbedSession = filterSessionEnvironment(os.Environ())
+		scrubbedOnce = true
+	}
+	os.Clearenv()
+	return append([]string(nil), scrubbedSession...)
+}
+
+// filterSessionEnvironment keeps only allowlisted session keys without
+// touching caller-controlled paths on the filesystem.
+func filterSessionEnvironment(environment []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, entry := range environment {
@@ -46,7 +70,7 @@ func DesktopEnvironment(environment []string, uid uint32) []string {
 		if !desktopEnvironmentKeys[key] && !strings.HasPrefix(key, "LC_") {
 			continue
 		}
-		if key == "HOME" && !ownedDirectory(value, uid) {
+		if key == "HOME" && (!filepath.IsAbs(value) || filepath.Clean(value) != value || value == "/") {
 			continue
 		}
 		seen[key] = true
@@ -55,14 +79,34 @@ func DesktopEnvironment(environment []string, uid uint32) []string {
 	return out
 }
 
+// DesktopEnvironment filters the caller's environment to the desktop's
+// session facts. The first value of a key wins; HOME must be a directory the
+// caller owns. Must be called as the unprivileged caller, never as uid 0.
+func DesktopEnvironment(environment []string, uid uint32) []string {
+	filtered := filterSessionEnvironment(environment)
+	out := make([]string, 0, len(filtered))
+	for _, entry := range filtered {
+		key, value, _ := strings.Cut(entry, "=")
+		if key == "HOME" && !ownedDirectory(value, uid) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 func ownedDirectory(path string, uid uint32) bool {
-	if !filepath.IsAbs(path) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 		return false
 	}
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
 		return false
 	}
-	facts, ok := info.Sys().(*syscall.Stat_t)
-	return ok && facts.Uid == uid
+	defer func() { _ = unix.Close(fd) }()
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return false
+	}
+	return stat.Mode&unix.S_IFMT == unix.S_IFDIR && stat.Uid == uid
 }

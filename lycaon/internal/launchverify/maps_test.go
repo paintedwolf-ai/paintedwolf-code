@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func chainFixture(t *testing.T) (fakeProc, Verifier) {
+func chainFixture(t *testing.T) (*fakeProc, Verifier) {
 	t.Helper()
 	proc, verifier := newFixture(t)
 	proc.add(fakeProcess{pid: 300, ppid: 1, uid: 1000, euid: 1000, start: 10, image: desktopImage})
