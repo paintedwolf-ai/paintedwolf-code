@@ -1,6 +1,7 @@
 """Workflow commands preserve machine-readable plans and required-job verdicts."""
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -47,3 +48,20 @@ class WorkflowCommandTests(unittest.TestCase):
             self.assertEqual(rows[0]['expected_seconds'], 250)
             self.assertIn('Estimate basis: `measured`', summary.read_text())
             self.assertIn('Qualification timing sources: 42', summary.read_text())
+
+    def test_nix_workflow_loads_the_shared_shipped_verification_profile(self):
+        workflow = (ROOT / ".github/workflows/linux-nix-qualification.yml").read_text()
+        step = workflow.split("      - name: Allow native verification engines to create user namespaces\n", 1)[1]
+        step = step.split("\n      - name:", 1)[0]
+        commands = [shlex.split(line.strip()) for line in step.splitlines() if line.strip().startswith("sudo ")]
+        install, reload = commands
+        self.assertEqual(install[:4], ["sudo", "install", "-m", "0644"])
+        profile = ROOT / install[4]
+        self.assertTrue(profile.is_file(), "The frozen source must ship the profile its workflow installs")
+        shared = (ROOT / ".github/actions/setup-verification/action.yml").read_text()
+        self.assertIn("$GITHUB_ACTION_PATH/" + profile.name, shared)
+        self.assertEqual(reload, ["sudo", "apparmor_parser", "-r", install[5]])
+        self.assertIn("apparmor_restrict_unprivileged_userns 2>/dev/null)", step)
+        self.assertIn("flags=(unconfined)", profile.read_text())
+        self.assertIn("userns,", profile.read_text())
+        self.assertNotIn("sysctl", step)
