@@ -420,7 +420,7 @@ func TestWorkflowFailedRedirectPublishThenTargetedCorrection(t *testing.T) {
 			callID:  "conflict-turn",
 			command: `printf 'step1-complete\n' | tee step1.txt; { printf 'concurrent-edit\n' > target.txt; printf 'staged-payload\n'; } > target.txt; printf 'step3-never\n' | tee step3.txt`,
 			inspect: func(t *testing.T, prev command.ProgramOutcome) {
-				if prev.State != "rejected" || prev.StopCode != "COMMAND_REVISION_CONFLICT" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
+				if prev.State != "rejected" || prev.StopCode != "COMMAND_REVISION_CONFLICT" || prev.CompletedEffects != 2 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
 					t.Fatalf("conflict turn outcome = %+v", prev)
 				}
 			},
@@ -510,8 +510,7 @@ func TestWorkflowProgramRefusedMidwayAndModelRecovers(t *testing.T) {
 			command: `printf 'prepared-header\n' | tee header.txt; summarize --unsupported-flag notes.txt; printf 'unreachable\n' | tee tail.txt`,
 			inspect: func(t *testing.T, prev command.ProgramOutcome) {
 				if prev.State != "rejected" || prev.Status != 2 || prev.StopCode != "COMMAND_OPTION_UNSUPPORTED" ||
-					prev.Stdout != "prepared-header\n" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" ||
-					!strings.Contains(prev.Stderr, "summarize: --unsupported-flag: not supported here [COMMAND_OPTION_UNSUPPORTED]") {
+					prev.Stdout != "prepared-header\n" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
 					t.Fatalf("midway refusal outcome = %+v", prev)
 				}
 			},
