@@ -68,6 +68,7 @@ func init() {
 
 // superviseCommand preserves the target's descriptors and adds an engine-lifetime pipe.
 func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (*exec.Cmd, func(), error) {
+	unrelayCommand(cmd)
 	self, err := os.Executable()
 	if err != nil {
 		cleanup()
@@ -170,7 +171,24 @@ func (t supervisorTarget) command() *exec.Cmd {
 	for i := 0; i < t.extraFiles; i++ {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
 	}
+	cmd.SysProcAttr = foregroundTerminal(0, 0)
 	return cmd
+}
+
+// foregroundTerminal places a target on fd in the terminal's foreground group
+// when fd is the controlling terminal of pid's session.
+func foregroundTerminal(fd, pid int) *syscall.SysProcAttr {
+	sid, err := unix.IoctlGetInt(fd, unix.TIOCGSID)
+	if err != nil {
+		return nil
+	}
+	if own, err := unix.Getsid(pid); err != nil || sid != own {
+		return nil
+	}
+	// The terminal signals its foreground group. The target's own group
+	// holds the foreground, so Ctrl-C reaches the program on the terminal
+	// and not the supervisor, which would end the whole command.
+	return &syscall.SysProcAttr{Foreground: true, Ctty: fd}
 }
 
 // launchFailure reports the errno the parent's fork/exec would have seen.
@@ -205,6 +223,23 @@ func awaitEngineLoss(monitor *os.File) <-chan struct{} {
 	return gone
 }
 
+func notifySupervisorSignals(events chan<- os.Signal, terminal bool) func() {
+	signal.Notify(events, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGUSR2)
+	if !terminal {
+		signal.Notify(events, syscall.SIGINT)
+		return func() { signal.Stop(events) }
+	}
+	// On a terminal, Ctrl-C signals the foreground group directly; catching
+	// SIGINT separately keeps the supervisor alive without settling the
+	// session, while execve resets the child's disposition to default.
+	ignored := make(chan os.Signal, 1)
+	signal.Notify(ignored, syscall.SIGINT)
+	return func() {
+		signal.Stop(ignored)
+		signal.Stop(events)
+	}
+}
+
 // runCommandSupervisor retains orphaned descendants inside one command's lineage.
 func runCommandSupervisor(args []string) int {
 	target, ok := parseSupervisorTarget(args)
@@ -220,9 +255,9 @@ func runCommandSupervisor(args []string) int {
 	}
 	_ = unix.Close(fd)
 	beforeSupervisorSignals()
+	_, termErr := unix.IoctlGetTermios(0, unix.TCGETS)
 	events := make(chan os.Signal, 4)
-	signal.Notify(events, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR2)
-	defer signal.Stop(events)
+	defer notifySupervisorSignals(events, termErr == nil)()
 	lifetime, status := 3+target.extraFiles, 4+target.extraFiles
 	// Exec cleared close-on-exec on the supervisor's own pipes; keep them from the target.
 	syscall.CloseOnExec(lifetime)

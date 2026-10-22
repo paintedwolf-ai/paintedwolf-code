@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/launchverify"
-	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
@@ -26,9 +25,6 @@ const requestDeadline = 30 * time.Second
 type Server struct {
 	Store    *Store
 	Verifier launchverify.Verifier
-	// Manifest is loaded per connection, so a package upgrade applies to the
-	// next engine without restarting the service.
-	Manifest string
 	PeerOf   func(net.Conn) (Peer, error)
 	// IdleExit ends Serve after this long without a connection; the socket
 	// unit starts the service again on demand. Zero serves until ctx ends.
@@ -116,12 +112,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.Log.Warn("vault identity peer credentials unavailable", "error", err)
 		return
 	}
-	verifier, resp := s.verifierFor()
-	if resp != nil {
-		s.answer(conn, *resp)
-		return
-	}
-	chain, err := verifier.VerifyChain(peer.PID, peer.UID)
+	chain, err := s.Verifier.VerifyChain(peer.PID, peer.UID)
 	if err != nil {
 		s.Log.Warn("vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
 		s.answer(conn, refusal(err))
@@ -135,14 +126,14 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 		// The verified process must still be the one connected.
-		if err := verifier.Recheck(chain); err != nil {
+		if err := s.Verifier.Recheck(chain); err != nil {
 			s.Log.Warn("vault identity caller changed", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err))
 			s.answer(conn, refusal(err))
 			return
 		}
 		resp := s.handle(caller, req)
 		// Handling may wait on storage. Reverify before releasing its response.
-		if err := verifier.Recheck(chain); err != nil {
+		if err := s.Verifier.Recheck(chain); err != nil {
 			s.answer(conn, refusal(err))
 			return
 		}
@@ -152,21 +143,6 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 	}
-}
-
-// verifierFor loads the manifest for one connection.
-func (s *Server) verifierFor() (launchverify.Verifier, *vaultidentity.Response) {
-	manifest, err := pkgmanifest.Load(s.Manifest)
-	if err != nil {
-		s.Log.Error("vault identity manifest unreadable", "path", s.Manifest, "error", err)
-		return launchverify.Verifier{}, &vaultidentity.Response{
-			Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable),
-			Message: "the installed executable manifest cannot be read",
-		}
-	}
-	verifier := s.Verifier
-	verifier.Manifest = manifest
-	return verifier, nil
 }
 
 func refusal(err error) vaultidentity.Response {
