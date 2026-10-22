@@ -150,3 +150,12 @@ func (o *Output) Write(p []byte) (int, error) {
 
 // Written reports the bytes accepted so far.
 func (o *Output) Written() int64 { return o.written }
+
+// RecordSourceMapping forwards source-mapping spans when the underlying writer
+// records them.
+func (o *Output) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {
+	if recorder, ok := o.w.(commandprogram.SourceMappingRecorder); ok {
+		return recorder.RecordSourceMapping(m)
+	}
+	return nil
+}

@@ -67,7 +67,8 @@ func (p ProgramInputCapture) RetainReviewedProgramInputs(ctx context.Context, in
 		return "", fmt.Errorf("reviewed input capture does not match actual child scope")
 	}
 	return p.retain(ctx, in.Identity.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
-		return p.Outputs.recorder.AttachProgramOutput(ctx, p.ProgramID, RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}, spill, p.Outputs.resources)
+		body, _, err := p.Outputs.recorder.AttachProgramOutput(ctx, p.ProgramID, RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}, spill, p.Outputs.resources)
+		return body, err
 	})
 }
 

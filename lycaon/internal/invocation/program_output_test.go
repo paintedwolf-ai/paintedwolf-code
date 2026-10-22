@@ -6,9 +6,16 @@ import (
 	"io"
 	"testing"
 
+	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	wire "github.com/lycaon/lycaon/pkg/api"
+	"reflect"
+	"strings"
 )
 
 type outputQuota struct{ disk, state, memory int }
@@ -93,4 +100,127 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	if quota.disk != 0 || quota.state != 0 || restoredQuota.disk != 0 || restoredQuota.state != 0 {
 		t.Fatalf("body accounting leaked: old=%+v restored=%+v", quota, restoredQuota)
 	}
+}
+
+func TestIncompleteDeliveryWindowSurvivesReopenWithoutChangingExecution(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	before, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
+	testutil.FailErr(t, "read execution before delivery", err)
+	quota := &outputQuota{}
+	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir()})
+	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
+	testutil.FailErr(t, "open output lifetime", err)
+	testutil.FailErr(t, "restore output lifetime", lifetime.Restore(t.Context()))
+	defer func() {
+		_, err := f.database.ExecContext(t.Context(), `DELETE FROM invocation_program_outputs WHERE program_id=?`, f.program)
+		testutil.FailErr(t, "release receipt references", err)
+		testutil.FailErr(t, "close output lifetime", lifetime.Close(t.Context()))
+	}()
+	input, output := io.Pipe()
+	failure := &toolcontract.ProgramMemoryLimitError{Account: "session_spill_bytes", Maximum: 1048576, Observed: 1048577}
+	go func() { _, _ = output.Write([]byte("prefix\n")); _ = output.CloseWithError(failure) }()
+	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(input), tooloutput.StreamSpillOptions{Store: store, ClaimID: f.program + ":stdout", MaximumBytes: 64, Admission: quota, WorkingMemory: quota, RetainedState: quota})
+	testutil.FailErr(t, "retain incomplete output", err)
+	defer spill.Close()
+	ref := "output:program:" + f.program + ":stdout"
+	_, err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{Stream: "stdout", Reference: ref, Complete: false}, spill)
+	testutil.FailErr(t, "attach incomplete output", err)
+	window := wire.CommandProgramOutputWindow{Stream: "stdout", Ref: ref, ScratchPath: "@scratch/output/" + f.program + ".stdout", TotalBytes: 7, TotalLines: 1, Complete: false, InlineBudgetBytes: 12 << 10, Limit: &wire.CommandProgramOutputLimit{Code: "COMMAND_LIMIT_EXCEEDED", LimitID: failure.Account, Maximum: failure.Maximum, Observed: failure.Observed}}
+	testutil.FailErr(t, "attach partial delivery facts", lifetime.AttachDeliveryWindow(t.Context(), f.program, window))
+	reopened := invocation.NewSQLRecorder(f.database)
+	after, err := reopened.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
+	testutil.FailErr(t, "read partial delivery after reopen", err)
+	if len(after.Program.Outputs) != 1 || !reflect.DeepEqual(after.Program.Outputs[0], window) || after.Program.State != before.Program.State || after.Program.StopCode != before.Program.StopCode || !reflect.DeepEqual(after.Program.StatusCode, before.Program.StatusCode) {
+		t.Fatalf("delivery changed execution: before=%+v after=%+v", before.Program, after.Program)
+	}
+}
+
+// Output bytes are required; optional source attribution may exceed receipt
+// bounds without changing either the retained body or the delivery decision.
+func TestProgramOutputOmitsUnadmittedMappingsAndKeepsCompleteBody(t *testing.T) {
+	for _, mode := range []string{"encoding", "memory", "invalid"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newProgramReceiptFixture(t)
+			quota := &mappingQuota{maximum: 1 << 30}
+			store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+			lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
+			testutil.FailErr(t, "create lifetime", err)
+			testutil.FailErr(t, "restore lifetime", lifetime.Restore(t.Context()))
+			body := strings.Repeat("x", 400)
+			spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(strings.NewReader(body))), tooloutput.StreamSpillOptions{Store: store, ClaimID: f.program + ":stdout", MaximumBytes: 1024, Admission: quota, WorkingMemory: quota, RetainedState: quota})
+			testutil.FailErr(t, "retain complete body", err)
+			defer spill.Close()
+			mappings := make([]toolcontract.StreamSourceMapping, len(body))
+			for i := range mappings {
+				source := fmt.Sprintf("source:%d", i)
+				if mode == "encoding" {
+					source += strings.Repeat("s", 4096)
+				}
+				mappings[i] = toolcontract.StreamSourceMapping{Source: toolcontract.SourcePin{SourceID: source, Revision: "r1", SHA256: strings.Repeat("a", 64), StartByte: 0, EndByte: 1}, OutputStartByte: int64(i), OutputEndByte: int64(i + 1), SourceStartByte: 0, SourceEndByte: 1}
+			}
+			if mode == "memory" {
+				quota.maximum = 4096
+			}
+			if mode == "invalid" {
+				mappings[len(mappings)-1].SourceEndByte = 2
+			}
+			ref := "output:program:" + f.program + ":stdout"
+			admitted, err := lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{Stream: "stdout", Reference: ref, Complete: true, Mappings: mappings}, spill)
+			if mode == "invalid" {
+				if err == nil {
+					t.Fatal("invalid exact mapping accepted")
+				}
+			} else {
+				testutil.FailErr(t, "attach body without optional maps", err)
+				if len(admitted) != 0 {
+					t.Fatal("unadmitted mapping returned for immediate source credit")
+				}
+				reopened := invocation.NewSQLRecorder(f.database)
+				quota.maximum = 1
+				_, err = reopened.ReadProgramOutputMappings(t.Context(), f.session, f.program, ref, quota)
+				var limit *toolcontract.ProgramMemoryLimitError
+				if !errors.As(err, &limit) || quota.memory != 0 {
+					t.Fatalf("decode preceded admission or leaked: %v %+v", err, quota)
+				}
+				quota.maximum = 1 << 30
+				read, err := reopened.ReadProgramOutputMappings(t.Context(), f.session, f.program, ref, quota)
+				testutil.FailErr(t, "read actual persisted mapping decision", err)
+				if read.Blob.Size != int64(len(body)) || len(read.Mappings) != 0 {
+					t.Fatalf("changed body or persisted rejected credit: %+v %d", read.Blob, len(read.Mappings))
+				}
+				if quota.memory != 1 {
+					t.Fatal("mapping decode lease ended before consumer")
+				}
+				read.Close()
+				read.Close()
+				quota.maximum = 1 << 30
+				reader, err := lifetime.Open(t.Context(), f.session, f.program, ref)
+				testutil.FailErr(t, "reopen complete retained body", err)
+				actual, err := io.ReadAll(reader)
+				testutil.FailErr(t, "read retained body", err)
+				testutil.FailErr(t, "close retained body", reader.Close())
+				if string(actual) != body {
+					t.Fatal("optional attribution changed bytes")
+				}
+			}
+			_, err = f.database.ExecContext(t.Context(), `DELETE FROM invocation_program_outputs WHERE program_id=?`, f.program)
+			testutil.FailErr(t, "release receipt references", err)
+			testutil.FailErr(t, "close lifetime", lifetime.Close(t.Context()))
+			if quota.disk != 0 || quota.state != 0 || quota.memory != 0 {
+				t.Fatalf("leaked admission: %+v", quota)
+			}
+		})
+	}
+}
+
+type mappingQuota struct {
+	outputQuota
+	maximum int64
+}
+
+func (q *mappingQuota) Reserve(ctx context.Context, amount int64) (func(), error) {
+	if amount > q.maximum {
+		return nil, &toolcontract.ProgramMemoryLimitError{Account: "working_memory", Maximum: q.maximum, Observed: amount}
+	}
+	return q.outputQuota.Reserve(ctx, amount)
 }

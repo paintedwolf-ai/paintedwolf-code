@@ -444,6 +444,9 @@ func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	} else {
 		display += "/" + scopeRel
 	}
+	if op != sandbox.PathOpRead && (scopeRel == "output" || strings.HasPrefix(scopeRel, "output/")) {
+		return Resolved{}, false, fmt.Errorf("%w: %q is read-only command output", projectroot.ErrPathEscape, modelPath)
+	}
 	if b != nil {
 		if op == sandbox.PathOpRead {
 			err = b.AssertReadScope(ctx, dir, scopeRel, tctx.ProfileID())
@@ -460,6 +463,7 @@ func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.
 		ScopeRel:    scopeRel,
 		Root:        projectroot.RootRef{ID: projectroot.VirtualScratchLabel, Label: projectroot.VirtualScratchLabel, Path: filepath.Clean(dir)},
 		External:    true,
+		ToolOutput:  scopeRel == "output" || strings.HasPrefix(scopeRel, "output/"),
 	}, true, nil
 }
 

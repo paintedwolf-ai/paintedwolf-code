@@ -10562,6 +10562,42 @@ export interface components {
             /** Format: date-time */
             settled_at?: string;
         };
+        /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
+        CommandProgramOutputLimit: {
+            /** @enum {string} */
+            code: "COMMAND_LIMIT_EXCEEDED";
+            limit_id: string;
+            /** Format: int64 */
+            maximum: number;
+            /** Format: int64 */
+            observed: number;
+        };
+        CommandProgramOutputWindow: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            ref: string;
+            scratch_path: string;
+            /**
+             * Format: int64
+             * @description Bytes in the saved stream. For an incomplete stream the final total is unknown.
+             */
+            total_bytes: number;
+            /** @description Lines in the saved stream. For an incomplete stream the final total is unknown. */
+            total_lines: number;
+            complete: boolean;
+            truncated: boolean;
+            /** Format: int64 */
+            head_end_byte: number;
+            head_end_line: number;
+            /** Format: int64 */
+            tail_start_byte: number;
+            tail_start_line: number;
+            /** Format: int64 */
+            omitted_bytes: number;
+            omitted_lines: number;
+            inline_budget_bytes: number;
+            limit?: components["schemas"]["CommandProgramOutputLimit"];
+        };
         CommandProgramReceipt: {
             /** Format: uuid */
             id: string;
@@ -10583,6 +10619,8 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             settled_at?: string;
+            /** @description Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence. */
+            outputs?: components["schemas"]["CommandProgramOutputWindow"][];
         };
         /** @enum {string} */
         ToolResultOutcome: "completed" | "rejected" | "error";
@@ -29982,6 +30020,8 @@ export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
 export type InvocationIsolation = components["schemas"]["InvocationIsolation"];
 export type InvocationReceipt = components["schemas"]["InvocationReceipt"];
+export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
+export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
 export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolResultOutcome = components["schemas"]["ToolResultOutcome"];
 export type FeedbackSubject = components["schemas"]["FeedbackSubject"];

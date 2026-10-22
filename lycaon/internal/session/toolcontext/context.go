@@ -74,6 +74,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 	}
 	if m != nil {
 		tctx.Host.MaxToolSpillBytes = m.limits.Effective(ctx, sess).MaxToolSpillBytes
+		tctx.Host.ModelContextWindow = m.limits.Compaction(ctx, sess).ModelContextWindow
 		tctx.Source.MutationRecorder = m.captures
 		tctx.Source.SourceLedger = m.SourceLedger
 		tctx.Source.History = m.history

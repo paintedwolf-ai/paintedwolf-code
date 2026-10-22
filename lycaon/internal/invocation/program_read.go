@@ -99,6 +99,10 @@ func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.
 	if err != nil {
 		return out, err
 	}
+	out.Outputs, err = readDeliveryWindows(ctx, tx, program)
+	if err != nil {
+		return out, err
+	}
 	out.StatusCode = optionalStatus(status)
 	out.StartedAt, err = time.Parse(time.RFC3339Nano, started)
 	if err != nil {
