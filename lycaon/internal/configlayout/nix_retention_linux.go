@@ -159,8 +159,8 @@ func pruneNixRoots(directory string) error {
 		}
 		file := os.NewFile(uintptr(fd), path)
 		var st unix.Stat_t
-		uid, uidOK := currentNixUID()
-		if uidOK && unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uid && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
+		uid := uint32(os.Getuid()) // #nosec G115 -- POSIX uid is non-negative and fits in uint32
+		if unix.Fstat(fd, &st) == nil && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Uid == uid && st.Mode&0o077 == 0 && st.Nlink == 1 && unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB) == nil {
 			link := strings.TrimSuffix(path, ".lock")
 			if removeNixLink(link) == nil {
 				_ = os.Remove(path)
