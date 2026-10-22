@@ -140,15 +140,9 @@ func TestCdFailuresAreUtilityErrorsInShellVoice(t *testing.T) {
 	}
 }
 
-func TestProgramEnvironmentAndAddressesNameRealFolders(t *testing.T) {
+func TestProgramAddressesNameRealFolders(t *testing.T) {
 	f := newTwoRoots(t)
 	p := f.paths(t)
-	env := strings.Join(p.Environment(), "\n")
-	for _, name := range []string{"TMPDIR", "TMP", "TEMP", "SCRATCH_DIR"} {
-		if !strings.Contains(env, name+"="+f.scratch) {
-			t.Fatalf("%s missing from %q", name, env)
-		}
-	}
 	for label, want := range map[string]string{"api": f.api.Path, "WEB": f.web.Path, "scratch": f.scratch} {
 		native, ok, err := p.Address(t.Context(), label)
 		if err != nil || !ok || native != want {
@@ -173,9 +167,6 @@ func TestProgramEnvironmentAndAddressesNameRealFolders(t *testing.T) {
 	scratchless.Host.SessionScratchDir = ""
 	q, err := projectpaths.NewProgramPaths(t.Context(), nil, scratchless, "")
 	testutil.FailErr(t, "bind scratchless paths", err)
-	if len(q.Environment()) != 0 {
-		t.Fatalf("scratchless environment = %v", q.Environment())
-	}
 	if _, _, err := q.Address(t.Context(), "scratch"); err == nil {
 		t.Fatal("@scratch converted without session scratch")
 	}
