@@ -816,12 +816,28 @@ dispatch's `dispatched-check` job reports its gate as the required `check`
 commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
 runs the complete check, then platform confinement and upgrade corpus beside
 the `release` profile's platform lanes, then browser and desktop journeys on
-main. One qualification runs at a time: it does
-not cancel an in-progress run for a newer push, and a newer push replaces a
-pending one, so a busy main qualifies its newest commit rather than every
-commit. Nightly retains race, fuzz, WebKit, stress, and performance
-coverage. A release requires a successful **Qualification** run for its exact
-commit on main; passing merge admission is insufficient.
+main. One qualification runs at a time. Its `queue: max` concurrency queue
+retains up to 100 pending requests without canceling a running qualification.
+When a push reaches the executor, source selection cancels that request if main
+has advanced. Current main and explicit candidates retain their queue order.
+Cancellation does not spend verification runners or produce qualification
+evidence. The queue limit is a bound, not a reservation: GitHub cancels additional requests when it is full.
+
+A manual request selects a full `source-sha` from main's history, or the dispatch
+commit when omitted. The main workflow remains the controller; each verification,
+platform, and E2E checkout uses the selected source. The final aggregate requires
+every stage and publishes `qualification-source-<attempt>`, binding the source
+commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
+request cannot qualify a source. Release admission verifies that binding and a
+successful aggregate job and an unexpired source receipt. Runs without that
+receipt must be qualified again before release. A failed-job rerun may reuse its
+successful source selection; the receipt identifies the attempt that completed
+the aggregate. Selected candidates share the same three-runner capacity as
+background main qualification.
+
+Nightly retains race, fuzz, WebKit, stress, and performance coverage. A release
+requires a successful **Qualification** run for its exact source on main;
+passing merge admission is insufficient.
 
 Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
 analysis-tool caches immediately after compiler preparation. Optional lint
@@ -1015,8 +1031,9 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
-A newer run replaces a pending one in its group and a started run finishes, so
-a long nightly or qualification never multiplies. The maintenance workflows
+Nightly replaces its pending snapshot while a started run finishes. Qualification
+retains explicit requests and drops superseded pushes at admission; both run
+one executor at a time. The maintenance workflows
 share one group across workflows; their schedules are staggered so that no two
 are pending at once, and a scheduled run replaced by a manual one returns at
 its next schedule. Issue intake, an issue's lifecycle nudge, and verification

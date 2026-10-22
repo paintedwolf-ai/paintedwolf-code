@@ -3,6 +3,10 @@ name: End-to-end verification
 on:
   workflow_call:
     inputs:
+      source-sha:
+        description: Exact source commit; blank uses the calling workflow commit
+        type: string
+        default: ''
       web-parallel:
         description: Web shards that run at once, beside the desktop job; the caller's runner budget sets it
         required: true
@@ -26,6 +30,8 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha || github.sha }}
 
       - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
@@ -104,6 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
         with:

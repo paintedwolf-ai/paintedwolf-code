@@ -3,6 +3,10 @@ name: Verification
 on:
   workflow_call:
     inputs:
+      source-sha:
+        description: Exact source commit; blank uses the calling workflow commit
+        type: string
+        default: ''
       profile:
         description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
@@ -39,6 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
       - name: Resolve verification jobs
         id: plan
@@ -85,6 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
 
       - uses: ./.github/actions/merge-group-watch
