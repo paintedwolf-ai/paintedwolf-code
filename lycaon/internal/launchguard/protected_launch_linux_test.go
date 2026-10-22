@@ -337,11 +337,14 @@ func tryAttackBrokerAgent(pid int) error {
 
 func findBrokerAgentPID(t *testing.T) int {
 	t.Helper()
-	pids := brokerAgentPIDs()
-	if len(pids) == 0 {
-		t.Fatal("broker agent process not found in /proc")
+	for _, pid := range brokerAgentPIDs() {
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+		if err == nil && strings.Contains(string(raw), "NoNewPrivs:\t0\n") {
+			return pid
+		}
 	}
-	return pids[len(pids)-1]
+	t.Fatal("broker agent process not found in /proc")
+	return 0
 }
 
 func assertBrokerAgentSealed(t *testing.T, pid int) {
@@ -423,6 +426,10 @@ func TestNoNewPrivilegesExec(t *testing.T) {
 	target := os.Getenv("PW_LAUNCH_NNP_TARGET")
 	if target == "" {
 		return
+	}
+	runtime.LockOSThread()
+	if err := prctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		os.Exit(3)
 	}
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		os.Exit(3)

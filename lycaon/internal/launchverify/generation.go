@@ -37,6 +37,7 @@ type generationPolicy struct {
 	ManifestSHA256     string   `json:"manifest_sha256"`
 	LogicalInstallRoot string   `json:"logical_install_root"`
 	SystemExecutables  []string `json:"system_executables,omitempty"`
+	LibraryRoots       []string `json:"library_roots,omitempty"`
 }
 
 type resolvedGeneration struct {
