@@ -21,6 +21,12 @@ PLAN = f"'http://mirror/pool/a.deb' a_1_amd64.deb {len(PAYLOAD)} SHA256:{DIGEST}
 
 
 class LinuxNativePackagesTests(unittest.TestCase):
+    def test_hosted_ubuntu_mirrorlist_uses_verified_canonical_archives(self):
+        plan = PLAN.replace("http://mirror", "mirror+file:/etc/apt/apt-mirrors.txt")
+        row = NATIVE.archives(plan)[0]
+        self.assertTrue(row["uri"].startswith("https://archive.ubuntu.com/ubuntu/pool/"))
+        self.assertEqual(row["sha256"], DIGEST)
+
     def test_identity_covers_dependencies_image_architecture_and_requested_packages(self):
         env = {"ImageOS": "ubuntu24", "ImageVersion": "20261022.1", "RUNNER_ARCH": "X64"}
         key = NATIVE.archive_identity(PLAN, ["xclip"], env)

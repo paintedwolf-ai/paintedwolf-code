@@ -49,6 +49,8 @@ def archives(plan):
                 or not re.fullmatch(r"SHA256:[0-9a-fA-F]{64}", fields[3])
                 or not re.fullmatch(r"[A-Za-z0-9.+~%:_-]+\.deb", fields[1])):
             raise ValueError("APT archive plan must contain safe filenames, sizes and SHA256 digests")
+        if fields[0].startswith("mirror+file:/etc/apt/apt-mirrors.txt/pool/"):
+            fields[0] = "https://archive.ubuntu.com/ubuntu/pool/" + fields[0].split("/pool/", 1)[1]
         uri = urlsplit(fields[0])
         if uri.scheme not in {"http", "https"} or not uri.hostname or uri.username or uri.password:
             raise ValueError("APT archive plan requires an HTTP package origin without credentials")
