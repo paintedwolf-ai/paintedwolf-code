@@ -734,11 +734,29 @@ Go graph falls back to the full Go recipe. Cargo manifests and lockfiles, build
 scripts, fixtures, assets, and unrecognized native paths still widen to full
 verification. Mixed changes union their lane and package obligations.
 
+Hosted lane ordering uses one comparable set of estimates. A selected matrix
+uses measured durations only when every row has a valid measurement; otherwise
+all rows use their catalog budgets. A new or resharded lane therefore switches
+the whole selected matrix to budgets until qualification measures its rows.
+Partial receipts from a cancelled run cannot
+mix short measured times with large timeout fallbacks. Shards share their lane's
+longest estimate because package balancing changes which packages each shard runs.
+Fail-fast lanes retain their declared priority, and runner caps are unchanged.
+The catalog declares `integration-build` with `timing_source: build`: qualification
+measures build plus cross compilation, a conservative estimate for the smaller
+integration build. Timing sources must run in qualification, cover the receiving
+lane's stages, and use the same execution configuration.
+
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
-newest qualification that recorded them and hands every shard of the run the
-same package durations, so the shards partition the selection identically:
+newest valid measurement for each row and package from check and release platform
+receipts in at most 20 completed qualifications, filling gaps from older runs.
+History stops once the rows qualification actually runs have measurements. The
+job summary records the estimate basis, missing timing rows, source runs, and
+matrix order, including declared timing sources.
+Every shard receives the same package durations, so the shards partition the
+selection identically:
 packages go longest first to the least loaded shard, so the longest package
 starts first and the shards finish together. A selection smaller than the split
 repeats packages rather than leave a shard empty. Without measurements, such as
@@ -921,10 +939,9 @@ gate's cap. The `capacity` table in
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
-cheap ones that fail most often, then the rest longest first by the durations
-main's qualification measured, so a capped matrix neither finishes on its
-slowest lane nor runs long before a cheap failure. A lane qualification does
-not run is planned at its budget, so it starts early.
+cheap ones that fail most often, then the rest longest first. Complete measured
+coverage uses each lane's longest shard duration; incomplete coverage uses catalog
+budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
