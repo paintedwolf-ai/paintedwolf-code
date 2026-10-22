@@ -17,13 +17,7 @@ def commit(value):
     return subprocess.check_output(["git", "rev-parse", "--verify", value + "^{commit}"], cwd=ROOT, text=True).strip()
 
 
-def pending_candidate(runs, current_id):
-    return any(run.get("id") != current_id and run.get("event") == "workflow_dispatch"
-               and run.get("head_branch") == "main" and run.get("status") in {"queued", "pending", "waiting", "requested"}
-               for run in runs)
-
-
-def select(environment, waiting):
+def select(environment):
     repository = environment["GITHUB_REPOSITORY"]
     event = environment["GITHUB_EVENT_NAME"]
     if environment["GITHUB_REF"] != "refs/heads/main" or event not in {"push", "workflow_dispatch"}:
@@ -42,8 +36,6 @@ def select(environment, waiting):
     reason = "selected candidate" if event == "workflow_dispatch" else "current main"
     if event == "push" and source != tip:
         reason = "superseded main snapshot"
-    elif event == "push" and pending_candidate(waiting, run_id):
-        reason = "selected candidate waiting"
     admitted = reason in {"selected candidate", "current main"}
     tree = subprocess.check_output(["git", "rev-parse", source + "^{tree}"], cwd=ROOT, text=True).strip()
     return {"version": 1, "repository": repository, "run_id": run_id,
@@ -54,12 +46,7 @@ def select(environment, waiting):
 
 def main():
     repository = os.environ["GITHUB_REPOSITORY"]
-    waiting = []
-    if os.environ["GITHUB_EVENT_NAME"] == "push":
-        for status in ("queued", "pending", "waiting", "requested"):
-            rows = api(f"repos/{repository}/actions/workflows/qualification.yml/runs?status={status}&per_page=100")
-            waiting.extend(rows["workflow_runs"])
-    record = select(os.environ, waiting)
+    record = select(os.environ)
     encoded = json.dumps(record, separators=(",", ":"))
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write(f"source-sha={record['source_sha']}\nrecord={encoded}\nadmitted={str(record['admitted']).lower()}\n")

@@ -23,13 +23,13 @@ def selection():
 
 
 class QualificationRequestTests(unittest.TestCase):
-    def choose(self, environment, waiting=(), ancestor=0, head=CONTROLLER):
+    def choose(self, environment, ancestor=0, head=CONTROLLER):
         with patch.object(requests, "commit", side_effect=lambda value: value), \
                 patch.object(requests, "api", return_value={"object": {"sha": CONTROLLER}}), \
                 patch.object(requests.subprocess, "check_output", side_effect=[head, TREE]), \
                 patch.object(requests.subprocess, "run") as command:
             command.return_value.returncode = ancestor
-            result = requests.select(environment, waiting)
+            result = requests.select(environment)
             command.assert_any_call(["git", "merge-base", "--is-ancestor", result["source_sha"], CONTROLLER],
                                     cwd=requests.ROOT)
             return result
@@ -38,26 +38,19 @@ class QualificationRequestTests(unittest.TestCase):
         result = self.choose(ENVIRONMENT)
         self.assertEqual(result, selection())
 
-    def test_background_skips_superseded_sources_or_yields_to_a_waiting_candidate(self):
+    def test_background_skips_superseded_sources_and_preserves_current_main(self):
         background = {**ENVIRONMENT, "GITHUB_EVENT_NAME": "push", "QUALIFICATION_SOURCE": "", "GITHUB_SHA": SOURCE}
         result = self.choose(background)
         self.assertFalse(result["admitted"])
         self.assertEqual(result["reason"], "superseded main snapshot")
         background["GITHUB_SHA"] = CONTROLLER
         self.assertTrue(self.choose(background)["admitted"])
-        candidate = dict(id=43, event="workflow_dispatch", head_branch="main", status="pending")
-        result = self.choose(background, [candidate])
-        self.assertFalse(result["admitted"])
-        self.assertEqual(result["reason"], "selected candidate waiting")
-        for change in ({"event": "push"}, {"status": "completed"}, {"head_branch": "feature"}, {"id": 42}):
-            with self.subTest(change=change):
-                self.assertTrue(self.choose(background, [{**candidate, **change}])["admitted"])
 
     def test_selection_rejects_foreign_controllers_and_sources_outside_main(self):
         for environment in ({**ENVIRONMENT, "GITHUB_REF": "refs/heads/feature"},
                             {**ENVIRONMENT, "GITHUB_EVENT_NAME": "pull_request"}):
             with self.subTest(environment=environment), self.assertRaises(ValueError):
-                requests.select(environment, [])
+                requests.select(environment)
         with self.assertRaisesRegex(ValueError, "ancestor"):
             self.choose(ENVIRONMENT, ancestor=1)
         with self.assertRaisesRegex(ValueError, "controller checkout"):

@@ -805,7 +805,7 @@ the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
 retains up to 100 pending requests without canceling a running qualification.
 When a push reaches the executor, source selection cancels that request if main
-has advanced or an explicit candidate is waiting. Cancellation does not spend
+has advanced. Current main and explicit candidates retain their queue order. Cancellation does not spend
 verification runners or produce qualification evidence. The queue limit is a
 bound, not a reservation: GitHub cancels additional requests when it is full.
 
