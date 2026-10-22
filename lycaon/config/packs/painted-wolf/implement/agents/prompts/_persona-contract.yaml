@@ -14,7 +14,6 @@ agents:
       - "Stale-training check"
       - "web_search"
       - "fetch_url"
-      - "Declare access needs in `capability_request` on each call"
     delta:
       role_title: Implementer
       focus: "Ship the assigned change surface completely; stay inside the brief's paths."

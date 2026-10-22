@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -270,5 +271,31 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCommandAccessGuidanceFollowsOfferedTools(t *testing.T) {
+	contractcheck.ActivateStockCatalog(t)
+	prompts.ResetPersonaContractCache()
+	engine := contractPersonaEngine(t)
+	persona, err := prompts.RenderPersona(context.Background(), engine, "implementer", nil)
+	contractcheck.FailErr(t, "render implementer without procedure injection", err)
+	renderer := prompts.NewInjectRenderer(engine)
+	for _, tc := range []struct {
+		profile string
+		offered []string
+		want    int
+	}{
+		{profile: "implement", offered: []string{"command"}, want: 1},
+		{profile: "implement", offered: []string{"verify"}, want: 1},
+		{profile: "implement", offered: []string{"terminal_open"}, want: 1},
+		{profile: "implement", want: 0},
+		{profile: "explore_readonly", offered: []string{"command"}, want: 0},
+	} {
+		block, err := inject.RenderToolProceduresBlock(context.Background(), renderer, "access-guidance", tc.profile, tc.offered, nil)
+		contractcheck.FailErr(t, "render offered execution procedures", err)
+		if got := strings.Count(persona+block, "Declare access needs in `capability_request` on each call"); got != tc.want {
+			t.Errorf("profile %s offered %v: access declaration count = %d, want %d", tc.profile, tc.offered, got, tc.want)
+		}
 	}
 }
