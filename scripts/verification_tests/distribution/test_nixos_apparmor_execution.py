@@ -37,7 +37,12 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
     def save(self):
         (self.root / "manifest.json").write_text(json.dumps(self.manifest))
 
-    def test_legacy_v1_unknown_versions_and_missing_payload_refused(self):
+    def test_accepts_format_1_and_2_and_refuses_unknown_or_mismatched_versions(self):
+        v1 = {k: v for k, v in self.manifest.items() if k != "payload"}
+        v1["format_version"] = 1
+        (self.root / "manifest.json").write_text(json.dumps(v1))
+        self.assertIn(str(self.engine), OWNER.profile(self.package))
+
         for bad_version in (0, 1, 3, 99, True, "2"):
             with self.subTest(format_version=bad_version):
                 self.manifest["format_version"] = bad_version
@@ -46,6 +51,10 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
                     OWNER.profile(self.package)
         self.manifest["format_version"] = 2
         self.manifest["payload"] = []
+        self.save()
+        with self.assertRaisesRegex(ValueError, "manifest does not identify"):
+            OWNER.profile(self.package)
+        del self.manifest["payload"]
         self.save()
         with self.assertRaisesRegex(ValueError, "manifest does not identify"):
             OWNER.profile(self.package)
