@@ -984,10 +984,7 @@ At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
 merge queue 8, leaving three runners outside those classes. Ready PR jobs share
 that remaining capacity and may wait during bursts. Full lint before admission
 uses more PR time but prevents deterministic analyzer failures from occupying
-speculative integration groups. Caps do not establish queue latency guarantees. Capacity experiments use the
-existing standard-runner budget: increase a per-run cap only after the bounded
-classes and both merge groups still fit alongside PR admission. Idle runners
-in one snapshot do not establish peak headroom.
+speculative integration groups. Caps do not establish queue latency guarantees.
 On macOS, qualification, warming, and nightly hold one runner each and a release
 two, five in all; the merge queue and the admission tier run on Linux.
 
