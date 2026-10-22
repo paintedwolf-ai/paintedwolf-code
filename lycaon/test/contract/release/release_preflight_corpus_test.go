@@ -15,7 +15,6 @@ import (
 // preflightInputs are the files release-preflight.sh reads before its corpus check.
 var preflightInputs = []string{
 	"VERSION", "RELEASE_BUILD", "CHANGELOG.md",
-
 	"lycaon-den/package.json", "lycaon-den/src-tauri/tauri.conf.json",
 	"lycaon-den/src-tauri/Cargo.toml", "lycaon-den/src-tauri/Cargo.lock",
 	"packaging/update-keys.json", "packaging/release-platforms.json",
@@ -25,6 +24,7 @@ var preflightInputs = []string{
 }
 
 func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
+	t.Parallel()
 	repo := contractcheck.RepoRoot(t)
 	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, repo, "VERSION"))
 	for _, tc := range []struct {
@@ -53,7 +53,7 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 printf built > "$PREFLIGHT_BUILD_CALLS"
 `,
 				"scripts/upgrade-fixture-files.py": "import sys\nwith open(" + pythonString(calls) + ", 'a') as log:\n    log.write(' '.join(sys.argv[1:]) + '\\n')\n",
-				"tools/bun":                        "#!/bin/sh\nexit 0\n",
+				"tools/bun":                        "#!/bin/sh\nprintf %s https://github.com/paintedwolf-ai/paintedwolf-code/issues\n",
 			}
 			files["tools/go"] = `#!/bin/sh
 printf '%s\n' "$PWD" "$LYCAON_ENGINE_ROOT" "$@" > "$PREFLIGHT_COMPATIBILITY_CALLS"
@@ -160,6 +160,7 @@ func TestReleaseCompatibility(t *testing.T) {
 	repo := contractcheck.RepoRoot(t)
 	cmd := exec.CommandContext(t.Context(), "go", "run", "./cmd/release-contracts", "--check-all")
 	cmd.Dir = filepath.Join(repo, "lycaon")
+	cmd.Env = append(os.Environ(), "LYCAON_ENGINE_ROOT="+filepath.Join(repo, "lycaon-den/src-tauri/engine-root"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("release compatibility failed: %v\n%s", err, out)

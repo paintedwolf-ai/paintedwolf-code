@@ -681,13 +681,15 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the hosted policy, runner, verification-evidence, and release
-contract packages, then compiles the host and runs `lint:full`, size budgets, Den
-typecheck, and Den lint. These checks are covered by `./task check-fast`, which
-also runs product tests and changed coverage. The admission contracts run through
-`test:contract` with explicit packages, without a test-name filter. Failure or
-interruption stops the lane before its remaining work. Catalog validation accepts
-existing contract packages and rejects selectors, traversal, and duplicate packages.
+job, `ready`: it first runs the complete repository contract tree, then compiles
+the host and runs `lint:full`, size budgets, Go changed coverage, comment checks,
+test failure-message checks, documentation links, Den typecheck, and Den lint.
+These checks are covered by `./task check-fast`, which also runs product tests
+and Den changed coverage. Admission uses `test:contract -- ./test/contract/...`
+without a test-name filter. Failure or interruption stops the lane before its
+remaining work. Catalog validation accepts
+the complete contract tree or existing contract packages and rejects selectors,
+traversal, and duplicate packages.
 Release corpus fixtures assert compatibility command arguments and failure
 propagation with a stub; a separate contract runs the real compatibility checker
 once against the checkout, sharing its compiler cache.

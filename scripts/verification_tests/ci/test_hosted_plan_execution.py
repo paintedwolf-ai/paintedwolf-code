@@ -23,20 +23,19 @@ class HostedPlanTests(unittest.TestCase):
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
-    def test_ready_tier_is_one_runner_with_full_lint_and_scoped_policy_contracts(self):
+    def test_ready_tier_is_one_runner_with_contracts_and_early_diagnostics(self):
         rows = ci.matrix("fast")["include"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(ci.max_parallel("fast"), 1)
         stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
-        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint"})
-        self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--",
-                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence", "./test/contract/release"])
+        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint",
+                                       "coverage:changes", "comments:check", "test:fail-messages:check", "docs:links"})
+        self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
-        # Product suites and changed coverage run on the landing commit.
-        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
-                                         "den:coverage:changes"})
+        # Product suites remain in the integration gate.
+        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "den:coverage:changes"})
         self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
