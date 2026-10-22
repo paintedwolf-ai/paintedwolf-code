@@ -23,12 +23,15 @@ var readCommands = map[string]bool{
 // ReadCommandTimeout bounds one read command.
 const ReadCommandTimeout = 2 * time.Minute
 
+// CommandReader is the stateless hermetic Git read door.
+type CommandReader struct{}
+
 // ReadCommand runs one catalog-bound read-only Git command in dir and streams
 // Git's own stdout to stdout. It returns Git's diagnostics and exit status.
 // The invocation is hermetic: hooks, pager, editor, external diff and
 // textconv drivers, fsmonitor and global configuration are disabled, and
 // optional locks are off; config is the caller's allowlisted -c overrides.
-func (m *Manager) ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error) {
+func (CommandReader) ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error) {
 	if len(args) == 0 || !readCommands[args[0]] {
 		return nil, -1, fmt.Errorf("git: %q is not a read command", firstArg(args))
 	}

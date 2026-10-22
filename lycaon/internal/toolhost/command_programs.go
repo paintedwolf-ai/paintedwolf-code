@@ -164,7 +164,7 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 	if t.git == nil {
 		return command.NativeOperation{}, nil
 	}
-	owners, err := gitcmd.NewOwners(t.git)
+	owners, err := gitcmd.NewOwners(git.CommandReader{})
 	if err != nil {
 		return command.NativeOperation{}, err
 	}

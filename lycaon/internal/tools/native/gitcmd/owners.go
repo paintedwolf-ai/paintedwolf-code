@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// Reader is the Git owner's read door (git.Manager.ReadCommand).
+// Reader is the Git owner's read door (git.CommandReader.ReadCommand).
 type Reader interface {
 	ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error)
 }
