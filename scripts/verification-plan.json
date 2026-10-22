@@ -350,6 +350,15 @@
     ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
     ]
   },
   "private": [
@@ -375,6 +384,9 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
     "den:test:rust": "fixed:desktop-settings-observer"
   },
   "resources": {
@@ -698,6 +710,31 @@
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:publish:aur-recipe": {
+      "locks": [
+        "aur-delivery"
       ],
       "workers": 1
     }
