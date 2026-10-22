@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -136,13 +135,20 @@ func TestMain(m *testing.M) {
 	})
 	code := m.Run()
 	confine.StopRefusalWatch()
+	if helperBuild.directory != "" {
+		if err := os.RemoveAll(helperBuild.directory); err != nil {
+			fmt.Fprintln(os.Stderr, "remove Nix workflow helper directory:", err)
+			code = 1
+		}
+	}
 	os.Exit(code)
 }
 
 var helperBuild struct {
-	once sync.Once
-	path string
-	err  error
+	once      sync.Once
+	directory string
+	path      string
+	err       error
 }
 
 func requireLinuxSandbox(t *testing.T) string {
@@ -156,8 +162,12 @@ func requireLinuxSandbox(t *testing.T) string {
 	testutil.FailErr(t, "resolve Nix workflow process helper", err)
 	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
 		helperBuild.once.Do(func() {
-			helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // All fixture children share the coverage helper build.
-			helperBuild.path = filepath.Join(os.TempDir(), "pw-nix-helper-"+strconv.Itoa(os.Getpid()))
+			helperBuild.err = os.Setenv("GOCOVERDIR", dir)                              //nolint:usetesting // All fixture children share the coverage helper build.
+			helperBuild.directory, helperBuild.err = os.MkdirTemp("", "pw-nix-helper-") //nolint:usetesting // TestMain owns the helper across individual tests.
+			if helperBuild.err != nil {
+				return
+			}
+			helperBuild.path = filepath.Join(helperBuild.directory, "confine-helper")
 			build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain", "-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path,
 				filepath.Join(testutil.CheckoutRoot(t), "lycaon/internal/confine/testdata/helpermain"))
 			if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
