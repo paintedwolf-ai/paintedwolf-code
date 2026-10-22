@@ -129,9 +129,9 @@ func detectProtectedLaunch(read func() (userNamespaceFacts, error), named string
 	return state
 }
 
-// relayThroughBroker turns a supervisor command into its broker relay when
-// this engine runs inside the protected launch. The relay receives the
-// broker as its last descriptor; everything else is the supervisor's.
+// relayThroughBroker turns a command into its broker relay when this engine
+// runs inside the protected launch. The relay receives the broker as its last
+// descriptor; everything else is the command's or its supervisor's.
 func relayThroughBroker(cmd *exec.Cmd) error { return relayThrough(cmd, protectedState()) }
 
 func relayThrough(cmd *exec.Cmd, state protectedLaunch) error {
@@ -143,9 +143,33 @@ func relayThrough(cmd *exec.Cmd, state protectedLaunch) error {
 	if state.err != nil {
 		return state.err
 	}
-	cmd.Args = append([]string{cmd.Args[0], relayCommand}, cmd.Args[1:]...)
+	if commandSupervisor(cmd) {
+		cmd.Args = append([]string{cmd.Args[0], relayCommand}, cmd.Args[1:]...)
+		cmd.ExtraFiles = append(cmd.ExtraFiles, state.broker)
+		return nil
+	}
+	resolveRelayedProgram(cmd, state)
+	self, _ := os.Executable()
+	count := len(cmd.ExtraFiles)
+	cmd.Args = append([]string{self, relayCommand, strconv.Itoa(count), cmd.Path}, cmd.Args...)
+	cmd.Path = self
 	cmd.ExtraFiles = append(cmd.ExtraFiles, state.broker)
 	return nil
+}
+
+// unrelayCommand restores a prepared command before superviseCommand wraps it
+// in a supervisor and relays the supervisor instead.
+func unrelayCommand(cmd *exec.Cmd) {
+	if !relayedCommand(cmd) || commandSupervisor(cmd) || len(cmd.Args) < 5 {
+		return
+	}
+	count, err := strconv.Atoi(cmd.Args[2])
+	if err != nil || count < 0 || len(cmd.ExtraFiles) <= count {
+		return
+	}
+	cmd.Path = cmd.Args[3]
+	cmd.Args = cmd.Args[4:]
+	cmd.ExtraFiles = append(cmd.ExtraFiles[:count], cmd.ExtraFiles[count+1:]...)
 }
 
 // relayedExecutable checks a program the broker will start. Inside the

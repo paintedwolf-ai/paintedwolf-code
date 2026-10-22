@@ -281,6 +281,15 @@ class StableFeedBaselineTests(unittest.TestCase):
                  patch.object(release_baseline.feed_signing, "verify", side_effect=verify_error), self.assertRaises(ValueError):
                 release_baseline.published_stable(self.mirror, "https://downloads.example")
 
+    def test_preview_feed_carries_a_stable_promotion(self):
+        mirror = {**self.mirror, "prerelease": True, "tag_name": "v1.0.2-rc8"}
+        with patch.object(release_baseline, "read_public", side_effect=[self.manifest("1.0.2"), b"signature"]), \
+             patch.object(release_baseline.feed_signature, "check") as binding, \
+             patch.object(release_baseline.feed_signing, "verify"):
+            selected = release_baseline.published_feed(mirror, "https://downloads.example", "preview")
+            self.assertEqual((selected["tag_name"], selected["prerelease"]), ("v1.0.2", False))
+            self.assertEqual(binding.call_args.kwargs["file"], "latest-preview-key-1.json")
+
     def test_preview_feed_values_and_unsafe_origins_are_refused(self):
         with patch.object(release_baseline, "read_public", side_effect=[self.manifest("1.0.2-rc3"), b"signature"]), \
              self.assertRaisesRegex(ValueError, "stable"):
@@ -324,6 +333,19 @@ class ReleaseProgressionTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(ValueError, "newer"):
                         release_baseline.check_progression(candidate, [], self.release(previous), "source")
+
+    def test_preview_candidate_advances_past_a_stable_promotion(self):
+        promoted = self.release("1.0.2")
+        for candidate, valid in (("1.0.3-rc1", True), ("1.0.2-rc9", False)):
+            with self.subTest(candidate=candidate), \
+                 patch.object(release_baseline.subprocess, "check_output", return_value="20"):
+                if valid:
+                    release_baseline.check_progression(candidate, [], promoted, "source")
+                else:
+                    with self.assertRaisesRegex(ValueError, "newer"):
+                        release_baseline.check_progression(candidate, [], promoted, "source")
+        with self.assertRaisesRegex(ValueError, "stable channel"):
+            release_baseline.check_progression("1.0.3", [], self.release("1.0.3-rc1"), "source")
 
     def test_native_build_advances_across_both_channels(self):
         releases = [self.release("1.0.1"), self.release("1.0.2-rc3")]

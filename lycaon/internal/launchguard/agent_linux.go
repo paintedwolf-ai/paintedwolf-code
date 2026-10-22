@@ -28,42 +28,86 @@ const (
 )
 
 // RunBrokerAgent serves the launch broker: the caller's identity in the
-// initial user namespace, inside the launch's mount namespace, with no
-// no_new_privs, so brokered programs keep every ordinary user facility,
-// set-ID programs included, and see the running generation at the logical
-// installation root. Started as uid 0 inside the module view, it runs the
-// module-view mount watcher instead.
+// initial user namespace, inside the launch's mount namespace, non-dumpable
+// from execve through shutdown and with no no_new_privs, so brokered programs
+// keep every ordinary user facility, set-ID programs included, and see the
+// running generation at the logical installation root. Started as uid 0 inside
+// the module view, it runs the module-view mount watcher instead.
 func RunBrokerAgent() error {
-	frame := os.NewFile(agentSpecFD, "sealed-entry-spec")
-	spec, err := readEntry(frame)
-	_ = frame.Close()
-	if err != nil {
-		return err
-	}
-	if isModuleViewWatcher() {
-		return runModuleViewWatcher(spec)
-	}
-	if err := sameIdentity(spec); err != nil {
-		return err
-	}
-	if err := initialUserNamespace(); err != nil {
-		return err
-	}
-	broker := os.NewFile(agentBrokerFD, "launch-broker")
-	if _, err := launchbroker.CheckSocket(agentBrokerFD); err != nil {
-		return err
-	}
-	unix.CloseOnExec(agentBrokerFD)
-	unix.CloseOnExec(agentWatchFD)
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
+	if isModuleViewWatcher() {
+		frame := os.NewFile(agentSpecFD, "sealed-entry-spec")
+		spec, err := readEntry(frame)
+		_ = frame.Close()
+		if err != nil {
+			return err
+		}
+		return runModuleViewWatcher(spec)
+	}
+	unix.CloseOnExec(agentWatchFD)
+	if err := unix.CloseRange(agentWatchFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
+	return runBrokerAgent(
+		os.NewFile(agentSpecFD, "sealed-entry-spec"),
+		os.NewFile(agentBrokerFD, "launch-broker"),
+	)
+}
+
+func runBrokerAgent(frame, broker *os.File) error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	spec, err := readEntry(frame)
+	_ = frame.Close()
+	if err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if err := sealBrokerAgentIdentity(spec); err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if err := initialUserNamespace(); err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
+		_ = broker.Close()
+		return errors.New("broker agent socket is not the launch supervisor")
+	}
+	unix.CloseOnExec(int(broker.Fd()))
 	agent := &brokerAgent{calls: map[int]*brokerCall{}}
 	agent.serve(broker)
 	return nil
+}
+
+// sealBrokerAgentIdentity drops from the stage's administrator identity to the
+// original caller while keeping the broker agent non-dumpable across the
+// transition.
+func sealBrokerAgentIdentity(spec EntrySpec) error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	uid, euid, suid := unix.Getresuid()
+	gid, egid, sgid := unix.Getresgid()
+	if uid == 0 && euid == 0 && suid == 0 && gid == 0 && egid == 0 && sgid == 0 {
+		if err := dropPrivileges(Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups}); err != nil {
+			return err
+		}
+	}
+	if err := clearCapabilities(); err != nil {
+		return err
+	}
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
+		return errors.New("broker agent is dumpable")
+	}
+	return sameIdentity(spec)
 }
 
 // runModuleViewWatcher runs inside the module view in the root-owned user
@@ -163,7 +207,7 @@ func sealModuleWatcher(caller Identity) error {
 	if err := dropWatcherBoundingSet(); err != nil {
 		return err
 	}
-	if err := watcherPrctlAllThreads(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
+	if err := prctlAllThreads(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
 		return err
 	}
 	groups := make([]int, len(caller.Groups))
@@ -179,13 +223,13 @@ func sealModuleWatcher(caller Identity) error {
 	if err := unix.Setresuid(int(caller.UID), int(caller.UID), int(caller.UID)); err != nil {
 		return err
 	}
-	if err := watcherPrctlAllThreads(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0); err != nil {
+	if err := prctlAllThreads(unix.PR_SET_KEEPCAPS, 0, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := watcherPrctlAllThreads(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
+	if err := prctlAllThreads(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := watcherPrctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+	if err := prctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
@@ -206,19 +250,12 @@ func dropWatcherBoundingSet() error {
 		if cap == unix.CAP_SYS_ADMIN || cap == unix.CAP_DAC_READ_SEARCH {
 			continue
 		}
-		if err := watcherPrctlAllThreads(unix.PR_CAPBSET_DROP, cap, 0, 0, 0); err != nil {
+		if err := prctlAllThreads(unix.PR_CAPBSET_DROP, cap, 0, 0, 0); err != nil {
 			if errors.Is(err, unix.EINVAL) {
 				break
 			}
 			return err
 		}
-	}
-	return nil
-}
-
-func watcherPrctlAllThreads(option, arg2, arg3, arg4, arg5 uintptr) error {
-	if _, _, errno := syscall.AllThreadsSyscall6(unix.SYS_PRCTL, option, arg2, arg3, arg4, arg5, 0); errno != 0 {
-		return errno
 	}
 	return nil
 }

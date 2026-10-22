@@ -204,3 +204,34 @@ func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureReaperStartsAndReplacesCompanion(t *testing.T) {
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate test binary", err)
+	t.Cleanup(func() {
+		reaper.mu.Lock()
+		defer reaper.mu.Unlock()
+		if reaper.pipe != nil {
+			_ = reaper.pipe.Close()
+			if reaper.cmd != nil {
+				_ = reaper.cmd.Wait()
+			}
+			reaper.pipe = nil
+			reaper.cmd = nil
+		}
+	})
+	testutil.FailErr(t, "ensure reaper", ensureReaper())
+	testutil.FailErr(t, "ensure reaper idempotent", ensureReaper())
+	testutil.FailErr(t, "replace reaper", StartReaper(self, ReaperCommand))
+	if err := StartReaper("/nonexistent/reaper"); err == nil {
+		t.Fatal("StartReaper with missing binary succeeded")
+	}
+	reaper.mu.Lock()
+	if reaper.pipe != nil {
+		_ = reaper.pipe.Close()
+	}
+	reaper.mu.Unlock()
+	if sendReaper('+', reaperGroup, "1") {
+		t.Fatal("sendReaper succeeded on closed pipe")
+	}
+}
