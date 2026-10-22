@@ -13,7 +13,7 @@ import (
 
 func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 	t.Parallel()
-	for range 100 {
+	for attempt := range 100 {
 		parent, child, err := controlPair()
 		if err != nil {
 			t.Fatalf("create control pair: %v", err)
@@ -22,10 +22,23 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 			t.Fatalf("register control deadline: %v", err)
 		}
 		done := make(chan error, 1)
+		started := make(chan struct{})
 		go func() {
+			close(started)
 			_, _, err := receiveControl(parent, make([]byte, 16), make([]byte, unix.CmsgSpace(4)))
 			done <- err
 		}()
+		if attempt == 0 {
+			<-started
+			// Leave the empty socket blocked before testing close wakeup.
+			select {
+			case err := <-done:
+				_ = parent.Close()
+				_ = child.Close()
+				t.Fatalf("empty control receive returned before close: %v", err)
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
 		if err := parent.Close(); err != nil {
 			t.Fatalf("close control endpoint: %v", err)
 		}
