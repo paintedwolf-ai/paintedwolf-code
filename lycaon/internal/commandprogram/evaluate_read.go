@@ -9,12 +9,24 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+var readSpec = toolcontract.CommandSpecification{
+	Name: "read",
+	Argv: "read [-r] [-d DELIM] [NAME ...]",
+	Forms: []toolcontract.OptionForm{
+		{Spellings: []string{"-r"}, Arity: 0},
+		{Spellings: []string{"-d"}, Arity: 1, ValueRole: "DELIM"},
+	},
+}
+
 // readBuiltin reads one record from the frame's input stream, splits it by
 // fixed IFS whitespace (space, tab, newline) and assigns the target variables.
 func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fields Fields) error {
-	spec, _, err := ResolveCommand(fields)
+	spec, ok, err := ResolveCommand(fields)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		spec = readSpec
 	}
 	bound, err := f.e.ports.Binder.Bind(spec, fields)
 	if err != nil {

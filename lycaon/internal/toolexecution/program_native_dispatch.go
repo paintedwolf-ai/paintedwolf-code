@@ -245,13 +245,32 @@ func stageMatchesCommand(command string, argv []string) bool {
 }
 
 // Command prefixes come from the immutable catalog, never parsed command prose.
+// Multi-word git commands admit global flags (-C, -c, --no-pager) before the subcommand.
 func nativeCommandPrefix(command string, argv []string) bool {
 	parts := strings.Split(command, " ")
-	if len(argv) < len(parts) {
+	if len(argv) < len(parts) || len(parts) == 0 || parts[0] == "" || argv[0] != parts[0] {
 		return false
 	}
-	for i, part := range parts {
-		if part == "" || argv[i] != part {
+	idx := 1
+	if parts[0] == "git" && len(parts) > 1 {
+		for idx < len(argv) {
+			word := argv[idx]
+			switch {
+			case word == "-C" || word == "-c":
+				idx += 2
+				continue
+			case strings.HasPrefix(word, "-C") || strings.HasPrefix(word, "-c") || word == "--no-pager":
+				idx++
+				continue
+			}
+			break
+		}
+	}
+	if len(argv)-idx < len(parts)-1 {
+		return false
+	}
+	for i, part := range parts[1:] {
+		if part == "" || argv[idx+i] != part {
 			return false
 		}
 	}

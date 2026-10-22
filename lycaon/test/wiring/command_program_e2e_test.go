@@ -3,12 +3,14 @@ package wiring
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -42,6 +44,17 @@ func newCommandProgramSession(t *testing.T, program, approvals string) *commandP
 	testutil.FailErr(t, "write approvals", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(rules), 0o600))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
+	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), sess.ID)
+	testutil.FailErr(t, "active run", err)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
+	testutil.FailErr(t, "get scaffold vars", err)
+	delete(vars, "content_review")
+	testutil.FailErr(t, "clear root content_review", h.Workflows.Manager.Store.State.UpdateVars(t.Context(), run, dir, vars))
+	h.Server.Admin.Capabilities.Access.Gate.PutAskQuiet(hitl.AskQuiet{
+		ChatSessionID: sess.ID,
+		Key:           string(wire.GateUnobservedChannel) + ":unconfined",
+	}, 0)
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	return &commandProgramSession{h: h, dir: dir, session: sess.ID}
 }
@@ -164,7 +177,7 @@ func TestCommandProgramApprovalRequiredExternalRunsAfterApproval(t *testing.T) {
 		}
 		return false
 	})
-	_, err := s.h.Sessions.Checkpoints.ResolveCheckpoint(s.h.OwnerCtx(t, ctx), s.session, checkpointID, kind, &hitl.DecisionResult{Approved: true}, nil)
+	_, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(s.h.OwnerCtx(t, ctx), s.session, checkpointID, "approve_current_action")
 	testutil.FailErr(t, "approve launch", err)
 	testutil.FailErr(t, "prompt", <-done)
 	if result := s.result(t); !strings.Contains(result, "darwin") && !strings.Contains(result, "linux") {
@@ -271,6 +284,7 @@ func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
 func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 	prog := `echo --- && echo --- section --- && ` +
 		`printf '{"a":1}\n' | jq -r '.a' && printf 'k: v\n' | yq '.k' && ` +
+		`git status -sb && git --no-pager log -n 1 --format=%s && git --no-pager diff -- notes.txt && ` +
 		`printf '1\n2\n' | sed '1!G;h;$!d' && ` +
 		`find . -name '*.txt' | xargs wc -l | sort -n && ` +
 		`find . -name '*.txt' -print0 | xargs -0 grep -l note && ` +
@@ -278,22 +292,43 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 		`(false | true; echo "pipe:${PIPESTATUS[0]}:${PIPESTATUS[1]}:${PIPESTATUS[@]}") && ` +
 		`touch touched.txt && echo redirected > redirected.txt && printf 'teed\n' | tee teed.txt && ` +
 		`wc notes.txt teed.txt && ` +
-		`ps aux >/dev/null && env | grep -q '^PWD=' && ! (env | grep -q '^PATH=') && ` +
+		`ps aux >/dev/null && env | grep -q '^PWD=' && ! (env | grep -q '^PATH='); ` +
 		`sleep 30 & pid=$!; ps aux | grep -q running && kill $pid; wait; echo "sig:$?"`
+	gitengine.TestingEnableBundledBinary()
 	s := newCommandProgramSession(t, prog, "")
+	bin, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "bundled git", err)
+	gitRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = s.dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=Ann", "GIT_AUTHOR_EMAIL=ann@example.test", "GIT_COMMITTER_NAME=Ann", "GIT_COMMITTER_EMAIL=ann@example.test")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	gitRun("init", "-q", "-b", "main")
+	testutil.FailErr(t, "seed initial notes", os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("first note\n"), 0o644))
+	gitRun("add", "notes.txt")
+	gitRun("commit", "-q", "-m", "seed commit")
+	testutil.FailErr(t, "update notes", os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	result := s.result(t)
 	for _, want := range []string{
 		`---`,
 		`--- section ---`,
-		`2\n1\n`,
+		`## main`,
+		`seed commit`,
+		`+second note`,
+		"2\n1\n",
 		`row:first note`,
 		`row:second note`,
 		`pipe:1:0:1 0`,
 		`teed`,
 		`total`,
 		`sig:143`,
-		`"completed_effects":3`,
+		`"completed_effects": 3`,
 	} {
 		if !strings.Contains(result, want) {
 			t.Fatalf("missing %q in result: %s", want, result)
@@ -318,7 +353,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 	for _, c := range []struct {
 		name, program, code, cmd, word string
 	}{
-		{"sed unsupported command", "echo before > saved.txt; sed 'w out.txt' notes.txt", "COMMAND_OPTION_UNSUPPORTED", "sed", "w"},
+		{"sed unsupported command", "echo before > saved.txt; sed 'e' notes.txt", "COMMAND_OPTION_UNSUPPORTED", "sed", "e"},
 		{"grep invalid regex", "echo before > saved.txt; grep '[' notes.txt", "GREP_REGEX_INVALID", "grep", "["},
 		{"kill pid", "echo before > saved.txt; kill 9999999", "COMMAND_JOB_UNKNOWN", "kill", "9999999"},
 		{"redirect escape", "echo before > saved.txt; echo hi > /outside-root-escape.txt", "SURVEY_PATH_ESCAPE", "redirect >", "/outside-root-escape.txt"},
@@ -327,7 +362,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 			rs := newCommandProgramSession(t, c.program, "")
 			testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
 			out := rs.result(t)
-			for _, want := range []string{c.code, c.cmd, c.word, `"completed_effects":1`, `1:`} {
+			for _, want := range []string{c.code, c.cmd, c.word, `"completed_effects": 1`, `1:`} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("%s: missing %q in %s", c.name, want, out)
 				}

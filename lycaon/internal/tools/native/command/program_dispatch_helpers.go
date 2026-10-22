@@ -109,6 +109,10 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 			return err
 		}
 		invoked = true
+	} else if isRedirectConstruct(command) {
+		if teeSpec, ok := d.run.commands["tee"]; ok && len(teeSpec.Effects) > 0 {
+			child.bound, _ = toolcontract.BindOperation(definition, invocation, teeSpec.Name, teeSpec.Effects[0].Mode, nil)
+		}
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -146,7 +150,12 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 }
 
 func isRedirectConstruct(command string) bool {
-	return strings.HasPrefix(command, "redirect ")
+	switch command {
+	case ">", ">>", "2>", "2>>", "&>", "&>>":
+		return true
+	default:
+		return strings.HasPrefix(command, "redirect ")
+	}
 }
 
 // structuralDefinition compiles one definition per evaluator construct.
@@ -161,9 +170,16 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
 	}
+	var commands []toolcontract.CommandSpecification
+	if isRedirectConstruct(construct) {
+		if teeSpec, ok := d.run.commands["tee"]; ok {
+			contract.Owner = teeSpec.Owner
+			commands = []toolcontract.CommandSpecification{teeSpec}
+		}
+	}
 	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
 		Identity: "program " + construct, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
-		Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
+		Commands: commands, Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
 		Streams: toolcontract.StreamContract{Input: "program streams", Output: "program streams", Error: "typed owner rejection; prose is diagnostic", Statuses: map[int]string{0: "aggregate status of the construct"}},
 	})
 	if err != nil {

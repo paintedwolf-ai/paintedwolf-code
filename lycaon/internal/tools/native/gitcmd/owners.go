@@ -130,7 +130,11 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, err
 	}
-	return Prepared{Command: spec.Name, Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(spec.Name), command: parsed, owners: o, paths: paths}, nil
+	reviewID := o.ops[spec.Name]
+	if reviewID == "" {
+		reviewID = spec.Name
+	}
+	return Prepared{Command: spec.Name, Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(reviewID), command: parsed, owners: o, paths: paths}, nil
 }
 
 // InvokeOwner runs the bound command once and settles Git's status.
