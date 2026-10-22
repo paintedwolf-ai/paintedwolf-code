@@ -197,6 +197,24 @@ One broker serves the host, at an address recorded in the state directory and re
 
 No credential travels in that environment. Identity is the calling process: the broker resolves the peer of each loopback connection to the launch it descends from, through an inherited descriptor that fork, exec, and setsid all preserve. A process cannot forge descent it does not have, and one it does have cannot be lost by reparenting. Where descendants cannot be observed, mediated egress is not offered at all rather than offered without attribution.
 
+### Host proxy policy
+
+[`internal/hostproxy`](../lycaon/internal/hostproxy) owns proxy selection for each effective destination: loopback destinations and `NO_PROXY` exceptions remain direct, explicit environment settings take precedence, and desktop settings supply the remaining policy. Invalid settings, unavailable configured readers, and unsupported PAC/WPAD return a failure; they never authorize a direct retry. Linux GNOME settings use a fixed, bounded native read. Nix packaging binds that reader to its retained GLib executable, without an environment or agent-selected command override.
+
+| Network path | Proxy owner |
+|---|---|
+| Provider, MCP, browser metadata, model provisioning and ordinary host HTTP | Purpose-bound `httpclient` transports select policy for each request and redirect |
+| OSV advisory exports | The scanner HTTP factory supplies the host download transport |
+| First-party mediated HTTP and feed requests | Authorization and address validation precede `hostproxy.DialPinned` for every hop |
+| Command and managed-browser broker connections | The existing action lease and destination grant precede the same pinned dialer |
+| Linux native update discovery | A bounded private engine child resolves each pointer/signature URL; native requests refuse redirects |
+| Exact loopback, Unix sockets and local native services | Explicit local transports retain their existing capability boundary |
+| Release artifact generation tooling | Build-time clients retain their own supplied transport; they are not an application network path |
+
+Pinned routes send the approved numeric address and port through HTTP/HTTPS CONNECT or SOCKS5. They preserve the original HTTP host and TLS server identity, so proxy-side DNS cannot change the approved destination. Proxy setup has bounded replies and cancellation, normal certificate verification, and no authentication or direct fallback. Proxy credentials belong only to the selected proxy connection; they do not enter origin headers, command environments or transport diagnostics. Selecting a proxy does not grant a destination, local socket or loopback capability.
+
+The native updater captures an engine descriptor against the package manifest and running desktop before using it for auxiliary children. A package mismatch requires restart; an installation without a qualified capture refuses the helper. Nix generation admission is supplied by the separate generation owner. Signed feed verification and HTTPS validation remain independent checks.
+
 ### Processes a command leaves behind
 
 Build tooling reuses daemons by design: a build server, a test supervisor, a watcher, a language server. On macOS a process that outlives the command which started it keeps the boundary applied at spawn, so the host tracks whose it is rather than losing sight of it. On Linux a command's processes end with the command: the helper is the first process of the command's PID namespace, and when it exits the kernel ends everything left inside.
