@@ -124,10 +124,13 @@ func verifyArtifactDirectory(m *Manifest, directory string) error {
 	if err := verifyArtifactFile(binary, art.SHA256, art.BinaryBytes, true, art.GOOS); err != nil {
 		return err
 	}
-	for _, part := range m.identity.Payload {
+	for _, part := range artifactPayloads(m) {
 		if err := verifyArtifactFile(filepath.Join(directory, part.Name), part.SHA256, part.Bytes, false, art.GOOS); err != nil {
 			return err
 		}
+	}
+	if m.identity.Consumer != nil {
+		return verifyConsumerRecord(m, directory)
 	}
 	return nil
 }

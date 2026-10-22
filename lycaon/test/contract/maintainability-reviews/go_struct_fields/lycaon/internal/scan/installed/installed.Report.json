@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/scan/installed/installed.Report",
+  "kind": "projection",
+  "workstream": "linux-installed-scanner",
+  "disposition": "retain",
+  "reason": "The 15-field report remains one flat qualification result: final artifact identity, applied confinement, execution outcome, and product cases. Explicit build-selected qualification adds no report fields; root, cancellation, empty-report, mapping, and packaged-identity contracts preserve this projection while producer admission and consumer sealing remain in the bundled artifact owner.",
+  "reviewed_commit": "03591bc76deb23ccb2bd0f2f75219b20aaada1ba",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/scan/installed/verify_test.go": "52ac5dc4d43a2ee99fd9df1e76cd23eb03e2eef28ce483a9fdd3873c393ef646",
+    "lycaon/internal/scan/installed/selected_unix_test.go": "f7912f690ff4712498f1df824ef0643343fed447f7f9e5d99bf523f074791d3e",
+    "lycaon/internal/scan/installed/verify_integration_linux_test.go": "984b19325c9fe1f992bf2075bb1ea9c46be51000bb4ca5d439f44ad26eb1daf9",
+    "lycaon/cmd/lycaon/scan_engines_installed_test.go": "978a9cdad7d10daa5515ddbdcf1bfe04ff7f8114b7d62c3714f67adaad80ed3b"
+  },
+  "reviewed_shape": "d55b94982c8d35c71019bc653ca6a1067a682ac321d24459a9b33eed7403139c"
+}

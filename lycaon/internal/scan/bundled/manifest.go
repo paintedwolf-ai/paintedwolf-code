@@ -24,6 +24,8 @@ type Manifest struct {
 	identity          *BuildIdentity
 	artifactDirectory string
 	releaseAdmitted   bool
+	consumerPending   bool
+	consumerSource    *Manifest
 }
 
 type OpenGrepManifest struct {

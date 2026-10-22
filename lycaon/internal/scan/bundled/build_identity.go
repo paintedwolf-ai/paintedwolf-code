@@ -22,6 +22,7 @@ type BuildIdentity struct {
 	BinarySHA256         string            `json:"binary_sha256"`
 	BinaryBytes          int64             `json:"binary_bytes"`
 	Payload              []PayloadIdentity `json:"payload"`
+	Consumer             *ConsumerIdentity `json:"consumer,omitempty"`
 }
 
 // PayloadIdentity binds a fixed artifact filename to its content.
@@ -38,7 +39,7 @@ var artifactPayloadNames = [...]string{
 }
 
 func (identity *BuildIdentity) validate(source OpenGrepManifest) error {
-	if identity.SchemaVersion != 1 || identity.Version != source.Version || identity.SourceLockSHA256 != source.SourceLockSHA256 || identity.SourceManifestSHA256 != source.SourceManifestSHA256 {
+	if !((identity.SchemaVersion == 1 && identity.Consumer == nil) || (identity.SchemaVersion == 2 && identity.Consumer != nil)) || identity.Version != source.Version || identity.SourceLockSHA256 != source.SourceLockSHA256 || identity.SourceManifestSHA256 != source.SourceManifestSHA256 {
 		return fmt.Errorf("opengrep build identity differs from maintained source selection")
 	}
 	if !supportedPlatform(identity.GOOS, identity.GOARCH) || !validHex(identity.BinarySHA256, 32) || identity.BinaryBytes <= 0 || identity.BinaryBytes > maxArtifactBytes {
@@ -55,6 +56,9 @@ func (identity *BuildIdentity) validate(source OpenGrepManifest) error {
 		if name == "source-lock.json" && part.SHA256 != source.SourceLockSHA256 {
 			return fmt.Errorf("opengrep source payload differs from source selection")
 		}
+	}
+	if identity.Consumer != nil {
+		return identity.Consumer.validate(identity)
 	}
 	return nil
 }
@@ -94,7 +98,7 @@ func EncodedBuildIdentity(m *Manifest) (string, error) {
 	if err := ValidateManifest(m); err != nil {
 		return "", err
 	}
-	if m.identity == nil || m.artifactDirectory == "" {
+	if m.identity == nil || m.artifactDirectory == "" || m.consumerPending {
 		return "", fmt.Errorf("a verified build artifact is required to emit identity")
 	}
 	if err := verifyArtifactDirectory(m, m.artifactDirectory); err != nil {

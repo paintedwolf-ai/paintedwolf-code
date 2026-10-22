@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 )
 
-func runScanEngines(args []string) error {
+func runScanEngines(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "verify-installed" {
+		return runVerifyInstalledEngine(ctx, args[1:], os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "verify-bundled" {
 		return runVerifyBundledEngine(args[1:])
 	}
