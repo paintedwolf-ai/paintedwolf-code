@@ -578,6 +578,16 @@ func (inv *invocation) gunzipBytes(data []byte) ([]byte, error) {
 	return io.ReadAll(&boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
 }
 
+func (inv *invocation) gunzipStream(data []byte) error {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = gz.Close() }()
+	_, err = io.Copy(inv.stdout, &boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
+	return err
+}
+
 // replaceCompressed publishes the new file, refusing to replace an existing
 // one, then recoverably removes the input.
 func (inv *invocation) replaceCompressed(input, output string, data []byte) (int, error) {
@@ -602,19 +612,13 @@ func runZcat(inv *invocation) error {
 		if int64(len(data)) > inv.owners.limit("archive_input_bytes") {
 			return limitRefusal("archive_input_bytes", "bytes", inv.owners.limit("archive_input_bytes"), int64(len(data)))
 		}
-		decoded, err := inv.gunzipBytes(data)
-		if err != nil {
-			return err
-		}
-		_, err = inv.stdout.Write(decoded)
-		return err
+		return inv.gunzipStream(data)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
-		decoded, err := inv.gunzipFile(operand)
+		data, _, err := inv.readBound(operand, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
 		if err != nil {
 			return 0, err
 		}
-		_, err = inv.stdout.Write(decoded)
-		return 0, err
+		return 0, inv.gunzipStream(data)
 	})
 }

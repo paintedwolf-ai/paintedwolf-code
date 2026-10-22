@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -15,16 +16,40 @@ import (
 // errBinaryStop ends one binary file's output after its notice.
 var errBinaryStop = errors.New("binary file matched")
 
-// searchContent selects records of one input and prints them in GNU form:
+type nullTrackingReader struct {
+	r         io.Reader
+	offset    int
+	firstNull *int
+}
+
+func (n *nullTrackingReader) Read(p []byte) (int, error) {
+	read, err := n.r.Read(p)
+	if read > 0 && *n.firstNull < 0 {
+		if idx := bytes.IndexByte(p[:read], 0); idx >= 0 {
+			*n.firstNull = n.offset + idx
+		}
+	}
+	n.offset += read
+	return read, err
+}
+
+// searchContent selects records of one in-memory input.
+func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
+	return r.searchStream(label, bytes.NewReader(content), 0, len(content), bytes.IndexByte(content, 0), pin, names)
+}
+
+// searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
 // output line becomes one "grep: PATH: binary file matches" notice on stderr
 // (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
-func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
+func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
-	r.numberWidth = len(strconv.Itoa(len(content)))
-	binary := !r.scan.NullData && bytes.IndexByte(content, 0) >= 0
+	r.numberWidth = len(strconv.Itoa(totalBytes))
+	if !r.scan.NullData && firstNull < 0 {
+		reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+	}
 	listing := r.mode != modeLines
 	separator := false
 	emitted := false
@@ -36,7 +61,10 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	if listing {
 		scan.Before, scan.After = 0, 0
 	}
-	n, err := textsearch.ScanLines(inv.ctx, content, r.matcher, scan, func(line textsearch.Line) error {
+	onExceed := func(maximum, observed int64) error {
+		return limitExceeded("stream_bytes", maximum, observed)
+	}
+	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
 			r.selected = true
@@ -47,12 +75,13 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 		if listing {
 			return nil
 		}
-		record := content[line.Start:line.End]
+		record := line.Text
+		binary := !r.scan.NullData && firstNull >= 0
 		if binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}
-			if err := r.binaryNotice(label, names, line, content); err != nil {
+			if err := r.binaryNotice(label, names, line, firstNull); err != nil {
 				return err
 			}
 			return errBinaryStop
@@ -98,12 +127,12 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	return nil
 }
 
-func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, content []byte) error {
+func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, firstNull int) error {
 	if !r.rg {
 		r.inv.warn(false, "%s: binary file matches", label)
 		return nil
 	}
-	offset := bytes.IndexByte(content, 0)
+	offset := firstNull
 	if offset < 0 {
 		offset = line.Start
 	}

@@ -1,6 +1,7 @@
 package query
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,8 @@ type inputs struct {
 	pendingEvents []any
 	pending       []any
 	stream        *nativejq.ValueStream
+	rawReader     *bufio.Reader
+	rawOffset     int64
 	// data holds the current operand's bytes read so far, for positions.
 	data   *bytes.Buffer
 	label  string
@@ -68,6 +71,26 @@ func (in *inputs) nextValue() (any, bool) {
 			v := in.pending[0]
 			in.pending = in.pending[1:]
 			return v, true
+		}
+		if in.rawReader != nil {
+			line, err := in.rawReader.ReadString('\n')
+			if len(line) == 0 && errors.Is(err, io.EOF) {
+				in.rawReader = nil
+				continue
+			}
+			if err != nil && !errors.Is(err, io.EOF) {
+				in.stop = err
+				return nil, false
+			}
+			in.rawOffset += int64(len(line))
+			if in.rawOffset > in.limit {
+				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
+				return nil, false
+			}
+			if errors.Is(err, io.EOF) {
+				in.rawReader = nil
+			}
+			return strings.TrimSuffix(line, "\n"), true
 		}
 		if in.stream != nil {
 			v, err := in.stream.Decode()
@@ -121,6 +144,11 @@ func (in *inputs) open(operand string) {
 	}
 	if !in.raw && !in.yaml {
 		in.stream = nativejq.NewValueStream(data)
+		return
+	}
+	if in.raw && !in.yaml {
+		in.rawReader = bufio.NewReader(data)
+		in.rawOffset = 0
 		return
 	}
 	text, err := in.readAll(data, operand == "-")
@@ -247,6 +275,8 @@ func (in *inputs) current() (any, int) {
 	end := int64(in.data.Len())
 	if in.stream != nil {
 		end = in.stream.InputOffset()
+	} else if in.rawReader != nil {
+		end = in.rawOffset
 	}
 	var name any = in.label
 	if in.label == "<stdin>" {

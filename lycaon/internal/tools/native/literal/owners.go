@@ -142,6 +142,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer inv.closeInputs()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()

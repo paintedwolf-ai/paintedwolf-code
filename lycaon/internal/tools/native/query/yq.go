@@ -13,6 +13,7 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -175,7 +176,7 @@ func (inv *invocation) regularFile(operand string) bool {
 // fail reports an ordinary yq error; typed refusals and interruption stop
 // the run instead.
 func (r *yqRun) fail(err error) error {
-	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, commandprogram.ErrConsumerClosed) {
 		return err
 	}
 	_, _ = fmt.Fprintf(r.inv.stderr, "Error: %s\n", err)

@@ -711,7 +711,7 @@ func (r *programRun) childOutputs(request commandprogram.OperationRequest, strea
 	}
 	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
 	teed := streams
-	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	teed.Output = teedOutput{primary: nonNilWriter(streams.Output), copy: stdout}
 	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
 	execution := request.Invocation.Identity.ExecutionID
 	return teed, func(ctx context.Context) {
@@ -726,6 +726,33 @@ func (r *programRun) childOutputs(request commandprogram.OperationRequest, strea
 			}
 		}
 	}
+}
+
+type teedOutput struct {
+	primary io.Writer
+	copy    io.Writer
+}
+
+func (t teedOutput) Write(p []byte) (int, error) {
+	n, err := t.primary.Write(p)
+	if n > 0 {
+		_, _ = t.copy.Write(p[:n])
+	}
+	return n, err
+}
+
+func (t teedOutput) ConsumerClosed() bool {
+	if closed, ok := t.primary.(interface{ ConsumerClosed() bool }); ok {
+		return closed.ConsumerClosed()
+	}
+	return false
+}
+
+func (t teedOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
+	if recorder, ok := t.primary.(commandprogram.SourceMappingRecorder); ok {
+		return recorder.RecordSourceMapping(mapping)
+	}
+	return nil
 }
 
 // stampProgramRun states the settled program's run for verification evidence:
