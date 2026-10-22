@@ -8,22 +8,35 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/launchguard"
 )
 
+func init() {
+	launchguard.ScrubBootstrapEnvironment()
+}
+
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == launchguard.StageArgument {
+	os.Exit(run(os.Args, os.Stderr))
+}
+
+func run(args []string, stderr io.Writer) int {
+	if len(args) == 2 && args[1] == launchguard.StageArgument {
 		if err := launchguard.RunStage(); err != nil {
-			fmt.Fprintf(os.Stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
-			os.Exit(1)
+			if launchguard.DropPrivilegesForError() {
+				_, _ = fmt.Fprintf(stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
+			}
+			return 1
 		}
-		return
+		return 0
 	}
-	status, err := launchguard.RunBootstrap(os.Args[1:])
+	status, err := launchguard.RunBootstrap(args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
+		if launchguard.DropPrivilegesForError() {
+			_, _ = fmt.Fprintf(stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
+		}
 	}
-	os.Exit(status)
+	return status
 }
