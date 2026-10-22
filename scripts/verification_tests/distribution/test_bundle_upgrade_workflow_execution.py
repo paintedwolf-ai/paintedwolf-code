@@ -56,6 +56,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)
         self.assertNotIn("secrets.", execution)
         self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)
+        self.assertIn("working-directory: lycaon-den", execution)
+        self.assertIn("bun install --frozen-lockfile", execution)
         self.assertIn("max-parallel: 1", execution)
         self.assertIn("matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}", execution)
         self.assertIn('matrix.case_id', execution)
