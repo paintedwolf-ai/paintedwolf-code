@@ -24,6 +24,7 @@ func TestRemovalReviewCannotApproveChangedTree(t *testing.T) {
 				if len(changes) != 1 || !changes[0].RecoveryLoss || changes[0].Preview.BeforeBytes != 6 {
 					t.Fatalf("inaccurate review: %+v", changes)
 				}
+				t.Logf("permanent-removal preview: %s", changes[0].Preview.PreviewNote)
 				if replace {
 					testutil.FailErr(t, "retain old tree", os.Rename(h.path("tree"), h.path("old-tree")))
 					testutil.FailErr(t, "replace tree", os.Mkdir(h.path("tree"), 0o755))

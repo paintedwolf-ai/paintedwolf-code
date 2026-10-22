@@ -24,6 +24,7 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, ch := range changes {
 			notes = append(notes, ch.Preview.PreviewNote)
+			t.Logf("permanent-removal preview: %s", ch.Preview.PreviewNote)
 		}
 		return errors.New("person declined permanent deletion")
 	}
