@@ -41,6 +41,38 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
 
+    def test_admission_contracts_fail_closed_before_static_checks(self):
+        scope = dict(base="b" * 40, head="a" * 40, paths=[".github/workflows/ci.yml"], full=True)
+        for preflight_code in (0, 1, 2, -15):
+            with self.subTest(code=preflight_code), tempfile.TemporaryDirectory() as directory, \
+                    patch("ci_policy.impact.change", return_value=scope), \
+                    patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0]) as run:
+                self.assertEqual(ci.run_lane("ready"), preflight_code)
+                self.assertEqual(run.call_args_list[0].args[0],
+                                 ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
+                self.assertEqual(run.call_count, 2 if preflight_code == 0 else 1)
+                record = json.loads((Path(directory) / "ci/run.json").read_text())
+                self.assertEqual(record["preflight"]["exit_code"], preflight_code)
+                self.assertIn("finished_at", record["preflight"])
+                self.assertEqual(record["scope"], scope)
+
+    def test_interrupted_admission_keeps_an_unfinished_record(self):
+        scope = dict(base="b" * 40, head="a" * 40, paths=[], full=False)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch("ci_policy.impact.change", return_value=scope), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", side_effect=KeyboardInterrupt) as run:
+            with self.assertRaises(KeyboardInterrupt):
+                ci.run_lane("ready")
+            self.assertEqual(run.call_count, 1)
+            record = json.loads((Path(directory) / "ci/run.json").read_text())
+            self.assertEqual(record["status"], "running")
+            self.assertNotIn("exit_code", record)
+            self.assertEqual(record["preflight"]["command"],
+                             ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
+            self.assertNotIn("exit_code", record["preflight"])
+
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
