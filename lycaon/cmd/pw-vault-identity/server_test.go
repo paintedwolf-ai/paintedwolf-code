@@ -11,7 +11,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,11 +68,28 @@ func entry(path string, image []byte) pkgmanifest.Executable {
 	return pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(image))}
 }
 
+// writeManifest seals the listed executables in a complete payload inventory, as
+// the package producer does; the vault server reads the same installed shape.
 func writeManifest(t *testing.T, path string, executables ...pkgmanifest.Executable) {
 	t.Helper()
+	const installRoot = "/opt/painted-wolf-code"
+	payload := map[string]pkgmanifest.PayloadEntry{}
+	for _, exe := range executables {
+		relative := strings.TrimPrefix(exe.Path, installRoot+"/")
+		for parent := filepath.Dir(relative); parent != "."; parent = filepath.Dir(parent) {
+			payload[parent] = pkgmanifest.PayloadEntry{Path: parent, Kind: "directory", Mode: 0o755}
+		}
+		sum, size := exe.SHA256, exe.Size
+		payload[relative] = pkgmanifest.PayloadEntry{Path: relative, Kind: "file", Mode: 0o755, SHA256: &sum, Size: &size}
+	}
+	entries := make([]pkgmanifest.PayloadEntry, 0, len(payload))
+	for _, row := range payload {
+		entries = append(entries, row)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	raw, err := json.Marshal(pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: "1.0.2",
-		Architecture: "x86_64", InstallRoot: "/opt/painted-wolf-code", Executables: executables,
+		Architecture: "x86_64", InstallRoot: installRoot, Executables: executables, Payload: entries,
 	})
 	testutil.FailErr(t, "encode manifest", err)
 	testutil.FailErr(t, "write manifest", os.WriteFile(path, raw, 0o644))
