@@ -365,12 +365,16 @@ func TestCommandGuidanceRenderMatrix(t *testing.T) {
 				if strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`") != wantMultiFolderCd {
 					t.Errorf("multi-folder cd guidance present=%v, want %v:\n%s", strings.Contains(cmdSurface, "`cd` moves between folders by absolute path or `@label`"), wantMultiFolderCd, cmdSurface)
 				}
-				wantStrict := tc.posture.ReviewsConfinedWrites()
-				if strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first.") != wantStrict {
-					t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
-				}
-				if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
-					t.Errorf("balanced outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
+				if !tc.readOnly {
+					wantStrict := tc.posture.ReviewsConfinedWrites()
+					if strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first.") != wantStrict {
+						t.Errorf("strict outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths, including temporary folders, ask the person first."), wantStrict)
+					}
+					if strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders.") != !wantStrict {
+						t.Errorf("balanced outside-folder copy present=%v, want %v", strings.Contains(cmdSurface, "Other paths ask the person first, except temporary and cache folders."), !wantStrict)
+					}
+				} else if strings.Contains(cmdSurface, "Other paths") {
+					t.Errorf("read-only surface must not render outside-folder write approval copy:\n%s", cmdSurface)
 				}
 			} else {
 				for _, unexpected := range []string{"These folders are the project", "@label", "non-primary", "Roots:"} {
