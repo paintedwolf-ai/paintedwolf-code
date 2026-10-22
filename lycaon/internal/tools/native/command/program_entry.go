@@ -440,7 +440,9 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			}
 			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
 				for key, value := range cause.Data {
-					if _, set := data[key]; !set { data[key] = value }
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
 				}
 			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)

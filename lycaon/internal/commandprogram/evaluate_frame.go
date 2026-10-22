@@ -25,7 +25,7 @@ type frameState struct {
 	last       *ChildRecord
 	pipeStatus []int
 	options    shellOptions
-	directory string
+	directory  string
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines

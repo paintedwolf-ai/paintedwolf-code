@@ -163,7 +163,9 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 		return Prepared{}, err
 	}
 	reviewID := o.ops[spec.Name]
-	if reviewID == "" { reviewID = spec.Name }
+	if reviewID == "" {
+		reviewID = spec.Name
+	}
 	return Prepared{
 		Command:   spec.Name,
 		Operation: o.ops[spec.Name],
