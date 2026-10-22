@@ -27,16 +27,18 @@ def complete(record, results, environment):
     from ci_policy.verification_verdict import require_success
     if not valid_identity(record) or set(record) != IDENTITY | {"admitted", "reason"} or record.get("admitted") is not True:
         raise ValueError("qualification source selection is missing or was not admitted")
+    attempt = int(environment["GITHUB_RUN_ATTEMPT"])
     expected = {"repository": environment["GITHUB_REPOSITORY"], "run_id": int(environment["GITHUB_RUN_ID"]),
-                "run_attempt": int(environment["GITHUB_RUN_ATTEMPT"]), "controller_sha": environment["GITHUB_WORKFLOW_SHA"],
+                "controller_sha": environment["GITHUB_WORKFLOW_SHA"],
                 "event": environment["GITHUB_EVENT_NAME"]}
-    if any(record.get(key) != value for key, value in expected.items()):
+    # Failed-job reruns retain successful selection outputs from an earlier attempt.
+    if record["run_attempt"] > attempt or any(record.get(key) != value for key, value in expected.items()):
         raise ValueError("qualification source selection belongs to another workflow attempt")
     if not isinstance(results, dict) or set(results) != CHECKS:
         raise ValueError("qualification requires the complete declared stage set")
     require_success(results)
     return {key: value for key, value in record.items() if key not in {"admitted", "reason"}} | {
-        "checks": {name: results[name]["result"] for name in sorted(CHECKS)}}
+        "run_attempt": attempt, "checks": {name: results[name]["result"] for name in sorted(CHECKS)}}
 
 
 def matches(record, repository, source, run):

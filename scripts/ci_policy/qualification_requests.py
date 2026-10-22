@@ -36,7 +36,7 @@ def select(environment):
     reason = "selected candidate" if event == "workflow_dispatch" else "current main"
     if event == "push" and source != tip:
         reason = "superseded main snapshot"
-    admitted = reason in {"selected candidate", "current main"}
+    admitted = event == "workflow_dispatch" or source == tip
     tree = subprocess.check_output(["git", "rev-parse", source + "^{tree}"], cwd=ROOT, text=True).strip()
     return {"version": 1, "repository": repository, "run_id": run_id,
             "run_attempt": int(environment["GITHUB_RUN_ATTEMPT"]), "event": event,

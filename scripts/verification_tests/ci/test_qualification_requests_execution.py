@@ -69,7 +69,7 @@ class QualificationReceiptTests(unittest.TestCase):
         self.assertEqual(completed["source_sha"], SOURCE)
         self.assertEqual(completed["controller_sha"], CONTROLLER)
         self.assertNotIn("reason", completed)
-        for changed in ({"admitted": False}, {"run_attempt": 1}, {"source_sha": "main"},
+        for changed in ({"admitted": False}, {"run_attempt": 3}, {"source_sha": "main"},
                         {"controller_sha": SOURCE}, {"repository": "foreign/repo"}, {"version": True}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 receipt.complete({**selection(), **changed}, results, ENVIRONMENT)
@@ -80,6 +80,15 @@ class QualificationReceiptTests(unittest.TestCase):
         for malformed in ({}, {**results, "other": {"result": "success"}}):
             with self.assertRaises(ValueError):
                 receipt.complete(selection(), malformed, ENVIRONMENT)
+
+    def test_failed_job_rerun_binds_retained_selection_to_the_completed_attempt(self):
+        results = {name: {"result": "success"} for name in receipt.CHECKS}
+        completed = receipt.complete({**selection(), "run_attempt": 1}, results, ENVIRONMENT)
+        self.assertEqual(completed["run_attempt"], 2)
+        self.assertEqual(completed["source_sha"], SOURCE)
+        for changed in ({"run_id": 7}, {"controller_sha": SOURCE}, {"run_attempt": 3}):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                receipt.complete({**selection(), **changed}, results, ENVIRONMENT)
 
     def test_receipt_binds_source_controller_repository_and_attempt(self):
         results = {name: {"result": "success"} for name in receipt.CHECKS}
@@ -104,3 +113,32 @@ class QualificationReceiptTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         receipt.decode(data.getvalue())
+
+    def test_receipt_lookup_selects_only_one_unexpired_current_attempt(self):
+        run = dict(id=42, run_attempt=2)
+        selected = dict(id=7, name="qualification-source-2", expired=False, size_in_bytes=100)
+        old = dict(id=6, name="qualification-source-1", expired=False, size_in_bytes=100)
+        with patch.object(receipt, "pages", return_value=[old, selected]), \
+                patch.object(receipt.subprocess, "check_output", return_value=b"archive") as download, \
+                patch.object(receipt, "decode", return_value=selection()):
+            self.assertEqual(receipt.from_run("owner/repo", run), selection())
+            download.assert_called_once_with(["gh", "api", "repos/owner/repo/actions/artifacts/7/zip"])
+        for rows in ([old], [{**selected, "expired": True}]):
+            with patch.object(receipt, "pages", return_value=rows), \
+                    patch.object(receipt.subprocess, "check_output") as download:
+                self.assertIsNone(receipt.from_run("owner/repo", run))
+                download.assert_not_called()
+        for rows in ([selected, selected], [{**selected, "size_in_bytes": receipt.MAX_BYTES + 1}]):
+            with patch.object(receipt, "pages", return_value=rows), \
+                    patch.object(receipt.subprocess, "check_output") as download, self.assertRaises(ValueError):
+                receipt.from_run("owner/repo", run)
+            download.assert_not_called()
+
+    def test_aggregate_lookup_requires_a_unique_success_on_the_completed_attempt(self):
+        run = dict(id=42, run_attempt=2)
+        good = dict(name="qualification", conclusion="success")
+        for jobs, accepted in [([good], True), ([], False), ([good, good], False),
+                               ([{**good, "conclusion": "skipped"}], False)]:
+            with self.subTest(jobs=jobs), patch.object(receipt, "pages", return_value=jobs) as pages:
+                self.assertEqual(receipt.aggregate_passed("owner/repo", run), accepted)
+                pages.assert_called_once_with("repos/owner/repo/actions/runs/42/attempts/2/jobs", "jobs")

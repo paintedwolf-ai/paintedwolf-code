@@ -805,9 +805,9 @@ the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
 retains up to 100 pending requests without canceling a running qualification.
 When a push reaches the executor, source selection cancels that request if main
-has advanced. Current main and explicit candidates retain their queue order. Cancellation does not spend
-verification runners or produce qualification evidence. The queue limit is a
-bound, not a reservation: GitHub cancels additional requests when it is full.
+has advanced. Current main and explicit candidates retain their queue order.
+Cancellation does not spend verification runners or produce qualification
+evidence. The queue limit is a bound, not a reservation: GitHub cancels additional requests when it is full.
 
 A manual request selects a full `source-sha` from main's history, or the dispatch
 commit when omitted. The main workflow remains the controller; each verification,
@@ -816,12 +816,25 @@ every stage and publishes `qualification-source-<attempt>`, binding the source
 commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
 request cannot qualify a source. Release admission verifies that binding and a
 successful aggregate job and an unexpired source receipt. Runs without that
-receipt must be qualified again before release. Selected candidates share the same three-runner
-capacity as background main qualification.
+receipt must be qualified again before release. A failed-job rerun may reuse its
+successful source selection; the receipt identifies the attempt that completed
+the aggregate. Selected candidates share the same three-runner capacity as
+background main qualification.
 
 Nightly retains race, fuzz, WebKit, stress, and performance coverage. A release
 requires a successful **Qualification** run for its exact source on main;
 passing merge admission is insufficient.
+
+Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
+analysis-tool caches immediately after compiler preparation. Optional lint
+diagnostics run afterward and publish their own result separately. WebKitGTK
+images also publish before diagnostics, so diagnostic cleanup cannot block
+their reuse. A failed or cancelled preparation cannot publish these caches;
+only trusted main writes them.
+The Go cache captures completed build preparation before lint adds test-variant
+compilation and vet facts; lint lanes may need to compute those entries themselves.
+Lint diagnostics remain a separate cache. A long diagnostic run cannot delay the
+prepared build inputs.
 
 #### Determinism and capacity
 
