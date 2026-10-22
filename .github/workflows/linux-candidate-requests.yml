@@ -1,0 +1,20 @@
+name: Linux candidate requests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-candidate-requests
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  candidates:
+    uses: ./.github/workflows/linux-candidates.yml
+    with:
+      source_sha: ${{ github.sha }}
