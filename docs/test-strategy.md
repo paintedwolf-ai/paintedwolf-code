@@ -644,7 +644,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` | Coverage of the Go and Den statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:fast, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, and changed coverage |
+| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and full qualification after merge, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -684,15 +684,20 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the hosted policy, runner, verification-evidence,
-host, and security contract packages, then compiles the host and runs `lint:full`,
-size budgets, Den typecheck, Den lint, and frontend seam canaries. Host watch-coverage,
-browser-launch, and native IPC registration contracts reject changes before
-enqueueing. These checks are covered by `./task check-fast`, which also runs
-broader product tests and changed coverage. The admission contracts run through
-`test:contract` with explicit packages, without a test-name filter. Failure or
-interruption stops the lane before its remaining work. Catalog validation accepts
-existing contract packages and rejects selectors, traversal, and duplicate packages.
+job, `ready`: it first runs the complete repository contract tree, then compiles
+the host and runs `lint:full`, size budgets, Go changed coverage, comment checks,
+test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+Host watch-coverage, browser-launch, and native IPC registration contracts reject changes before enqueueing. These checks are covered by `./task check-fast`, which also runs product tests
+and Den changed coverage. Admission uses `test:contract -- ./test/contract/...`
+without a test-name filter. Failure or interruption stops the lane before its
+remaining work. Catalog validation accepts
+the complete contract tree or existing contract packages and rejects selectors,
+traversal, and duplicate packages.
+Release corpus fixtures assert compatibility command arguments and failure
+propagation with a stub; a separate contract runs the real compatibility checker
+once against the checkout, sharing its compiler cache. It also checks the
+migration identities of every stable release tag; release CI adds the published
+preview releases it reads from GitHub.
 
 The execution budget is two hours, allowing the integration lint lane's existing
 ninety-minute allowance plus the contracts and remaining checks. This is a

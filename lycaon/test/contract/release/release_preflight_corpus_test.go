@@ -1,9 +1,13 @@
 package contract
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -13,7 +17,6 @@ import (
 // preflightInputs are the files release-preflight.sh reads before its corpus check.
 var preflightInputs = []string{
 	"VERSION", "RELEASE_BUILD", "CHANGELOG.md",
-	"lycaon/go.mod", "lycaon/go.sum",
 	"lycaon-den/package.json", "lycaon-den/src-tauri/tauri.conf.json",
 	"lycaon-den/src-tauri/Cargo.toml", "lycaon-den/src-tauri/Cargo.lock",
 	"packaging/update-keys.json", "packaging/release-platforms.json",
@@ -23,21 +26,27 @@ var preflightInputs = []string{
 }
 
 func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
+	t.Parallel()
 	repo := contractcheck.RepoRoot(t)
 	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, repo, "VERSION"))
 	for _, tc := range []struct {
-		name           string
-		manifest       bool
-		engineOverride bool
-		controller     bool
+		name               string
+		manifest           bool
+		engineOverride     bool
+		controller         bool
+		compatibilityFails bool
 	}{
+		{name: "compatibility failure blocks corpus", manifest: true, compatibilityFails: true},
+		{name: "controller compatibility failure blocks corpus", manifest: true, controller: true, compatibilityFails: true},
 		{name: "missing manifest", engineOverride: true},
 		{name: "complete corpus", manifest: true, engineOverride: true},
 		{name: "complete corpus with checkout engine", manifest: true},
 		{name: "controller validates selected corpus without building it", manifest: true, engineOverride: true, controller: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			root := t.TempDir()
+			contractcheck.FailErr(t, "create preflight module directory", os.MkdirAll(filepath.Join(root, "lycaon"), 0o700))
 			paths := contractcheck.InstallArtifactPaths(t, root, t.TempDir())
 			calls := filepath.Join(root, "candidate-calls")
 			files := map[string]string{
@@ -46,8 +55,12 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 printf built > "$PREFLIGHT_BUILD_CALLS"
 `,
 				"scripts/upgrade-fixture-files.py": "import sys\nwith open(" + pythonString(calls) + ", 'a') as log:\n    log.write(' '.join(sys.argv[1:]) + '\\n')\n",
-				"tools/bun":                        "#!/bin/sh\nexit 0\n",
+				"tools/bun":                        "#!/bin/sh\nprintf %s https://github.com/paintedwolf-ai/paintedwolf-code/issues\n",
 			}
+			files["tools/go"] = `#!/bin/sh
+printf '%s\n' "$PWD" "$LYCAON_ENGINE_ROOT" "$@" > "$PREFLIGHT_COMPATIBILITY_CALLS"
+exit "${PREFLIGHT_COMPATIBILITY_EXIT:-0}"
+`
 			candidate := root
 			if tc.controller {
 				candidate = t.TempDir()
@@ -67,19 +80,6 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 			}
 			if tc.controller {
 				contractcheck.FailErr(t, "write candidate VERSION", os.WriteFile(filepath.Join(candidate, "VERSION"), []byte(version+"\n"), 0o700))
-				contractcheck.FailErr(t, "link candidate git", os.Symlink(filepath.Join(repo, ".git"), filepath.Join(candidate, ".git")))
-			}
-			// Candidate inputs stay inside the source boundary.
-			for _, rel := range []string{"schemas", "lycaon/internal", "lycaon/config"} {
-				contractcheck.FailErr(t, "copy preflight candidate "+rel, os.CopyFS(filepath.Join(candidate, rel), os.DirFS(filepath.Join(repo, rel))))
-			}
-			controllerLinks := []string{".git", "third_party", "lycaon/cmd", "lycaon/pkg", "lycaon-den/src-tauri/engine-root"}
-			if tc.controller {
-				controllerLinks = append(controllerLinks, "lycaon/internal", "lycaon/config")
-			}
-			for _, rel := range controllerLinks {
-				contractcheck.FailErr(t, "link preflight archive dependency "+rel,
-					os.Symlink(filepath.Join(repo, rel), filepath.Join(root, rel)))
 			}
 			args := []string{filepath.Join(root, "scripts", "release-preflight.sh"), "--require-corpus"}
 			if tc.controller {
@@ -89,7 +89,12 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "tools")+string(os.PathListSeparator)+os.Getenv("PATH"))
 			cmd.Env = append(cmd.Env, paths.Env()...)
 			builds := filepath.Join(root, "build-calls")
-			cmd.Env = append(cmd.Env, "PREFLIGHT_BUILD_CALLS="+builds)
+			compatibilityCalls := filepath.Join(root, "compatibility-calls")
+			compatibilityExit := 0
+			if tc.compatibilityFails {
+				compatibilityExit = 7
+			}
+			cmd.Env = append(cmd.Env, "PREFLIGHT_BUILD_CALLS="+builds, "BASELINE_SHA=", "PREFLIGHT_COMPATIBILITY_CALLS="+compatibilityCalls, fmt.Sprintf("PREFLIGHT_COMPATIBILITY_EXIT=%d", compatibilityExit))
 			// Exercise both an explicit engine root and the staged checkout default.
 			engineRoot := ""
 			if tc.engineOverride {
@@ -97,6 +102,19 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 			}
 			cmd.Env = append(cmd.Env, "LYCAON_ENGINE_ROOT="+engineRoot)
 			out, err := cmd.CombinedOutput()
+			wantEngine := engineRoot
+			if wantEngine == "" {
+				wantEngine = filepath.Join(root, "lycaon-den/src-tauri/engine-root")
+			}
+			wantCompatibility := []string{filepath.Join(root, "lycaon"), wantEngine, "run", "./cmd/release-contracts", "--check-all", "--baseline", ""}
+			if tc.controller {
+				wantCompatibility = append(wantCompatibility[:len(wantCompatibility)-1], "v1.0.1", "--repo-root", candidate, "--published-versions", `["1.0.1"]`)
+			}
+			compatibility, compatibilityErr := os.ReadFile(compatibilityCalls)
+			contractcheck.FailErr(t, "read compatibility calls", compatibilityErr)
+			if string(compatibility) != strings.Join(wantCompatibility, "\n")+"\n" {
+				t.Fatalf("compatibility command = %q, want %q", compatibility, wantCompatibility)
+			}
 			_, buildErr := os.Stat(builds)
 			if tc.controller && !os.IsNotExist(buildErr) {
 				t.Fatal("controller rebuilt the selected engine")
@@ -108,11 +126,21 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 			if readErr != nil && !os.IsNotExist(readErr) {
 				contractcheck.FailErr(t, "read candidate calls", readErr)
 			}
+			if tc.compatibilityFails {
+				var exitErr *exec.ExitError
+				if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 || len(raw) != 0 {
+					t.Fatalf("compatibility failure lost: err=%v calls=%q\n%s", err, raw, out)
+				}
+				return
+			}
 			if !tc.manifest {
 				if err == nil || !strings.Contains(string(out), "MANIFEST.json missing") || len(raw) != 0 {
 					t.Fatalf("missing manifest passed or was verified: err=%v calls=%q\n%s", err, raw, out)
 				}
 				return
+			}
+			if err != nil {
+				t.Fatalf("complete corpus preflight failed: %v\n%s", err, out)
 			}
 			want := "candidate " + corpus + " --sidecar " + filepath.Join(paths.Build, "lycaon-dev") + " --version " + version + " --inventory-root " + filepath.Dir(corpus) + "\n"
 			if tc.controller {
@@ -127,4 +155,39 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 
 func pythonString(value string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(value, `\`, `\\`), "'", `\'`) + "'"
+}
+
+// stableReleaseTag names a published stable release; preview tags may be cut without publishing.
+var stableReleaseTag = regexp.MustCompile(`^v([1-9][0-9]*\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$`)
+
+// publishedStableVersions lists the stable releases whose migration identities the checkout must keep.
+func publishedStableVersions(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "tag", "--list", "v*").Output()
+	contractcheck.FailErr(t, "list release tags", err)
+	versions := []string{}
+	for _, tag := range strings.Fields(string(out)) {
+		if match := stableReleaseTag.FindStringSubmatch(tag); match != nil {
+			versions = append(versions, match[1])
+		}
+	}
+	if len(versions) == 0 {
+		t.Fatal("no published stable release tags; fetch tags before running release contracts")
+	}
+	raw, err := json.Marshal(versions)
+	contractcheck.FailErr(t, "encode published versions", err)
+	return string(raw)
+}
+
+func TestReleaseCompatibility(t *testing.T) {
+	t.Parallel()
+	repo := contractcheck.RepoRoot(t)
+	cmd := exec.CommandContext(t.Context(), "go", "run", "./cmd/release-contracts", "--check-all",
+		"--published-versions", publishedStableVersions(t, repo))
+	cmd.Dir = filepath.Join(repo, "lycaon")
+	cmd.Env = append(os.Environ(), "LYCAON_ENGINE_ROOT="+filepath.Join(repo, "lycaon-den/src-tauri/engine-root"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("release compatibility failed: %v\n%s", err, out)
+	}
 }
