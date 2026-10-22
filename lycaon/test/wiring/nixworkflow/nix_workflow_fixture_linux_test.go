@@ -162,7 +162,10 @@ func requireLinuxSandbox(t *testing.T) string {
 	testutil.FailErr(t, "resolve Nix workflow process helper", err)
 	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
 		helperBuild.once.Do(func() {
-			helperBuild.err = os.Setenv("GOCOVERDIR", dir)                              //nolint:usetesting // All fixture children share the coverage helper build.
+			helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // All fixture children share the coverage helper build.
+			if helperBuild.err != nil {
+				return
+			}
 			helperBuild.directory, helperBuild.err = os.MkdirTemp("", "pw-nix-helper-") //nolint:usetesting // TestMain owns the helper across individual tests.
 			if helperBuild.err != nil {
 				return

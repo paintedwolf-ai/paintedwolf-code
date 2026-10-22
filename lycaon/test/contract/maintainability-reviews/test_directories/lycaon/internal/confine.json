@@ -3,7 +3,15 @@
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
   "workstream": "linux-confinement-authority",
-  "disposition": "refactor",
-  "reason": "Move actual Nix client, daemon, terminal, and MCP workflows into the dedicated wiring integration suite. Keep syscall-policy controls in the unit suite and reuse its existing unshare probe. The moved Nix paths no longer define the unit-directory review boundary; reconsider bounded retention only after focused contracts and current membership are verified.",
-  "reviewed_commit": "84cd3cefcc4887f15c0022d4928aa901a6d80f9a"
+  "disposition": "retain",
+  "reason": "The 56 unit test files cover the shared confinement authority, platform policies, and syscall controls. Actual Nix client, daemon, terminal, and MCP workflows now belong to the dedicated wiring integration suite; the generic unshare negative control shares the existing syscall probe. Native sandbox and Nix workflow contracts passed after this move. Retain this smaller unit boundary without adding forwarding APIs or moving unrelated tests.",
+  "reviewed_commit": "aca097a57f3fe7c483ba46bb65ced6e25a61fb8e",
+  "ceiling": 56,
+  "reviewed_shape": "ff3192749832db679d03923bfdf2ee6c941a5a6ae363af747d9c521757f0b915",
+  "boundaries": {
+    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
+    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
+    "lycaon/internal/confine/boundary_linux_live_test.go": "3d295bc049b6c339c54c505ed367b88909c5eb2a7dcdec9d47c3c13c8ef22293"
+  }
 }
