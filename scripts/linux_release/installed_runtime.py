@@ -102,9 +102,11 @@ def manifest(root: Path, architecture: str) -> dict:
         raise ValueError("installed manifest is not a bounded physical file")
     raw_manifest = json.loads(path.read_text())
     version = raw_manifest.get("format_version") if isinstance(raw_manifest, dict) else None
-    if type(version) is not int or version != 2:
+    if type(version) is not int or version not in (1, 2):
         raise ValueError("installed manifest differs from the selected native layout")
-    fields = {"format_version", "package", "version", "architecture", "install_root", "executables", "payload"}
+    fields = {"format_version", "package", "version", "architecture", "install_root", "executables"}
+    if version == 2:
+        fields = fields | {"payload"}
     record = evidence.object_fields(raw_manifest, fields)
     if (record["package"] != "painted-wolf-code"
             or record["install_root"] != str(root) or not isinstance(record["version"], str) or not record["version"]
@@ -136,7 +138,8 @@ def manifest(root: Path, architecture: str) -> dict:
         observed[image] = identity
     if not roles <= observed.keys():
         raise ValueError("installed manifest omits a required native helper")
-    manifest_payload(record["payload"], root, observed)
+    if version == 2:
+        manifest_payload(record["payload"], root, observed)
     return {"version": record["version"], "images": {str(path): value for path, value in observed.items()}}
 
 
