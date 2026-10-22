@@ -31,7 +31,7 @@ class CaseTests(unittest.TestCase):
         case = {"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview", "protocol": "native-v2", "steps": [step]}
         plan = {"candidate": step, "archives": {"1.0.2": manifest("1.0.2")}, "schema_version": 5, "schemas": {"1.0.2": 5}}
         records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
-        installation = Mock(executable=executable)
+        installation = Mock(executable=executable, last_observation={"state": "healthy"})
         launches = []
         def launch():
             launches.append(True)
@@ -76,6 +76,7 @@ class CaseTests(unittest.TestCase):
                 installation.stop.assert_any_call(crash_app=True)
                 self.assertEqual(semantics.call_count, 3)
                 self.assertTrue((evidence / "1.1.0-transaction.json").exists())
+                self.assertEqual(json.loads((evidence / "startup-observation.json").read_text()), {"state": "healthy"})
             self.assertGreaterEqual(installation.stop.call_count, 1)
 
     def test_activation_requires_a_complete_native_transition_and_another_restart(self):

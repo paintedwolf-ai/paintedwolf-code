@@ -1081,3 +1081,18 @@ Fixtures are deterministic, repository-local, and safe to run without credential
 The paid coordinator benchmark drives the real application with candidate
 models and grades environment outcomes, not transcripts. It is opt-in, never
 part of `check` or CI, and has its own page: [Coordinator benchmark](coordinator-benchmark.md).
+
+### Upgrade rehearsal preparation and startup evidence
+
+Nightly upgrade rehearsal uses the shared verification setup for the pinned
+Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
+public feed verifier. The managed rehearsal task owns its development sidecar
+build. Bundle execution restores the shared Go compiler cache and consumes the
+prepared signed fixture artifact.
+
+Every bundle case retains `startup-observation.json` before cleanup. It records
+the expected version, captured process identities, daemon PID/port, and the last
+structured startup state. Timeout errors include the same observation. Engine
+and updater logs and transaction records remain attached. Missing startup is a
+failed gate; these observations distinguish rejection reasons without weakening
+ownership, health, schema, activation, or restart requirements.
