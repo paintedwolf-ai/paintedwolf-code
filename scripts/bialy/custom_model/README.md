@@ -6,29 +6,52 @@ artifacts, launch teachers, or start provider-backed collection.
 
 ## Capture and admission
 
-Set `PW_TRAINING_CAPTURE_DIR` to an existing private absolute directory and
-`PW_TRAINING_EPOCH` to the collection epoch on the isolated host. The Bialy runner
-creates this directory inside its shard. Capture is otherwise disabled.
+A training row pairs the request the student will be served with the response
+a student should emit, and every rule below follows from that.
 
-`pw-training-turn/1` records the actual serialized adapter request and the
-provider completion before host normalization, linked by call, session, message
-and settled output IDs. Payloads are excluded for ambiguous adapter attempts,
-failed/scripted/reasoning-bearing responses, host modifications, unsettled
-outputs, oversized requests, and secret-screen changes. Exclusions retain only
-metadata. Files use mode 0600 and descriptor-relative atomic publication. This
-is an experimental collection artifact, not a database or public API change.
+Capture runs only when `PW_TRAINING_CAPTURE_DIR` (an existing private absolute
+directory), `PW_TRAINING_EPOCH`, `PW_TRAINING_STUDENT_PROVIDER` and
+`PW_TRAINING_STUDENT_MODEL` are all set on the isolated host. The student
+provider is a configured provider entry describing how the student will be
+served, with its model's `context_length`; collections declare it but never
+drive it. The Bialy runner writes that entry and creates the directory inside
+its shard.
 
-`collect.py` reads immutable shard snapshots and actual invocation receipts. Its
-initial supported slice is native, text-only OpenAI-compatible tool responses.
-Every positive call must match a completed, invoked receipt by session, message,
-call ID, tool name and canonical arguments. Floating-point arguments, prose
-closeouts without publication validation, multimodal inputs, and unsupported
-provider controls fail closed. A missing capture or receipt produces no positive.
-Tool-disabled turns and non-default reasoning controls are excluded at export.
-Every exclusion is counted by its reason, including the host's own capture
-reasons (`unsupported_response` for a reasoning-bearing teacher reply,
-`ambiguous_dispatch` for a retried call, `secret_screen_changed_payload`), so a
-calibration report shows why rows were lost.
+`pw-training-turn/1` records, per settled model output:
+
+- the exact teacher dispatch, as provenance;
+- the request rendered offline through the student's provider entry
+  (`Registry.RenderRequest` with the adapter's `RequestRenderer`), as training
+  input. It is rendered from the request the adapter serialized, after every
+  host projection and screen, so it carries the student's own message layout.
+  A request the student could not be served, such as one over its declared
+  window, is excluded as `student_cannot_be_served`;
+- the target. When the host changed only what a student never emits (call
+  identifiers, duplicate or argument-less sibling calls it removed), the target
+  is the settled message, because the receipts name the settled calls; the
+  changes are listed in `normalized`. A change to content, a call name or its
+  arguments excludes the turn and names the field in `modified_fields`.
+
+A request message the durable transcript policy would change is excluded as
+`transcript_policy_changes_request`, with its position: training artifacts
+persist only what the host's transcript would. Reasoning-bearing, failed,
+scripted, unsettled and retried attempts are excluded by name. Exclusions keep
+identifiers and field names only. When the host commits a tool-free reply as a
+turn's visible result it writes a `pw-training-fact/1` `turn_committed` fact,
+which is the acceptance evidence for that reply. Files use mode 0600 and atomic
+publication. This is an experimental collection artifact, not a database or
+public API change.
+
+`collect.py` reads immutable shard snapshots and actual invocation receipts. It
+decodes the student request into the chat-template input that the student's
+server builds. Only `openai-compatible` qualifies: llama.cpp's server with
+`--jinja` applies the checkpoint's own template, after deserializing tool-call
+arguments into objects as Gemma 4's template requires. Ollama renders prompts
+with its own templates, whose parity with the checkpoint is not established.
+Every tool call must match a completed, invoked receipt by session, message,
+call ID, tool name and canonical arguments. A tool-free reply must be the output
+the host committed. Floating-point arguments, multimodal inputs and unsupported
+controls fail closed, and every exclusion is counted by its reason.
 
 On the `command-v1` surface a `command` call is admitted only when its child
 operation receipts all settled with known effects; a program that left partial

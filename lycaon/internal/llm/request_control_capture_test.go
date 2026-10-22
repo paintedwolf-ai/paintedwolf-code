@@ -40,11 +40,14 @@ func TestRequestControlCaptureMatchesSentWireWithoutPrompt(t *testing.T) {
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "private task"}},
 		Tools:    []tools.ToolMeta{{Name: "read"}}, Debug: modelcall.RequestDebug{SessionID: "session"}})
 	testutil.FailErr(t, "complete fixture request", err)
-	raw, dispatches := wireCapture.Snapshot()
+	raw, source, dispatches := wireCapture.Snapshot()
 	var exact map[string]any
 	testutil.FailErr(t, "decode exact wire", json.Unmarshal(raw, &exact))
 	if dispatches != 1 || !reflect.DeepEqual(sent, exact) {
 		t.Fatal("debug wrapper replaced the collection capture")
+	}
+	if source == nil || len(source.Messages) != 1 || source.Messages[0].Content != "private task" {
+		t.Fatalf("adapter dispatch source = %+v", source)
 	}
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read capture", err)

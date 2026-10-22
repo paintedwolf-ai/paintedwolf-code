@@ -242,6 +242,38 @@ func (r *Registry) Catalog() *ProviderCatalog {
 	return r.catalog
 }
 
+// RenderRequest serializes req as the configured provider would dispatch it to
+// model, without contacting the provider, and returns the provider's kind. The
+// adapter is built from the provider's own catalog entry, so its message layout,
+// reasoning wire, and declared model window are the ones serving would use.
+func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, req modelcall.CompletionRequest) (string, []byte, error) {
+	if r == nil || r.catalog == nil {
+		return "", nil, fmt.Errorf("render request: no provider catalog")
+	}
+	entry, ok := r.catalog.Get(providerID)
+	if !ok {
+		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
+	}
+	body, err := renderWithEntry(ctx, entry, model, req)
+	return entry.Kind, body, err
+}
+
+func renderWithEntry(ctx context.Context, entry CatalogEntry, model string, req modelcall.CompletionRequest) ([]byte, error) {
+	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
+	if err != nil {
+		return nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
+	}
+	if err := configureReasoningWire(driver, entry.ReasoningWire); err != nil {
+		return nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
+	}
+	renderer, ok := driver.(modelcall.RequestRenderer)
+	if !ok {
+		return nil, fmt.Errorf("render request: provider kind %q has no offline request serializer", entry.Kind)
+	}
+	req.Model, req.ControlCapture = model, nil
+	return renderer.RenderRequest(ctx, req)
+}
+
 // StreamWithSelection streams from the configured provider.
 func (r *Registry) StreamWithSelection(ctx context.Context, sel *ModelSelection, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	if sel == nil {
