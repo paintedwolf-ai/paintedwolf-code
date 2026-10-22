@@ -147,42 +147,7 @@ func runLinuxProbe(mode string) int {
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
 	case "interrupted":
-		// Interrupt notified calls while they wait for the supervisor, the
-		// way Go's preemption signal does in a busy toolchain, then confirm
-		// the supervisor still answers.
-		stop := make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-stop:
-					return
-				case <-time.After(200 * time.Microsecond):
-					_ = unix.Kill(os.Getpid(), unix.SIGURG)
-				}
-			}
-		}()
-		refusedConnect := func() error {
-			fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = unix.Close(fd) }()
-			return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
-		}
-		var wg sync.WaitGroup
-		for worker := 0; worker < 4; worker++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for i := 0; i < 300; i++ {
-					_ = refusedConnect()
-				}
-			}()
-		}
-		wg.Wait()
-		close(stop)
-		fmt.Println("after interruptions:", errnoName(refusedConnect()))
-		return 0
+		return interruptedProbe()
 	case "families":
 		return familiesProbe()
 	case "iouring":
@@ -613,6 +578,45 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
 	}
+}
+
+func interruptedProbe() int {
+	// Interrupt notified calls while they wait for the supervisor, the
+	// way Go's preemption signal does in a busy toolchain, then confirm
+	// the supervisor still answers.
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(200 * time.Microsecond):
+				_ = unix.Kill(os.Getpid(), unix.SIGURG)
+			}
+		}
+	}()
+	refusedConnect := func() error {
+		fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
+	}
+	var wg sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 300; i++ {
+				_ = refusedConnect()
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	fmt.Println("after interruptions:", errnoName(refusedConnect()))
+	return 0
 }
 
 // A notified call interrupted while it waits must not end supervision: later
