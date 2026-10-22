@@ -116,7 +116,7 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer stopClosing()
 	peer, err := s.PeerOf(conn)
 	if err != nil {
-		s.Log.Warn("vault identity peer credentials unavailable", "error", err)
+		s.Log.WarnContext(ctx, "vault identity peer credentials unavailable", "error", err)
 		return
 	}
 	verifiers, resp := s.verifiersFor()
@@ -137,7 +137,7 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 		}
 	}
 	if err != nil {
-		s.Log.Warn("vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
+		s.Log.WarnContext(ctx, "vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
 		s.answer(conn, refusal(err))
 		return
 	}
@@ -150,13 +150,13 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 		}
 		// The verified process must still be the one connected.
 		if err := verifier.Recheck(chain); err != nil {
-			s.Log.Warn("vault identity caller changed", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err))
+			s.Log.WarnContext(ctx, "vault identity caller changed", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err))
 			s.answer(conn, refusal(err))
 			return
 		}
 		resp := s.handle(caller, req)
 		// Accounts are configuration-root digests, never secrets.
-		s.Log.Info("vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
+		s.Log.InfoContext(ctx, "vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
 		if !s.answer(conn, resp) {
 			return
 		}

@@ -27,7 +27,7 @@ type trustedGeneration struct {
 }
 
 func loadTrustPolicy(path string, base launchverify.Verifier) ([]launchverify.Verifier, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- administrator-configured custody trust policy path
 	if err != nil {
 		return nil, err
 	}
