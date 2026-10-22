@@ -80,10 +80,11 @@ describe("update settings", () => {
   });
   it("leaves Nix update ownership with the selected profile or configuration", async () => {
     const state = packageFixture();
-    state.package = { ...state.package!, family: "nix", update_command: "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation." };
+    state.package = { ...state.package!, family: "nix", update_command: "Update the Nix profile, Home Manager configuration, or NixOS configuration that owns this installation.", source: { availability: "not_checked", owner: null, pinned: null } };
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
     const upgrade = await screen.findByTestId("updates-package-upgrade");
-    expect(upgrade.textContent).toContain("Nix profile, Home Manager configuration, or NixOS configuration");
+    expect(screen.getByTestId("updates-nix-owner").textContent).toContain("NixOS configuration, Home Manager configuration or user profile");
+    expect(upgrade.textContent).toContain("Availability through your selected Nix source has not been checked");
     expect(upgrade.querySelector("code")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
