@@ -217,7 +217,7 @@ func requireSourceIdentity(path, want string) error {
 }
 
 func requireSourceFingerprint(ctx context.Context, path, want string) error {
-	got, err := sourceTreeFingerprint(ctx, path)
+	got, _, err := sourceTreeFingerprint(ctx, path)
 	if err != nil {
 		return err
 	}

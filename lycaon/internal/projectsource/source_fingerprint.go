@@ -12,14 +12,16 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
+type sourceTreeSize struct{ Bytes, Files int64 }
+
 // Fingerprints depend on the selected entry, not read access to its parent.
-func sourceTreeFingerprint(ctx context.Context, path string) (string, error) {
+func sourceTreeFingerprint(ctx context.Context, path string) (string, sourceTreeSize, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return "", sourceTreeSize{}, err
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return "", err
+		return "", sourceTreeSize{}, err
 	}
 	hash := sha256.New()
 	progress := newSourceWorkProgress(ctx, "verifying")
@@ -32,9 +34,9 @@ func sourceTreeFingerprint(ctx context.Context, path string) (string, error) {
 			func() (string, error) { return os.Readlink(path) }, progress)
 	}
 	if err != nil {
-		return "", err
+		return "", sourceTreeSize{}, err
 	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), sourceTreeSize{Bytes: progress.bytes, Files: progress.files}, nil
 }
 
 func fingerprintSourceDirectory(ctx context.Context, hash io.Writer, path string, info fs.FileInfo, progress *sourceWorkProgress) error {
@@ -69,6 +71,9 @@ func fingerprintSourceDirectory(ctx context.Context, hash io.Writer, path string
 
 func fingerprintSourceEntry(ctx context.Context, hash io.Writer, rel string, info fs.FileInfo, open func() (*os.File, error), readlink func() (string, error), progress *sourceWorkProgress) error {
 	entry := sourceledger.RecoveryEntry{Path: rel, Mode: uint32(info.Mode())}
+	if !info.IsDir() {
+		progress.files++
+	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, err := readlink()
 		if err != nil {

@@ -19,7 +19,7 @@ func TestSourceMoveRecoveryRefusesDamagedDestinationDuringCleanup(t *testing.T) 
 		testutil.FailErr(t, "create move tree", os.Mkdir(path, 0o700))
 		testutil.FailErr(t, "seed complete child", os.WriteFile(filepath.Join(path, "file"), []byte("complete"), 0o600))
 	}
-	sha, err := sourceTreeFingerprint(t.Context(), destination)
+	sha, _, err := sourceTreeFingerprint(t.Context(), destination)
 	testutil.FailErr(t, "fingerprint complete destination", err)
 	heldID, err := fspath.EntryIdentity(held)
 	testutil.FailErr(t, "identify held source", err)

@@ -77,7 +77,7 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if resolved != plan.AbsPath {
 		return ErrSourceMutationDiverged
 	}
-	if !plan.Unrecoverable {
+	if plan.TreeSHA != "" {
 		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
 			return err
 		}
@@ -88,6 +88,14 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 	if !plan.DeleteStarted {
 		plan.DeleteStarted, plan.DeleteIdentity = true, identity
 		if err := s.Journal.update(ctx, row); err != nil {
+			return err
+		}
+	}
+	if err := requireSourceIdentity(plan.AbsPath, identity); err != nil {
+		return err
+	}
+	if plan.TreeSHA != "" {
+		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
 			return err
 		}
 	}

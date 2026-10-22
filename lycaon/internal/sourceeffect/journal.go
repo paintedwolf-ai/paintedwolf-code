@@ -12,10 +12,22 @@ import (
 
 // Journal records intent and attribution before a file effect.
 type Journal interface {
+	// RecoveryQuotaBytes bounds logical retained recovery content per project.
+	// Physical compression and deduplication belong to the blob store.
+	RecoveryQuotaBytes() int64
+	InspectRemoval(context.Context, fseffect.Location) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
 	// RemoveEntry keeps a complete recovery copy of an entry, then removes it,
 	// so the removal can be undone. It returns the operation identity.
 	RemoveEntry(context.Context, Removal) (string, error)
+}
+
+// RemovalSnapshot names the exact tree measured before removal review.
+type RemovalSnapshot struct {
+	Identity string `json:"identity"`
+	TreeSHA  string `json:"tree_sha256"`
+	Bytes    int64  `json:"bytes"`
+	Files    int64  `json:"files"`
 }
 
 // Removal is an entry the agent reviewed for removal from an attached root.
@@ -27,11 +39,12 @@ type Removal struct {
 	RootPath string `json:"root_path"`
 	// ReviewedSHA256 is the file content the review showed; a file that no
 	// longer matches is refused. Empty for directories and links.
-	ReviewedSHA256 string `json:"reviewed_sha256,omitempty"`
+	ReviewedSHA256   string           `json:"reviewed_sha256,omitempty"`
+	ReviewedSnapshot *RemovalSnapshot `json:"reviewed_snapshot,omitempty"`
 	// Recursive allows removing a non-empty directory tree as one operation.
 	Recursive bool `json:"recursive,omitempty"`
 	// Unrecoverable skips recovery capture after explicit user approval of an
-	// oversize tree deletion.
+	// removal exceeding the history recovery quota.
 	Unrecoverable bool `json:"unrecoverable,omitempty"`
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
@@ -20,7 +19,7 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 		"oversize/a.txt": strings.Repeat("a", 32),
 		"oversize/b.txt": strings.Repeat("b", 32),
 	})
-	h.owners.Operations.Delete.Caps = native.RecursiveCaps{Files: 1, Bytes: 16}
+	h.service.History.SetRecoveryQuotaBytes(16)
 	var notes []string
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, ch := range changes {
@@ -37,13 +36,13 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	}
 }
 
-func TestRegenerableDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
+func TestDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 	h := newHarness(t, nil)
-	// Set a 4 KiB recovery quota so repeated recoverable deletes of regenerable
+	// Set a 4 KiB recovery quota so repeated recoverable deletes of ordinary
 	// directories must evict older history entries and sweep their blobs.
 	h.service.History.SetRecoveryQuotaBytes(4096)
 
-	chunk := strings.Repeat("regenerable-build-artifact-line\n", 48) // 1536 bytes per file
+	chunk := strings.Repeat("retained-build-artifact-line\n", 48) // 1536 bytes per file
 	for round := 0; round < 5; round++ {
 		for _, dir := range []string{"node_modules/pkg", "dist/assets"} {
 			full := h.path(filepath.Join(dir, fmt.Sprintf("bundle-%d.js", round)))
@@ -61,7 +60,7 @@ func TestRegenerableDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 	var historyCount int
 	testutil.FailErr(t, "count history entries", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_history_entries WHERE project_id = ?`, h.project.ID).Scan(&historyCount))
 	if historyCount > 2 {
-		t.Fatalf("expected regenerable directory history to stay bounded (<= 2 entries), got %d", historyCount)
+		t.Fatalf("expected directory history to stay bounded (<= 2 entries), got %d", historyCount)
 	}
 	var totalRecoveryBytes int64
 	testutil.FailErr(t, "sum recovery bytes", h.db.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(size), 0) FROM source_blob_objects`).Scan(&totalRecoveryBytes))
@@ -72,7 +71,7 @@ func TestRegenerableDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 
 func TestOversizeDeleteWithoutReviewerLeavesTreeIntact(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/a": "content"})
-	h.owners.Operations.Delete.Caps = native.RecursiveCaps{Bytes: 1}
+	h.service.History.SetRecoveryQuotaBytes(1)
 	h.tc.Files.FileChangeReview = nil
 	r := h.run("", "rm", "-rf", "tree")
 	reject := toolrejection.AsToolReject(r.err)

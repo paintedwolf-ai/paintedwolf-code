@@ -8,10 +8,31 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// InspectRemoval measures content and kernel entry identity without changing it.
+func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fseffect.Location) (sourceeffect.RemovalSnapshot, error) {
+	abs, _, err := resolveLifecyclePath(location.Root, location.Rel)
+	if err != nil {
+		return sourceeffect.RemovalSnapshot{}, err
+	}
+	identity, err := fspath.EntryIdentity(abs)
+	if err != nil {
+		return sourceeffect.RemovalSnapshot{}, err
+	}
+	sha, size, err := sourceTreeFingerprint(ctx, abs)
+	if err != nil {
+		return sourceeffect.RemovalSnapshot{}, err
+	}
+	if err := requireSourceIdentity(abs, identity); err != nil {
+		return sourceeffect.RemovalSnapshot{}, err
+	}
+	return sourceeffect.RemovalSnapshot{Identity: identity, TreeSHA: sha, Bytes: size.Bytes, Files: size.Files}, nil
+}
 
 // RemoveEntry records an undoable agent deletion without using system Trash.
 func (s *SourceMutationService) RemoveEntry(ctx context.Context, removal sourceeffect.Removal) (string, error) {
@@ -29,23 +50,21 @@ func (s *SourceMutationService) RemoveEntry(ctx context.Context, removal sourcee
 	digest, err := sourceMutationDigest(struct {
 		ProjectID, BranchID, RootID, RootPath, Path, SessionID, ToolCallID, ReviewedSHA256 string
 		Recursive, Unrecoverable                                                           bool
+		Snapshot                                                                           *sourceeffect.RemovalSnapshot
 	}{
 		record.ProjectID, record.BranchID.String(), record.RootID, removal.RootPath, record.Path,
-		record.SessionID, record.ToolCallID, removal.ReviewedSHA256, removal.Recursive, removal.Unrecoverable,
+		record.SessionID, record.ToolCallID, removal.ReviewedSHA256, removal.Recursive, removal.Unrecoverable, removal.ReviewedSnapshot,
 	})
 	if err != nil {
 		return "", err
 	}
 	_, err = s.execute(ctx, operationID, record.ProjectID, digest, func() (*sourceMutationPlan, error) {
-		return prepareAgentRemoval(ctx, operationID, removal)
+		return s.prepareAgentRemoval(ctx, operationID, removal)
 	})
-	if err == nil {
-		s.reclaimEvictedRecovery(ctx)
-	}
 	return operationID, err
 }
 
-func prepareAgentRemoval(ctx context.Context, operationID string, removal sourceeffect.Removal) (*sourceMutationPlan, error) {
+func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operationID string, removal sourceeffect.Removal) (*sourceMutationPlan, error) {
 	record := removal.Record
 	// Tool path resolution excludes repository metadata and control-plane paths.
 	// Reviewed removals can reach the project overlay.
@@ -73,6 +92,15 @@ func prepareAgentRemoval(ctx context.Context, operationID string, removal source
 			return nil, ErrSourceNotEmpty
 		}
 	}
+	if removal.ReviewedSnapshot != nil {
+		current, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel})
+		if err != nil {
+			return nil, err
+		}
+		if current != *removal.ReviewedSnapshot {
+			return nil, ErrSourceMutationDiverged
+		}
+	}
 	evidence, err := sourceHistoryEvidence(ctx, abs)
 	if err != nil {
 		return nil, err
@@ -92,6 +120,9 @@ func prepareAgentRemoval(ctx context.Context, operationID string, removal source
 		if err != nil {
 			return nil, err
 		}
+	}
+	if snapshot := removal.ReviewedSnapshot; snapshot != nil {
+		pub.EntryIdentity, recovery.TreeSHA, beforeSize = snapshot.Identity, snapshot.TreeSHA, snapshot.Bytes
 	}
 	return &sourceMutationPlan{
 		sourceMutationContent:     sourceMutationContent{Before: evidence.content, BaseSHA256: evidence.sha256, BeforeSize: beforeSize},

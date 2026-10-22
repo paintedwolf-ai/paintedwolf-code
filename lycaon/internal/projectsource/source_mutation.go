@@ -45,6 +45,7 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 	journal := &SourceMutationJournal{db: database, people: peoplestore.New(database), memory: make(map[string]*sourceMutationRow)}
 	recovery := &sourceRecovery{db: database, objects: objects, recoveryBytes: make(map[string][]byte), recoveryEntries: make(map[string][]sourceledger.RecoveryEntry)}
 	history := &SourceHistory{db: database, recovery: recovery, history: make(map[string]*sourceHistoryEntry)}
+	recovery.quota = history.recoveryQuotaBytes
 	service := &SourceMutationService{
 		recorder: recorder, Journal: journal, Paths: &SourcePaths{}, History: history, recovery: recovery,
 		Effects:    &SourceEffects{Journal: journal, recovery: recovery, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem},
@@ -66,6 +67,11 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 		return nil, err
 	}
 	defer unlock()
+	defer s.reclaimEvictedRecovery(ctx)
+	if s.recovery.objects == nil {
+		s.recovery.lifecycle.RLock()
+		defer s.recovery.lifecycle.RUnlock()
+	}
 	if s.recovery.objects != nil {
 		release := s.recovery.objects.HoldRecoveryReferences()
 		defer release()

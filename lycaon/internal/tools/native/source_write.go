@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -182,6 +181,14 @@ func setAsideUnversionedFile(ctx context.Context, tctx tools.ToolContext, target
 	if _, ok := recoverableRemoval(tctx, replaced); !ok {
 		return nil
 	}
+	if err := measureAgentRemoval(ctx, tctx, target, &replaced, target.Location.Rel); err != nil {
+		return err
+	}
+	if replaced.Unrecoverable {
+		if err := reviewAgentMutation(ctx, tctx, replaced, target.Location, fseffect.Location{}, true); err != nil {
+			return err
+		}
+	}
 	if err := discardAgentEntry(ctx, tctx, target, replaced); err != nil {
 		return fmt.Errorf("set aside replaced file: %w", err)
 	}
@@ -196,52 +203,18 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 	}
 	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
+	if err := measureAgentRemoval(ctx, tctx, target, &mutation, target.Location.Rel); err != nil {
+		return err
+	}
 	reportMutationIntent(tctx, mutation, target.Location, fseffect.Location{}, api.AgentIntentOperationDelete)
-	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false); err != nil {
+	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, mutation.Unrecoverable); err != nil {
 		return err
 	}
 	return discardAgentEntry(ctx, tctx, target, mutation)
 }
 
-func removeAgentTree(ctx context.Context, tctx tools.ToolContext, target mutationTarget, relSlash string, files, bytes int64, unrecoverable bool) error {
-	mutation := agentMutation{
-		Op:            api.SourceChangeOpDelete,
-		AbsPath:       target.Abs,
-		BeforeSize:    bytes,
-		IsDir:         true,
-		Recursive:     true,
-		Unrecoverable: unrecoverable,
-	}
-	if unrecoverable {
-		note, err := guidance.RenderGuidance(ctx, "source-remove-permanent", map[string]any{"path": relSlash, "size": formatDeleteByteSize(bytes), "files": files})
-		if err != nil {
-			return err
-		}
-		mutation.MetadataChange = note
-	}
-	reportMutationIntent(tctx, mutation, target.Location, fseffect.Location{}, api.AgentIntentOperationDelete)
-	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, unrecoverable); err != nil {
-		return err
-	}
-	return discardAgentEntry(ctx, tctx, target, mutation)
-}
-
-func formatDeleteByteSize(bytes int64) string {
-	switch {
-	case bytes >= 1<<30:
-		return fmt.Sprintf("%.1f GiB", float64(bytes)/float64(1<<30))
-	case bytes >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(bytes)/float64(1<<20))
-	case bytes >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(bytes)/float64(1<<10))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
-}
-
-// discardAgentEntry removes a reviewed entry. Inside an attached root the
-// entry is kept for recovery first, so the removal can be undone from Files
-// history whatever its size; elsewhere it is removed as `rm` would.
+// discardAgentEntry uses the attached root's reviewed recovery plan;
+// outside attached roots it removes the entry through the scoped effect door.
 func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mutation agentMutation) error {
 	if removal, ok := recoverableRemoval(tctx, mutation); ok {
 		operationID, err := tctx.Source.SourceMutations.RemoveEntry(ctx, removal)
@@ -378,12 +351,13 @@ func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.R
 		return sourceeffect.Removal{}, false
 	}
 	return sourceeffect.Removal{
-		Record:         in,
-		Change:         change,
-		RootPath:       root.Path,
-		ReviewedSHA256: m.BeforeSHA256,
-		Recursive:      m.Recursive,
-		Unrecoverable:  m.Unrecoverable,
+		Record:           in,
+		Change:           change,
+		RootPath:         root.Path,
+		ReviewedSHA256:   m.BeforeSHA256,
+		Recursive:        m.Recursive,
+		Unrecoverable:    m.Unrecoverable,
+		ReviewedSnapshot: m.RemovalSnapshot,
 	}, true
 }
 
@@ -476,19 +450,20 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 }
 
 type agentMutation struct {
-	MetadataChange string
-	Op             api.SourceChangeOp
-	AbsPath        string
-	FromAbsPath    string
-	After          []byte
-	Before         []byte
-	BeforeSHA256   string
-	AfterSHA256    string
-	BeforeSize     int64
-	AfterSize      int64
-	IsDir          bool
-	Recursive      bool
-	Unrecoverable  bool
+	MetadataChange  string
+	Op              api.SourceChangeOp
+	AbsPath         string
+	FromAbsPath     string
+	After           []byte
+	Before          []byte
+	BeforeSHA256    string
+	AfterSHA256     string
+	BeforeSize      int64
+	AfterSize       int64
+	IsDir           bool
+	Recursive       bool
+	Unrecoverable   bool
+	RemovalSnapshot *sourceeffect.RemovalSnapshot
 }
 
 type agentFileEvidence struct {

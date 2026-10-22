@@ -352,7 +352,8 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 		for _, command := range [][]string{{"rm", "-rf", "tree"}, {"cp", "-r", "tree", "copy"}} {
 			t.Run(c.name+" "+command[0], func(t *testing.T) {
 				h := newHarness(t, tree(c.files, c.size))
-				h.owners.Operations.Delete.Caps, h.owners.Operations.Copy.Caps = caps, caps
+				h.owners.Operations.Copy.Caps = caps
+				h.service.History.SetRecoveryQuotaBytes(caps.Bytes)
 				var reviewed []tools.FileChange
 				h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 					reviewed = append(reviewed, changes...)

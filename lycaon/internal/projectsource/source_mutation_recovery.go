@@ -28,6 +28,10 @@ func (s *SourceMutationService) Recover(ctx context.Context) error {
 }
 
 func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutationRow) error {
+	if s.recovery.objects == nil {
+		s.recovery.lifecycle.RLock()
+		defer s.recovery.lifecycle.RUnlock()
+	}
 	unlock, err := s.operationLocks.Acquire(ctx, row.ID)
 	if err != nil {
 		return err

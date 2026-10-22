@@ -14,15 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
-const (
-	defaultDeleteRecoveryMaxBytes int64 = 100 << 20 // 100 MiB
-)
-
 // DeleteTool removes files and empty directories within write scope.
 type DeleteTool struct {
 	Boundary *sandbox.Boundary
-	// Caps overrides the catalog recursive mutation ceilings; zero uses them.
-	Caps RecursiveCaps
 }
 
 func (t *DeleteTool) Name() string { return "delete" }
@@ -32,9 +26,8 @@ type deleteResponse struct {
 }
 
 // DeleteInput is one complete delete operation. Recursive removes each tree
-// children first, every entry through the same reviewed, recoverable removal,
-// after measuring the whole tree against the catalog's recursive mutation
-// caps. Force skips operands that do not exist.
+// as one reviewed, recoverable operation. A tree exceeding the history
+// owner's recovery byte quota requires explicit permanent-removal review. Force skips operands that do not exist.
 type DeleteInput struct {
 	Paths     []string
 	FilesOnly bool
@@ -114,14 +107,16 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				if inspectErr != nil {
 					return result, inspectErr
 				}
-				unrecoverable := t.isOversizeForRecovery(summary.bytes)
 				displayPath := relSlash
 				if resolved.DisplayPath != "" {
 					displayPath = filepath.ToSlash(resolved.DisplayPath)
 				} else if resolved.ScopeRel != "" {
 					displayPath = filepath.ToSlash(resolved.ScopeRel)
 				}
-				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.files, summary.bytes, unrecoverable); err != nil {
+				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, func() error {
+					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof)
+					return err
+				}); err != nil {
 					return result, fmt.Errorf("delete %s: %w", relSlash, err)
 				}
 				result.Deleted = append(result.Deleted, relSlash)
@@ -141,14 +136,6 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 type deleteTreeSummary struct {
 	files int64
 	bytes int64
-}
-
-func (t *DeleteTool) isOversizeForRecovery(bytes int64) bool {
-	maxBytes := defaultDeleteRecoveryMaxBytes
-	if t.Caps.Bytes > 0 {
-		maxBytes = t.Caps.Bytes
-	}
-	return bytes > maxBytes
 }
 
 func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, root projectpaths.Resolved, prof string) (deleteTreeSummary, error) {

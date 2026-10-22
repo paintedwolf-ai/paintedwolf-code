@@ -43,6 +43,7 @@ type sourceWorkProgress struct {
 	ctx            context.Context
 	phase          string
 	entries, bytes int64
+	files          int64
 	last           time.Time
 }
 

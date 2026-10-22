@@ -33,7 +33,7 @@ func TestRetainedTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
 	testutil.FailErr(t, "create nested folder", os.MkdirAll(filepath.Join(root, "folder", "empty"), 0o750))
 	testutil.FailErr(t, "seed binary", os.WriteFile(filepath.Join(root, "folder", "data"), []byte{0, 1, 255}, 0o640))
 	testutil.FailErr(t, "seed dangling link", os.Symlink("../missing", filepath.Join(root, "folder", "link")))
-	before, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, "folder"))
+	before, _, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, "folder"))
 	testutil.FailErr(t, "fingerprint before", err)
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "folder", Recursive: true}
@@ -43,7 +43,7 @@ func TestRetainedTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
 	installTestTrash(t, restarted)
 	testutil.FailErr(t, "replay committed delete", restarted.Delete(t.Context(), id, p, req))
 	undoHistoryHead(t, restarted, p, id)
-	after, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, "folder"))
+	after, _, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, "folder"))
 	testutil.FailErr(t, "fingerprint restored tree", err)
 	if after != before {
 		t.Fatalf("restored fingerprint %s, want %s", after, before)
@@ -162,7 +162,7 @@ func TestTrashRecoveryFinishesInterruptedNativeEffect(t *testing.T) {
 	testutil.FailErr(t, "resolve root", err)
 	abs = filepath.Join(abs, "file")
 	testutil.FailErr(t, "seed", os.WriteFile(abs, []byte("recover"), 0o600))
-	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
+	fingerprint, _, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
 	id := uuid.NewString()
 	plan := sourceMutationPlan{
@@ -230,7 +230,7 @@ func TestInterruptedPreparationReleasesUnclaimedRecovery(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	abs := filepath.Join(root, "file")
 	testutil.FailErr(t, "seed", os.WriteFile(abs, []byte("still here"), 0o600))
-	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
+	fingerprint, _, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
 	plan := sourceMutationPlan{
 		sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: uuid.NewString(), TreeSHA: fingerprint},
@@ -300,7 +300,7 @@ func TestTrashPreflightFailureWaitsForExplicitRetry(t *testing.T) {
 	testutil.FailErr(t, "resolve root", err)
 	abs = filepath.Join(abs, "file")
 	testutil.FailErr(t, "seed", os.WriteFile(abs, []byte("keep"), 0o600))
-	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
+	fingerprint, _, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
 	id := uuid.NewString()
 	plan := sourceMutationPlan{

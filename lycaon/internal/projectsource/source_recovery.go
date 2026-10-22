@@ -1,6 +1,7 @@
 package projectsource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -22,9 +24,13 @@ type sourceRecovery struct {
 	db              db.Handle
 	objects         RecoveryStorage
 	stateMu         sync.Mutex
+	lifecycle       sync.RWMutex
+	quota           func() int64
 	recoveryBytes   map[string][]byte
 	recoveryEntries map[string][]sourceledger.RecoveryEntry
 }
+
+var ErrSourceRecoveryQuota = errors.New("source recovery content exceeds the history byte quota")
 
 var ErrSourceRecoveryFailed = errors.New("could not preserve file recovery data")
 
@@ -286,10 +292,11 @@ type sourceRecoveryCapture struct {
 	progress *sourceWorkProgress
 	root     sourceHistoryBuffer
 	rootSHA  string
+	quota    int64
 }
 
 func (s *sourceRecovery) beginRecoveryCapture(ctx context.Context, plan *sourceMutationPlan, phase string) (*sourceRecoveryCapture, error) {
-	capture := &sourceRecoveryCapture{service: s, plan: plan, digest: newSourceTreeDigest(), progress: newSourceWorkProgress(ctx, phase)}
+	capture := &sourceRecoveryCapture{service: s, plan: plan, quota: s.quota(), digest: newSourceTreeDigest(), progress: newSourceWorkProgress(ctx, phase)}
 	if s.objects != nil {
 		writer, err := s.objects.BeginRecovery(ctx, plan.ProjectID, plan.RecoveryID)
 		if err != nil {
@@ -314,7 +321,7 @@ func (c *sourceRecoveryCapture) close() {
 }
 
 func (c *sourceRecoveryCapture) append(ctx context.Context, entry sourceledger.RecoveryEntry, root *os.Root, path string, destination io.Writer) (sourceledger.RecoveryEntry, error) {
-	writers := []io.Writer{c.progress}
+	writers := []io.Writer{c}
 	if destination != nil {
 		writers = append(writers, destination)
 	}
@@ -341,19 +348,49 @@ func (c *sourceRecoveryCapture) append(ctx context.Context, entry sourceledger.R
 	return entry, nil
 }
 
+// Write admits bytes before either capture storage or a copied destination.
+func (c *sourceRecoveryCapture) Write(p []byte) (int, error) {
+	if int64(len(p)) > c.quota-c.progress.bytes {
+		return 0, ErrSourceRecoveryQuota
+	}
+	return c.progress.Write(p)
+}
+
 func (c *sourceRecoveryCapture) appendMemory(entry sourceledger.RecoveryEntry, root *os.Root, path string, destination io.Writer) (sourceledger.RecoveryEntry, error) {
 	if os.FileMode(entry.Mode).IsRegular() {
-		content, err := root.ReadFile(path)
+		file, err := root.Open(path)
 		if err != nil {
 			return entry, err
 		}
+		defer func() { _ = file.Close() }()
+		before, err := file.Stat()
+		if err != nil {
+			return entry, err
+		}
+		remaining := c.quota - c.progress.bytes
+		if before.Size() > remaining {
+			return entry, ErrSourceRecoveryQuota
+		}
+		if before.Mode() != os.FileMode(entry.Mode) {
+			return entry, ErrSourceMutationDiverged
+		}
+		var body bytes.Buffer
+		n, err := io.Copy(io.MultiWriter(destination, &body), contextio.Reader{Context: c.progress.ctx, Source: io.LimitReader(file, remaining+1)})
+		if err != nil {
+			return entry, err
+		}
+		after, err := file.Stat()
+		if err != nil {
+			return entry, err
+		}
+		if n != before.Size() || !sameSourceFileVersion(before, after) {
+			return entry, ErrSourceMutationDiverged
+		}
+		content := body.Bytes()
 		entry.SHA = sourceblob.ContentSHA(content)
 		c.service.stateMu.Lock()
 		c.service.recoveryBytes[entry.SHA] = content
 		c.service.stateMu.Unlock()
-		if _, err := destination.Write(content); err != nil {
-			return entry, err
-		}
 	}
 	c.service.stateMu.Lock()
 	c.service.recoveryEntries[c.plan.RecoveryID] = append(c.service.recoveryEntries[c.plan.RecoveryID], entry)

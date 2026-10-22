@@ -284,7 +284,7 @@ func prepareRestoreOverContent(
 		return nil, ErrSourceWriteConflict
 	}
 	if req.Version.State == string(api.SourceTipStateAbsent) {
-		treeSHA, fingerprintErr := sourceTreeFingerprint(ctx, abs)
+		treeSHA, _, fingerprintErr := sourceTreeFingerprint(ctx, abs)
 		if fingerprintErr != nil {
 			return nil, fingerprintErr
 		}

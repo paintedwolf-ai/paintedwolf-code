@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"sort"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -74,48 +73,11 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 	return pruneSourceHistoryRecoveryQuotaTx(ctx, tx, entry.ProjectID, quotaBytes)
 }
 
-func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectID string, quotaBytes int64) error {
-	if quotaBytes <= 0 {
-		quotaBytes = DefaultSourceHistoryRecoveryQuotaBytes
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT id, COALESCE(CAST(json_extract(redo_plan_json, '$.before_size') AS INTEGER), CAST(json_extract(undo_plan_json, '$.before_size') AS INTEGER), 0) FROM source_history_entries WHERE project_id=? ORDER BY seq DESC`, projectID)
-	if err != nil {
-		return err
-	}
-	type retainedRow struct {
-		id   string
-		size int64
-	}
-	var retained []retainedRow
-	for rows.Next() {
-		var r retainedRow
-		if err := rows.Scan(&r.id, &r.size); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		retained = append(retained, r)
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	var total int64
-	var evict []string
-	for _, r := range retained {
-		if total+r.size > quotaBytes {
-			evict = append(evict, r.id)
-			continue
-		}
-		total += r.size
-	}
-	for _, id := range evict {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM source_history_entries WHERE project_id=? AND id=?`, projectID, id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *SourceMutationService) reclaimEvictedRecovery(ctx context.Context) {
+	if s.recovery.objects == nil {
+		s.reclaimMemoryRecovery()
+		return
+	}
 	if s.recovery.objects != nil {
 		if err := s.recovery.objects.SweepBlobs(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
 			slog.WarnContext(ctx, "source recovery reclamation", "error", err)
@@ -167,22 +129,6 @@ func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry
 	s.history[copy.ID] = &copy
 	s.pruneSourceHistoryMemory(copy.ProjectID)
 	return nil
-}
-
-func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
-	entries := make([]*sourceHistoryEntry, 0)
-	for _, entry := range s.history {
-		if entry.ProjectID == projectID {
-			entries = append(entries, entry)
-		}
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Seq > entries[j].Seq })
-	if len(entries) <= sourceHistoryLimit {
-		return
-	}
-	for _, entry := range entries[sourceHistoryLimit:] {
-		delete(s.history, entry.ID)
-	}
 }
 
 func historyTransitionStates(transition string) (string, string) {

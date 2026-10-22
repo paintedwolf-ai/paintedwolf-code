@@ -15,12 +15,12 @@ import (
 )
 
 type SourceHistory struct {
-	db          db.Handle
-	recovery    *sourceRecovery
-	stateMu     sync.Mutex
-	history     map[string]*sourceHistoryEntry
-	historySeq  int64
-	quotaBytes  int64
+	db         db.Handle
+	recovery   *sourceRecovery
+	stateMu    sync.Mutex
+	history    map[string]*sourceHistoryEntry
+	historySeq int64
+	quotaBytes int64
 }
 
 const (
@@ -28,7 +28,9 @@ const (
 	DefaultSourceHistoryRecoveryQuotaBytes = 256 << 20 // 256 MiB
 )
 
-// SetRecoveryQuotaBytes overrides the retained recovery byte quota per project.
+// SetRecoveryQuotaBytes overrides the logical retained content quota per project.
+// Nonpositive values restore the default; they never disable recovery admission.
+// Compression and deduplication do not change this history policy.
 func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
 	if s == nil {
 		return
@@ -36,6 +38,10 @@ func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
 	s.stateMu.Lock()
 	s.quotaBytes = quota
 	s.stateMu.Unlock()
+}
+
+func (s *SourceMutationService) RecoveryQuotaBytes() int64 {
+	return s.History.recoveryQuotaBytes()
 }
 
 func (s *SourceHistory) recoveryQuotaBytes() int64 {
@@ -311,7 +317,7 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 		fingerprint := original.TreeSHA
 		if fingerprint == "" {
 			var err error
-			fingerprint, err = sourceTreeFingerprint(ctx, targetAbs)
+			fingerprint, _, err = sourceTreeFingerprint(ctx, targetAbs)
 			if err != nil {
 				return sourceHistoryPlans{}, err
 			}
