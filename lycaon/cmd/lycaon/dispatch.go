@@ -6,7 +6,7 @@ func isCLIVerb(name string) bool {
 	switch name {
 	case "serve", "open", "ls", "logs", "completion", "diagnostics", "credentials",
 		"scan", "workflow", "extensions", "rules", "prompts", "browser", "decide", "git-credential-osxkeychain",
-		"git-credential-vault", "internal-scan-worker":
+		"git-credential-vault", "internal-scan-worker", "internal-system-proxy":
 		return true
 	default:
 		return false
