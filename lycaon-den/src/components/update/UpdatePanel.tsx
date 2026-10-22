@@ -72,22 +72,3 @@ export function UpdatePanel(props: UpdatePanelProps) {
       <Show when={current().install_source !== "system_package" && candidate()}>{(release) => <p>Version {release().version} is available.</p>}</Show>
       <Show when={installationStatus(current())}>{(status) => <p role="status" aria-live="polite" aria-atomic="true" data-testid="updates-installation-status">{status()}{current().installation === "downloading" ? progress() : ""}</p>}</Show>
       <Show when={current().install_source === "system_package" && current().package}>{(pkg) => <>
-        <Show when={nix()} fallback={<p data-testid="updates-package-identity">Installed from the {pkg().name} {pkg().version} package ({pkg().family}). Your package manager owns this installation.</p>}>
-          <p data-testid="updates-package-identity">Running Nix build {pkg().name} {pkg().version}. The configuration or profile that owns this installation is unknown.</p>
-          <p data-testid="updates-nix-owner">Use the NixOS configuration, Home Manager configuration or user profile where you chose this package. A temporary launch may have no installed profile. This app cannot choose an upgrade command for you.</p>
-          <p data-testid="updates-nix-pin">{pkg().source.pinned === true ? "This installation is pinned; an upstream release check does not change its pin." : pkg().source.pinned === false ? "This installation is not pinned. Its selected source still controls the available version." : "Whether this installation is intentionally pinned is unknown."}</p>
-        </Show>
-        <Show when={candidate()}>{(release) => <p data-testid="updates-package-upgrade">{nix() ? `${current().discovery === "failed" ? "Previously seen upstream" : "Upstream"} version ${release().version}${current().discovery === "failed" ? ". Recheck the upstream feed before acting on this notice." : " is available."} Availability through your selected Nix source has not been checked. Review the owning input and pin before upgrading.` : `Upstream version ${release().version} is available. Availability through your configured package source is unknown. Review your package repositories, holds and pins before upgrading.`}</p>}</Show>
-      </>}</Show>
-      <Show when={current().install_source === "unpackaged"}><p data-testid="updates-unpackaged">This copy was not installed from a package, so no update command is available. Install the .deb or .rpm package to receive update notices.</p></Show>
-      <Show when={current().install_source === "homebrew_cask"}><p data-testid="updates-brew-upgrade">You installed this with Homebrew — run <code>brew upgrade --cask {current().channel === "preview" ? "painted-wolf-code@preview" : "painted-wolf-code"}</code> to update.</p></Show>
-      <Show when={current().capabilities.blocked_reason === "unsupported_installation"}><p>This installation needs permission or a supported location to update.</p></Show>
-      <Show when={current().capabilities.blocked_reason === "state_unavailable"}><p>Updates are paused because Painted Wolf Code could not coordinate with its installation. Close other copies and reopen the app.</p></Show>
-    </div>}</Show>
-    <Show when={candidate()?.notes} keyed>{(notes) => <div class="den-settings-hint update-release-notes" data-testid="updates-release-notes"><MarkdownBody untrusted source={notes} /></div>}</Show>
-    <Show when={state()?.capabilities.can_download || state()?.capabilities.can_restart_to_update}>
-      <DenButton variant="primary" data-testid="updates-install" disabled={updates.busy()} onClick={action}>{state()?.capabilities.can_restart_to_update ? "Restart to update" : state()?.installation === "failed" ? "Retry update" : "Download update"}</DenButton>
-    </Show>
-    <Show when={updates.error() ?? state()?.last_error}>{(error) => <div class="den-settings-hint" data-testid="updates-install-status"><p role="alert">{UPDATE_ERROR_MESSAGES[error().code]}</p><Show when={error().detail}>{(detail) => <details><summary><span class="den-disclosure-caret" aria-hidden="true" />Technical details</summary><p>{detail()}</p></details>}</Show></div>}</Show>
-  </div>;
-}

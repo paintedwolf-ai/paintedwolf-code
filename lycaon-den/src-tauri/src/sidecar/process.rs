@@ -104,8 +104,9 @@ pub(super) fn spawn_sidecar_process(
     password: Option<&[u8]>,
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::ensure_host_config_dir()?;
-    let mut cmd = Command::new(&bin);
+    let mut cmd = Command::new(&image.path);
     cmd.arg("serve")
         .env("LYCAON_ADDR", "127.0.0.1:0")
         .env("LYCAON_API_TOKEN", api_token)
