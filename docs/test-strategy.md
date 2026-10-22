@@ -721,8 +721,14 @@ nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
 documentation are build inputs and widen the gate. Unknown paths,
 fixtures, dependencies, build inputs, generated contracts, and verification
 policy expand to the full `check` profile. A missing Git base fails planning;
-an unresolved Go graph runs the full Go recipe. An empty shard never passes as
-an empty test run. Selection and source identities travel with each lane receipt.
+an unresolved Go graph runs the full Go recipe. Go source under `internal/`,
+`cmd/`, and `test/` uses the same resolved import graph, including test imports. Contract and smoke packages remain mandatory.
+Changes to command or test source do not select unrelated native or frontend
+lanes; mixed changes union their obligations. Go outside the module's graph
+(nested modules such as the harness fixture projects, `testdata`, and
+directories Go ignores), other fixtures, public package contracts, and unknown
+paths still widen verification.
+An empty shard never passes as an empty test run. Selection and source identities travel with each lane receipt.
 
 Native Rust source has explicit verification dependencies in
 [`native_impact.py`](../scripts/ci_policy/native_impact.py). Tauri source runs native,
