@@ -9,6 +9,7 @@ runs:
   steps:
     - name: Resolve native package archive identity
       id: packages
+      timeout-minutes: 7
       shell: bash
       run: python3 "$GITHUB_ACTION_PATH/provision.py" plan
 
@@ -19,6 +20,7 @@ runs:
         key: ${{ steps.packages.outputs.key }}
 
     - name: Install resolved native packages
+      timeout-minutes: 9
       shell: bash
       run: python3 "$GITHUB_ACTION_PATH/provision.py" install
 

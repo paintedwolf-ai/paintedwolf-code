@@ -31,6 +31,9 @@ jobs:
     needs: verification
     runs-on: macos-15
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         shell: bash
@@ -65,12 +68,16 @@ jobs:
       - name: Cache the release build
         id: build
         uses: ./.github/actions/cache-release-build
-        with:
-          save: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Warm release compiler caches
         if: steps.build.outputs.cache-hit != 'true'
         run: ./task setup-dev -- --release-cache
+
+      - name: Publish prepared release compiler cache
+        if: github.ref == 'refs/heads/main' && steps.build.outputs.cache-hit != 'true'
+        uses: ./.github/actions/cache-release-build
+        with:
+          save: 'true'
 
   # Seeds the caches setup-verification restores in the merge queue, pull
   # requests, and nightly runs, by compiling the dependencies their lanes build.
@@ -124,7 +131,13 @@ jobs:
         if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
-      # Inline saves resolve cache paths before lint without nested post-job contexts.
+      - name: Publish prepared desktop compiler cache
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.rust-cache-hit != 'true'
+        uses: ./.github/actions/cache-rust
+        with:
+          save: 'true'
+
+      # Publish completed compiler caches before diagnostic work.
       - name: Publish prepared Go caches
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
         uses: ./.github/actions/cache-go

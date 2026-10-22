@@ -1,4 +1,5 @@
-"""Resolve and install the native verification environment on an ephemeral Linux runner."""
+"""Install the native package closure resolved from the runner's signed APT indexes."""
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -7,8 +8,13 @@ import re
 import shlex
 import subprocess
 import sys
+import time
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent
+DOWNLOAD_SECONDS = 240
+TRANSFER_SECONDS = 30
 
 
 def packages():
@@ -19,8 +25,10 @@ def packages():
 
 
 def apt(*arguments, capture=False):
-    result = subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", *arguments],
-                            check=True, text=True, stdout=subprocess.PIPE if capture else None)
+    command = ["sudo", "timeout", "--kill-after=10s", "180s", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get",
+               "-o", "Acquire::Retries=2", "-o", "Acquire::http::Timeout=20", "-o", "Acquire::https::Timeout=20",
+               *arguments]
+    result = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE if capture else None)
     return result.stdout
 
 
@@ -32,35 +40,127 @@ def runner_image(environment):
     return [environment[name] for name in fields]
 
 
-def archive_identity(plan, names, environment):
-    archives = []
+def archives(plan):
+    rows = []
     for line in plan.splitlines():
-        if line.startswith("'"):
-            fields = shlex.split(line)
-            if len(fields) != 4 or not fields[2].isdigit() or not re.fullmatch(r"SHA256:[0-9a-fA-F]{64}", fields[3]):
-                raise ValueError("APT archive plan must contain sizes and SHA256 digests")
-            archives.append(fields[1:])
-    identity = {"packages": names, "archives": sorted(archives),
+        if not line.startswith("'"):
+            continue
+        fields = shlex.split(line)
+        if (len(fields) != 4 or not fields[2].isdigit() or int(fields[2]) <= 0
+                or not re.fullmatch(r"SHA256:[0-9a-fA-F]{64}", fields[3])
+                or not re.fullmatch(r"[A-Za-z0-9.+~%:_-]+\.deb", fields[1])):
+            raise ValueError("APT archive plan must contain safe filenames, sizes and SHA256 digests")
+        uri = urlsplit(fields[0])
+        if uri.scheme not in {"http", "https"} or not uri.hostname or uri.username or uri.password:
+            raise ValueError("APT archive plan requires an HTTP package origin without credentials")
+        rows.append(dict(uri=fields[0], name=fields[1], size=int(fields[2]), sha256=fields[3][7:].lower()))
+    if len({row["name"] for row in rows}) != len(rows):
+        raise ValueError("APT archive plan contains duplicate filenames")
+    return rows
+
+
+def archive_identity(plan, names, environment):
+    rows = archives(plan)
+    identity = {"packages": names,
+                "archives": sorted([row["name"], str(row["size"]), "SHA256:" + row["sha256"]] for row in rows),
                 "image": runner_image(environment)}
     return "linux-native-v1-" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def origins(uri):
+    parsed = urlsplit(uri)
+    result = [uri]
+    if parsed.hostname in {"azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com"} and parsed.path.startswith("/ubuntu/pool/"):
+        fallback = urlunsplit(("https", "archive.ubuntu.com", parsed.path, "", ""))
+        if fallback != uri:
+            result.append(fallback)
+    elif parsed.hostname == "ports.ubuntu.com" and parsed.scheme == "http" and parsed.path.startswith("/ubuntu-ports/pool/"):
+        result.append(urlunsplit(("https", parsed.netloc, parsed.path, "", "")))
+    return result
+
+
+def verified(path, row):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size != row["size"]:
+        return False
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest() == row["sha256"]
+
+
+def transfer(uri, path, row, deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("native package download deadline expired")
+    with urlopen(uri, timeout=min(15, remaining)) as response, path.open("wb") as output:
+        total = 0
+        while block := response.read(64 * 1024):
+            total += len(block)
+            if time.monotonic() >= deadline:
+                raise TimeoutError("native package transfer exceeded its deadline")
+            if total > row["size"]:
+                raise ValueError("native package exceeds its resolved size")
+            output.write(block)
+    if time.monotonic() >= deadline:
+        raise TimeoutError("native package transfer exceeded its deadline")
+    if not verified(path, row):
+        raise ValueError("native package differs from its resolved SHA256 or size")
+
+
+def fetch(row, directory, deadline):
+    destination = directory / row["name"]
+    if verified(destination, row):
+        return "cached"
+    temporary = directory / "partial" / row["name"]
+    failures = []
+    for uri in origins(row["uri"]):
+        try:
+            transfer(uri, temporary, row, min(deadline, time.monotonic() + TRANSFER_SECONDS))
+            temporary.replace(destination)
+            print(f"Native package verified: {row['name']} from {urlsplit(uri).hostname}", flush=True)
+            return "downloaded"
+        except (OSError, ValueError) as error:
+            failures.append(f"{urlsplit(uri).hostname}: {error}")
+        finally:
+            temporary.unlink(missing_ok=True)
+    raise ValueError(f"Unable to prepare {row['name']}: {'; '.join(failures)}")
+
+
+def prepare(rows, directory):
+    started = time.monotonic()
+    deadline = started + DOWNLOAD_SECONDS
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(lambda row: fetch(row, directory, deadline), rows))
+    summary = {"archives": len(rows), "cached": results.count("cached"), "downloaded": results.count("downloaded"),
+               "download_seconds": round(time.monotonic() - started, 3)}
+    print(json.dumps(summary, sort_keys=True), flush=True)
+    return summary
 
 
 def main(mode):
     if os.environ.get("RUNNER_OS") != "Linux":
         raise ValueError("native package preparation requires a Linux runner")
-    runner_image(os.environ)
+    image = runner_image(os.environ)
     names = packages()
     directory = Path(os.environ["RUNNER_TEMP"]) / "paintedwolf-native-archives"
     (directory / "partial").mkdir(parents=True, exist_ok=True)
+    manifest = directory / "plan.json"
     if mode == "plan":
         apt("update")
         plan = apt("-o", "Acquire::ForceHash=SHA256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)
         key = archive_identity(plan, names, os.environ)
+        manifest.write_text(json.dumps({"plan": plan, "packages": names, "image": image, "key": key}, indent=2) + "\n")
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
             output.write(f"archives={directory}\nkey={key}\n")
     elif mode == "install":
+        value = json.loads(manifest.read_text())
+        if (value["packages"] != names or value["image"] != image
+                or value["key"] != archive_identity(value["plan"], names, os.environ)):
+            raise ValueError("native package plan no longer matches the runner and package inputs")
+        summary = prepare(archives(value["plan"]), directory)
         apt("-o", f"Dir::Cache::archives={directory}", "-o", "APT::Keep-Downloaded-Packages=true",
-            "--yes", "--no-install-recommends", "install", *names)
+            "--no-download", "--yes", "--no-install-recommends", "install", *names)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+                output.write("### Native package preparation\n\n```json\n" + json.dumps(summary, indent=2) + "\n```\n")
     else:
         raise ValueError("expected plan or install")
 
