@@ -807,6 +807,15 @@ commit. Nightly retains race, fuzz, WebKit, stress, and performance
 coverage. A release requires a successful **Qualification** run for its exact
 commit on main; passing merge admission is insufficient.
 
+Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
+analysis-tool caches immediately after compiler preparation. Optional lint
+diagnostics run afterward and publish their own result separately. A failed or
+cancelled preparation cannot publish these caches; only trusted main writes them.
+The Go cache captures completed build preparation before lint adds test-variant
+compilation and vet facts; lint lanes may need to compute those entries themselves.
+Lint diagnostics remain a separate cache. A long diagnostic run cannot delay the
+prepared build inputs.
+
 #### Determinism and capacity
 
 Required integration execution has a Linux network namespace containing only
