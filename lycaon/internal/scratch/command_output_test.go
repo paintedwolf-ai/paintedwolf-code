@@ -25,3 +25,39 @@ func TestCommandOutputRejectsInvalidDestinationsWithoutCreatingFiles(t *testing.
 		t.Fatalf("invalid destination created output directory: %v", err)
 	}
 }
+
+func TestCommandOutputDirectoryPreparedBeforePublication(t *testing.T) {
+	root := t.TempDir()
+	dir, err := scratch.PrepareCommandOutputDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("unpublished output directory: %v, %v", entries, err)
+	}
+	if err := scratch.PublishCommandOutput(root, "program", "stdout", strings.NewReader("saved\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scratch.PrepareCommandOutputDirectory(root); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "program.stdout"))
+	if err != nil || string(data) != "saved\n" {
+		t.Fatalf("prepared directory lost retained output: %q, %v", data, err)
+	}
+}
+
+func TestCommandOutputPreparationRefusesDirectoryAlias(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "output")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scratch.PrepareCommandOutputDirectory(root); !errors.Is(err, fseffect.ErrSymlink) {
+		t.Fatalf("output alias accepted: %v", err)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("outside directory changed: %v, %v", entries, err)
+	}
+}
