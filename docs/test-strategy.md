@@ -792,6 +792,12 @@ pinned browser under confinement) runs on both. Platform qualification's
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
 
+Admission runs the hosted, runner, evidence, host, and security contract packages
+before static checks. Host watch-coverage and browser-launch contracts therefore
+reject changes before enqueueing. The existing frontend seam canaries also run
+in admission and include native IPC registration parity. Full behavior and
+frontend suites still run on the exact landing commit.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency

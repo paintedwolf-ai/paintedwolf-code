@@ -29,13 +29,14 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(ci.max_parallel("fast"), 1)
         stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
-        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint"})
+        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast"})
         self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--",
-                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence"])
+                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence",
+                         "./test/contract/host", "./test/contract/security"])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
         # Product suites and changed coverage run on the landing commit.
-        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
+        self.assertFalse(set(stages) & {"test:short", "test:contract", "coverage:changes",
                                          "den:coverage:changes"})
         self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
 
