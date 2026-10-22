@@ -105,6 +105,8 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 }
 
 type agentStreamRequest struct {
+	// Mode applies to a new file; nil uses the ordinary write mode.
+	Mode         *os.FileMode
 	Target       mutationTarget
 	Source       io.Reader
 	BeforeCommit func(fseffect.Target, fseffect.Result) error
@@ -123,8 +125,12 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
 	var journal sourceeffect.Pending
 	var captured revisionCapture
+	mode := os.FileMode(0o644)
+	if req.Mode != nil {
+		mode = *req.Mode
+	}
 	result, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: req.Target.Location, Source: io.TeeReader(req.Source, &captured), Mode: 0o644, PreserveMode: true,
+		Location: req.Target.Location, Source: io.TeeReader(req.Source, &captured), Mode: mode, PreserveMode: true,
 		ReviewStaged: func(target fseffect.Target, staged fseffect.Result) error {
 			if req.BeforeCommit != nil {
 				if err := req.BeforeCommit(target, staged); err != nil {

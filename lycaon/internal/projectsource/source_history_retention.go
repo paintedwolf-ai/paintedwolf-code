@@ -3,6 +3,7 @@ package projectsource
 import (
 	"context"
 	"database/sql"
+	"math"
 	"sort"
 )
 
@@ -30,6 +31,9 @@ func retainedRecoveryBytes(undo, redo historyRecoveryUsage) int64 {
 	if undo.id == redo.id {
 		return max(undo.bytes, redo.bytes)
 	}
+	if undo.bytes > math.MaxInt64-redo.bytes {
+		return math.MaxInt64
+	}
 	return undo.bytes + redo.bytes
 }
 
@@ -48,6 +52,7 @@ func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectI
 	}
 	var total int64
 	var evict []string
+	newest := true
 	for rows.Next() {
 		var id string
 		var undo, redo historyRecoveryUsage
@@ -56,11 +61,14 @@ func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectI
 			return err
 		}
 		size := retainedRecoveryBytes(undo, redo)
-		if size > quotaBytes-total {
+		// An already-applied operation may be recovered under a lower quota.
+		// Preserve its promised newest Undo; new captures cannot exceed quota.
+		if !newest && size > 0 && size > max(0, quotaBytes-total) {
 			evict = append(evict, id)
 		} else {
 			total += size
 		}
+		newest = false
 	}
 	scanErr := rows.Err()
 	if err := rows.Close(); err != nil {
@@ -93,7 +101,7 @@ func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
 	var total int64
 	for i, entry := range entries {
 		size := retainedRecoveryBytes(recoveryUsage(entry.UndoPlan), recoveryUsage(entry.RedoPlan))
-		if i >= sourceHistoryLimit || size > quota-total {
+		if i >= sourceHistoryLimit || (i > 0 && size > 0 && size > max(0, quota-total)) {
 			delete(s.history, entry.ID)
 		} else {
 			total += size
@@ -104,7 +112,9 @@ func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
 // Memory reclamation observes history and pending receipts only after all
 // captures have published or released their references.
 func (s *SourceMutationService) reclaimMemoryRecovery() {
-	s.recovery.lifecycle.Lock()
+	if !s.recovery.lifecycle.TryLock() {
+		return
+	}
 	defer s.recovery.lifecycle.Unlock()
 	retained := map[string]bool{}
 	s.History.stateMu.Lock()

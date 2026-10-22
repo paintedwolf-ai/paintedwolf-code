@@ -43,6 +43,11 @@ func (s *SourceMutationService) RemoveEntry(ctx context.Context, removal sourcee
 	if record.BranchID.IsWorker() {
 		return "", fmt.Errorf("agent removal on a worker branch belongs to its overlay")
 	}
+	releaseHistory, err := s.Paths.lockSourceHistory(ctx, record.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	defer releaseHistory()
 	operationID := record.OperationID
 	if operationID == "" {
 		operationID = uuid.NewString()

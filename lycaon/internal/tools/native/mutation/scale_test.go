@@ -42,8 +42,8 @@ func TestDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 	// directories must evict older history entries and sweep their blobs.
 	h.service.History.SetRecoveryQuotaBytes(4096)
 
-	chunk := strings.Repeat("retained-build-artifact-line\n", 48) // 1536 bytes per file
 	for round := 0; round < 5; round++ {
+		chunk := fmt.Sprintf("round %d\n", round) + strings.Repeat("retained-build-artifact-line\n", 48)
 		for _, dir := range []string{"node_modules/pkg", "dist/assets"} {
 			full := h.path(filepath.Join(dir, fmt.Sprintf("bundle-%d.js", round)))
 			testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(filepath.Dir(full), 0o755))

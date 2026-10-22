@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
@@ -118,4 +120,77 @@ func TestPermanentRemovalRevalidatesPreparedContentBeforeDisposal(t *testing.T) 
 		t.Fatalf("changed prepared tree = %v", err)
 	}
 	assertSourceHistoryFile(t, root, "tree/file", "grew after preparation")
+}
+
+func TestQuotaChangesWaitForAcceptedRemoval(t *testing.T) {
+	service := NewSourceMutationService(nil, nil)
+	root := t.TempDir()
+	project := &Project{ID: "project", Roots: []Root{{ID: "root", ProjectID: "project", Path: root, IsPrimary: true}}}
+	service.History.SetRecoveryQuotaBytes(4)
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("body"), 0o600))
+	reached, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	ctx := WithSourceEffect(t.Context(), func() error { close(reached); <-release; return nil })
+	removed := make(chan error, 1)
+	go func() {
+		_, err := service.RemoveEntry(ctx, agentRemoval(project, "file", textfile.SHA256([]byte("body"))))
+		removed <- err
+	}()
+	select {
+	case <-reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("removal did not reach effect boundary")
+	}
+	changing, changed := make(chan struct{}), make(chan struct{})
+	go func() { close(changing); service.History.SetRecoveryQuotaBytes(1); close(changed) }()
+	<-changing
+	select {
+	case <-changed:
+		t.Fatal("quota changed before accepted removal finished")
+	case <-time.After(50 * time.Millisecond):
+	}
+	unblock()
+	testutil.FailErr(t, "settle removal", <-removed)
+	<-changed
+	state, err := service.History.State(t.Context(), project.ID)
+	testutil.FailErr(t, "read accepted Undo", err)
+	if state.Undo == nil {
+		t.Fatal("quota update discarded the accepted removal's Undo")
+	}
+}
+
+func TestAppliedRecoveryKeepsUndoWhenRestartQuotaIsLower(t *testing.T) {
+	service, project, root, _ := sourceMutationFixture(t)
+	ledger := service.settlement.recorder.(*sourceledger.Store)
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("body"), 0o600))
+	removal := agentRemoval(project, "file", textfile.SHA256([]byte("body")))
+	removal.Record.OperationID = uuid.NewString()
+	interrupted := errors.New("pause before effect")
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != interrupted {
+				t.Fatalf("interruption=%v", recovered)
+			}
+		}()
+		_, _ = service.RemoveEntry(WithSourceEffect(t.Context(), func() error { panic(interrupted) }), removal)
+	}()
+	row, found, err := service.Journal.load(t.Context(), removal.Record.OperationID)
+	testutil.FailErr(t, "read prepared receipt", err)
+	if !found {
+		t.Fatal("prepared receipt missing")
+	}
+	testutil.FailErr(t, "apply without settlement", service.Effects.applyMutation(t.Context(), row))
+	row.Status = sourceMutationFileApplied
+	testutil.FailErr(t, "record interrupted settlement", service.Journal.update(t.Context(), row))
+	restarted := NewSourceMutationService(service.Journal.db, ledger)
+	restarted.History.SetRecoveryQuotaBytes(1)
+	testutil.FailErr(t, "settle accepted recovery", restarted.Recover(t.Context()))
+	state, err := restarted.History.State(t.Context(), project.ID)
+	testutil.FailErr(t, "read recovered Undo", err)
+	if state.Undo == nil || state.Undo.ID != removal.Record.OperationID {
+		t.Fatalf("accepted recovery lost Undo: %+v", state)
+	}
+	undoHistoryHead(t, restarted, project, removal.Record.OperationID)
+	assertSourceHistoryFile(t, root, "file", "body")
 }

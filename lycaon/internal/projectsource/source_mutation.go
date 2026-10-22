@@ -62,6 +62,8 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 	if s == nil || strings.TrimSpace(operationID) == "" {
 		return nil, fmt.Errorf("source mutation operation id required")
 	}
+	s.History.policyMu.RLock()
+	defer s.History.policyMu.RUnlock()
 	unlock, err := s.operationLocks.Acquire(ctx, operationID)
 	if err != nil {
 		return nil, err

@@ -201,7 +201,9 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 	if readLimit < math.MaxInt64 {
 		readLimit++
 	}
+	mode := info.Mode().Perm()
 	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{
+		Mode:   &mode,
 		Target: target, Source: contextio.Reader{Context: ctx, Source: io.LimitReader(in, readLimit)},
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
 			if staged.Bytes <= maxBytes {

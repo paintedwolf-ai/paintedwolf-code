@@ -28,15 +28,18 @@ func (s *SourceMutationService) Recover(ctx context.Context) error {
 }
 
 func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutationRow) error {
-	if s.recovery.objects == nil {
-		s.recovery.lifecycle.RLock()
-		defer s.recovery.lifecycle.RUnlock()
-	}
+	s.History.policyMu.RLock()
+	defer s.History.policyMu.RUnlock()
 	unlock, err := s.operationLocks.Acquire(ctx, row.ID)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	if s.recovery.objects == nil {
+		s.recovery.lifecycle.RLock()
+		defer s.recovery.lifecycle.RUnlock()
+	}
+
 	// The row may change while recovery waits for the operation lock.
 	current, found, err := s.Journal.load(ctx, row.ID)
 	if err != nil {

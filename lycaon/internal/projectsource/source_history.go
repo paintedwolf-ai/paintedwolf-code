@@ -18,6 +18,7 @@ type SourceHistory struct {
 	db         db.Handle
 	recovery   *sourceRecovery
 	stateMu    sync.Mutex
+	policyMu   sync.RWMutex
 	history    map[string]*sourceHistoryEntry
 	historySeq int64
 	quotaBytes int64
@@ -30,11 +31,14 @@ const (
 
 // SetRecoveryQuotaBytes overrides the logical retained content quota per project.
 // Nonpositive values restore the default; they never disable recovery admission.
-// Compression and deduplication do not change this history policy.
+// Changes wait for accepted source operations to finish. Compression and
+// deduplication do not change this history policy.
 func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
 	if s == nil {
 		return
 	}
+	s.policyMu.Lock()
+	defer s.policyMu.Unlock()
 	s.stateMu.Lock()
 	s.quotaBytes = quota
 	s.stateMu.Unlock()

@@ -62,3 +62,21 @@ func TestRecursiveCopyRechecksGrowthAfterPreflight(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyNewFilesKeepsSourcePermissionsAndExistingFilesKeepTheirMode(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/tool": "executable", "existing": "old"})
+	testutil.FailErr(t, "set executable source mode", os.Chmod(h.path("tree/tool"), 0o750))
+	testutil.FailErr(t, "set existing destination mode", os.Chmod(h.path("existing"), 0o600))
+	for _, args := range [][]string{{"cp", "-r", "tree", "copy"}, {"cp", "tree/tool", "existing"}} {
+		if r := h.run("", args...); r.err != nil || r.result.Status != 0 {
+			t.Fatalf("copy mode: result=%+v error=%v", r.result, r.err)
+		}
+	}
+	for path, want := range map[string]os.FileMode{"copy/tool": 0o750, "existing": 0o600} {
+		info, err := os.Stat(h.path(path))
+		testutil.FailErr(t, "stat copy", err)
+		if got := info.Mode().Perm(); got != want {
+			t.Fatalf("%s mode=%04o; want %04o", path, got, want)
+		}
+	}
+}

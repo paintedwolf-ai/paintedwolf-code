@@ -99,9 +99,9 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 			visible = filteredProcs
 		}
 
-		columns := "pid,tty,time,command"
+		columns := "pid,tty,time,cmd"
 		if bsdAux {
-			columns = "user,pid,pcpu,pmem,vsz,rss,tty,stat,start,time,command"
+			columns = "user,pid,%cpu,%mem,vsz,rss,tty,stat,start,time,command"
 		}
 		if fullFmt && !bsdAux {
 			columns = "uid,pid,ppid,c,stime,tty,time,cmd"
