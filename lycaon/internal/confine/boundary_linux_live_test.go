@@ -98,8 +98,20 @@ func runLinuxProbe(mode string) int {
 		}
 		return 4
 	case "unshare":
-		fmt.Println("unshare:", unix.Unshare(unix.CLONE_NEWNS))
-		return 4
+		flags := uint64(unix.CLONE_NEWNS)
+		if value := os.Getenv(unshareProbeFlags); value != "" {
+			parsed, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return 2
+			}
+			flags = parsed
+		}
+		_, _, errno := unix.RawSyscall(unix.SYS_UNSHARE, uintptr(flags), 0, 0)
+		fmt.Println("unshare:", errno)
+		if errno == unix.EPERM {
+			return 0
+		}
+		return 3
 	case "tiocsti", "tioclinux":
 		// Take the inherited terminal as the controlling one, as a shell would,
 		// so only the filter stands between the request and the terminal.
@@ -790,5 +802,24 @@ func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
 	status, stderr = rawHelper(t, self, unsupported, "/bin/true")
 	if status.ExitStatus() != confine.HelperFailureExit || !strings.Contains(stderr, linuxsandbox.UnsupportedNetworkMode) {
 		t.Fatalf("unsupported plan: exit %d: %s", status.ExitStatus(), stderr)
+	}
+}
+
+const unshareProbeFlags = "PW_CONFINE_UNSHARE_FLAGS"
+
+func TestLinuxFilesystemUnshareRefusesWithoutChangingNamespacePolicy(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	for _, flags := range []uint64{unix.CLONE_FS, unix.CLONE_NEWNS, unix.CLONE_FS | unix.CLONE_NEWUSER, unix.CLONE_FS | 1<<32} {
+		t.Run(strconv.FormatUint(flags, 10), func(t *testing.T) {
+			env := append(probeEnv("unshare"), unshareProbeFlags+"="+strconv.FormatUint(flags, 10))
+			status, output := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), env, self, probeTestFlag)
+			if flags == unix.CLONE_FS {
+				if status.ExitStatus() != 0 || status.Signaled() {
+					t.Fatalf("filesystem unshare did not return EPERM: %v %s", status, output)
+				}
+			} else if !status.Signaled() || status.Signal() != syscall.SIGSYS {
+				t.Fatalf("namespace or unknown unshare escaped the kill policy: %v %s", status, output)
+			}
+		})
 	}
 }

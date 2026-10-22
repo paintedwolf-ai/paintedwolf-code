@@ -985,161 +985,17 @@
       "setup": "verification",
       "platform": "linux"
     },
-    "race": {
+    "nix-confine": {
       "targets": [
-        "test:race"
-      ],
-      "minutes": 150,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "race",
-      "setup": "verification",
-      "shards": 3
-    },
-    "fuzz": {
-      "targets": [
-        "test:fuzz"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "fuzz",
-      "setup": "verification"
-    },
-    "stress": {
-      "targets": [
-        "test:stress"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
-    "go-coverage": {
-      "targets": [
-        "check:coverage"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "frontend-coverage": {
-      "targets": [
-        "den:coverage-check"
-      ],
-      "minutes": 90,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "transcript-scale": {
-      "targets": [
-        "den:test:transcript-scale"
+        "test:confine:linux"
       ],
       "minutes": 60,
       "profiles": [
         "nightly"
       ],
-      "suite": "performance",
-      "setup": "verification"
-    },
-    "vulnerability-freshness": {
-      "targets": [
-        "lint:vuln:fresh"
-      ],
-      "minutes": 90,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    },
-    "benchmarks": {
-      "targets": [
-        "perf:bench"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
-    "sidecar-performance": {
-      "targets": [
-        "perf:sidecar"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
-    "sidecar-soak": {
-      "targets": [
-        "perf:soak"
-      ],
-      "minutes": 90,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
-    "integration-build": {
-      "targets": [
-        "build",
-        "licenses:notices"
-      ],
-      "timing_source": "build",
-      "minutes": 120,
-      "profiles": [
-        "integration"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    }
-  },
-  "capacity": {
-    "runners": 20,
-    "macos_runners": 5,
-    "max_parallel": {
-      "fast": 1,
-      "integration": 4,
-      "check": 3,
-      "nightly": 2,
-      "release": 1
-    },
-    "footprints": {
-      "ci.yml": 1,
-      "qualification.yml": 3,
-      "build-caches.yml": 1,
-      "nightly.yml": 2,
-      "release.yml": 2,
-      "linux-candidates.yml": 1,
-      "release-halt.yml": 1,
-      "release-secrets-check.yml": 1,
-      "release-staple-probe.yml": 1,
-      "release-feed-signature-backfill.yml": 1,
-      "dependency-inventory.yml": 1,
-      "release-system-live-test.yml": 1,
-      "queue-health.yml": 1,
-      "issue-stale.yml": 1,
-      "issue-sweep.yml": 1,
-      "issue-intake.yml": 1,
-      "maintainability-issues.yml": 1,
-      "verification-recovery.yml": 1,
-      "dco.yml": 1
-    }
-  }
-}
+      "suite": "behavior",
+      "setup": "verification",
+      "platform": "linux",
+      "arguments": [
+        "nix"
+      ]

@@ -104,3 +104,33 @@ func TestLinuxConfineRunsOnBothArchitectures(t *testing.T) {
 	}
 	t.Error("no release and nightly CI lane runs test:confine:linux on ubuntu-24.04-arm")
 }
+
+func TestLinuxConfineNixLegCoversEveryWorkflowContract(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	scopes := linuxConfineScopes(t, root)
+	const workflowPackage = "./test/wiring/nixworkflow"
+	var inventory, uncovered []string
+	walkTestFiles(t, root, func(pkg string, fset *token.FileSet, file *ast.File, _ []byte) {
+		if pkg != workflowPackage {
+			return
+		}
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "TestLinuxNix") {
+				inventory = append(inventory, fn.Name.Name)
+			}
+		}
+	})
+	if len(inventory) == 0 {
+		t.Fatal("found no Nix workflow integration contracts")
+	}
+	for _, test := range inventory {
+		if !slices.ContainsFunc(scopes, func(scope goTestScope) bool {
+			return scope.covers(workflowPackage, test) && strings.Contains(scope.Command, "--tags nixworkflow")
+		}) {
+			uncovered = append(uncovered, test)
+		}
+	}
+	slices.Sort(uncovered)
+	contractcheck.FailViolations(t, "Nix workflow contracts missing from the declared nix leg", uncovered)
+}

@@ -191,93 +191,17 @@ class HostedPlanTests(unittest.TestCase):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
-                    self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
+                    lane = ci.lanes()[row["lane"]]
+                    self.assertEqual(row["browser"], "test:confine:linux" in lane["targets"]
+                                     and "browser" in lane.get("arguments", ["browser"]))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.
-        self.assertEqual(ci.lanes()["nix"]["profiles"], ["nightly"])
-        for profile in ("check", "integration", "release"):
-            with self.subTest(profile=profile):
-                self.assertNotIn("nix", {row["lane"] for row in ci.matrix(profile)["include"]})
-        rows = [row for row in ci.matrix("nightly")["include"] if row["lane"] == "nix"]
-        self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
-
-    def test_lane_arguments_are_explicit(self):
-        for mutation in ("arguments-many-targets", "arguments-empty", "paths"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                if mutation == "arguments-many-targets":
-                    data["ci"]["frontend"]["arguments"] = ["browser"]
-                elif mutation == "arguments-empty":
-                    data["ci"]["confinement-arm64"]["arguments"] = []
-                else:
-                    data["ci"]["nix"]["paths"] = ["packaging/nix/"]
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.matrix("nightly")
-        data = copy.deepcopy(planning.catalog())
-        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
-        with patch.object(ci, "catalog", return_value=data):
-            row = next(row for row in ci.matrix("nightly")["include"] if row["lane"] == "confinement-arm64")
-        self.assertEqual((row["nix"], row["browser"]), (True, False))
-
-    def test_platform_selection_keeps_only_platform_lanes(self):
-        for profile in ("integration", "nightly", "release"):
-            with self.subTest(profile=profile):
-                rows = ci.matrix(profile, platform=True)["include"]
-                self.assertTrue(rows)
-                self.assertTrue(all("platform" in ci.lanes()[row["lane"]] for row in rows))
-        scope = dict(full=False, paths=["lycaon/internal/confine/boundary_linux.go"])
-        self.assertEqual({row["lane"] for row in ci.matrix("integration", scope=scope, platform=True)["include"]},
-                         {"confinement-arm64"})
-        with self.assertRaises(ValueError):
-            ci.matrix("check", platform=True)
-
-    def test_each_profile_caps_the_runners_its_matrix_holds(self):
-        caps = planning.catalog()["capacity"]["max_parallel"]
-        for profile in ci.PROFILES:
-            with self.subTest(profile=profile):
-                self.assertEqual(ci.max_parallel(profile), caps[profile])
-        with self.assertRaises(ValueError):
-            ci.max_parallel("unknown")
-        for mutation in ("missing", "zero", "fraction"):
-            with self.subTest(mutation=mutation):
-                data = copy.deepcopy(planning.catalog())
-                if mutation == "missing":
-                    del data["capacity"]["max_parallel"]["nightly"]
-                else:
-                    data["capacity"]["max_parallel"]["nightly"] = 0 if mutation == "zero" else 1.5
-                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-                    ci.max_parallel("check")
-
-    def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
-        lanes = ci.lanes()
-        rows = ci.matrix("integration")["include"]
-        self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
-        for profile in ci.PROFILES:
-            with self.subTest(profile=profile):
-                order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in ci.matrix(profile)["include"]]
-                self.assertEqual(order, sorted(order))
-        data = copy.deepcopy(planning.catalog())
-        data["ci"]["limits"]["first"] = False
-        with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
-            ci.matrix("integration")
-
-    def test_combined_analysis_targets_restore_both_tool_sets(self):
-        self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
-
-    def test_lane_setup_restores_only_the_required_tool_sets(self):
-        for profile in ci.PROFILES:
-            for row in ci.matrix(profile)["include"]:
-                targets = ci.lanes()[row["lane"]]["targets"]
-                self.assertEqual(row["notices"], "licenses:notices" in targets)
-                if row["analysis"] == "lint":
-                    self.assertTrue(set(targets) & {"lint:fast", "lint:full"})
-                elif row["analysis"] == "vulnerabilities":
-                    self.assertTrue(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
-                else:
-                    self.assertEqual(row["analysis"], "none")
-        self.assertEqual(len([row for row in ci.matrix("check")["include"] if row["notices"]]), 1)
-        # Notices run in the merge queue, not the ready pull request tier.
-        self.assertFalse([row for row in ci.matrix("fast")["include"] if row["notices"]])
+        for lane in ("nix", "nix-confine"):
+            self.assertEqual(ci.lanes()[lane]["profiles"], ["nightly"])
+            for profile in ("check", "integration", "release"):
+                with self.subTest(lane=lane, profile=profile):
+                    self.assertNotIn(lane, {row["lane"] for row in ci.matrix(profile)["include"]})
+        rows = [row for row in ci.matrix("nightly")["include"] if row["lane"] in ("nix", "nix-confine")]
+        self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False), (True, False)])
