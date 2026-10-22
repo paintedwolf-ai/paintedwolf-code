@@ -18,6 +18,9 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create control pair: %v", err)
 		}
+		if err := parent.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			t.Fatalf("register control deadline: %v", err)
+		}
 		done := make(chan error, 1)
 		go func() {
 			_, _, err := receiveControl(parent, make([]byte, 16), make([]byte, unix.CmsgSpace(4)))
@@ -46,7 +49,8 @@ func TestControlPreservesDescriptorHandoffsAndCloseOnExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create control pair: %v", err)
 	}
-	t.Cleanup(func() { _ = parent.Close(); _ = child.Close() })
+	t.Cleanup(func() { _ = parent.Close() })
+	t.Cleanup(func() { _ = child.Close() })
 	file, err := os.Open("/dev/null")
 	if err != nil {
 		t.Fatalf("open descriptor fixture: %v", err)
