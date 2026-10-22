@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,10 @@ while [ "$#" -gt 0 ]; do
  esac
  shift
 done
-if [ "${SCANNER_SKIP_REPORT:-}" = 1 ]; then exit 0; fi
+if [ "${SCANNER_SKIP_REPORT:-}" = 1 ]; then
+ printf 'fixture scanner failed before report\n' >&2
+ exit 5
+fi
 if [ "$rule_timeout" != 0 ]; then
  printf '%s' '{"results":[],"errors":[{"type":"Timeout","level":"error","message":"Per-rule timer interrupted coverage"}],"paths":{"scanned":[]}}' > "$output"
  exit 0
@@ -123,5 +127,8 @@ func TestOpenGrepBatchCannotReuseAnEarlierReport(t *testing.T) {
 	result, err := run()
 	if err == nil || result != nil {
 		t.Fatalf("missing batch output reused a prior report: result=%+v error=%v", result, err)
+	}
+	if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), "exit=5") || !strings.Contains(err.Error(), "fixture scanner failed before report") {
+		t.Fatalf("missing batch output lost its cause or bounded console: %v", err)
 	}
 }
