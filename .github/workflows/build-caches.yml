@@ -124,13 +124,7 @@ jobs:
         if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
-      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
-      - name: Record lint diagnostics
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: ./task lint:full
-
-      # Resolve paths at publication time instead of relying on nested post-job contexts.
+      # Publish prepared compiler inputs before optional lint diagnostics.
       - name: Publish prepared Go caches
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
         uses: ./.github/actions/cache-go
@@ -155,6 +149,12 @@ jobs:
         with:
           tools: all
           save: 'true'
+
+      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      - name: Record lint diagnostics
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: ./task lint:full
 
       - name: Publish lint diagnostics
         if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
