@@ -15,9 +15,79 @@ import (
 // or the typed null endpoints). Closing Input is a deliberate consumer stop,
 // never producer failure. Display previews are a separate projection.
 type Streams struct {
-	Input  io.ReadCloser
-	Output io.Writer
-	Error  io.Writer
+	Input   io.ReadCloser
+	Output  io.Writer
+	Error   io.Writer
+	readers [10]io.ReadCloser
+	writers [10]io.Writer
+}
+
+// Reader returns the input stream bound to descriptor fd (0..9).
+func (s Streams) Reader(fd int) io.ReadCloser {
+	if fd < 0 || fd >= len(s.readers) {
+		return NullInput()
+	}
+	if fd == 0 && s.Input != nil {
+		return s.Input
+	}
+	if s.readers[fd] != nil {
+		return s.readers[fd]
+	}
+	return NullInput()
+}
+
+// SetReader binds descriptor fd (0..9) to r.
+func (s *Streams) SetReader(fd int, r io.ReadCloser) {
+	if fd < 0 || fd >= len(s.readers) {
+		return
+	}
+	s.readers[fd] = r
+	if fd == 0 {
+		s.Input = r
+	}
+}
+
+// Writer returns the output stream bound to descriptor fd (0..9).
+func (s Streams) Writer(fd int) io.Writer {
+	if fd < 0 || fd >= len(s.writers) {
+		return io.Discard
+	}
+	switch fd {
+	case 1:
+		if s.Output != nil {
+			return s.Output
+		}
+	case 2:
+		if s.Error != nil {
+			return s.Error
+		}
+	}
+	if s.writers[fd] != nil {
+		return s.writers[fd]
+	}
+	return io.Discard
+}
+
+// SetWriter binds descriptor fd (0..9) to w.
+func (s *Streams) SetWriter(fd int, w io.Writer) {
+	if fd < 0 || fd >= len(s.writers) {
+		return
+	}
+	s.writers[fd] = w
+	switch fd {
+	case 1:
+		s.Output = w
+	case 2:
+		s.Error = w
+	}
+}
+
+func (s Streams) hasReader(fd int) bool {
+	return fd >= 0 && fd < len(s.readers) && (fd == 0 || s.readers[fd] != nil)
+}
+
+func (s Streams) hasWriter(fd int) bool {
+	return fd >= 0 && fd < len(s.writers) && (fd == 1 || fd == 2 || s.writers[fd] != nil)
 }
 
 // OperationRequest is one reached simple command after expansion and before

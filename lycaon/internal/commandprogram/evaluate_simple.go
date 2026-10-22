@@ -69,18 +69,6 @@ func (f *frame) expandWords(ctx context.Context, words []commandsurface.Deferred
 	return out, nil
 }
 
-func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.Assignment) ([]assignment, error) {
-	out := make([]assignment, 0, len(items))
-	for _, item := range items {
-		value, err := f.e.expander.ExpandScalar(ctx, f, item.Value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, assignment{loc: item.SyntaxLocation, name: item.Name, value: value})
-	}
-	return out, nil
-}
-
 // expanding runs one command's expansion with the statuses of the
 // substitutions it reaches retained. A nonzero unit prevents the containing
 // command (P08 AdmitSubstitution) and becomes its status; prevented reports
@@ -124,7 +112,7 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
 		var err error
 		if fields, err = g.expandWords(ctx, c.Words); err == nil {
-			assigns, err = g.expandAssignments(ctx, c.Assignments)
+			assigns, err = expandAssignmentList(ctx, g, c.Assignments)
 		}
 		return err
 	})
@@ -133,7 +121,7 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	}
 	if len(fields) == 0 {
 		for _, a := range assigns {
-			if err := f.state.vars.Assign(ctx, a.name, a.value); err != nil {
+			if err := a.apply(ctx, f.state.vars); err != nil {
 				return signal{}, f.expansionRefusal(a.loc, err)
 			}
 		}
@@ -360,7 +348,7 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 	var assigns, names []assignment
 	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
 		var err error
-		if assigns, err = g.expandAssignments(ctx, c.Assignments); err != nil {
+		if assigns, err = expandAssignmentList(ctx, g, c.Assignments); err != nil {
 			return err
 		}
 		for _, word := range c.Words {

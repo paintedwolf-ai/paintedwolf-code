@@ -15,6 +15,15 @@ func (ArithmeticPart) wordNode() {}
 
 // Words lists the operand words of the expression in source order.
 func (p ArithmeticPart) Words() []DeferredWord {
+	return arithmeticWords(p.Expression)
+}
+
+// Words lists the operand words of the command expression in source order.
+func (c ArithmeticCommand) Words() []DeferredWord {
+	return arithmeticWords(c.Expression)
+}
+
+func arithmeticWords(root ArithmeticNode) []DeferredWord {
 	var out []DeferredWord
 	var visit func(ArithmeticNode)
 	visit = func(n ArithmeticNode) {
@@ -28,7 +37,7 @@ func (p ArithmeticPart) Words() []DeferredWord {
 			visit(n.Right)
 		}
 	}
-	visit(p.Expression)
+	visit(root)
 	return out
 }
 
@@ -46,6 +55,7 @@ type ArithmeticOperand struct {
 type ArithmeticUnary struct {
 	SyntaxLocation
 	Operator string
+	Postfix  bool
 	Operand  ArithmeticNode
 }
 
@@ -59,7 +69,7 @@ func (ArithmeticOperand) arithmeticNode() {}
 func (ArithmeticUnary) arithmeticNode()   {}
 func (ArithmeticBinary) arithmeticNode()  {}
 
-const arithmeticForms = "$(( )) with integer operands and + - * / % ** << >> & | ^ ~ ! comparisons && || ?: and parentheses, without assignment"
+const arithmeticForms = "$(( )) or (( )) with integer operands and + - * / % ** << >> & | ^ ~ ! comparisons && || ?: and parentheses"
 
 var arithmeticBinaryOperators = map[string]bool{
 	"+": true, "-": true, "*": true, "/": true, "%": true, "**": true, "<<": true, ">>": true,
@@ -67,36 +77,113 @@ var arithmeticBinaryOperators = map[string]bool{
 	"&&": true, "||": true, "?": true, ":": true,
 }
 
+var arithmeticAssignOperators = map[string]bool{
+	"=": true, "+=": true, "-=": true, "*=": true, "/=": true, "%=": true,
+	"<<=": true, ">>=": true, "&=": true, "|=": true, "^=": true,
+}
+
 func (c *programCompiler) validateArithmetic(n syntax.Node) {
 	switch v := n.(type) {
 	case *syntax.ArithmExp:
 		if v.Bracket || v.Unsigned {
 			c.unsupported(n, arithmeticForms)
+			return
 		}
-		if word, ok := v.X.(*syntax.Word); ok {
-			c.markArithmeticWord(word)
+		c.validateArithmeticExpr(v.X, false)
+	case *syntax.ArithmCmd:
+		if v.Unsigned {
+			c.unsupported(n, arithmeticForms)
+			return
 		}
+		c.validateArithmeticExpr(v.X, true)
+	}
+}
+
+func (c *programCompiler) validateArithmeticExpr(expr syntax.ArithmExpr, allowMutation bool) {
+	if expr == nil {
+		return
+	}
+	switch v := expr.(type) {
+	case *syntax.Word:
+		c.markArithmeticWord(v)
 	case *syntax.ParenArithm:
-		if word, ok := v.X.(*syntax.Word); ok {
-			c.markArithmeticWord(word)
-		}
+		c.validateArithmeticExpr(v.X, allowMutation)
 	case *syntax.UnaryArithm:
-		if op := v.Op.String(); v.Post || (op != "+" && op != "-" && op != "!" && op != "~") {
-			c.unsupported(n, arithmeticForms)
-		}
-		if word, ok := v.X.(*syntax.Word); ok {
-			c.markArithmeticWord(word)
-		}
-	case *syntax.BinaryArithm:
-		if !arithmeticBinaryOperators[v.Op.String()] {
-			c.unsupported(n, arithmeticForms)
-		}
-		for _, side := range []syntax.ArithmExpr{v.X, v.Y} {
-			if word, ok := side.(*syntax.Word); ok {
-				c.markArithmeticWord(word)
+		op := v.Op.String()
+		if op == "++" || op == "--" {
+			if !allowMutation || !validArithmeticTarget(v.X) {
+				c.unsupported(v, arithmeticForms)
+				return
 			}
+			c.validateArithmeticExpr(v.X, allowMutation)
+			return
+		}
+		if v.Post || (op != "+" && op != "-" && op != "!" && op != "~") {
+			c.unsupported(v, arithmeticForms)
+			return
+		}
+		c.validateArithmeticExpr(v.X, allowMutation)
+	case *syntax.BinaryArithm:
+		op := v.Op.String()
+		switch {
+		case arithmeticBinaryOperators[op] || (allowMutation && op == ","):
+			c.validateArithmeticExpr(v.X, allowMutation)
+			c.validateArithmeticExpr(v.Y, allowMutation)
+		case allowMutation && arithmeticAssignOperators[op] && validArithmeticTarget(v.X):
+			c.validateArithmeticExpr(v.X, allowMutation)
+			c.validateArithmeticExpr(v.Y, allowMutation)
+		default:
+			c.unsupported(v, arithmeticForms)
+		}
+	default:
+		c.unsupported(expr, arithmeticForms)
+	}
+}
+
+func validArithmeticTarget(expr syntax.ArithmExpr) bool {
+	w, ok := expr.(*syntax.Word)
+	if !ok || len(w.Parts) != 1 {
+		return false
+	}
+	switch part := w.Parts[0].(type) {
+	case *syntax.Lit:
+		return validWritableVariable(part.Value)
+	case *syntax.ParamExp:
+		return part.Short && !part.Dollar.IsValid() && part.Index != nil && part.Param != nil && validWritableVariable(part.Param.Value) && subscriptAllSymbol(part.Index) == ""
+	default:
+		return false
+	}
+}
+
+func validWritableVariable(name string) bool {
+	if name == "" || name == "IFS" || name == "PIPESTATUS" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if i == 0 {
+			if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && ch != '_' {
+				return false
+			}
+			continue
+		}
+		if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '_' {
+			return false
 		}
 	}
+	return true
+}
+
+func subscriptAllSymbol(expr syntax.ArithmExpr) string {
+	w, ok := expr.(*syntax.Word)
+	if !ok || len(w.Parts) != 1 {
+		return ""
+	}
+	lit, ok := w.Parts[0].(*syntax.Lit)
+	if !ok || (lit.Value != "@" && lit.Value != "*") {
+		return ""
+	}
+	return lit.Value
 }
 
 // Case words and patterns never undergo brace expansion.
@@ -114,6 +201,9 @@ func (c *programCompiler) markArithmeticWord(word *syntax.Word) {
 }
 
 func (c *programCompiler) arithmetic(expr syntax.ArithmExpr) ArithmeticNode {
+	if expr == nil {
+		return nil
+	}
 	loc := c.location(expr)
 	switch v := expr.(type) {
 	case *syntax.Word:
@@ -121,7 +211,7 @@ func (c *programCompiler) arithmetic(expr syntax.ArithmExpr) ArithmeticNode {
 	case *syntax.ParenArithm:
 		return c.arithmetic(v.X)
 	case *syntax.UnaryArithm:
-		return ArithmeticUnary{SyntaxLocation: loc, Operator: v.Op.String(), Operand: c.arithmetic(v.X)}
+		return ArithmeticUnary{SyntaxLocation: loc, Operator: v.Op.String(), Postfix: v.Post, Operand: c.arithmetic(v.X)}
 	case *syntax.BinaryArithm:
 		return ArithmeticBinary{SyntaxLocation: loc, Operator: v.Op.String(), Left: c.arithmetic(v.X), Right: c.arithmetic(v.Y)}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -85,11 +86,18 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
 	switch r.Operator {
 	case ">&":
-		if r.Descriptor == 2 {
-			g.streams.Error = g.streams.Output
-		} else {
-			g.streams.Output = g.streams.Error
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.streams.hasWriter(src) {
+			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
 		}
+		g.streams.SetWriter(redirectDescriptor(r), g.streams.Writer(src))
+		return nil, false, nil
+	case "<&":
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.streams.hasReader(src) {
+			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
+		}
+		g.streams.SetReader(redirectDescriptor(r), g.streams.Reader(src))
 		return nil, false, nil
 	case "<<", "<<-":
 		return g.hereDocument(ctx, r)
@@ -115,7 +123,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		if err != nil {
 			return nil, true, g.redirectFailure(child, r.Operator, target, err)
 		}
-		g.streams.Input = input
+		g.streams.SetReader(redirectDescriptor(r), input)
 		child.settle(ordinaryResult(0), nil)
 		return nil, false, nil
 	}
@@ -127,15 +135,24 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	errorStream := g.streams.Error
 	switch r.Operator {
 	case "&>", "&>>":
-		g.streams.Output, g.streams.Error = staged, staged
+		g.streams.SetWriter(1, staged)
+		g.streams.SetWriter(2, staged)
 	default:
-		if r.Descriptor == 2 {
-			g.streams.Error = staged
-		} else {
-			g.streams.Output = staged
-		}
+		g.streams.SetWriter(redirectDescriptor(r), staged)
 	}
 	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, false, nil
+}
+
+func redirectDescriptor(r commandsurface.ProgramRedirect) int {
+	if r.Descriptor >= 0 {
+		return r.Descriptor
+	}
+	switch r.Operator {
+	case "<", "<&", "<<", "<<-":
+		return 0
+	default:
+		return 1
+	}
 }
 
 // redirectFailure records a refused open: owner stops latch, other failures
@@ -175,7 +192,7 @@ func (g *frame) hereDocument(ctx context.Context, r commandsurface.ProgramRedire
 	if prevented || err != nil {
 		return nil, true, err
 	}
-	g.streams.Input = io.NopCloser(strings.NewReader(body))
+	g.streams.SetReader(redirectDescriptor(r), io.NopCloser(strings.NewReader(body)))
 	return nil, false, nil
 }
 
@@ -237,7 +254,7 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			}
 			switch r.Operator {
 			case "<":
-				if ports.Input == nil || r.Descriptor > 0 {
+				if ports.Input == nil || r.Descriptor == 1 || r.Descriptor == 2 {
 					refuse(r.SyntaxLocation, "< with an input owner on descriptor 0")
 				}
 			case ">", ">>", "&>", "&>>":
@@ -249,7 +266,11 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 		switch c := s.Command.(type) {
 		case commandsurface.SimpleCommand:
 			for _, a := range c.Assignments {
+				if a.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: a.Index}.Words())
+				}
 				words([]commandsurface.DeferredWord{a.Value})
+				words(a.Array)
 			}
 			words(c.Words)
 			if len(c.Words) > 0 && staticWord(c.Words[0]) == "source" && ports.Sources == nil {
@@ -289,6 +310,10 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			statement(c.Body)
 		case commandsurface.TestExpression:
 			test(c.Expression)
+		case commandsurface.ArithmeticCommand:
+			words(c.Words())
+		case commandsurface.TrapCommand:
+			statements(c.Statements)
 		}
 	}
 	statements = func(items []commandsurface.Statement) {

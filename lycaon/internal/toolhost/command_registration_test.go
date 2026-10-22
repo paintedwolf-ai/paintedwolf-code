@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -80,3 +84,55 @@ func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T)
 		})
 	}
 }
+
+func TestComposedProgramOwnersRunNativeProcessSubstitutions(t *testing.T) {
+	f := programtest.New(t, programtest.Options{})
+	testutil.FailErr(t, "register diff owner", f.Runtime.Registry.Register("diff", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "", nil
+	}))
+	b := f.Runtime.Boundary
+	owners, err := (programOwnerTools{
+		boundary: b,
+		registry: f.Runtime.Registry,
+		operations: mutation.Operations{
+			Write:   &native.WriteTool{Boundary: b},
+			Delete:  &native.DeleteTool{Boundary: b},
+			Move:    &native.MoveTool{Boundary: b},
+			Copy:    &native.CopyTool{Boundary: b},
+			Mkdir:   &native.MkdirTool{Boundary: b},
+			Chmod:   &native.ChmodTool{Boundary: b},
+			Chown:   &native.ChownTool{Boundary: b},
+			Times:   &native.TimesTool{Boundary: b},
+			Extract: &native.ExtractArchiveTool{Boundary: b},
+		},
+	}).compose(f.Recorder)
+	testutil.FailErr(t, "compose program owners", err)
+	f.Runtime.Owners = owners
+	testutil.FailErr(t, "seed a.txt", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("beta\nalpha\ngamma\n"), 0o600))
+	testutil.FailErr(t, "seed b.txt", os.WriteFile(filepath.Join(f.Dir, "b.txt"), []byte("beta\nalpha\ndelta\n"), 0o600))
+
+	raw, err := f.Call(t, t.Context(), `
+comm -12 <(sort a.txt) <(sort b.txt)
+paste <(printf 'k1\nk2\n') <(printf 'v1\nv2\n')
+diff -u <(sort a.txt) <(sort b.txt) || printf 'diff_status=%d\n' "$?"
+printf 'hello\n' > >(tr 'a-z' 'A-Z')
+`)
+	testutil.FailErr(t, "run composed process substitutions", err)
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(raw), &outcome))
+	if outcome.Status != 0 || outcome.State != "completed" {
+		t.Fatalf("unexpected outcome: %+v", outcome)
+	}
+	for _, want := range []string{
+		"alpha\nbeta\n",
+		"k1\tv1\nk2\tv2\n",
+		"-gamma\n+delta\n",
+		"diff_status=1\n",
+		"HELLO\n",
+	} {
+		if !strings.Contains(outcome.Stdout, want) {
+			t.Fatalf("stdout %q missing %q", outcome.Stdout, want)
+		}
+	}
+}
+

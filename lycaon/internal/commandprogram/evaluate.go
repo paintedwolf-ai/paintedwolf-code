@@ -33,6 +33,8 @@ type EvaluationPorts struct {
 	Streams    Streams
 	// Environment is the captured child environment; its entries start exported.
 	Environment []string
+	// ScratchDir is the session scratch directory used for process-substitution files.
+	ScratchDir string
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -134,7 +136,11 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	defer release()
+	defer e.cleanupScratch()
 	_, err = root.statements(ctx, plan.Statements)
+	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	return e.outcome(root), err
 }
 

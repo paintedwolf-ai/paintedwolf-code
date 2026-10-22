@@ -80,12 +80,13 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 		defer release()
 		g.parent, g.loops, g.returnable = run.inv, 0, false
-		g.streams = Streams{Input: f.streams.Input, Output: f.streams.Output, Error: stderr}
+		g.streams = f.streams
+		g.streams.SetWriter(2, stderr)
 		if i > 0 {
-			g.streams.Input = pipes[i-1].ConsumerEnd()
+			g.streams.SetReader(0, pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
-			g.streams.Output = pipes[i]
+			g.streams.SetWriter(1, pipes[i])
 		}
 		frames[i] = g
 	}

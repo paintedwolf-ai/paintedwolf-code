@@ -32,6 +32,8 @@ type Variables struct {
 
 type variable struct {
 	value    string
+	elements map[int64]string
+	array    bool
 	set      bool
 	exported bool
 	release  func()
@@ -84,6 +86,76 @@ func (v *Variables) Assign(ctx context.Context, name, value string) error {
 		return err
 	}
 	return v.store(ctx, name, variable{value: value, set: true, exported: v.values[name].exported})
+}
+
+// AssignScalar sets or appends a scalar variable in this frame.
+func (v *Variables) AssignScalar(ctx context.Context, name, value string, appendMode bool) error {
+	current := v.values[name]
+	if appendMode && current.array {
+		return v.AssignIndex(ctx, name, 0, value, true)
+	}
+	if appendMode && current.set {
+		value = current.value + value
+	}
+	return v.Assign(ctx, name, value)
+}
+
+// AssignIndex sets or appends element index of an indexed array variable.
+func (v *Variables) AssignIndex(ctx context.Context, name string, index int64, value string, appendMode bool) error {
+	if index < 0 {
+		return invalidValue(toolcontract.SourceSpan{}, "a non-negative array subscript")
+	}
+	current := v.values[name]
+	elements := copyElements(current)
+	if appendMode {
+		value = elements[index] + value
+	}
+	if err := assignable(v.bounds, name, value); err != nil {
+		return err
+	}
+	elements[index] = value
+	return v.store(ctx, name, variable{elements: elements, array: true, set: true, exported: current.exported})
+}
+
+// AssignArray sets or appends an indexed array variable from items.
+func (v *Variables) AssignArray(ctx context.Context, name string, items []string, appendMode bool) error {
+	if err := assignable(v.bounds, name, ""); err != nil {
+		return err
+	}
+	current := v.values[name]
+	var elements map[int64]string
+	var start int64
+	if appendMode {
+		elements = copyElements(current)
+		for k := range elements {
+			if k >= start {
+				start = k + 1
+			}
+		}
+	} else {
+		elements = make(map[int64]string, len(items))
+	}
+	for i, item := range items {
+		if err := assignable(v.bounds, name, item); err != nil {
+			return err
+		}
+		elements[start+int64(i)] = item
+	}
+	return v.store(ctx, name, variable{elements: elements, array: true, set: true, exported: current.exported})
+}
+
+func copyElements(current variable) map[int64]string {
+	if current.array {
+		out := make(map[int64]string, len(current.elements))
+		for k, v := range current.elements {
+			out[k] = v
+		}
+		return out
+	}
+	if current.set {
+		return map[int64]string{0: current.value}
+	}
+	return map[int64]string{}
 }
 
 // Export marks a variable for child environments; an unset name stays unset.
@@ -139,7 +211,11 @@ func (v *Variables) Environment(overrides map[string]string) ([]string, error) {
 func (v *Variables) Clone(ctx context.Context) (*Variables, error) {
 	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, positional: append([]string(nil), v.positional...), status: v.status, pipeStatus: append([]int(nil), v.pipeStatus...), background: v.background, hasJob: v.hasJob}
 	for name, entry := range v.values {
-		if err := clone.store(ctx, name, entry); err != nil {
+		copied := entry
+		if entry.array {
+			copied.elements = copyElements(entry)
+		}
+		if err := clone.store(ctx, name, copied); err != nil {
 			clone.Close()
 			return nil, err
 		}
@@ -167,7 +243,75 @@ func (v *Variables) SetBackground(job string) {
 
 func (v *Variables) Variable(name string) (string, bool) {
 	entry := v.values[name]
+	if entry.array {
+		val, ok := entry.elements[0]
+		return val, ok
+	}
 	return entry.value, entry.set
+}
+
+func (v *Variables) VariableElement(name string, index int64) (string, bool) {
+	if index < 0 {
+		return "", false
+	}
+	if name == "PIPESTATUS" {
+		statuses := v.PipeStatus()
+		if index >= int64(len(statuses)) {
+			return "", false
+		}
+		return itoaStatus(statuses[index]), true
+	}
+	entry := v.values[name]
+	if entry.array {
+		val, ok := entry.elements[index]
+		return val, ok
+	}
+	if entry.set && index == 0 {
+		return entry.value, true
+	}
+	return "", false
+}
+
+func (v *Variables) VariableElements(name string) ([]string, bool) {
+	if name == "PIPESTATUS" {
+		statuses := v.PipeStatus()
+		out := make([]string, len(statuses))
+		for i, s := range statuses {
+			out[i] = itoaStatus(s)
+		}
+		return out, true
+	}
+	entry := v.values[name]
+	if !entry.set {
+		return nil, false
+	}
+	if !entry.array {
+		return []string{entry.value}, true
+	}
+	keys := make([]int64, 0, len(entry.elements))
+	for k := range entry.elements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = entry.elements[k]
+	}
+	return out, true
+}
+
+func itoaStatus(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
 }
 func (v *Variables) ProgramName() string { return v.program }
 func (v *Variables) Positional() []string {
@@ -207,7 +351,11 @@ func (v *Variables) store(ctx context.Context, name string, entry variable) erro
 	if count := int64(len(v.values) + 1); !replacing && count > v.bounds.maximum["variable_count"] {
 		return v.bounds.exceeded("variable_count", count, toolcontract.SourceSpan{})
 	}
-	release, err := v.memory.ReserveProgramState(ctx, int64(len(name)+len(entry.value)+variableBytes))
+	bytes := int64(len(name) + len(entry.value) + variableBytes)
+	for _, elem := range entry.elements {
+		bytes += int64(len(elem) + 32)
+	}
+	release, err := v.memory.ReserveProgramState(ctx, bytes)
 	if err != nil {
 		return err
 	}

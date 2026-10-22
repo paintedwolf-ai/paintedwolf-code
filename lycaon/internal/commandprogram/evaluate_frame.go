@@ -25,6 +25,7 @@ type frameState struct {
 	last       *ChildRecord
 	pipeStatus []int
 	options    shellOptions
+	exitTrap   []commandsurface.Statement
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -45,6 +46,7 @@ type frame struct {
 	// and exported to its dispatches, never stored in the caller's frame.
 	prefix     map[string]string
 	substs     *substitutionStatus
+	procSubst  *procSubstScope
 	loops      int
 	functions  int
 	sources    int
@@ -140,7 +142,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	}
 	g := *f
 	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options}
-	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
+	g.publish, g.prefix, g.substs, g.procSubst = newEligibility(), nil, nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
 
@@ -183,6 +185,11 @@ func (f *frame) environment(prefix []assignment) ([]string, error) {
 type assignment struct {
 	loc         commandsurface.SyntaxLocation
 	name, value string
+	index       int64
+	hasIndex    bool
+	appendMode  bool
+	array       bool
+	items       []string
 }
 
 // syncWriter serializes concurrent stage writes to one shared stream.

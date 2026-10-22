@@ -233,6 +233,9 @@ type programCompiler struct {
 	literalContext map[*syntax.Word]bool
 	testWords      map[*syntax.Word]bool
 	staticProof    map[*syntax.Word]bool
+	traps          map[*syntax.CallExpr]*syntax.File
+	trapSpans      map[*syntax.CallExpr]toolcontract.SourceSpan
+	spanOverride   *toolcontract.SourceSpan
 	nodeCount      int64
 	maximumDepth   int64
 	pool           *syntax.AllocationBudget
@@ -241,7 +244,13 @@ type programCompiler struct {
 
 func (c *programCompiler) location(n syntax.Node) SyntaxLocation {
 	c.sequence++
-	return SyntaxLocation{ID: NodeID(fmt.Sprintf("n%d", c.sequence)), Span: nodeSpan(n)}
+	return SyntaxLocation{ID: NodeID(fmt.Sprintf("n%d", c.sequence)), Span: c.span(n)}
+}
+func (c *programCompiler) span(n syntax.Node) toolcontract.SourceSpan {
+	if c.spanOverride != nil {
+		return *c.spanOverride
+	}
+	return nodeSpan(n)
 }
 func nodeSpan(n syntax.Node) toolcontract.SourceSpan {
 	if w, ok := n.(*syntax.Word); ok && len(w.Parts) == 0 {
@@ -251,13 +260,13 @@ func nodeSpan(n syntax.Node) toolcontract.SourceSpan {
 }
 func (c *programCompiler) unsupported(n syntax.Node, expected string) {
 	if c.err == nil {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: nodeSpan(n), Expected: expected}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: c.span(n), Expected: expected}
 	}
 }
 func (c *programCompiler) limit(n syntax.Node, id string, observed int64) {
 	maximum := languageLimit(c.catalog, id)
 	if c.err == nil && observed > maximum {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: nodeSpan(n), Expected: "bounded " + id, Limit: id, Unit: languageLimitUnit(c.catalog, id), Maximum: maximum, Observed: observed}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: c.span(n), Expected: "bounded " + id, Limit: id, Unit: languageLimitUnit(c.catalog, id), Maximum: maximum, Observed: observed}
 	}
 }
 func (c *programCompiler) nativeName(name string) bool {

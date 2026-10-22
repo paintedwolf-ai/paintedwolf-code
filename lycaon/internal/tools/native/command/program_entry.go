@@ -309,6 +309,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: programEnvironment(tc),
+		ScratchDir:  tc.Host.SessionScratchDir,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
@@ -588,6 +589,15 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.SimpleCommand:
 			words(node.Words)
 			for _, assignment := range node.Assignments {
+				if assignment.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: assignment.Index}.Words())
+				}
+				words([]commandsurface.DeferredWord{assignment.Value})
+				words(assignment.Array)
+			}
+		case commandsurface.EnvironmentDeclaration:
+			words(node.Words)
+			for _, assignment := range node.Assignments {
 				words([]commandsurface.DeferredWord{assignment.Value})
 			}
 		case commandsurface.BinaryCommand:
@@ -614,6 +624,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			}
 		case commandsurface.FunctionDeclaration:
 			statement(node.Body)
+		case commandsurface.ArithmeticCommand:
+			words(node.Words())
+		case commandsurface.TrapCommand:
+			list(node.Statements)
 		}
 	}
 	list(statements)

@@ -82,6 +82,21 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 
 // parameterState reads a parameter's value and whether it is set.
 func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string, bool, error) {
+	if part.Index != nil {
+		index, err := r.arithmeticValue(part.Index)
+		if err != nil {
+			return "", false, err
+		}
+		if index < 0 {
+			return "", false, invalidValue(part.Span, "a non-negative array subscript")
+		}
+		value, set := scopeArrayElement(r.scope, part.Name, index)
+		return value, set, nil
+	}
+	if part.Subscript == "@" || part.Subscript == "*" {
+		elems, set := scopeArrayElements(r.scope, part.Name)
+		return strings.Join(elems, " "), set && len(elems) > 0, nil
+	}
 	switch name := part.Name; {
 	case name == "@" || name == "*":
 		positional := r.scope.Positional()

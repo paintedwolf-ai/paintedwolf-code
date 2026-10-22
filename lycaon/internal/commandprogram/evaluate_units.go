@@ -35,7 +35,10 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.streams = Streams{Input: NullInput(), Output: stdout, Error: f.streams.Error}
+	g.streams = f.streams
+	g.streams.SetReader(0, NullInput())
+	g.streams.SetWriter(1, stdout)
+	g.streams.SetWriter(2, f.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
@@ -187,5 +190,8 @@ func (s Streams) withDefaults() Streams {
 	if s.Error == nil {
 		s.Error = io.Discard
 	}
+	s.readers[0] = s.Input
+	s.writers[1] = s.Output
+	s.writers[2] = s.Error
 	return s
 }
