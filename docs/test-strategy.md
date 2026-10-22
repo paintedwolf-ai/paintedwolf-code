@@ -945,6 +945,8 @@ serve no later run while it evicted main's under the repository's 10 GB limit.
 Pull request, merge-queue, nightly, and tag runs therefore restore without
 saving. Keys follow toolchains and dependency locks, so main saves once per
 dependency change, and the workflow's summary reports total cache usage.
+Decision-engine cache identity includes Xcode only on macOS; Linux keys use
+only their own platform and compiler inputs.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.

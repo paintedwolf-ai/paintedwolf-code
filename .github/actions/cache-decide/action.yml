@@ -28,7 +28,7 @@ runs:
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -37,6 +37,6 @@ runs:
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
-        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
+        key: decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/rust-path-remap.sh') }}
         restore-keys: |
-          decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-
+          decide-v2-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'macOS' && env.DEVELOPER_DIR || 'system' }}-
