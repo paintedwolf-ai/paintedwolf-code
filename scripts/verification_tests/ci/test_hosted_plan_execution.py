@@ -58,7 +58,7 @@ class HostedPlanTests(unittest.TestCase):
                     ci.matrix("check")
 
     def test_admission_refuses_invalid_package_selection(self):
-        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "absent"):
+        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "mixed", "absent"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 lane = data["ci"]["ready"]
@@ -78,6 +78,8 @@ class HostedPlanTests(unittest.TestCase):
                     lane["preflight"][2] = "./test/contract/../internal"
                 elif mutation == "duplicate":
                     lane["preflight"].append(lane["preflight"][2])
+                elif mutation == "mixed":
+                    lane["preflight"].append("./test/contract/host")
                 else:
                     lane["preflight"][2] = "./test/contract/absent"
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):

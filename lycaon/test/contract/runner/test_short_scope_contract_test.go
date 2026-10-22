@@ -156,7 +156,8 @@ func TestCheckFastGateMembership(t *testing.T) {
 	}
 	plan := verificationCatalog(t)
 	want := []string{"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
-		"test:short", "test:contract", "coverage:changes", "licenses:notices"}
+		"test:short", "test:contract", "coverage:changes", "licenses:notices", "comments:check",
+		"test:fail-messages:check", "docs:links"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
 	}

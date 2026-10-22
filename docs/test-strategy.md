@@ -641,7 +641,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` | Coverage of the Go and Den statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:fast, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, and changed coverage |
+| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and full qualification after merge, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -692,7 +692,9 @@ the complete contract tree or existing contract packages and rejects selectors,
 traversal, and duplicate packages.
 Release corpus fixtures assert compatibility command arguments and failure
 propagation with a stub; a separate contract runs the real compatibility checker
-once against the checkout, sharing its compiler cache.
+once against the checkout, sharing its compiler cache. It also checks the
+migration identities of every stable release tag; release CI adds the published
+preview releases it reads from GitHub.
 
 The execution budget is two hours, allowing the integration lint lane's existing
 ninety-minute allowance plus the contracts and remaining checks. This is a
