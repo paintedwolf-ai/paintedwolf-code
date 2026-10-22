@@ -462,6 +462,7 @@ func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.
 		ScopeRel:    scopeRel,
 		Root:        projectroot.RootRef{ID: projectroot.VirtualScratchLabel, Label: projectroot.VirtualScratchLabel, Path: filepath.Clean(dir)},
 		External:    true,
+		ToolOutput:  scopeRel == "output" || strings.HasPrefix(scopeRel, "output/"),
 	}, true, nil
 }
 

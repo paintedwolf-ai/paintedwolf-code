@@ -175,18 +175,81 @@ func TestScratchOutputIsReadOnlyAndRefusesMutation(t *testing.T) {
 	}
 }
 
+func TestGoTest200kLinesSummarySurvives(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Host.ModelContextWindow = 200000 // large tier: 64 KiB (32 KiB head + 32 KiB tail)
+	}
+
+	var b strings.Builder
+	b.Grow(6 << 20)
+	const cases = 99999 // 99,999 * 2 = 199,998 lines + 2 summary lines = 200,000 lines
+	for i := 1; i <= cases; i++ {
+		fmt.Fprintf(&b, "=== RUN   TestCase%06d\n--- PASS: TestCase%06d (0.00s)\n", i, i)
+	}
+	b.WriteString("PASS\nok  \tgithub.com/lycaon/lycaon/internal/foo\t1.234s\n")
+	testutil.FailErr(t, "write gotest.log", os.WriteFile(filepath.Join(f.Dir, "gotest.log"), []byte(b.String()), 0o644))
+
+	raw, err := f.Call(t, t.Context(), "cat gotest.log")
+	testutil.FailErr(t, "call cat gotest.log", err)
+	out := decodeProgramOutcome(t, raw)
+
+	if !out.Truncated || len(out.Outputs) != 1 || !out.Outputs[0].Truncated {
+		t.Fatalf("expected truncated 200k-line output, got %+v", out)
+	}
+	win := out.Outputs[0]
+	if win.TotalLines != 200000 {
+		t.Fatalf("TotalLines = %d, want 200000", win.TotalLines)
+	}
+	if !strings.HasPrefix(out.Stdout, "=== RUN   TestCase000001\n") {
+		t.Fatalf("200k-line output missing first line")
+	}
+	wantSuffix := "PASS\nok  \tgithub.com/lycaon/lycaon/internal/foo\t1.234s\n"
+	if !strings.HasSuffix(out.Stdout, wantSuffix) {
+		t.Fatalf("200k-line output lost trailing go test summary; tail=%q", out.Stdout[max(0, len(out.Stdout)-120):])
+	}
+
+	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@scratch/output/[^)]+)\)`)
+	m := re.FindStringSubmatch(out.Stdout)
+	if m == nil {
+		t.Fatalf("omitted notice missing sed command in 200k-line output")
+	}
+	sedCmd := fmt.Sprintf("sed -n '%s,%sp' %s", m[1], m[2], m[3])
+	sedRaw, err := f.Call(t, t.Context(), sedCmd)
+	testutil.FailErr(t, "call sed on 200k-line scratch output", err)
+	sedOut := decodeProgramOutcome(t, sedRaw)
+
+	nextLineNum := win.HeadEndLine + 1
+	caseNum := (nextLineNum + 1) / 2
+	var wantFirstLine string
+	if nextLineNum%2 == 1 {
+		wantFirstLine = fmt.Sprintf("=== RUN   TestCase%06d\n", caseNum)
+	} else {
+		wantFirstLine = fmt.Sprintf("--- PASS: TestCase%06d (0.00s)\n", caseNum)
+	}
+	if !strings.HasPrefix(sedOut.Stdout, wantFirstLine) {
+		t.Fatalf("sed output did not start with expected line %d (%q); got %q", nextLineNum, wantFirstLine, sedOut.Stdout[:min(len(sedOut.Stdout), 100)])
+	}
+}
+
 func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	var b strings.Builder
-	for i := 1; i <= 200; i++ {
-		fmt.Fprintf(&b, "row-%04d: 0123456789abcdef0123456789abcdef\n", i)
+	writeSizedFile := func(name string, lines int) {
+		var b strings.Builder
+		for i := 1; i <= lines; i++ {
+			fmt.Fprintf(&b, "row-%04d: 0123456789abcdef0123456789abcdef\n", i) // 43 bytes/line
+		}
+		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(f.Dir, name), []byte(b.String()), 0o644))
 	}
-	testutil.FailErr(t, "write medium.txt", os.WriteFile(filepath.Join(f.Dir, "medium.txt"), []byte(b.String()), 0o644))
+	writeSizedFile("medium.txt", 200)  // ~8.6 KiB: fits in 12 KiB (small), exceeds 6 KiB split
+	writeSizedFile("tier20k.txt", 500) // ~21.5 KiB: exceeds 12 KiB (small), fits in 32 KiB (medium)
+	writeSizedFile("tier45k.txt", 1050) // ~45.1 KiB: exceeds 32 KiB (medium), fits in 64 KiB (large)
+	writeSizedFile("tier80k.txt", 1900) // ~81.7 KiB: exceeds 64 KiB (large)
 
+	// Small context tier (16384 tokens -> 12 KiB budget)
 	f.Configure = func(tc *tools.ToolContext) {
-		tc.Host.ModelContextWindow = 16384 // 12 KiB total budget
+		tc.Host.ModelContextWindow = 16384
 	}
-
 	singleRaw, err := f.Call(t, t.Context(), "cat medium.txt")
 	testutil.FailErr(t, "single active stream call", err)
 	singleOut := decodeProgramOutcome(t, singleRaw)
@@ -199,6 +262,42 @@ func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 	bothOut := decodeProgramOutcome(t, bothRaw)
 	if !bothOut.Truncated || len(bothOut.Outputs) != 2 || !bothOut.Outputs[0].Truncated || !bothOut.Outputs[1].Truncated {
 		t.Fatalf("expected both stdout and stderr to be truncated when splitting 12 KiB budget (6 KiB each), got %+v", bothOut)
+	}
+
+	small20kRaw, err := f.Call(t, t.Context(), "cat tier20k.txt")
+	testutil.FailErr(t, "small tier 20k call", err)
+	if !decodeProgramOutcome(t, small20kRaw).Truncated {
+		t.Fatalf("expected 21.5 KiB output to truncate under small (12 KiB) budget")
+	}
+
+	// Medium context tier (65536 tokens -> 32 KiB budget)
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Host.ModelContextWindow = 65536
+	}
+	med20kRaw, err := f.Call(t, t.Context(), "cat tier20k.txt")
+	testutil.FailErr(t, "medium tier 20k call", err)
+	if decodeProgramOutcome(t, med20kRaw).Truncated {
+		t.Fatalf("expected 21.5 KiB output to fit without truncation under medium (32 KiB) budget")
+	}
+	med45kRaw, err := f.Call(t, t.Context(), "cat tier45k.txt")
+	testutil.FailErr(t, "medium tier 45k call", err)
+	if !decodeProgramOutcome(t, med45kRaw).Truncated {
+		t.Fatalf("expected 45.1 KiB output to truncate under medium (32 KiB) budget")
+	}
+
+	// Large context tier (200000 tokens -> 64 KiB budget)
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Host.ModelContextWindow = 200000
+	}
+	large45kRaw, err := f.Call(t, t.Context(), "cat tier45k.txt")
+	testutil.FailErr(t, "large tier 45k call", err)
+	if decodeProgramOutcome(t, large45kRaw).Truncated {
+		t.Fatalf("expected 45.1 KiB output to fit without truncation under large (64 KiB) budget")
+	}
+	large80kRaw, err := f.Call(t, t.Context(), "cat tier80k.txt")
+	testutil.FailErr(t, "large tier 80k call", err)
+	if !decodeProgramOutcome(t, large80kRaw).Truncated {
+		t.Fatalf("expected 81.7 KiB output to truncate under large (64 KiB) budget")
 	}
 }
 

@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	maxRetainedProgramOutputBytes  = 4 << 20
+	maxRetainedProgramOutputBytes  = 16 << 20
 	largeContextOutputBudgetBytes  = 64 << 10
 	mediumContextOutputBudgetBytes = 32 << 10
 	smallContextOutputBudgetBytes  = 12 << 10
@@ -95,16 +95,32 @@ func newProgramStream(limit int) *programStream {
 func (s *programStream) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	room := s.limit - len(s.data)
-	if room < len(p) {
-		s.truncated = true
-		if room > 0 {
-			s.data = append(s.data, p[:room]...)
-		}
-		return len(p), nil
+	origLen := len(p)
+	if len(s.data)+len(p) <= s.limit {
+		s.data = append(s.data, p...)
+		return origLen, nil
 	}
-	s.data = append(s.data, p...)
-	return len(p), nil
+	s.truncated = true
+	headKeep := s.limit / 2
+	tailKeep := s.limit - headKeep
+	if len(s.data) < headKeep {
+		need := headKeep - len(s.data)
+		s.data = append(s.data, p[:need]...)
+		p = p[need:]
+	}
+	if len(p) >= tailKeep {
+		s.data = append(s.data[:headKeep], p[len(p)-tailKeep:]...)
+		return origLen, nil
+	}
+	curTail := len(s.data) - headKeep
+	if curTail+len(p) <= tailKeep {
+		s.data = append(s.data, p...)
+		return origLen, nil
+	}
+	drop := (curTail + len(p)) - tailKeep
+	copy(s.data[headKeep:], s.data[headKeep+drop:])
+	s.data = append(s.data[:headKeep+curTail-drop], p...)
+	return origLen, nil
 }
 
 func (s *programStream) Bytes() []byte {

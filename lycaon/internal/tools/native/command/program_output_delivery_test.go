@@ -81,4 +81,14 @@ func TestWriteReadOnlyScratchOutputAndParseScratchSource(t *testing.T) {
 	if !ok2 || prog2 != "prog-42" || stream2 != "stderr" {
 		t.Fatalf("parseScratchOutputSource(@scratch) = (%q, %q, %v)", prog2, stream2, ok2)
 	}
+
+	ps := newProgramStream(20)
+	_, _ = ps.Write([]byte("01234567"))
+	_, _ = ps.Write([]byte("89abcdef"))
+	_, _ = ps.Write([]byte("ghijklmn"))
+	_, _ = ps.Write([]byte("opqrstuv"))
+	_, _ = ps.Write([]byte("0123456789END"))
+	if !ps.truncated || !strings.HasPrefix(string(ps.Bytes()), "0123456789") || !strings.HasSuffix(string(ps.Bytes()), "END") {
+		t.Fatalf("programStream rolling head+tail failed: %q (truncated=%v)", string(ps.Bytes()), ps.truncated)
+	}
 }
