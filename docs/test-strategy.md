@@ -1084,3 +1084,19 @@ Fixtures are deterministic, repository-local, and safe to run without credential
 The paid coordinator benchmark drives the real application with candidate
 models and grades environment outcomes, not transcripts. It is opt-in, never
 part of `check` or CI, and has its own page: [Coordinator benchmark](coordinator-benchmark.md).
+
+### Merge-group early checks and throughput
+
+The first four integration slots run limits, lint, and the two Go behavior shards.
+On the exact merge-group source, lint completes comment and failure-message checks
+before analysis. Each Go shard runs repository contracts with the full integration
+recipe before its remaining affected packages. The two phases are disjoint and
+retain the same shard, worker cap, and package measurements. A failed first phase
+never starts its second phase; the matrix cancels siblings on failure. Other
+profiles keep their complete recipes.
+
+Queue health counts actual pull requests merged to main per observation hour.
+It reports success, failure, and cancellation separately, the fraction of decided
+groups that failed, creation-to-failure latency, and observed job minutes including
+retries. Missing job completion timestamps are counted explicitly. These measure
+the observation window; a successful group is not itself evidence of a main merge.

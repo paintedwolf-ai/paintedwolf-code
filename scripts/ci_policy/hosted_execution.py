@@ -62,7 +62,7 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-def run_lane(name, shard=""):
+def run_lane(name, shard="", merge_group=False):
     lane = hosted_plan.lanes()[name]
     count = lane.get("shards", 1)
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
@@ -99,6 +99,7 @@ def run_lane(name, shard=""):
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
     command = ["./task", *hosted_plan.invocation(targets)]
+    packages = None
     if scope and name == "behavior":
         from ci_policy.impact import go_scope
         packages = go_scope(scope)
@@ -113,8 +114,19 @@ def run_lane(name, shard=""):
             path.write_text(json.dumps(record, indent=2) + "\n")
             code = subprocess.call(preflight, cwd=ROOT, env=environment)
             record["preflight"].update(exit_code=code, finished_at=time.time())
-        if code == 0:
+        commands = [command]
+        if code == 0 and merge_group:
+            from ci_policy.merge_preflight import commands as ordered_commands
+            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
+        record["phases"] = []
+        for command in commands:
+            if code != 0:
+                break
+            phase = {"command": command, "started_at": time.time()}
+            record["phases"].append(phase)
+            path.write_text(json.dumps(record, indent=2) + "\n")
             code = subprocess.call(command, cwd=ROOT, env=environment)
+            phase.update(exit_code=code, finished_at=time.time())
     finally:
         stop.set()
     record["oom_after"] = oom_events()
