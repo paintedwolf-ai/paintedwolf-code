@@ -132,9 +132,13 @@ def local_origin(root: Path, work: Path, evidence: Path):
                         process.wait(timeout=5)
                     except subprocess.TimeoutExpired as failure:
                         errors.append(str(failure))
+        # Retaining a denied leaf entry while removing the CA keeps the admin
+        # trust dictionary non-empty so Security.framework takes its root path.
         for needed, action in ((mapped, lambda: change_hosts(line, True)),
+                               (trusted, lambda: run(["sudo", "-n", "security", "add-trusted-cert", "-d", "-r", "deny", "-k", KEYCHAIN, str(certificate)])),
                                (trusted, lambda: run(["sudo", "-n", "security", "remove-trusted-cert", "-d", str(ca)])),
-                               (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-Z", fingerprint, KEYCHAIN]))):
+                               (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-Z", fingerprint, KEYCHAIN])),
+                               (trusted, lambda: run(["sudo", "-n", "security", "delete-certificate", "-c", HOST, KEYCHAIN]))):
             if needed:
                 try:
                     action()
