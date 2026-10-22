@@ -64,6 +64,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/hostlock/hostlock.go":       "advisory pid stamp written under the lock it names; best-effort by design",
 	"lycaon/internal/preflight/probes.go":        "writability probe: written to prove the mount accepts a write, then removed",
 	"lycaon/cmd/lycaon-perf/fixtures.go":         "generated disposable benchmark tree under a fresh scratch root; no durable or prior content exists",
+	"lycaon/internal/scan/installed/verify.go":   "generated disposable qualification fixture under a fresh scratch root removed on return",
 	"lycaon/internal/testdbfixture/open.go":      "clones cached database template into disposable test fixture path",
 
 	// Maintenance commands write generated checkout artifacts.
