@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -28,6 +29,7 @@ import (
 
 // programOwnerTools are the structured tools the command program owners share.
 type programOwnerTools struct {
+	http       httpaction.Deps
 	boundary   *sandbox.Boundary
 	summarize  *survey.SummarizeTool
 	repo       *reposurvey.RepoTool
@@ -76,6 +78,10 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
+		httpNative, err := t.httpOperation(mutationOwners, barrier)
+		if err != nil {
+			return command.ProgramOwners{}, err
+		}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
 		owners := command.ProgramOwners{
 			Natives:     map[string]command.NativeOperation{},
@@ -149,6 +155,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				}
 				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
+		}
+		if httpNative.Prepare != nil {
+			owners.Natives["curl"] = httpNative
 		}
 		if gitNative.Prepare != nil {
 			owners.Natives["git"] = gitNative
