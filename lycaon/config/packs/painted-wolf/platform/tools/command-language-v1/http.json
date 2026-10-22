@@ -354,6 +354,9 @@
         },
         {
           "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure",
             "write",
             "review",
             "revision",

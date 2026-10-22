@@ -143,7 +143,7 @@ type ExchangeOptions struct {
 	MaxBodyBytes   int64
 	RedirectLimit  int
 	ConnectTimeout time.Duration
-	// WireHeaders keeps a cleartext final response's header block as received.
+	// WireHeaders keeps complete headers and any observable cleartext block.
 	WireHeaders bool
 }
 

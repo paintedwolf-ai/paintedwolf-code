@@ -3,6 +3,7 @@ package curl
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"io"
 	"net/http"
 	"testing"
@@ -35,5 +36,30 @@ func TestCurlPreservesSecretShapedResponseBytes(t *testing.T) {
 		if file && (!contains(h.read("headers.txt"), "X-Token: AKIAQYJK5TXV4NZR7SGB") || !contains(h.read("headers.txt"), "Set-Cookie: token=ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3") || !contains(h.read("cookies.txt"), "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3")) {
 			t.Fatal("response header or cookie values changed")
 		}
+	}
+}
+
+func TestCurlFilePublicationRequiresBothNetworkAndMutation(t *testing.T) {
+	h := newHarness(t)
+	server := fixedServer(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "body") })
+	r := h.curl(t.Context(), "-s", "-o", "downloaded", server.URL)
+	if r.err != nil {
+		t.Fatal(r.err)
+	}
+	mutationOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	networkOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandNetworkEgress)
+	both, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation, toolcontract.CommandNetworkEgress)
+	var required toolcontract.CommandEffects
+	for _, effect := range h.owners.spec.Effects {
+		if effect.Mode == r.mode {
+			var err error
+			required, err = effect.CommandEffects(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if required == 0 || mutationOnly.Allows(required) || networkOnly.Allows(required) || !both.Allows(required) {
+		t.Fatalf("file request admitted without both authorities: mode=%q effects=%v", r.mode, required.Classes())
 	}
 }
