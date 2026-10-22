@@ -31,11 +31,26 @@ func planOperation(ctx context.Context, dir string, req OperationRequest) (opera
 	var err error
 	switch req.Kind {
 	case "checkout":
-		err = p.checkout(ctx, dir)
+		switch req.Action {
+		case "paths":
+			err = p.checkoutPaths(ctx, dir)
+		case "detach":
+			err = p.detach(ctx, dir)
+		default:
+			err = p.checkout(ctx, dir)
+		}
 	case "merge":
 		err = p.merge(ctx, dir)
 	case "stash":
 		err = p.stash(ctx, dir)
+	case "add":
+		err = p.add()
+	case "reset":
+		err = p.reset(ctx, dir)
+	case "clean":
+		err = p.clean()
+	case "cherry-pick", "revert", "rebase":
+		err = p.sequence(ctx, dir)
 	default:
 		err = operationRefusal("unknown_operation")
 	}

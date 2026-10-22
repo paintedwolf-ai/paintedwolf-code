@@ -3,14 +3,11 @@ package gitcmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -18,10 +15,11 @@ import (
 // command is one bound Git invocation: its global -C directories and
 // allowlisted -c overrides, and the subcommand argv Git receives.
 type command struct {
-	spec   toolcontract.CommandSpecification
-	dirs   []string
-	config []string
-	args   []string
+	spec                  toolcontract.CommandSpecification
+	dirs                  []string
+	config                []string
+	args                  []string
+	beforeDash, afterDash []string
 }
 
 // allowedConfig are the -c overrides a command may set: each only narrows
@@ -70,7 +68,12 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 		}
 	}
 	c.args = append(append([]string{}, names[1:]...), argv[i:].Values()...)
-	if err := readForms[spec.Name](spec, bound); err != nil {
+	c.beforeDash, c.afterDash = splitDashOperands(spec, c.args, bound)
+	rule := readForms[spec.Name]
+	if rule == nil {
+		rule = mutateForms[spec.Name]
+	}
+	if err := rule(spec, bound); err != nil {
 		return nil, err
 	}
 	if err := formatPlaceholders(spec, bound); err != nil {
@@ -199,40 +202,15 @@ func (p Prepared) run(ctx context.Context, streams commandprogram.Streams) (int,
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	dir := p.paths.Cwd().Abs
-	for _, next := range p.command.dirs {
-		if filepath.IsAbs(next) {
-			dir = next
-		} else {
-			dir = filepath.Join(dir, next)
-		}
-		bound, err := p.paths.Bind(ctx, dir, false)
-		if err != nil {
-			return 0, err
-		}
-		if info, err := os.Stat(bound.Resolved.Abs); err != nil || !info.IsDir() {
-			reason := "No such file or directory"
-			if err == nil {
-				reason = "Not a directory"
-			}
-			_, _ = fmt.Fprintf(stderr, "fatal: cannot change to '%s': %s\n", next, reason)
-			return 128, nil
-		}
-		dir = bound.Resolved.Abs
-	}
-	repo, ok := gitrepo.Discover(dir)
-	if !ok {
-		_, _ = io.WriteString(stderr, "fatal: not a git repository (or any of the parent directories): .git\n")
-		return 128, nil
-	}
-	if _, err := p.paths.Bind(ctx, repo.Root, false); err != nil {
-		return 0, err
+	dir, _, status, err := resolveCommandRepo(ctx, p, stderr, false)
+	if err != nil || status != 0 {
+		return status, err
 	}
 	out := &meteredOutput{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes")}
 	if out.w == nil {
 		out.w = io.Discard
 	}
-	diagnostics, status, err := p.owners.Git.ReadCommand(ctx, dir, p.command.args, p.command.config, out)
+	diagnostics, status, err := (git.CommandReader{}).ReadCommand(ctx, dir, p.command.args, p.command.config, out)
 	if out.err != nil {
 		return 0, out.err
 	}

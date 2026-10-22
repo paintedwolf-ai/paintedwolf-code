@@ -18,11 +18,13 @@ import (
 
 // OperationRequest describes a local repository effect, never arbitrary argv.
 type OperationRequest struct {
-	Kind             string
-	Action           string
-	Branch           string
-	Create           bool
-	Ref              string
+	Kind   string
+	Action string
+	Branch string
+	Create bool
+	Ref    string
+	// Refs are further commits a cherry-pick or revert applies in order.
+	Refs             []string
 	Mode             string
 	Message          string
 	Paths            []string
@@ -85,7 +87,7 @@ func (m *Manager) Operate(ctx context.Context, root string, req OperationRequest
 	if err != nil {
 		return result, err
 	}
-	prepared, err := m.prepareOperation(ctx, repo, req)
+	prepared, err := prepareOperation(ctx, repo, req)
 	release()
 	if err != nil {
 		return result, err
