@@ -21,7 +21,7 @@ class HostedScheduleTests(unittest.TestCase):
 
     def test_balanced_shards_share_the_longest_measurement(self):
         baseline = hosted_plan.matrix("integration")["include"]
-        seconds = {row["lane"] + (f" {row['shard']}" if row["shard"] else ""): 600 for row in baseline}
+        seconds = {row["timing_row"]: 600 for row in baseline}
         seconds.update({"behavior 1/2": 60, "behavior 2/2": 1500})
         rows = hosted_plan.matrix("integration", timings={"lanes": seconds})["include"]
         self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])

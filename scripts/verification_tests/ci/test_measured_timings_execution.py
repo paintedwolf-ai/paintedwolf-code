@@ -59,7 +59,7 @@ class MeasuredTimingsTests(unittest.TestCase):
                     self.assertEqual(timings.merge([path]),
                                      {"lanes": {}, "packages": {"valid": 2, "zero": 0}})
 
-    def test_latest_reads_the_newest_qualification_that_recorded_timings(self):
+    def test_history_stops_once_required_rows_are_available(self):
         runs = {"workflow_runs": [{"id": 3}, {"id": 2}, {"id": 1}]}
         artifacts = {3: [{"name": "verification-check-lint-1", "expired": False}],
                      2: [{"name": "receipt-verification-check-lint-1", "expired": False},
@@ -121,12 +121,13 @@ class MeasuredTimingsTests(unittest.TestCase):
                                     "packages": {"a": 3, "b": 5},
                                     "lane_runs": {"behavior 1/2": 3, "behavior 2/2": 2, "webkit-gtk": 2}})
 
-    def test_history_covers_the_current_check_and_integration_rows(self):
+    def test_history_requires_only_rows_produced_by_qualification(self):
         expected = {timings.row_key(row["lane"], row["shard"])
-                    for profile in ("check", "integration")
-                    for row in hosted_plan.matrix(profile)["include"]}
+                    for matrix in (hosted_plan.matrix("check"), hosted_plan.matrix("release", platform=True))
+                    for row in matrix["include"]}
         self.assertEqual(timings.qualification_rows(), expected)
-        self.assertTrue({"webkit-gtk", "confinement-arm64"} <= expected)
+        self.assertTrue({"build", "webkit-gtk", "confinement-arm64"} <= expected)
+        self.assertNotIn("integration-build", expected)
 
     def test_unavailable_measurements_plan_without_them(self):
         refused = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403: Resource not accessible")
@@ -137,7 +138,7 @@ class MeasuredTimingsTests(unittest.TestCase):
     def test_measured_lanes_order_the_capped_matrix(self):
         lanes = hosted_plan.lanes()
         unmeasured = hosted_plan.matrix("integration")["include"]
-        measured = {row["lane"] + (f" {row['shard']}" if row["shard"] else ""): 60 for row in unmeasured}
+        measured = {row["timing_row"]: 60 for row in unmeasured}
         measured.update({"contracts": 300, "frontend": 800, "native": 600, "runner": 320, "webkit-gtk": 900})
         rows = hosted_plan.matrix("integration", timings={"lanes": measured, "packages": {}})["include"]
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)

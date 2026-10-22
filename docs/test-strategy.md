@@ -728,18 +728,25 @@ verification. Mixed changes union their lane and package obligations.
 
 Hosted lane ordering uses one comparable set of estimates. A selected matrix
 uses measured durations only when every row has a valid measurement; otherwise
-all rows use their catalog budgets. Partial receipts from a cancelled run cannot
+all rows use their catalog budgets. A new or resharded lane therefore switches
+the whole selected matrix to budgets until qualification measures its rows.
+Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
 Fail-fast lanes retain their declared priority, and runner caps are unchanged.
+The catalog declares `integration-build` with `timing_source: build`: qualification
+measures build plus cross compilation, a conservative estimate for the smaller
+integration build. Timing sources must run in qualification, cover the receiving
+lane's stages, and use the same execution configuration.
 
 Lanes and shards are planned from measured durations. Each lane of main's
 qualification records its elapsed time beside its receipts in `ci/timings.json`;
 a sharded lane also records its packages' durations. The plan job reads the
 newest valid measurement for each row and package from check and release platform
 receipts in at most 20 completed qualifications, filling gaps from older runs.
-The job summary
-records the selected estimate basis, missing rows, source runs, and matrix order.
+History stops once the rows qualification actually runs have measurements. The
+job summary records the estimate basis, missing timing rows, source runs, and
+matrix order, including declared timing sources.
 Every shard receives the same package durations, so the shards partition the
 selection identically:
 packages go longest first to the least loaded shard, so the longest package

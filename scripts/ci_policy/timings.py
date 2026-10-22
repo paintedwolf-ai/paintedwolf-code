@@ -17,8 +17,8 @@ def row_key(lane, shard):
     return f"{lane} {shard}" if shard else lane
 
 
-def valid_seconds(value):
-    return type(value) in (int, float) and math.isfinite(value) and value > 0
+def valid_seconds(value, *, allow_zero=False):
+    return type(value) in (int, float) and math.isfinite(value) and (value >= 0 if allow_zero else value > 0)
 
 
 def record(root, run):
@@ -45,7 +45,7 @@ def merge(paths):
         if measured["status"] == "passed" and valid_seconds(measured["seconds"]):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
         packages.update({name: seconds for name, seconds in measured["packages"].items()
-                         if type(seconds) in (int, float) and math.isfinite(seconds) and seconds >= 0})
+                         if valid_seconds(seconds, allow_zero=True)})
     return {"lanes": lanes, "packages": packages}
 
 
@@ -59,7 +59,8 @@ def download(repository, run, names, directory):
 def qualification_rows():
     from verification_plan import catalog
     return {row_key(name, f"{index}/{count}" if count > 1 else "")
-            for name, lane in catalog()["ci"].items() if set(lane["profiles"]) & {"check", "integration"}
+            for name, lane in catalog()["ci"].items()
+            if "check" in lane["profiles"] or "release" in lane["profiles"] and "platform" in lane
             for count in [lane.get("shards", 1)] for index in range(1, count + 1)}
 
 
