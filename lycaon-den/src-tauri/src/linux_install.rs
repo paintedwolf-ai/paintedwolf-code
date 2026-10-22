@@ -4,6 +4,8 @@
 //! this process runs from the `.deb` or `.rpm` package. Layout constants here
 //! mirror `packaging/linux/` and the Go engine's `configlayout`.
 
+pub(crate) mod entry_points;
+
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
