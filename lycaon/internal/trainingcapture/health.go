@@ -3,6 +3,7 @@ package trainingcapture
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -30,7 +31,12 @@ func ObserveUtility(ctx context.Context, purpose string, err error) {
 	if truncated, ok := failure.AsProviderOutputTruncated(err); ok {
 		health.FinishReason = truncated.FinishReason
 	}
-	if err := writeArtifact(filepath.Join(root, "health"), health); err != nil {
+	directory := filepath.Join(root, "health")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		slog.WarnContext(ctx, "create training health directory", "error", err)
+		return
+	}
+	if err := writeArtifact(directory, health); err != nil {
 		slog.WarnContext(ctx, "write training health", "error", err)
 	}
 }
