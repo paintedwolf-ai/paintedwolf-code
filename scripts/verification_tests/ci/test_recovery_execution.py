@@ -6,6 +6,27 @@ from ci_policy import recovery
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_ineligible_runs_do_not_download_evidence_or_request_recovery(self):
+        run = dict(id=42, path='.github/workflows/ci.yml', event='merge_group', conclusion='failure')
+        mutations = [
+            {'conclusion': conclusion} for conclusion in ('success', 'cancelled', 'timed_out', None)
+        ] + [
+            {'event': event} for event in ('pull_request', 'pull_request_target', 'schedule', None)
+        ] + [
+            {'path': '.github/workflows/unrelated.yml'},
+            {'repository': {'full_name': 'foreign/repo'}},
+            {'head_repository': {'full_name': 'foreign/repo'}},
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
+                    patch.object(recovery, 'evidence') as evidence, patch.object(recovery, 'pages') as pages, \
+                    patch.object(recovery, 'api') as api, patch.object(recovery, 'propose_revert') as revert:
+                recovery.recover({**run, **mutation})
+                evidence.assert_not_called()
+                pages.assert_not_called()
+                api.assert_not_called()
+                revert.assert_not_called()
+
     def run_recovery(self, records, failures=(), jobs=(), attempt=1, workflow='ci.yml'):
         run = {'id': 42, 'path': '.github/workflows/' + workflow, 'event': 'merge_group',
                'run_attempt': attempt, 'conclusion': 'failure', 'html_url': 'https://example.test/run'}

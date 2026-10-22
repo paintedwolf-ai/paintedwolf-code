@@ -913,7 +913,10 @@ do not authorize retry. Recovery does not retry pull request artifacts with a
 privileged token.
 
 [`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
-runs code from main, parses bounded JSON without extracting or executing
+runs only for failed push, merge-group, or manual CI/qualification runs whose
+head repository is this repository. Other events skip runner allocation. The
+controller checks eligibility again before downloading receipts. It runs code
+from main, parses bounded JSON without extracting or executing
 artifacts, and recovers measured runner faults. Failure details remain in run
 annotations, summaries, and retained evidence. It
 proposes a draft revert only for a source failure on the current main tip with

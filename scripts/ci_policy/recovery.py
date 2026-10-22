@@ -94,16 +94,15 @@ def propose_revert(run, failures):
 
 
 def recover(run):
+    if run.get('conclusion') != 'failure' or run.get('event') not in {'push', 'merge_group', 'workflow_dispatch'}:
+        return
     if run.get('path') not in {'.github/workflows/ci.yml', '.github/workflows/qualification.yml'}:
         return
     if run.get('repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
         return
-    # Fork artifacts cannot authorize privileged recovery and need not be downloaded.
-    if run.get('event') == 'pull_request':
+    if run.get('head_repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
         return
     records, failures = evidence(run)
-    if run.get('conclusion') != 'failure':
-        return
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))
     # Every failed executable lane must have evidence. Missing evidence cannot prove a runner fault.
     failed_jobs = [j for j in jobs if j['conclusion'] in {'failure', 'timed_out'} and j['name'] not in {'check', 'qualification'}]
