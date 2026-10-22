@@ -681,10 +681,12 @@ clients that require manual installation.
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
-job, `ready`: it first runs the hosted policy, runner, and verification-evidence
-contract packages, then compiles the host and runs `lint:full`, size budgets, Den
-typecheck, and Den lint. These checks are covered by `./task check-fast`, which
-also runs product tests and changed coverage. The admission contracts run through
+job, `ready`: it first runs the hosted policy, runner, verification-evidence,
+host, and security contract packages, then compiles the host and runs `lint:full`,
+size budgets, Den typecheck, Den lint, and frontend seam canaries. Host watch-coverage,
+browser-launch, and native IPC registration contracts reject changes before
+enqueueing. These checks are covered by `./task check-fast`, which also runs
+broader product tests and changed coverage. The admission contracts run through
 `test:contract` with explicit packages, without a test-name filter. Failure or
 interruption stops the lane before its remaining work. Catalog validation accepts
 existing contract packages and rejects selectors, traversal, and duplicate packages.
@@ -791,12 +793,6 @@ pinned browser under confinement) runs on both. Platform qualification's
 `ubuntu-24.04-arm` nightly, in qualification, and in the merge queue when the
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
-
-Admission runs the hosted, runner, evidence, host, and security contract packages
-before static checks. Host watch-coverage and browser-launch contracts therefore
-reject changes before enqueueing. The existing frontend seam canaries also run
-in admission and include native IPC registration parity. Full behavior and
-frontend suites still run on the exact landing commit.
 
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
