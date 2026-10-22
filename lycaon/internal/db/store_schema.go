@@ -25,7 +25,7 @@ var (
 )
 
 // SchemaVersion identifies the baseline schema.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 const cleanShutdownMetaKey = "clean_shutdown"
 

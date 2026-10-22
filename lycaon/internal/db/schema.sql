@@ -778,7 +778,7 @@ CREATE TABLE IF NOT EXISTS vault_unlocks (
     unlocked_at TEXT NOT NULL CHECK (unlocked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
     ended_at TEXT CHECK (ended_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),
     end_reason TEXT CHECK (end_reason IN (
-        'idle', 'ceiling', 'screen_locked', 'sleep', 'app_quit', 'manual', 'renewed', 'restart'
+        'idle', 'ceiling', 'screen_locked', 'sleep', 'away', 'app_quit', 'manual', 'renewed', 'restart'
     )),
     CHECK ((ended_at IS NULL) = (end_reason IS NULL))
 ) STRICT;
