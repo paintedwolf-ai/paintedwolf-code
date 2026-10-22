@@ -145,36 +145,7 @@ func runLinuxProbe(mode string) int {
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
 	case "longcwd":
-		// A working directory deeper than the kernel names in one page leaves
-		// /proc/<pid>/cwd unreadable, so a relative socket path names nothing
-		// the supervisor can decide.
-		segment := strings.Repeat("d", 200)
-		for depth := 0; depth < 24; depth++ {
-			if err := unix.Mkdir(segment, 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
-				fmt.Println("mkdir:", err)
-				return 2
-			}
-			if err := unix.Chdir(segment); err != nil {
-				fmt.Println("chdir:", err)
-				return 2
-			}
-		}
-		for _, op := range []string{"connect", "bind"} {
-			fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
-			if err != nil {
-				fmt.Println("socket:", err)
-				return 2
-			}
-			sa := &unix.SockaddrUnix{Name: "relative.sock"}
-			if op == "connect" {
-				err = unix.Connect(fd, sa)
-			} else {
-				err = unix.Bind(fd, sa)
-			}
-			_ = unix.Close(fd)
-			fmt.Printf("relative %s: %s\n", op, errnoName(err))
-		}
-		return 0
+		return longcwdProbe()
 	case "interrupted":
 		// Interrupt notified calls while they wait for the supervisor, the
 		// way Go's preemption signal does in a busy toolchain, then confirm
@@ -640,6 +611,39 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
 	}
+}
+
+func longcwdProbe() int {
+	// A working directory deeper than the kernel names in one page leaves
+	// /proc/<pid>/cwd unreadable, so a relative socket path names nothing
+	// the supervisor can decide.
+	segment := strings.Repeat("d", 200)
+	for depth := 0; depth < 24; depth++ {
+		if err := unix.Mkdir(segment, 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
+			fmt.Println("mkdir:", err)
+			return 2
+		}
+		if err := unix.Chdir(segment); err != nil {
+			fmt.Println("chdir:", err)
+			return 2
+		}
+	}
+	for _, op := range []string{"connect", "bind"} {
+		fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			fmt.Println("socket:", err)
+			return 2
+		}
+		sa := &unix.SockaddrUnix{Name: "relative.sock"}
+		if op == "connect" {
+			err = unix.Connect(fd, sa)
+		} else {
+			err = unix.Bind(fd, sa)
+		}
+		_ = unix.Close(fd)
+		fmt.Printf("relative %s: %s\n", op, errnoName(err))
+	}
+	return 0
 }
 
 // A relative socket path whose working directory the supervisor cannot read
