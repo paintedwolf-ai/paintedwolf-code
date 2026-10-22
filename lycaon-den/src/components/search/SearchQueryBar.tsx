@@ -23,6 +23,7 @@ import { SearchIcon } from "./SearchIcons.tsx";
 import { AnchoredSurface } from "../primitives/AnchoredSurface.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { createResidentFocus } from "../../ui/resident-activity.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 function SegmentVisual(props: { segment: QuerySegment }) {
   if (props.segment.type === "filter") {
@@ -378,7 +379,7 @@ export function SearchQueryBar(props: Props) {
               onClick={() => queueMicrotask(revealCaret)}
               onKeyUp={() => queueMicrotask(revealCaret)}
               onKeyDown={(e) => {
-                if (e.isComposing) return;
+                if (isImeComposition(e)) return;
                 if (e.key === "Escape") {
                   if (showSuggestions()) {
                     e.stopPropagation();
