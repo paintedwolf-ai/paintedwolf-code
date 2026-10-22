@@ -31,6 +31,10 @@ class DesktopSettingsPayloadTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'final fixture executable ' + path.name.encode())
                 path.chmod(0o755)
+            # The format 2 payload seal also covers the staged engine root, version and notices.
+            (tauri / 'engine-root').mkdir()
+            (root / 'VERSION').write_text('1.2.3\n')
+            (tauri / 'THIRD-PARTY-NOTICES.md').write_text('notices\n')
             args = argparse.Namespace(root=root, target=target, version='1.2.3', output=root / 'manifest.json')
             manifest.generate(args)
             row = next(row for row in json.loads(args.output.read_text())['executables']
