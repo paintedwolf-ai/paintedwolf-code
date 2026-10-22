@@ -72,13 +72,19 @@ runs:
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
-    - name: Allow Go test binaries to create user namespaces
+    - name: Allow verification engines to create user namespaces
       if: runner.os == 'Linux'
       shell: bash
       run: |
         if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
-          sudo install -m 0644 "$GITHUB_ACTION_PATH/apparmor-go-test-userns" /etc/apparmor.d/paintedwolf-go-test
-          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+          profile="$RUNNER_TEMP/paintedwolf-verification"
+          {
+            cat "$GITHUB_ACTION_PATH/apparmor-verification-userns"
+            printf '\nprofile paintedwolf-verification-sidecar "%s/lycaon-dev" flags=(unconfined) {\n  userns,\n}\n' \
+              "$(python3 scripts/artifact_paths.py build "$GITHUB_WORKSPACE")"
+          } > "$profile"
+          sudo install -m 0644 "$profile" /etc/apparmor.d/paintedwolf-verification
+          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-verification
         fi
 
     - name: Install Tauri Linux build dependencies
