@@ -56,7 +56,11 @@ func (s *supervisor) serveNotifications(listener int) {
 	for {
 		var n seccompNotif
 		if err := ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_RECV, unsafe.Pointer(&n)); err != nil {
-			if errors.Is(err, unix.EINTR) {
+			// ENOENT is a call whose caller was interrupted, for instance by
+			// the Go runtime's preemption signal, before it could be read;
+			// the caller retries it. Closing the listener would instead fail
+			// every later notified call with ENOSYS.
+			if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
 				continue
 			}
 			return
