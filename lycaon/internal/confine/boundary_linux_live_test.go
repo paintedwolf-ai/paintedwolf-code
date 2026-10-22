@@ -184,24 +184,7 @@ func runLinuxProbe(mode string) int {
 		fmt.Println("after interruptions:", errnoName(refusedConnect()))
 		return 0
 	case "families":
-		for _, family := range []struct {
-			name   string
-			domain int
-			kind   int
-			proto  int
-		}{
-			{"vsock", unix.AF_VSOCK, unix.SOCK_STREAM, 0},
-			{"vsock datagram", unix.AF_VSOCK, unix.SOCK_DGRAM, 0},
-			{"bluetooth", unix.AF_BLUETOOTH, unix.SOCK_STREAM, 0},
-			{"netlink", unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_ROUTE},
-		} {
-			fd, err := unix.Socket(family.domain, family.kind|unix.SOCK_CLOEXEC, family.proto)
-			if err == nil {
-				_ = unix.Close(fd)
-			}
-			fmt.Printf("family %s: %s\n", family.name, errnoName(err))
-		}
-		return 0
+		return familiesProbe()
 	case "iouring":
 		params := make([]byte, 120)
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
@@ -640,6 +623,27 @@ func TestLinuxSupervisorSurvivesInterruptedNotifications(t *testing.T) {
 	if status.ExitStatus() != 0 || !strings.Contains(out, "after interruptions: EACCES") {
 		t.Fatalf("interrupted probe: exit %d: %s", status.ExitStatus(), out)
 	}
+}
+
+func familiesProbe() int {
+	for _, family := range []struct {
+		name   string
+		domain int
+		kind   int
+		proto  int
+	}{
+		{"vsock", unix.AF_VSOCK, unix.SOCK_STREAM, 0},
+		{"vsock datagram", unix.AF_VSOCK, unix.SOCK_DGRAM, 0},
+		{"bluetooth", unix.AF_BLUETOOTH, unix.SOCK_STREAM, 0},
+		{"netlink", unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_ROUTE},
+	} {
+		fd, err := unix.Socket(family.domain, family.kind|unix.SOCK_CLOEXEC, family.proto)
+		if err == nil {
+			_ = unix.Close(fd)
+		}
+		fmt.Printf("family %s: %s\n", family.name, errnoName(err))
+	}
+	return 0
 }
 
 // AF_VSOCK reaches the hypervisor host from any network namespace, so no
