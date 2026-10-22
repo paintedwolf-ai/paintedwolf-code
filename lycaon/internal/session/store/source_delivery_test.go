@@ -199,7 +199,11 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceEndByte: int64(len(source)), OutputEndByte: int64(len(source))}
 	reference := "output:actual-native-source"
 	spill := retain(in.Identity.ExecutionID, source, 13)
-	testutil.FailErr(t, "retain actual native source mapping outside stdout", outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill))
+	admitted, err := outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill)
+	testutil.FailErr(t, "retain actual native source mapping outside stdout", err)
+	if len(admitted) != 1 || admitted[0] != mapping {
+		t.Fatal("actual source mapping was not admitted")
+	}
 	result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.ZeroStatusPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: contract.Owner, Kind: "source_snapshot", EvidenceRef: pin.SourceID}}
 	testutil.FailErr(t, "settle actual executed read independently of delivery", recorder.SettleChild(ctx, in.Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: reference}))
 	return retainedDeliveryFixture{owner: owner, recorder: recorder, outputs: outputs, source: source, pin: pin, mapping: mapping, session: session.ID, program: program, execution: in.Identity.ExecutionID, reference: reference, quota: quota}

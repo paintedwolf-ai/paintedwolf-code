@@ -6,7 +6,7 @@ Pass `cwd` as a repo-relative directory, `@scratch` for session scratch, or `@la
 
 Foreground waits ~30s, then returns a live handle if still running; yielding never terminates it. The host ledger preserves the job and emits its terminal envelope. First read: `command_output(handle="<handle>", cursor=0)`. Later reads must pass the exact returned `next_cursor`; never reuse a cursor. If no output is needed now, call `wait(until_complete=true, conditions=[{"kind":"process_done","handles":["<handle>"]}], reason="waiting for command completion")`. Intentional termination uses `command_stop(handle="<handle>")`. Exact live reruns are rejected; set `allow_concurrent:true` only for independent work. `timeout_ms` is the execution deadline. For a server/watch/tail, set `background:true`; stop it with **`command_stop`**, never `kill`/`pkill`/`lsof` via `command`.
 
-Omit `stdout_to`/`stderr_to` (or `>`/`2>`) to read output in tool result `tail`; redirects persist into write scope.
+{% if command_output_scratch_files %}For long output, read the saved copy named in the notice.{% else %}Omit `stdout_to`/`stderr_to` (or `>`/`2>`) to read output in tool result `tail`; redirects persist into write scope.{% endif %}
 
 If **`COMMAND_NOT_ARGV`** or **`COMMAND_ARGV_REQUIRED`**, read reject **Instead** — don't retry variants.
 

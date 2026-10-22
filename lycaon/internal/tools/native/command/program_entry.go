@@ -114,21 +114,21 @@ type programRun struct {
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
-	ProgramID        string                `json:"program_id"`
-	State            string                `json:"state"`
-	Status           int                   `json:"status"`
-	StopCode         string                `json:"stop_code,omitempty"`
-	Stdout           string                `json:"stdout"`
-	Stderr           string                `json:"stderr"`
-	StdoutRef        string                `json:"stdout_ref,omitempty"`
-	StderrRef        string                `json:"stderr_ref,omitempty"`
-	Outputs          []ProgramOutputWindow `json:"outputs,omitempty"`
-	Truncated        bool                  `json:"truncated,omitempty"`
-	ExecutedChildren int                   `json:"executed_children"`
-	CompletedEffects int                   `json:"completed_effects"`
-	UncertainEffects int                   `json:"uncertain_effects"`
-	NativeGaps       int                   `json:"native_gaps,omitempty"`
-	ReplayAvailable  bool                  `json:"replay_available"`
+	ProgramID        string                           `json:"program_id"`
+	State            string                           `json:"state"`
+	Status           int                              `json:"status"`
+	StopCode         string                           `json:"stop_code,omitempty"`
+	Stdout           string                           `json:"stdout"`
+	Stderr           string                           `json:"stderr"`
+	StdoutRef        string                           `json:"stdout_ref,omitempty"`
+	StderrRef        string                           `json:"stderr_ref,omitempty"`
+	Outputs          []api.CommandProgramOutputWindow `json:"outputs,omitempty"`
+	Truncated        bool                             `json:"truncated,omitempty"`
+	ExecutedChildren int                              `json:"executed_children"`
+	CompletedEffects int                              `json:"completed_effects"`
+	UncertainEffects int                              `json:"uncertain_effects"`
+	NativeGaps       int                              `json:"native_gaps,omitempty"`
+	ReplayAvailable  bool                             `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
@@ -265,7 +265,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return err
 		}
 		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
-		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
+		if _, err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
 			return errors.Join(err, spill.Close())
 		}
 		return nil
@@ -305,7 +305,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			}
 		}
 	}
-	stdout, stderr := newProgramStream(maxRetainedProgramOutputBytes), newProgramStream(maxRetainedProgramOutputBytes)
+	var outputLimit int64
+	for _, limit := range run.catalog.Language.Limits {
+		if limit.ID == "spill_bytes" {
+			outputLimit = limit.Maximum
+		}
+	}
+	stdout, stderr := newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory), newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory)
+	releaseOutputs := release
+	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input,
@@ -687,16 +695,36 @@ const childOutputBytes = 64 << 10
 // execution; pipe stages produce no retention rows.
 func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context, toolcontract.ProducerResult, error)) {
 	teed := streams
-	if ps, ok := streams.Output.(*programStream); ok {
-		teed.Output = &childStreamView{stream: ps, baseOffset: ps.Len()}
+	outputView, errorView := newChildStreamView(streams.Output), newChildStreamView(streams.Error)
+	if outputView != nil {
+		teed.Output = outputView
+	}
+	errorOutput := nonNilWriter(streams.Error)
+	if errorView != nil {
+		errorOutput = errorView
+	}
+	closeViews := func() {
+		if outputView != nil {
+			outputView.Close()
+		}
+		if errorView != nil {
+			errorView.Close()
+		}
 	}
 	if r.retainOutput == nil {
-		return teed, func(context.Context, toolcontract.ProducerResult, error) {}
+		teed.Error = errorOutput
+		return teed, func(context.Context, toolcontract.ProducerResult, error) { closeViews() }
 	}
 	stderr := &boundedBuffer{limit: childOutputBytes}
-	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
+	if errorView != nil {
+		errorView.copy = stderr
+		teed.Error = errorView
+	} else {
+		teed.Error = io.MultiWriter(errorOutput, stderr)
+	}
 	execution := request.Invocation.Identity.ExecutionID
 	return teed, func(ctx context.Context, result toolcontract.ProducerResult, err error) {
+		defer closeViews()
 		failed := err != nil || result.Status != 0 || (result.Terminal != "" && result.Terminal != toolcontract.ProducerCompleted)
 		if !failed {
 			return

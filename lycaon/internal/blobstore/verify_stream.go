@@ -44,8 +44,14 @@ func (s Store) VerifyStream(ctx context.Context, blob Blob, scratch []byte) erro
 			return io.ErrNoProgress
 		}
 	}
-	if count != blob.Size || attachmentID(hex.EncodeToString(digest.Sum(nil)), blob.Name) != blob.ID {
+	if count != blob.Size || !blob.MatchesContentDigest(hex.EncodeToString(digest.Sum(nil))) {
 		return fmt.Errorf("retained blob content identity mismatch")
 	}
 	return reader.Close()
+}
+
+// MatchesContentDigest checks plaintext identity using the store's filename-bound
+// addressing rule. A blob ID is not itself the plaintext SHA-256.
+func (b Blob) MatchesContentDigest(digest string) bool {
+	return isHexDigest(digest) && attachmentID(digest, b.Name) == b.ID
 }

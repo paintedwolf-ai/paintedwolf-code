@@ -1,21 +1,27 @@
 package toolhost
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -209,6 +215,10 @@ func TestGoTest200kLinesSummarySurvives(t *testing.T) {
 		t.Fatalf("200k-line output lost trailing go test summary; tail=%q", out.Stdout[max(0, len(out.Stdout)-120):])
 	}
 
+	if len(f.Delivered()) != 0 {
+		t.Fatal("oversized optional source capture acquired read credit")
+	}
+
 	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@scratch/output/[^)]+)\)`)
 	m := re.FindStringSubmatch(out.Stdout)
 	if m == nil {
@@ -241,8 +251,8 @@ func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 		}
 		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(f.Dir, name), []byte(b.String()), 0o644))
 	}
-	writeSizedFile("medium.txt", 200)  // ~8.6 KiB: fits in 12 KiB (small), exceeds 6 KiB split
-	writeSizedFile("tier20k.txt", 500) // ~21.5 KiB: exceeds 12 KiB (small), fits in 32 KiB (medium)
+	writeSizedFile("medium.txt", 200)   // ~8.6 KiB: fits in 12 KiB (small), exceeds 6 KiB split
+	writeSizedFile("tier20k.txt", 500)  // ~21.5 KiB: exceeds 12 KiB (small), fits in 32 KiB (medium)
 	writeSizedFile("tier45k.txt", 1050) // ~45.1 KiB: exceeds 32 KiB (medium), fits in 64 KiB (large)
 	writeSizedFile("tier80k.txt", 1900) // ~81.7 KiB: exceeds 64 KiB (large)
 
@@ -428,5 +438,118 @@ func TestScreenedSecretsAreRedactedOnceAndMatchScratchOutput(t *testing.T) {
 	}
 	if diff := secretCalls - emptyCalls; diff != 1 {
 		t.Fatalf("expected non-empty stdout to add exactly 1 ScreenStream call over empty stdout, got %d (empty=%d, secret=%d)", diff, emptyCalls, secretCalls)
+	}
+}
+
+func TestDeliveryWindowSurvivesRecorderReopenAndRejectsIncompleteDescriptor(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	immediate := &tools.ToolInvocationOut{}
+	f.Configure = func(tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000; tc.Effects.Out = immediate }
+	body := strings.Repeat("line for retained output\n", 2000)
+	testutil.FailErr(t, "write window fixture", os.WriteFile(filepath.Join(f.Dir, "window.txt"), []byte(body), 0600))
+	raw, err := f.Call(t, t.Context(), "cat window.txt")
+	testutil.FailErr(t, "produce window", err)
+	outcome := decodeProgramOutcome(t, raw)
+	if immediate.CommandProgram == nil || !reflect.DeepEqual(immediate.CommandProgram.Outputs, outcome.Outputs) {
+		t.Fatalf("immediate receipt=%+v output=%+v", immediate.CommandProgram, outcome.Outputs)
+	}
+	reopened := invocation.NewSQLRecorder(f.Database)
+	page, err := reopened.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 10)
+	testutil.FailErr(t, "read reopened receipt", err)
+	if !reflect.DeepEqual(page.Program.Outputs, outcome.Outputs) || len(page.Program.Outputs) != 1 || page.Program.Outputs[0].InlineBudgetBytes != 12<<10 {
+		t.Fatalf("durable windows=%+v model windows=%+v", page.Program.Outputs, outcome.Outputs)
+	}
+	_, err = f.Database.ExecContext(t.Context(), `UPDATE invocation_program_outputs SET preview_truncated=1 WHERE program_id=? AND reference=?`, outcome.ProgramID, "output:program:"+outcome.ProgramID+":window:stdout")
+	testutil.FailErr(t, "damage descriptor preview", err)
+	if _, err := reopened.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 10); err == nil {
+		t.Fatal("incomplete delivery descriptor became receipt window")
+	}
+}
+
+func TestChangedScratchCopyCannotReuseOriginalMappings(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	testutil.FailErr(t, "seed mapped source", os.WriteFile(filepath.Join(f.Dir, "source.txt"), []byte("original source\n"), 0600))
+	raw, err := f.Call(t, t.Context(), "cat source.txt")
+	testutil.FailErr(t, "produce mapped copy", err)
+	out := decodeProgramOutcome(t, raw)
+	before := len(f.Delivered())
+	copyPath := filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout")
+	testutil.FailErr(t, "simulate external permission change", os.Chmod(copyPath, 0600))
+	testutil.FailErr(t, "simulate equal-size external replacement", os.WriteFile(copyPath, []byte("modified source\n"), 0600))
+	_, err = f.Call(t, t.Context(), "cat "+out.Outputs[0].ScratchPath)
+	testutil.FailErr(t, "read changed scratch copy", err)
+	if after := len(f.Delivered()); after != before {
+		t.Fatalf("changed copy reused source mappings: before=%d after=%d", before, after)
+	}
+}
+
+func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	f.Configure = func(tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000 }
+	secret := "tiny-key"
+	matcher := secretmatch.NewInertMatcher()
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		return []secretmatch.HarvestedValue{{Name: "token", Secret: secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
+	})
+	f.Runtime.Projector = captureprojection.New(matcher, nil)
+	padding := " " + strings.Repeat("x", 4096) + "\n"
+	// One match per log record keeps detector-window evidence within its memory budget.
+	body := strings.Repeat(secret+padding, 400)
+	want := []byte(strings.Repeat(secretmatch.RedactedMarker+padding, 400))
+	testutil.FailErr(t, "seed expanding output", os.WriteFile(filepath.Join(f.Dir, "expansion.txt"), []byte(body), 0600))
+	raw, err := f.Call(t, t.Context(), "cat expansion.txt")
+	testutil.FailErr(t, "deliver expanding output", err)
+	out := decodeProgramOutcome(t, raw)
+	if out.Status != 0 || len(out.Outputs) != 1 || !out.Outputs[0].Complete || out.Outputs[0].Limit != nil || out.Outputs[0].TotalBytes != int64(len(want)) {
+		t.Fatalf("expanding outcome=%+v", out)
+	}
+	copyBytes, err := os.ReadFile(filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout"))
+	testutil.FailErr(t, "read expanded copy", err)
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "load mapping read limits", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "admit mapping read", err)
+	mappings, err := f.Recorder.ReadProgramOutputMappings(t.Context(), f.Session, out.ProgramID, out.StdoutRef, memory)
+	testutil.FailErr(t, "lookup expanded body", err)
+	defer mappings.Close()
+	store := f.Recorder.ProgramBlobStore(f.Runtime.Blobs)
+	store.Dir = tooloutput.ToolOutputSpillDir
+	reader, err := store.Open(mappings.Blob)
+	testutil.FailErr(t, "open expanded retained body", err)
+	retained, err := io.ReadAll(reader)
+	testutil.FailErr(t, "read expanded retained body", err)
+	testutil.FailErr(t, "close expanded body", reader.Close())
+	if !bytes.Equal(copyBytes, want) || !bytes.Equal(retained, want) || len(f.Delivered()) != 0 {
+		t.Fatal("expanded bytes changed, shortened, or acquired source credit")
+	}
+}
+
+func TestScreeningLimitKeepsExecutionOutcomeAndIncompleteReceipt(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	matcher := secretmatch.NewInertMatcher()
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		return []secretmatch.HarvestedValue{{Name: "token", Secret: "tiny-key", RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
+	})
+	f.Runtime.Projector = captureprojection.New(matcher, nil)
+	testutil.FailErr(t, "seed dense output", os.WriteFile(filepath.Join(f.Dir, "dense.txt"), []byte(strings.Repeat("tiny-key\n", 160000)), 0600))
+	raw, err := f.Call(t, t.Context(), "cat dense.txt")
+	testutil.FailErr(t, "deliver partial screened output", err)
+	out := decodeProgramOutcome(t, raw)
+	if out.Status != 0 || out.StopCode != "" || out.State != "completed" || len(out.Outputs) != 1 {
+		t.Fatalf("delivery changed execution: %+v", out)
+	}
+	window := out.Outputs[0]
+	if window.Complete || window.Limit == nil || window.Limit.Code != "COMMAND_LIMIT_EXCEEDED" || window.Limit.LimitID != "screen_memory_bytes" || window.Limit.Maximum != 32<<20 || window.Limit.Observed <= window.Limit.Maximum {
+		t.Fatalf("partial delivery=%+v", window)
+	}
+	copyBytes, err := os.ReadFile(filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout"))
+	testutil.FailErr(t, "read saved prefix", err)
+	if int64(len(copyBytes)) != window.TotalBytes || len(f.Delivered()) != 0 || bytes.Contains(copyBytes, []byte("tiny-key")) {
+		t.Fatal("partial copy totals or source credit are false")
+	}
+	page, err := invocation.NewSQLRecorder(f.Database).ReadProgramPage(t.Context(), f.Session, out.ProgramID, "", 10)
+	testutil.FailErr(t, "read partial receipt", err)
+	if page.Program.State != "completed" || page.Program.StopCode != "" || !reflect.DeepEqual(page.Program.Outputs, out.Outputs) {
+		t.Fatalf("partial receipt=%+v", page.Program)
 	}
 }

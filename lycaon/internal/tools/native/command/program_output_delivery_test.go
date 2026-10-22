@@ -1,13 +1,17 @@
 package command
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCommandOutputBudgetAndStreamSplitting(t *testing.T) {
@@ -65,7 +69,7 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 
 func TestWriteReadOnlyScratchOutputAndParseScratchSource(t *testing.T) {
 	scratchDir := t.TempDir()
-	testutil.FailErr(t, "writeReadOnlyScratchOutput", writeReadOnlyScratchOutput(scratchDir, "prog-42", "stdout", []byte("alpha\nbeta\n")))
+	testutil.FailErr(t, "writeReadOnlyScratchOutput", scratch.PublishCommandOutput(scratchDir, "prog-42", "stdout", strings.NewReader("alpha\nbeta\n")))
 	target := filepath.Join(scratchDir, "output", "prog-42.stdout")
 	info, err := os.Stat(target)
 	testutil.FailErr(t, "stat scratch file", err)
@@ -82,13 +86,19 @@ func TestWriteReadOnlyScratchOutputAndParseScratchSource(t *testing.T) {
 		t.Fatalf("parseScratchOutputSource(@scratch) = (%q, %q, %v)", prog2, stream2, ok2)
 	}
 
-	ps := newProgramStream(20)
-	_, _ = ps.Write([]byte("01234567"))
-	_, _ = ps.Write([]byte("89abcdef"))
-	_, _ = ps.Write([]byte("ghijklmn"))
-	_, _ = ps.Write([]byte("opqrstuv"))
-	_, _ = ps.Write([]byte("0123456789END"))
-	if !ps.truncated || !strings.HasPrefix(string(ps.Bytes()), "0123456789") || !strings.HasSuffix(string(ps.Bytes()), "END") {
-		t.Fatalf("programStream rolling head+tail failed: %q (truncated=%v)", string(ps.Bytes()), ps.truncated)
+}
+
+func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName, ref, scratchPath string) (string, api.CommandProgramOutputWindow, [][2]int64, error) {
+	sample, err := sampleOutput(bytes.NewReader(data), budget)
+	if err != nil {
+		return "", api.CommandProgramOutputWindow{}, nil, err
 	}
+	delivered, window, parts, err := sample.window(ctx, streamName, ref, scratchPath, true)
+	var ranges [][2]int64
+	for _, part := range parts {
+		if len(part.data) > 0 {
+			ranges = append(ranges, [2]int64{part.start, part.start + int64(len(part.data))})
+		}
+	}
+	return delivered, window, ranges, err
 }
