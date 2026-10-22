@@ -186,7 +186,7 @@ Implementation references: [Transformers chat templates](https://huggingface.co/
 [llama.cpp converter](https://github.com/ggml-org/llama.cpp/blob/master/convert_hf_to_gguf.py).
 
 Collection runners also consume `pw-training-health/1` artifacts from the capture
-directory. These contain only the epoch, utility purpose, success, protocol finish
+directory's `health/` subdirectory. These contain only the epoch, utility purpose, success, protocol finish
 reason and timestamp. They let a runner stop after repeated truncated compaction
 summaries without parsing provider error prose or capturing utility payloads. The
-receipt exporter ignores them; they are diagnostic evidence, never training rows.
+receipt exporter does not traverse that directory; they are diagnostic evidence, never training rows.

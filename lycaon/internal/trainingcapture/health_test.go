@@ -17,7 +17,7 @@ func TestUtilityHealthContainsOnlyProtocolFacts(t *testing.T) {
 	for _, err := range []error{nil, errors.New("private diagnostic"), &failure.ProviderOutputTruncatedError{FinishReason: "length"}} {
 		ObserveUtility(t.Context(), "compaction", err)
 	}
-	paths, err := filepath.Glob(filepath.Join(root, "*.json"))
+	paths, err := filepath.Glob(filepath.Join(root, "health", "*.json"))
 	testutil.FailErr(t, "list health records", err)
 	var success, truncated int
 	for _, path := range paths {
