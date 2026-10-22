@@ -1,7 +1,6 @@
 """Native package preparation reuses exact archives without changing test dependencies."""
 import importlib.util
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -138,7 +137,7 @@ elif 'install' in sys.argv:
             def transfer(uri, path, received, deadline):
                 calls.append(uri)
                 if len(calls) == 1:
-                    raise NATIVE.HTTPException("truncated response")
+                    raise OSError("truncated response")
                 path.write_bytes(PAYLOAD)
 
             with patch.object(NATIVE, "transfer", side_effect=transfer):
@@ -154,16 +153,35 @@ elif 'install' in sys.argv:
         row = NATIVE.archives(PLAN)[0]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / row["name"]
-            for payload in (b"wrong", PAYLOAD + b"extra", b"x" * len(PAYLOAD)):
-                with self.subTest(payload=payload), patch.object(NATIVE, "urlopen", return_value=io.BytesIO(payload)), \
-                        self.assertRaises(ValueError):
-                    NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
-            with patch.object(NATIVE, "urlopen") as open_url, self.assertRaises(TimeoutError):
+            for payload, accepted in [(b"wrong", False), (PAYLOAD + b"extra", False),
+                                      (b"x" * len(PAYLOAD), False), (PAYLOAD, True)]:
+                def download(command, **options):
+                    Path(command[command.index("--output") + 1]).write_bytes(payload)
+                    self.assertIn("--max-filesize", command)
+                    self.assertEqual(command[-2:], ["--", row["uri"]])
+                    self.assertLessEqual(options["timeout"], 5)
+
+                with self.subTest(payload=payload), patch.object(NATIVE.subprocess, "run", side_effect=download):
+                    if accepted:
+                        NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+                    else:
+                        with self.assertRaises(ValueError):
+                            NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+            with patch.object(NATIVE.subprocess, "run") as download, self.assertRaises(TimeoutError):
                 NATIVE.transfer(row["uri"], path, row, time.monotonic() - 1)
-            open_url.assert_not_called()
-            with patch.object(NATIVE, "urlopen", return_value=io.BytesIO(PAYLOAD)):
-                NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+            download.assert_not_called()
             self.assertTrue(NATIVE.verified(path, row))
+
+    def test_transfer_deadline_bounds_a_continuously_slow_download_process(self):
+        row = NATIVE.archives(PLAN)[0]
+        for error, expected in [(subprocess.TimeoutExpired("curl", 30), TimeoutError),
+                                (subprocess.CalledProcessError(22, "curl"), OSError)]:
+            with self.subTest(error=error), patch.object(NATIVE.time, "monotonic", return_value=10), \
+                    patch.object(NATIVE.subprocess, "run", side_effect=error) as download, self.assertRaises(expected):
+                NATIVE.transfer(row["uri"], Path("archive.deb"), row, 40)
+            command = download.call_args.args[0]
+            self.assertEqual(command[command.index("--max-time") + 1], "30")
+            self.assertEqual(download.call_args.kwargs["timeout"], 30)
 
     def test_manifest_refuses_unsafe_paths_duplicate_archives_and_credentials(self):
         for plan in (PLAN.replace(" a_1_amd64.deb ", " ../a.deb "), PLAN + PLAN,

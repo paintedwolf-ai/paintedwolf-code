@@ -1,7 +1,6 @@
 """Install the native package closure resolved from the runner's signed APT indexes."""
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
-from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -11,7 +10,6 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent
 DOWNLOAD_SECONDS = 240
@@ -91,15 +89,15 @@ def transfer(uri, path, row, deadline):
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError("native package download deadline expired")
-    with urlopen(uri, timeout=min(15, remaining)) as response, path.open("wb") as output:
-        total = 0
-        while block := response.read(64 * 1024):
-            total += len(block)
-            if time.monotonic() >= deadline:
-                raise TimeoutError("native package transfer exceeded its deadline")
-            if total > row["size"]:
-                raise ValueError("native package exceeds its resolved size")
-            output.write(block)
+    command = ["curl", "--fail", "--location", "--silent", "--show-error",
+               "--proto", "=http,https", "--proto-redir", "=http,https", "--connect-timeout", "15",
+               "--max-time", str(remaining), "--max-filesize", str(row["size"]), "--output", str(path), "--", uri]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=remaining)
+    except subprocess.TimeoutExpired as error:
+        raise TimeoutError("native package transfer exceeded its deadline") from error
+    except subprocess.CalledProcessError as error:
+        raise OSError(f"native package transfer failed with curl exit {error.returncode}") from error
     if time.monotonic() >= deadline:
         raise TimeoutError("native package transfer exceeded its deadline")
     if not verified(path, row):
@@ -118,7 +116,7 @@ def fetch(row, directory, deadline):
             temporary.replace(destination)
             print(f"Native package verified: {row['name']} from {urlsplit(uri).hostname}", flush=True)
             return "downloaded"
-        except (OSError, HTTPException, ValueError) as error:
+        except (OSError, ValueError) as error:
             failures.append(f"{urlsplit(uri).hostname}: {error}")
         finally:
             temporary.unlink(missing_ok=True)
