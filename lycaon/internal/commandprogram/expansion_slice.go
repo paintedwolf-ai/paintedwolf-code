@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -139,6 +140,10 @@ func (r *expansionRun) sliceString(value string, slice *commandsurface.Parameter
 			return "", err
 		}
 	}
+	// The rune vector and UTF-8 result overlap until the expansion completes.
+	if err := r.charge(4*int64(utf8.RuneCountInString(value)) + int64(len(value))); err != nil {
+		return "", err
+	}
 	runes := []rune(value)
 	n := int64(len(runes))
 	if offset < 0 {
@@ -164,7 +169,10 @@ func (r *expansionRun) sliceString(value string, slice *commandsurface.Parameter
 		}
 		return string(runes[offset:end]), nil
 	}
-	end := min(offset+length, n)
+	end := n
+	if length < n-offset {
+		end = offset + length
+	}
 	return string(runes[offset:end]), nil
 }
 
