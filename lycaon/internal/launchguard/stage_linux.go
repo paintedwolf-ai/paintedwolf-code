@@ -20,9 +20,9 @@ const entrySelfFD = entryLifetimeFD + 1
 // RunStage is the privileged stage: uid 0 of the initial user namespace,
 // cloned into a fresh mount namespace by the bootstrap. It binds the selected
 // generation, then clones the unprivileged entry into the protected user
-// namespace as the original caller and exits; the entry is reparented to the
-// supervisor. It reads nothing a caller supplied except through the sealed
-// root-created frame.
+// namespace as the original caller and starts the broker agent as uid 0 so the
+// agent clears dumpable and drops privileges itself without a dumpable exec
+// window; both children are reparented to the supervisor when the stage exits.
 func RunStage() error {
 	if uid, euid, suid := unix.Getresuid(); uid != 0 || euid != 0 || suid != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator identity")
@@ -76,15 +76,24 @@ func RunStage() error {
 	if err := entry.Start(); err != nil {
 		return fmt.Errorf("start protected entry: %w", err)
 	}
+	null, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = null.Close() }()
+	// The broker agent starts as uid 0 in the initial user namespace and drops
+	// to the caller's identity after execve, so the kernel never resets its
+	// dumpable flag to 1 under the caller's credentials.
 	agent := &exec.Cmd{
 		Path:       "/proc/self/fd/" + strconv.Itoa(agentSelfFD),
 		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
 		Env:        []string{},
-		Stderr:     os.Stderr,
+		Stdin:      null,
+		Stdout:     null,
+		Stderr:     null,
 		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), entryImage},
 		SysProcAttr: &syscall.SysProcAttr{
-			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
-			Setsid:     true,
+			Setsid: true,
 		},
 	}
 	if err := agent.Start(); err != nil {

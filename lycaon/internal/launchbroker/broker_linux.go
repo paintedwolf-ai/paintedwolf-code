@@ -7,8 +7,9 @@
 // channel, standard input, output and error, then Request.ExtraFiles more,
 // which the program receives from descriptor 3. The broker reports Events on
 // the call channel and ends the program's session if the channel closes before
-// the program exits. The broker runs in the launch's own mount namespace, so a
-// path under the logical installation root names the running generation.
+// the program exits, unless the request detaches the program. The broker runs
+// in the launch's own mount namespace, so a path under the logical
+// installation root names the running generation.
 package launchbroker
 
 import (
@@ -51,6 +52,9 @@ type Request struct {
 	// Terminal makes the program a session leader whose controlling terminal
 	// is its standard input.
 	Terminal bool `json:"terminal,omitempty"`
+	// Detach starts a session that may outlive its call channel and the
+	// protected launch itself, such as an external desktop application.
+	Detach bool `json:"detach,omitempty"`
 	// ExtraFiles counts the descriptors after the standard streams.
 	ExtraFiles int `json:"extra_files,omitempty"`
 }
@@ -74,6 +78,9 @@ func (r Request) Validate() error {
 	}
 	if !filepath.IsAbs(r.Dir) || filepath.Clean(r.Dir) != r.Dir {
 		return errors.New("broker request directory must be absolute and clean")
+	}
+	if r.Terminal && r.Detach {
+		return errors.New("detached broker request cannot claim a controlling terminal")
 	}
 	if r.ExtraFiles < 0 || r.ExtraFiles > MaxExtraFiles {
 		return fmt.Errorf("broker request carries %d extra descriptors, at most %d", r.ExtraFiles, MaxExtraFiles)
