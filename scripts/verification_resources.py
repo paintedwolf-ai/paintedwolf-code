@@ -104,8 +104,12 @@ def combine(specs):
     shared = [lock for lock in locks
               if all(lock in spec.get("shared_locks", []) for spec in specs if lock in spec["locks"])]
     limit = capacity()
-    return {"locks": locks, "shared_locks": shared,
-            "workers": max((demand(spec, limit) for spec in specs), default=limit)}
+    combined = {"locks": locks, "shared_locks": shared,
+                "workers": max((demand(spec, limit) for spec in specs), default=limit)}
+    progress = next((spec["progress"] for spec in specs if "progress" in spec), None)
+    if progress is not None:
+        combined["progress"] = progress
+    return combined
 
 
 def resource_conflict(left, right):
