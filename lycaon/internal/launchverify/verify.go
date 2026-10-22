@@ -65,6 +65,9 @@ func CodeOf(err error) Code {
 type Verifier struct {
 	ProcRoot string
 	Manifest *pkgmanifest.Manifest
+	// InstallRoot and StorePolicy come only from a root-controlled service policy.
+	InstallRoot string
+	StorePolicy *StorePolicy
 	// statFile replaces the filesystem in tests of the mapping check.
 	statFile func(string) (fileFacts, error)
 }
@@ -140,7 +143,10 @@ func (v Verifier) Recheck(chain Chain) error {
 // opened as a descriptor, and compares it with the manifest's entry for the
 // role's installed path.
 func (v Verifier) VerifyExecutable(pid int, role string) error {
-	want, size, ok := expected(v.Manifest, role)
+	if v.StorePolicy != nil && v.InstallRoot == "" {
+		return refuse(CodeManifestUnreadable, role, pid, "a selected closure requires its exact installation root")
+	}
+	want, size, ok := expected(v.Manifest, role, v.InstallRoot)
 	if !ok {
 		return refuse(CodeManifestUnreadable, role, pid, "the manifest lists no such executable")
 	}
@@ -149,6 +155,13 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 		return refuse(CodeExecutableUnreadable, role, pid, err.Error())
 	}
 	defer func() { _ = file.Close() }()
+	if v.StorePolicy != nil {
+		actual, err := file.Stat()
+		installed, installedErr := os.Stat(rolePath(role, v.InstallRoot))
+		if err != nil || installedErr != nil || !os.SameFile(actual, installed) {
+			return refuse(CodeExecutableMismatch, role, pid, "the running image is not the selected generation's executable inode")
+		}
+	}
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	if err != nil {
