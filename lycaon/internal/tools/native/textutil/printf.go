@@ -63,8 +63,9 @@ func (e formatError) Error() string { return string(e) }
 
 func parseFormat(ctx context.Context, memory *toolcontract.ProgramMemory, text string) (out printfFormat, release func(), err error) {
 	// Every percent can introduce a conversion and adjacent literal. Reserve
-	// slice growth and literal-buffer overlap before the parser allocates them.
-	bound := int64(192*(2*strings.Count(text, "%")+1) + 4*len(text) + 1024)
+	// the complete directive capacity and literal-buffer overlap before allocating.
+	slots := 2*strings.Count(text, "%") + 1
+	bound := int64(96*slots + 4*len(text) + 1024)
 	if err := memory.ReserveBytes(ctx, bound); err != nil {
 		return nil, nil, err
 	}
@@ -73,6 +74,7 @@ func parseFormat(ctx context.Context, memory *toolcontract.ProgramMemory, text s
 			memory.ReleaseBytes(bound)
 		}
 	}()
+	out = make(printfFormat, 0, slots)
 	var literal bytes.Buffer
 	flush := func() {
 		if literal.Len() > 0 {
