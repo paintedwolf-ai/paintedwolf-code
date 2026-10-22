@@ -43,7 +43,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 		if err := l.controlledParents(name); err != nil {
 			return Generation{}, err
 		}
-		if err := os.MkdirAll(name, 0755); err != nil {
+		if err := os.MkdirAll(name, 0755); err != nil { // #nosec G301 -- root-owned generation store and lock directories are readable by unprivileged processes
 			return Generation{}, err
 		}
 		if err := l.controlledParents(name); err != nil {
@@ -54,7 +54,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err != nil {
 		return Generation{}, err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 	// Reinstalling a live identical generation must not wait for its users to exit.
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_SH); err != nil {
 		return Generation{}, err
@@ -81,7 +81,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err != nil || present && damage == nil {
 		return selected, err
 	}
-	if err := manifest.VerifyOwnedPayload(staging, owner); err != nil {
+	if err := manifest.VerifyOwnedPayload(staging, owner, l.stagedExclusions()...); err != nil {
 		return Generation{}, err
 	}
 	sourceManifest, err := readSeal(staging, len(raw), owner)
@@ -115,7 +115,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err != nil {
 		return Generation{}, err
 	}
-	defer target.Close()
+	defer func() { _ = target.Close() }()
 	entries := append([]pkgmanifest.PayloadEntry(nil), manifest.Payload...)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	for _, entry := range entries {
@@ -139,7 +139,7 @@ func (l layout) materialize(staging *os.Root, raw []byte) (Generation, error) {
 	if err := manifest.VerifyOwnedPayload(target, owner); err != nil {
 		return Generation{}, err
 	}
-	if err := os.Chmod(temporary, 0755); err != nil {
+	if err := os.Chmod(temporary, 0755); err != nil { // #nosec G302 -- finalized root-owned generation directory uses 0755 permissions
 		return Generation{}, err
 	}
 	if err := syncDirectory(temporary); err != nil {
@@ -178,7 +178,7 @@ func verifyExisting(path string, raw []byte, manifest *pkgmanifest.Manifest, own
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	if err := controlledObject(path, info, owner); err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func copyEntry(source, target *os.Root, entry pkgmanifest.PayloadEntry, owner ui
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		opened, err := file.Stat()
 		if err != nil {
 			return err
@@ -237,7 +237,7 @@ func copyEntry(source, target *os.Root, entry pkgmanifest.PayloadEntry, owner ui
 		if err != nil {
 			return err
 		}
-		defer output.Close()
+		defer func() { _ = output.Close() }()
 		hasher := sha256.New()
 		count, err := io.Copy(io.MultiWriter(output, hasher), io.LimitReader(file, *entry.Size+1))
 		if err != nil {
@@ -269,7 +269,7 @@ func readSeal(root *os.Root, size int, owner uint32) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
 	if err != nil {
 		return nil, err

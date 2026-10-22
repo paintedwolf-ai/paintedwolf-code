@@ -7,11 +7,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +25,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/launchverify"
+	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
 // Facts mirrors the test's decoding of this report.
@@ -46,12 +50,39 @@ type Facts struct {
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
+	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
 	ExecGeneration  string                      `json:"exec_generation"`
 	Exec            *ExecProbe                  `json:"exec,omitempty"`
+	ModuleUser      string                      `json:"module_user"`
+	ModuleLibrary   string                      `json:"module_library"`
+	BrokerUserExec  string                      `json:"broker_user_exec,omitempty"`
+}
+
+type vaultCommand struct {
+	Socket  string                `json:"socket"`
+	Request vaultidentity.Request `json:"request"`
 }
 
 func main() {
+	if len(os.Args) == 5 && os.Args[1] == "--browser-engine-victim" {
+		os.Exit(runBrowserEngineVictim(os.Args[2], os.Args[3], os.Args[4]))
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--engine-vault" {
+		runEngineVault(os.Args[2])
+		return
+	}
+	ready := make(chan struct{}, 4)
+	for range 4 {
+		go func() {
+			runtime.LockOSThread()
+			ready <- struct{}{}
+			select {}
+		}()
+	}
+	for range 4 {
+		<-ready
+	}
 	var facts Facts
 	facts.PID = os.Getpid()
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()
@@ -85,6 +116,7 @@ func main() {
 	facts.ExecGeneration = startName(filepath.Join(install, "bin", "pw-launch-entry"))
 	facts.InstallWrite = errnoName(os.WriteFile(filepath.Join(install, "planted"), []byte("x"), 0o644))
 	facts.Remount = errnoName(unix.Mount("", install, "", unix.MS_REMOUNT|unix.MS_BIND, ""))
+	facts.ModuleUser, facts.ModuleLibrary = moduleProbe()
 	for _, arg := range os.Args[1:] {
 		if arg == "--broker-probe" {
 			brokerProbe(&facts)
@@ -104,11 +136,40 @@ func main() {
 	if err := json.NewEncoder(os.Stdout).Encode(facts); err != nil {
 		os.Exit(2)
 	}
-	_, _ = io.Copy(io.Discard, os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		out, err := exec.Command(filepath.Join(install, "bin", "pw"), "--engine-vault", line).Output()
+		if err != nil {
+			_ = json.NewEncoder(os.Stdout).Encode(vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()})
+			continue
+		}
+		_, _ = os.Stdout.Write(out)
+	}
+}
+
+func runEngineVault(raw string) {
+	var cmd vaultCommand
+	if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
+		_ = json.NewEncoder(os.Stdout).Encode(vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()})
+		return
+	}
+	client := vaultidentity.NewClient(cmd.Socket)
+	defer func() { _ = client.Close() }()
+	resp, err := client.Do(cmd.Request)
+	if err != nil && resp.Status == "" {
+		resp = vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()}
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(resp)
 }
 
 // brokerProbe runs one program through the supervisor's broker and reports
-// where it ran, then abandons a second one and reports whether it ended.
+// where it ran, abandons a second one and reports whether it ended, and
+// starts a detached background child that must outlive the launch without
+// holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
 	broker := os.NewFile(6, "broker")
 	null, err := os.Open("/dev/null")
@@ -132,6 +193,7 @@ func brokerProbe(facts *Facts) {
 		return
 	}
 	output, _ := io.ReadAll(read)
+	_ = read.Close()
 	facts.BrokerOutput = string(output)
 	for {
 		event, err := launchbroker.ReadEvent(channel)
@@ -149,6 +211,7 @@ func brokerProbe(facts *Facts) {
 		}
 	}
 	_ = channel.Close()
+	facts.BrokerUserExec = brokeredUserProgram(broker, null)
 	sleeper, err := launchbroker.Send(broker, launchbroker.Request{
 		Argv: []string{"sleep", "60"}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
 	}, null, null, null)
@@ -165,9 +228,99 @@ func brokerProbe(facts *Facts) {
 	for i := 0; i < 250; i++ {
 		if _, err := os.Stat("/proc/" + strconv.Itoa(started.Started)); err != nil {
 			facts.AbandonedEnded = true
-			return
+			break
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if !facts.AbandonedEnded {
+		return
+	}
+	detachedRead, detachedWrite, err := os.Pipe()
+	if err != nil {
+		facts.BrokerError = err.Error()
+		return
+	}
+	detachedCall, err := launchbroker.Send(broker, launchbroker.Request{
+		Argv:        []string{"sh", "-c", "sleep 60 </dev/null >/dev/null 2>&1 & echo $!"},
+		Environment: []string{"PATH=/usr/bin:/bin"},
+		Dir:         "/",
+		Detach:      true,
+	}, null, detachedWrite, null)
+	_ = detachedWrite.Close()
+	if err != nil {
+		_ = detachedRead.Close()
+		facts.BrokerError = err.Error()
+		return
+	}
+	rawPID, _ := io.ReadAll(detachedRead)
+	_ = detachedRead.Close()
+	_ = detachedCall.Close()
+	facts.DetachedPID, _ = strconv.Atoi(strings.TrimSpace(string(rawPID)))
+}
+
+// moduleProbe maps a file of the caller's own, and one from the fixture's
+// library root, executable, the way the dynamic loader maps a module.
+func moduleProbe() (user, library string) {
+	planted := filepath.Join(os.Getenv("HOME"), "planted.so")
+	if err := os.WriteFile(planted, []byte("not a module"), 0o755); err != nil {
+		return err.Error(), ""
+	}
+	user = mapExecutable(planted)
+	library = "no regular file in /usr/lib"
+	entries, _ := os.ReadDir("/usr/lib")
+	for _, entry := range entries {
+		if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			return user, mapExecutable(filepath.Join("/usr/lib", entry.Name()))
+		}
+	}
+	return user, library
+}
+
+func mapExecutable(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = file.Close() }()
+	region, err := unix.Mmap(int(file.Fd()), 0, 1, unix.PROT_READ|unix.PROT_EXEC, unix.MAP_PRIVATE)
+	if err != nil {
+		return errnoName(err)
+	}
+	_ = unix.Munmap(region)
+	return "ok"
+}
+
+// brokeredUserProgram runs a program from the caller's own files through the
+// broker, which executes outside the module view; its output is its result.
+func brokeredUserProgram(broker, null *os.File) string {
+	script := filepath.Join(os.Getenv("HOME"), "brokered.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho brokered-user-program\n"), 0o755); err != nil {
+		return err.Error()
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		return err.Error()
+	}
+	channel, err := launchbroker.Send(broker, launchbroker.Request{
+		Argv: []string{script}, Environment: []string{"PATH=/usr/bin:/bin"}, Dir: "/",
+	}, null, write, write)
+	_ = write.Close()
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = channel.Close() }()
+	output, _ := io.ReadAll(read)
+	for {
+		event, err := launchbroker.ReadEvent(channel)
+		if err != nil {
+			return err.Error()
+		}
+		if event.Error != "" {
+			return event.Error
+		}
+		if event.Exited {
+			return strings.TrimSpace(string(output))
+		}
 	}
 }
 

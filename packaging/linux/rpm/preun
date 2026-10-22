@@ -1,4 +1,8 @@
 # $1 is 0 on removal and 1 on upgrade; only removal stops the vault identity units.
+PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations
+if [ "$1" -eq 0 ]; then
+  "$PW_GENERATIONS" remove || echo "painted-wolf-code: generations still in use remain until reinstall" >&2
+fi
 SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
 if [ "$1" -eq 0 ] && [ -d /run/systemd/system ] && [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ]; then

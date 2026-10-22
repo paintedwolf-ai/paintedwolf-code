@@ -1,8 +1,10 @@
-//go:build unix && !linux
+//go:build !linux
 
 package exec
 
 import "os/exec"
+
+func relayThroughBroker(*exec.Cmd) error { return nil }
 
 // relayedCommand reports a command that is the broker relay, which only the
 // protected Linux launch uses.

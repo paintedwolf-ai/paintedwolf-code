@@ -571,7 +571,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:fast`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
 | `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
@@ -625,6 +625,22 @@ editing modular OpenAPI sources, run `./task openapi:bundle` and
 ### Digest captures and locking
 
 Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease-holder PID is gone. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
+
+
+Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
+directory under its artifact root. `PW_COMPILER_CACHE_DIR` preserves that path
+across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. The scheduler's `rust` resource lock prevents
+concurrent test runs from replacing shared test executables. Cargo serializes
+compilation, and the decision build holds a publication lock until its executable
+is staged. The decision cache warmer compiles both test and
+release profiles in the verification source slot. Prepared benchmarks set this
+cache path inside their run directory, outside the sealed source, so importing
+prepared artifacts omits compiler intermediates.
+
+Hosted frontend lanes install Bun, Node, Rust, ripgrep, and the native document
+core's pinned Cargo inputs. They skip the multi-gigabyte Go compiler cache,
+scanner provisioning, engine downloads, and Go generator tools. The catalog
+rejects this setup for targets that need those dependencies.
 
 Ordinary `./task` requests automatically share compatible verification on macOS
 and Linux: the oldest request admits up to 32 consecutive requests from the same
@@ -898,11 +914,16 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 | Path | Contents |
 |------|----------|
 | `/usr/bin/pw`, `/usr/bin/pw-logs` | package-owned entry points that `exec` the binaries under the install root |
-| `/opt/painted-wolf-code/bin/` | the desktop shell `painted-wolf-code` (the desktop entry's `Exec`), `pw`, `pw-logs`, `pw-document-core`, `bialy`, and `pw-vault-identity` when the build stages it; the shell's location under this root is what the app reads as a package installation |
+| `/opt/painted-wolf-code/bin/` | the desktop shell `painted-wolf-code`, `pw`, `pw-logs`, `pw-document-core`, `pw-desktop-settings`, `bialy`, `pw-vault-identity`, the protected launch entry `pw-launch-entry`, and `pw-generations`, the maintainer scripts' generation owner; the shell's location under this root is what the app reads as a package installation |
+| `/usr/libexec/painted-wolf-code/pw-launch` | the protected launch bootstrap, root `4755` and the desktop entry's `Exec`; it is outside the payload, whose modes never carry setuid ([Protected Linux launch](security.md#protected-linux-launch)) |
+| `/opt/painted-wolf-code/protected-launch.json` | sealed copy of [`packaging/linux/protected-launch.json`](../packaging/linux/protected-launch.json): per family and CPU, the WebKitGTK helper programs the protected namespace may execute and the library roots whose native code it may map |
+| `/opt/painted-wolf-code/generations/<manifest sha256>/`, `/etc/paintedwolf/launch.json` | immutable copies of installed payloads and the root policy selecting one for new launches; written by `pw-generations`, never part of the package's file list |
 | `/opt/painted-wolf-code/engine-root/` | schemas, scanner, Git toolchain, browser, decision heads |
 | `/opt/painted-wolf-code/manifest.json` | SHA-256 and size of every executable the package installs ([schema](../packaging/linux/manifest/manifest.schema.json), reader `lycaon/internal/pkgmanifest`) |
 | `/opt/painted-wolf-code/release-version`, `THIRD-PARTY-NOTICES.md` | release resources |
 | `/usr/share/applications/dev.paintedwolf.code.desktop`, `/usr/share/icons/hicolor/` | the desktop entry named by the bundle identifier and icons. The shell sets its GTK program name to that identifier, which GTK 3 uses as the Wayland app id and the X11 window class (`StartupWMClass=dev.paintedwolf.code`), and `enableGTKAppId` registers it as the GTK application id, so a second launch activates the running instance and exits. It is the only desktop entry; the assembler drops the product-named one Tauri always writes |
+
+Package transactions own the protected launch's generations. `postinst configure` and rpm `%post` run `pw-generations install --family deb|rpm`: it verifies the staged payload against its manifest, copies it to a new generation, resolves the catalog's WebKitGTK helper programs and library roots for the installing family and CPU (keeping the ones the system ships, each root-owned and not writable by others), atomically writes the policy selecting the generation, and reclaims every other generation no running launch holds. A failure fails the configure step (rpm reports the failed scriptlet) and writes no policy, so nothing launches unprotected. Removal (`prerm remove`, rpm `%preun` with `0`) withdraws the policy and reclaims unheld generations; purge (and rpm erase in `%postun`) removes the policy directory and reclaims what a launch still held at removal once its lifetime lock is free. A reinstall accepts an install root that holds only such generations. Upgrades keep a running app on its own generation until it exits.
 
 `lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
@@ -1020,6 +1041,25 @@ are verified by the format-specific publication work.
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
+
+### Linux candidate builds
+
+The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+builds the native amd64 and arm64 deb/rpm packages through the production bundle
+and staging path. It runs independently on relevant packaging pull requests
+once ready, weekly, or by manual dispatch on the selected branch. The release
+workflow calls the same job with its exact selected source commit. Candidate
+artifacts include checksums and the source commit and are retained for 90 days.
+The workflow has read-only repository access and no signing environment or
+publication credentials. Package signing rehearsals and installed-system
+qualification remain separate requirements; a candidate build alone does not
+qualify a release. Draft pull requests do not start candidate builds.
+
+When a package stage fails after the build starts, the workflow runs
+`./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
+from the same source checkout. It retains the canonical assembled packages with
+hashes and an explicit report that grants no complete-candidate, installed or
+publication authority.
 
 ### Release dry run
 
