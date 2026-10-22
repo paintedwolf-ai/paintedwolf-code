@@ -6,36 +6,14 @@ on:
       source_sha:
         type: string
         required: true
-  workflow_dispatch:
-  schedule:
-    - cron: '17 9 * * 1'
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - '.github/workflows/linux-candidates.yml'
-      - '.github/workflows/release.yml'
-      - '.github/actions/setup-*/**'
-      - 'packaging/**'
-      - 'scripts/*linux*'
-      - 'scripts/*engine*'
-      - 'scripts/*bundle*'
-      - 'scripts/release-stage-platform-artifacts.sh'
-      - 'lycaon-den/src-tauri/Cargo.*'
-      - 'lycaon-den/src-tauri/tauri*.json'
-      - 'rust-toolchain.toml'
-      - '.bun-version'
 
 permissions:
   contents: read
 
-concurrency:
-  group: maintenance
-  cancel-in-progress: false
-
 jobs:
   source:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.source.outputs.version }}
@@ -43,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
       - id: source
         run: |
