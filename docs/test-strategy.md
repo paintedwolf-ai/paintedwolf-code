@@ -976,7 +976,7 @@ remain a coverage gap; cancellation is reported separately from an attributed te
 The GitHub Free plan runs twenty hosted jobs at once across the organization,
 five of them on macOS, and starts waiting jobs first come, first served. The
 project uses no larger or self-hosted runners, so those limits are fixed.
-Contention is ruled out by construction instead: each class of work holds a
+Concurrency is bounded by construction: each class of work holds a
 fixed number of runners, through one run at a time, capped matrices, and a
 run's stages in turn wherever running them side by side would widen it. The
 merge queue's own settings budget its class: groups built at once times the
@@ -995,8 +995,9 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
-| Linux candidate requests | `linux-candidate-requests.yml` | `linux-candidate-requests`, up to 100 pending requests | 1 (0): weekly or manual package construction |
-| Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| DCO certification | `dco.yml` | `dco-certification` | 1 |
+| Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
+| Maintenance | Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
@@ -1009,19 +1010,20 @@ recovery handle one event per run instead: each run is a single job bounded to
 fifteen minutes.
 
 Linux package construction is a reusable workflow. Release calls consume the
-release class's existing two-runner footprint and never enter the maintenance or
-standalone candidate queue. Weekly and manual candidates share a separate
-one-runner queue that retains up to 100 requests. Pull requests use ordinary CI;
-package construction is an explicit dispatch when needed. This keeps long package
-builds from replacing maintenance or selected release requests.
+release class's existing two-runner footprint without entering maintenance.
+Weekly, manual, and ready packaging pull requests share the maintenance class's
+single runner through `linux-candidate-requests.yml`. Its path filter includes
+packaging, native setup, release builders, and toolchain inputs. Pending standalone
+requests can be replaced by later maintenance requests; an explicit dispatch
+restores a needed candidate without affecting a selected release.
 
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
 footprint is small and each pull request's is a single bounded job. Nothing reorders or preempts runs.
 
-At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 = 10 runners and
-the merge queue 8, leaving two runners outside those classes. Ready PR jobs share
+At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 + 1 = 11 runners and
+the merge queue 8, leaving one runner outside those classes. Ready PR jobs share
 that remaining capacity and may wait during bursts. Full lint before admission
 uses more PR time but prevents deterministic analyzer failures from occupying
 speculative integration groups. Caps do not establish queue latency guarantees.

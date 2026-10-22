@@ -1158,8 +1158,8 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly or by manual dispatch on the selected branch.
-Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+and staging path. It runs weekly, on ready PRs that change packaging inputs,
+or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
 request needs package artifacts. The release workflow calls the reusable
 [package build](../.github/workflows/linux-candidates.yml) directly with its exact
 selected source commit, within the release runner budget. Candidate
@@ -1167,7 +1167,8 @@ artifacts include checksums and the source commit and are retained for 90 days.
 The workflow has read-only repository access and no signing environment or
 publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
-qualify a release. Pull request events run ordinary CI without package builds.
+qualify a release. Standalone requests share the maintenance runner budget;
+release calls use the release budget and cannot be replaced by maintenance.
 
 When a package stage fails after the build starts, the workflow runs
 `./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`

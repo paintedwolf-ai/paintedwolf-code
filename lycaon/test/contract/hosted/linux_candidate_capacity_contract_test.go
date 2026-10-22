@@ -6,7 +6,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestLinuxCandidateRequestsCannotReplaceReleaseOrMaintenance(t *testing.T) {
+func TestLinuxCandidateRequestsShareMaintenanceWithoutBlockingRelease(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
 	builder := plan.workflows["linux-candidates.yml"]
@@ -14,13 +14,13 @@ func TestLinuxCandidateRequestsCannotReplaceReleaseOrMaintenance(t *testing.T) {
 		t.Fatal("package construction must inherit its caller's capacity without entering another queue")
 	}
 	requests := plan.workflows["linux-candidate-requests.yml"]
-	for _, event := range []string{"workflow_dispatch", "schedule"} {
+	for _, event := range []string{"workflow_dispatch", "schedule", "pull_request"} {
 		if _, ok := requests.On[event]; !ok {
 			t.Errorf("candidate requests omit %s", event)
 		}
 	}
-	if len(requests.On) != 2 || len(requests.Jobs) != 1 {
-		t.Fatal("standalone package requests must be one scheduled or manual build")
+	if len(requests.On) != 3 || len(requests.Jobs) != 1 {
+		t.Fatal("standalone package requests must be one scheduled, manual, or packaging pull request build")
 	}
 	var concurrency struct {
 		Group  string
@@ -28,15 +28,21 @@ func TestLinuxCandidateRequestsCannotReplaceReleaseOrMaintenance(t *testing.T) {
 		Cancel bool `yaml:"cancel-in-progress"`
 	}
 	contractcheck.FailErr(t, "decode candidate request concurrency", requests.Concurrency.Decode(&concurrency))
-	if concurrency.Group != "linux-candidate-requests" || concurrency.Queue != "max" || concurrency.Cancel {
-		t.Fatal("standalone candidates must retain pending requests in their own bounded queue")
+	if concurrency.Group != "maintenance" || concurrency.Queue != "" || concurrency.Cancel {
+		t.Fatal("standalone candidates must share the maintenance runner budget")
 	}
-	for _, workflow := range []string{"release.yml", "queue-health.yml"} {
+	for _, workflow := range []string{"release.yml", "release-halt.yml"} {
 		if plan.group(t, workflow) == concurrency.Group {
 			t.Errorf("%s shares the standalone candidate queue", workflow)
 		}
 	}
+	if plan.group(t, "queue-health.yml") != concurrency.Group {
+		t.Fatal("standalone package builds must not add another capacity class")
+	}
 	call := requests.Jobs["candidates"]
+	if call.If != "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}" {
+		t.Fatal("packaging pull requests must wait until ready")
+	}
 	if call.Uses != "./.github/workflows/linux-candidates.yml" || call.With["source_sha"] != "${{ github.sha }}" {
 		t.Fatal("candidate requests must pass the immutable dispatch source to the shared build")
 	}
