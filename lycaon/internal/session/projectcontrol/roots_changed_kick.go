@@ -81,11 +81,15 @@ func (m *Service) ObserveSessionPosture(ctx context.Context, sessionID string, c
 	if !hadPrev || m.anchors == nil {
 		return
 	}
+	probe, hasProbe := m.anchors.(latestAnchorProbe)
+	if hasProbe && !probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
+		m.pendingPostureBaselines.Delete(sessionID)
+		m.pendingExternalBaselines.Delete(sessionID)
+	}
 	before := prevAny.(gate.Posture)
 	if before == current {
 		return
 	}
-	probe, hasProbe := m.anchors.(latestAnchorProbe)
 	baseline := before
 	if hasProbe && probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
 		if saved, ok := m.pendingPostureBaselines.Load(sessionID); ok {
@@ -140,11 +144,15 @@ func (m *Service) ObserveSessionCommandExternal(ctx context.Context, sessionID s
 	if !hadPrev || m.anchors == nil {
 		return
 	}
+	probe, hasProbe := m.anchors.(latestAnchorProbe)
+	if hasProbe && !probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
+		m.pendingPostureBaselines.Delete(sessionID)
+		m.pendingExternalBaselines.Delete(sessionID)
+	}
 	beforeHidden := prevAny.(bool)
 	if beforeHidden == currentHidden {
 		return
 	}
-	probe, hasProbe := m.anchors.(latestAnchorProbe)
 	baselineHidden := beforeHidden
 	if hasProbe && probe.HasLatest(sessionID, anchor.ProjectPostureChanged) {
 		if saved, ok := m.pendingExternalBaselines.Load(sessionID); ok {
