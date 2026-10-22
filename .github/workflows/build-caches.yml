@@ -124,7 +124,7 @@ jobs:
         if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
-      # Publish prepared compiler inputs before optional lint diagnostics.
+      # Inline saves resolve cache paths before lint without nested post-job contexts.
       - name: Publish prepared Go caches
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
         uses: ./.github/actions/cache-go
