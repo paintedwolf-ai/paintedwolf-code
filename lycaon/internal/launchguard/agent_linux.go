@@ -21,37 +21,75 @@ const (
 )
 
 // RunBrokerAgent serves the launch broker: the caller's identity in the
-// initial user namespace, inside the launch's mount namespace, with no
-// no_new_privs, so brokered programs keep every ordinary user facility,
-// set-ID programs included, and see the running generation at the logical
-// installation root.
+// initial user namespace, inside the launch's mount namespace, non-dumpable
+// from execve through shutdown and with no no_new_privs, so brokered programs
+// keep every ordinary user facility, set-ID programs included, and see the
+// running generation at the logical installation root.
 func RunBrokerAgent() error {
-	frame := os.NewFile(agentSpecFD, "sealed-entry-spec")
-	spec, err := readEntry(frame)
-	_ = frame.Close()
-	if err != nil {
-		return err
-	}
-	if err := sameIdentity(spec); err != nil {
-		return err
-	}
-	if err := initialUserNamespace(); err != nil {
-		return err
-	}
-	broker := os.NewFile(agentBrokerFD, "launch-broker")
-	if _, err := launchbroker.CheckSocket(agentBrokerFD); err != nil {
-		return err
-	}
-	unix.CloseOnExec(agentBrokerFD)
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}
-	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
+	if err := unix.CloseRange(agentBrokerFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
+	return runBrokerAgent(
+		os.NewFile(agentSpecFD, "sealed-entry-spec"),
+		os.NewFile(agentBrokerFD, "launch-broker"),
+	)
+}
+
+func runBrokerAgent(frame, broker *os.File) error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	spec, err := readEntry(frame)
+	_ = frame.Close()
+	if err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if err := sealBrokerAgentIdentity(spec); err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if err := initialUserNamespace(); err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
+		_ = broker.Close()
+		return errors.New("broker agent socket is not the launch supervisor")
+	}
+	unix.CloseOnExec(int(broker.Fd()))
 	agent := &brokerAgent{calls: map[int]*brokerCall{}}
 	agent.serve(broker)
 	return nil
+}
+
+// sealBrokerAgentIdentity drops from the stage's administrator identity to the
+// original caller while keeping the broker agent non-dumpable across the
+// transition.
+func sealBrokerAgentIdentity(spec EntrySpec) error {
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	uid, euid, suid := unix.Getresuid()
+	gid, egid, sgid := unix.Getresgid()
+	if uid == 0 && euid == 0 && suid == 0 && gid == 0 && egid == 0 && sgid == 0 {
+		if err := dropPrivileges(Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups}); err != nil {
+			return err
+		}
+	}
+	if err := clearCapabilities(); err != nil {
+		return err
+	}
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return err
+	}
+	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
+		return errors.New("broker agent is dumpable")
+	}
+	return sameIdentity(spec)
 }
 
 // initialUserNamespace requires this process to be in the initial user
