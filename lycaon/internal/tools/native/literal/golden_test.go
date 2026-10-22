@@ -132,15 +132,6 @@ func TestCatalogGoldenProgramsProduceExactBytes(t *testing.T) {
 	}
 }
 
-// examples whose documented stdout contradicts the GNU behavior the
-// catalog's own notes specify; each has an explicit replacement fixture.
-var contradictedExamples = map[string]string{
-	// GNU and BSD ls list a file operand by name; the example shows nothing.
-	"ls": "./empty\n",
-	// GNU and BSD nl terminate the last numbered line; the example does not.
-	"nl": "1:alpha\n2:beta\n",
-}
-
 // TestCatalogCommandExamplesProduceExactBytes runs each literal command's
 // documented example in the shared fixture corpus it declares.
 func TestCatalogCommandExamplesProduceExactBytes(t *testing.T) {
@@ -181,11 +172,7 @@ func TestCatalogCommandExamplesProduceExactBytes(t *testing.T) {
 			if !ok {
 				t.Fatalf("example %q is not a literal fixture", example.Program)
 			}
-			want := example.Stdout
-			if replacement, ok := contradictedExamples[spec.Name]; ok {
-				want = replacement
-			}
-			h.exec(stdin, argv...).expect(t, example.Program, want, "", example.Status)
+			h.exec(stdin, argv...).expect(t, example.Program, example.Stdout, "", example.Status)
 		})
 	}
 }

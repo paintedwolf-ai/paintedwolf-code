@@ -58,6 +58,8 @@ type ChildRecord struct {
 	Executed     bool
 	Result       toolcontract.ProducerResult
 	Diagnostic   error
+	// JobHandle is the session job a trailing & statement started.
+	JobHandle string
 }
 
 // SourceRecord binds a reached source statement to its exact captured bytes.

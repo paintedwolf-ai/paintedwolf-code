@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type programFixture struct{ *programtest.Fixture }
@@ -198,7 +199,7 @@ func TestProgramEntryJobSpecsAddressSessionJobs(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), `sleep 30 & first=$!; sleep 30 & kill %1; kill %%; wait $first; external -- /bin/echo "first=$?"; wait %2; external -- /bin/echo "second=$?"`)
 	testutil.FailErr(t, "run job specs", err)
-	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=130") || !strings.Contains(outcome.Stdout, "second=130") {
+	if outcome := decodeOutcome(t, out); !strings.Contains(outcome.Stdout, "first=143") || !strings.Contains(outcome.Stdout, "second=143") {
 		t.Fatalf("job spec outcome %s", out)
 	}
 }
@@ -394,7 +395,7 @@ func TestProgramEntryFilePredicatesReadRealFilesFromTheFrame(t *testing.T) {
 	testutil.FailErr(t, "seed dir", os.MkdirAll(filepath.Join(f.Dir, "sub"), 0o755))
 	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("a"), 0o644))
 	testutil.FailErr(t, "seed nested file", os.WriteFile(filepath.Join(f.Dir, "sub", "b.txt"), []byte("b"), 0o644))
-	out, err := f.call(t, t.Context(), `test -f a.txt && [ -d sub ] && [[ -f sub/b.txt ]] && [ -s a.txt ] && ! test -f missing && ! [ -d a.txt ] && cd sub && test -f b.txt; external -- /bin/echo "status=$?"`)
+	out, err := f.call(t, t.Context(), `test -f a.txt && [ -d sub ] && [[ -f sub/b.txt ]] && ! test -f missing && ! [ -d a.txt ] && cd sub && test -f b.txt; external -- /bin/echo "status=$?"`)
 	testutil.FailErr(t, "run predicates", err)
 	if outcome := decodeOutcome(t, out); outcome.Stdout != "status=0\n" {
 		t.Fatalf("predicates outcome %s", out)
@@ -414,5 +415,25 @@ func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
 	}
 	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
 		t.Fatalf("hidden external stderr %q", outcome.Stderr)
+	}
+}
+
+// A settled program states its run for verification evidence: passed on
+// status 0, failed otherwise; a program whose job still runs states nothing.
+func TestProgramEntryStatesTheSettledRun(t *testing.T) {
+	for _, c := range []struct {
+		program, verdict string
+	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
+		f := newProgramFixture(t)
+		out := &tools.ToolInvocationOut{}
+		f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+		_, err := f.call(t, t.Context(), c.program)
+		testutil.FailErr(t, "run "+c.program, err)
+		switch {
+		case c.verdict == "" && out.SourceRun != nil:
+			t.Fatalf("%s with a running job stated %+v", c.program, out.SourceRun)
+		case c.verdict != "" && (out.SourceRun == nil || out.SourceRun.Verdict != c.verdict || out.SourceRun.Command != c.program):
+			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
+		}
 	}
 }

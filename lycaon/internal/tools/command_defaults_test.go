@@ -51,18 +51,17 @@ func TestCommandMatcherRejectsUnknownSemanticsEvenAtDeclaredDefaults(t *testing.
 func TestStockCommandDefaultsKeepGitRedirects(t *testing.T) {
 	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "load tool schemas", err)
-	for _, tool := range []string{"command", "verify"} {
+	// command programs bind each reached git child natively; verify keeps the
+	// exact structured replacement for its declared defaults.
+	for _, tool := range []string{"verify"} {
 		meta, ok := cfg.ToolMeta(tool)
 		if !ok {
 			t.Fatalf("%s schema missing", tool)
 		}
 		for field, value := range map[string]any{
-			"verification": false, "background": false, "append": false,
+			"background": false, "append": false,
 			"allow_concurrent": false, "socks_proxy": false, "env": map[string]any{},
 		} {
-			if tool == "verify" && field == "verification" {
-				continue
-			}
 			t.Run(tool+"/"+field, func(t *testing.T) {
 				args := map[string]any{"command": "git commit --amend -m fix -- a.go", field: value}
 				testutil.FailErr(t, "validate declared default", tools.ValidateToolArgs(meta.ArgsSchema, args))

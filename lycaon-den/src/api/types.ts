@@ -11316,6 +11316,26 @@ export interface components {
             arguments_ref: string;
             detail_ref: string;
         };
+        CommandExecutionOutput: {
+            /** @enum {string} */
+            stream: "stdout" | "stderr";
+            /** @description Retained output handle owned by the program receipt. */
+            ref: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description The stream reached its end; false is a retained prefix. */
+            complete: boolean;
+            redacted: boolean;
+            /** @description Leading screened bytes of the retained stream as UTF-8. Never the authoritative body. */
+            preview: string;
+            preview_truncated: boolean;
+        };
+        /** @description Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed. */
+        CommandRevisionConflict: {
+            path: string;
+            expected_revision: string;
+            observed_revision: string;
+        };
         /** @description Host dynamic execution. It has no assistant message or model tool-call identity. */
         CommandExecutionReceipt: {
             /** Format: uuid */
@@ -11364,6 +11384,11 @@ export interface components {
             published_revision?: string;
             detail_ref: string;
             approval_ref?: string;
+            /** @description Host background job this child started, for the existing background process views. */
+            job_handle?: string;
+            /** @description Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing. */
+            outputs?: components["schemas"]["CommandExecutionOutput"][];
+            revision_conflict?: components["schemas"]["CommandRevisionConflict"];
         };
         CommandProgramNode: {
             /** @description Host syntax node identity within its program. */
@@ -30036,6 +30061,8 @@ export type ChatContentPage = components["schemas"]["ChatContentPage"];
 export type ChatContentMatch = components["schemas"]["ChatContentMatch"];
 export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage"];
 export type CommandProgramProgressReceipt = components["schemas"]["CommandProgramProgressReceipt"];
+export type CommandExecutionOutput = components["schemas"]["CommandExecutionOutput"];
+export type CommandRevisionConflict = components["schemas"]["CommandRevisionConflict"];
 export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
 export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
 export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];

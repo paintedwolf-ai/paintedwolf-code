@@ -54,8 +54,10 @@ type Fixture struct {
 	Dir        string
 	Background *bgprocess.Registry
 	Boundary   *sandbox.Boundary
-	scratch    string
-	calls      int
+	// Configure adjusts each call's tool context before the entry runs.
+	Configure func(*tools.ToolContext)
+	scratch   string
+	calls     int
 }
 
 type sessions struct{}
@@ -139,6 +141,9 @@ func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
 	tc.Host.SessionScratchDir = f.scratch
+	if f.Configure != nil {
+		f.Configure(&tc)
+	}
 	return f.Runtime.Run(ctx, args, tc)
 }
 

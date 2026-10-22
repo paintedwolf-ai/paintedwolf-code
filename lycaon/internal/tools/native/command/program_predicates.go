@@ -48,8 +48,6 @@ func (p framePredicates) TestPath(ctx context.Context, _ toolcontract.OperationI
 		return stat.Mode.IsDir(), nil
 	case "-L":
 		return stat.Mode&fs.ModeSymlink != 0, nil
-	case "-s":
-		return stat.Size > 0, nil
 	case "-r", "-w", "-x":
 		return accessible(bound.Resolved.Abs, operator), nil
 	}

@@ -2,6 +2,7 @@ package textutil
 
 import (
 	"container/heap"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -18,7 +19,9 @@ const recordOverhead = 48
 // sort_memory_bytes; a full chunk is sorted and spilled as a run, and runs
 // merge with at most sort_merge_fan_in open readers per pass. Every spilled
 // byte is admitted first; spills are removed whether the sort completes,
-// fails or is canceled. A missing input is status 2 with no output.
+// fails or is canceled. A missing input is status 2 with no output. -c checks
+// order instead; -o publishes the complete output, staged before any input is
+// pinned so it may name an input.
 func runSort(inv *invocation) error {
 	order, err := parseSortOrder(inv)
 	if err != nil {
@@ -28,6 +31,28 @@ func runSort(inv *invocation) error {
 	if inv.flag("-z") {
 		delimiter = 0
 	}
+	if inv.flag("-c") {
+		return checkSorted(inv, order, delimiter)
+	}
+	output, ok := inv.value("-o")
+	if !ok {
+		if err := sortInto(inv, order, delimiter, inv.out); !errors.Is(err, errMissingInput) {
+			return err
+		}
+		return nil
+	}
+	stage, err := inv.openDestination(output)
+	if err != nil {
+		return err
+	}
+	err = sortInto(inv, order, delimiter, nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes")))
+	if errors.Is(err, errMissingInput) {
+		return stage.Abandon(context.WithoutCancel(inv.ctx))
+	}
+	return settleStage(inv.ctx, stage, err)
+}
+
+func sortInto(inv *invocation, order sortOrder, delimiter byte, out io.Writer) error {
 	sources, err := inv.openInputs(inv.operands())
 	if err != nil {
 		return err
@@ -35,9 +60,9 @@ func runSort(inv *invocation) error {
 	defer closeSources(sources)
 	if inv.status != 0 {
 		inv.status = 2
-		return nil
+		return errMissingInput
 	}
-	s := &sorter{inv: inv, order: order, delimiter: delimiter}
+	s := &sorter{inv: inv, order: order, delimiter: delimiter, out: out}
 	defer s.cleanup()
 	for _, source := range sources {
 		if err := s.read(source.reader); err != nil {
@@ -53,8 +78,13 @@ func runSort(inv *invocation) error {
 	return s.merge()
 }
 
+// errMissingInput abandons -o output when an input could not be read; the
+// status and stderr already describe the failure.
+var errMissingInput = errors.New("sort input missing")
+
 type sorter struct {
 	inv        *invocation
+	out        io.Writer
 	order      sortOrder
 	delimiter  byte
 	chunk      [][]byte
@@ -103,7 +133,7 @@ func (s *sorter) emit(records [][]byte) error {
 		if s.order.unique && i > 0 && s.order.compareKeys(previous, record) == 0 {
 			continue
 		}
-		if err := writeRecord(s.inv.out, record, s.delimiter); err != nil {
+		if err := writeRecord(s.out, record, s.delimiter); err != nil {
 			return err
 		}
 		previous = record
@@ -206,7 +236,7 @@ func (s *sorter) merge() error {
 		}
 		first = false
 		previous = slices.Clone(record)
-		return writeRecord(s.inv.out, record, s.delimiter)
+		return writeRecord(s.out, record, s.delimiter)
 	})
 }
 
@@ -262,41 +292,4 @@ func (s *sorter) cleanup() {
 	for _, release := range s.releases {
 		release()
 	}
-}
-
-type mergeCursor struct {
-	reader RunReader
-	record []byte
-	index  int
-}
-
-func (c *mergeCursor) advance() (bool, error) {
-	record, err := c.reader.Next()
-	if errors.Is(err, io.EOF) {
-		return false, nil
-	}
-	c.record = record
-	return err == nil, err
-}
-
-// mergeHeap orders cursors by record and then by run index, which keeps the
-// merge stable across runs spilled in input order.
-type mergeHeap struct {
-	order   sortOrder
-	cursors []*mergeCursor
-}
-
-func (h *mergeHeap) Len() int { return len(h.cursors) }
-func (h *mergeHeap) Less(i, j int) bool {
-	if c := h.order.compare(h.cursors[i].record, h.cursors[j].record); c != 0 {
-		return c < 0
-	}
-	return h.cursors[i].index < h.cursors[j].index
-}
-func (h *mergeHeap) Swap(i, j int) { h.cursors[i], h.cursors[j] = h.cursors[j], h.cursors[i] }
-func (h *mergeHeap) Push(x any)    { h.cursors = append(h.cursors, x.(*mergeCursor)) }
-func (h *mergeHeap) Pop() any {
-	last := h.cursors[len(h.cursors)-1]
-	h.cursors = h.cursors[:len(h.cursors)-1]
-	return last
 }
