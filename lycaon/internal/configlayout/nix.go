@@ -64,7 +64,7 @@ func nixLayout(executable string, image io.Reader) (*NixLayout, error) {
 		return nil, err
 	}
 	if len(raw) > 16384 {
-		return nil, errors.New("Nix layout receipt too large")
+		return nil, errors.New("nix layout receipt too large")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -73,17 +73,17 @@ func nixLayout(executable string, image io.Reader) (*NixLayout, error) {
 		return nil, err
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, errors.New("Nix layout has trailing data")
+		return nil, errors.New("nix layout has trailing data")
 	}
 	if receipt.FormatVersion != 1 || !filepath.IsAbs(receipt.Output) || filepath.Clean(receipt.Output) != receipt.Output || !filepath.IsAbs(receipt.NixStore) || filepath.Clean(receipt.NixStore) != receipt.NixStore || filepath.Join(receipt.Output, "lib", "painted-wolf-code") != root || filepath.Dir(executable) != filepath.Join(root, "bin") {
-		return nil, errors.New("Nix layout does not describe the running executable")
+		return nil, errors.New("nix layout does not describe the running executable")
 	}
 	manifest, err := pkgmanifest.Load(filepath.Join(root, "manifest.json"))
 	if err != nil {
 		return nil, err
 	}
 	if manifest.InstallRoot != root || manifest.Package != "painted-wolf-code" {
-		return nil, errors.New("Nix manifest does not describe the running generation")
+		return nil, errors.New("nix manifest does not describe the running generation")
 	}
 	expected, ok := manifest.Lookup(executable)
 	if !ok {

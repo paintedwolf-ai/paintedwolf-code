@@ -33,16 +33,16 @@ func nixStorageStat(path string) nixStorageFact {
 
 func runningNixRegistrar(layout *NixLayout) (nixRegistrar, error) {
 	if filepath.Dir(layout.Output) != nixPhysicalStore {
-		return nixRegistrar{}, errors.New("Nix retention requires an explicitly supported physical store")
+		return nixRegistrar{}, errors.New("nix retention requires an explicitly supported physical store")
 	}
-	uid := uint32(os.Getuid())
+	uid := uint32(os.Getuid()) // #nosec G115 -- POSIX uid is non-negative and fits in uint32
 	if !nixStorageStat(layout.Output).directory(uid, false) {
-		return nixRegistrar{}, errors.New("The running Nix output is missing or unsafe; retention cannot recreate it")
+		return nixRegistrar{}, errors.New("the running Nix output is missing or unsafe; retention cannot recreate it")
 	}
 	for _, parent := range []string{"/nix", "/nix/var"} {
 		st := nixStorageStat(parent)
 		if !st.directory(uid, false) {
-			return nixRegistrar{}, errors.New("Nix retention storage parents are unavailable or unsafe")
+			return nixRegistrar{}, errors.New("nix retention storage parents are unavailable or unsafe")
 		}
 	}
 	return selectNixRegistrar(uid, nixStorageStat(nixPhysicalStore), nixStorageStat(nixPhysicalState),
@@ -56,7 +56,7 @@ func (st nixStorageFact) directory(uid uint32, sticky bool) bool {
 
 func selectNixRegistrar(uid uint32, store, state, socketDirectory, socket nixStorageFact) (nixRegistrar, error) {
 	if !store.directory(uid, true) || !state.directory(uid, false) {
-		return nixRegistrar{}, errors.New("Nix retention storage is unavailable or unsafe")
+		return nixRegistrar{}, errors.New("nix retention storage is unavailable or unsafe")
 	}
 	settings := url.Values{"store": {nixPhysicalStore}, "real": {nixPhysicalStore}, "state": {nixPhysicalState}}
 	if store.uid == uid && state.uid == uid {
@@ -66,7 +66,7 @@ func selectNixRegistrar(uid uint32, store, state, socketDirectory, socket nixSto
 		socketDirectory.directory(0, false) && socket.uid == 0 && socket.kind == unix.S_IFSOCK {
 		return nixRegistrar{storeURI: "unix://" + nixDaemonSocket + "?" + settings.Encode()}, nil
 	}
-	return nixRegistrar{}, errors.New("The running Nix store has no supported local GC authority")
+	return nixRegistrar{}, errors.New("the running Nix store has no supported local GC authority")
 }
 
 // No caller configuration, plugins, remote store, substitution or builders take
@@ -78,6 +78,6 @@ func (r nixRegistrar) environment(config, cache string) []string {
 		"XDG_CACHE_HOME=" + cache, "NIX_CACHE_HOME=" + cache,
 		"XDG_STATE_HOME=" + cache, "NIX_STATE_HOME=" + cache,
 		"PATH=/run/current-system/sw/bin:/usr/bin:/bin", "LANG=C", "LC_ALL=C",
-		"NIX_CONFIG=substitute = false\nsubstituters =\nbuilders =\nmax-jobs = 0\nplugin-files =\n",
+		"NIX_CONFIG=substitute = false\nsubstituters =\nbuilders =\nmax-jobs = 0\nplugin-files =\n", //nolint:misspell // Nix config option name
 	}
 }
