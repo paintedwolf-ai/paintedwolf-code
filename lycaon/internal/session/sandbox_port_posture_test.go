@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"testing"
 
@@ -226,4 +227,111 @@ func TestAutomaticOwnedLoopbackNeverCreatesAStickyLease(t *testing.T) {
 	if !explicit.Authorized || explicit.RequiresOwnedListener {
 		t.Fatalf("independent approved connect authority was lost: %+v", explicit)
 	}
+}
+
+type endpointProvenance struct {
+	fixedProvenance
+	endpoints map[netip.AddrPort]struct {
+		id    string
+		owned bool
+		err   error
+	}
+}
+
+func (p endpointProvenance) ObserveSessionListener(_ context.Context, _ string, endpoint netip.AddrPort) (string, bool, error) {
+	obs, ok := p.endpoints[endpoint]
+	if !ok {
+		return "", false, nil
+	}
+	return obs.id, obs.owned, obs.err
+}
+
+func TestLoopbackAllHolderConvergenceAndIncompleteObservation(t *testing.T) {
+	t.Parallel()
+	v4 := netip.MustParseAddrPort("127.0.0.1:8123")
+	v6 := netip.MustParseAddrPort("[::1]:8123")
+
+	t.Run("AllLoopbackHoldersOwned", func(t *testing.T) {
+		t.Parallel()
+		prov := endpointProvenance{
+			endpoints: map[netip.AddrPort]struct {
+				id    string
+				owned bool
+				err   error
+			}{
+				v4: {id: "res-v4", owned: true},
+				v6: {id: "res-v6", owned: true},
+			},
+		}
+		b := newPortBrokers(gate.PostureBalanced, prov)
+		if res := b.connect(t, "chat-dual", 8123); !res.Authorized || !res.RequiresOwnedListener {
+			t.Fatalf("converged dual-stack owned listeners were not admitted: %+v", res)
+		}
+	})
+
+	t.Run("SecondForeignHolderRequiresApproval", func(t *testing.T) {
+		t.Parallel()
+		prov := endpointProvenance{
+			endpoints: map[netip.AddrPort]struct {
+				id    string
+				owned bool
+				err   error
+			}{
+				v4: {id: "res-v4", owned: true},
+				v6: {id: "res-foreign", owned: false},
+			},
+		}
+		b := newPortBrokers(gate.PostureBalanced, prov)
+		if res := b.connect(t, "chat-shared", 8123); res.Authorized {
+			t.Fatalf("port shared with foreign holder bypassed approval: %+v", res)
+		}
+		combined, err := b.network.AwaitCombined(context.Background(), tools.LocalNetworkAsk{
+			SessionID: "chat-shared", ProjectDir: "/tmp/proj", ListenPorts: []uint16{8123}, ConnectPorts: []uint16{8123},
+		})
+		if err != nil || combined.Authorized {
+			t.Fatalf("combined ask on shared port bypassed approval: %+v err=%v", combined, err)
+		}
+	})
+
+	t.Run("HeldByOtherBlocksPartialFamilyOwnership", func(t *testing.T) {
+		t.Parallel()
+		prov := endpointProvenance{
+			fixedProvenance: fixedProvenance{held: map[uint16]bool{8123: true}},
+			endpoints: map[netip.AddrPort]struct {
+				id    string
+				owned bool
+				err   error
+			}{
+				v4: {id: "res-v4", owned: true},
+			},
+		}
+		b := newPortBrokers(gate.PostureBalanced, prov)
+		if res := b.connect(t, "chat-held", 8123); res.Authorized {
+			t.Fatalf("port held by other bypassed approval: %+v", res)
+		}
+	})
+
+	t.Run("IncompleteObservationRetainsOrdinaryApproval", func(t *testing.T) {
+		t.Parallel()
+		prov := endpointProvenance{
+			endpoints: map[netip.AddrPort]struct {
+				id    string
+				owned bool
+				err   error
+			}{
+				v4: {id: "res-v4", owned: true},
+				v6: {err: errors.New("incomplete holder observation")},
+			},
+		}
+		b := newPortBrokers(gate.PostureBalanced, prov)
+		if res := b.connect(t, "chat-partial", 8123); res.Authorized {
+			t.Fatalf("incomplete listener observation bypassed approval: %+v", res)
+		}
+		combined, err := b.network.AwaitCombined(context.Background(), tools.LocalNetworkAsk{
+			SessionID: "chat-partial", ProjectDir: "/tmp/proj", ListenPorts: []uint16{8123}, ConnectPorts: []uint16{8123},
+		})
+		if err != nil || combined.Authorized {
+			t.Fatalf("combined ask with incomplete observation bypassed approval: %+v err=%v", combined, err)
+		}
+	})
 }
