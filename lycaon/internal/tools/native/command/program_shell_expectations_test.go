@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -85,5 +86,28 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	pkillOwned := decodeOutcome(t, pkillOwnedOut)
 	if pkillOwned.Refusal != nil || !strings.Contains(pkillOwned.Stdout, "pkilled=143") {
 		t.Fatalf("expected pkill on owned process to settle with 143, got %+v", pkillOwned)
+	}
+}
+
+func TestProgramPsCustomHeadersAndUnknownField(t *testing.T) {
+	f := newProgramFixture(t)
+	pid := strconv.Itoa(os.Getpid())
+	for _, tc := range []struct{ args, stdout string }{
+		{"-o 'pid=Process number' -o uid=Owner", fmt.Sprintf("Process number Owner\n%s %d\n", pid, os.Getuid())},
+		{"-o pid=Number -o uid=Owner", fmt.Sprintf("Number Owner\n%s %d\n", pid, os.Getuid())},
+		{"-o pid= -o uid=", fmt.Sprintf("%s %d\n", pid, os.Getuid())},
+	} {
+		out, err := f.call(t, t.Context(), "ps -p "+pid+" "+tc.args)
+		testutil.FailErr(t, "custom ps output", err)
+		got := decodeOutcome(t, out)
+		if got.Status != 0 || got.Stdout != tc.stdout {
+			t.Fatalf("ps %s: %+v; want %q", tc.args, got, tc.stdout)
+		}
+	}
+	out, err := f.call(t, t.Context(), "ps -p "+pid+" -o nonsense")
+	testutil.FailErr(t, "invalid ps field", err)
+	got := decodeOutcome(t, out)
+	if got.Status == 0 || got.Stdout != "" || got.Stderr != "ps: unknown output field: nonsense\n" {
+		t.Fatalf("unknown field outcome: %+v", got)
 	}
 }

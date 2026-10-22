@@ -12,9 +12,13 @@ import (
 func TestProcessFormattingDoesNotFabricateStatisticsOrOwnership(t *testing.T) {
 	p := hostprocess.VisibleProcess{Process: hostprocess.Process{PID: 41, ParentPID: 9, UID: 12, Name: "worker", Instance: "current"}, Command: "worker input"}
 	var out strings.Builder
-	writePsCustomFormat(&out, "pid=,ppid=,uid=,pgid=,pcpu=,rss=,tty=,stat=,time=,unknown=,command=", []hostprocess.VisibleProcess{p}, nil,
+	cols, err := parsePsColumns("pid=,ppid=,uid=,pgid=,pcpu=,rss=,tty=,stat=,time=,command=")
+	if err != nil {
+		t.Fatalf("parse columns: %v", err)
+	}
+	writePsCustomFormat(&out, cols, []hostprocess.VisibleProcess{p}, nil,
 		map[int]jobStatus{41: {Handle: "stale", Process: hostprocess.Process{PID: 41, Instance: "reused"}}}, &SessionJobs{})
-	if got, want := out.String(), "41 9 12 - - - - - - - worker input\n"; got != want {
+	if got, want := out.String(), "41 9 12 - - - - - - worker input\n"; got != want {
 		t.Fatalf("snapshot row = %q; want %q", got, want)
 	}
 }

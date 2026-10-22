@@ -106,11 +106,24 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 		if fullFmt && !bsdAux {
 			columns = "uid,pid,ppid,c,stime,tty,time,cmd"
 		}
-		if formatOpt, ok := bound.Last("-o"); ok && len(formatOpt.Values) > 0 {
-			columns = formatOpt.Values[0].Value
+		if options := bound.Options("-o"); len(options) > 0 {
+			var formats []string
+			for _, option := range options {
+				for _, value := range option.Values {
+					formats = append(formats, value.Value)
+				}
+			}
+			columns = strings.Join(formats, ",")
+		}
+		parsed, err := parsePsColumns(columns)
+		if err != nil {
+			if _, writeErr := fmt.Fprintln(nonNilWriter(streams.Error), err); writeErr != nil {
+				return ownerFailure(writeErr), writeErr
+			}
+			return readResult(1), nil
 		}
 		var out strings.Builder
-		writePsCustomFormat(&out, columns, visible, statuses, ownedByPID, jobs)
+		writePsCustomFormat(&out, parsed, visible, statuses, ownedByPID, jobs)
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
 		}
