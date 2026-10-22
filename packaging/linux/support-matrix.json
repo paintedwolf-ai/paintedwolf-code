@@ -1216,7 +1216,7 @@
           }
         ],
         "display": {
-          "protocol": "x11",
+          "protocol": "wayland",
           "xwayland": "permitted",
           "clipboard_manager": "permitted"
         },
@@ -1279,7 +1279,57 @@
         733,
         941,
         943
-      ]
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "artix"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "x11",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
     },
     {
       "id": "debian-xfce",
