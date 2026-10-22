@@ -4,6 +4,13 @@ let
   inherit (lib) mkEnableOption mkIf mkOption types;
   cfg = config.services.painted-wolf-code;
   selected = [ cfg.package ] ++ cfg.additionalTrustedPackages;
+  engineAppArmor = pkgs.runCommand "painted-wolf-code-selected-engine-apparmor" {
+    nativeBuildInputs = [ pkgs.python3 pkgs.apparmor-parser ];
+  } ''
+    python ${./apparmor.py} ${lib.escapeShellArgs (map toString selected)} > "$out"
+    apparmor_parser --skip-kernel-load --skip-cache \
+      -I ${pkgs.apparmor-profiles}/etc/apparmor.d "$out"
+  '';
   closures = map (package: {
     inherit package;
     closure = pkgs.closureInfo { rootPaths = [ package ] ++ cfg.extraRuntimePackages; };
@@ -66,6 +73,10 @@ in {
     environment.systemPackages = [ cfg.package ];
     environment.pathsToLink = [ "/share/polkit-1" ];
     security.polkit.enable = lib.mkIf cfg.polkit.enable true;
+    # This is kernel setup for exact engines, not a vault identity grant.
+    security.apparmor.policies = mkIf config.security.apparmor.enable {
+      paintedwolf-selected-engines = { path = engineAppArmor; state = "enforce"; };
+    };
     systemd.sockets.paintedwolf-vault-identity = {
       description = "Painted Wolf Code vault identity socket";
       wantedBy = [ "sockets.target" ];
