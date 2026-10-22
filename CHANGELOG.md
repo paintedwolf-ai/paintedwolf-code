@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
-## [1.0.3-rc1]
+## [1.0.3]
 
-First release candidate for 1.0.3, published on the preview channel to
-distrust the compromised eMudhra intermediate certificates and to exercise the
-signed desktop self-upgrade release gate.
+### Added
+
+- Linux OCR ships a verified eight-language profile (English, German, French,
+  Spanish, Russian, Arabic, simplified Chinese, and Japanese) pinned by
+  immutable source commit, SHA-256, and byte size.
+- Linux desktop settings observation runs in an isolated read-only helper
+  (`pw-desktop-settings`) sealed in the native payload manifest.
 
 ### Security
 
@@ -19,6 +23,18 @@ signed desktop self-upgrade release gate.
   certificates whose private keys are recoverable, on Go 1.26.10,
   rustls-webpki 0.103.16, and webpki-roots 1.0.10. On Linux, bundled Git
   relies on the system's `ca-certificates` update for the same protection.
+- Linux secret-handling processes require non-dumpable memory protection and
+  clear transient identity buffers in password custody.
+- Required confinement refusals describe every Linux unavailability code and
+  remediation path.
+
+### Fixed
+
+- Native Linux package upgrades retain complete payload generations across
+  replacements and prompt for a desktop restart when the installed package
+  changes under a running shell.
+- Relocated Linux scanner binaries verify their final installed bytes before
+  packaging.
 
 ## [1.0.2]
 
