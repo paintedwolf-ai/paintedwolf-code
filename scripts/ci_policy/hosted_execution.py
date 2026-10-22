@@ -99,15 +99,16 @@ def run_lane(name, shard="", merge_group=False):
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
     command = ["./task", *hosted_plan.invocation(targets)]
-    packages = None
-    if scope and name == "behavior":
-        from ci_policy.impact import go_scope
-        packages = go_scope(scope)
-        if packages:
-            command += ["--", *packages]
-            record["packages"] = packages
     try:
         code = 0
+        record["phases"] = []
+        packages = None
+        if scope and name == "behavior":
+            from ci_policy.impact import go_scope
+            packages = go_scope(scope)
+            if packages:
+                command += ["--", *packages]
+                record["packages"] = packages
         if lane.get("preflight"):
             preflight = ["./task", *lane["preflight"]]
             record["preflight"] = {"command": preflight, "started_at": time.time()}
@@ -118,7 +119,6 @@ def run_lane(name, shard="", merge_group=False):
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
-        record["phases"] = []
         for command in commands:
             if code != 0:
                 break
@@ -127,6 +127,11 @@ def run_lane(name, shard="", merge_group=False):
             path.write_text(json.dumps(record, indent=2) + "\n")
             code = subprocess.call(command, cwd=ROOT, env=environment)
             phase.update(exit_code=code, finished_at=time.time())
+    except (subprocess.SubprocessError, OSError, ValueError) as error:
+        code = 2
+        record["execution_error"] = {"type": type(error).__name__, "message": str(error)}
+        if isinstance(error, subprocess.CalledProcessError):
+            record["execution_error"].update(command=error.cmd, exit_code=error.returncode, stderr=error.stderr)
     finally:
         stop.set()
     record["oom_after"] = oom_events()

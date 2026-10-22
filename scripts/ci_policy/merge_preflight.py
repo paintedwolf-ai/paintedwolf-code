@@ -1,4 +1,5 @@
 """Order exact-source merge checks without changing their coverage."""
+import os
 from pathlib import Path
 import subprocess
 
@@ -10,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 def package_phases(selected):
     patterns = selected or ["./..."]
     result = subprocess.run(["go", "list", "-json", "-tags=integration", *patterns],
-                            cwd=ROOT / "lycaon", text=True, capture_output=True, check=True)
+                            cwd=ROOT / "lycaon", text=True, capture_output=True, check=True,
+                            env={**os.environ, "GOPROXY": "off", "GOTOOLCHAIN": "local"})
     records = list(json_stream(result.stdout))
     if not records or any(row.get("Error") or row.get("DepsErrors") for row in records):
         raise ValueError("merge preflight requires a complete package selection")

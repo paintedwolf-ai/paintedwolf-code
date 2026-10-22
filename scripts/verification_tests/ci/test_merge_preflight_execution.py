@@ -1,5 +1,6 @@
 """Merge phases preserve the full recipe and stop before expensive work on failure."""
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,6 +20,8 @@ class MergePreflightTests(unittest.TestCase):
             self.assertEqual(sorted(sum(phases, [])), sorted(packages))
             self.assertEqual(len(sum(phases, [])), len(packages))
             self.assertEqual(run.call_args.args[0][-1], "./...")
+            self.assertEqual(run.call_args.kwargs["env"]["GOPROXY"], "off")
+            self.assertEqual(run.call_args.kwargs["env"]["GOTOOLCHAIN"], "local")
             preflight.package_phases(["./internal/a", "./test/contract/..."])
             self.assertEqual(run.call_args.args[0][-2:], ["./internal/a", "./test/contract/..."])
 
@@ -54,6 +57,25 @@ class MergePreflightTests(unittest.TestCase):
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["phases"][0]["exit_code"], code)
                 self.assertEqual(len(record["phases"]), 1)
+
+    def test_failed_package_planning_finalizes_unverified_lane_evidence(self):
+        from ci_policy import hosted_execution
+        errors = (subprocess.CalledProcessError(1, ["go", "list"], stderr="dependency unavailable"),
+                  ValueError("incomplete metadata"), FileNotFoundError("go unavailable"))
+        for error in errors:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(hosted_execution, "artifact_root", return_value=Path(directory)), \
+                    patch.object(preflight, "package_phases", side_effect=error), \
+                    patch.object(hosted_execution.subprocess, "call") as run:
+                self.assertEqual(hosted_execution.run_lane("behavior", "1/2", merge_group=True), 2)
+                run.assert_not_called()
+                record = json.loads((Path(directory) / "ci/run.json").read_text())
+                self.assertEqual(record["status"], "unverified")
+                self.assertEqual(record["phases"], [])
+                self.assertEqual(record["execution_error"]["type"], type(error).__name__)
+                self.assertGreaterEqual(record["finished_at"], record["started_at"])
+                if isinstance(error, subprocess.CalledProcessError):
+                    self.assertEqual(record["execution_error"]["stderr"], error.stderr)
 
     def test_throughput_counts_actual_merges_and_separates_cancellation(self):
         from ci_policy.health import throughput
