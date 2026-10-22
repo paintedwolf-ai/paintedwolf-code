@@ -6,6 +6,7 @@
   "parse_timeout": "30s",
   "excludes": [
     "third_party/gotreesitter",
+    "third_party/mvdan-sh",
     ".paintedwolf/tool-output",
     ".paintedwolf-dev",
     "THIRD-PARTY-NOTICES.md",
