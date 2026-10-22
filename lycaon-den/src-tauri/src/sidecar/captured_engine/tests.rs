@@ -27,12 +27,19 @@ fn fixture() -> (crate::test_support::TempDir, std::path::PathBuf) {
 }
 
 #[test]
-fn legacy_v1_and_unknown_future_manifest_versions_are_refused() {
+fn accepts_format_1_and_2_and_refuses_unknown_or_mismatched_manifest_versions() {
     let (root, desktop) = fixture();
     let manifest_path = root.join("manifest.json");
-    let mut manifest: serde_json::Value =
+    let base: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let mut v1 = base.clone();
+    v1["format_version"] = serde_json::json!(1);
+    v1.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v1).unwrap()).unwrap();
+    assert!(capture(&root, &desktop, false).is_ok());
+
     for bad_version in [0, 1, 3, 99] {
+        let mut manifest = base.clone();
         manifest["format_version"] = serde_json::json!(bad_version);
         std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(
@@ -40,9 +47,16 @@ fn legacy_v1_and_unknown_future_manifest_versions_are_refused() {
                 capture(&root, &desktop, false),
                 Err(AdmissionError::ManifestUnavailable)
             ),
-            "format_version {bad_version} must be refused"
+            "format_version {bad_version} with payload must be refused"
         );
     }
+    let mut v2_no_payload = base;
+    v2_no_payload.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v2_no_payload).unwrap()).unwrap();
+    assert!(matches!(
+        capture(&root, &desktop, false),
+        Err(AdmissionError::ManifestUnavailable)
+    ));
 }
 
 #[tokio::test]
