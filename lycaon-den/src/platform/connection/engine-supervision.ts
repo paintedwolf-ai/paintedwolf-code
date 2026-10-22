@@ -16,7 +16,7 @@ export type EngineState =
   | { state: "idle" }
   | { state: "running"; generation: number }
   | { state: "restarting"; exit: EngineExit; attempt: number }
-  | { state: "stopped"; exit: EngineExit; failure?: string };
+  | { state: "stopped"; exit: EngineExit; failure?: string; restart_required?: boolean };
 
 export const ENGINE_STATE_EVENT = "engine-state";
 
@@ -57,9 +57,13 @@ export function parseEngineState(value: unknown): EngineState | null {
     case "stopped":
       if (!validExit(candidate.exit)) return null;
       if (candidate.failure !== undefined && typeof candidate.failure !== "string") return null;
-      return candidate.failure === undefined
-        ? { state: "stopped", exit: candidate.exit }
-        : { state: "stopped", exit: candidate.exit, failure: candidate.failure };
+      if (candidate.restart_required !== undefined && typeof candidate.restart_required !== "boolean") return null;
+      return {
+        state: "stopped",
+        exit: candidate.exit,
+        ...(candidate.failure === undefined ? {} : { failure: candidate.failure }),
+        ...(candidate.restart_required === undefined ? {} : { restart_required: candidate.restart_required }),
+      };
     default:
       return null;
   }

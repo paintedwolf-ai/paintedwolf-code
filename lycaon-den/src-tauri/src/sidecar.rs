@@ -21,9 +21,11 @@ use std::time::Instant;
 pub(crate) mod commands;
 pub(crate) mod custody;
 pub(crate) mod daemon;
+mod installation;
 mod diagnostics;
 pub(crate) mod layout;
 mod logging;
+pub(crate) mod manifest;
 mod process;
 mod startup;
 pub(crate) mod supervisor;
@@ -50,6 +52,7 @@ pub enum SidecarStartError {
     CredentialVaultUninitialized(String),
     CredentialVaultUnlockFailed(String),
     CredentialVaultCorrupt(String),
+    DesktopRestartRequired(String),
     CredentialVaultCustodianUnavailable(String),
     CredentialVaultCustodianAbsent(String),
     CredentialVaultLauncherRefused(String),
@@ -73,6 +76,7 @@ impl SidecarStartError {
             | Self::CredentialVaultUninitialized(message)
             | Self::CredentialVaultUnlockFailed(message)
             | Self::CredentialVaultCorrupt(message)
+            | Self::DesktopRestartRequired(message)
             | Self::CredentialVaultCustodianUnavailable(message)
             | Self::CredentialVaultCustodianAbsent(message)
             | Self::CredentialVaultLauncherRefused(message)
@@ -313,6 +317,8 @@ where
     if let Some(info) = state.cached_info() {
         return Ok(info);
     }
+    installation::ensure_current()
+        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
     stop_sidecar_locked(state);
 
     launch_sidecar_locked(state, password, emit)
@@ -326,6 +332,8 @@ fn launch_sidecar_locked<F>(
 where
     F: Fn(StartupProgress),
 {
+    installation::ensure_current()
+        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
     state.cancel_start.store(false, Ordering::Release);
     state.starting.store(true, Ordering::Release);
     let _starting = StartingGuard(&state.starting);
@@ -439,6 +447,8 @@ where
     if attach_only_requested() {
         return attach_or_explain(&crate::config_dir::host_config_dir()?);
     }
+    installation::ensure_current()
+        .map_err(|reason| SidecarStartError::DesktopRestartRequired(reason.guidance()))?;
     state.crashes.lock().unwrap().clear();
     stop_sidecar_locked(state);
     launch_sidecar_locked(state, None, &emit)
@@ -455,6 +465,7 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
     if child_alive(state.process.lock().unwrap().as_mut()) {
         return Err("The credential vault cannot be reset while the engine is running.".into());
     }
+    installation::ensure_current().map_err(|reason| reason.guidance())?;
     let bin = resolve_lycaon_binary()?;
     let config_dir = crate::config_dir::host_config_dir()?;
     let status = Command::new(&bin)

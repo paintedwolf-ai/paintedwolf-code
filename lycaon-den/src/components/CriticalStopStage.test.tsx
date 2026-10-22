@@ -43,6 +43,7 @@ const saveDiagnosticsBundle = vi.fn();
 const saveStartupDiagnosticsBundle = vi.fn();
 const provideCredentialVaultPassword = vi.fn();
 const resetCredentialVault = vi.fn();
+const quitDesktopForRestart = vi.fn();
 let startFailure: string | null = null;
 let recoveryClient: {
   restoreRecoverySnapshot: typeof restoreRecoverySnapshot;
@@ -71,6 +72,7 @@ vi.mock("../platform/connection/backend.ts", () => ({
   provideCredentialVaultPassword: (...args: unknown[]) =>
     provideCredentialVaultPassword(...args),
   resetCredentialVault: () => resetCredentialVault(),
+  quitDesktopForRestart: () => quitDesktopForRestart(),
 }));
 
 vi.mock("../settings/system/diagnostics-export.ts", () => ({
@@ -114,6 +116,8 @@ describe("createCriticalStop", () => {
     saveDiagnosticsBundle.mockReset();
     saveStartupDiagnosticsBundle.mockReset();
     provideCredentialVaultPassword.mockReset();
+    quitDesktopForRestart.mockReset();
+    quitDesktopForRestart.mockResolvedValue(undefined);
     resetCredentialVault.mockReset();
     resetCredentialVault.mockResolvedValue(undefined);
     startFailure = null;
@@ -200,6 +204,18 @@ describe("createCriticalStop", () => {
     expect(
       rendered.baseElement.querySelector('[data-testid="critical-stop"]'),
     ).toBeNull();
+  });
+
+  it("quits through the native coordinator when the installed desktop changed", async () => {
+    startFailure = "desktop_restart_required";
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(quitDesktopForRestart).toHaveBeenCalledOnce());
+    expect(connectAppBackend).not.toHaveBeenCalled();
+    expect(resetCredentialVault).not.toHaveBeenCalled();
   });
 
   it("unlocks the credential vault with an explicit app password", async () => {

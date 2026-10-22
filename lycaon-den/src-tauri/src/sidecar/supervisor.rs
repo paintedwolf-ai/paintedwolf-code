@@ -50,6 +50,7 @@ pub enum EngineState {
         exit: EngineExit,
         #[serde(skip_serializing_if = "Option::is_none")]
         failure: Option<String>,
+        restart_required: bool,
     },
 }
 
@@ -101,7 +102,7 @@ where
     state.retire();
     let attempt = state.record_crash(Instant::now(), policy.crash_window);
     let Some(delay) = policy.delays.get(attempt as usize - 1).copied() else {
-        state.publish(EngineState::Stopped { exit, failure: None });
+        state.publish(EngineState::Stopped { exit, failure: None, restart_required: false });
         return;
     };
     state.publish(EngineState::Restarting {
@@ -121,6 +122,7 @@ where
         state.publish(EngineState::Stopped {
             exit,
             failure: Some(err.message().to_string()),
+            restart_required: matches!(&err, SidecarStartError::DesktopRestartRequired(_)),
         });
     }
 }
@@ -153,7 +155,7 @@ pub(super) fn log_line(state: &EngineState) -> Option<String> {
             "--- engine {}; restarting (attempt {attempt}) ---\n",
             exit.description
         )),
-        EngineState::Stopped { exit, failure: None } => Some(format!(
+        EngineState::Stopped { exit, failure: None, .. } => Some(format!(
             "--- engine {}; not restarting after repeated exits ---\n",
             exit.description
         )),
