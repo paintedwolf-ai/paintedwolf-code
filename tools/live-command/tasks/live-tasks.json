@@ -1,0 +1,12 @@
+[
+  {"label": "L01-go-files", "text": "Use the `command` tool. How many Go files are in this project, and which one has the most lines? Show the line counts."},
+  {"label": "L02-tests", "text": "Use the `command` tool. Run the Go tests for this project and explain any failures (which test, what it expected, and the likely cause). Don't fix anything."},
+  {"label": "L03-todo-notes", "text": "Use the `command` tool. Create notes.txt in the project root listing every TODO in the project as file:line: text, using grep. Then show me notes.txt."},
+  {"label": "L04-rename-key", "text": "Use the `command` tool. In config.json rename the key \"x\" to \"y\" keeping its value, using jq or sed. Show the file afterwards."},
+  {"label": "L05-bg-job", "text": "Use the `command` tool. Start `sleep 120` as a background job, show me the running jobs, then kill that job and confirm it is gone. Only touch the job you started."},
+  {"label": "L06-find-size", "text": "Use the `command` tool. Find all files under data/ and logs/ larger than 10 KB, and list them with their sizes, largest first."},
+  {"label": "L07-log-stats", "text": "Use the `command` tool. In logs/app.log count how many lines there are of each log level (the second field), and list the three most frequent messages with their counts."},
+  {"label": "L08-sed-edit", "text": "Use the `command` tool. Using sed -i, in docs/nested/list.txt change every 'alpha' to 'ALPHA', then delete any line containing 'gamma', then append a final line 'end'. Show the file before and after."},
+  {"label": "L09-git", "text": "Use the `command` tool. Show the git status, the last commits, and the full diff of uncommitted changes in this repository, then summarise what changed."},
+  {"label": "L10-curl", "text": "Use the `command` tool. There is an HTTP server on http://127.0.0.1:55217/ . Fetch / and /status.json with curl, show the HTTP status codes and the JSON field values from status.json."}
+]
