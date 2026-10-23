@@ -3,7 +3,9 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
@@ -13,7 +15,6 @@ import (
 type guardianRetirementCause string
 
 const (
-	guardianAdmissionFailed   guardianRetirementCause = "admission_failed"
 	guardianWaitFailed        guardianRetirementCause = "wait_failed"
 	guardianUnsettledChildren guardianRetirementCause = "no_children_unsettled"
 	guardianSignalReceived    guardianRetirementCause = "signal_received"
@@ -85,7 +86,7 @@ func (state *protectedGuardian) writeRetirement(writer io.Writer, event guardian
 		return
 	}
 	switch event.Cause {
-	case guardianAdmissionFailed, guardianWaitFailed, guardianUnsettledChildren,
+	case guardianWaitFailed, guardianUnsettledChildren,
 		guardianSignalReceived, guardianRootExited, guardianDesktopReady,
 		guardianRoleReady, guardianHealthEnded, guardianHealthRejected,
 		guardianHealthExpired, guardianPollFailed:
@@ -145,4 +146,95 @@ func (guardianDiagnosticStderr) Write(data []byte) (int, error) {
 		count = 0
 	}
 	return count, err
+}
+
+const guardianDiagnosticMagic = "PWGDIAG1"
+const guardianDiagnosticLimit = 1024
+
+type guardianReport struct {
+	notice     guardianNotice
+	diagnostic []byte
+}
+
+type guardianDiagnosticControl struct{ fd int }
+
+func (sink guardianDiagnosticControl) Write(raw []byte) (int, error) {
+	if len(raw) == 0 || len(raw) > guardianDiagnosticLimit {
+		return 0, unix.EMSGSIZE
+	}
+	packet := append([]byte(guardianDiagnosticMagic), raw...)
+	n, err := unix.SendmsgN(sink.fd, packet, nil, nil, unix.MSG_DONTWAIT|unix.MSG_NOSIGNAL)
+	if err != nil {
+		return 0, err
+	}
+	if n != len(packet) {
+		return 0, io.ErrShortWrite
+	}
+	return len(raw), nil
+}
+
+func (state *protectedGuardian) reportRetirement(event guardianRetirement) {
+	if state.control != nil {
+		state.writeRetirement(guardianDiagnosticControl{int(state.control.Fd())}, event)
+	}
+}
+
+// Only the post-admission supervisor accepts diagnostics. This variant never
+// supplies readiness, failure, settlement or an exit status.
+func receiveGuardianReport(fd, pid int, caller Identity) (guardianReport, error) {
+	raw, err := receiveGuardianPacket(fd, pid, caller, len(guardianDiagnosticMagic)+guardianDiagnosticLimit)
+	if err != nil {
+		return guardianReport{}, err
+	}
+	if !bytes.HasPrefix(raw, []byte(guardianDiagnosticMagic)) {
+		notice, err := decodeGuardianNotice(raw)
+		return guardianReport{notice: notice}, err
+	}
+	raw = raw[len(guardianDiagnosticMagic):]
+	var event guardianRetirement
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&event); err != nil {
+		return guardianReport{}, err
+	}
+	canonical, err := json.Marshal(event)
+	if err != nil || !bytes.Equal(raw, append(canonical, '\n')) || !validGuardianRetirement(event, pid) {
+		return guardianReport{}, errors.New("invalid guardian retirement diagnostic")
+	}
+	return guardianReport{diagnostic: raw}, nil
+}
+
+func validGuardianRetirement(event guardianRetirement, pid int) bool {
+	if event.Version != 1 || event.MonotonicNS <= 0 || event.Guardian.Role != "guardian" || event.Guardian.PID != pid || event.Guardian.Start <= 0 || event.RoleIndex < -1 || event.RoleIndex > 2 {
+		return false
+	}
+	seen := map[int]bool{pid: true}
+	for index, name := range [3]string{"desktop", "mount-watcher", "mount-intake"} {
+		role := event.Roles[index]
+		if role.Role != name || role.PID <= 1 || role.Start <= 0 || seen[role.PID] {
+			return false
+		}
+		seen[role.PID] = true
+	}
+	switch event.Cause {
+	case guardianRootExited:
+		return event.RoleIndex >= 0 && event.WaitStatus != nil && event.Signal == 0 && event.Observation == nil
+	case guardianSignalReceived:
+		return event.RoleIndex == -1 && event.WaitStatus == nil && (event.Signal == int(unix.SIGTERM) || event.Signal == int(unix.SIGINT) || event.Signal == int(unix.SIGHUP)) && event.Observation == nil
+	case guardianWaitFailed, guardianUnsettledChildren:
+		return event.RoleIndex == -1 && event.WaitStatus == nil && event.Signal == 0 && event.Observation == nil
+	case guardianDesktopReady, guardianRoleReady, guardianHealthEnded, guardianHealthRejected, guardianHealthExpired, guardianPollFailed:
+		if event.WaitStatus != nil || event.Signal != 0 || event.Observation == nil || event.Observation.Cause != event.Cause || event.Observation.RoleIndex != event.RoleIndex {
+			return false
+		}
+		if event.Cause == guardianDesktopReady {
+			return event.RoleIndex == 0
+		}
+		if event.Cause == guardianRoleReady {
+			return event.RoleIndex > 0
+		}
+		return event.RoleIndex == -1
+	default:
+		return false
+	}
 }

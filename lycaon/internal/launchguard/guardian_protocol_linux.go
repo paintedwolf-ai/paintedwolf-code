@@ -48,8 +48,8 @@ func sendGuardianMessage(fd int, phase uint32, status uint32) error {
 
 type guardianNotice struct{ phase, status uint32 }
 
-func receiveGuardianNotice(fd int, pid int, caller Identity) (guardianNotice, error) {
-	var raw [25]byte
+func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte, error) {
+	raw := make([]byte, limit+1)
 	control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
 	for {
 		n, oobn, flags, _, err := unix.Recvmsg(fd, raw[:], control, unix.MSG_CMSG_CLOEXEC)
@@ -57,7 +57,7 @@ func receiveGuardianNotice(fd int, pid int, caller Identity) (guardianNotice, er
 			continue
 		}
 		if err != nil {
-			return guardianNotice{}, err
+			return nil, err
 		}
 		messages, controlErr := unix.ParseSocketControlMessage(control[:oobn])
 		// Close any injected rights before rejecting their control shape.
@@ -69,21 +69,37 @@ func receiveGuardianNotice(fd int, pid int, caller Identity) (guardianNotice, er
 				}
 			}
 		}
-		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n != 24 || controlErr != nil || len(messages) != 1 || messages[0].Header.Level != unix.SOL_SOCKET || messages[0].Header.Type != unix.SCM_CREDENTIALS {
-			return guardianNotice{}, errors.New("invalid guardian handoff control shape")
+		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n > limit || controlErr != nil || len(messages) != 1 || messages[0].Header.Level != unix.SOL_SOCKET || messages[0].Header.Type != unix.SCM_CREDENTIALS {
+			return nil, errors.New("invalid guardian handoff control shape")
 		}
 		credentials, err := unix.ParseUnixCredentials(&messages[0])
 		if err != nil || int(credentials.Pid) != pid || credentials.Uid != caller.UID || credentials.Gid != caller.GID {
-			return guardianNotice{}, errors.New("guardian handoff sender differs from selected process")
+			return nil, errors.New("guardian handoff sender differs from selected process")
 		}
-		if string(raw[:8]) != "PWGHAND1" || binary.LittleEndian.Uint32(raw[8:]) != 1 || binary.LittleEndian.Uint32(raw[20:]) != 0 {
-			return guardianNotice{}, errors.New("invalid guardian handoff frame")
-		}
-		phase := binary.LittleEndian.Uint32(raw[12:])
-		status := binary.LittleEndian.Uint32(raw[16:])
-		if phase < guardianReady || phase > guardianFailed || (phase == guardianFailed && status != 1) || status > 255 || ((phase == guardianReady || phase == guardianAdmit) && status != 0) {
-			return guardianNotice{}, errors.New("invalid guardian handoff status")
-		}
-		return guardianNotice{phase: phase, status: status}, nil
+		return raw[:n], nil
 	}
+}
+
+func receiveGuardianNotice(fd int, pid int, caller Identity) (guardianNotice, error) {
+	raw, err := receiveGuardianPacket(fd, pid, caller, 24)
+	if err != nil {
+		return guardianNotice{}, err
+	}
+	return decodeGuardianNotice(raw)
+}
+
+func decodeGuardianNotice(raw []byte) (guardianNotice, error) {
+	if len(raw) != 24 {
+		return guardianNotice{}, errors.New("invalid guardian handoff frame length")
+	}
+
+	if string(raw[:8]) != "PWGHAND1" || binary.LittleEndian.Uint32(raw[8:]) != 1 || binary.LittleEndian.Uint32(raw[20:]) != 0 {
+		return guardianNotice{}, errors.New("invalid guardian handoff frame")
+	}
+	phase := binary.LittleEndian.Uint32(raw[12:])
+	status := binary.LittleEndian.Uint32(raw[16:])
+	if phase < guardianReady || phase > guardianFailed || (phase == guardianFailed && status != 1) || status > 255 || ((phase == guardianReady || phase == guardianAdmit) && status != 0) {
+		return guardianNotice{}, errors.New("invalid guardian handoff status")
+	}
+	return guardianNotice{phase: phase, status: status}, nil
 }

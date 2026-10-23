@@ -135,14 +135,17 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 			notified = notifyGuardianFailure(notified)
 		}
 		if polls[0].Revents&unix.POLLIN != 0 {
-			notice, err := receiveGuardianNotice(int(control.Fd()), stagePID, caller)
+			report, err := receiveGuardianReport(int(control.Fd()), stagePID, caller)
 			if err != nil {
 				if !errors.Is(err, unix.EAGAIN) {
 					notified = notifyGuardianFailure(notified)
 					controlClosed = true
 					_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
 				}
+			} else if report.diagnostic != nil {
+				_, _ = (guardianDiagnosticStderr{}).Write(report.diagnostic)
 			} else {
+				notice := report.notice
 				switch notice.phase {
 				case guardianFailed:
 					notified = notifyGuardianFailure(notified)

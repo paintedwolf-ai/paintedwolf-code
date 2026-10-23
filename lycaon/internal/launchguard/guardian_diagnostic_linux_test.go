@@ -60,7 +60,7 @@ func (failedGuardianDiagnosticWriter) Write([]byte) (int, error) {
 }
 
 func TestGuardianDiagnosticFailureNeverChangesRetirementOutcome(t *testing.T) {
-	for _, cause := range []guardianRetirementCause{guardianAdmissionFailed, guardianWaitFailed, guardianUnsettledChildren, guardianSignalReceived, guardianDesktopReady, guardianRoleReady, guardianHealthEnded, guardianHealthRejected, guardianHealthExpired, guardianPollFailed} {
+	for _, cause := range []guardianRetirementCause{guardianWaitFailed, guardianUnsettledChildren, guardianSignalReceived, guardianDesktopReady, guardianRoleReady, guardianHealthEnded, guardianHealthRejected, guardianHealthExpired, guardianPollFailed} {
 		state := diagnosticGuardianFixture()
 		before := state
 		state.writeRetirement(failedGuardianDiagnosticWriter{}, guardianRetirement{Cause: cause, RoleIndex: -1})
@@ -98,6 +98,8 @@ func TestGuardianDiagnosticSinkFixture(t *testing.T) {
 		os.Exit(2)
 	}
 	state := diagnosticGuardianFixture()
+	status := uint32(3 << 8)
+	state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianRootExited, RoleIndex: 0, WaitStatus: &status})
 	state.recordExit(42, unix.WaitStatus(3<<8))
 	state.recordExit(43, unix.WaitStatus(0))
 	state.recordExit(44, unix.WaitStatus(0))
