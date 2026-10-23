@@ -12,11 +12,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 type capturedRuntime struct {
 	Sources []RuntimeSource
 	Files   []RuntimeFile
+	Links   []RuntimeLink
 	Aliases []RuntimeAlias
 	Bytes   int64
 }
@@ -29,6 +32,7 @@ func (l layout) captureRuntime(origins []RuntimeOrigin, target *os.Root) (*captu
 	if err != nil {
 		return nil, err
 	}
+	defer before.Close()
 	captured, err := l.copyRuntimeInputs(before, target)
 	if err != nil {
 		return nil, err
@@ -37,22 +41,26 @@ func (l layout) captureRuntime(origins []RuntimeOrigin, target *os.Root) (*captu
 	if err != nil {
 		return nil, err
 	}
+	defer after.Close()
 	if !sameRuntimeSnapshot(before, after) {
 		return nil, errors.New("runtime capture: selected input set changed; discard candidate and retry")
 	}
 	for _, origin := range origins {
-		input := before[origin.SelectedRoot]
+		input := before.Inputs[origin.SelectedRoot]
 		if input.Kind == "symlink" {
 			return nil, errors.New("runtime capture: projection root must be physical")
 		}
 		captured.Aliases = append(captured.Aliases, RuntimeAlias{Path: origin.SelectedRoot, Target: runtimeViewPath(origin.SelectedRoot), Kind: input.Kind})
+	}
+	for _, link := range before.Links {
+		captured.Links = append(captured.Links, link)
 	}
 	return captured, nil
 }
 
 func runtimeViewPath(name string) string { return "view/" + strings.TrimPrefix(name, "/") }
 
-func (l layout) copyRuntimeInputs(inputs runtimeSnapshot, target *os.Root) (*capturedRuntime, error) {
+func (l layout) copyRuntimeInputs(snapshot *runtimeSnapshot, target *os.Root) (*capturedRuntime, error) {
 	if target == nil {
 		return nil, errors.New("runtime capture: missing private candidate")
 	}
@@ -66,6 +74,7 @@ func (l layout) copyRuntimeInputs(inputs runtimeSnapshot, target *os.Root) (*cap
 	if !info.IsDir() || info.Mode().Perm() != 0700 {
 		return nil, errors.New("runtime capture: candidate must be private")
 	}
+	inputs := snapshot.Inputs
 	result := &capturedRuntime{}
 	directories := map[string]bool{}
 	names := make([]string, 0, len(inputs))
@@ -101,12 +110,7 @@ func (l layout) copyRuntimeInputs(inputs runtimeSnapshot, target *os.Root) (*cap
 		case "directory":
 			continue
 		case "symlink":
-			destination := item.Target
-			if filepath.IsAbs(destination) {
-				destination = runtimeViewPath(destination)
-			} else {
-				destination = filepath.Clean(filepath.Join(filepath.Dir(relative), destination))
-			}
+			destination := runtimeViewPath(item.Resolved)
 			rewritten, err := filepath.Rel(filepath.Dir(relative), destination)
 			if err != nil {
 				return nil, err
@@ -134,7 +138,7 @@ func (l layout) copyRuntimeInputs(inputs runtimeSnapshot, target *os.Root) (*cap
 }
 
 func (l layout) copyRuntimeFile(name, relative string, input runtimeInput, target *os.Root) (RuntimeSource, error) {
-	source, err := os.Open(name)
+	source, err := openRuntimeAt(input.root, input.relative, unix.O_RDONLY)
 	if err != nil {
 		return RuntimeSource{}, err
 	}
@@ -147,7 +151,7 @@ func (l layout) copyRuntimeFile(name, relative string, input runtimeInput, targe
 	if err != nil {
 		return RuntimeSource{}, err
 	}
-	if !opened.Mode().IsRegular() || facts != input.Facts {
+	if !opened.Mode().IsRegular() || opened.Size() < 0 || opened.Size() == 1<<63-1 || facts != input.Facts {
 		return RuntimeSource{}, errors.New("runtime capture: source changed while opening")
 	}
 	output, err := target.OpenFile(relative, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)

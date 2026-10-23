@@ -5,25 +5,38 @@ package packagegeneration
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
-// A snapshot is a bounded observation of the entire selected input set. It is
-// compared again after copying; individual file stability alone would accept a
-// mixture observed during a package transaction. This is not an atomic host
-// filesystem snapshot and never makes package-manager text authoritative.
-type runtimeSnapshot map[string]runtimeInput
+// Compare the entire selected set before and after copying. This is a bounded
+// package-update consistency check, not an atomic host filesystem snapshot.
+type runtimeSnapshot struct {
+	Inputs  map[string]runtimeInput
+	Custody map[string]KernelObservation
+	Links   map[string]RuntimeLink
+	roots   []*os.File
+}
 
 type runtimeInput struct {
-	Origin   RuntimeOrigin
-	Facts    KernelObservation
-	Kind     string
-	Target   string
-	Children []string
+	Origin                 RuntimeOrigin
+	Facts                  KernelObservation
+	Kind, Target, Resolved string
+	Children               []string
+	root                   *os.File
+	relative               string
+}
+
+func (s *runtimeSnapshot) Close() {
+	for _, root := range s.roots {
+		_ = root.Close()
+	}
 }
 
 func runtimeFacts(info os.FileInfo) (KernelObservation, error) {
@@ -34,97 +47,162 @@ func runtimeFacts(info os.FileInfo) (KernelObservation, error) {
 	return KernelObservation{Device: uint64(stat.Dev), Inode: stat.Ino, MtimeNS: stat.Mtim.Nano(), CtimeNS: stat.Ctim.Nano(), UID: stat.Uid, GID: stat.Gid, Mode: stat.Mode}, nil
 }
 
-func (l layout) observeRuntime(origins []RuntimeOrigin) (runtimeSnapshot, error) {
-	observed := runtimeSnapshot{}
+func (l layout) observeRuntime(origins []RuntimeOrigin) (*runtimeSnapshot, error) {
+	snapshot := &runtimeSnapshot{Inputs: map[string]runtimeInput{}, Custody: map[string]KernelObservation{}, Links: map[string]RuntimeLink{}}
+	complete := false
+	defer func() {
+		if !complete {
+			snapshot.Close()
+		}
+	}()
 	for _, origin := range origins {
-		// The native producer has strict custody. Nix outputs require their own
-		// explicit store-root exception and immutable-output proof, never this path.
+		// Nix requires explicit store-root custody and immutable-output proof, never
+		// a reinterpretation of generic provenance as native root authority.
 		if origin.Kind != "native" || origin.StoreRoot != "" || origin.OutputPath != "" || !runtimeAbsolute(origin.SelectedRoot) {
 			return nil, errors.New("runtime capture: unsupported native source authority")
 		}
-		if err := l.controlledParents(filepath.Dir(origin.SelectedRoot)); err != nil {
+		parent, err := l.runtimeSourceDirectory(filepath.Dir(origin.SelectedRoot), snapshot.Custody)
+		if err != nil {
 			return nil, err
 		}
-		if err := l.observeRuntimePath(origin.SelectedRoot, origin, observed); err != nil {
+		snapshot.roots = append(snapshot.roots, parent)
+		if err := l.observeRuntimePath(origin.SelectedRoot, filepath.Base(origin.SelectedRoot), parent, origin, snapshot); err != nil {
 			return nil, err
 		}
 	}
-	if len(observed) == 0 {
+	if len(snapshot.Inputs) == 0 {
 		return nil, errors.New("runtime capture: empty input selection")
 	}
-	return observed, nil
+	for _, link := range snapshot.Links {
+		target, exists := snapshot.Inputs[link.ResolvedPath]
+		if !exists || (target.Kind != "file" && target.Kind != "directory") {
+			return nil, errors.New("runtime capture: resolved link target is absent from explicit retained set")
+		}
+	}
+	complete = true
+	return snapshot, nil
 }
 
-func (l layout) observeRuntimePath(name string, origin RuntimeOrigin, observed runtimeSnapshot) error {
-	if previous, exists := observed[name]; exists {
-		if !reflect.DeepEqual(previous.Origin, origin) {
+func (l layout) observeRuntimePath(name, relative string, root *os.File, origin RuntimeOrigin, snapshot *runtimeSnapshot) error {
+	if !runtimeAbsolute(name) {
+		return errors.New("runtime capture: invalid selected path")
+	}
+	if previous, exists := snapshot.Inputs[name]; exists {
+		if previous.Origin != origin {
 			return fmt.Errorf("runtime capture: overlapping source authorities %q", name)
 		}
 		return nil
 	}
-	if len(observed) >= RuntimeSealMaxEntries {
+	if len(snapshot.Inputs) >= RuntimeSealMaxEntries {
 		return errors.New("runtime capture: input set exceeds format ceiling")
 	}
-	info, err := os.Lstat(name)
+	selected, err := openRuntimeAt(root, relative, unix.O_PATH)
 	if err != nil {
 		return err
 	}
-	if err := controlledObject(name, info, l.owner); err != nil {
+	defer func() { _ = selected.Close() }()
+	if err := l.recordRuntimeCustody(name, selected, snapshot.Custody); err != nil {
+		return err
+	}
+	info, err := selected.Stat()
+	if err != nil {
 		return err
 	}
 	facts, err := runtimeFacts(info)
 	if err != nil {
 		return err
 	}
-	item := runtimeInput{Origin: origin, Facts: facts}
+	item := runtimeInput{Origin: origin, Facts: facts, root: root, relative: relative}
 	switch {
 	case info.IsDir():
 		item.Kind = "directory"
-		directory, err := os.Open(name)
+		directory, err := openRuntimeAt(root, relative, unix.O_RDONLY|unix.O_DIRECTORY)
 		if err != nil {
 			return err
 		}
-		opened, statErr := directory.Stat()
-		children, readErr := directory.ReadDir(-1)
-		closeErr := directory.Close()
-		if err := errors.Join(statErr, readErr, closeErr); err != nil {
+		opened, err := directory.Stat()
+		if err != nil {
+			_ = directory.Close()
 			return err
 		}
 		if !os.SameFile(info, opened) {
-			return errors.New("runtime capture: source directory changed while opening")
+			_ = directory.Close()
+			return errors.New("runtime capture: selected directory changed while opening")
 		}
+		// Retaining each opened directory binds every child to the validated walk.
+		snapshot.roots = append(snapshot.roots, directory)
+		children, err := readRuntimeChildren(directory, RuntimeSealMaxEntries-len(snapshot.Inputs)-1)
+		if err != nil {
+			return err
+		}
+		item.Children = children
+		snapshot.Inputs[name] = item
 		for _, child := range children {
-			item.Children = append(item.Children, child.Name())
+			if err := l.observeRuntimePath(filepath.Join(name, child), child, directory, origin, snapshot); err != nil {
+				return err
+			}
 		}
-		slices.Sort(item.Children)
+		return nil
 	case info.Mode().IsRegular():
 		item.Kind = "file"
 	case info.Mode()&os.ModeSymlink != 0:
+		if name == origin.SelectedRoot {
+			return errors.New("runtime capture: projection root must be physical")
+		}
 		item.Kind = "symlink"
-		item.Target, err = os.Readlink(name)
+		item.Target, err = runtimeReadlink(selected)
 		if err != nil {
 			return err
 		}
-		// Every link must resolve inside a selected root. The final seal validates
-		// retained link graphs, so a captured module cannot fall back to live bytes.
-		resolved, err := filepath.EvalSymlinks(name)
+		item.Resolved, err = l.resolveRuntimeLink(name, origin, snapshot)
 		if err != nil {
 			return err
-		}
-		relative, err := filepath.Rel(origin.SelectedRoot, resolved)
-		if err != nil || relative == ".." || len(relative) > 3 && relative[:3] == "../" {
-			return fmt.Errorf("runtime capture: link leaves selected source %q", name)
 		}
 	default:
 		return fmt.Errorf("runtime capture: unsupported source object %q", name)
 	}
-	observed[name] = item
-	for _, child := range item.Children {
-		if err := l.observeRuntimePath(filepath.Join(name, child), origin, observed); err != nil {
-			return err
-		}
-	}
+	snapshot.Inputs[name] = item
 	return nil
 }
 
-func sameRuntimeSnapshot(before, after runtimeSnapshot) bool { return reflect.DeepEqual(before, after) }
+func readRuntimeChildren(directory *os.File, remaining int) ([]string, error) {
+	var names []string
+	for {
+		count := min(128, remaining-len(names)+1)
+		if count < 1 {
+			return nil, errors.New("runtime capture: directory exceeds remaining entry ceiling")
+		}
+		entries, err := directory.ReadDir(count)
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		if len(names) > remaining {
+			return nil, errors.New("runtime capture: directory exceeds remaining entry ceiling")
+		}
+		if errors.Is(err, io.EOF) {
+			slices.Sort(names)
+			return names, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+func sameRuntimeSnapshot(before, after *runtimeSnapshot) bool {
+	if !reflect.DeepEqual(before.Custody, after.Custody) || !reflect.DeepEqual(before.Links, after.Links) || len(before.Inputs) != len(after.Inputs) {
+		return false
+	}
+	for name, input := range before.Inputs {
+		other, exists := after.Inputs[name]
+		if !exists {
+			return false
+		}
+		input.root = nil
+		other.root = nil
+		if !reflect.DeepEqual(input, other) {
+			return false
+		}
+	}
+	return true
+}

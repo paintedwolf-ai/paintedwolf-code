@@ -19,7 +19,7 @@ func (seal *RuntimeSeal) Validate() error {
 		!runtimeText(seal.ProducerVersion, 128) || strings.TrimSpace(seal.ProducerVersion) != seal.ProducerVersion {
 		return errors.New("runtime seal: invalid identity")
 	}
-	count := len(seal.Sources) + len(seal.Files) + len(seal.Aliases) + len(seal.Anchors)
+	count := len(seal.Sources) + len(seal.Files) + len(seal.Aliases) + len(seal.Anchors) + len(seal.Links)
 	if count > RuntimeSealMaxEntries || len(seal.Sources) == 0 || len(seal.Files) == 0 ||
 		len(seal.Aliases) == 0 || len(seal.Anchors) == 0 {
 		return errors.New("runtime seal: invalid entry count")
@@ -47,6 +47,9 @@ func (seal *RuntimeSeal) Validate() error {
 		}
 	}
 	if err := seal.validateAliases(files); err != nil {
+		return err
+	}
+	if err := seal.validateLinks(files); err != nil {
 		return err
 	}
 	roles := make(map[string]bool, len(seal.Anchors))

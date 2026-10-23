@@ -103,6 +103,7 @@ func TestRuntimeCaptureDetectsWholeSetChangeAndOpenReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer before.Close()
 	if err := os.WriteFile(filepath.Join(source, "late.so"), []byte("new entry"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +111,7 @@ func TestRuntimeCaptureDetectsWholeSetChangeAndOpenReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer after.Close()
 	if sameRuntimeSnapshot(before, after) {
 		t.Fatal("missed new selected directory entry")
 	}
@@ -142,5 +144,117 @@ func TestRuntimeCaptureRejectsWritableOrNonprivateCustody(t *testing.T) {
 	}
 	if _, err := l.captureRuntime(origins, target); err == nil {
 		t.Fatal("accepted nonprivate candidate")
+	}
+}
+
+func TestRuntimeCaptureRewritesControlledAlternativesChain(t *testing.T) {
+	l, source, target := runtimeCaptureFixture(t)
+	alternatives := filepath.Join(l.anchor, "etc", "alternatives")
+	if err := os.MkdirAll(alternatives, 0755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(source, "alias.so")
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(alternatives, "module.so")
+	if err := os.Symlink(external, alias); err != nil {
+		t.Fatal(err)
+	}
+	original := "../../system/module.so"
+	if err := os.Symlink(original, external); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := l.captureRuntime([]RuntimeOrigin{{Kind: "native", SelectedRoot: source}}, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(captured.Links) != 2 {
+		t.Fatalf("link provenance=%+v", captured.Links)
+	}
+	for _, link := range captured.Links {
+		if link.ResolvedPath != filepath.Join(source, "module.so") || link.CapturedPath != runtimeViewPath(link.ResolvedPath) || link.Observation == nil {
+			t.Fatalf("link provenance=%+v", link)
+		}
+		if link.Path == external && link.Target != original {
+			t.Fatal("lost original relative alternatives target")
+		}
+		if link.Path == alias && link.Target != external {
+			t.Fatal("lost original absolute alternatives target")
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(l.anchor, "etc")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(source); err != nil {
+		t.Fatal(err)
+	}
+	data, err := target.ReadFile(runtimeViewPath(alias))
+	if err != nil || string(data) != "original module" {
+		t.Fatalf("retained alternatives=%q,%v", data, err)
+	}
+	files, err := (&RuntimeSeal{Files: captured.Files}).validateFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seal := &RuntimeSeal{Links: captured.Links, Aliases: captured.Aliases}
+	if err := seal.validateLinks(files); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRuntimeCapturePinsObservedAncestorAndDetectsReplacement(t *testing.T) {
+	l, source, target := runtimeCaptureFixture(t)
+	origins := []RuntimeOrigin{{Kind: "native", SelectedRoot: source}}
+	before, err := l.observeRuntime(origins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer before.Close()
+	moved := source + "-old"
+	if err := os.Rename(source, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "module.so"), []byte("replacement"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("module.so", filepath.Join(source, "alias.so")); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := l.copyRuntimeInputs(before, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := target.ReadFile(captured.Sources[0].CapturedPath)
+	if err != nil || string(data) != "original module" {
+		t.Fatalf("copied unobserved replacement=%q,%v", data, err)
+	}
+	after, err := l.observeRuntime(origins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Close()
+	if sameRuntimeSnapshot(before, after) {
+		t.Fatal("accepted replaced selected ancestor")
+	}
+}
+
+func TestRuntimeCaptureBoundsDirectoryBeforeCollectingIt(t *testing.T) {
+	directory := t.TempDir()
+	for _, name := range []string{"a", "b", "c"} {
+		if err := os.WriteFile(filepath.Join(directory, name), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opened, err := os.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if _, err := readRuntimeChildren(opened, 2); err == nil {
+		t.Fatal("collected directory beyond remaining ceiling")
 	}
 }

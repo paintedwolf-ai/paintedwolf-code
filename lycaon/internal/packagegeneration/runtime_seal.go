@@ -32,6 +32,7 @@ type RuntimeSeal struct {
 	InventorySHA256    string          `json:"inventory_sha256"`
 	ProducerVersion    string          `json:"producer_version"`
 	Sources            []RuntimeSource `json:"sources"`
+	Links              []RuntimeLink   `json:"links"`
 	Files              []RuntimeFile   `json:"files"`
 	Aliases            []RuntimeAlias  `json:"aliases"`
 	Anchors            []RuntimeAnchor `json:"anchors"`
@@ -96,10 +97,12 @@ func MarshalRuntimeSeal(seal *RuntimeSeal) ([]byte, string, error) {
 	}
 	canonical := *seal
 	canonical.Sources = slices.Clone(seal.Sources)
+	canonical.Links = append([]RuntimeLink{}, seal.Links...)
 	canonical.Files = slices.Clone(seal.Files)
 	canonical.Aliases = slices.Clone(seal.Aliases)
 	canonical.Anchors = slices.Clone(seal.Anchors)
 	slices.SortFunc(canonical.Sources, func(a, b RuntimeSource) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(canonical.Links, func(a, b RuntimeLink) int { return strings.Compare(a.Path, b.Path) })
 	slices.SortFunc(canonical.Files, func(a, b RuntimeFile) int { return strings.Compare(a.Path, b.Path) })
 	slices.SortFunc(canonical.Aliases, func(a, b RuntimeAlias) int { return strings.Compare(a.Path, b.Path) })
 	slices.SortFunc(canonical.Anchors, func(a, b RuntimeAnchor) int { return strings.Compare(a.Role, b.Role) })
