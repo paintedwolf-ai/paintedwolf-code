@@ -102,9 +102,10 @@ function mountedMessages() {
   const rows = [message("first"), message("last")] as const;
   document.body.append(viewport);
   const reveal = vi.fn();
+  const [active, setActive] = createSignal(true);
   createRoot(stop => {
     dispose = stop;
-    const keyboard = createTranscriptKeyboard({ active: () => true,
+    const keyboard = createTranscriptKeyboard({ active,
       rows: () => [{ key: "first", kind: "user" }, { key: "last", kind: "assistant" }],
       root: () => viewport, viewport: () => viewport, reveal,
       loadEarlier: async () => {}, loadLater: async () => {}, reportError: error => { throw error; } });
@@ -115,7 +116,7 @@ function mountedMessages() {
     row.dispatchEvent(event);
     return event;
   };
-  return { viewport, rows, reveal, frames, arrow };
+  return { viewport, rows, reveal, frames, arrow, setActive };
 }
 
 it("leaves arrows on a pointer-focused message to native reading scroll", () => {
@@ -145,6 +146,19 @@ it.each(["wheel", "pointerdown", "touchstart", "PageUp"])("returns to reading sc
   if (input === "PageUp") arrow(rows[0], input);
   else rows[0].dispatchEvent(new Event(input, { bubbles: true }));
   reveal.mockClear();
+  expect(arrow(rows[0]).defaultPrevented).toBe(false);
+  expect(reveal).not.toHaveBeenCalled();
+});
+
+it("releases message navigation and pending focus when the transcript deactivates", () => {
+  const { viewport, rows, frames, reveal, arrow, setActive } = mountedMessages();
+  viewport.focus();
+  invokeCommand("chat.nextMessage");
+  setActive(false);
+  reveal.mockClear();
+  frames.shift()!(0);
+  expect(document.activeElement).toBe(viewport);
+  rows[0].focus();
   expect(arrow(rows[0]).defaultPrevented).toBe(false);
   expect(reveal).not.toHaveBeenCalled();
 });
