@@ -17,6 +17,24 @@ import (
 
 func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.Store, error) {
 	hooks := db.UpgradeHooks{
+		IntegrityProgress: func(phase db.IntegrityPhase) {
+			b.logger.InfoContext(ctx, "store recovery check", "phase", phase)
+			if b.startup == nil {
+				return
+			}
+			var stage startupprotocol.Phase
+			switch phase {
+			case db.IntegrityStructure:
+				stage = startupprotocol.PhaseRecoveryStructure
+			case db.IntegrityIndexes:
+				stage = startupprotocol.PhaseRecoveryIndexes
+			case db.IntegrityReferences:
+				stage = startupprotocol.PhaseRecoveryReferences
+			default:
+				return
+			}
+			_ = b.startup.Phase(stage)
+		},
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 			previous, _, err := db.ReadAppVersion(ctx, source)
 			if err != nil {

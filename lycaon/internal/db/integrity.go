@@ -13,16 +13,25 @@ import (
 // A nonempty audit marker requires full verification before the next open.
 const integrityAuditFailedMetaKey = "integrity_audit_failed"
 
+// IntegrityPhase identifies work actually entered by startup recovery.
+type IntegrityPhase string
+
+const (
+	IntegrityStructure  IntegrityPhase = "structure"
+	IntegrityIndexes    IntegrityPhase = "indexes"
+	IntegrityReferences IntegrityPhase = "references"
+)
+
 // prepareIntegrity is the boot gate for an existing store: nothing after a
 // clean shutdown, quick_check after an unclean one with the whole-store audit
 // deferred until serving starts, and the whole check for an unfinished audit.
-func prepareIntegrity(ctx context.Context, sqlDB *sql.DB) error {
+func prepareIntegrity(ctx context.Context, sqlDB *sql.DB, progress func(IntegrityPhase)) error {
 	stamped, err := integrityAuditFailed(ctx, sqlDB)
 	if err != nil {
 		return fmt.Errorf("read integrity audit state: %w", err)
 	}
 	if stamped {
-		return validateStoreIntegrity(ctx, sqlDB)
+		return validateStoreIntegrity(ctx, sqlDB, progress)
 	}
 	clean, err := lastShutdownWasClean(ctx, sqlDB)
 	if err != nil {
@@ -30,6 +39,9 @@ func prepareIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 	}
 	if clean {
 		return nil
+	}
+	if progress != nil {
+		progress(IntegrityStructure)
 	}
 	return quickCheck(ctx, sqlDB)
 }
@@ -56,7 +68,7 @@ func AuditIntegrity(ctx context.Context, store *Store) error {
 		return errors.New("audit integrity: nil database")
 	}
 	started := time.Now()
-	auditErr := validateStoreIntegrity(ctx, store.reader)
+	auditErr := validateStoreIntegrity(ctx, store.reader, nil)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -105,9 +117,15 @@ func quickCheck(ctx context.Context, sqlDB *sql.DB) error {
 	return scanCheck(ctx, sqlDB, "quick_check")
 }
 
-func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
+func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB, progress func(IntegrityPhase)) error {
+	if progress != nil {
+		progress(IntegrityIndexes)
+	}
 	if err := scanCheck(ctx, sqlDB, "integrity_check"); err != nil {
 		return err
+	}
+	if progress != nil {
+		progress(IntegrityReferences)
 	}
 	return foreignKeyCheck(ctx, sqlDB)
 }

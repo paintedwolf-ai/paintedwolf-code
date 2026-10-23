@@ -21,6 +21,8 @@ type UpgradeHooks struct {
 	BeforeCurrentOpen func(context.Context, *sql.DB, migrations.Plan) error
 	After             func(context.Context, migrations.Plan) error
 	Progress          func(migrations.Phase)
+	// IntegrityProgress reports startup checks after an unclean shutdown or unfinished audit.
+	IntegrityProgress func(IntegrityPhase)
 }
 
 func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
@@ -118,7 +120,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		return err
 	}
 	if !plan.Required() {
-		if err := prepareIntegrity(ctx, reader); err != nil {
+		if err := prepareIntegrity(ctx, reader, hooks.IntegrityProgress); err != nil {
 			return err
 		}
 		if hooks.BeforeCurrentOpen != nil {
@@ -126,7 +128,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		}
 		return nil
 	}
-	if err := validateStoreIntegrity(ctx, reader); err != nil {
+	if err := validateStoreIntegrity(ctx, reader, nil); err != nil {
 		return err
 	}
 	if !staged {
