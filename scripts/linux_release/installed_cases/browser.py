@@ -35,7 +35,7 @@ def opened(results: list[dict]) -> dict:
 
 
 def browser_sandbox(binding: dict) -> tuple[str, dict, dict]:
-    identities, facts = [], {}
+    identities, facts, app = [], {}, None
     try:
         with tempfile.TemporaryDirectory(prefix='paintedwolf-installed-browser-') as directory:
             project = Path(directory)
@@ -44,19 +44,26 @@ def browser_sandbox(binding: dict) -> tuple[str, dict, dict]:
                 with InstalledApp(binding) as app, ToolTurn(app, provider, project) as turn:
                     turn.submit()
                     results = turn.wait(timeout=90)
+                    facts.update({'tool_results': results, 'turn': turn.observations,
+                                  'provider': provider.observations, 'app': app.observations})
                     facts['opened'] = opened(results)
                     wait_settled(app, turn.session_id)
                     engine = app.observations['engine_identity']
                     host = namespace_observer(engine)
-                    observation = observe(binding, engine)
-                    identities = validate(observation, engine, host, os.getuid())
+                    launch = app.observations['launch_identity']
+                    observation = observe(binding, engine, launch)
                     facts.update({'engine_namespaces': host, 'browser_observation': observation,
                                   'turn': turn.observations, 'app': app.observations,
                                   'fixture_sha256': hashlib.sha256(HTML.encode()).hexdigest()})
+                    identities = validate(observation, engine, launch, host, os.getuid())
                 remaining = [identity for identity in identities if state(identity) not in {None, 'Z', 'X'}]
                 facts['browser_processes_remaining_after_stop'] = remaining
                 passed = not remaining and app.observations.get('capture_complete') is True and not app.observations.get('output_limit')
                 return 'passed' if passed else 'failed', facts, app.streams()
+    except (ValueError, OSError, TimeoutError) as error:
+        error.observations = {**facts, **getattr(error, 'observations', {})}
+        error.streams = app.streams() if app is not None else getattr(error, 'streams', {})
+        raise
     finally:
         # Exact captured descendants only; a PID reused after observation is never signaled.
         cleanup(identities)

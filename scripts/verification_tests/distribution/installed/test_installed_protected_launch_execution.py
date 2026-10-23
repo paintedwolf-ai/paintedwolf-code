@@ -23,7 +23,7 @@ def row(pid, parent, exe, image, namespaces, **changes):
     value = {'identity': {'pid': pid, 'parent_pid': parent, 'start_time_ticks': pid * 10}, 'exe': exe, 'image': image,
              'namespaces': copy.deepcopy(namespaces), 'user_namespace_owner': 0, 'uid_map': process_tree.FULL_MAP,
              'gid_map': process_tree.FULL_MAP, 'uids': [1000] * 4, 'no_new_privs': 1, 'seccomp': 0,
-             'capabilities': {name: 0 for name in process_tree.CAPABILITIES}}
+             'capabilities': {name: 0 for name in process_tree.CAPABILITIES}, 'capability_bounding_set': 0}
     value.update(changes)
     return value
 

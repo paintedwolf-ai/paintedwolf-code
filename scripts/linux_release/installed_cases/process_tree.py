@@ -65,7 +65,8 @@ for pid in sorted(owned)[:request['limit'] + 1]:
                'user_namespace_owner': owner(pid), 'uid_map': id_map(pid, 'uid_map'), 'gid_map': id_map(pid, 'gid_map'),
                'uids': [int(value) for value in status['Uid'].split()],
                'no_new_privs': int(status['NoNewPrivs']), 'seccomp': int(status['Seccomp']),
-               'capabilities': {name: int(status[name], 16) for name in ('CapInh', 'CapPrm', 'CapEff', 'CapAmb')}}
+               'capabilities': {name: int(status[name], 16) for name in ('CapInh', 'CapPrm', 'CapEff', 'CapAmb')},
+               'capability_bounding_set': int(status['CapBnd'], 16)}
         if request['mounts'] and pid in request['mounts']:
             row['mounts'] = [line.split(' - ')[0].split()[4:6] for line in pathlib.Path(f'/proc/{pid}/mountinfo').read_text().splitlines()]
         if identity(pid) != rows[pid]:
@@ -110,7 +111,7 @@ def validate(document: object, root: dict) -> dict:
     seen = set()
     for row in document['processes']:
         required = {'identity', 'exe', 'image', 'namespaces', 'user_namespace_owner', 'uid_map', 'gid_map',
-                    'uids', 'no_new_privs', 'seccomp', 'capabilities'}
+                    'uids', 'no_new_privs', 'seccomp', 'capabilities', 'capability_bounding_set'}
         if not isinstance(row, dict) or not required <= set(row) <= required | {'mounts'}:
             raise ValueError('process tree observer returned a malformed process')
         identity = row['identity']
@@ -127,7 +128,8 @@ def validate(document: object, root: dict) -> dict:
                 or not isinstance(row['uids'], list) or len(row['uids']) != 4 or any(type(v) is not int for v in row['uids'])
                 or type(row['no_new_privs']) is not int or type(row['seccomp']) is not int
                 or not isinstance(row['capabilities'], dict) or set(row['capabilities']) != set(CAPABILITIES)
-                or any(type(value) is not int or value < 0 for value in row['capabilities'].values())):
+                or any(type(value) is not int or value < 0 for value in row['capabilities'].values())
+                or type(row['capability_bounding_set']) is not int or row['capability_bounding_set'] < 0):
             raise ValueError('process tree observer returned malformed kernel facts')
         mounts = row.get('mounts', [])
         if (not isinstance(mounts, list) or len(mounts) > 4096
