@@ -1,13 +1,16 @@
 """Private fixture streams bind real Linux peers and never use disk secret files."""
 from concurrent.futures import ThreadPoolExecutor
 import os
+import errno
 from pathlib import Path
 import socket
 import struct
 import sys
 import tempfile
 import time
+import threading
 import unittest
+from unittest.mock import patch
 
 from linux_release.installed_cases.app import process_identity
 from linux_release.installed_input import password_socket as private
@@ -129,3 +132,75 @@ class PasswordSocketTests(unittest.TestCase):
             with self.assertRaises((OSError, ValueError)):
                 with private.connect(box, self.expected, time.monotonic() + 1):
                     pass
+
+    def test_private_bind_does_not_change_another_threads_file_creation_mask(self):
+        entered, release = threading.Event(), threading.Event()
+        real_umask = os.umask
+        def paused(mask):
+            previous = real_umask(mask)
+            if mask == 0o177:
+                entered.set()
+                if not release.wait(2):
+                    raise AssertionError('fixture probe did not observe the private mask')
+            return previous
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            selected = [row.split()[1] for row in Path('/proc/self/status').read_text().splitlines()
+                        if row.startswith('Umask:')]
+            self.assertEqual(len(selected), 1)
+            expected = 0o666 & ~int(selected[0], 8)
+            def probe():
+                try:
+                    if not entered.wait(2):
+                        raise AssertionError('private bind did not reach its isolated umask')
+                    descriptor = os.open(directory / 'parallel-file', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+                    try:
+                        return os.fstat(descriptor).st_mode & 0o777
+                    finally:
+                        os.close(descriptor)
+                finally:
+                    release.set()
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                result = pool.submit(probe)
+                with patch.object(private.os, 'umask', side_effect=paused):
+                    with private.Listener(self.mailbox(directory), self.expected):
+                        self.assertEqual(result.result(timeout=3), expected)
+            self.assertEqual((directory / 'parallel-file').stat().st_mode & 0o777, expected)
+
+    def test_replacement_after_bind_is_preserved_without_any_foreign_mode_change(self):
+        original = private._bind_private
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            path = directory / private.NAME
+            identity = []
+            def replaced(stream, selected):
+                created = original(stream, selected)
+                foreign = directory / 'foreign-object'
+                descriptor = os.open(foreign, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+                try:
+                    os.fchmod(descriptor, 0o640)
+                    os.write(descriptor, b'foreign fixture object')
+                finally:
+                    os.close(descriptor)
+                os.replace(foreign, path)
+                identity.append(private._file(path.lstat()))
+                return created
+            with patch.object(private, '_bind_private', side_effect=replaced), \
+                    patch.object(Path, 'chmod', side_effect=AssertionError('pathname chmod forbidden')):
+                with self.assertRaises(ValueError):
+                    with private.Listener(self.mailbox(directory), self.expected):
+                        pass
+            self.assertEqual(private._file(path.lstat()), identity[0])
+            self.assertEqual(path.read_bytes(), b'foreign fixture object')
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+
+    def test_refused_filesystem_unshare_never_changes_umask_or_binds_a_socket(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            with patch.object(private.os, 'unshare', side_effect=PermissionError(errno.EPERM, 'fixture denied'), create=True), \
+                    patch.object(private.os, 'umask', side_effect=AssertionError('global umask forbidden')):
+                with self.assertRaises(OSError) as failure:
+                    with private.Listener(self.mailbox(directory), self.expected):
+                        pass
+            self.assertEqual(failure.exception.errno, errno.EPERM)
+            self.assertEqual(list(directory.iterdir()), [])

@@ -3,14 +3,17 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import os
+import errno
 import socket
 import stat
 import struct
 import time
+import threading
 
 from ..installed_cases.app import process_identity
 from . import password_wire, protocol
 
+# The campaign owns this QA UID; hostile controllers of that same UID are outside this fixture boundary.
 NAME = 'app-password.sock'
 
 
@@ -32,6 +35,44 @@ def peer(stream, expected):
             or process_identity(pid) != actual):
         raise ValueError('private fixture peer changed its credentials or birth identity')
     return expected
+
+
+def _bind_private(stream, path):
+    # CLONE_FS gives only this short-lived thread a private umask/cwd/root.
+    # The case's other threads must never observe a temporary process umask.
+    result, failure = [], []
+    def create():
+        try:
+            unshare, flag = getattr(os, 'unshare', None), getattr(os, 'CLONE_FS', None)
+            if unshare is None or flag is None:
+                raise OSError(errno.ENOSYS, 'private fixture filesystem isolation unavailable')
+            unshare(flag)
+            previous = os.umask(0o177)
+            try:
+                stream.bind(str(path))
+                info = path.lstat()
+                if (not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid()
+                        or stat.S_IMODE(info.st_mode) != 0o600):
+                    raise ValueError('private fixture socket was not created with its fixed mode')
+                result.append(info)
+            finally:
+                os.umask(previous)
+        except BaseException as error:
+            failure.append(error)
+    worker = threading.Thread(target=create, name='private-fixture-bind', daemon=True)
+    worker.start()
+    worker.join(3)
+    if worker.is_alive():
+        stream.close()
+        raise OSError(errno.ETIMEDOUT, 'private fixture socket creation did not settle')
+    if failure:
+        error = failure[0]
+        if isinstance(error, OSError):
+            raise OSError(error.errno, 'private fixture socket creation unavailable') from None
+        raise ValueError('private fixture socket creation refused') from None
+    if len(result) != 1:
+        raise ValueError('private fixture socket creation omitted its identity')
+    return result[0]
 
 
 class Channel:
@@ -109,10 +150,7 @@ class Listener:
             if self.directory != _file(os.fstat(self.directory_fd))[:4]:
                 raise ValueError('private fixture directory changed before socket creation')
             # bind refuses an existing endpoint; no stale or public socket is reused.
-            self.stream.bind(str(self.path))
-            self.created = _file(self.path.lstat())
-            self.path.chmod(0o600)
-            self.created = _file(self.path.lstat())
+            self.created = _file(_bind_private(self.stream, self.path))
             self.check()
             self.stream.listen(1)
             return self
