@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -211,5 +212,41 @@ func TestUpgradeRefusesAFullVolumeWithoutTouchingTheStore(t *testing.T) {
 	testutil.FailErr(t, "read refused bytes", err)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("refused upgrade changed source bytes")
+	}
+}
+
+func TestUpgradeOperationalFailurePreservesSource(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		cause  error
+		reason RecoveryReason
+	}{
+		{"permission", os.ErrPermission, RecoveryReasonStorageUnavailable},
+		{"io", syscall.EIO, RecoveryReasonStorageUnavailable},
+		{"full", syscall.ENOSPC, RecoveryReasonInsufficientSpace},
+		{"quota", syscall.EDQUOT, RecoveryReasonInsufficientSpace},
+		{"canceled", context.Canceled, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path, registry, _ := upgradeFixture(t)
+			before, err := os.ReadFile(path)
+			testutil.FailErr(t, "read source before failed capture", err)
+			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+				return fmt.Errorf("capture: %w", test.cause)
+			}}, false, registry)
+			var failure *StoreIncompatibleError
+			if test.reason == "" {
+				if !errors.Is(err, test.cause) || errors.As(err, &failure) {
+					t.Fatalf("cancellation = %v, want cancellation without recovery diagnosis", err)
+				}
+			} else if !errors.As(err, &failure) || failure.Reason != test.reason {
+				t.Fatalf("capture failure = %v, want %s", err, test.reason)
+			}
+			after, err := os.ReadFile(path)
+			testutil.FailErr(t, "read source after failed capture", err)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("failed recovery capture changed source bytes")
+			}
+		})
 	}
 }

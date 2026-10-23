@@ -8,10 +8,9 @@ type RecoveryReason string
 const (
 	RecoveryReasonIntegrityFailed RecoveryReason = "integrity_failed"
 	RecoveryReasonSchemaMismatch  RecoveryReason = "schema_mismatch"
-	// RecoveryReasonInsufficientSpace means the volume cannot hold an upgrade
-	// and its recovery point; the store is untouched and serves again once
-	// space is freed.
-	RecoveryReasonInsufficientSpace RecoveryReason = "insufficient_space"
+	// RecoveryReasonInsufficientSpace reports a capacity refusal or exhausted storage.
+	RecoveryReasonInsufficientSpace  RecoveryReason = "insufficient_space"
+	RecoveryReasonStorageUnavailable RecoveryReason = "storage_unavailable"
 )
 
 // StoreIncompatibleError describes a store this build cannot serve.
@@ -19,7 +18,7 @@ type StoreIncompatibleError struct {
 	Reason             RecoveryReason
 	StoreSchemaVersion int
 	Detail             string
-	// Space is set for RecoveryReasonInsufficientSpace.
+	// Space is set when a preflight estimate is available.
 	Space *InsufficientSpaceError
 }
 

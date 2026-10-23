@@ -52,6 +52,8 @@ export type ClientNoticeKind =
   | "store_incompatible_schema_no_snapshot"
   | "store_incompatible_snapshot_incompatible"
   | "store_insufficient_space"
+  | "store_storage_full"
+  | "store_storage_unavailable"
   | "transcript_row_gone"
   | "unexpected_client_error"
   | "update_available"
@@ -255,6 +257,18 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Not enough free space to update",
     message: "Updating your data safely needs about {needed} free on this disk, and {available} is free. Your data has not been changed. Free up space, then try again.",
     suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_full: {
+    title: "Not enough free space",
+    message: "Painted Wolf Code could not finish writing its data because storage is full. Free up space on that disk, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_unavailable: {
+    title: "Your data could not be opened",
+    message: "Painted Wolf Code cannot access its stored data. Check that its storage location is available and accessible, then try again.",
+    suggestedAction: "The storage location is still unavailable. Check access to it, then try again.",
     scope: "app",
   },
   transcript_row_gone: {

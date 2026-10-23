@@ -244,10 +244,13 @@ function storeIncompatibleCopy(
     : CLIENT_NOTICES.store_incompatible_integrity_no_snapshot;
 }
 
-// A full disk leaves the store untouched, so it offers a retry and never a
-// restore or a fresh start.
-function insufficientSpaceCriticalStop(health: HealthResponse): CriticalStopSpec {
-  const copy = CLIENT_NOTICES.store_insufficient_space;
+// Operational failures offer retry without implying that history is damaged.
+function storageUnavailableCriticalStop(health: HealthResponse): CriticalStopSpec {
+  const copy = health.recovery_reason === "storage_unavailable"
+    ? CLIENT_NOTICES.store_storage_unavailable
+    : health.recovery_space_needed_bytes === undefined
+      ? CLIENT_NOTICES.store_storage_full
+      : CLIENT_NOTICES.store_insufficient_space;
   return {
     code: STORE_INCOMPATIBLE_STOP_CODE,
     title: copy.title,
@@ -263,8 +266,8 @@ function insufficientSpaceCriticalStop(health: HealthResponse): CriticalStopSpec
 export function storeIncompatibleCriticalStop(
   health: HealthResponse,
 ): CriticalStopSpec {
-  if (health.recovery_reason === "insufficient_space") {
-    return insufficientSpaceCriticalStop(health);
+  if (health.recovery_reason === "insufficient_space" || health.recovery_reason === "storage_unavailable") {
+    return storageUnavailableCriticalStop(health);
   }
   const at = health.recovery_snapshot_at?.trim();
   const time = at ? formatRecoverySnapshotAt(at) : undefined;

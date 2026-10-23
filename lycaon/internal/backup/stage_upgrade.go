@@ -17,16 +17,19 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 		return &InvalidError{Detail: "store.db is unreadable"}
 	}
 	plan, err := db.PlanUpgrade(ctx, source)
-	if err == nil && plan.Required() {
-		err = preflightUpgrade(ctx, CreateOpts{ConfigDir: root, DBPath: path, SQLDB: source}, plan, false)
-	}
-	_ = source.Close()
+	defer func() { _ = source.Close() }()
 	if err != nil {
 		return &BaselineMismatchError{ArchiveVersion: manifest.SchemaUserVersion, BinaryVersion: db.SchemaVersion, ShapeDetail: err.Error()}
+	}
+	if plan.Required() {
+		if err := preflightUpgrade(ctx, CreateOpts{ConfigDir: root, DBPath: path, SQLDB: source}, plan, false); err != nil {
+			return err
+		}
 	}
 	if plan.Source.Revision != manifest.SchemaUserVersion || plan.Source.Shape != manifest.SchemaShapeDigest {
 		return &InvalidError{Detail: "store.db does not match its archive schema identity"}
 	}
+	_ = source.Close()
 	if err := db.UpgradeStaged(ctx, path); err != nil {
 		return fmt.Errorf("upgrade extracted history: %w", err)
 	}

@@ -418,6 +418,20 @@ describe("store incompatible critical stop", () => {
     expect(stop.retryFailed).toBe(CLIENT_NOTICES.store_insufficient_space.suggestedAction);
   });
 
+  it.each(["storage_unavailable", "insufficient_space"] as const)(
+    "offers retry without invented measurements for %s",
+    (reason) => {
+      const stop = storeIncompatibleCriticalStop({ ...recoveryHealth, recovery_reason: reason });
+      expect(stop.recovery).toBe("retry_upgrade");
+      expect(stop.message).not.toContain("{");
+      expect(stop.message).not.toContain("0 B");
+      expect(stop.message).not.toContain("has not been changed");
+      expect(stop.title).toBe(reason === "storage_unavailable"
+        ? CLIENT_NOTICES.store_storage_unavailable.title
+        : CLIENT_NOTICES.store_storage_full.title);
+    },
+  );
+
   it("keeps recovery copy out of the model source", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, "critical-stop-model.ts"), "utf8");

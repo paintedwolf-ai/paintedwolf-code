@@ -108,7 +108,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	}
 	reader, err := openReader(ctx, path)
 	if err != nil {
-		return classifyStoreOpenFailure(err)
+		return ClassifyStoreFailure(err)
 	}
 	defer func() { _ = reader.Close() }()
 	plan, err := planUpgrade(ctx, reader, registry)
@@ -129,25 +129,18 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			hooks.Progress(migrations.Snapshotting)
 		}
 		if err := hooks.Before(ctx, reader, plan); err != nil {
-			var space *InsufficientSpaceError
-			if errors.As(err, &space) {
-				return &StoreIncompatibleError{
-					Reason: RecoveryReasonInsufficientSpace, StoreSchemaVersion: plan.Source.Revision,
-					Detail: space.Error(), Space: space,
-				}
-			}
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, fmt.Sprintf("capture upgrade recovery: %v", err))
+			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Source.Revision, "capture upgrade recovery")
 		}
 	}
 	if err := reader.Close(); err != nil {
 		return err
 	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
-		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
+		return upgradeOperationError(err, RecoveryReasonSchemaMismatch, plan.Source.Revision, "migrate store")
 	}
 	if hooks.After != nil {
 		if err := hooks.After(ctx, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Target.Revision, fmt.Sprintf("record upgrade commit: %v", err))
+			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Target.Revision, "record upgrade commit")
 		}
 	}
 	return nil
@@ -160,4 +153,20 @@ func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, prog
 	}
 	defer func() { _ = writer.Close() }()
 	return registry.Execute(ctx, writer, plan, inspectSchema, progress)
+}
+
+func upgradeOperationError(err error, fallback RecoveryReason, revision int, operation string) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	classified := ClassifyStoreFailure(err)
+	var failure *StoreIncompatibleError
+	if errors.As(classified, &failure) {
+		result := *failure
+		if result.StoreSchemaVersion == 0 {
+			result.StoreSchemaVersion = revision
+		}
+		return &result
+	}
+	return storeIncompatible(fallback, revision, fmt.Sprintf("%s: %v", operation, err))
 }

@@ -388,10 +388,10 @@ describe("createCriticalStop", () => {
     });
   });
 
-  it("retries a refused upgrade after space is freed, and never offers a fresh start", async () => {
+  it.each(["insufficient_space", "storage_unavailable"] as const)("retries %s without offering a fresh start", async (reason) => {
     noteHealthResponse({
       ...recoveryHealth,
-      recovery_reason: "insufficient_space",
+      recovery_reason: reason,
       recovery_space_needed_bytes: 3 * 1024 ** 3,
       recovery_space_available_bytes: 1024 ** 3,
     });

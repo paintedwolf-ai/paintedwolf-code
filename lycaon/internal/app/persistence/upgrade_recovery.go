@@ -57,11 +57,7 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 	}
 	if err := b.prepareUpgradeReadiness(ctx, database, filepath.Dir(path)); err != nil {
 		_ = database.Shutdown(ctx)
-		if errors.Is(err, db.ErrStoreIncompatible) {
-			return nil, err
-		}
-		return nil, errors.Join(&db.StoreIncompatibleError{Reason: db.RecoveryReasonIntegrityFailed,
-			StoreSchemaVersion: db.SchemaVersion, Detail: "Could not preserve upgrade recovery state before startup."}, err)
+		return nil, recoveryStateFailure(err, db.SchemaVersion, "Could not preserve upgrade recovery state before startup.")
 	}
 	return database, nil
 }
@@ -113,13 +109,19 @@ func (b *Runtime) captureVersionRecovery(ctx context.Context, path string, hooks
 	}
 	hooks.Progress(migrations.Snapshotting)
 	if err := hooks.Before(ctx, source, plan); err != nil {
-		var space *db.InsufficientSpaceError
-		if errors.As(err, &space) {
-			return &db.StoreIncompatibleError{Reason: db.RecoveryReasonInsufficientSpace,
-				StoreSchemaVersion: plan.Source.Revision, Detail: space.Error(), Space: space}
-		}
-		return errors.Join(&db.StoreIncompatibleError{Reason: db.RecoveryReasonIntegrityFailed,
-			StoreSchemaVersion: plan.Source.Revision, Detail: "Could not preserve history before the application update."}, err)
+		return recoveryStateFailure(err, plan.Source.Revision, "Could not preserve history before the application update.")
 	}
 	return nil
+}
+
+func recoveryStateFailure(err error, revision int, detail string) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	classified := db.ClassifyStoreFailure(err)
+	if errors.Is(classified, db.ErrStoreIncompatible) {
+		return classified
+	}
+	return errors.Join(&db.StoreIncompatibleError{Reason: db.RecoveryReasonStorageUnavailable,
+		StoreSchemaVersion: revision, Detail: detail}, err)
 }

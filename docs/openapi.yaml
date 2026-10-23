@@ -14528,7 +14528,8 @@ components:
             - integrity_failed
             - schema_mismatch
             - insufficient_space
-          description: Closed reason the store cannot be served. Present when status is recovery. insufficient_space leaves the store untouched; it serves again once space is freed and the engine restarts.
+            - storage_unavailable
+          description: Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
         recovery_detail:
           type: string
           description: Human-readable sentence matching the recovery reason. Present when status is recovery.
@@ -14539,12 +14540,12 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Free bytes the upgrade and its recovery point need. Present when recovery_reason is insufficient_space.
+          description: Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
         recovery_space_available_bytes:
           type: integer
           format: int64
           minimum: 0
-          description: Free bytes the volume held when the upgrade was refused. Present when recovery_reason is insufficient_space.
+          description: Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
         recovery_snapshot_at:
           type: string
           format: date-time

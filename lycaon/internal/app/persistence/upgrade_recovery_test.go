@@ -31,8 +31,9 @@ func TestUnwritableRecoveryMetadataKeepsRecoveryRoutesEligible(t *testing.T) {
 		_ = database.Close()
 		t.Fatal("store exposed despite recovery metadata failure")
 	}
-	if !errors.Is(err, db.ErrStoreIncompatible) {
-		t.Fatalf("startup error=%v; want recovery-eligible refusal", err)
+	var unavailable *db.StoreIncompatibleError
+	if !errors.As(err, &unavailable) || unavailable.Reason != db.RecoveryReasonStorageUnavailable {
+		t.Fatalf("startup error=%v; want unavailable storage without a corruption diagnosis", err)
 	}
 }
 
@@ -133,5 +134,14 @@ func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
 	var refused *db.StoreIncompatibleError
 	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonInsufficientSpace || refused.Space != space {
 		t.Fatalf("capture error = %v, want an insufficient-space refusal", err)
+	}
+	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return os.ErrPermission }
+	err = builder.captureVersionRecovery(t.Context(), dbPath, hooks)
+	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonStorageUnavailable {
+		t.Fatalf("permission error = %v, want unavailable storage", err)
+	}
+	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return context.Canceled }
+	if err = builder.captureVersionRecovery(t.Context(), dbPath, hooks); !errors.Is(err, context.Canceled) {
+		t.Fatalf("capture cancellation = %v, want cancellation", err)
 	}
 }
