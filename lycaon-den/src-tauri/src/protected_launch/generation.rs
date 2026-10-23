@@ -212,4 +212,5 @@ pub(super) fn read(frame_fd: i32, broker_fd: i32) -> Result<Generation, Generati
 
 #[cfg(test)]
 #[path = "generation/tests.rs"]
+#[path = "generation/tests.rs"]
 mod tests;
