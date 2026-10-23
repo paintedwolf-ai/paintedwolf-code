@@ -75,7 +75,7 @@ jobs:
         env:
           REHEARSAL_CASE: ${{ inputs.rehearsal_case }}
         run: |
-          ./task upgrade:rehearse -- --bundle --case "${REHEARSAL_CASE}" \
+          ./task upgrade:rehearse -- --bundle --recovery-probe --case "${REHEARSAL_CASE}" \
             --fixtures "${RUNNER_TEMP}/bundle-upgrade-fixtures" \
             --evidence "${RUNNER_TEMP}/bundle-upgrade-evidence"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

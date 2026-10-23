@@ -201,3 +201,27 @@ def retain_state(config, records, evidence):
     for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1", "desktop-launch.log"):
         if (config / name).is_file():
             shutil.copyfile(config / name, evidence / name)
+
+
+def probe_committed_recovery(case, plan, root, work, config, evidence):
+    """Diagnose next-launch recovery without changing the failed upgrade result."""
+    app, = work.glob("*.app")
+    app = app.resolve()
+    records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
+    transaction = read_json(records / "transaction.json")
+    if not transaction or transaction.get("phase") != "committed":
+        return {"result": "not_applicable", "reason": "no_committed_transaction"}
+    evidence.mkdir()
+    installation = Installation(app, config)
+    try:
+        installation.launch()
+        version = plan["candidate"]["version"]
+        observation = installation.healthy(version)
+        wait_for("next-launch recovery did not confirm the installed candidate",
+                 lambda: confirmed(read_json(records / "transaction.json"), version, app))
+        verify_semantics(config, root / "fixtures" / case["source_version"], observation, evidence)
+        return {"result": "passed", "trigger": "explicit_next_launch", "health": observation["health"]}
+    except Exception as error:
+        return {"result": "failed", "error": str(error)}
+    finally:
+        finish_case(installation, config, records, evidence, sys.exc_info()[1])
