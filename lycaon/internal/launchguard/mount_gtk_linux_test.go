@@ -5,12 +5,14 @@ package launchguard
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -90,6 +92,7 @@ func TestMountGTKSettingsModuleIsRefusedWhileChooserReadsFUSE(t *testing.T) {
 			t.Fatalf("FUSE GTK module executed in protected view: %v", err)
 		}
 	}
+	assertGTKVolumeHold(t, fixture.bootstrap, environment, payload)
 }
 
 // Failed concurrent starts supply no positive GUI evidence. At least one cycle
@@ -153,6 +156,7 @@ func buildGTKVolumeFixture(t *testing.T) (string, string) {
 		t.Fatalf("build marked native GTK module: %v\n%s", err, output)
 	}
 	testutil.FailErr(t, "make caller build ancestry traversable for fixture installation", os.Chmod(directory, 0755))
+	retainGTKVolumeComponent(t, desktop, module)
 	return desktop, module
 }
 
@@ -178,4 +182,117 @@ func startFixtureXvfb(t *testing.T) string {
 	number, err := strconv.ParseUint(strings.TrimSpace(text), 10, 16)
 	testutil.FailErr(t, "decode own X display number", err)
 	return fmt.Sprintf(":%d", number)
+}
+
+type gtkHeldFile struct {
+	Held   bool   `json:"held"`
+	PID    int    `json:"pid"`
+	FD     int    `json:"fd"`
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
+}
+
+func assertGTKVolumeHold(t *testing.T, bootstrap string, environment []string, payload string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, bootstrap, "--protected-hold", payload)
+	command.Env = environment
+	input, err := command.StdinPipe()
+	testutil.FailErr(t, "prepare held-file control", err)
+	output, err := command.StdoutPipe()
+	testutil.FailErr(t, "prepare held-file report", err)
+	diagnostic, err := os.Create(filepath.Join(t.TempDir(), "gtk-held-stderr.log"))
+	testutil.FailErr(t, "retain held-file diagnostics", err)
+	defer diagnostic.Close()
+	command.Stderr = diagnostic
+	diagnostics := func() string { raw, _ := os.ReadFile(diagnostic.Name()); return string(raw) }
+	testutil.FailErr(t, "start selected-generation GTK held-file lane", command.Start())
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	waited := false
+	defer func() {
+		_ = input.Close()
+		if !waited {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				cancel()
+				<-done
+			}
+		}
+	}()
+	testutil.FailErr(t, "bound held-file report reads independently of child exit", output.SetReadDeadline(time.Now().Add(10*time.Second)))
+	reader := bufio.NewReader(output)
+	read := func(prefix string, target any) {
+		t.Helper()
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read GTK held-file report: %v stderr=%s", err, diagnostics())
+		}
+		raw, ok := strings.CutPrefix(line, prefix)
+		if !ok {
+			t.Fatalf("unexpected GTK held-file protocol %q", line)
+		}
+		testutil.FailErr(t, "decode GTK held-file record", json.Unmarshal([]byte(raw), target))
+	}
+	var view gtkVolumeFacts
+	read("PWGTK01 ", &view)
+	if !view.Initialized || !view.ChooserRead || !view.EngineRead {
+		t.Fatalf("held-file lane omitted actual GUI/read proof: %+v", view)
+	}
+	var held gtkHeldFile
+	read("PWGTKHOLD01 ", &held)
+	if !held.Held || held.PID <= 1 || held.FD < 0 || held.Inode == 0 {
+		t.Fatalf("GTK did not retain actual regular-file descriptor: %+v", held)
+	}
+	_, err = input.Write([]byte{'s'})
+	testutil.FailErr(t, "query still-open descriptor", err)
+	var again gtkHeldFile
+	read("PWGTKHOLD01 ", &again)
+	if again != held {
+		t.Fatalf("held descriptor changed before release: %+v -> %+v", held, again)
+	}
+	_, err = input.Write([]byte{'c'})
+	testutil.FailErr(t, "release only the selected held descriptor", err)
+	var closed gtkHeldFile
+	read("PWGTKHOLD01 ", &closed)
+	if closed.Held || closed.FD != -1 || closed.PID != held.PID || closed.Inode != held.Inode || closed.Device != held.Device {
+		t.Fatalf("GTK held descriptor was not explicitly released: %+v", closed)
+	}
+	_, err = input.Write([]byte{'q'})
+	testutil.FailErr(t, "end held-file component", err)
+	err = <-done
+	waited = true
+	if err != nil {
+		t.Fatalf("GTK held-file lane did not settle: %v stderr=%s", err, diagnostics())
+	}
+}
+
+// Preserve compiled component applications for later owned-device manual probes;
+// they are not managed test binaries and carry no installed-qualification claim.
+func retainGTKVolumeComponent(t *testing.T, desktop, module string) {
+	t.Helper()
+	root := os.Getenv("PW_TEST_ARTIFACT_ROOT")
+	if root == "" {
+		root = os.Getenv("PW_ARTIFACT_ROOT")
+	}
+	if root == "" {
+		t.Fatal("managed artifact root unavailable for GTK component retention")
+	}
+	root = filepath.Join(root, "manual-components")
+	testutil.FailErr(t, "prepare component artifact owner", os.MkdirAll(root, 0700))
+	directory, err := os.MkdirTemp(root, "gtk-volume-")
+	testutil.FailErr(t, "create distinct retained component", err)
+	files := map[string]string{}
+	for name, source := range map[string]string{"gtk-volume-desktop": desktop, "module.so": module} {
+		raw, err := os.ReadFile(source)
+		testutil.FailErr(t, "read compiled component", err)
+		testutil.FailErr(t, "retain compiled component", os.WriteFile(filepath.Join(directory, name), raw, 0555))
+		files[name] = fmt.Sprintf("%x", sha256.Sum256(raw))
+	}
+	raw, err := json.MarshalIndent(map[string]any{"format_version": 1, "architecture": runtime.GOARCH, "files_sha256": files, "scope": "compiled component preparation; not installed qualification"}, "", "  ")
+	testutil.FailErr(t, "encode component provenance", err)
+	testutil.FailErr(t, "retain component provenance", os.WriteFile(filepath.Join(directory, "component.json"), append(raw, '\n'), 0600))
+	t.Logf("retained GTK volume component: %s", directory)
 }
