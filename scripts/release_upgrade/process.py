@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import time
 import urllib.request
@@ -41,8 +42,10 @@ class Installation:
         self.executable = app / "Contents/MacOS" / info["CFBundleExecutable"]
         self.owned = {}
         self.last_observation = {"state": "not_observed"}
+        self.launched_at = time.time()
 
     def launch(self):
+        self.launched_at = time.time()
         subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
                         "--stdout", str(self.config / "desktop-launch.log"),
                         "--stderr", str(self.config / "desktop-launch.log"), str(self.app)], check=True, timeout=30)
@@ -79,6 +82,8 @@ class Installation:
         if not isinstance(daemon, dict) or type(daemon.get("pid")) is not int or type(daemon.get("port")) is not int:
             return None
         pid, port = daemon["pid"], daemon["port"]
+        self.last_observation["live_owned"] = {owned_pid: {"identity": identity, "kind": kind}
+            for owned_pid, (identity, kind) in self.owned.items() if process_identity(owned_pid) == identity}
         self.last_observation.update(engine_pid=pid, port=port, state="engine_not_owned")
         if pid <= 1 or not 1 <= port <= 65535:
             raise ValueError("invalid rehearsal daemon identity")
@@ -115,6 +120,26 @@ class Installation:
             return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
         except TimeoutError as error:
             raise TimeoutError(f"{error}; last observation: {json.dumps(self.last_observation, sort_keys=True)}") from error
+
+    def retain_crashes(self, evidence):
+        paths = {str(self.executable), *(str(path) for path in self.config.glob("updates/installations/*/staging/*/update-helper"))}
+        retained = 0
+        for root in (Path.home() / "Library/Logs/DiagnosticReports", Path("/Library/Logs/DiagnosticReports")):
+            for path in root.glob("*.ips"):
+                if retained >= 10:
+                    return
+                try:
+                    stat = path.stat()
+                    if path.is_symlink() or stat.st_mtime < self.launched_at or stat.st_size > 8 * 1024 * 1024:
+                        continue
+                    raw = path.read_text()
+                    report = json.loads(raw.split("\n", 1)[1])
+                    if report.get("procPath") not in paths:
+                        continue
+                    shutil.copyfile(path, evidence / f"native-crash-{retained}.ips")
+                    retained += 1
+                except (OSError, ValueError, IndexError):
+                    continue
 
     def sample_startup(self, evidence):
         """Capture blocked native stacks before retiring only this installation's processes."""

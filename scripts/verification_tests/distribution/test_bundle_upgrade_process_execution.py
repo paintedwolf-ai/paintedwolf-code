@@ -132,3 +132,22 @@ class ProcessTests(unittest.TestCase):
             self.assertEqual(run.call_count, 1)
             self.assertEqual(run.call_args.args[0][:4], ["/usr/bin/sample", "10", "1", "1"])
             self.assertTrue((Path(directory) / "startup-process-10-status.json").exists())
+
+
+    def test_native_crashes_require_this_installation_and_current_launch(self):
+        import tempfile
+        import json
+        installation = self.installation()
+        installation.launched_at = 0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "Library/Logs/DiagnosticReports"
+            reports.mkdir(parents=True)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            (reports / "owned.ips").write_text('{}\n' + json.dumps({"procPath": str(installation.executable), "pid": 10}))
+            (reports / "foreign.ips").write_text('{}\n' + json.dumps({"procPath": "/foreign/app", "pid": 11}))
+            with patch.object(Path, "home", return_value=root):
+                installation.retain_crashes(evidence)
+            self.assertEqual(len(list(evidence.glob("native-crash-*.ips"))), 1)
+            self.assertEqual(json.loads((evidence / "native-crash-0.ips").read_text().split("\n", 1)[1])["pid"], 10)
