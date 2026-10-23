@@ -136,6 +136,14 @@ class ResponseBarrier:
         self.require_held()
         self.released.set()
 
+    def await_response_written(self, timeout=10):
+        if not self.done.wait(timeout):
+            raise CaseUnavailable('fixed-provider-response-was-not-written-before-its-deadline')
+        row = self.snapshot()
+        if row is None or row['state'] != 'released' or row['response_written'] is not True:
+            raise CaseUnavailable('fixed-provider-request-ended-without-its-controlled-response')
+        return row
+
     def await_peer_cancellation(self, timeout=10):
         if not self.done.wait(timeout):
             raise CaseUnavailable('fixed-provider-request-did-not-observe-peer-cancellation')

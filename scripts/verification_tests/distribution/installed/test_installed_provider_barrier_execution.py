@@ -62,6 +62,7 @@ class BarrierTests(unittest.TestCase):
         row = barrier.snapshot()
         self.assertEqual(row['request_id'], before['request_id'])
         self.assertTrue(row['response_written'])
+        self.assertEqual(barrier.await_response_written()['request_id'], before['request_id'])
         self.assertEqual(results, [True])
         with self.assertRaises(CaseUnavailable):
             barrier.await_peer_cancellation()
@@ -98,8 +99,7 @@ class BarrierTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
             self.assertEqual(errors, [])
             self.assertEqual(results[0]['choices'][0]['finish_reason'], 'tool_calls')
-            self.assertTrue(barrier.done.wait(2))
-            self.assertTrue(barrier.snapshot()['response_written'])
+            self.assertTrue(barrier.await_response_written()['response_written'])
 
     def test_invalid_deadlines_and_uncaptured_holds_refuse(self):
         for value in (0, -1, 181, True, float('nan')):
