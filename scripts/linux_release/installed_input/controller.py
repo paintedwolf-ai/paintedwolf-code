@@ -170,6 +170,7 @@ class Bridge:
         self.ssh_command, self.output = ssh_command, output
         self.stop = threading.Event()
         self.error, self.bytes = None, 0
+        self.private_session = None
 
     def __enter__(self):
         self.lease = open_lease(Path(self.selected['lease']), execution_nonce=self.execution['execution_nonce'],
@@ -190,11 +191,15 @@ class Bridge:
             if not isinstance(selected, dict) or set(selected) != {'state', 'actor'} or selected['state'] != 'password-fixture-actor':
                 raise ValueError('private SSH transport omitted its password fixture actor identity')
             self.fixture_actor = password_wire.actor(selected['actor'])
+            from .password_exchange import Session
+            self.private_session = Session(self.actor, self.fixture_actor, self.execution, self.output)
             self.thread = threading.Thread(target=self._run, name='fixed-native-input', daemon=True)
             self.thread.start()
         except BaseException:
             try:
                 self._close_transport()
+                if self.private_session is not None:
+                    self.private_session.close()
             finally:
                 self.lease.__exit__(None, None, None)
             raise
@@ -230,6 +235,14 @@ class Bridge:
                 if row in ({'state': 'waiting'}, {'state': 'acknowledged'}):
                     self.stop.wait(0.025)
                     continue
+                if set(row) == {'state', 'request'} and row['state'] == 'private-request':
+                    pipe = Pipe(self.process, self.selector, time.monotonic() + password_wire.MAX_SECONDS)
+                    if not self.private_session.perform(row['request'], pipe):
+                        # Construct this outside the caught private exception's lifetime.
+                        self.error = ValueError('private fixture exchange failed; retained aggregate requires review')
+                        self.stop.set()
+                        return
+                    continue
                 if set(row) != {'state', 'request'} or row['state'] != 'request':
                     raise ValueError('fixed native input guest returned an unknown response')
                 pending = protocol.request(row['request'], self.execution)
@@ -258,9 +271,18 @@ class Bridge:
 
     def __exit__(self, *error):
         self.stop.set()
-        self.thread.join(6)
-        self._close_transport()
-        self.thread.join(1)
-        self.lease.__exit__(*error)
+        self.actor.failed = True
+        try:
+            self.thread.join(6)
+            self._close_transport()
+            self.thread.join(password_wire.MAX_SECONDS + 1)
+            if self.thread.is_alive():
+                self.error = ValueError('fixed native input thread did not settle after its bounded shutdown')
+        finally:
+            try:
+                if self.private_session is not None:
+                    self.private_session.close()
+            finally:
+                self.lease.__exit__(*error)
         if not any(error):
             self.require_healthy()

@@ -2,8 +2,10 @@
 import copy
 import json
 import time
+import tempfile
+from pathlib import Path
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from linux_release.installed_input import password_actor, password_exchange, password_wire
 from verification_tests.distribution.installed import test_installed_password_actor_execution as actor_tests
@@ -92,3 +94,32 @@ class PasswordExchangeTests(unittest.TestCase):
                          {'guest_confirmed': False, 'failure_type': 'ValueError'})
         pipe.receive_fixture_value.assert_not_called()
         self.assertTrue(self.actor.failed)
+
+    def test_session_failure_retains_no_exception_arguments_or_retry_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = password_exchange.Session(self.actor, self.pending['actor'], self.pending['binding'], Path(directory))
+            pipe, _ = self.pipe()
+            pipe.line.return_value = {'state': 'private-fixture-open'}
+            with patch.object(password_exchange, 'exchange', side_effect=ValueError(self.secret)) as exchange:
+                self.assertFalse(session.perform(self.pending, pipe))
+                self.assertFalse(session.perform(self.pending, pipe))
+                exchange.assert_called_once()
+            session.close()
+            facts = [json.loads(row) for row in (Path(directory) / 'native-password-input.jsonl').read_text().splitlines()]
+            self.assertEqual(len(facts), 1)
+            self.assertNotIn(self.secret, str(facts))
+            self.assertEqual(facts[0]['failure_type'], 'ValueError')
+            self.assertFalse(facts[0]['guest_confirmed'])
+            self.assertTrue(self.actor.failed)
+            self.assertFalse(any(isinstance(value, BaseException) for value in vars(session).values()))
+
+    def test_closed_session_cannot_reopen_transport_or_deliver_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = password_exchange.Session(self.actor, self.pending['actor'], self.pending['binding'], Path(directory))
+            session.close()
+            pipe, _ = self.pipe()
+            with patch.object(password_exchange, 'exchange') as exchange:
+                self.assertFalse(session.perform(self.pending, pipe))
+                exchange.assert_not_called()
+            pipe.line.assert_not_called()
+            self.assertFalse((Path(directory) / 'native-password-input.jsonl').exists())

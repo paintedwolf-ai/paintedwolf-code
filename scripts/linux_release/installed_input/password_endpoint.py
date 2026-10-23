@@ -59,3 +59,36 @@ def relay(mailbox, pending, selected_actor, pipe):
             pipe.send_metadata(accepted)
     finally:
         value = None
+
+
+def serve(mailbox, pending, selected_actor):
+    """Only this authenticated SSH process owns these standard pipe descriptors."""
+    import selectors
+    import sys
+    from types import SimpleNamespace
+    from .password_pipe import Pipe
+    from . import protocol
+    streams, selector, succeeded = [], None, False
+    try:
+        process = SimpleNamespace(stdin=sys.stdout.buffer, stdout=sys.stdin.buffer)
+        for stream in (process.stdin, process.stdout):
+            streams.append((stream.fileno(), os.get_blocking(stream.fileno())))
+            os.set_blocking(stream.fileno(), False)
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        pipe = Pipe(process, selector, time.monotonic() + password_wire.MAX_SECONDS)
+        pipe.write(protocol.canonical({'state': 'private-fixture-open'}))
+        relay(mailbox, pending, selected_actor, pipe)
+        succeeded = True
+    except BaseException:
+        # No exception arguments or traceback frames enter the SSH error log.
+        succeeded = False
+    finally:
+        if selector is not None:
+            selector.close()
+        for descriptor, blocking in streams:
+            try:
+                os.set_blocking(descriptor, blocking)
+            except OSError:
+                succeeded = False
+    return succeeded

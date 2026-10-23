@@ -117,7 +117,7 @@ def completed(value, pending, vm_id):
                 **{key: pending[key] for key in ('actor', 'case', 'profile', 'session', 'target')},
                 'acknowledged_count': SECRET_BYTES + 1, 'completed': True, 'delivery_uncertain': False}
     if (not isinstance(value, dict) or set(value) != fields
-            or any(type(value[key]) is not type(item) or value[key] != item for key, item in expected.items())
+            or protocol.canonical({key: value[key] for key in expected}) != protocol.canonical(expected)
             or not isinstance(value['lease'], dict) or value['lease'].get('vm_id') != vm_id):
         raise ValueError('private fixture completion differs from its captured physical transaction')
     protocol.canonical(value)
