@@ -56,6 +56,8 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		digest := `"manifest_sha256":"` + os.Getenv(fixtureHash) + `"`
 		tampered := strings.Replace(mustRead(filepath.Join(dir, "launch.json")), digest, `"manifest_sha256":"`+strings.Repeat("0", 64)+`"`, 1)
 		err = os.WriteFile(filepath.Join(dir, "launch.json"), []byte(tampered), 0o644)
+	case "module-view":
+		err = verifyModuleViewIsolation(dir, os.Getenv(fixtureDesktopPIDEnv))
 	default:
 		err = fmt.Errorf("unknown fixture mode %q", mode)
 	}
@@ -63,7 +65,9 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	os.Exit(0)
+	if testing.CoverMode() == "" {
+		os.Exit(0)
+	}
 }
 
 func mustRead(path string) string {
@@ -86,6 +90,10 @@ func lockFree(path string) error {
 // installFixture runs as root: a root-owned generation holding the entry and
 // the fixture desktop, its manifest, the policy, a logical install root and a
 // setuid copy of the fixture-linked bootstrap.
+// fixtureLibraryRoot is the fixture policy's one library root. The fixture
+// binaries are static, so the root only has to exist and be root-controlled.
+const fixtureLibraryRoot = "/usr/lib"
+
 func installFixture(dir string, binaries []string) error {
 	if len(binaries) != 3 {
 		return errors.New("fixture needs bootstrap, entry and desktop binaries")
@@ -184,7 +192,7 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 	if err := os.Rename(staging, generation); err != nil {
 		return err
 	}
-	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install})
+	policy, err := json.Marshal(GenerationPolicy{Version: 1, GenerationRoot: generation, ManifestSHA256: digest, LogicalInstallRoot: install, LibraryRoots: []string{fixtureLibraryRoot}})
 	if err != nil {
 		return err
 	}
@@ -267,8 +275,18 @@ func fixtureArchitecture() string {
 func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 	t.Helper()
 	args := append([]string{"-n", "env", fixtureModeEnv + "=" + mode, fixtureDirEnv + "=" + dir}, extra...)
+	coverDir := os.Getenv("PW_GO_CHILD_COVERDIR")
+	if testing.CoverMode() != "" && coverDir != "" {
+		args = append(args, "GOCOVERDIR="+coverDir)
+	}
 	args = append(args, os.Args[0], "-test.run=^TestProtectedLaunchFixture$")
+	if testing.CoverMode() != "" && coverDir != "" {
+		args = append(args, "-test.gocoverdir="+coverDir)
+	}
 	out, err := exec.Command("sudo", args...).CombinedOutput()
+	if testing.CoverMode() != "" && coverDir != "" {
+		_ = exec.Command("sudo", "-n", "chmod", "-R", "a+rX", coverDir).Run()
+	}
 	if err != nil {
 		return fmt.Errorf("%s fixture: %w: %s", mode, err, out)
 	}

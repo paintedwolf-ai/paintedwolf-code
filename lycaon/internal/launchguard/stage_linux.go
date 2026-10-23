@@ -5,8 +5,10 @@ package launchguard
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"syscall"
 
@@ -57,6 +59,27 @@ func RunStage() error {
 	if err := rootRegular(entryImage); err != nil {
 		return err
 	}
+	// The entry and the module-view watcher start in the module view; the
+	// broker agent starts back in the launch's own mount namespace and holds
+	// the watcher's lifetime pipe until the launch ends.
+	runtime.LockOSThread()
+	leave, err := enterModuleView(spec.Generation, mounted)
+	if err != nil {
+		return err
+	}
+	watchLifetime, err := startModuleViewWatcher(frame, entryImage)
+	if err != nil {
+		_ = leave()
+		return err
+	}
+	defer func() { _ = watchLifetime.Close() }()
+	viewed, err := reopenImage(spec.Generation, mounted)
+	if err != nil {
+		_ = leave()
+		return err
+	}
+	_ = mounted.Close()
+	mounted = viewed
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -74,7 +97,11 @@ func RunStage() error {
 		SysProcAttr: attributes,
 	}
 	if err := entry.Start(); err != nil {
+		_ = leave()
 		return fmt.Errorf("start protected entry: %w", err)
+	}
+	if err := leave(); err != nil {
+		return fmt.Errorf("leave module view: %w", err)
 	}
 	null, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
 	if err != nil {
@@ -91,7 +118,7 @@ func RunStage() error {
 		Stdin:      null,
 		Stdout:     null,
 		Stderr:     null,
-		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), entryImage},
+		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), watchLifetime, entryImage},
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid: true,
 		},
@@ -102,5 +129,60 @@ func RunStage() error {
 	return nil
 }
 
+// startModuleViewWatcher starts the module-view mount watcher in the current
+// mount namespace and waits until its baseline scan is armed.
+func startModuleViewWatcher(frame, entryImage *os.File) (*os.File, error) {
+	watchR, watchW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	readyR, readyW, err := os.Pipe()
+	if err != nil {
+		_ = watchR.Close()
+		_ = watchW.Close()
+		return nil, err
+	}
+	watcher := &exec.Cmd{
+		Path:       "/proc/self/fd/" + strconv.Itoa(watcherSelfFD),
+		Args:       []string{"pw-launch-entry", BrokerAgentArgument},
+		Env:        []string{},
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{frame, watchR, readyW, entryImage},
+		SysProcAttr: &syscall.SysProcAttr{
+			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+			UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+			GidMappingsEnableSetgroups: true,
+		},
+	}
+	err = watcher.Start()
+	_ = watchR.Close()
+	_ = readyW.Close()
+	if err != nil {
+		_ = readyR.Close()
+		_ = watchW.Close()
+		return nil, fmt.Errorf("start module view watcher: %w", err)
+	}
+	var ready [1]byte
+	_, err = io.ReadFull(readyR, ready[:])
+	_ = readyR.Close()
+	if err != nil {
+		_ = watchW.Close()
+		return nil, fmt.Errorf("module view watcher did not become ready: %w", err)
+	}
+	viewNS, err := os.Open(fmt.Sprintf("/proc/%d/ns/mnt", watcher.Process.Pid))
+	if err != nil {
+		_ = watchW.Close()
+		return nil, fmt.Errorf("open module view mount namespace: %w", err)
+	}
+	err = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
+	_ = viewNS.Close()
+	if err != nil {
+		_ = watchW.Close()
+		return nil, fmt.Errorf("enter module view mount namespace: %w", err)
+	}
+	return watchW, nil
+}
+
 // agentSelfFD is where the broker agent's image sits for its execution.
-const agentSelfFD = agentBrokerFD + 1
+const agentSelfFD = agentWatchFD + 1
