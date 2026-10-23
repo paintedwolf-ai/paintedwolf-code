@@ -38,13 +38,24 @@ func restrictExecution(policy GenerationPolicy, image *os.File) error {
 		return errors.New("protected launch requires Landlock to restrict execution")
 	}
 	attr := unix.LandlockRulesetAttr{Handled_access_fs: unix.LANDLOCK_ACCESS_FS_EXECUTE}
+	if abi >= 2 {
+		// REFER is implicitly denied from ABI 2, even when omitted here.
+		// Permit data reparenting; Landlock still refuses moves that would
+		// gain EXECUTE at the destination.
+		attr.Handled_access_fs |= unix.LANDLOCK_ACCESS_FS_REFER
+	}
 	ruleset, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), unsafe.Offsetof(attr.Handled_access_net), 0)
 	if errno != 0 {
 		return fmt.Errorf("execution ruleset: %w", errno)
 	}
 	defer func() { _ = unix.Close(int(ruleset)) }()
+	if abi >= 2 {
+		if err := allowExecutionRule(int(ruleset), "/", unix.LANDLOCK_ACCESS_FS_REFER); err != nil {
+			return err
+		}
+	}
 	for _, path := range paths {
-		if err := allowExecution(int(ruleset), path); err != nil {
+		if err := allowExecutionRule(int(ruleset), path, unix.LANDLOCK_ACCESS_FS_EXECUTE); err != nil {
 			return err
 		}
 	}
@@ -54,8 +65,9 @@ func restrictExecution(policy GenerationPolicy, image *os.File) error {
 	return nil
 }
 
-// allowExecution adds one root-controlled path the namespace may execute from.
-func allowExecution(ruleset int, path string) error {
+// allowExecutionRule grants one right in the execution ruleset below a
+// root-controlled path. Reparenting and execution have separate grants.
+func allowExecutionRule(ruleset int, path string, access uint64) error {
 	object, err := openRootControlled(path, true)
 	if errors.Is(err, unix.ENOTDIR) {
 		object, err = openRootControlled(path, false)
@@ -64,10 +76,10 @@ func allowExecution(ruleset int, path string) error {
 		return fmt.Errorf("executable path %s: %w", path, err)
 	}
 	defer func() { _ = object.Close() }()
-	rule := unix.LandlockPathBeneathAttr{Allowed_access: unix.LANDLOCK_ACCESS_FS_EXECUTE, Parent_fd: int32(object.Fd())}
+	rule := unix.LandlockPathBeneathAttr{Allowed_access: access, Parent_fd: int32(object.Fd())}
 	if _, _, errno := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, uintptr(ruleset), unix.LANDLOCK_RULE_PATH_BENEATH,
 		uintptr(unsafe.Pointer(&rule)), 0, 0, 0); errno != 0 {
-		return fmt.Errorf("allow execution from %s: %w", path, errno)
+		return fmt.Errorf("execution ruleset path %s: %w", path, errno)
 	}
 	return nil
 }

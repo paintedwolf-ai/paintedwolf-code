@@ -54,6 +54,8 @@ type protectedFacts struct {
 	BrokerPeerPID   int                         `json:"broker_peer_pid"`
 	BrokerPeerUID   int                         `json:"broker_peer_uid"`
 	BrokerType      int                         `json:"broker_type"`
+	ProtectedLaunch string                      `json:"protected_launch"`
+	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
 	OpenBeyond      []int                       `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
@@ -174,7 +176,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	coverDir := t.TempDir()
 	env := []string{
 		"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8",
-		"LD_PRELOAD=/tmp/planted.so", "GTK_MODULES=planted", "LYCAON_SANDBOX=off", "SSL_CERT_FILE=/tmp/planted.pem",
+		"PW_PROTECTED_LAUNCH=forged", "LD_PRELOAD=/tmp/planted.so", "GTK_MODULES=planted", "LYCAON_SANDBOX=off", "SSL_CERT_FILE=/tmp/planted.pem",
 		"GOCOVERDIR=" + coverDir, "GODEBUG=inittrace=1", "GOTRACEBACK=crash",
 	}
 	launch := startLaunch(t, f, env, "--fixture-argument", "--broker-probe")
@@ -201,7 +203,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("desktop arguments %q", facts.Arguments)
 	}
 	for _, key := range facts.Environment {
-		if !desktopEnvironmentKeys[key] && !strings.HasPrefix(key, "LC_") {
+		if key != protectedLaunchEnv && !desktopEnvironmentKeys[key] && !strings.HasPrefix(key, "LC_") {
 			t.Fatalf("environment key %q crossed the bootstrap: %v", key, facts.Environment)
 		}
 	}
@@ -218,6 +220,14 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	// privileged and now holds only the caller's identity.
 	if facts.BrokerPeerPID != launch.cmd.Process.Pid || facts.BrokerPeerUID != 0 || facts.BrokerType != unix.SOCK_SEQPACKET || !facts.LifetimeRegular {
 		t.Fatalf("broker or lifetime descriptor not inherited from the supervisor: %+v", facts)
+	}
+	if facts.ProtectedLaunch != "1" {
+		t.Fatalf("verified entry marker = %q", facts.ProtectedLaunch)
+	}
+	selection, err := decodeEntry(facts.GenerationFrame)
+	testutil.FailErr(t, "desktop generation selection", err)
+	if selection.SupervisorPID != facts.BrokerPeerPID || selection.UID != uint32(uid) || selection.GID != uint32(gid) || selection.Generation.LogicalInstallRoot != f.install {
+		t.Fatalf("desktop received a different authenticated selection: %+v", selection)
 	}
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
