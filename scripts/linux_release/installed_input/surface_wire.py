@@ -43,7 +43,8 @@ def proof(value):
                 or any(type(row[key]) is not bool for key in ('visible', 'active', 'defunct', 'modal'))):
             raise ValueError('surface observation has an unknown shape')
         identity = object_identity(row['identity'], value['launch'])
-        if identity['process'] != value['main']['process']:
+        if (identity['process'] != value['main']['process']
+                or identity['bus_name'] != value['main']['bus_name']):
             raise ValueError('surface proof escaped its captured desktop process')
         marker = identity['bus_name'], identity['object_path']
         if marker in seen:
@@ -54,7 +55,8 @@ def proof(value):
         if row['kind'] != 'frame' and (row['parent'] != value['main']
                 or not row['defunct'] and not row['modal']):
             raise ValueError('native dialog omitted its captured modal parent')
-    if value['main'] not in [row['identity'] for row in surfaces]:
+    main = [row for row in surfaces if row['identity'] == value['main']]
+    if len(main) != 1 or main[0]['kind'] != 'frame' or main[0]['parent'] is not None:
         raise ValueError('surface proof lost its captured original frame')
     control = value['control']
     if control is not None:
@@ -62,9 +64,11 @@ def proof(value):
                 or control['kind'] != 'quit-button' or control['focused'] is not True):
             raise ValueError('surface input has an unknown focused control')
         object_identity(control['identity'], value['launch'])
-        if control['identity']['process'] != value['main']['process'] or not any(
+        if (control['identity']['process'] != value['main']['process']
+                or control['identity']['bus_name'] != value['main']['bus_name']
+                or control['identity'] in [row['identity'] for row in surfaces] or not any(
                 row['identity'] == control['parent'] and row['kind'] == 'quit-dialog' and active(row)
-                for row in surfaces):
+                for row in surfaces)):
             raise ValueError('focused Quit control escaped its owned active native dialog')
     return value
 
