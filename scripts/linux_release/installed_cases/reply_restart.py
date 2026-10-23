@@ -47,9 +47,10 @@ def configure_provider(app, fixture):
     with DesktopUI(app) as ui:
         ui.click('Add AI provider')
         ui.click('LiteLLM')
-        physical_input(app, ui, 'Name (optional)', 'provider-name-v1')
-        physical_input(app, ui, 'Endpoint URL', endpoint_operation(fixture.server.server_port))
-        physical_input(app, ui, 'API key', 'provider-fixture-credential-v1', password=True)
+        # WebKit exposes these implicit labels and placeholders as one accessible name.
+        physical_input(app, ui, 'Name (optional) e.g. GPU box, Work account', 'provider-name-v1')
+        physical_input(app, ui, 'Endpoint URL http://localhost:4000/v1', endpoint_operation(fixture.server.server_port))
+        physical_input(app, ui, 'API key Paste your API key…', 'provider-fixture-credential-v1', password=True)
         ui.click('Add AI provider')
         ui.click('Default model')
         ui.click(MODEL)
