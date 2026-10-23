@@ -14,7 +14,8 @@ import (
 )
 
 // IntegrityFailureSuffix is local health evidence bound to one physical store.
-// It is excluded from backups and discarded when that store is replaced.
+// It is excluded from backups; the health check discards it once the store it
+// names has been replaced or removed.
 const IntegrityFailureSuffix = ".integrity-failure.json"
 const integrityFailureMaxBytes = 8192
 
@@ -26,8 +27,11 @@ type integrityFailureRecord struct {
 
 // CheckStoreHealth refuses recorded corruption before capture or store open,
 // including when SQLite could not save the diagnosis in its own metadata.
+// Evidence that names another physical file (a restored, fresh, or removed
+// store) is stale and is discarded here, on every open path.
 func CheckStoreHealth(path string) error {
-	file, err := os.Open(path + IntegrityFailureSuffix)
+	recordPath := path + IntegrityFailureSuffix
+	file, err := os.Open(recordPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -44,16 +48,16 @@ func CheckStoreHealth(path string) error {
 		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, "Store quarantine evidence is invalid or unsupported.")
 	}
 	identity, err := fspath.EntryIdentity(fspath.CanonicalPath(path))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, fmt.Sprintf("identify quarantined store: %v", err))
 	}
-	if identity != record.Identity {
-		return nil
+	if err == nil && identity == record.Identity {
+		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, record.Detail)
 	}
-	return storeIncompatible(RecoveryReasonIntegrityFailed, 0, record.Detail)
+	if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("discard stale store quarantine: %w", err)
+	}
+	return nil
 }
 
 func recordIntegrityFailure(health *storeHealth, failure *StoreIncompatibleError) error {

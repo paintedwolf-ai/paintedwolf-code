@@ -117,10 +117,11 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	if err != nil {
 		return err
 	}
+	// Recorded damage is refused before any scan, capture, or migration.
+	if err := prepareIntegrity(ctx, reader); err != nil {
+		return err
+	}
 	if !plan.Required() {
-		if err := prepareIntegrity(ctx, reader); err != nil {
-			return err
-		}
 		if staged {
 			return validateStoreIntegrity(ctx, reader)
 		}

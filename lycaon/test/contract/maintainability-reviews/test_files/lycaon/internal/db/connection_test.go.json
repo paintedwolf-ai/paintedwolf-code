@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain the 382 measured lines as the store connection acceptance suite: baseline refusal, pool configuration, shutdown state, audit handoff, and durability settings share real open/close fixtures. The change replaces a production-only diagnostic-stamping helper with direct fixture seeding. Damage, quarantine, interrupted-audit, and crash-recovery cases live in the focused store health suite; moving more unrelated connection tests would scatter the acceptance contract. Reconsider any growth above this measured size.",
-  "reviewed_commit": "34283db9eb44bcddc8099878d8a1d805fd50a546",
+  "reason": "Retain the 382 measured lines as the store connection acceptance suite: baseline refusal, pool configuration, shutdown state, audit handoff, and durability settings share real open/close fixtures. The change replaces production-only diagnostic-stamping and marker-classifying helpers with direct fixture seeding and raw marker reads, without adding lines. Damage, quarantine, interrupted-audit, and crash-recovery cases live in the focused store health suite; moving more unrelated connection tests would scatter the acceptance contract. Reconsider any growth above this measured size.",
+  "reviewed_commit": "d5c864fc49ef77ce1a86ddaa28c584fda59cecb3",
   "ceiling": 382,
   "boundaries": {
-    "lycaon/internal/db/connection_test.go": "eb253b77c78fd307a544a395de1421d6c6ad330c5774a0247527c2d3995196b5",
-    "lycaon/internal/db/store_health_test.go": "8e3740217d4827e34231b8ad6dba42b6855ce59646b899fd1cbe7590b72f747f"
+    "lycaon/internal/db/connection_test.go": "0119703864bc6d364724d237b83bb3751bfbdf0e3f0a2067b15d828bb7bd87e3",
+    "lycaon/internal/db/store_health_test.go": "97835afd62a6df6ea3775e1d9c5bcbfb7ae33d3fa8c2a7b03425c5db135139c2"
   }
 }
