@@ -49,8 +49,8 @@ class SelectionTests(unittest.TestCase):
 
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
-        self.record = {'version': 1, 'batch_head': SHA, 'sources': [row(3), row(4)]}
-        self.pull = {'number': 10, 'node_id': 'ten', 'head': {'sha': SHA}, 'state': 'open',
+        self.record = {'version': 1, 'batch_head': SHA, 'sources': [row(3), row(4)], 'ci.yml_dispatched': True, 'dco.yml_dispatched': True}
+        self.pull = {'number': 10, 'node_id': 'ten', 'head': {'sha': SHA, 'ref': 'automation/queue-batch-fixture'}, 'state': 'open',
                      'draft': False, 'merged_at': None, 'labels': [], 'auto_merge': None}
 
     def ports(self):
@@ -164,7 +164,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertIsNone(c.build('o/r', [row(3), row(4)], 2))
             withdraw.assert_not_called()
 
-    def test_label_enforcement_withdraws_only_explicitly_held_pull_requests(self):
+    def test_no_combine_never_withdraws_an_individual_pull_request(self):
         with patch.object(gh, 'pages', return_value=[{'number': 3, 'labels': [{'name': s.HOLD}]}, {'number': 4, 'labels': []}]), \
              patch.object(gh, 'batches', return_value=[]), patch.object(gh, 'withdraw') as withdraw:
             gh.enforce_holds('o/r')
@@ -210,3 +210,12 @@ class LifecycleTests(unittest.TestCase):
              patch.object(gh, 'mutation') as mutation:
             gh.restore('o/r', row(3))
             mutation.assert_called_once_with('enablePullRequestAutoMerge', {'pullRequestId': 'three', 'mergeMethod': 'SQUASH'})
+
+    def test_interrupted_dispatch_resumes_only_the_missing_workflow(self):
+        record = {**self.record, 'ci.yml_dispatched': False}
+        with patch.object(c, 'api') as api:
+            c.dispatch('o/r', self.pull, record)
+            c.dispatch('o/r', self.pull, record)
+        dispatches = [call for call in api.call_args_list if call.args[0].endswith('/dispatches')]
+        self.assertEqual(len(dispatches), 1)
+        self.assertIn('/ci.yml/', dispatches[0].args[0])

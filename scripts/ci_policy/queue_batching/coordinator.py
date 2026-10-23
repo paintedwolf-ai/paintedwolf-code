@@ -8,13 +8,25 @@ import tempfile
 from ci_policy.batch_prs import command, source
 from ci_policy.github import api, pages
 from . import github
-from .selection import MARKER, PREFIX, identity, manifest, select, unchanged
+from .selection import MARKER, identity, manifest, select, unchanged
 
 
 def describe(record):
     sources = ', '.join(f'#{p["number"]}' for p in record['sources'])
     return (f'Automatic merge-queue batch of {sources}. Combined admission and merge-group checks are required. '
             'Original PRs remain open until this batch lands.' + MARKER + json.dumps(record, sort_keys=True) + '\n-->')
+
+
+def dispatch(repository, pull, record):
+    for workflow, ref, inputs in (
+            ('ci.yml', pull['head']['ref'], {'profile': 'fast'}),
+            ('dco.yml', 'main', {'pull_request': str(pull['number'])})):
+        key = workflow + '_dispatched'
+        if not record.get(key):
+            api(f'repos/{repository}/actions/workflows/{workflow}/dispatches', 'POST',
+                {'ref': ref, 'inputs': inputs})
+            record[key] = True
+            api(f'repos/{repository}/pulls/{pull["number"]}', 'PATCH', {'body': describe(record)})
 
 
 def settle(repository, pull, record, outcome):
@@ -60,6 +72,7 @@ def reconcile(repository, pull, record):
     if github.ejected(repository, pull['number']):
         dissolve(repository, pull, record)
         return False
+    dispatch(repository, pull, record)
     verdict = github.checks(repository, pull['head']['sha'])
     if verdict == 'failed':
         # Individual fallbacks isolate the failure without retrying the same
@@ -106,10 +119,7 @@ def build(repository, rows, entries):
                 # GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
                 # Explicit dispatch is the supported exception and runs with the
                 # CI workflow's read-only verification permissions.
-                api(f'repos/{repository}/actions/workflows/ci.yml/dispatches', 'POST',
-                    {'ref': branch, 'inputs': {'profile': 'fast'}})
-                api(f'repos/{repository}/actions/workflows/dco.yml/dispatches', 'POST',
-                    {'ref': 'main', 'inputs': {'pull_request': str(pull['number'])}})
+                dispatch(repository, {**pull, 'head': {'ref': branch}}, record)
             except Exception:
                 dissolve(repository, pull, record)
                 raise
