@@ -165,7 +165,7 @@ func (r *expansionRun) arithmeticIncDec(n commandsurface.ArithmeticUnary) (int64
 	if !r.allowArithmeticMutation {
 		return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: n.Span, Expected: "a version 1 arithmetic expression"}
 	}
-	name, index, current, err := r.arithmeticTarget(n.Operand, n.Span)
+	name, index, current, err := r.arithmeticTarget(n.Operand, n.Span, true)
 	if err != nil {
 		return 0, err
 	}
@@ -186,11 +186,23 @@ func (r *expansionRun) arithmeticAssign(n commandsurface.ArithmeticBinary, baseO
 	if !r.allowArithmeticMutation {
 		return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: n.Span, Expected: "a version 1 arithmetic operator"}
 	}
-	name, index, current, err := r.arithmeticTarget(n.Left, n.Span)
-	if err != nil {
-		return 0, err
+	var name string
+	var index *int64
+	var current, right int64
+	var err error
+	if baseOp == "" {
+		// Plain assignment evaluates the right side before resolving its target
+		// subscript and never interprets the previous value as an integer.
+		right, err = r.arithmeticValue(n.Right)
+		if err == nil {
+			name, index, current, err = r.arithmeticTarget(n.Left, n.Span, false)
+		}
+	} else {
+		name, index, current, err = r.arithmeticTarget(n.Left, n.Span, true)
+		if err == nil {
+			right, err = r.arithmeticValue(n.Right)
+		}
 	}
-	right, err := r.arithmeticValue(n.Right)
 	if err != nil {
 		return 0, err
 	}
@@ -207,7 +219,7 @@ func (r *expansionRun) arithmeticAssign(n commandsurface.ArithmeticBinary, baseO
 	return next, nil
 }
 
-func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span toolcontract.SourceSpan) (string, *int64, int64, error) {
+func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span toolcontract.SourceSpan, readCurrent bool) (string, *int64, int64, error) {
 	operand, ok := node.(commandsurface.ArithmeticOperand)
 	if !ok || len(operand.Word.Parts) != 1 {
 		return "", nil, 0, invalidValue(span, "an assignable variable")
@@ -217,6 +229,9 @@ func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span
 		name := strings.TrimSpace(part.Value)
 		if !VariableName(name) || name == "IFS" || name == "PIPESTATUS" {
 			return "", nil, 0, invalidValue(span, "an assignable variable")
+		}
+		if !readCurrent {
+			return name, nil, 0, nil
 		}
 		raw, _ := r.scope.Variable(name)
 		raw = strings.TrimSpace(raw)
@@ -236,6 +251,9 @@ func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span
 		if idx < 0 {
 			return "", nil, 0, invalidValue(span, "a non-negative array subscript")
 		}
+		if !readCurrent {
+			return part.Name, &idx, 0, nil
+		}
 		raw, _ := scopeArrayElement(r.scope, part.Name, idx)
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
@@ -251,7 +269,17 @@ func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span
 // arithmeticOperand reads an integer literal or a variable holding one; an
 // unset or empty value is zero. Values are never evaluated as expressions.
 func (r *expansionRun) arithmeticOperand(n commandsurface.ArithmeticOperand) (int64, error) {
-	text, err := r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+	var text string
+	var err error
+	if len(n.Word.Parts) == 1 {
+		if part, ok := n.Word.Parts[0].(commandsurface.ParameterPart); ok && part.Index != nil {
+			text, err = r.resolveParameterValue(part)
+		} else {
+			text, err = r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+		}
+	} else {
+		text, err = r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+	}
 	if err != nil {
 		return 0, err
 	}

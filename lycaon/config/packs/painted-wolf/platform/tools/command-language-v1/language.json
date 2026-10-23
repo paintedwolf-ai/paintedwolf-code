@@ -104,6 +104,7 @@
     ]
   },
   "rules": {
+    "array_index": "Use an array index from 0 through 9223372036854775807.",
     "splitting": "Unquoted expansions split on space/tab/LF then glob; quoted expansions retain one argument; fixed IFS cannot be changed.",
     "globs": "Sort byte order; exclude hidden names unless requested; unmatched patterns stay literal; never traverse symlinks. Preserve existing ** whole-component matching of zero or more nonhidden directories, bounded visits/matches and no symlink descent.",
     "substitution": "Reached units only; strip trailing LF bytes; refuse NUL scalar; failure prevents containing dispatch; never reparse output.",

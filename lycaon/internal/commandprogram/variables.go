@@ -87,6 +87,9 @@ func isLetter(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 
 
 // Assign sets a variable in this frame, keeping its export mark.
 func (v *Variables) Assign(ctx context.Context, name, value string) error {
+	if v.values[name].array {
+		return v.AssignIndex(ctx, name, 0, value, false)
+	}
 	if err := assignable(v.bounds, name, value); err != nil {
 		return err
 	}
@@ -116,7 +119,7 @@ func (v *Variables) Unset(name string) {
 func (v *Variables) Environment(ctx context.Context, overrides map[string]string) ([]string, func(), error) {
 	var count, size int64
 	for name, entry := range v.values {
-		if _, overridden := overrides[name]; entry.exported && entry.set && !overridden {
+		if _, overridden := overrides[name]; entry.exported && entry.set && !entry.array && !overridden {
 			count++
 			size += int64(len(name) + len(entry.value) + 1)
 		}
@@ -138,7 +141,7 @@ func (v *Variables) Environment(ctx context.Context, overrides map[string]string
 	}
 	names := make([]string, 0, count)
 	for name, entry := range v.values {
-		if _, overridden := overrides[name]; entry.exported && entry.set && !overridden {
+		if _, overridden := overrides[name]; entry.exported && entry.set && !entry.array && !overridden {
 			names = append(names, name)
 		}
 	}

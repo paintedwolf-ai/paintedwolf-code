@@ -19,13 +19,14 @@ const (
 // Limit, Unit, Maximum and Observed describe an exceeded catalog ceiling.
 // The containing command never dispatches after one.
 type ExpansionError struct {
-	Code     string
-	Span     toolcontract.SourceSpan
-	Expected string
-	Limit    string
-	Unit     string
-	Maximum  int64
-	Observed int64
+	Code             string
+	Span             toolcontract.SourceSpan
+	Expected         string
+	Limit            string
+	Unit             string
+	Maximum          int64
+	Observed         int64
+	UnsignedObserved uint64
 }
 
 func (e *ExpansionError) Error() string {
@@ -56,8 +57,9 @@ func (e *SubstitutionError) Unwrap() error { return e.Cause }
 
 // catalogBounds are the frozen catalog ceilings and their units by limit id.
 type catalogBounds struct {
-	maximum map[string]int64
-	unit    map[string]string
+	maximum        map[string]int64
+	unit           map[string]string
+	arrayIndexRule string
 }
 
 var languageBounds = sync.OnceValues(func() (catalogBounds, error) {
@@ -65,7 +67,7 @@ var languageBounds = sync.OnceValues(func() (catalogBounds, error) {
 	if err != nil {
 		return catalogBounds{}, err
 	}
-	bounds := catalogBounds{maximum: map[string]int64{}, unit: map[string]string{}}
+	bounds := catalogBounds{maximum: map[string]int64{}, unit: map[string]string{}, arrayIndexRule: catalog.Language.Rules["array_index"]}
 	for _, limit := range catalog.Language.Limits {
 		bounds.maximum[limit.ID], bounds.unit[limit.ID] = limit.Maximum, limit.Unit
 	}

@@ -41,6 +41,13 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 		}
 		return invalidValue(part.Span, part.Name+": "+message)
 	case "^", "^^", ",", ",,":
+		size := caseSize(value, part.Operator)
+		if size > r.expander.limits.valueBytes {
+			return r.expander.limits.exceeded("variable_value_bytes", size, part.Span)
+		}
+		if err := r.charge(size); err != nil {
+			return err
+		}
 		return r.emit(convertCase(value, part.Operator), quoted)
 	}
 	return r.patternOperation(value, part, quoted)
@@ -156,4 +163,26 @@ func (r *expansionRun) joinParameterElements(values []string) (string, error) {
 		return "", err
 	}
 	return strings.Join(values, " "), nil
+}
+
+func caseSize(value, operator string) int64 {
+	var size int64
+	for offset, ch := range value {
+		if operator == "^" || operator == "," {
+			_, width := utf8.DecodeRuneInString(value[offset:])
+			if operator == "^" {
+				ch = unicode.ToUpper(ch)
+			} else {
+				ch = unicode.ToLower(ch)
+			}
+			return int64(utf8.RuneLen(ch) + len(value) - width)
+		}
+		if operator == "^^" {
+			ch = unicode.ToUpper(ch)
+		} else {
+			ch = unicode.ToLower(ch)
+		}
+		size += int64(utf8.RuneLen(ch))
+	}
+	return size
 }

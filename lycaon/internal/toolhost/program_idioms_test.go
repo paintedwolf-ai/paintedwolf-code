@@ -75,9 +75,15 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		{"replacement and trimming", `s=a/b/c; printf '%s\n' "${s//\//-}" "${s#*/}" "${s%/*}"`, "a-b-c\nb/c\na/b\n", "", 0},
 		{"anchored replacement", `s=abc; e=; printf '%s\n' "${s/#a/x}" "${s/%c/y}" "${e/#*/x}" "${e/%*/y}"`, "xbc\naby\nx\ny\n", "", 0},
 		{"shortest and longest trimming", `s=abcbcd; printf '%s\n' "${s#a*c}" "${s##a*c}" "${s%b*d}" "${s%%b*d}"`, "bcd\nd\nabc\na\n", "", 0},
+		{"Unicode case", `s=äBc; printf '%s\n' "${s^}" "${s^^}" "${s,}" "${s,,}"`, "ÄBc\nÄBC\näBc\näbc\n", "", 0},
 		{"unicode slices", `s='aβ🙂z'; printf '%s\n' "${s:1:2}" "${s: -1}" "${s:1:-1}"`, "β🙂\nz\nβ🙂\n", "", 0},
 		{"arrays", `a=(first 'second third'); a+=(fourth); a[4]=fifth; a[0]+=!; printf '%s\n' "${a[@]}" "${#a[@]}" "${a[@]:1:2}"`, "first!\nsecond third\nfourth\nfifth\n4\nsecond third\nfourth\n", "", 0},
+		{"scalar assignment preserves array", `a=(one two); a=three; printf '%s\n' "${a[@]}"; ((a=4)); printf '%s\n' "${a[@]}"; a+=5; printf '%s\n' "${a[@]}"`, "three\ntwo\n4\ntwo\n45\ntwo\n", "", 0},
+		{"array export", `a=(one two); export a; printenv a; printf 'status=%d\n' "$?"`, "status=1\n", "", 0},
+		{"read array element zero", `a=(one two); read -r a < input.txt; printf '%s\n' "${a[@]}"`, "from file\ntwo\n", "", 0},
 		{"arithmetic", `((i=0)); while ((i<3)); do printf '%d\n' "$i"; ((i++)); done; ((0)); printf 'status=%d\n' "$?"`, "0\n1\n2\nstatus=1\n", "", 0},
+		{"arithmetic indexed read", `a=(10 20); ((i=0)); ((v=a[i++]+1)); printf '%s:%s\n' "$v" "$i"`, "11:1\n", "", 0},
+		{"arithmetic assignment order", `((i=0)); ((a[i++]=i)); printf '%s:%s\n' "${a[0]}" "$i"; ((v=1,v+=(v=2))); printf '%s\n' "$v"; ((i=0)); ((b[i]=i++)); printf '%s:%s\n' "${b[1]}" "$i"`, "0:1\n3\n0:1\n", "", 0},
 		{"short circuit arithmetic", `((a=0)); ((0 && a++)); ((1 || a++)); printf '%d\n' "$a"`, "0\n", "", 0},
 		{"trailing duplication", `printf '%s\n' error >&2`, "", "error\n", 0},
 		{"leading duplication", `>&2 printf '%s\n' error`, "", "error\n", 0},
@@ -94,6 +100,7 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newComposedProgramFixture(t)
+			testutil.FailErr(t, "seed read input", os.WriteFile(filepath.Join(f.Dir, "input.txt"), []byte("from file\n"), 0o600))
 			outcome := callComposedProgram(t, f, c.source)
 			if outcome.Stdout != c.stdout || outcome.Stderr != c.stderr || outcome.Status != c.status || outcome.Refusal != nil {
 				t.Fatalf("outcome %+v; want stdout=%q stderr=%q status=%d", outcome, c.stdout, c.stderr, c.status)

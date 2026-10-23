@@ -301,7 +301,7 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 			return
 		}
 		if subscriptAllSymbol(p.Index) == "" {
-			c.validateArithmeticExpr(p.Index, false)
+			c.validateArithmeticExpr(p.Index, c.arithmeticIndexes[p])
 		}
 	}
 	if p.Slice != nil {

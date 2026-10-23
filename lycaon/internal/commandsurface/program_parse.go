@@ -227,19 +227,20 @@ func parserPosition(pos syntax.Pos, length int) toolcontract.SourceSpan {
 }
 
 type programCompiler struct {
-	catalog        toolcontract.LanguageCatalog
-	source         []byte
-	sequence       int
-	literalContext map[*syntax.Word]bool
-	testWords      map[*syntax.Word]bool
-	staticProof    map[*syntax.Word]bool
-	traps          map[*syntax.CallExpr]*syntax.File
-	trapSpans      map[*syntax.CallExpr]toolcontract.SourceSpan
-	spanOverride   *toolcontract.SourceSpan
-	nodeCount      int64
-	maximumDepth   int64
-	pool           *syntax.AllocationBudget
-	err            error
+	catalog           toolcontract.LanguageCatalog
+	source            []byte
+	sequence          int
+	literalContext    map[*syntax.Word]bool
+	testWords         map[*syntax.Word]bool
+	arithmeticIndexes map[*syntax.ParamExp]bool
+	staticProof       map[*syntax.Word]bool
+	traps             map[*syntax.CallExpr]*syntax.File
+	trapSpans         map[*syntax.CallExpr]toolcontract.SourceSpan
+	spanOverride      *toolcontract.SourceSpan
+	nodeCount         int64
+	maximumDepth      int64
+	pool              *syntax.AllocationBudget
+	err               error
 }
 
 func (c *programCompiler) location(n syntax.Node) SyntaxLocation {

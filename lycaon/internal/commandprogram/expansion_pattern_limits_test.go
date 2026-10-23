@@ -60,3 +60,18 @@ func TestParameterPatternAdmitsSourceAndStopsAtWorkBoundary(t *testing.T) {
 		}
 	})
 }
+
+func TestParameterCaseConversionAdmitsResultBeforeAllocation(t *testing.T) {
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 256, State: 1 << 20})
+	testutil.FailErr(t, "small case working budget", err)
+	expander, _ := fixtureExpander(t, commandsurface.OSGlobFiles{Dir: t.TempDir()}, memory)
+	scope := testScope(t, memory, []string{"V=" + strings.Repeat("x", 512)})
+	_, err = expander.ExpandFields(t.Context(), scope, parsedWords(t, `: "${V^^}"`)[1])
+	var exhausted *toolcontract.ProgramMemoryLimitError
+	if !errors.As(err, &exhausted) || exhausted.Account != "working" {
+		t.Fatalf("case conversion error=%v, want working memory refusal", err)
+	}
+	if used := memory.InUse(); used.Working != 0 {
+		t.Fatalf("refused case conversion retained working storage: %+v", used)
+	}
+}

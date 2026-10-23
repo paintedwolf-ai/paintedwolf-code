@@ -106,6 +106,21 @@ func (c *programCompiler) validateArithmeticExpr(expr syntax.ArithmExpr, allowMu
 	switch v := expr.(type) {
 	case *syntax.Word:
 		c.markArithmeticWord(v)
+		if allowMutation {
+			for _, node := range v.Parts {
+				part, ok := node.(*syntax.ParamExp)
+				if !ok || !part.Short || part.Dollar.IsValid() || part.Index == nil {
+					continue
+				}
+				if !c.reserveHeap(128, part) {
+					return
+				}
+				if c.arithmeticIndexes == nil {
+					c.arithmeticIndexes = make(map[*syntax.ParamExp]bool)
+				}
+				c.arithmeticIndexes[part] = true
+			}
+		}
 	case *syntax.ParenArithm:
 		c.validateArithmeticExpr(v.X, allowMutation)
 	case *syntax.UnaryArithm:

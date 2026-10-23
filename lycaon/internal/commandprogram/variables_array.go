@@ -11,8 +11,8 @@ import (
 // AssignScalar sets or appends a scalar variable in this frame.
 func (v *Variables) AssignScalar(ctx context.Context, name, value string, appendMode bool) error {
 	current := v.values[name]
-	if appendMode && current.array {
-		return v.AssignIndex(ctx, name, 0, value, true)
+	if current.array {
+		return v.AssignIndex(ctx, name, 0, value, appendMode)
 	}
 	if !appendMode || !current.set {
 		return v.Assign(ctx, name, value)
@@ -87,7 +87,7 @@ func (v *Variables) AssignArray(ctx context.Context, name string, items []string
 				if k >= start {
 					if k == math.MaxInt64 {
 						if len(items) > 0 {
-							return invalidValue(toolcontract.SourceSpan{}, "an array index within signed 64-bit range")
+							return v.arrayIndexOverflow(uint64(k) + uint64(len(items)))
 						}
 						continue
 					}
@@ -99,7 +99,7 @@ func (v *Variables) AssignArray(ctx context.Context, name string, items []string
 		}
 	}
 	if len(items) > 0 && int64(len(items)-1) > math.MaxInt64-start {
-		return invalidValue(toolcontract.SourceSpan{}, "an array index within signed 64-bit range")
+		return v.arrayIndexOverflow(uint64(start) + uint64(len(items)-1))
 	}
 	for _, item := range items {
 		if err := assignable(v.bounds, name, item); err != nil {
@@ -162,4 +162,8 @@ func indexedVariable(elements map[int64]string, exported bool) variable {
 		ordered[i] = elements[key]
 	}
 	return variable{elements: elements, ordered: ordered, array: true, set: true, exported: exported}
+}
+
+func (v *Variables) arrayIndexOverflow(observed uint64) *ExpansionError {
+	return &ExpansionError{Code: codeOperandInvalid, Expected: v.bounds.arrayIndexRule, Maximum: math.MaxInt64, UnsignedObserved: observed}
 }
