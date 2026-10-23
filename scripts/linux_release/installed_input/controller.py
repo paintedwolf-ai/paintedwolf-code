@@ -12,6 +12,7 @@ import time
 from . import protocol, surface_wire, password_wire
 from .mailbox import decode
 from .qemu import open_lease
+from .password_pipe import Pipe
 
 MAX_LOG = 8 << 20
 
@@ -178,7 +179,10 @@ class Bridge:
             self.log = (self.output / 'native-input.jsonl').open('xb')
             self.errors = (self.output / 'native-input-transport.log').open('xb')
             self.process = subprocess.Popen(self.ssh_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                            stderr=self.errors, start_new_session=True)
+                                            stderr=self.errors, start_new_session=True, bufsize=0)
+            # These are exclusively owned SSH transport endpoints, not shared app FDs.
+            os.set_blocking(self.process.stdin.fileno(), False)
+            os.set_blocking(self.process.stdout.fileno(), False)
             self.selector = selectors.DefaultSelector()
             self.selector.register(self.process.stdout, selectors.EVENT_READ)
             selected = self.exchange({'operation': 'identify-password-fixture-actor',
@@ -217,21 +221,7 @@ class Bridge:
                 stream.close()
 
     def exchange(self, document):
-        self.process.stdin.write(protocol.canonical(document))
-        self.process.stdin.flush()
-        raw = bytearray()
-        deadline = time.monotonic() + 5
-        while len(raw) <= protocol.MAX_DOCUMENT:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0 or not self.selector.select(remaining):
-                raise ValueError('fixed native input guest transport exceeded its bounded response time')
-            char = os.read(self.process.stdout.fileno(), 1)
-            if not char:
-                raise ValueError('fixed native input guest transport ended before its response')
-            raw.extend(char)
-            if char == b'\n':
-                return decode(bytes(raw))
-        raise ValueError('fixed native input guest transport exceeded its response bound')
+        return Pipe(self.process, self.selector, time.monotonic() + 5).line(document)
 
     def _run(self):
         try:
