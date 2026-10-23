@@ -3,8 +3,9 @@ package textutil
 import (
 	"bufio"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // records reads delimiter-terminated records under record_bytes; a final
@@ -26,10 +27,10 @@ func (inv *invocation) records(r io.Reader, delimiter byte) (*records, error) {
 		return nil, err
 	}
 	records := &records{inv: inv, reader: bufio.NewReaderSize(r, 64<<10), delimiter: delimiter, maximum: inv.limit("record_bytes"), releaseReader: release}
-	inv.releases = append(inv.releases, records.Close)
 	return records, nil
 }
 func (r *records) Close() {
+	r.reader = nil
 	if r.releaseReader != nil {
 		r.releaseReader()
 		r.releaseReader = nil
@@ -49,14 +50,21 @@ func (r *records) next() ([]byte, error) {
 
 // nextTerminated also reports whether the record ended with its delimiter.
 func (r *records) nextTerminated() ([]byte, bool, error) {
+	if r.reader == nil {
+		return nil, false, io.EOF
+	}
 	r.buffer = r.buffer[:0]
 	for {
 		if err := r.inv.ctx.Err(); err != nil {
 			return nil, false, err
 		}
 		chunk, err := r.reader.ReadSlice(r.delimiter)
-		if int64(len(r.buffer)+len(chunk)) > r.maximum+1 {
-			return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)+len(chunk)))
+		observed := int64(len(r.buffer) + len(chunk))
+		if err == nil {
+			observed--
+		}
+		if observed > r.maximum {
+			return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, observed)
 		}
 		if cap(r.buffer) < len(r.buffer)+len(chunk) {
 			capacity := min(int(r.maximum+1), max(len(r.buffer)+len(chunk), 2*cap(r.buffer)))
@@ -75,9 +83,6 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 		switch {
 		case err == nil:
 			record := r.buffer[:len(r.buffer)-1]
-			if int64(len(record)) > r.maximum {
-				return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(record)))
-			}
 			return record, true, nil
 		case errors.Is(err, bufio.ErrBufferFull):
 			continue
@@ -85,9 +90,6 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 			if len(r.buffer) == 0 {
 				r.Close()
 				return nil, false, io.EOF
-			}
-			if int64(len(r.buffer)) > r.maximum {
-				return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)))
 			}
 			return r.buffer, false, nil
 		default:
@@ -103,4 +105,29 @@ func writeRecord(out io.Writer, record []byte, delimiter byte) error {
 	}
 	_, err := out.Write([]byte{delimiter})
 	return err
+}
+
+// consume owns framing storage until the selected source is finished.
+func (r *records) consume(visit func([]byte, bool) error) error {
+	defer r.Close()
+	for {
+		record, terminated, err := r.nextTerminated()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := visit(record, terminated); err != nil {
+			return err
+		}
+	}
+}
+
+func closeRecords(readers []*records) {
+	for _, reader := range readers {
+		if reader != nil {
+			reader.Close()
+		}
+	}
 }

@@ -2,7 +2,7 @@
 // script before any input is read; a Machine runs it over records with
 // pattern and hold space, branches, append queues and per-file state. The
 // host supplies the POSIX regex engine, the records, every output writer and
-// the contents of r and R files, so the language never opens a path itself.
+// the streams for r and R files, so the language never opens a path itself.
 package sedscript
 
 import (

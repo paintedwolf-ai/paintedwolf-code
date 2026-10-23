@@ -173,13 +173,30 @@ func (h *harness) run(source, stdin string) run {
 // expander and dispatches the first command with stdin as its input.
 func (h *harness) runWith(ports Ports, source, stdin string) run {
 	h.t.Helper()
+	request, release := h.bind(source)
+	defer release()
+	argv := request.Argv
+	builtins := h.owners.Builtins(ports)
+	var stdout, stderr bytes.Buffer
+	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	if validation := result.Validate(); validation != nil {
+		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
+	}
+	if used := ports.Memory.InUse().Working; used != 0 {
+		h.t.Fatalf("%s retained %d bytes of working memory", source, used)
+	}
+	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv, execution: request.Invocation.Identity.ExecutionID}
+}
+
+// bind owns the actual parsed command and its expansion frame.
+func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) {
+	h.t.Helper()
 	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "inline"})
 	testutil.FailErr(h.t, "parse "+source, err)
 	statement := parsed.Snapshot().Statements[0]
 	command := statement.Command.(commandsurface.SimpleCommand)
 	frame, err := commandprogram.NewVariables(h.t.Context(), h.memory, "inline", h.env, nil)
 	testutil.FailErr(h.t, "frame", err)
-	defer frame.Close()
 	expander, err := commandprogram.NewWordExpander(commandprogram.ExpanderPorts{Substitutions: noSubstitution{}, Files: commandsurface.OSGlobFiles{Dir: h.root}, Memory: h.memory})
 	testutil.FailErr(h.t, "expander", err)
 	var argv commandprogram.Fields
@@ -198,16 +215,7 @@ func (h *harness) runWith(ports Ports, source, stdin string) run {
 		},
 		OperationID: argv[0].Value, Statement: statement, Argv: argv,
 	}
-	builtins := h.owners.Builtins(ports)
-	var stdout, stderr bytes.Buffer
-	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
-	if validation := result.Validate(); validation != nil {
-		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
-	}
-	if used := ports.Memory.InUse().Working; used != 0 {
-		h.t.Fatalf("%s retained %d bytes of working memory", source, used)
-	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv, execution: execution}
+	return request, frame.Close
 }
 
 type noSubstitution struct{}

@@ -73,7 +73,13 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 		buffers[name] = &bytes.Buffer{}
 		writers[name] = buffers[name]
 	}
-	m, err := NewMachine(t.Context(), program, Config{Quiet: f.quiet || program.Quiet(), Delimiter: delimiter, SpaceLimit: 1 << 20, StepLimit: 1000, Stdout: &stdout, Writers: writers, Files: f.files})
+	m, err := NewMachine(t.Context(), program, Config{Quiet: f.quiet || program.Quiet(), Delimiter: delimiter, SpaceLimit: 1 << 20, StepLimit: 1000, Stdout: &stdout, Writers: writers, OpenFile: func(name string) (ReadFile, error) {
+		data, ok := f.files[name]
+		if !ok {
+			return nil, nil
+		}
+		return &fixtureFile{Buffer: bytes.NewBuffer(data)}, nil
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,4 +202,19 @@ func TestRefusalsAndLimits(t *testing.T) {
 	if _, _, _, err := (fixture{script: "s//x/", inputs: []string{"a\n"}}).run(t, false); !errors.As(err, &runtime) {
 		t.Fatalf("empty regex first: %v", err)
 	}
+}
+
+type fixtureFile struct{ *bytes.Buffer }
+
+func (f *fixtureFile) Close() error { return nil }
+func (f *fixtureFile) Next() (Record, error) {
+	text, err := f.ReadBytes('\n')
+	if len(text) == 0 {
+		return Record{}, err
+	}
+	terminated := text[len(text)-1] == '\n'
+	if terminated {
+		text = text[:len(text)-1]
+	}
+	return Record{Text: text, Terminated: terminated}, nil
 }

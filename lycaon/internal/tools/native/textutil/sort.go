@@ -110,6 +110,7 @@ func (s *sorter) read(r io.Reader) error {
 	if err != nil {
 		return err
 	}
+	defer records.Close()
 	budget := s.inv.limit("sort_memory_bytes")
 	for {
 		record, err := records.next()

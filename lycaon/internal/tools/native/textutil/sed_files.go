@@ -1,7 +1,6 @@
 package textutil
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
 )
@@ -37,37 +35,6 @@ func (r *sedRun) settleWrites(err error) error {
 		}
 	}
 	return err
-}
-
-// readFiles captures each r and R file once, pinned like any input; a file
-// that is missing or unreadable reads as nothing, as in GNU sed.
-func (r *sedRun) readFiles() (map[string][]byte, error) {
-	files := map[string][]byte{}
-	if len(r.program.ReadFiles()) == 0 {
-		return files, nil
-	}
-	paths, err := newPaths(r.inv)
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range r.program.ReadFiles() {
-		word := commandprogram.Field{Value: name, Span: r.word.Span}
-		reader, _, err := r.inv.capture(paths, word)
-		if err != nil {
-			if _, ok := ordinary(err); ok {
-				continue
-			}
-			return nil, pathRejection(err, word)
-		}
-		captured, err := r.inv.owners.Revisions.ReadWholeInput(r.inv.ctx, reader, r.inv.limit("whole_file_bytes"))
-		_ = reader.Close()
-		if err != nil {
-			return nil, err
-		}
-		r.inv.releases = append(r.inv.releases, captured.Close)
-		files[name] = captured.Bytes
-	}
-	return files, nil
 }
 
 // inPlace edits each file separately: line numbers, $ and ranges restart per
@@ -122,32 +89,33 @@ func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, st
 			}
 		}
 	}()
-	var backup commandprogram.StagedOutput
+	var backup *sedBackup
 	var err error
 	if suffix != "" {
-		var original []byte
-		var captured *native.BufferedBytes
-		captured, err = inv.owners.Revisions.ReadWholeInput(inv.ctx, reader, inv.limit("whole_file_bytes"))
-		if err == nil {
-			defer captured.Close()
-			original = captured.Bytes
+		backup, err = r.prepareBackup(operand, reader, suffix)
+		if backup != nil {
+			defer func() {
+				if closeErr := backup.Close(); closeErr != nil {
+					if finalErr == nil {
+						finalErr = closeErr
+					} else {
+						finalErr = errors.Join(finalErr, closeErr)
+					}
+				}
+			}()
+			reader = backup.replay
 		}
-		if err == nil {
-			backup, err = inv.openDestination(commandprogram.Field{Value: backupName(operand.Value, suffix), Span: operand.Span})
-		}
-		if err == nil {
-			_, err = nativeutility.NewOutput(inv.ctx, backup, "stream_bytes", inv.limit("stream_bytes")).Write(original)
-		}
-		reader = io.NopCloser(bytes.NewReader(original))
 	}
 	quit = false
 	if err == nil {
 		out := nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
-		quit, err = r.machine.Stream(r.input([]source{{name: operand.Value, reader: reader}}), out)
+		input := r.input([]source{{name: operand.Value, reader: reader}})
+		quit, err = r.machine.Stream(input, out)
+		input.Close()
 		err = r.failure(err)
 	}
-	if backup != nil {
-		err = inv.settleStage(backup, err)
+	if backup != nil && backup.stage != nil {
+		err = inv.settleStage(backup.stage, err)
 	}
 	return quit, inv.settleStage(stage, err)
 }
@@ -206,4 +174,11 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name}, nil
 	}
 	return sedscript.Record{}, io.EOF
+}
+
+func (s *sedInput) Close() {
+	if s.records != nil {
+		s.records.Close()
+		s.records = nil
+	}
 }

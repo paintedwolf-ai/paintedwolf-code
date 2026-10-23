@@ -45,17 +45,8 @@ func (inv *invocation) eachRecord(visit func(record []byte, terminated bool) err
 		if err != nil {
 			return err
 		}
-		for {
-			record, terminated, err := records.nextTerminated()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			if err := visit(record, terminated); err != nil {
-				return err
-			}
+		if err := records.consume(visit); err != nil {
+			return err
 		}
 	}
 	return nil

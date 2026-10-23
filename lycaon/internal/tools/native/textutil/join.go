@@ -154,6 +154,7 @@ func (r *joinRecord) close() {
 	}
 }
 func (j *joiner) close() {
+	closeRecords(j.readers[:])
 	for _, record := range j.current {
 		record.close()
 	}

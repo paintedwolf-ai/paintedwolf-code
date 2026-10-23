@@ -117,9 +117,7 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 	case 'r':
 		err = m.queueAppend(appendItem{file: c.arg})
 	case 'R':
-		if line, ok := m.readLine(c.arg); ok {
-			err = m.queueAppend(appendItem{text: line})
-		}
+		err = m.queueAppend(appendItem{file: c.arg, line: true})
 	case '=':
 		err = out.text(strconv.AppendInt(nil, int64(m.stream.line), 10))
 	case 'F':

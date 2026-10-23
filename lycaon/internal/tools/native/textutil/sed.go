@@ -31,7 +31,7 @@ func (c sedCompiler) Compile(ctx context.Context, pattern string, extended, fold
 }
 
 // runSed parses the complete script before any input is read, opens every w
-// file and reads every r file, then runs the inputs as one stream, one stream
+// file, then opens read files only when reached and runs the inputs as one stream, one stream
 // per file with -s, or edits each file in place with -i. Output preserves a
 // final record's missing newline; q and Q set the exit status.
 func runSed(inv *invocation) error {
@@ -90,11 +90,16 @@ func (r *sedRun) execute(script sedSource) error {
 		inv.status = 2
 	}
 	if !inv.flag("-s") {
-		_, err := r.machine.Stream(r.input(sources), nil)
+		input := r.input(sources)
+		_, err := r.machine.Stream(input, nil)
+		input.Close()
 		return r.failure(err)
 	}
 	for _, input := range sources {
-		if quit, err := r.machine.Stream(r.input([]source{input}), nil); err != nil || quit {
+		stream := r.input([]source{input})
+		quit, err := r.machine.Stream(stream, nil)
+		stream.Close()
+		if err != nil || quit {
 			return r.failure(err)
 		}
 	}
@@ -111,14 +116,14 @@ func (r *sedRun) config() (sedscript.Config, error) {
 	if err != nil {
 		return sedscript.Config{}, err
 	}
-	files, err := r.readFiles()
+	files, err := r.readFileFactory()
 	if err != nil {
 		return sedscript.Config{}, err
 	}
 	return sedscript.Config{
 		Quiet: inv.flag("-n") || r.program.Quiet(), Delimiter: delimiter,
 		SpaceLimit: inv.limit("record_bytes"), StepLimit: inv.limit("query_work_steps"), Reserve: inv.reserve,
-		Stdout: inv.out, Stderr: inv.streams.Error, Writers: writers, Files: files,
+		Stdout: inv.out, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
 	}, nil
 }
 
