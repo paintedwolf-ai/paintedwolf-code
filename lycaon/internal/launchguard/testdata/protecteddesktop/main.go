@@ -41,6 +41,7 @@ type Facts struct {
 	BrokerPeerPID   int                         `json:"broker_peer_pid"`
 	BrokerPeerUID   int                         `json:"broker_peer_uid"`
 	BrokerType      int                         `json:"broker_type"`
+	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
 	OpenBeyond      []int                       `json:"open_beyond"`
@@ -87,6 +88,7 @@ func main() {
 	}
 	var facts Facts
 	facts.GenerationFrame = frameRaw
+	facts.ProtectedLaunch = os.Getenv("PW_PROTECTED_LAUNCH")
 	facts.PID = os.Getpid()
 	facts.UIDs[0], facts.UIDs[1], facts.UIDs[2] = unix.Getresuid()
 	facts.GIDs[0], facts.GIDs[1], facts.GIDs[2] = unix.Getresgid()

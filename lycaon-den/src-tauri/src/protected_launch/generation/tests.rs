@@ -87,3 +87,25 @@ fn frame_must_belong_to_the_actual_broker_and_login_identity() {
         Err(GenerationError::InvalidFrame)
     );
 }
+
+#[test]
+fn root_selected_library_policy_is_explicit_and_strict() {
+    let mut value = entry();
+    value["generation"]["library_roots"] = json!(["/usr/lib", "/usr/lib64"]);
+    value["generation"]["system_executables"] = json!(["/usr/libexec/webkit"]);
+    assert!(parse(&value).is_ok());
+    for invalid in [
+        json!(null),
+        json!([]),
+        json!(["relative"]),
+        json!(["/"]),
+        json!(["/usr/../lib"]),
+        json!([1]),
+    ] {
+        value["generation"]["library_roots"] = invalid;
+        assert_eq!(parse(&value), Err(GenerationError::InvalidFrame));
+    }
+    value["generation"]["library_roots"] = json!(["/usr/lib"]);
+    value["generation"]["system_executables"] = json!(["relative"]);
+    assert_eq!(parse(&value), Err(GenerationError::InvalidFrame));
+}

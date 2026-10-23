@@ -53,8 +53,16 @@ struct Policy {
     generation_root: String,
     logical_install_root: String,
     manifest_sha256: String,
-    #[serde(default, rename = "system_executables")]
-    _system_executables: Vec<String>,
+    #[serde(default)]
+    system_executables: Vec<String>,
+    #[serde(default, deserialize_with = "present_roots")]
+    library_roots: Option<Vec<String>>,
+}
+
+fn present_roots<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    Vec::<String>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Deserialize)]
@@ -97,6 +105,14 @@ fn decode(
         || entry.supervisor_pid <= 1
         || !absolute_root(&policy.generation_root)
         || !absolute_root(&policy.logical_install_root)
+        || !policy
+            .system_executables
+            .iter()
+            .all(|root| absolute_root(root))
+        || policy
+            .library_roots
+            .as_ref()
+            .is_some_and(|roots| roots.is_empty() || !roots.iter().all(|root| absolute_root(root)))
         || !digest(&policy.manifest_sha256)
         || !digest(&entry.image.sha256)
         || entry.image.size == 0

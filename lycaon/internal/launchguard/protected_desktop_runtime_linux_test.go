@@ -105,17 +105,10 @@ func runActualDesktop(t *testing.T, dir string, uid, gid int, groups []uint32, a
 	app.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
 	stopApp := startDesktopProcess(t, app, filepath.Join(dir, "desktop.log"))
 	defer stopApp()
-	enginePID, desktopPID := awaitActualDesktopHealth(t, home, policy)
-	engineHandle, err := unix.PidfdOpen(enginePID, 0)
-	testutil.FailErr(t, "retain owned engine process", err)
-	defer unix.Close(engineHandle)
-	desktopHandle, err := unix.PidfdOpen(desktopPID, 0)
-	testutil.FailErr(t, "retain owned desktop process", err)
-	defer unix.Close(desktopHandle)
-	defer func() {
-		_ = unix.PidfdSendSignal(engineHandle, unix.SIGKILL, nil, 0)
-		_ = unix.PidfdSendSignal(desktopHandle, unix.SIGKILL, nil, 0)
-	}()
+	engine, desktop := awaitActualDesktopHealth(t, home, policy, app.Process.Pid)
+	defer unix.Close(engine.fd)
+	defer unix.Close(desktop.fd)
+	enginePID, desktopPID := engine.pid, desktop.pid
 	initial, err := launchverify.ReadNamespace("/proc", 0)
 	testutil.FailErr(t, "initial namespace", err)
 	engineNS, err := launchverify.ReadNamespace("/proc", enginePID)
@@ -123,13 +116,11 @@ func runActualDesktop(t *testing.T, dir string, uid, gid int, groups []uint32, a
 	desktopNS, err := launchverify.ReadNamespace("/proc", desktopPID)
 	testutil.FailErr(t, "actual desktop namespace", err)
 	testutil.FailErr(t, "actual protected engine and desktop boundary", launchverify.ProtectedNamespacePair(initial, engineNS, desktopNS))
+	testutil.FailErr(t, "engine birth after namespace observation", engine.current())
+	testutil.FailErr(t, "desktop birth after namespace observation", desktop.current())
 	t.Logf("actual Den source=%s tree=%s manifest=%s engine_pid=%d desktop_pid=%d health=passed package_registration=absent external_network=absent fixture_manifest=%s", artifact.SourceCommit, artifact.SourceTree, artifact.ManifestSHA256, enginePID, desktopPID, policy.ManifestSHA256)
 	stopApp()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) && unix.PidfdSendSignal(engineHandle, 0, nil, 0) == nil {
-		time.Sleep(50 * time.Millisecond)
-	}
-	if unix.PidfdSendSignal(engineHandle, 0, nil, 0) == nil {
+	if !fixtureProcessExited(engine.fd, 10*time.Second) {
 		t.Fatal("owned engine survived desktop teardown")
 	}
 }
@@ -174,7 +165,7 @@ func awaitDesktopFile(t *testing.T, path string) {
 	t.Fatalf("desktop fixture never created %s", path)
 }
 
-func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy) (int, int) {
+func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy, bootstrap int) (fixtureProcess, fixtureProcess) {
 	t.Helper()
 	deadline := time.Now().Add(120 * time.Second)
 	for time.Now().Before(deadline) {
@@ -195,6 +186,21 @@ func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy
 			if _, err := exec.Command("curl", "--fail", "--silent", "--max-time", "2", endpoint.String()).Output(); err != nil {
 				continue
 			}
+			pinnedEngine, err := pinFixtureProcess(manifest.PID, 0)
+			if err != nil {
+				continue
+			}
+			keepHandles := false
+			desktopFD := -1
+			defer func() {
+				if !keepHandles {
+					_ = unix.Close(pinnedEngine.fd)
+					if desktopFD >= 0 {
+						_ = unix.Close(desktopFD)
+					}
+				}
+			}()
+			testutil.FailErr(t, "engine belongs to owned bootstrap", fixtureDescendsFrom(manifest.PID, bootstrap))
 			engine, err := os.Stat(fmt.Sprintf("/proc/%d/exe", manifest.PID))
 			testutil.FailErr(t, "running engine image", err)
 			selected, err := os.Stat(filepath.Join(policy.GenerationRoot, "bin/pw"))
@@ -210,6 +216,12 @@ func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy
 					parent, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "PPid:")))
 				}
 			}
+			if parent != pinnedEngine.parent {
+				t.Fatal("engine parent changed during observation")
+			}
+			pinnedDesktop, err := pinFixtureProcess(parent, 0)
+			testutil.FailErr(t, "retain actual desktop birth", err)
+			desktopFD = pinnedDesktop.fd
 			desktop, err := os.Stat(fmt.Sprintf("/proc/%d/exe", parent))
 			testutil.FailErr(t, "running desktop image", err)
 			selected, err = os.Stat(filepath.Join(policy.GenerationRoot, "bin/painted-wolf-code"))
@@ -217,10 +229,13 @@ func awaitActualDesktopHealth(t *testing.T, home string, policy GenerationPolicy
 			if !os.SameFile(desktop, selected) {
 				t.Fatal("engine parent is not the actual selected Den")
 			}
-			return manifest.PID, parent
+			testutil.FailErr(t, "engine birth remains current", pinnedEngine.current())
+			testutil.FailErr(t, "desktop birth remains current", pinnedDesktop.current())
+			keepHandles = true
+			return pinnedEngine, pinnedDesktop
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatal("actual protected Den never served engine health with an empty package database")
-	return 0, 0
+	return fixtureProcess{}, fixtureProcess{}
 }

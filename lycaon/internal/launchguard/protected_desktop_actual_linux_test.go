@@ -84,7 +84,19 @@ func TestProtectedLaunchActualDesktopFixture(t *testing.T) {
 		t.Fatal("invalid owned fixture path")
 	}
 	testutil.FailErr(t, "reserve owned fixture", os.Mkdir(dir, 0o755))
-	defer func() { testutil.FailErr(t, "remove owned fixture", os.RemoveAll(dir)) }()
+	preserve := false
+	defer func() {
+		if !preserve {
+			testutil.FailErr(t, "remove owned fixture", os.RemoveAll(dir))
+		}
+	}()
+	testutil.FailErr(t, "owned outer subreaper", unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0))
+	defer func() {
+		if err := settleDesktopLineage(); err != nil {
+			preserve = true
+			t.Errorf("fixture lineage cleanup: %v (%s)", err, dir)
+		}
+	}()
 	testutil.FailErr(t, "install exact artifact generation", installDesktopGeneration(dir, artifact, manifest, os.Getenv("PW_DESKTOP_BOOTSTRAP"), os.Getenv("PW_DESKTOP_ENTRY")))
 	_, _, err = copyRootBinary(os.Args[0], filepath.Join(dir, "test-driver"), 0o755, nil)
 	testutil.FailErr(t, "retain fixture driver before private temporary mount", err)
@@ -107,5 +119,6 @@ func TestProtectedLaunchActualDesktopFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("private loopback: %v %s", err, out)
 	}
+	verifyDesktopLineageCleanup(t)
 	runActualDesktop(t, dir, uid, gid, groups, artifact)
 }

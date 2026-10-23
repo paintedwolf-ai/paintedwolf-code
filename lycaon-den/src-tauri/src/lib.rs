@@ -36,10 +36,12 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Before any thread or child exists that could inherit the launch's
-    // broker and lifetime descriptors.
+    // Claim the launch selection, broker and lifetime descriptors before threads or children.
     #[cfg(unix)]
-    protected_launch::claim();
+    if let Err(error) = protected_launch::claim() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
     if let Err(error) = process_protection::harden_release() {
         eprintln!("Could not protect desktop process memory: {error}");
         std::process::exit(1);
