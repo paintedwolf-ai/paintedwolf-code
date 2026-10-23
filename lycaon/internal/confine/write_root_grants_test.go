@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestGrantedWriteRootsSourceUnionedIntoWriteRoots(t *testing.T) {
@@ -18,7 +19,8 @@ func TestGrantedWriteRootsSourceUnionedIntoWriteRoots(t *testing.T) {
 	SetGrantedWriteRootsSource(func(string) []string { return []string{granted} })
 	t.Cleanup(func() { SetGrantedWriteRootsSource(nil) })
 
-	roots := WriteRootsForBoundary("", nil, nil, "")
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	if !PathWithinWriteRoots(granted, roots) {
 		t.Fatalf("durable write_root grant %q not unioned into write roots: %v", granted, roots)
 	}
@@ -35,30 +37,34 @@ func TestGrantedWriteRootsSourceReadLive(t *testing.T) {
 	})
 	t.Cleanup(func() { SetGrantedWriteRootsSource(nil) })
 
-	if PathWithinWriteRoots(granted, WriteRootsForBoundary("", nil, nil, "")) {
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit initial roots", err)
+	if PathWithinWriteRoots(granted, roots) {
 		t.Fatal("grant must not be present before it is enabled")
 	}
 	enabled = true
-	if !PathWithinWriteRoots(granted, WriteRootsForBoundary("", nil, nil, "")) {
+	roots, err = WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit updated roots", err)
+	if !PathWithinWriteRoots(granted, roots) {
 		t.Fatal("grant must be picked up live on the next resolve (Revoke drops it likewise)")
 	}
 }
 
-// Attached (standing) roots refuse stores in both directions: the root itself
-// and any root that merely contains one.
+// Standing roots distinguish protected stores from the host state tree.
 func TestAttachedWriteRootRefused(t *testing.T) {
 	withShippedCredentialStores(t)
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		t.Skip("no home dir")
 	}
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
 	cases := []struct {
 		name string
 		root string
 		code string // empty => allowed
 	}{
-		{"home", home, ""},
-		{"fs-root", string(filepath.Separator), ""},
+		{"home", home, WriteRootCodeContainsState},
+		{"fs-root", string(filepath.Separator), WriteRootCodeContainsState},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
 		{"ssh-secret", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
@@ -98,12 +104,13 @@ func TestGrantedWriteRootRefused(t *testing.T) {
 	if err != nil || home == "" {
 		t.Skip("no home dir")
 	}
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
 	cases := []struct {
 		name string
 		root string
 		code string // empty => allowed
 	}{
-		{"fs-root", string(filepath.Separator), ""},
+		{"fs-root", string(filepath.Separator), WriteRootCodeContainsState},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
 		{"ssh-key-material", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
@@ -115,9 +122,9 @@ func TestGrantedWriteRootRefused(t *testing.T) {
 		{"inside-store", filepath.Join(home, ".config", "gcloud", "logs"), WriteRootCodeSecretStore},
 		// The ask adjudicated these; the floor protects what sits inside.
 		{"docker-parent-ok", filepath.Join(home, ".docker"), ""},
-		{"config-parent-ok", filepath.Join(home, ".config"), ""},
+		{"config-parent", filepath.Join(home, ".config"), WriteRootCodeContainsState},
 		{"library-parent-ok", filepath.Join(home, "Library"), ""},
-		{"home-ok", home, ""},
+		{"home", home, WriteRootCodeContainsState},
 		{"docker-buildx-state-ok", filepath.Join(home, ".docker", "buildx", "activity"), ""},
 		{"under-home-ok", filepath.Join(home, "go", "pkg", "mod"), ""},
 		{"opt-ok", "/opt/shared-cache", ""},
@@ -392,7 +399,8 @@ func TestControlPlanePathDeniedLeavesOnlyTheInvocationsScratch(t *testing.T) {
 }
 
 func TestWriteRootsForBoundarySymmetricAliases(t *testing.T) {
-	roots := WriteRootsForBoundary("", nil, nil, "")
+	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	if runtime.GOOS == "darwin" {
 		// Both /tmp and /private/tmp must be present.
 		hasTmp := false
@@ -432,7 +440,8 @@ func TestWriteRootsForBoundaryAliasesOnlyWholeSegments(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		return
 	}
-	roots := WriteRootsForBoundary("", []string{"/private/tmpX/project", "/private/variant/project"}, nil, "")
+	roots, err := WriteRootsForBoundary("", []string{"/private/tmpX/project", "/private/variant/project"}, nil, "")
+	testutil.FailErr(t, "admit write roots", err)
 	for _, r := range roots {
 		if strings.HasPrefix(r, "/tmpX") || strings.HasPrefix(r, "/variant") {
 			t.Fatalf("WriteRootsForBoundary aliased a sibling of a /private root: %q in %v", r, roots)
@@ -477,7 +486,8 @@ func TestStandardCacheDataRootsNameStoresNotToolHomes(t *testing.T) {
 
 func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 	scratchDir := filepath.Join(t.TempDir(), "scratch", "sess-123")
-	roots := WriteRootsForBoundary("", nil, nil, scratchDir)
+	roots, err := WriteRootsForBoundary("", nil, nil, scratchDir)
+	testutil.FailErr(t, "admit write roots", err)
 	if !PathWithinWriteRoots(scratchDir, roots) {
 		t.Fatalf("session scratch root %q not unioned into write roots: %v", scratchDir, roots)
 	}

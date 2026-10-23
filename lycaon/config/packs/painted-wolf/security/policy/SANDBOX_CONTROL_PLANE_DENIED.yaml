@@ -12,7 +12,7 @@ requires:
 when: paintedwolf.rejection_code == "SANDBOX_CONTROL_PLANE_DENIED"
 effect: block
 copy:
-  what: '{{ paintedwolf.path }} is part of the agent host''s control plane.'
+  what: 'Tools cannot use {{ paintedwolf.path }} to access the app''s own state.'
   cause: Agents cannot read or rewrite the configuration that defines their own tools, policy, credentials, and authority. No approval covers this path, so none was asked for.
   why: An approval cannot make self-inspection or self-modification of the active control plane coherent.
   fix: >-
