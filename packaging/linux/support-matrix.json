@@ -378,7 +378,8 @@
         927,
         928,
         940,
-        941
+        941,
+        1312
       ],
       "cases": [
         "clean-install-and-launch",
@@ -386,7 +387,15 @@
         "elf-abi-and-runtime-modules",
         "launcher-arguments",
         "package-ownership-and-removal"
-      ]
+      ],
+      "platform_difference": {
+        "code_authority": "Immutable application generation and administrator-installed module roots; macOS uses Apple signatures and library validation.",
+        "residuals": [
+          "User configuration may select an unneeded root-installed library; macOS similarly admits unneeded Apple-signed libraries.",
+          "Code already running in a protected process can load code from memory; preserve process and sandbox authority separation."
+        ],
+        "post_release_issue": 1312
+      }
     },
     {
       "id": "updates",
