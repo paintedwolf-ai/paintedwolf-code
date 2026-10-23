@@ -179,8 +179,13 @@ export function createSessionNavigation(options: Pick<ShellScope,
     recents: options.recents,
     retireEntity: (scope) => getEntityRetire()?.session(scope),
     resumeSession: (next, options) => resumeSession(next, options),
-    evictConversation: (projectId, sessionId) =>
-      options.shell.evictConversation(projectId, sessionId),
+    evictConversation: (projectId, sessionId) => {
+      options.shell.evictConversation(projectId, sessionId);
+      if (options.appStore.state.currentSession?.id === sessionId) {
+        options.appStore.actions.clearChatForSessionSwitch("*");
+        options.appStore.actions.resetChatForSessionSwitch();
+      }
+    },
   });
 
   const sidebarRowAsRecent = (row: SidebarChatRow): RecentSession => ({
@@ -198,7 +203,12 @@ export function createSessionNavigation(options: Pick<ShellScope,
     nextPinRank: options.projectSessions.nextPinRank,
     pinnedIds: options.projectSessions.pinnedIds,
     refreshProjectRows: () => void options.projectSessions.refresh(),
-    retireLocally: (target) => retireSessionLocally(localRetirementDeps(), target),
+    retireLocally: async (target) => {
+      if (options.appStore.state.currentSession?.id === target.sessionId) {
+        options.appStore.actions.markSessionArchived(target.sessionId, true);
+      }
+      await retireSessionLocally(localRetirementDeps(), target);
+    },
   });
 
   const archiveSidebarSession = async (row: SidebarChatRow) => {

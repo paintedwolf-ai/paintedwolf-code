@@ -85,7 +85,7 @@ export function holdPresentedChat(
   if (!sameProject) return next;
 
   // Same-project hydrate and create hold until the incoming session is bound.
-  if (lock || next == null || current !== next.sessionId) return previous;
+  if (lock || (next != null && current !== next.sessionId)) return previous;
   return next;
 }
 
