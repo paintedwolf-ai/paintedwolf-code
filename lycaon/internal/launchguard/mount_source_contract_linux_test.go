@@ -3,6 +3,8 @@
 package launchguard
 
 import (
+	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +13,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -63,6 +67,9 @@ func checkMountSourceRole(directory, uidText, gidText string) error {
 	}
 	entries, err := parseMountTopology(raw)
 	if err != nil {
+		return err
+	}
+	if err := checkSourceFrameRefusals(frame, origin, generation.Entry, raw, uint32(uid)); err != nil {
 		return err
 	}
 	opener, err := startMountSource(frame, origin, generation.Entry, raw)
@@ -174,6 +181,84 @@ func verifySourceThreadCredentials(pid int, uid, gid string) error {
 				return fmt.Errorf("source thread lacks %s", key)
 			}
 		}
+	}
+	return nil
+}
+
+func checkSourceFrameRefusals(frame, origin, entry *os.File, topology []byte, caller uint32) error {
+	sealed, err := sealSourceTopology(topology)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sealed.Close() }()
+	raw, err := os.ReadFile(mountDescriptorPath(int(sealed.Fd())))
+	if err != nil {
+		return err
+	}
+	for _, mode := range []string{"namespace", "version", "reserved", "truncated", "foreign owner"} {
+		bad := append([]byte(nil), raw...)
+		switch mode {
+		case "namespace":
+			binary.LittleEndian.PutUint64(bad[24:], binary.LittleEndian.Uint64(bad[24:])^1)
+		case "version":
+			binary.LittleEndian.PutUint32(bad[8:], 2)
+		case "reserved":
+			bad[12] = 1
+		case "truncated":
+			bad = bad[:sourceTopologyHeader-1]
+		}
+		fd, err := unix.MemfdCreate("invalid-source-frame", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
+		if err != nil {
+			return err
+		}
+		invalid := os.NewFile(uintptr(fd), "invalid-source-frame")
+		_, err = invalid.Write(bad)
+		if err == nil && mode == "foreign owner" {
+			err = invalid.Chown(int(caller), -1)
+		}
+		if err == nil {
+			err = invalid.Chmod(0o400)
+		}
+		if err == nil {
+			_, err = unix.FcntlInt(invalid.Fd(), unix.F_ADD_SEALS, entrySeals)
+		}
+		if err == nil {
+			err = checkSourceRoleRefuses(frame, origin, entry, invalid)
+		}
+		_ = invalid.Close()
+		if err != nil {
+			return fmt.Errorf("source %s refusal: %w", mode, err)
+		}
+	}
+	return nil
+}
+
+func checkSourceRoleRefuses(frame, origin, entry, topology *os.File) error {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	parent, child := os.NewFile(uintptr(pair[0]), "refusal-parent"), os.NewFile(uintptr(pair[1]), "refusal-child")
+	defer func() { _ = parent.Close(); _ = child.Close() }()
+	read, write, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = read.Close(); _ = write.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "/proc/self/fd/"+strconv.Itoa(sourceSelfFD), MountSourceArgument)
+	command.Env = []string{}
+	command.ExtraFiles = []*os.File{frame, origin, topology, child, read, entry}
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:                 unix.CLONE_NEWUSER,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappingsEnableSetgroups: true,
+	}
+	out, runErr := command.CombinedOutput()
+	if ctx.Err() != nil || runErr == nil || command.ProcessState == nil || command.ProcessState.ExitCode() != 1 || len(out) != 0 {
+		return fmt.Errorf("source refusal state=%v deadline=%v output=%q", command.ProcessState, ctx.Err(), out)
 	}
 	return nil
 }
