@@ -1,23 +1,34 @@
 use super::*;
 use serde_json::Value;
-use std::{fs, os::unix::fs::PermissionsExt, sync::atomic::{AtomicU64, Ordering}};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let base = std::env::temp_dir().join(format!("observer-producer-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let base = std::env::temp_dir().join(format!(
+            "observer-producer-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir(&base).unwrap();
         Self(base.canonicalize().unwrap())
     }
 }
 impl Drop for Directory {
-    fn drop(&mut self) { fs::remove_dir_all(&self.0).unwrap(); }
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.0).unwrap();
+    }
 }
 
 #[test]
 fn shared_producer_manifest_opens_the_observer_and_rejects_changed_identity() {
-    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../packaging/linux/manifest/testdata");
+    let corpus =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../packaging/linux/manifest/testdata");
     let architecture = std::env::consts::ARCH;
     let raw = fs::read(corpus.join(format!("{architecture}.json"))).unwrap();
     let canonical: Value = serde_json::from_slice(&raw).unwrap();
@@ -55,7 +66,9 @@ fn shared_producer_manifest_opens_the_observer_and_rejects_changed_identity() {
         fs::write(&observer, &bytes).unwrap();
         match mutation {
             "unknown version" => bad["format_version"] = serde_json::json!(99),
-            "missing seal" => { bad.as_object_mut().unwrap().remove("payload"); }
+            "missing seal" => {
+                bad.as_object_mut().unwrap().remove("payload");
+            }
             _ => {
                 let mut changed = bytes.clone();
                 changed[32] ^= 1;
@@ -63,6 +76,9 @@ fn shared_producer_manifest_opens_the_observer_and_rejects_changed_identity() {
             }
         }
         fs::write(&manifest_path, serde_json::to_vec(&bad).unwrap()).unwrap();
-        assert!(Image::open_at(&shell, &directory.0, owner).is_err(), "{mutation}");
+        assert!(
+            Image::open_at(&shell, &directory.0, owner).is_err(),
+            "{mutation}"
+        );
     }
 }
