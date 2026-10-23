@@ -4,6 +4,7 @@ package fspath
 
 import (
 	"encoding/binary"
+	"os"
 	"path/filepath"
 	"unsafe"
 
@@ -14,6 +15,11 @@ import (
 func canonicalizeExisting(path string) (string, bool) {
 	if resolved, ok := kernelPath(path); ok {
 		return resolved, true
+	}
+	// Missing tails are resolved by CanonicalPath's parent walk. Rewalking
+	// every existing ancestor here repeats that work for each missing component.
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return "", false
 	}
 	linked, err := filepath.EvalSymlinks(path)
 	if err != nil {
