@@ -135,8 +135,10 @@ def serve(execution: dict, vm_id: str):
 
     def attached_publication():
         mailbox.attach()
-        return tuple((info.st_dev, info.st_ino) for info in
-                     (mailbox.path.lstat(), (mailbox.path / 'binding.json').lstat()))
+        directory = mailbox.path.lstat()
+        binding = (mailbox.path / 'binding.json').lstat()
+        return ((directory.st_dev, directory.st_ino),
+                (binding.st_dev, binding.st_ino, binding.st_size, binding.st_mtime_ns, binding.st_ctime_ns))
 
     for _ in range(protocol.MAX_TRANSACTIONS * 256 * 20):
         raw = sys.stdin.buffer.readline(protocol.MAX_DOCUMENT + 1)
