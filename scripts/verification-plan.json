@@ -356,6 +356,12 @@
     "licenses:notices": [
       "licenses:notices"
     ],
+    "nix:check": [
+      "nix:check"
+    ],
+    "nix:build": [
+      "nix:build"
+    ],
     "test:linux:installed": [
       "test:linux:installed"
     ],
@@ -385,6 +391,8 @@
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
+    "nix:build": "passthrough",
+    "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "test:linux:installed": "passthrough"
   },
@@ -713,6 +721,18 @@
       ],
       "workers": 1
     },
+    "nix:check": {
+      "locks": [
+        "nix"
+      ],
+      "workers": 1,
+      "progress": "log"
+    },
+    "nix:build": {
+      "locks": ["*"],
+      "workers": 1,
+      "progress": "log"
+    },
     "test:linux:installed": {
       "locks": [],
       "workers": 1
@@ -973,6 +993,18 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "nix": {
+      "targets": [
+        "nix:check"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
       "platform": "linux"
     },
     "race": {

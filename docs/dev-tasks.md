@@ -972,6 +972,51 @@ flowchart TD
 
 Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
 
+### Nix development and package builds
+
+The pinned [flake](../flake.nix) defines Linux amd64 and arm64 development
+shells from the repository's Rust toolchain, Go module and Bun version. Enter
+with `nix develop`, then use the existing root `./task` commands. The shell
+supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
+application feature code still uses native capability facts.
+
+Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu
+24.04 and later) need an administrator to load the generation's engine grant
+before confinement is available. Each generation ships
+`share/painted-wolf-code/apparmor/paintedwolf-engine-<hash>`, which grants user
+namespaces to that generation's exact `pw` executable only: install it under
+`/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
+a new path and needs its own grant; remove the previous one once nothing runs it.
+A source build on such a host also needs the scanner builder's grant: build the
+scanner tools first (`./task nix:build -- --component scanner-host-tools`), load
+the `paintedwolf-scanner-builder-<hash>` profile its output ships the same way,
+then build the application. Substituting the qualified closure needs neither.
+
+Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
+Vulkan driver unless those variables are already set: host-installed drivers
+are not part of the generation, so they would be foreign modules. NixOS uses
+the system's configured driver environment.
+
+Consumers without flakes use [default.nix](../default.nix): `nix-build` or
+`pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
+inputs pinned in `flake.lock`; the caller's package set selects only the
+platform.
+
+`./task nix:check` evaluates all declared systems without building or updating
+the lock file, and requires `default.nix` to instantiate the flake's exact
+application derivation for each system. `./task nix:build` builds the host's native Linux package under
+normal exclusive admission with one Nix job/core and sandboxing enabled. Its
+report binds the source tree, flake lock, derivations, outputs and recursive
+closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+For a focused package input build, use `./task nix:build -- --component bun-lock`;
+the declared component list is checked by the build driver. The generated Bun
+dependency expression is a build output to review and commit, never an
+evaluation-time download or an automatic lock-file mutation.
+These tasks do not publish a cache or authorize daemon access from an agent
+command. Nix build sandboxing and application command confinement are separate.
+The package closure and installed system integration remain under implementation
+in #927/#928/#929; evaluation does not establish installed support.
+
 ### Linux packages
 
 Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and an `.rpm` for Fedora and RHEL-compatible families, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
