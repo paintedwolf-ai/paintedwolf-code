@@ -725,11 +725,13 @@
       "locks": [
         "nix"
       ],
-      "workers": 1
+      "workers": 1,
+      "progress": "log"
     },
     "nix:build": {
       "locks": ["*"],
-      "workers": 1
+      "workers": 1,
+      "progress": "log"
     },
     "test:linux:installed": {
       "locks": [],
