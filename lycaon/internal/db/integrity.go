@@ -40,7 +40,7 @@ func (s *Store) IntegrityAuditDue() bool {
 // RunIntegrityAudit audits the store once after boot, then parks until ctx
 // ends so the runner supervisor does not restart it.
 func RunIntegrityAudit(ctx context.Context, store *Store) error {
-	if err := AuditIntegrity(ctx, store); err != nil {
+	if err := AuditIntegrity(ctx, store); err != nil && !errors.Is(err, errAuditDeferred) {
 		return err
 	}
 	<-ctx.Done()
@@ -53,11 +53,15 @@ func AuditIntegrity(ctx context.Context, store *Store) error {
 		return errors.New("audit integrity: nil database")
 	}
 	started := time.Now()
-	auditErr := auditTables(ctx, store.reader, store.auditedTable)
+	auditErr := auditTables(ctx, store.reader, store.auditedTable, 30*time.Second)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 	if auditErr != nil {
+		if errors.Is(auditErr, errAuditDeferred) {
+			slog.InfoContext(ctx, "store integrity audit deferred; table deadline exceeded", "component", "db", "error", auditErr)
+			return auditErr
+		}
 		var damaged *StoreIncompatibleError
 		if !errors.As(auditErr, &damaged) {
 			return auditErr
@@ -97,33 +101,59 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 	return foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check")
 }
 
-// auditTables checks one table at a time, its b-tree and indexes and then
-// its foreign keys, each in a read of its own, so an audit running beside
-// live work releases its read snapshot between tables. A large table can
-// still pin the WAL while its check runs. Whole-file page accounting is left
-// to validateStoreIntegrity;
-// a damaged free list surfaces as corruption when its pages are reused.
-func auditTables(ctx context.Context, sqlDB *sql.DB, audited func(string)) error {
+var errAuditDeferred = errors.New("integrity audit deferred")
+
+// auditTables releases each table's read snapshot before checking the next.
+// Large checks are interrupted; incomplete audits retain their pending marker.
+// Whole-file page accounting remains part of exclusive validation.
+func auditTables(ctx context.Context, sqlDB *sql.DB, audited func(string), tableLimit time.Duration) error {
 	tables, err := auditableTables(ctx, sqlDB)
 	if err != nil {
 		return integrityCheckError(err, "list tables")
 	}
+	var deferred []string
 	for _, table := range tables {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
-		if err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check("+quoted+")"); err != nil {
-			return err
+		err := auditTable(ctx, sqlDB, table, tableLimit)
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		if err := foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check("+quoted+")"); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			deferred = append(deferred, table)
+			continue
+		}
+		if err != nil {
 			return err
 		}
 		if audited != nil {
 			audited(table)
 		}
 	}
+	if len(deferred) != 0 {
+		return fmt.Errorf("%w: %s", errAuditDeferred, strings.Join(deferred, ", "))
+	}
 	return nil
+}
+
+func auditTable(ctx context.Context, sqlDB *sql.DB, table string, limit time.Duration) error {
+	checkCtx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
+	err := scanCheck(checkCtx, sqlDB, "PRAGMA integrity_check("+quoted+")")
+	if err == nil {
+		err = foreignKeyCheck(checkCtx, sqlDB, "PRAGMA foreign_key_check("+quoted+")")
+	}
+	// Preserve confirmed damage even if the deadline races the result.
+	var damaged *StoreIncompatibleError
+	if errors.As(err, &damaged) {
+		return err
+	}
+	if checkCtx.Err() != nil {
+		return checkCtx.Err()
+	}
+	return err
 }
 
 // auditableTables lists the stored tables, including virtual tables' shadow
