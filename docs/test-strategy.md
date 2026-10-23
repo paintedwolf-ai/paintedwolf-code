@@ -1041,14 +1041,18 @@ measures a tar payload compressed with zstd and reserves that size plus 5% and
 1 MiB for archive variance against an 8 GiB repository budget. Superseded platform
 entries remain available until GitHub's inventory confirms the new cache. Only
 when required to fit the upload does admission retire entries first, preferring
-superseded generations and then the least recently used owned compiler entries; it never deletes another ref or an unknown family. Oversized
+superseded generations of the same platform family; it never displaces another
+family, ref, or unknown entry. A payload that cannot coexist with the other
+caches is reported and left unpublished. Oversized
 payloads are reported and left unpublished. The remaining allowance leaves
 headroom for tool caches; concurrent writes and GitHub eviction can still
 displace entries.
 This is write admission, not a storage reservation or a pinned cache.
 
 The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
-combined module/build payload. The desktop warmer removes workspace package
+compiler-only payload. Go modules are downloaded during online provisioning
+before offline verification. Expanded sources and their duplicate archives do
+not compete with native compiler intermediates for repository storage. The desktop warmer removes workspace package
 outputs with Cargo's package-scoped cleanup, retaining dependency builds.
 Hosted development Rust profiles are configured explicitly by setup and the
 calling workflows; cache restore and save do not change compiler settings.

@@ -32,13 +32,13 @@ class CacheBudgetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             budget.plan(rows, "unowned-new", 10)
 
-    def test_space_is_reserved_before_retiring_other_owned_entries(self):
+    def test_storage_pressure_cannot_displace_another_compiler_family(self):
         rows = [row(1, "go-Linux-X64-old", 2**20), row(2, "decide-v2-macOS-ARM64-old", 2**20),
                 row(3, "unknown", 100)]
         result = budget.plan(rows, "go-Linux-X64-new", 2**20, limit=3 * 2**20)
-        self.assertTrue(result["allowed"])
-        self.assertEqual(result["delete"], [1, 2])
-        self.assertLessEqual(result["projected_bytes"], result["limit_bytes"])
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["delete"], [])
+        self.assertGreater(result["projected_bytes"], result["limit_bytes"])
 
     def test_payload_measurement_obeys_exclusions_and_ignores_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,3 +103,16 @@ class CacheBudgetTests(unittest.TestCase):
             with patch.dict(os.environ, {**env, "GITHUB_REF": "refs/pull/1/merge"}, clear=True), \
                     self.assertRaises(ValueError):
                 budget.main()
+
+
+class GoCachePayloadTests(unittest.TestCase):
+    def test_go_payload_keeps_compiler_outputs_without_module_archives(self):
+        import yaml
+        root = Path(__file__).resolve().parents[3]
+        action = yaml.safe_load((root / ".github/actions/cache-go/action.yml").read_text())
+        payloads = [step["with"]["path"] for step in action["runs"]["steps"]
+                    if "path" in step.get("with", {})]
+        self.assertEqual(len(payloads), 3)
+        self.assertTrue(all(path.strip() == "${{ steps.paths.outputs.gocache }}" for path in payloads))
+        provision = (root / "scripts/ci_policy/provision.sh").read_text()
+        self.assertIn('go mod download', provision)
