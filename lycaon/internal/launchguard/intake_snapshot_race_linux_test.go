@@ -26,6 +26,10 @@ type intakeSnapshotFacts struct {
 	CaptureRetryable        bool   `json:"capture_retryable"`
 	IntakeRetryable         bool   `json:"intake_retryable"`
 	IntakeTerminal          bool   `json:"intake_terminal"`
+	IntakePending           bool   `json:"intake_pending"`
+	SyscallFailurePreserved bool   `json:"syscall_failure_preserved"`
+	AliasFailureFatal       bool   `json:"alias_failure_fatal"`
+	StructuralFailureFatal  bool   `json:"structural_failure_fatal"`
 }
 
 func TestIntakeStaleSnapshotFixture(t *testing.T) {
@@ -54,10 +58,11 @@ func TestIntakeSnapshotAfterOwnedUnmount(t *testing.T) {
 	if !facts.SnapshotRetired || !facts.IdentityLookupSucceeded || facts.SnapshotMountID == 0 || facts.OpenedMountID == 0 || facts.SnapshotMountID == facts.OpenedMountID {
 		t.Fatalf("fixture did not establish successful underlying-mount lookup: %+v", facts)
 	}
-	// This diagnostic fixture records the existing terminal behavior before a
-	// separately reviewed epoch-change correction; it is not a desired outcome.
-	if facts.CaptureRetryable || facts.IntakeRetryable || !facts.IntakeTerminal {
-		t.Fatalf("stale snapshot no longer demonstrates the suspected terminal path: %+v", facts)
+	if !facts.CaptureRetryable || !facts.IntakeRetryable || !facts.IntakePending || facts.IntakeTerminal {
+		t.Fatalf("verified mount replacement did not select fresh-topology retry: %+v", facts)
+	}
+	if !facts.SyscallFailurePreserved || !facts.AliasFailureFatal || !facts.StructuralFailureFatal {
+		t.Fatalf("retry swallowed a syscall, alias or structural failure: %+v", facts)
 	}
 	t.Logf("actual intake stale-snapshot facts: %s", out)
 }
@@ -81,7 +86,7 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	if err != nil {
 		return facts, err
 	}
-	defer os.RemoveAll(root)
+	defer func() { _ = os.RemoveAll(root) }()
 	target := filepath.Join(root, "owned-volume")
 	if err := os.Mkdir(target, 0700); err != nil {
 		return facts, err
@@ -115,7 +120,28 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	if err != nil {
 		return facts, err
 	}
+	_, invalid := verifyIntakeRoot(-1, selected)
+	var identity *intakeIdentityError
+	facts.SyscallFailurePreserved = errors.Is(invalid, unix.EBADF) && errors.As(invalid, &identity) && !errors.Is(invalid, errIntakeEpochChanged)
+	originalRoot := root
+	movedRoot := root + "-moved"
+	if err := os.Rename(root, movedRoot); err != nil {
+		_ = unix.Close(descriptor)
+		return facts, err
+	}
+	root, target = movedRoot, filepath.Join(movedRoot, "owned-volume")
+	aliasID, _, err := mountDescriptorIdentity(descriptor)
+	if err != nil || aliasID != uint64(selected.id) {
+		_ = unix.Close(descriptor)
+		return facts, errors.New("alias control changed its held mount identity")
+	}
+	_, aliasErr := verifyIntakeRoot(descriptor, selected)
+	facts.AliasFailureFatal = aliasErr != nil && !errors.Is(aliasErr, errIntakeEpochChanged)
 	_ = unix.Close(descriptor)
+	if err := os.Rename(root, originalRoot); err != nil {
+		return facts, err
+	}
+	root, target = originalRoot, selected.mountPoint
 	facts.SnapshotMountID = uint64(selected.id)
 	if err := unix.Unmount(target, 0); err != nil {
 		return facts, err
@@ -150,8 +176,28 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	}
 	facts.CaptureRetryable = errors.Is(captureErr, errIntakeEpochChanged)
 	intake := moduleIntake{socket: -1}
-	_, intakeErr := intake.importArrivals(snapshot, structural)
+	pending, intakeErr := intake.importArrivals(snapshot, structural)
+	facts.IntakePending = pending
+	_, structuralErr := intake.reconcile(current, map[int]bool{selected.id: true}, map[int]mountEntry{selected.id: selected})
+	facts.StructuralFailureFatal = structuralErr != nil && !errors.Is(structuralErr, errIntakeEpochChanged)
 	facts.IntakeRetryable = errors.Is(intakeErr, errIntakeEpochChanged)
 	facts.IntakeTerminal = intakeErr != nil && !facts.IntakeRetryable
 	return facts, nil
+}
+
+func TestIntakeLookupRefusalCannotHideIdentitySyscallFailure(t *testing.T) {
+	for _, cause := range []error{unix.EACCES, unix.ENOENT, unix.ENOTDIR, unix.ELOOP} {
+		if !intakeLookupUnavailable(cause) {
+			t.Fatalf("existing path lookup refusal changed: %v", cause)
+		}
+		identity := &intakeIdentityError{cause}
+		if intakeLookupUnavailable(identity) || !errors.Is(identity, cause) || errors.Is(identity, errIntakeEpochChanged) {
+			t.Fatalf("identity syscall provenance was discarded or retried: %v", identity)
+		}
+	}
+	for _, failure := range []error{unix.EBADF, unix.EIO, errIntakeEpochChanged, errors.New("structural refusal")} {
+		if intakeLookupUnavailable(failure) {
+			t.Fatalf("nonlookup failure broadened retry authority: %v", failure)
+		}
+	}
 }

@@ -69,15 +69,31 @@ func openedIntakeRoot(entry mountEntry) (fd int, inode uint64, err error) {
 			_ = unix.Close(descriptor)
 		}
 	}()
+	inode, err = verifyIntakeRoot(fd, entry)
+	if err != nil {
+		return -1, 0, err
+	}
+	return fd, inode, nil
+}
+
+type intakeIdentityError struct{ error }
+
+func (err *intakeIdentityError) Unwrap() error { return err.error }
+
+// Bind a held descriptor to the observed mount and its exact selected root.
+func verifyIntakeRoot(fd int, entry mountEntry) (uint64, error) {
 	id, inode, err := mountDescriptorIdentity(fd)
-	if err != nil || id != uint64(entry.id) {
-		return -1, 0, errors.New("intake source mount changed during opening")
+	if err != nil {
+		return 0, &intakeIdentityError{err}
+	}
+	if id != uint64(entry.id) {
+		return 0, errIntakeEpochChanged
 	}
 	alias, err := os.Readlink(mountDescriptorPath(fd))
 	if err != nil || alias != entry.mountPoint {
-		return -1, 0, errors.New("intake source is not the selected mount root")
+		return 0, errors.New("intake source is not the selected mount root")
 	}
-	return fd, inode, nil
+	return inode, nil
 }
 
 // A held private clone pins its filesystem/root object. Adoption requires the

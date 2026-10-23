@@ -82,7 +82,7 @@ func (intake *moduleIntake) importArrivals(current []mountEntry, structural map[
 		if captureErr != nil {
 			// These are structured source lookup refusals under the caller's
 			// credentials. No alternate target or privileged lookup follows.
-			if errors.Is(captureErr, unix.EACCES) || errors.Is(captureErr, unix.ENOENT) || errors.Is(captureErr, unix.ENOTDIR) || errors.Is(captureErr, unix.ELOOP) {
+			if intakeLookupUnavailable(captureErr) {
 				pending = true
 				// A known atomic group remains indivisible on refusal; never
 				// import one of its descendants as a separate fallback lease.
@@ -118,4 +118,10 @@ func (intake *moduleIntake) importArrivals(current []mountEntry, structural map[
 		}
 	}
 	return pending, nil
+}
+
+func intakeLookupUnavailable(err error) bool {
+	var identity *intakeIdentityError
+	return !errors.As(err, &identity) && (errors.Is(err, unix.EACCES) || errors.Is(err, unix.ENOENT) ||
+		errors.Is(err, unix.ENOTDIR) || errors.Is(err, unix.ELOOP))
 }
