@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { liveChatStage } from "./helpers.ts";
 
 const scroller = (page: Page) => liveChatStage(page).locator(".den-chat-stream");
@@ -23,56 +23,59 @@ export function expectContiguousSteps(steps: readonly number[]) {
 }
 
 export async function wheelTranscript(page: Page, deltaY: number) {
-  const host = scroller(page);
-  const box = await host.boundingBox();
-  if (!box) throw new Error("chat scroller is missing");
-  const observation = await host.evaluateHandle((element) => {
-    let frame = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    let previous = "";
-    let stable = 0;
-    const cleanup = () => {
-      clearTimeout(timer);
-      cancelAnimationFrame(frame);
-      element.removeEventListener("wheel", start, true);
-    };
-    let start = () => {};
-    const settled = new Promise<void>((resolve, reject) => {
-      timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Transcript did not settle after its wheel gesture"));
-      }, 5_000);
-      start = () => {
-        const sample = () => {
-          const rows = element.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]");
-          const first = rows.item(0);
-          const last = rows.item(rows.length - 1);
-          const signature = [element.scrollTop, element.scrollHeight,
-            first?.dataset.msgId, first?.getBoundingClientRect().top,
-            last?.dataset.msgId, last?.getBoundingClientRect().bottom].join(":");
-          stable = signature === previous ? stable + 1 : 0;
-          previous = signature;
-          if (stable >= 3) {
-            cleanup();
-            resolve();
-          } else {
-            frame = requestAnimationFrame(sample);
-          }
-        };
-        frame = requestAnimationFrame(sample);
+  // The runner deadline also catches a blocked renderer event loop.
+  await test.step(`Wheel transcript by ${deltaY}px`, async () => {
+    const host = scroller(page);
+    const box = await host.boundingBox();
+    if (!box) throw new Error("chat scroller is missing");
+    const observation = await host.evaluateHandle((element) => {
+      let frame = 0;
+      let timer: ReturnType<typeof setTimeout>;
+      let previous = "";
+      let stable = 0;
+      const cleanup = () => {
+        clearTimeout(timer);
+        cancelAnimationFrame(frame);
+        element.removeEventListener("wheel", start, true);
       };
-      element.addEventListener("wheel", start, { capture: true, once: true });
+      let start = () => {};
+      const settled = new Promise<void>((resolve, reject) => {
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("Transcript did not settle after its wheel gesture"));
+        }, 5_000);
+        start = () => {
+          const sample = () => {
+            const rows = element.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]");
+            const first = rows.item(0);
+            const last = rows.item(rows.length - 1);
+            const signature = [element.scrollTop, element.scrollHeight,
+              first?.dataset.msgId, first?.getBoundingClientRect().top,
+              last?.dataset.msgId, last?.getBoundingClientRect().bottom].join(":");
+            stable = signature === previous ? stable + 1 : 0;
+            previous = signature;
+            if (stable >= 3) {
+              cleanup();
+              resolve();
+            } else {
+              frame = requestAnimationFrame(sample);
+            }
+          };
+          frame = requestAnimationFrame(sample);
+        };
+        element.addEventListener("wheel", start, { capture: true, once: true });
+      });
+      return { settled, cleanup };
     });
-    return { settled, cleanup };
-  });
-  try {
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.wheel(0, deltaY);
-    await observation.evaluate(async (state) => state.settled);
-  } finally {
-    await observation.evaluate((state) => state.cleanup());
-    await observation.dispose();
-  }
+    try {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel(0, deltaY);
+      await observation.evaluate(async (state) => state.settled);
+    } finally {
+      await observation.evaluate((state) => state.cleanup());
+      await observation.dispose();
+    }
+  }, { timeout: 7_000 });
 }
 
 export async function readTranscriptBackTo(page: Page, step: number) {
