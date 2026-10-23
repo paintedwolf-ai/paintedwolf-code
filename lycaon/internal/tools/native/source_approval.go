@@ -25,22 +25,22 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 		// A removed or replaced entry is the entry itself, never a link's target.
 		verifyTarget = verifyEntrySnapshot
 	}
-	if err := verifyTarget(target, m.BeforeSHA256, m.IsDir); err != nil {
+	if err := verifyTarget(ctx, target, m.BeforeSHA256, m.IsDir); err != nil {
 		return err
 	}
 	if m.FromAbsPath != "" {
-		return verifyMutationSnapshot(from, m.AfterSHA256, m.IsDir)
+		return verifyMutationSnapshot(ctx, from, m.AfterSHA256, m.IsDir)
 	}
 	return nil
 }
 
-func verifyMutationSnapshot(location fseffect.Location, expected string, directory bool) error {
-	current, err := captureAgentFileAt(location, context.Background(), nil, false)
+func verifyMutationSnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
+	current, err := captureAgentFileAt(location, ctx, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)
 }
 
-func verifyEntrySnapshot(location fseffect.Location, expected string, directory bool) error {
-	current, err := captureRemovedEntry(location)
+func verifyEntrySnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
+	current, err := captureRemovedEntry(ctx, location, false)
 	return snapshotMatches(location, current, err, expected, directory)
 }
 

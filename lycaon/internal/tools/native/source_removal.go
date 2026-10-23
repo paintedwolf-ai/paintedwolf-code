@@ -19,7 +19,7 @@ func measureAgentRemoval(ctx context.Context, tc tools.ToolContext, target mutat
 	if err != nil {
 		return err
 	}
-	if err := verifyEntrySnapshot(target.Location, mutation.BeforeSHA256, mutation.IsDir); err != nil {
+	if err := verifyEntrySnapshot(ctx, target.Location, mutation.BeforeSHA256, mutation.IsDir); err != nil {
 		return err
 	}
 	mutation.RemovalSnapshot, mutation.BeforeSize = &snapshot, snapshot.Bytes

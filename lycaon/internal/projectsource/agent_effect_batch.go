@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 )
@@ -125,6 +126,7 @@ func (b *agentEffectBatch) Finish(ctx context.Context, completions []sourceeffec
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, pending := range b.pending {
+		pending.row.UpdatedAt = time.Now().UTC()
 		if err := updateSourceMutation(ctx, tx, pending.row); err != nil {
 			return errors.Join(outcome, err)
 		}

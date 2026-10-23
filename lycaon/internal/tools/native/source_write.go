@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -89,7 +90,7 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 			if err := verifyTextWriteBase(current, target.Abs, baseSHA256); err != nil {
 				return err
 			}
-			if err := verifyMutationSnapshot(target.Location, mutation.BeforeSHA256, false); err != nil {
+			if err := verifyMutationSnapshot(ctx, target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
 			}
 			if admit != nil {
@@ -197,7 +198,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			if err := ensureIgnoreOverlayFormat(req.Target.Location); err != nil {
 				return err
 			}
-			if err := verifyMutationSnapshot(req.Target.Location, mutation.BeforeSHA256, false); err != nil {
+			if err := verifyMutationSnapshot(ctx, req.Target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
 			}
 			if err := setAsideUnversionedFile(ctx, tctx, req.Target, mutation); err != nil {
@@ -250,7 +251,7 @@ func setAsideUnversionedFile(ctx context.Context, tctx tools.ToolContext, target
 }
 
 func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget) error {
-	before, err := captureRemovedEntry(target.Location)
+	before, err := captureRemovedEntry(ctx, target.Location, true)
 	if err != nil {
 		return err
 	}
@@ -350,7 +351,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if err != nil {
 		return err
 	}
-	before, err := captureRemovedEntry(to.Location)
+	before, err := captureRemovedEntry(ctx, to.Location, true)
 	if err != nil {
 		return err
 	}
@@ -385,7 +386,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 
 // captureRemovedEntry reads the entry itself: a symbolic link is removed as a
 // link, so it carries no content of its own.
-func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
+func captureRemovedEntry(ctx context.Context, loc fseffect.Location, retainBody bool) (agentFileEvidence, error) {
 	info, err := os.Lstat(filepath.Join(loc.Root, loc.Rel))
 	if os.IsNotExist(err) {
 		return agentFileEvidence{}, nil
@@ -396,7 +397,7 @@ func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return agentFileEvidence{exists: true}, nil
 	}
-	return captureAgentFileAt(loc, context.Background(), nil, true)
+	return captureAgentFileAt(loc, ctx, nil, retainBody)
 }
 
 // recoverableRemoval is the attributed removal of an entry in an attached
@@ -567,7 +568,7 @@ func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *tool
 	}
 	defer release()
 	scratch := make([]byte, 32<<10)
-	size, err := io.CopyBuffer(output, struct{ io.Reader }{f}, scratch)
+	size, err := io.CopyBuffer(output, contextio.Reader{Context: ctx, Source: f}, scratch)
 	if err != nil {
 		captured.Close()
 		return agentFileEvidence{}, err
