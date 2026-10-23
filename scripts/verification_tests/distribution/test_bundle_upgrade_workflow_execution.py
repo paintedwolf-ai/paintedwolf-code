@@ -87,3 +87,39 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("name: release-preflight-${{ github.run_attempt }}", validation)
         self.assertIn("name: release-upgrade-${{ github.run_attempt }}", validation)
         self.assertNotIn("continue-on-error", validation)
+
+
+class ReplayTests(unittest.TestCase):
+    def test_replay_is_read_only_and_cannot_reach_publication(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        replay = workflow.split("  replay-bundle-upgrade:\n", 1)[1].split("  classify:\n", 1)[0]
+        self.assertIn("inputs.rehearsal_run_id != ''", replay)
+        self.assertIn("if: ${{ inputs.rehearsal_run_id == '' }}", workflow)
+        self.assertIn("actions: read", replay)
+        self.assertNotIn("secrets.", replay)
+        self.assertNotIn("environment: release-publication", replay)
+        self.assertIn("artifact-ids: ${{ steps.fixtures.outputs.artifact_id }}", replay)
+        self.assertIn('--case "${REHEARSAL_CASE}"', replay)
+
+    def test_fixture_admission_requires_preparation_and_exact_attempt(self):
+        from unittest.mock import patch
+        from release_upgrade import replay
+        run = {"path": ".github/workflows/release.yml", "status": "completed", "event": "push",
+               "head_repository": {"full_name": "owner/repo"}, "run_attempt": 2, "head_sha": "a" * 40}
+        def rows(path, key):
+            if key == "jobs":
+                self.assertIn("/attempts/2/jobs", path)
+                return [{"name": "prepare-bundle-upgrade", "conclusion": "success"}]
+            return [{"name": "bundle-upgrade-fixtures-1", "expired": False, "id": 1},
+                    {"name": "bundle-upgrade-fixtures-2", "expired": False, "id": 2}]
+        with patch.dict(os.environ, GITHUB_REPOSITORY="owner/repo"), patch.object(replay, "api", return_value=run), patch.object(replay, "pages", side_effect=rows):
+            self.assertEqual(replay.select("123", "")["artifact_id"], 2)
+            for field, value in (("status", "in_progress"), ("path", "ci.yml"), ("head_repository", {"full_name": "foreign/repo"})):
+                with patch.dict(run, {field: value}), self.assertRaises(ValueError):
+                    replay.select("123", "")
+            with patch.object(replay, "pages", return_value=[]), self.assertRaises(ValueError):
+                replay.select("123", "")
+            with self.assertRaises(ValueError):
+                replay.select("123", "v1.0.3-rc1")
+            with self.assertRaises(ValueError):
+                replay.select("../123", "")
