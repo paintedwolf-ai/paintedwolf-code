@@ -74,7 +74,7 @@ func projectModuleCodeRoots(roots []moduleCodeRoot) error {
 	}
 	for _, root := range roots {
 		if err := projectModuleCodeRoot(root); err != nil {
-			return fmt.Errorf("project selected module root: %w", err)
+			return fmt.Errorf("project selected module root %q: %w", root.path, err)
 		}
 	}
 	return nil
@@ -85,11 +85,11 @@ func projectModuleCodeRoot(root moduleCodeRoot) error {
 	// descendant mount. Initial volumes have their own detached safe leases.
 	tree, err := unix.OpenTree(int(root.object.Fd()), "", unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH)
 	if err != nil {
-		return err
+		return fmt.Errorf("clone selected object: %w", err)
 	}
 	defer func() { _ = unix.Close(tree) }()
 	if err := unix.MountSetattr(tree, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_clr: unix.MOUNT_ATTR_NOEXEC, Propagation: unix.MS_PRIVATE}); err != nil {
-		return err
+		return fmt.Errorf("prepare executable projection: %w", err)
 	}
 	target, err := openMountPoint(root.path)
 	if err != nil {
@@ -97,7 +97,7 @@ func projectModuleCodeRoot(root moduleCodeRoot) error {
 	}
 	defer func() { _ = unix.Close(target) }()
 	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
-		return err
+		return fmt.Errorf("attach executable projection: %w", err)
 	}
 	if alias, err := os.Readlink(mountDescriptorPath(tree)); err != nil || alias != root.path {
 		return errors.New("selected module projection moved during placement")
