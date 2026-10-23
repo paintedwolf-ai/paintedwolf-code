@@ -57,6 +57,9 @@ func auditTables(ctx context.Context, database *sql.DB, audited func(string), ch
 	if err != nil {
 		return integrityCheckError(err, "list tables")
 	}
+	// Partial checks cannot prove global page ownership. Keep a whole-file
+	// check in the obligation; it obeys the same checkpoint pressure policy.
+	remaining = append(remaining, "")
 	for len(remaining) > 0 {
 		var deferred []string
 		for _, table := range remaining {
@@ -71,7 +74,7 @@ func auditTables(ctx context.Context, database *sql.DB, audited func(string), ch
 			if err != nil {
 				return err
 			}
-			if audited != nil {
+			if audited != nil && table != "" {
 				audited(table)
 			}
 		}

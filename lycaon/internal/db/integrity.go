@@ -109,13 +109,18 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 	return foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check")
 }
 
+// An empty table requests whole-file page accounting.
 // auditTable has no wall-clock limit. Checkpoint pressure can release its
 // snapshot, and the audit scheduler retains the unfinished table for retry.
 func auditTable(ctx context.Context, sqlDB *sql.DB, table string) error {
 	quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
-	err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check("+quoted+")")
+	suffix := "(" + quoted + ")"
+	if table == "" {
+		suffix = ""
+	}
+	err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check"+suffix)
 	if err == nil {
-		err = foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check("+quoted+")")
+		err = foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check"+suffix)
 	}
 	var damaged *StoreIncompatibleError
 	if errors.As(err, &damaged) {
