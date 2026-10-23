@@ -61,3 +61,61 @@ class PasswordActorTests(unittest.TestCase):
                          [{**command, 'binding': {**self.execution, 'execution_nonce': 'f' * 32}}]):
             with self.assertRaises(ValueError):
                 self.serve(commands)
+
+
+class PasswordTargetTests(unittest.TestCase):
+    def setUp(self):
+        self.identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
+        self.engine = {'pid': 124, 'parent_pid': 123, 'start_time_ticks': 43}
+        self.main = {'bus_name': ':1.37', 'object_path': '/org/a11y/atspi/accessible/1',
+                     'process': self.identity, 'lineage': [self.identity]}
+        self.dialog = {**self.main, 'object_path': '/org/a11y/atspi/accessible/2'}
+        self.control = {**self.main, 'object_path': '/org/a11y/atspi/accessible/3'}
+        self.surface = {'launch': self.identity, 'engine': self.engine, 'main': self.main, 'control': None,
+            'surfaces': [self.row(self.main, active=False), self.row(self.dialog, kind='presence-dialog',
+                modal=True, parent=self.main)]}
+        self.native = {'kind': 'native-presence', 'surface': self.surface,
+            'password': {'identity': self.control, 'parent': self.dialog, 'focused': True, 'visible': True}}
+        self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
+            'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
+            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
+        self.pending = {'format_version': 1, 'binding': self.execution,
+            'operation': password_wire.OPERATION, 'stage': 'native-presence-password',
+            'transaction_id': 'd' * 32, 'actor': {'process': self.engine, 'uid': 1234, 'session_nonce': 'e' * 32},
+            'case': self.identity, 'profile': {'path': '/home/fixture/.config/paintedwolf', 'device': 1, 'inode': 2, 'uid': 1234},
+            'session': {'id': '123', 'User': '1234', 'Type': 'wayland', 'Active': 'yes', 'Remote': 'no'},
+            'target': self.native, 'expires_ns': 12345}
+
+    def row(self, identity, **changes):
+        return {'identity': identity, 'kind': 'frame', 'visible': True, 'active': True,
+                'defunct': False, 'modal': False, 'parent': None, **changes}
+
+    def test_native_password_requires_exact_owned_modal_parent_focused_visible_control(self):
+        password_wire.target('native-presence-password', self.native)
+        for key, value in [('focused', False), ('visible', False), ('parent', self.main),
+                           ('identity', {**self.control, 'bus_name': ':1.99'})]:
+            changed = copy.deepcopy(self.native)
+            changed['password'][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                password_wire.target('native-presence-password', changed)
+        changed = copy.deepcopy(self.native)
+        changed['surface']['surfaces'][1]['parent'] = None
+        with self.assertRaises(ValueError):
+            password_wire.target('native-presence-password', changed)
+        with self.assertRaises(ValueError):
+            password_wire.target('new-app-password', self.native)
+
+    def test_fixed_request_refuses_arbitrary_text_stage_profile_account_and_numeric_aliases(self):
+        self.assertEqual(password_wire.request(self.pending, self.execution), self.pending)
+        for changes in ({'stage': 'arbitrary-text'}, {'secret': 'must-not-be-public'},
+                        {'profile': {**self.pending['profile'], 'uid': 9999}},
+                        {'session': {**self.pending['session'], 'Active': 'no'}},
+                        {'session': {**self.pending['session'], 'Remote': 'yes'}},
+                        {'expires_ns': True}, {'binding': {**self.execution, 'execution_nonce': 'f' * 32}}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                password_wire.request({**copy.deepcopy(self.pending), **changes}, self.execution)
+        # The existing normal session collector may add its independently acquired
+        # GNOME owner; wire validation must not discard that runtime evidence.
+        selected = copy.deepcopy(self.pending)
+        selected['session']['DesktopOwner'] = {'pid': 987, 'start_time_ticks': 123}
+        self.assertEqual(password_wire.request(selected, self.execution), selected)
