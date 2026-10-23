@@ -232,6 +232,12 @@ func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB,
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("configure wal journal: %w", err)
 	}
+	// A WAL that grew while a reader pinned it shrinks back to this size the
+	// next time a write restarts it after a complete checkpoint.
+	if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA journal_size_limit=%d`, walSizeLimitBytes)); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("configure wal size limit: %w", err)
+	}
 	sqlDB.SetMaxOpenConns(writerOpenConns)
 	sqlDB.SetMaxIdleConns(writerOpenConns)
 	return sqlDB, nil

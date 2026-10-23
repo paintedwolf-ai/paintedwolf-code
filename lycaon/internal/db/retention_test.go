@@ -278,3 +278,35 @@ func rowExists(t *testing.T, database DBTX, query string, args ...any) bool {
 	testutil.FailErr(t, "probe row", err)
 	return true
 }
+
+// Pages another owner freed, such as the snapshot sweep, are returned even
+// when retention itself deleted nothing.
+func TestRetentionReturnsPagesItDidNotFree(t *testing.T) {
+	database := openTestDB(t)
+	ctx := t.Context()
+	_, err := database.ExecContext(ctx, `CREATE TABLE freed_elsewhere (body BLOB NOT NULL)`)
+	testutil.FailErr(t, "create scratch table", err)
+	for range 2000 {
+		_, err := database.ExecContext(ctx, `INSERT INTO freed_elsewhere (body) VALUES (zeroblob(4000))`)
+		testutil.FailErr(t, "fill scratch table", err)
+	}
+	_, err = database.ExecContext(ctx, `DROP TABLE freed_elsewhere`)
+	testutil.FailErr(t, "free scratch pages", err)
+	freelist := func() int64 {
+		var pages int64
+		testutil.FailErr(t, "read freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&pages))
+		return pages
+	}
+	before := freelist()
+	if before < 1500 {
+		t.Fatalf("freelist = %d pages; the test cannot show a reclaim", before)
+	}
+	report, err := RunRetention(ctx, database, DefaultRetention())
+	testutil.FailErr(t, "RunRetention", err)
+	if report.TotalDeleted() != 0 || !report.IncrementalVacuumed {
+		t.Fatalf("report = %+v, want a vacuum without deletions", report)
+	}
+	if after := freelist(); after >= DefaultRetention().IncrementalVacuumMinFreelistPages {
+		t.Fatalf("freelist after maintenance = %d, was %d", after, before)
+	}
+}
