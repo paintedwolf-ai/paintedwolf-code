@@ -79,6 +79,9 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 			}
 		}
 	}
+	if err := validateRebuildCounts(ctx, tx, objects, selection); err != nil {
+		return err
+	}
 	for _, statement := range selection.After {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
 			return err

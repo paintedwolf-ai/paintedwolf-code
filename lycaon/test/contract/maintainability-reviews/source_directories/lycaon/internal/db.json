@@ -4,13 +4,13 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the database lifecycle as one authority. Retained-copy selection belongs to the migration registry, while copy construction, capacity accounting, and journaled publication are distinct implementation files. Moving publication outside db would split the pre-open recovery boundary. Review renewed at 28 files.",
-  "reviewed_commit": "6d0b48607e54267e394b1ac0f572f8de715ee787",
-  "ceiling": 28,
+  "reason": "Retain the database lifecycle as one authority. Copy equivalence and preservation of an unexpected empty publication occupant are separate implementation seams within pre-open recovery, not separate subsystem authorities. The 30-file boundary keeps journal, copy, and identity decisions in db.",
+  "reviewed_commit": "582212cf337c61cbd340e889502e0ca524ceb6d1",
+  "ceiling": 30,
   "boundaries": {
-    "lycaon/internal/db/rebuild_copy.go": "1b275f054f70d6d6239fcc53a73b898faf96bebcdc279c70b90376d26a6a80a1",
-    "lycaon/internal/db/rebuild_journal.go": "c020e48be11495799e731f30fe9174b2658b3e2b74f63552a6fccac708d837e4",
-    "lycaon/internal/db/rebuild_upgrade.go": "32bad9e88a5381211e0b0f611fd55d68cbe7545f9fe9da3a7794992ca5b8888d"
+    "lycaon/internal/db/rebuild_equivalence_test.go": "8bc520bb004585da1142b522fa2bddda682257582e3b712ddd18c387f15047b5",
+    "lycaon/internal/db/rebuild_crash_test.go": "7c3250c21e95367f8214192c26ba586ce87102fffa7c284366d6e43f8169bccb",
+    "lycaon/internal/db/rebuild_journal_test.go": "46ef36ff444075d81b6e9a18477d6de726093bc96a3c28c16cf20d7d25fe239c"
   },
-  "reviewed_shape": "9f37ba7bd4f22a7a546881e6bcd323d3fe4d608ddd76dee3d5225ee46c753fc2"
+  "reviewed_shape": "5e8a6ee4031d0e70f560291bb75354c474d4b4a1af4e9051afe0c6fe2fe3a22d"
 }

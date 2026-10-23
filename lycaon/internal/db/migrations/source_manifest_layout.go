@@ -37,10 +37,18 @@ type layoutChunk struct {
 
 func retainedManifestCopy() *RetainedCopy {
 	return &RetainedCopy{
+		SourceShapes: []string{SourceNamespace().From.Shape, sourceNamespaceTarget.Shape, manifestLayoutSource.Shape},
+		// Independent cardinalities: source chunk metadata states how many entries
+		// must survive, rather than trusting the copying predicate to validate itself.
+		ExpectedRows: map[string]string{
+			"source_manifest_chunks":  `SELECT COUNT(DISTINCT chunk_id) FROM original.source_snapshot_chunks NOT INDEXED`,
+			"source_manifest_entries": `SELECT COALESCE(SUM(entry_count),0) FROM original.source_manifest_chunks NOT INDEXED WHERE id IN (SELECT chunk_id FROM original.source_snapshot_chunks NOT INDEXED)`,
+			"source_manifest_staging": `SELECT 0`,
+		},
 		Sources: map[string]string{
-			"source_manifest_chunks": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks) c
+			"source_manifest_chunks": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
 CROSS JOIN original.source_manifest_chunks e ON e.id = c.chunk_id`,
-			"source_manifest_entries": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks) c
+			"source_manifest_entries": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
 CROSS JOIN original.source_manifest_entries e ON e.chunk_id = c.chunk_id`,
 			"source_manifest_staging": `FROM original.source_manifest_staging e WHERE 0`,
 		},

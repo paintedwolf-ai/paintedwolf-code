@@ -144,7 +144,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			hooks.Progress(migrations.Snapshotting)
 		}
 		if err := hooks.Before(ctx, reader, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, fmt.Sprintf("capture upgrade recovery: %v", err))
+			return fmt.Errorf("capture upgrade recovery: %w", err)
 		}
 	}
 	if err := reader.Close(); err != nil {
@@ -155,7 +155,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	}
 	if hooks.After != nil {
 		if err := hooks.After(ctx, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Target.Revision, fmt.Sprintf("record upgrade commit: %v", err))
+			return fmt.Errorf("record upgrade commit: %w", err)
 		}
 	}
 	return nil
@@ -172,7 +172,8 @@ func classifyUpgradeFailure(err error, revision int) error {
 	if classified := integrityCheckError(err, "migrate store"); errors.As(classified, &damaged) {
 		return classified
 	}
-	return storeIncompatible(RecoveryReasonSchemaMismatch, revision, err.Error())
+	// Preserve operational causes for the open boundary's shared classifier.
+	return fmt.Errorf("migrate store: %w", err)
 }
 
 func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry) error {

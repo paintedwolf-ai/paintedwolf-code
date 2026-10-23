@@ -38,14 +38,16 @@ func seedLegacyManifestStore(t *testing.T, dir string, rootEntries map[string]in
 	}
 	seedSnapshot := func(id string, roots []string) {
 		total := 0
+		maxEntries := 0
 		want[id] = map[string][]string{}
 		for ordinal, root := range roots {
 			exec(`INSERT INTO source_snapshot_roots (snapshot_id, root_path, ordinal) VALUES (?, ?, ?)`, id, root, ordinal)
 			total += rootEntries[root]
+			maxEntries = max(maxEntries, rootEntries[root])
 		}
 		exec(`INSERT INTO source_snapshots (id, roots_key, merkle_sha256, file_count, total_bytes, capture_quality, created_ts)
 			VALUES (?, ?, ?, ?, 0, 'exact', '2026-10-20T00:00:00.000000000Z')`, id, "key-"+id, id, total)
-		for bucket := range 4 {
+		for bucket := range min(4, maxEntries) {
 			chunk := fmt.Sprintf("%s-bucket-%d", id, bucket)
 			exec(`INSERT INTO source_manifest_chunks (id, entry_count, total_bytes) VALUES (?, 1, 0)`, chunk)
 			exec(`INSERT INTO source_snapshot_chunks (snapshot_id, bucket, chunk_id) VALUES (?, ?, ?)`, id, bucket, chunk)
@@ -68,6 +70,7 @@ func seedLegacyManifestStore(t *testing.T, dir string, rootEntries map[string]in
 	}
 	seedSnapshot("snapshot-one", []string{"/work/a"})
 	seedSnapshot("snapshot-two", []string{"/work/a", "/work/b"})
+	exec(`UPDATE source_manifest_chunks SET entry_count=(SELECT COUNT(*) FROM source_manifest_entries e WHERE e.chunk_id=source_manifest_chunks.id)`)
 	exec(`INSERT INTO source_manifest_chunks (id, entry_count, total_bytes) VALUES ('orphan', 1, 0)`)
 	exec(`INSERT INTO source_blob_objects (sha256, size, stored_size, storage_relpath, git_oid_sha1, git_oid_sha256)
 		VALUES (?, 1, 1, 'objects/orphan', '', '')`, orphanBlob)
