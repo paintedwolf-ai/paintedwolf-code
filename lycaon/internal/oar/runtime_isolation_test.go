@@ -3,6 +3,8 @@ package oar
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
@@ -193,5 +195,39 @@ func TestCounterReferenceScannerIgnoresFunctionTextInsideStrings(t *testing.T) {
 	testutil.FailErr(t, "parse counter references", err)
 	if len(refs) != 1 || refs[0].Literal != "REAL" {
 		t.Fatalf("counter references = %#v, want only REAL", refs)
+	}
+}
+
+func TestSelectionObservesProviderWritesAfterAnEarlierSelector(t *testing.T) {
+	for _, failure := range []error{nil, errors.New("profile unavailable")} {
+		t.Run(fmt.Sprint(failure), func(t *testing.T) {
+			rules := NewRuleSet([]*Rule{
+				{ID: "A_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
+				{ID: "B_PROFILE", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.profile": {"implement"}}},
+				{ID: "C_GREP", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"grep"}}},
+				{ID: "D_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
+			})
+			pipeline := NewGuardPipeline(rules, nil, nil)
+			pipeline.EnableAnchor(AnchorToolPreInvoke)
+			gc := NewGuardContext()
+			gc.Invocation.Tool = "read"
+			gc.RegisterProvider("paintedwolf.profile", func(g *GuardContext) error {
+				g.Invocation.Tool = "grep"
+				g.Session.Profile = "implement"
+				return failure
+			})
+			for _, want := range [][]string{{"A_READ", "B_PROFILE", "C_GREP"}, {"A_READ", "B_PROFILE", "D_READ"}} {
+				gc.Invocation.Tool = "read"
+				result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
+				testutil.FailErr(t, "evaluate provider-backed selectors", err)
+				var got []string
+				for _, entry := range result.Trace.Entries {
+					got = append(got, entry.Rule)
+				}
+				if !slices.Equal(got, want) {
+					t.Fatalf("selected rules = %v, want %v", got, want)
+				}
+			}
+		})
 	}
 }

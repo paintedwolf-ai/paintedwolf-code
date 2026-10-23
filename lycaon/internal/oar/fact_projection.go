@@ -12,7 +12,7 @@ import (
 // activation publishes occurrence facts under their rule-visible names.
 func activation(gc *GuardContext) map[string]any {
 	bare := bareActivation(gc)
-	tiers := factTiers()
+	tiers := bareFactTiers
 	out := make(map[string]any, len(bare))
 	for name, value := range bare {
 		out[publishedName(name, tiers[name])] = value

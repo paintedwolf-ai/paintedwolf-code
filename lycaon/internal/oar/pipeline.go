@@ -290,6 +290,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 }
 
 func (p *GuardPipeline) selectRules(rules *RuleSet, stage Stage, anchor string, gc *GuardContext) ([]*Rule, map[*Rule]error) {
+	projection := selectorFacts{context: gc}
 	var out []*Rule
 	errs := map[*Rule]error{}
 	var src []*Rule
@@ -308,12 +309,7 @@ func (p *GuardPipeline) selectRules(rules *RuleSet, stage Stage, anchor string, 
 		if StageFromAnchor(r.Anchor) != stage {
 			continue
 		}
-		if err := AssembleFacts(gc, r.Selector.Clauses()); err != nil {
-			out = append(out, r)
-			errs[r] = err
-			continue
-		}
-		matches, err := ruleSelectorMatches(r, gc)
+		matches, err := projection.match(r)
 		if err != nil {
 			out = append(out, r)
 			errs[r] = err

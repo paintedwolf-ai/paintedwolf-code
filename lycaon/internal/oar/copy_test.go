@@ -67,10 +67,10 @@ func TestCopyDoesNotChangeDecisionCode(t *testing.T) {
 }
 
 func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
-	tiers := factTiers()
+	tiers := bareFactTiers
 	for _, d := range occurrenceFactDecls {
 		if got := tiers[d.name]; got != d.tier {
-			t.Fatalf("factTiers()[%q] = %q, want %q", d.name, got, d.tier)
+			t.Fatalf("bareFactTiers[%q] = %q, want %q", d.name, got, d.tier)
 		}
 	}
 	gc := NewGuardContext()
@@ -88,4 +88,3 @@ func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
 		t.Fatalf("paintedwolf.worker_leg = %v, want true", act["paintedwolf.worker_leg"])
 	}
 }
-
