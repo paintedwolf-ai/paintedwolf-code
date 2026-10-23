@@ -1,5 +1,7 @@
 mod app_state;
 pub mod files;
+mod child_credentials;
+mod external_launch;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod linux_desktop;
@@ -72,10 +74,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init());
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
+    #[cfg(target_os = "linux")]
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     builder
         .plugin(webview_policy::init())
         .manage(SidecarState::new())

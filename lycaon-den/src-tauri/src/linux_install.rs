@@ -102,12 +102,11 @@ fn owner(executable: &Path) -> Option<InstalledPackage> {
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new(program)
+    let output = crate::external_launch::External::new(program)
         .args(args)
-        .env_clear()
+        .clear_env()
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("LC_ALL", "C")
-        .stdin(std::process::Stdio::null())
         .output()
         .ok()?;
     output
