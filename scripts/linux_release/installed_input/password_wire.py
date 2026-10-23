@@ -106,3 +106,19 @@ def frame_size(header, maximum):
     if not 0 < size <= maximum:
         raise ValueError('private fixture frame exceeded its fixed bound')
     return size
+
+
+def completed(value, pending, vm_id):
+    """Correlate aggregate delivery; host lease verification remains on the host."""
+    fields = {'format_version', 'execution_nonce', 'transaction_id', 'stage', 'actor', 'case',
+              'profile', 'session', 'target', 'acknowledged_count', 'completed', 'delivery_uncertain', 'lease'}
+    expected = {'format_version': 1, 'execution_nonce': pending['binding']['execution_nonce'],
+                'transaction_id': pending['transaction_id'], 'stage': pending['stage'],
+                **{key: pending[key] for key in ('actor', 'case', 'profile', 'session', 'target')},
+                'acknowledged_count': SECRET_BYTES + 1, 'completed': True, 'delivery_uncertain': False}
+    if (not isinstance(value, dict) or set(value) != fields
+            or any(type(value[key]) is not type(item) or value[key] != item for key, item in expected.items())
+            or not isinstance(value['lease'], dict) or value['lease'].get('vm_id') != vm_id):
+        raise ValueError('private fixture completion differs from its captured physical transaction')
+    protocol.canonical(value)
+    return value
