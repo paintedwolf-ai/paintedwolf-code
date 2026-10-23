@@ -22,13 +22,15 @@ type copyPageEntry struct {
 // copyPage bounds held filesystem capabilities and intent/attribution storage.
 // It owns no alternate mutation path: all streams use the shared write door.
 type copyPage struct {
-	operation *CopyOperation
-	ctx       context.Context
-	tc        tools.ToolContext
-	result    *CopyResult
-	entries   []copyPageEntry
-	bytes     int64
-	release   func()
+	operation      *CopyOperation
+	ctx            context.Context
+	tc             tools.ToolContext
+	result         *CopyResult
+	entries        []copyPageEntry
+	bytes          int64
+	release        func()
+	buffers        [copyPageEntries][]byte
+	bufferReleases [copyPageEntries]func()
 }
 
 func newCopyPage(ctx context.Context, tc tools.ToolContext, operation *CopyOperation, result *CopyResult) (*copyPage, error) {
@@ -61,7 +63,11 @@ func (p *copyPage) Add(pair FilePair, maximum int64) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	staged, result, err := p.operation.stageCopyFileWithinLimit(p.ctx, p.tc, from, resolvedMutationTarget(to), maximum)
+	buffer, err := p.streamBuffer()
+	if err != nil {
+		return err
+	}
+	staged, result, err := p.operation.stageCopyFileWithinLimit(p.ctx, p.tc, from, resolvedMutationTarget(to), maximum, buffer)
 	if err != nil {
 		return err
 	}
@@ -79,6 +85,21 @@ func (p *copyPage) Add(pair FilePair, maximum int64) error {
 		return p.Flush()
 	}
 	return nil
+}
+
+// Each live stage gets its own admitted slot. Closing a page's stages makes
+// their scratch reusable by the next page without allocating another arena.
+func (p *copyPage) streamBuffer() ([]byte, error) {
+	index := len(p.entries)
+	if p.buffers[index] == nil {
+		release, err := p.operation.memory.Reserve(p.ctx, 32<<10)
+		if err != nil {
+			return nil, err
+		}
+		p.bufferReleases[index] = release
+		p.buffers[index] = make([]byte, 32<<10)
+	}
+	return p.buffers[index], nil
 }
 
 func (p *copyPage) Flush() error {
@@ -119,6 +140,12 @@ func (p *copyPage) clear() {
 
 func (p *copyPage) Close() {
 	p.clear()
+	for i, release := range p.bufferReleases {
+		if release != nil {
+			release()
+		}
+		p.bufferReleases[i], p.buffers[i] = nil, nil
+	}
 	if p.release != nil {
 		p.release()
 		p.release = nil

@@ -248,7 +248,7 @@ func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string
 	return nil
 }
 
-func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maxBytes int64) (*agentStreamStage, fseffect.Result, error) {
+func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maxBytes int64, copyBuffer []byte) (*agentStreamStage, fseffect.Result, error) {
 	in, err := op.reads.Open(source)
 	if err != nil {
 		return nil, fseffect.Result{}, err
@@ -273,7 +273,7 @@ func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tool
 	}
 	mode := info.Mode().Perm()
 	stage, result, err := stageAgentStream(ctx, tctx, agentStreamRequest{
-		Mode: &mode, Memory: op.memory,
+		Mode: &mode, Memory: op.memory, CopyBuffer: copyBuffer,
 		Target: target, Source: contextio.Reader{Context: ctx, Source: io.LimitReader(in, readLimit)},
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
 			if staged.Bytes <= maxBytes {
@@ -295,7 +295,7 @@ func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tool
 }
 
 func (op *CopyOperation) copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maximum int64) (fseffect.Result, error) {
-	staged, result, err := op.stageCopyFileWithinLimit(ctx, tc, source, target, maximum)
+	staged, result, err := op.stageCopyFileWithinLimit(ctx, tc, source, target, maximum, nil)
 	if err != nil {
 		return result, err
 	}

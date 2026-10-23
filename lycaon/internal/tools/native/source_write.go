@@ -108,6 +108,8 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 
 type agentStreamRequest struct {
 	Memory *toolcontract.ProgramMemory
+	// CopyBuffer is caller-admitted scratch retained until the stage closes.
+	CopyBuffer []byte
 	// Mode applies to a new file; nil uses the ordinary write mode.
 	Mode         *os.FileMode
 	Target       mutationTarget
@@ -125,17 +127,21 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 }
 
 func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (*agentStreamStage, fseffect.Result, error) {
+	workingBytes := int64(40 << 10) // fixed metadata and overlapping verification scratch
+	if len(req.CopyBuffer) == 0 {
+		workingBytes += 32 << 10
+	}
 	var releaseWorking func()
 	if req.Memory != nil {
-		release, err := req.Memory.Reserve(ctx, 72<<10)
+		release, err := req.Memory.Reserve(ctx, workingBytes)
 		if err != nil {
 			return nil, fseffect.Result{}, err
 		}
 		releaseWorking = release
 	}
 	// Admit fixed stage metadata plus overlapping copy and verification scratch.
-	stage := &agentStreamStage{request: req, releaseWorking: releaseWorking}
-	if req.Memory != nil {
+	stage := &agentStreamStage{request: req, releaseWorking: releaseWorking, copyBuffer: req.CopyBuffer}
+	if req.Memory != nil && len(stage.copyBuffer) == 0 {
 		stage.copyBuffer = make([]byte, 32<<10)
 	}
 	ready := false
