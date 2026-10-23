@@ -217,6 +217,7 @@
       "cases": [
         "client-and-server-decorations",
         "tiling-and-multi-window",
+        "workspace-activation-and-exit",
         "mixed-scale-monitors",
         "geometry-recovery"
       ]

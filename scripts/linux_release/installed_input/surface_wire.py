@@ -144,3 +144,14 @@ def finished(operation, old, new):
         return active(main) and not any(row['kind'] == kind and row['visible']
                                        for row in new['surfaces'])
     raise ValueError('surface input requires a fixed declared operation')
+
+
+def reopened(old, new):
+    """A public activation must expose the retained original without adding another frame."""
+    same_runtime(old, new)
+    old_frames = [row['identity'] for row in old['surfaces'] if row['kind'] == 'frame']
+    new_frames = [row for row in new['surfaces'] if row['kind'] == 'frame']
+    return (len(new_frames) == len(old_frames)
+            and all(row['identity'] in old_frames for row in new_frames)
+            and len([row for row in new_frames if active(row)]) == 1
+            and any(row['identity'] == new['main'] and active(row) for row in new_frames))
