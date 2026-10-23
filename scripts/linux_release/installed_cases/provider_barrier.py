@@ -11,6 +11,8 @@ import time
 
 from .records import CaseUnavailable
 
+PEER_HANGUP = select.POLLHUP | select.POLLERR | getattr(select, 'POLLRDHUP', 0)
+
 
 class ResponseBarrier:
     def __init__(self, timeout_seconds=120):
@@ -55,10 +57,10 @@ class ResponseBarrier:
                 raise ValueError('fixture response lease differs from its captured request')
             connection = self.connection
         poll = select.poll()
-        poll.register(connection, select.POLLIN | select.POLLHUP | select.POLLERR | select.POLLRDHUP)
+        poll.register(connection, select.POLLIN | PEER_HANGUP)
         while True:
             events = poll.poll(20)
-            closed = any(flags & (select.POLLHUP | select.POLLERR | select.POLLRDHUP) for _, flags in events)
+            closed = any(flags & PEER_HANGUP for _, flags in events)
             if events and not closed:
                 # Request bytes were fully consumed before capture. Additional
                 # input is not another request on this held response connection.
@@ -116,10 +118,10 @@ class ResponseBarrier:
                 self._cancel('connection-identity-changed')
                 raise CaseUnavailable('fixed-provider-request-connection-identity-changed')
             poll = select.poll()
-            poll.register(self.connection, select.POLLIN | select.POLLHUP | select.POLLERR | select.POLLRDHUP)
+            poll.register(self.connection, select.POLLIN | PEER_HANGUP)
             events = poll.poll(0)
             if events:
-                closed = any(flags & (select.POLLHUP | select.POLLERR | select.POLLRDHUP) for _, flags in events)
+                closed = any(flags & PEER_HANGUP for _, flags in events)
                 if not closed:
                     closed = self.connection.recv(1, socket.MSG_PEEK) == b''
                 self._cancel('peer-closed' if closed else 'unexpected-connection-input', closed)
