@@ -20,7 +20,7 @@ export function createFilesTabTransfers({ projectId, closeBuffer, onFileTabMoved
   // A drag can settle before its token reaches this window.
   const settledEarly = new Map<string, FileTabTransferSettled["outcome"]>();
 
-  const moveOut = async (key: FileBufferKey) => {
+  const releaseCommittedSource = async (key: FileBufferKey) => {
     const released = closeBuffer(key);
     if (!released || (await released) === "restored") return;
     scheduleSessionFidelityPersist();
@@ -34,17 +34,21 @@ export function createFilesTabTransfers({ projectId, closeBuffer, onFileTabMoved
       return;
     }
     outgoing.delete(token);
-    if (outcome === "committed") void moveOut(key);
+    if (outcome === "committed") void releaseCommittedSource(key);
+  };
+
+  const publishDraft = async (key: FileBufferKey) => {
+    flushFilesDraftSyncFor(projectId(), key);
+    const buffer = projectFilesState(projectId()).byKey[key];
+    if (!buffer) throw new Error("The dragged file tab is no longer open.");
+    if (buffer.dirty && !(await publishEditorDocumentDraft(projectId(), buffer))) {
+      throw new Error("The latest file draft could not be handed off.");
+    }
   };
 
   const handOff = async (token: string, key: FileBufferKey) => {
     try {
-      flushFilesDraftSyncFor(projectId(), key);
-      const buffer = projectFilesState(projectId()).byKey[key];
-      if (!buffer) throw new Error("The dragged file tab is no longer open.");
-      if (buffer.dirty && !(await publishEditorDocumentDraft(projectId(), buffer))) {
-        throw new Error("The latest file draft could not be handed off.");
-      }
+      await publishDraft(key);
       await readyFileTabTransfer(token);
     } catch (err) {
       console.debug("[item-window] native tab transfer abandoned", err);
@@ -69,5 +73,5 @@ export function createFilesTabTransfers({ projectId, closeBuffer, onFileTabMoved
     );
   };
 
-  return { start, observe: () => listenFileTabTransfer(settle) };
+  return { start, observe: () => listenFileTabTransfer(settle), publishDraft, releaseCommittedSource };
 }
