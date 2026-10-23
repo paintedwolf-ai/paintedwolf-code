@@ -4,7 +4,7 @@
   "kind": "runtime_service",
   "workstream": "workflow-closeout-repair",
   "disposition": "retain",
-  "reason": "Retain the current 784-line invocation lifecycle within 790 lines. Gate rejection adds only an occurrence-bound marker after the existing retraction, without a new dependency or invocation path. Frozen plan, roster and receipt settlement remain together; production invocation and bounded repair contracts constrain them.",
+  "reason": "Retain the current 787-line invocation lifecycle within 790 lines. Gate rejection adds only an occurrence-bound marker after the existing retraction, without a new dependency or invocation path. Frozen plan, roster and receipt settlement remain together; production invocation and bounded repair contracts constrain them. A forced-closeout rejection retains its actual history for the single repair re-entry.",
   "reviewed_commit": "523225a96c92addace7f2f0d6e05d34f4b53a365",
   "ceiling": 790,
   "boundaries": {
@@ -12,7 +12,8 @@
     "lycaon/internal/coordinator/promptloop/host_answered_receipt_test.go": "232b19eb8e5b04ad28f5a87a5fee606a891dcfa505e714629f85bc202d20b532",
     "lycaon/internal/coordinator/promptloop/prose_reject_loop_test.go": "814d434fca9059c66275eb65e99907c7b919b033844bb8978e2523e8332d2ea9",
     "lycaon/internal/coordinator/promptloop/completion_barrier_test.go": "2227b197a748cb370e64a243674362cb595c60d58d0595c55a721e2419d2c2ef",
-    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3"
+    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3",
+    "lycaon/internal/coordinator/promptloop/execution_closeout_test.go": "a3bd782cb42d2107f011c9e65814add30dd282d44889a122f044e4f004a3c009"
   },
   "reviewed_shape": "49ab85929de65c09c2a3c52e9a6581b2ea54f90cceeddf1829eb3f4faa433118"
 }

@@ -4,13 +4,14 @@
   "kind": "projection",
   "workstream": "workflow-closeout-repair",
   "disposition": "retain",
-  "reason": "Retain the current 309-line rejection projection within 315 lines. The added typed repair marker preserves the exact rejected occurrence; receipt retraction and frozen recovery remain in their existing owner. Existing production OAR and new gated-closeout contracts cover both boundaries.",
+  "reason": "Retain the current 312-line rejection projection within 315 lines. The added typed repair marker preserves the exact rejected occurrence; receipt retraction and frozen recovery remain in their existing owner. Existing production OAR and new gated-closeout contracts cover both boundaries. A forced-closeout rejection retains its actual history for the single repair re-entry.",
   "reviewed_commit": "523225a96c92addace7f2f0d6e05d34f4b53a365",
   "ceiling": 315,
   "boundaries": {
     "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3",
     "lycaon/internal/coordinator/promptloop/prose_reject_loop_test.go": "814d434fca9059c66275eb65e99907c7b919b033844bb8978e2523e8332d2ea9",
     "lycaon/internal/coordinator/promptloop/completion_barrier_test.go": "2227b197a748cb370e64a243674362cb595c60d58d0595c55a721e2419d2c2ef",
-    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3"
+    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3",
+    "lycaon/internal/coordinator/promptloop/execution_closeout_test.go": "a3bd782cb42d2107f011c9e65814add30dd282d44889a122f044e4f004a3c009"
   }
 }
