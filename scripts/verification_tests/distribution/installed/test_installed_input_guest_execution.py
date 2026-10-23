@@ -24,7 +24,8 @@ class GuestInputTests(unittest.TestCase):
             'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
         identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         self.focus = {'launch': identity, 'entry': identity, 'frame': identity,
-            'frame_lineage': [dict(identity)],
+            'frame_lineage': [dict(identity)], 'entry_lineage': [dict(identity)],
+            'accessible_chain': [{'bus_name': ':1.2', 'path': '/frame', 'pid': 123}],
             'entry_focused': True, 'frame_active': True, 'frame_visible': True}
 
     def mailbox(self, stale=False):

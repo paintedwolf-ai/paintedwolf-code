@@ -21,7 +21,8 @@ class InputLineageTests(unittest.TestCase):
             self.assertEqual(lineage.capture(self.root, self.frame), self.chain)
         self.assertEqual([call.args[0] for call in observe.call_args_list], [102, 101, 100, 100, 101, 102])
         value = {'launch': self.root, 'entry': self.frame, 'frame': self.frame,
-                 'frame_lineage': self.chain, 'entry_focused': True, 'frame_active': True, 'frame_visible': True}
+                 'frame_lineage': self.chain, 'entry_lineage': [self.frame],
+                 'accessible_chain': [{'bus_name': ':1.2', 'path': '/frame', 'pid': 102}], 'entry_focused': True, 'frame_active': True, 'frame_visible': True}
         self.assertIs(protocol.focus(value), value)
 
     def test_wrong_root_cycle_missing_link_and_excess_depth_are_refused(self):
@@ -58,7 +59,10 @@ class InputLineageTests(unittest.TestCase):
         node.get_process_id.return_value = self.frame['pid']
         node.queryComponent.return_value.grabFocus.return_value = True
         node.getState.return_value.contains.return_value = True
+        node.app.bus_name, node.path = ':1.3', '/entry'
+        frame.app.bus_name, frame.path = ':1.2', '/frame'
         node.get_parent.return_value = frame
+        ui.windows.side_effect = lambda: iter([(self.frame, frame)])
         frame.getRole.return_value = 23
         frame.get_process_id.return_value = self.frame['pid']
         frame.getState.return_value.contains.return_value = True
