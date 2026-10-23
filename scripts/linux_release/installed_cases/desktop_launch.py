@@ -1,6 +1,7 @@
 """Select the authenticated installed bootstrap for protected desktop cases."""
 from pathlib import Path
 import subprocess
+import time
 
 from .app import process_identity, session_environment
 from ..installed_environment import graphical_session
@@ -62,3 +63,55 @@ def activate(app):
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait(timeout=5)
+
+
+def _visible_native_frame(app, ui, deadline):
+    from ..installed_input import accessibility, lineage, surface_wire
+    app.require_running()
+    app.require_engine()
+    launch, engine = (dict(app.observations[name]) for name in ('launch_identity', 'engine_identity'))
+    frames = [node for _, node in ui.windows(deadline) if node.getRole() == ui.api.ROLE_FRAME]
+    if len(frames) != 1:
+        refusal = CaseUnavailable('public-activation-visible-frame-is-missing-or-ambiguous')
+        refusal.observations = {'public_activation_frame_inventory': {'count': len(frames),
+                                'launch': launch, 'engine': engine}}
+        raise refusal
+    node = frames[0]
+    native = accessibility.identity(node)
+    process = process_identity(native['pid'])
+    chain = lineage.capture(launch, process)
+    selected = surface_wire.object_identity({'bus_name': native['bus_name'], 'object_path': native['path'],
+        'process': process, 'lineage': chain}, launch)
+    active = bool(node.getState().contains(ui.api.STATE_ACTIVE))
+    if (accessibility.identity(node) != native or process_identity(process['pid']) != process
+            or lineage.capture(launch, process) != chain or not ui.visible(node)
+            or process_identity(launch['pid']) != launch or process_identity(engine['pid']) != engine):
+        raise ValueError('public activation native frame or runtime changed during observation')
+    app.require_running()
+    app.require_engine()
+    if app.observations['launch_identity'] != launch or app.observations['engine_identity'] != engine:
+        raise ValueError('public activation selected runtime changed during frame observation')
+    return {'launch': launch, 'engine': engine, 'frame': selected, 'active': active}
+
+
+def activate_visible_frame(app, ui):
+    """Activate one already visible native frame and witness that exact frame becoming active."""
+    deadline = time.monotonic() + 15
+    before = _visible_native_frame(app, ui, deadline)
+    try:
+        launched = activate(app)
+    except (OSError, ValueError) as error:
+        error.observations = {**getattr(error, 'observations', {}), 'public_activation': {'before': before}}
+        raise
+    after = None
+    while time.monotonic() < deadline:
+        after = _visible_native_frame(app, ui, deadline)
+        if any(after[name] != before[name] for name in ('launch', 'engine', 'frame')):
+            raise ValueError('public activation replaced its pinned visible frame or runtime')
+        if after['active']:
+            return {'before': before, 'after': after, 'public_launcher': launched}
+        time.sleep(0.05)
+    refusal = CaseUnavailable('public-activation-same-visible-frame-did-not-become-active')
+    refusal.observations = {'public_activation': {'before': before, 'public_launcher': launched,
+                                                  'after': after, 'same_frame_active': False}}
+    raise refusal
