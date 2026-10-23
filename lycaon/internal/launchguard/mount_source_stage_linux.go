@@ -100,6 +100,11 @@ func (opener *mountSourceOpener) open(entry mountEntry) (int, error) {
 	if err != nil {
 		return -1, err
 	}
+	denied := request
+	denied.kind = mountTransferDenied
+	if fd < 0 && message == denied {
+		return -1, unix.EACCES
+	}
 	request.kind = mountTransferAdd
 	if message != request || fd < 0 {
 		if fd >= 0 {

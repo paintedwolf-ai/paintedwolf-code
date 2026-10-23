@@ -56,3 +56,19 @@ func TestMountTransferPreservesOpaqueNamesAndDescriptorCustody(t *testing.T) {
 		t.Fatal("accepted incorrect descriptor cardinality")
 	}
 }
+
+func TestMountTransferDenialHasExactIdentityAndNoDescriptor(t *testing.T) {
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create denial transport", err)
+	defer func() { _ = unix.Close(pair[0]); _ = unix.Close(pair[1]) }()
+	want := mountTransfer{kind: mountTransferDenied, sequence: 9, id: 17, path: "/admin/root"}
+	testutil.FailErr(t, "send typed denial", sendMountTransfer(pair[0], want, -1))
+	got, fd, err := receiveMountTransfer(pair[1])
+	testutil.FailErr(t, "receive typed denial", err)
+	if got != want || fd >= 0 {
+		t.Fatal("denial changed selection or carried a descriptor")
+	}
+	if sendMountTransfer(pair[0], want, pair[1]) == nil {
+		t.Fatal("denial accepted descriptor authority")
+	}
+}

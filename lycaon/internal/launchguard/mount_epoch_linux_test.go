@@ -56,3 +56,23 @@ func TestMountEpochDetectsUnselectedChangesAndOrdersCoversFirst(t *testing.T) {
 		t.Fatal("ignored a duplicate or additional mount")
 	}
 }
+
+func TestMountEpochPeelsCoverBeforeHiddenSiblingDescendants(t *testing.T) {
+	entries, err := parseMountTopology([]byte("20 1 8:1 / / rw - ext4 root rw\n50 20 8:2 / /volume rw - ext4 old rw\n60 50 8:3 / /volume/hidden rw - ext4 hidden rw\n4 50 8:4 / /volume rw - ext4 cover rw\n3 4 8:5 / /volume/visible rw - ext4 visible rw\n70 20 8:6 / /other/hidden rw - ext4 sibling-hidden rw\n2 20 8:7 / /other rw - ext4 sibling-cover rw\n"))
+	testutil.FailErr(t, "decode covered descendant topology", err)
+	hidden, err := hiddenMountRoots(entries)
+	testutil.FailErr(t, "derive original visible roots", err)
+	if !reflect.DeepEqual(hidden, map[int]bool{50: true, 60: true, 70: true}) {
+		t.Fatalf("hidden roots = %v", hidden)
+	}
+	order := volumeDetachOrder(entries, map[int]bool{20: true})
+	positions := make(map[int]int)
+	for index, entry := range order {
+		positions[entry.id] = index
+	}
+	for _, pair := range [][2]int{{3, 4}, {4, 60}, {60, 50}, {2, 70}} {
+		if positions[pair[0]] >= positions[pair[1]] {
+			t.Fatalf("cover/child ordering violated: %v: %+v", pair, order)
+		}
+	}
+}

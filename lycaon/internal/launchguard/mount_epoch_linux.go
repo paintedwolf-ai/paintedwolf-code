@@ -84,37 +84,50 @@ func sameMountEpoch(before, after []mountEntry, removed map[int]bool) bool {
 	return len(remaining) == 0
 }
 
-// Detach descendants and covering mounts first. Depth is memoized once for
-// the complete already-validated topology; a deep chain is not rescanned for
-// every volume.
+// Peel covering sibling subtrees before opening hidden descendants, then
+// detach children before their parent. Mount IDs carry no creation ordering.
+// Within one parent, a lexical ancestor alias sorts before aliases it covers.
 func volumeDetachOrder(entries []mountEntry, structural map[int]bool) []mountEntry {
 	byID := make(map[int]mountEntry, len(entries))
-	depth := make(map[int]int, len(entries))
+	children := make(map[int][]mountEntry, len(entries))
 	for _, entry := range entries {
 		byID[entry.id] = entry
+		children[entry.parent] = append(children[entry.parent], entry)
+	}
+	for parent, members := range children {
+		sort.Slice(members, func(a, b int) bool {
+			if members[a].mountPoint != members[b].mountPoint {
+				return members[a].mountPoint < members[b].mountPoint
+			}
+			return members[a].id < members[b].id
+		})
+		children[parent] = members
+	}
+	type visit struct {
+		entry mountEntry
+		leave bool
+	}
+	var stack []visit
+	for _, entry := range entries {
+		if _, exists := byID[entry.parent]; !exists {
+			stack = append(stack, visit{entry: entry})
+		}
 	}
 	var volumes []mountEntry
-	for _, entry := range entries {
-		var chain []int
-		current, exists := entry, true
-		for exists && depth[current.id] == 0 {
-			chain = append(chain, current.id)
-			current, exists = byID[current.parent]
+	for len(stack) > 0 {
+		item := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if item.leave {
+			if !structural[item.entry.id] {
+				volumes = append(volumes, item.entry)
+			}
+			continue
 		}
-		next := depth[current.id]
-		for index := len(chain) - 1; index >= 0; index-- {
-			next++
-			depth[chain[index]] = next
-		}
-		if !structural[entry.id] {
-			volumes = append(volumes, entry)
+		stack = append(stack, visit{entry: item.entry, leave: true})
+		members := children[item.entry.id]
+		for index := len(members) - 1; index >= 0; index-- {
+			stack = append(stack, visit{entry: members[index]})
 		}
 	}
-	sort.Slice(volumes, func(a, b int) bool {
-		if depth[volumes[a].id] != depth[volumes[b].id] {
-			return depth[volumes[a].id] > depth[volumes[b].id]
-		}
-		return volumes[a].id > volumes[b].id
-	})
 	return volumes
 }

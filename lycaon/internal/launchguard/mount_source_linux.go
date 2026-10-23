@@ -150,6 +150,15 @@ func serveMountSource(entries []mountEntry, socket, lifetime int) error {
 		}
 		delete(selected, request.id)
 		fd, err := openMountPoint(request.path)
+		if errors.Is(err, unix.EACCES) {
+			// Denial is a typed observation, never permission for a privileged
+			// lookup. The stage separately proves any prune-only fallback.
+			err = sendMountTransfer(socket, mountTransfer{kind: mountTransferDenied, sequence: sequence, id: request.id, path: request.path}, -1)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("open selected mount source: %w", err)
 		}
