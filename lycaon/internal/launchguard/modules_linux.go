@@ -197,10 +197,14 @@ func readMountInfo(fd int, buf []byte) ([]byte, error) {
 	}
 	buf = buf[:0]
 	for {
+		if len(buf) > maxMountTopologyBytes {
+			return buf[:0], errors.New("mount topology exceeds its byte bound")
+		}
 		if len(buf) == cap(buf) {
 			buf = append(buf, 0)[:len(buf)]
 		}
-		n, err := unix.Read(fd, buf[len(buf):cap(buf)])
+		end := min(cap(buf), maxMountTopologyBytes+1)
+		n, err := unix.Read(fd, buf[len(buf):end])
 		if n > 0 {
 			buf = buf[:len(buf)+n]
 		}

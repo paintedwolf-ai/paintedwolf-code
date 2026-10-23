@@ -45,7 +45,21 @@ func TestMountTransitionBuildIsFreestandingAndRefusesUnprivilegedInputs(t *testi
 	binary.LittleEndian.PutUint16(badMachine[18:], uint16(elf.EM_NONE))
 	badTable := append([]byte(nil), raw...)
 	binary.LittleEndian.PutUint64(badTable[40:], uint64(len(raw)-1))
-	for name, content := range map[string][]byte{"wrong machine": badMachine, "truncated section table": badTable} {
+	badEntry := append([]byte(nil), raw...)
+	phoff := binary.LittleEndian.Uint64(raw[32:])
+	phsize := uint64(binary.LittleEndian.Uint16(raw[54:]))
+	phnum := uint64(binary.LittleEndian.Uint16(raw[56:]))
+	for index := uint64(0); index < phnum; index++ {
+		row := phoff + index*phsize
+		if binary.LittleEndian.Uint32(raw[row:]) == uint32(elf.PT_LOAD) && binary.LittleEndian.Uint32(raw[row+4:])&uint32(elf.PF_X) != 0 {
+			fileSize := binary.LittleEndian.Uint64(raw[row+32:])
+			address := binary.LittleEndian.Uint64(raw[row+16:])
+			binary.LittleEndian.PutUint64(badEntry[24:], address+fileSize)
+			binary.LittleEndian.PutUint64(badEntry[row+40:], fileSize+1)
+			break
+		}
+	}
+	for name, content := range map[string][]byte{"wrong machine": badMachine, "truncated section table": badTable, "entry in executable zero fill": badEntry} {
 		t.Run(name, func(t *testing.T) {
 			invalid := filepath.Join(t.TempDir(), "invalid-elf")
 			testutil.FailErr(t, "write invalid transition", os.WriteFile(invalid, content, 0o600))

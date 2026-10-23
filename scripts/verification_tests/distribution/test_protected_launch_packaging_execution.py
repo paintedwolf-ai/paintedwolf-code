@@ -39,6 +39,7 @@ class Catalogs(unittest.TestCase):
         self.assertEqual(payload.load()["setuid_bootstrap"], {"name": "pw-launch", "path": "/usr/libexec/painted-wolf-code/pw-launch"})
         self.assertIn("pw-launch-entry", payload.load()["helpers"])
         self.assertIn("pw-generations", payload.load()["helpers"])
+        self.assertIn("pw-mount-intake-transition", payload.load()["helpers"])
 
     def test_invalid_launch_catalogs_are_refused(self):
         valid = json.loads(protected_launch.CATALOG.read_text())
@@ -104,6 +105,10 @@ class PackagePlacement(unittest.TestCase):
             sealed = json.loads(args.output.read_text())
             self.assertIn("/usr/libexec/painted-wolf-code/pw-launch", {row["path"] for row in sealed["executables"]})
             self.assertIn("protected-launch.json", {row["path"] for row in sealed["payload"]})
+            transition = next(row for row in sealed["payload"] if row["path"] == "bin/pw-mount-intake-transition")
+            self.assertEqual(transition["mode"], 0o755)
+            self.assertIn("/opt/painted-wolf-code/bin/pw-mount-intake-transition",
+                          {row["path"] for row in sealed["executables"]})
             self.assertFalse(any(row["path"].startswith("bin/pw-launch") and row["path"] != "bin/pw-launch-entry"
                                  for row in sealed["payload"]), "the setuid bootstrap must not be generation payload")
 

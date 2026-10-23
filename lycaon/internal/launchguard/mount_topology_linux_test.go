@@ -3,6 +3,7 @@
 package launchguard
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -46,5 +47,28 @@ func TestMountTopologyKeepsKernelIdentityAndRejectsIncompleteGraphs(t *testing.T
 	private[1].root = "/replacement"
 	if snapshot.unchanged(private) {
 		t.Fatal("changed source root was accepted as unchanged")
+	}
+}
+
+func TestMountTopologyDeepChainAndAdmissionBounds(t *testing.T) {
+	var raw strings.Builder
+	raw.WriteString("2 1 8:1 / / rw - ext4 /dev/root rw\n")
+	for id := 3; id <= maxMountTopologyEntries+1; id++ {
+		fmt.Fprintf(&raw, "%d %d 8:1 / /nested rw - ext4 /dev/root rw\n", id, id-1)
+	}
+	entries, err := parseMountTopology([]byte(raw.String()))
+	testutil.FailErr(t, "decode maximum-depth topology", err)
+	if len(entries) != maxMountTopologyEntries {
+		t.Fatalf("decoded %d entries", len(entries))
+	}
+	if _, err := parseMountTopology([]byte(raw.String() + "32770 32769 8:1 / /extra rw - ext4 /dev/root rw\n")); err == nil {
+		t.Fatal("accepted too many mount entries")
+	}
+	if _, err := parseMountTopology([]byte(strings.Repeat("x", maxMountTopologyBytes) + "\n")); err == nil {
+		t.Fatal("accepted oversized topology")
+	}
+	cycle := strings.Replace(raw.String(), "2 1 8:1", fmt.Sprintf("2 %d 8:1", maxMountTopologyEntries+1), 1)
+	if _, err := parseMountTopology([]byte(cycle)); err == nil {
+		t.Fatal("accepted a deep cycle")
 	}
 }

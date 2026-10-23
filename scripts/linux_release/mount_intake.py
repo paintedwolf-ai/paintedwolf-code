@@ -34,7 +34,7 @@ def inspect(raw, architecture):
             raise ValueError("intake transition requires a runtime or loader")
         if kind == 1 and flags & 3 == 3:
             raise ValueError("intake transition has writable executable code")
-        if kind == 1 and flags & 1 and address <= entry < address + memory:
+        if kind == 1 and flags & 1 and address <= entry < address + size:
             executable_entry = True
         if kind == 0x6474E551:
             stack = True

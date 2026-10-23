@@ -95,8 +95,8 @@ func lockFree(path string) error {
 const fixtureLibraryRoot = "/usr/lib"
 
 func installFixture(dir string, binaries []string) error {
-	if len(binaries) != 3 {
-		return errors.New("fixture needs bootstrap, entry and desktop binaries")
+	if len(binaries) != 4 {
+		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
 	}
 	install := filepath.Join(dir, "install")
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -134,8 +134,8 @@ func copyRootBinary(source, target string, mode uint32, extra []byte) (string, i
 }
 
 func stageFixtureGeneration(dir, version string, binaries []string, extra []byte) error {
-	if len(binaries) != 3 {
-		return errors.New("fixture needs bootstrap, entry and desktop binaries")
+	if len(binaries) != 4 {
+		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
 	}
 	install := filepath.Join(dir, "install")
 	staging := filepath.Join(dir, "staging")
@@ -158,6 +158,7 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 		{binaries[1], "pw-launch-entry", nil},
 		{binaries[2], "painted-wolf-code", extra},
 		{binaries[2], "pw", extra},
+		{binaries[3], "pw-mount-intake-transition", nil},
 	} {
 		sum, size, err := copyRootBinary(role.source, filepath.Join(staging, "bin", role.name), 0o755, role.extra)
 		if err != nil {
@@ -322,10 +323,11 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	build := t.TempDir()
 	module := "github.com/lycaon/lycaon/internal/launchguard"
 	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))
-	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code")}
+	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition")}
 	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout)
 	goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", "")
 	goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
+	buildMountTransition(t, binaries[3])
 	for _, binary := range binaries {
 		testutil.FailErr(t, "fixture binary readable", os.Chmod(binary, 0o755))
 	}

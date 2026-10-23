@@ -50,19 +50,22 @@ func attachPreparedMount(lease uint64, name string, tree int) (_ *mountedVolume,
 		return nil, err
 	}
 	defer func() { _ = unix.Close(target) }()
-	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
-		return nil, err
-	}
-	mounted := &mountedVolume{lease: lease, path: name, tree: tree}
-	defer func() {
-		if err != nil {
-			_ = unix.Unmount(mountDescriptorPath(tree), unix.MNT_DETACH)
-		}
-	}()
-	mounted.mountID, err = mountID(tree)
+	id, err := mountID(tree)
 	if err != nil {
 		return nil, err
 	}
+	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
+		return nil, err
+	}
+	mounted := &mountedVolume{lease: lease, path: name, tree: tree, mountID: id}
+	defer func() {
+		if err != nil {
+			// The startup stage and the watcher never mutate M_view at the
+			// same time. Even on refusal, check the exact visible mount before
+			// unmounting; a proc-fd pathname alone is not mount authority.
+			err = errors.Join(err, mounted.detach())
+		}
+	}()
 	// A pinned target can be renamed during lookup. Never claim that a stale
 	// lexical alias is the attachment location; retire the prepared tree if
 	// that race is observed. The kernel always binds the opened object.
@@ -78,7 +81,8 @@ func mountDescriptorPath(fd int) string {
 
 // Mount operations are serialized and replacements retire the old lease
 // before attachment. A proc-fd unmount follows covering mounts, so refuse if
-// the retained root is no longer the visible mount at its recorded alias.
+// the retained root is no longer visible. Its current kernel-reported alias,
+// rather than its original name, follows ordinary directory renames.
 func (volume *mountedVolume) detach() error {
 	if volume.tree < 0 {
 		return nil
@@ -88,14 +92,18 @@ func (volume *mountedVolume) detach() error {
 	if err != nil || id != volume.mountID {
 		return errors.New("attached mount identity changed")
 	}
-	visible, err := openMountPoint(volume.path)
+	current, err := os.Readlink(mountDescriptorPath(fd))
+	if err != nil {
+		return err
+	}
+	visible, err := openMountPoint(current)
 	if err != nil {
 		return err
 	}
 	visibleID, statErr := mountID(visible)
 	_ = unix.Close(visible)
 	if statErr != nil || visibleID != volume.mountID {
-		return errors.New("retained volume is covered or no longer at its alias")
+		return errors.New("retained volume is covered or no longer visible")
 	}
 	if err := unix.Unmount(mountDescriptorPath(fd), unix.MNT_DETACH); err != nil {
 		return fmt.Errorf("detach retained volume: %w", err)

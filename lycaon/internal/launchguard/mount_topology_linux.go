@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	maxMountTopologyBytes   = 16 << 20
+	maxMountTopologyEntries = 32768
+)
+
 type mountEntry struct {
 	id            int
 	parent        int
@@ -112,7 +117,7 @@ func validMountDevice(value string) bool {
 }
 
 func validMountOptions(raw string) bool {
-	if raw == "" || strings.ContainsAny(raw, " \t\n\x00") {
+	if raw == "" || strings.ContainsAny(raw, " \t\r\n\x00") {
 		return false
 	}
 	seen := map[string]bool{}
@@ -150,14 +155,14 @@ func decodeMountInfoField(raw string) (string, bool) {
 // New startup admission consumes the complete topology. Unlike the historical
 // diagnostic parser above, one malformed record refuses the entire snapshot.
 func parseMountTopology(raw []byte) ([]mountEntry, error) {
-	if len(raw) == 0 || raw[len(raw)-1] != '\n' {
+	if len(raw) == 0 || len(raw) > maxMountTopologyBytes || raw[len(raw)-1] != '\n' {
 		return nil, errors.New("truncated mount topology")
 	}
 	var entries []mountEntry
 	byID := map[int]mountEntry{}
 	for line := range strings.SplitSeq(string(raw[:len(raw)-1]), "\n") {
 		entry, ok := parseMountInfoLine(line)
-		if !ok {
+		if !ok || len(entries) == maxMountTopologyEntries {
 			return nil, errors.New("invalid mount topology record")
 		}
 		if _, exists := byID[entry.id]; exists {
@@ -174,21 +179,31 @@ func parseMountTopology(raw []byte) ([]mountEntry, error) {
 			}
 			roots++
 		}
-		seen := map[int]bool{}
-		for current := entry; ; {
-			if seen[current.id] {
-				return nil, errors.New("mount topology cycle")
-			}
-			seen[current.id] = true
-			parent, exists := byID[current.parent]
-			if !exists {
-				break
-			}
-			current = parent
-		}
 	}
 	if roots != 1 {
 		return nil, errors.New("ambiguous mount topology root")
+	}
+	// Each identity moves unseen → visiting → complete exactly once. A deep
+	// caller-created topology must not repeat an ancestor walk for every row.
+	state := make(map[int]byte, len(entries))
+	for _, entry := range entries {
+		if state[entry.id] == 2 {
+			continue
+		}
+		var chain []int
+		for current, exists := entry, true; exists; current, exists = byID[current.parent] {
+			if state[current.id] == 2 {
+				break
+			}
+			if state[current.id] == 1 {
+				return nil, errors.New("mount topology cycle")
+			}
+			state[current.id] = 1
+			chain = append(chain, current.id)
+		}
+		for _, id := range chain {
+			state[id] = 2
+		}
 	}
 	return entries, nil
 }

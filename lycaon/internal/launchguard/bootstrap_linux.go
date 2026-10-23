@@ -28,6 +28,7 @@ const (
 	stageLifetimeFD
 	stageSelfFD
 	stageServerFD
+	stageMountTransitionFD
 )
 
 // RunBootstrap is the installed setuid program's caller-facing half. It
@@ -90,7 +91,7 @@ func RunBootstrap(arguments []string) (int, error) {
 		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime, self, broker},
+		ExtraFiles: []*os.File{frame, generation.Directory, generation.Desktop, generation.Entry, origin, desktopEnd, generation.Lifetime, self, broker, generation.MountTransition},
 		SysProcAttr: &syscall.SysProcAttr{
 			Cloneflags: unix.CLONE_NEWNS,
 			Credential: &syscall.Credential{Uid: 0, Gid: 0, Groups: []uint32{}},
