@@ -94,7 +94,8 @@ Before allocating training resources, run `prepare.py --model MODEL --train TRAI
 with the same local tokenizer and token limit as training. It checks receipt and
 quality admission and split separation, then encodes every complete request and
 target. Its manifest records input and output hashes, token lengths, and whole
-rows excluded for exceeding the limit. No request or target is truncated.
+rows excluded for exceeding the limit or failing exact template-prefix, content,
+or token-boundary preservation. No request or target is truncated or rewritten.
 Unsupported controls and other invalid inputs remain errors. Every split must
 retain at least one row. Train from the three JSONL files in that output directory.
 
@@ -118,7 +119,7 @@ full-vocabulary log-softmax over 8,192 positions of a 262,144-token vocabulary
 would need about 21 GB by itself. Do not shorten an accepted request to fit.
 The tokenizer must preserve the full generation prefix and every target;
 training rejects oversize or unsupported rows; the explicit preparation stage
-counts and excludes whole oversize rows before training. Prompt tokens are
+counts and excludes whole unencodable rows before training. Prompt tokens are
 masked. DPO uses summed completion log likelihoods with a frozen reference;
 the optional chosen NLL anchor is token-normalized.
 

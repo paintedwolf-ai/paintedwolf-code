@@ -6,7 +6,7 @@ from pathlib import Path
 
 from checkpoint import exclusive_run
 from common import digest, file_digest, inventory, write_new
-from data import OversizeRow, assert_disjoint, encode, load_split
+from data import EncodingExclusion, assert_disjoint, encode, load_split
 
 
 def prepare(paths, out, tokenizer, max_length, model_identity, checkpoint_matches=None):
@@ -27,9 +27,9 @@ def prepare(paths, out, tokenizer, max_length, model_identity, checkpoint_matche
                     keys = ("target",) if row["schema"] == "pw-custom-sft/1" else ("chosen", "rejected")
                     try:
                         tokens = max(len(encode(tokenizer, row, row[key], max_length)["input_ids"]) for key in keys)
-                    except OversizeRow as exc:
+                    except EncodingExclusion as exc:
                         report["excluded"].append({"split": name, "request_sha256": row["request_capture"]["sha256"],
-                                                   "reason": "oversize", "tokens": exc.tokens, "limit": exc.limit})
+                                                   "reason": exc.reason, **exc.details})
                         continue
                     stream.write(json.dumps(row, ensure_ascii=False) + "\n")
                     lengths.append(tokens)
