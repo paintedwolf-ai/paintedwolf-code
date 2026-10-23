@@ -4,7 +4,7 @@ import tempfile
 import time
 
 from .app import InstalledApp
-from .desktop_ui import interactive_window
+from .desktop_ui import DesktopUI, interactive_window
 from .desktop_launch import activate, protected_launcher
 from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
@@ -78,6 +78,7 @@ def execute(binding, capability, case, root):
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the owned workspace project')
                 submit_project_turn(app)
+                with DesktopUI(app) as ui:
                     deadline = time.monotonic() + 30
                     while active_session(app, project, provider['provider_id']) is None:
                         if time.monotonic() >= deadline:
