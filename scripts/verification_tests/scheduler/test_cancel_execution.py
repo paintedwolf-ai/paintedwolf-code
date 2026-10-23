@@ -268,7 +268,7 @@ class LifecycleTests(unittest.TestCase):
         """Keep an owned descendant observable without its caretaker retaining the lease."""
         ready, stop = self.root / "descendant-ready", self.root / "descendant-stop"
         caretaker = (
-            "import json, os, time; from pathlib import Path\n"
+            "import json, os, signal, time; from pathlib import Path\n"
             f"stop = Path({str(stop)!r}); ready = Path({str(ready)!r})\n"
             "descriptor = int(os.environ['PW_TEST_EXECUTION_FD'])\n"
             "child = os.fork()\n"
@@ -277,21 +277,23 @@ class LifecycleTests(unittest.TestCase):
                "    deadline = time.monotonic() + 20\n"
                "    while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
                "    os._exit(0)\n")
-            + "os.close(descriptor)\n"
+            + "child_pin = os.pidfd_open(child)\n"
+            "os.close(descriptor)\n"
             "def facts(pid):\n"
             "    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()\n"
             "    return {'pid': pid, 'state': fields[0], 'start': fields[19]}\n"
             + ("deadline = time.monotonic() + 20\n"
                "while facts(child)['state'] != 'Z':\n"
                "    if stop.exists() or time.monotonic() >= deadline:\n"
-               "        os.kill(child, 9); os.waitpid(child, 0); os._exit(1)\n"
+               "        signal.pidfd_send_signal(child_pin, signal.SIGKILL)\n"
+               "        os.waitpid(child, 0); os.close(child_pin); os._exit(1)\n"
                "    time.sleep(.01)\n" if mode == "zombie" else "")
             + "temporary = ready.with_suffix('.tmp')\n"
             "temporary.write_text(json.dumps({'caretaker': facts(os.getpid()), 'child': facts(child)}))\n"
             "temporary.replace(ready)\n"
             "deadline = time.monotonic() + 20\n"
             "while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
-            "os.waitpid(child, 0)\n"
+            "os.waitpid(child, 0); os.close(child_pin)\n"
         )
         running = self.start("descendant fixture",
                              "import os, subprocess, sys, time\n"
