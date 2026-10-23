@@ -118,6 +118,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
             KeySynthType=SimpleNamespace(LOCKMODIFIERS=5, UNLOCKMODIFIERS=6, SYM=3, STRING=4),
             generate_keyboard_event=Mock(return_value=True))
         with patch.object(focus_owner, 'process_identity', return_value=identity), \
+                patch.object(focus_owner.lineage, 'process_identity', return_value=identity), \
                 patch.object(focus_owner, 'owned_process', return_value=True):
             result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertTrue(result['normal_keyboard_replace_and_save'])
@@ -166,6 +167,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
         frame.getState.return_value.contains.return_value = True
         app = SimpleNamespace(observations={'launch_identity': identity}, require_running=lambda: None)
         with patch.object(focus_owner, 'process_identity', return_value=identity), \
+                patch.object(focus_owner.lineage, 'process_identity', return_value=identity), \
                 patch.object(focus_owner, 'owned_process', return_value=True):
             selected = focus_owner.EntryFocus(app, ui, 'Contents of fixture')
             self.assertEqual(selected.observe()['entry'], identity)

@@ -17,6 +17,7 @@ class InstalledInputProtocolTests(unittest.TestCase):
                    'operation': 'editor-replace-save-v1', 'ordinal': 0,
                    'focus': {'launch': identity, 'frame': dict(identity),
                              'entry': {'pid': 101, 'parent_pid': 100, 'start_time_ticks': 43},
+                             'frame_lineage': [dict(identity)],
                              'entry_focused': True, 'frame_active': True, 'frame_visible': True}}
         delivery = {'format_version': 1, 'execution_nonce': 'a' * 32, 'vm_id': 'owned-fedora',
                     'transaction_id': 'd' * 32, 'operation': request['operation'], 'ordinal': 0,
