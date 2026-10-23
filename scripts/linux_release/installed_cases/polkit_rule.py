@@ -66,18 +66,22 @@ def _inventory(directory):
     return {name: _file(directory, name) for name in names}
 
 
+def rule_bytes(username):
+    if not isinstance(username, str) or not username or len(username) > 128:
+        raise ValueError('presence rule requires the selected campaign account')
+    return ('polkit.addRule(function(action, subject) {\n'
+        f'  if (action.id === {json.dumps(ACTION)} && subject.user === {json.dumps(username)}) {{\n'
+        '    return polkit.Result.YES;\n  }\n});\n').encode()
+
+
 class RuleLease:
     """Keep the directory FD and exact created object until the rule is removed."""
     def __init__(self, directory, nonce, username):
         if not isinstance(nonce, str) or not re.fullmatch('[a-f0-9]{32}', nonce):
             raise ValueError('presence rule requires its fixed execution nonce')
-        if not isinstance(username, str) or not username or len(username) > 128:
-            raise ValueError('presence rule requires the selected campaign account')
         self.directory, self.created = directory, None
         self.name = '00-paintedwolf-qualification-' + nonce + '.rules'
-        self.body = ('polkit.addRule(function(action, subject) {\n'
-            f'  if (action.id === {json.dumps(ACTION)} && subject.user === {json.dumps(username)}) {{\n'
-            '    return polkit.Result.YES;\n  }\n});\n').encode()
+        self.body = rule_bytes(username)
         self.before = _inventory(directory)
 
     def install(self):
@@ -123,11 +127,15 @@ def _campaign_account():
     uid = os.environ.get('SUDO_UID', '')
     if not re.fullmatch('[0-9]{1,10}', uid) or int(uid) == 0:
         raise ValueError('presence rule requires its nonroot sudo campaign account')
-    info = MARKER.lstat()
-    _controlled(info)
-    if info.st_size > 4096:
-        raise ValueError('owned guest marker exceeds its fixed bound')
-    marker = json.loads(MARKER.read_bytes())
+    descriptor = os.open(MARKER, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as stream:
+        before = os.fstat(stream.fileno())
+        _controlled(before)
+        raw = stream.read(4097)
+        if (len(raw) > 4096 or _identity(before) != _identity(os.fstat(stream.fileno()))
+                or _identity(before) != _identity(MARKER.lstat())):
+            raise ValueError('owned guest marker changed or exceeds its fixed bound')
+    marker = json.loads(raw)
     if (not isinstance(marker, dict) or set(marker) != {'format_version', 'desktop', 'package'}
             or type(marker['format_version']) is not int or marker['format_version'] != 1
             or marker['desktop'] not in {'gnome', 'plasma'}
