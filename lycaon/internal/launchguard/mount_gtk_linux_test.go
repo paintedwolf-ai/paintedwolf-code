@@ -307,3 +307,103 @@ func retainGTKVolumeComponent(t *testing.T, desktop, module string) {
 	testutil.FailErr(t, "retain component provenance", os.WriteFile(filepath.Join(directory, "component.json"), append(raw, '\n'), 0600))
 	t.Logf("retained GTK volume component: %s", directory)
 }
+
+func TestMountGTKChooserReadsVolumeAttachedAfterReadiness(t *testing.T) {
+	desktop, module := buildGTKVolumeFixture(t)
+	display := startFixtureXvfb(t)
+	home, volume := t.TempDir(), t.TempDir()
+	payload := filepath.Join(volume, "payload")
+	if _, err := os.Stat(payload); !os.IsNotExist(err) {
+		t.Fatalf("late-volume payload exists before attachment: %v", err)
+	}
+	raw, err := os.ReadFile(module)
+	testutil.FailErr(t, "read late-volume module", err)
+	fixture := installLaunchFixture(t)
+	binaries := append([]string(nil), fixture.binaries...)
+	binaries[2] = desktop
+	testutil.FailErr(t, "stage late-volume GTK desktop", sudoFixture(t, "upgrade", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, fixture.bootstrap, "--protected-watch", payload)
+	command.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	input, err := command.StdinPipe()
+	testutil.FailErr(t, "create late-volume controls", err)
+	defer input.Close()
+	output, writer, err := os.Pipe()
+	testutil.FailErr(t, "create late-volume reports", err)
+	defer output.Close()
+	defer writer.Close()
+	diagnostic, err := os.Create(filepath.Join(t.TempDir(), "gtk-late.log"))
+	testutil.FailErr(t, "retain late-volume diagnostics", err)
+	defer diagnostic.Close()
+	command.Stdout, command.Stderr = writer, diagnostic
+	testutil.FailErr(t, "start GTK before the source volume", command.Start())
+	_ = writer.Close()
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	waited := false
+	defer func() {
+		_ = input.Close()
+		if !waited {
+			cancel()
+			<-done
+		}
+	}()
+	testutil.FailErr(t, "bound late-volume report reads", output.SetReadDeadline(time.Now().Add(15*time.Second)))
+	reader := bufio.NewReader(output)
+	read := func(prefix string, target any) {
+		t.Helper()
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			raw, _ := os.ReadFile(diagnostic.Name())
+			t.Fatalf("late-volume report: %v diagnostics=%s", err, raw)
+		}
+		raw, ok := strings.CutPrefix(line, prefix)
+		if !ok {
+			t.Fatalf("unexpected late-volume report %q", line)
+		}
+		testutil.FailErr(t, "decode late-volume report", json.Unmarshal([]byte(raw), target))
+	}
+	var ready struct {
+		Initialized bool `json:"gtk_initialized"`
+		PID         int  `json:"pid"`
+	}
+	read("PWGTKREADY01 ", &ready)
+	if !ready.Initialized || ready.PID <= 1 {
+		t.Fatalf("mapped GTK readiness missing: %+v", ready)
+	}
+	if _, err := os.Stat(payload); !os.IsNotExist(err) {
+		t.Fatalf("source volume arrived before readiness: %v", err)
+	}
+	stop := startSourceFUSE(t, volume, raw)
+	defer stop()
+	began := time.Now()
+	_, err = fmt.Fprint(input, "r")
+	testutil.FailErr(t, "request chooser read after attachment", err)
+	var facts gtkVolumeFacts
+	read("PWGTK01 ", &facts)
+	if !facts.Initialized || !facts.ChooserRead || !facts.EngineRead {
+		t.Fatalf("late chooser/engine read absent: %+v", facts)
+	}
+	t.Logf("GTK started before absent volume; protected chooser and engine read after FUSE attachment in %s", time.Since(began))
+	_, err = fmt.Fprint(input, "h")
+	testutil.FailErr(t, "retain late-volume file", err)
+	read("PWGTK01 ", &facts)
+	var held gtkHeldFile
+	read("PWGTKHOLD01 ", &held)
+	if !held.Held || held.PID != ready.PID || held.FD < 0 || held.Inode == 0 {
+		t.Fatalf("late-volume held file missing: %+v", held)
+	}
+	_, err = fmt.Fprint(input, "c")
+	testutil.FailErr(t, "release late-volume file", err)
+	var closed gtkHeldFile
+	read("PWGTKHOLD01 ", &closed)
+	if closed.Held || closed.FD != -1 || closed.PID != held.PID || closed.Device != held.Device || closed.Inode != held.Inode {
+		t.Fatalf("late-volume file release changed identity: %+v -> %+v", held, closed)
+	}
+	_, err = fmt.Fprint(input, "q")
+	testutil.FailErr(t, "settle late-volume GTK", err)
+	err = <-done
+	waited = true
+	testutil.FailErr(t, "late-volume GTK exit", err)
+}
