@@ -60,6 +60,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
     if endpoint:
         return _literal_steps(gui_endpoint(int(endpoint.group(1))))
+    if operation == 'reply-fixture-prompt-v1':
+        return _literal_steps('Run the installed qualification fixture using command.')
     if operation == 'editor-replace-save-v1':
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':

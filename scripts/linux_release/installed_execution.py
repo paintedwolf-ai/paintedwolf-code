@@ -78,6 +78,8 @@ def driver_family(capability: str, installation: str) -> str | None:
 
 
 def case_family(capability: str, case: str, installation: str) -> str | None:
+    if (capability, case) == ("conversation", "restart-and-reconnect"):
+        return "reply_restart"
     if capability == "installation" and case in {"clean-install-and-launch", "launcher-arguments"}:
         return "desktop"
     if capability == "documents" and case in {"redacted-send", "ocr-and-documents"}:
