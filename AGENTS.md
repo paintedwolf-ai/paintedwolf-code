@@ -38,6 +38,13 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   Keep source PRs open until the batch lands. Merge only when requested, through
   the normal queue. The backend/frontend scope rule below applies to each
   constituent change; a batch may contain both.
+- **Cancel superseded background Qualification when its source is obsolete.**
+  The hosted supersession controller may cancel queued or running background
+  main-push Qualification after validating source ancestry and rechecking run
+  identity. Preserve explicit candidate and release Qualification. Releases still
+  require passing Qualification on their exact source commit. This cancellation
+  policy needs no additional approval; local verification cancellation follows
+  the stuck-verification rules below.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is
