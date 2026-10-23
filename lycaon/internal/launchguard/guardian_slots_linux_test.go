@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -33,7 +34,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGuardianExecSlotsPreserveForeignDescriptors(t *testing.T) {
-	for _, mode := range []string{"collision", "close", "exec-failure"} {
+	for _, mode := range []string{"collision-64", "collision-85", "collision-86", "close", "exec-failure"} {
 		t.Run(mode, func(t *testing.T) {
 			command := exec.Command("sudo", "-n", "env", guardianSlotFixture+"="+mode, os.Args[0], "-test.run=^$")
 			if output, err := command.CombinedOutput(); err != nil {
@@ -58,13 +59,19 @@ func runGuardianSlotFixture(mode string) error {
 	}
 	defer reader.Close()
 	defer writer.Close()
-	if mode == "collision" {
-		foreign, err := unix.FcntlInt(writer.Fd(), unix.F_DUPFD_CLOEXEC, 64)
+	collision := map[string]int{"collision-64": 64, "collision-85": guardianIncomingProof, "collision-86": guardianIncomingImage}[mode]
+	if collision != 0 {
+		for fd := 64; fd <= guardianIncomingImage; fd++ {
+			if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+				return errors.New("fixture transition slot already occupied: " + strconv.Itoa(fd))
+			}
+		}
+		foreign, err := unix.FcntlInt(writer.Fd(), unix.F_DUPFD_CLOEXEC, collision)
 		if err != nil {
 			return err
 		}
 		defer unix.Close(foreign)
-		if foreign != 64 {
+		if foreign != collision {
 			return errors.New("fixture could not reserve its collision slot")
 		}
 		before, err := unix.FcntlInt(uintptr(foreign), unix.F_GETFD, 0)
@@ -78,6 +85,14 @@ func runGuardianSlotFixture(mode string) error {
 		after, err := unix.FcntlInt(uintptr(foreign), unix.F_GETFD, 0)
 		if err != nil || before != after {
 			return errors.New("collision changed foreign descriptor flags")
+		}
+		for fd := 64; fd <= guardianIncomingImage; fd++ {
+			if fd == foreign {
+				continue
+			}
+			if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+				return errors.New("failed reservation retained owned slot: " + strconv.Itoa(fd))
+			}
 		}
 		if _, err := unix.Write(foreign, []byte{'f'}); err != nil {
 			return err
