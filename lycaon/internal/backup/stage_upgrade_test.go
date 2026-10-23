@@ -66,3 +66,19 @@ func TestStagedInspectionKeepsConfirmedInvalidity(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreApplyPreservesOperationalFailures(t *testing.T) {
+	for _, cause := range []error{context.Canceled, syscall.ENOSPC, syscall.EIO, syscall.EROFS, os.ErrPermission} {
+		err := unapplicableRestore(cause)
+		if errors.Is(cause, context.Canceled) {
+			if !errors.Is(err, cause) {
+				t.Fatal("restore lost cancellation")
+			}
+			continue
+		}
+		var failure *db.StoreIncompatibleError
+		if !errors.As(err, &failure) || failure.Reason == db.RecoveryReasonIntegrityFailed {
+			t.Fatalf("operational apply failure labeled damaged history: %v", err)
+		}
+	}
+}

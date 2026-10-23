@@ -202,7 +202,7 @@ func ClassifyStoreFailure(err error) error {
 	if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
 		return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
 	}
-	if errors.Is(err, fs.ErrPermission) {
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EROFS) {
 		return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 	}
 	return err

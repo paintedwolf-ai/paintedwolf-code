@@ -297,6 +297,8 @@ A backup must identify the current schema or a recognized released schema with a
 
 The archive always names its SQLite payload `store.db`. An internal restore marker maps that payload to the configured local database filename; archive metadata cannot choose the destination. Recovery pre-images preserve the configured database and its journals under canonical archive names. Native transfer journals are local operational data, excluded from exports and reclaimed on startup by process lock and recorded file identity without touching active transfers.
 
+Restore progress uses an optional version-1 `.restore-progress.json` cursor inside its staging directory, bound by SHA-256 to the immutable restore decision. Checkpoints contain a completed-operation count, so their encoded size stays independent of the file inventory. Files are installed, synced, and verified before advancing the cursor; checkpoints occur after 64 files or 16 MiB, with large files checkpointed immediately. A process interruption can replay the partial batch and the file being checkpointed. Existing markers with explicit applied paths remain valid, older binaries safely replay work when they ignore the cursor, and reported failures retain the full applied set in the original marker. An unsupported, mismatched, or out-of-range cursor cannot skip work.
+
 A failed apply is not a dead end. The marker records the failure, so the boot enters recovery mode and an explicit restore, recovery snapshot, or start fresh replaces the stuck transaction instead of being refused as a pending restart. The pre-image that transaction displaced is kept.
 
 Pending rewind journals belong to the installation. Their durable references resolve
