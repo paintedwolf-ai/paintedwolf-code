@@ -273,7 +273,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		return nil, Result{}, err
 	}
 	hasher := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, hasher), req.Source)
+	n, err := io.CopyBuffer(io.MultiWriter(tmp, hasher), req.Source, req.CopyBuffer)
 	result := Result{Bytes: n, SHA256: hex.EncodeToString(hasher.Sum(nil))}
 	if err != nil {
 		return nil, result, fmt.Errorf("write replacement: %w", err)
@@ -318,7 +318,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 			return result, err
 		}
 		if req.ReviewStaged != nil {
-			if err := verifyWindowsTarget(windowsTarget{parent: parent, name: tmpName}, result); err != nil {
+			if err := verifyWindowsTarget(windowsTarget{parent: parent, name: tmpName}, result, req.CopyBuffer); err != nil {
 				return result, fmt.Errorf("reviewed staging changed: %w", err)
 			}
 		}
@@ -337,7 +337,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageDirSynced); err != nil {
 			return result, err
 		}
-		if err := verifyWindowsTarget(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
+		if err := verifyWindowsTarget(windowsTarget{parent: parent, name: parent.name}, result, req.CopyBuffer); err != nil {
 			return result, err
 		}
 		result.Publication = PublicationVerified
@@ -423,14 +423,14 @@ func deleteWindowsHandle(handle windows.Handle) error {
 	return err
 }
 
-func verifyWindowsTarget(target windowsTarget, want Result) error {
+func verifyWindowsTarget(target windowsTarget, want Result, buffer []byte) error {
 	f, err := target.Open()
 	if err != nil {
 		return fmt.Errorf("%w: open destination: %v", ErrPostcondition, err)
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.Copy(hasher, f)
+	n, err := io.CopyBuffer(hasher, f, buffer)
 	if err != nil || n != want.Bytes || hex.EncodeToString(hasher.Sum(nil)) != want.SHA256 {
 		return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
 	}

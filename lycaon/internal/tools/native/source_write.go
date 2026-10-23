@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -105,6 +106,7 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 }
 
 type agentStreamRequest struct {
+	Memory *toolcontract.ProgramMemory
 	// Mode applies to a new file; nil uses the ordinary write mode.
 	Mode         *os.FileMode
 	Target       mutationTarget
@@ -113,24 +115,52 @@ type agentStreamRequest struct {
 }
 
 func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (fseffect.Result, error) {
-	before, err := captureAgentFileAt(req.Target.Location)
+	stage, result, err := stageAgentStream(ctx, tctx, req)
 	if err != nil {
-		return fseffect.Result{}, err
+		return result, err
+	}
+	defer stage.Close()
+	result, err = stage.replacement.Commit()
+	return result, finishAgentMutation(ctx, tctx, stage.mutation, stage.journal, err)
+}
+
+func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (*agentStreamStage, fseffect.Result, error) {
+	stage := &agentStreamStage{ctx: ctx, tc: tctx, request: req}
+	if req.Memory != nil {
+		release, err := req.Memory.Reserve(ctx, 32<<10)
+		if err != nil {
+			return nil, fseffect.Result{}, err
+		}
+		stage.releaseWorking = release
+		stage.copyBuffer = make([]byte, 32<<10)
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			stage.Close()
+		}
+	}()
+
+	before, err := captureAgentFileAt(req.Target.Location, ctx, req.Memory)
+	if err != nil {
+		return nil, fseffect.Result{}, err
 	}
 	op := api.SourceChangeOpWrite
 	if !before.exists {
 		op = api.SourceChangeOpCreate
 	}
-	mutation := agentMutation{Op: op, AbsPath: req.Target.Abs,
+	stage.releaseBefore = before.release
+	stage.mutation = agentMutation{Op: op, AbsPath: req.Target.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
-	var journal sourceeffect.Pending
-	var captured revisionCapture
+	mutation := &stage.mutation
+	stage.captured = revisionCapture{ctx: ctx, memory: req.Memory}
+	captured := &stage.captured
 	mode := os.FileMode(0o644)
 	if req.Mode != nil {
 		mode = *req.Mode
 	}
-	result, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: req.Target.Location, Source: io.TeeReader(req.Source, &captured), Mode: mode, PreserveMode: true,
+	replacement, result, err := fseffect.StageReplace(fseffect.ReplaceRequest{
+		Location: req.Target.Location, Source: io.TeeReader(req.Source, captured), Mode: mode, PreserveMode: true, CopyBuffer: stage.copyBuffer,
 		ReviewStaged: func(target fseffect.Target, staged fseffect.Result) error {
 			if req.BeforeCommit != nil {
 				if err := req.BeforeCommit(target, staged); err != nil {
@@ -143,8 +173,8 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			if mutation.Op == api.SourceChangeOpCreate {
 				operation = api.AgentIntentOperationCreate
 			}
-			reportMutationIntent(tctx, mutation, req.Target.Location, fseffect.Location{}, operation)
-			return reviewAgentMutation(ctx, tctx, mutation, req.Target.Location, fseffect.Location{}, false)
+			reportMutationIntent(tctx, *mutation, req.Target.Location, fseffect.Location{}, operation)
+			return reviewAgentMutation(ctx, tctx, *mutation, req.Target.Location, fseffect.Location{}, false)
 		},
 		BeforeCommit: func(target fseffect.Target, staged fseffect.Result) error {
 			if err := ctx.Err(); err != nil {
@@ -161,15 +191,23 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			if err := verifyMutationSnapshot(req.Target.Location, mutation.BeforeSHA256, false); err != nil {
 				return err
 			}
-			if err := setAsideUnversionedFile(ctx, tctx, req.Target, &mutation); err != nil {
+			if err := setAsideUnversionedFile(ctx, tctx, req.Target, mutation); err != nil {
 				return err
 			}
 			var prepareErr error
-			journal, prepareErr = prepareAgentMutation(ctx, tctx, mutation, req.Target.Location, fseffect.Location{}, false)
+			if stage.batchPrepared {
+				return nil
+			}
+			stage.journal, prepareErr = prepareAgentMutation(ctx, tctx, *mutation, req.Target.Location, fseffect.Location{}, false)
 			return prepareErr
 		},
 	})
-	return result, finishAgentMutation(ctx, tctx, mutation, journal, err)
+	if err != nil {
+		return nil, result, err
+	}
+	stage.replacement = replacement
+	ready = true
+	return stage, result, nil
 }
 
 // setAsideUnversionedFile keeps a replaced file that is too large for source
@@ -299,7 +337,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
 		return fmt.Errorf("rename crosses filesystem effect roots")
 	}
-	after, err := captureAgentFileAt(from.Location)
+	after, err := captureAgentFileAt(from.Location, ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -349,7 +387,7 @@ func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return agentFileEvidence{exists: true}, nil
 	}
-	return captureAgentFileAt(loc)
+	return captureAgentFileAt(loc, context.Background(), nil)
 }
 
 // recoverableRemoval is the attributed removal of an entry in an attached
@@ -415,7 +453,7 @@ func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 }
 
 func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, target mutationTarget, metadataChange string, apply func() error) error {
-	evidence, err := captureAgentFileAt(target.Location)
+	evidence, err := captureAgentFileAt(target.Location, ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -484,6 +522,7 @@ type agentMutation struct {
 }
 
 type agentFileEvidence struct {
+	release func()
 	exists  bool
 	isDir   bool
 	content []byte
@@ -491,7 +530,7 @@ type agentFileEvidence struct {
 	size    int64
 }
 
-func captureAgentFileAt(loc fseffect.Location) (agentFileEvidence, error) {
+func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *toolcontract.ProgramMemory) (agentFileEvidence, error) {
 	f, err := fseffect.OpenRead(loc)
 	if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
 		return agentFileEvidence{}, nil
@@ -508,12 +547,13 @@ func captureAgentFileAt(loc fseffect.Location) (agentFileEvidence, error) {
 		return agentFileEvidence{exists: true, isDir: info.IsDir()}, nil
 	}
 	h := sha256.New()
-	var captured revisionCapture
+	captured := revisionCapture{ctx: ctx, memory: memory}
 	size, err := io.Copy(io.MultiWriter(h, &captured), f)
 	if err != nil {
+		captured.Close()
 		return agentFileEvidence{}, err
 	}
-	return agentFileEvidence{exists: true, content: captured.bytes(), sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
+	return agentFileEvidence{release: captured.Close, exists: true, content: captured.bytes(), sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
 }
 
 func hashExistingBytes(content []byte) string {
@@ -664,27 +704,47 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 
 // A revision body is retained only if the entire stream fits the capture limit.
 type revisionCapture struct {
-	content  []byte
+	buffer   *BufferedBytes
+	ctx      context.Context
+	memory   *toolcontract.ProgramMemory
 	overflow bool
 }
 
 func (c *revisionCapture) Write(raw []byte) (int, error) {
-	if !c.overflow {
-		if len(c.content)+len(raw) > sourceledger.MaxRevisionContentBytes {
-			c.content, c.overflow = nil, true
-		} else {
-			c.content = append(c.content, raw...)
-		}
+	if c.overflow {
+		return len(raw), nil
 	}
-	return len(raw), nil
+	if c.buffer == nil {
+		ctx := c.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		buffer, err := (ExecutionRevisions{Memory: c.memory}).NewBufferedBytes(ctx, sourceledger.MaxRevisionContentBytes, "source_revision_bytes")
+		if err != nil {
+			return 0, err
+		}
+		c.buffer = buffer
+	}
+	if len(c.buffer.Bytes)+len(raw) > sourceledger.MaxRevisionContentBytes {
+		c.overflow = true
+		_ = c.buffer.Close()
+		return len(raw), nil
+	}
+	return c.buffer.Write(raw)
 }
 
 func (c *revisionCapture) bytes() []byte {
 	if c.overflow {
 		return nil
 	}
-	if c.content == nil {
+	if c.buffer == nil || c.buffer.Bytes == nil {
 		return []byte{}
 	}
-	return c.content
+	return c.buffer.Bytes
+}
+
+func (c *revisionCapture) Close() {
+	if c.buffer != nil {
+		_ = c.buffer.Close()
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -16,7 +17,7 @@ import (
 // copyTree preflights without retaining a tree-sized plan, then routes every
 // entry through the same mutation owners as a single-file copy. The second
 // pass measures actual streamed bytes so growth cannot exceed admission.
-func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, in CopyInput, caps RecursiveCaps, used *RecursiveCaps, result *CopyResult) error {
+func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, in CopyInput, caps RecursiveCaps, used *RecursiveCaps, result *CopyResult, memory *toolcontract.ProgramMemory) error {
 	destination, err := assertCopyWritePath(ctx, t.Boundary, tc, pair.To, tc.ProfileID())
 	if err != nil {
 		return err
@@ -82,7 +83,7 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 			remaining = min(remaining, in.MaxFileBytes)
 		}
 		before := len(result.Copied)
-		err := t.copyFile(ctx, tc, FilePair{From: filepath.Join(pair.From, rel), To: to}, in, remaining, result)
+		err := t.copyFile(ctx, tc, FilePair{From: filepath.Join(pair.From, rel), To: to}, in, remaining, result, memory)
 		if len(result.Copied) > before {
 			used.Bytes += result.Copied[len(result.Copied)-1].Bytes
 		}

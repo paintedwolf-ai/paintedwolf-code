@@ -221,7 +221,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		return nil, Result{}, err
 	}
 	hasher := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, hasher), req.Source)
+	n, err := io.CopyBuffer(io.MultiWriter(tmp, hasher), req.Source, req.CopyBuffer)
 	result := Result{Bytes: n, SHA256: hex.EncodeToString(hasher.Sum(nil))}
 	if err != nil {
 		return nil, result, fmt.Errorf("write replacement: %w", err)
@@ -276,7 +276,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if req.ReviewStaged != nil {
 			stagedParent := *parent
 			stagedParent.name = tmpName
-			if err := verifyTarget(targetAt{parent: &stagedParent}, result); err != nil {
+			if err := verifyTarget(targetAt{parent: &stagedParent}, result, req.CopyBuffer); err != nil {
 				return result, fmt.Errorf("reviewed staging changed: %w", err)
 			}
 		}
@@ -295,7 +295,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageDirSynced); err != nil {
 			return result, err
 		}
-		if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
+		if err := verifyTarget(targetAt{parent: parent}, result, req.CopyBuffer); err != nil {
 			return result, err
 		}
 		result.Publication = PublicationVerified
@@ -356,14 +356,14 @@ func createTempAt(parent *openedParent, mode os.FileMode) (string, *os.File, sta
 	return "", nil, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
 }
 
-func verifyTarget(target Target, want Result) error {
+func verifyTarget(target Target, want Result, buffer []byte) error {
 	f, err := target.Open()
 	if err != nil {
 		return fmt.Errorf("%w: open destination: %w", ErrPostcondition, err)
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.Copy(hasher, f)
+	n, err := io.CopyBuffer(hasher, f, buffer)
 	if err != nil {
 		return fmt.Errorf("%w: read destination: %w", ErrPostcondition, err)
 	}

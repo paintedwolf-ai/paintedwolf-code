@@ -47,7 +47,9 @@ type Target interface {
 type ReplaceRequest struct {
 	Location
 	Source io.Reader
-	Mode   os.FileMode
+	// CopyBuffer is caller-admitted stream scratch, retained through Commit.
+	CopyBuffer []byte
+	Mode       os.FileMode
 	// PreserveMode resolves the destination mode under the target lock.
 	PreserveMode bool
 	// DirMode applies to created parents; zero uses defaultDirMode.

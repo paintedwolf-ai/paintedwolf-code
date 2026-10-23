@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -83,13 +84,24 @@ func (t *CopyTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 // CopyOperation keeps recursive admission across every source in one utility
 // invocation, including sources handled after an ordinary operand failure.
 type CopyOperation struct {
+	memory       *toolcontract.ProgramMemory
 	tool         *CopyTool
 	input        CopyInput
 	caps, used   RecursiveCaps
 	maxFileBytes int64
 }
 
-func (t *CopyTool) Begin(in CopyInput) (*CopyOperation, error) {
+func (t *CopyTool) Begin(in CopyInput, memory *toolcontract.ProgramMemory) (*CopyOperation, error) {
+	if memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return nil, err
+		}
+		memory, err = toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return nil, err
+		}
+	}
 	caps, err := t.Caps.resolve()
 	if err != nil {
 		return nil, err
@@ -103,13 +115,13 @@ func (t *CopyTool) Begin(in CopyInput) (*CopyOperation, error) {
 		}
 	}
 	in.Pairs = nil
-	return &CopyOperation{tool: t, input: in, caps: caps, maxFileBytes: maxBytes}, nil
+	return &CopyOperation{memory: memory, tool: t, input: in, caps: caps, maxFileBytes: maxBytes}, nil
 }
 
 // Copy writes a complete batch through one operation's mutation streams.
 func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContext) (CopyResult, error) {
 	var result CopyResult
-	op, err := t.Begin(in)
+	op, err := t.Begin(in, nil)
 	if err != nil {
 		return result, err
 	}
@@ -137,7 +149,7 @@ func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools
 			return result, err
 		}
 		if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
-			err := t.copyTree(ctx, tctx, source, pair, in, op.caps, &op.used, &result)
+			err := t.copyTree(ctx, tctx, source, pair, in, op.caps, &op.used, &result, op.memory)
 			return result, err
 		}
 	}
@@ -149,14 +161,14 @@ func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools
 		}
 		limit = min(limit, op.caps.Bytes-op.used.Bytes)
 	}
-	err := t.copyFile(ctx, tctx, pair, in, limit, &result)
+	err := t.copyFile(ctx, tctx, pair, in, limit, &result, op.memory)
 	if in.Recursive && len(result.Copied) > 0 {
 		op.used.Bytes += result.Copied[len(result.Copied)-1].Bytes
 	}
 	return result, err
 }
 
-func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, in CopyInput, maxBytes int64, result *CopyResult) error {
+func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, in CopyInput, maxBytes int64, result *CopyResult, memory *toolcontract.ProgramMemory) error {
 	prof := tctx.ProfileID()
 	fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
 	srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "copy",
@@ -174,7 +186,7 @@ func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair Fi
 			return nil
 		}
 	}
-	n, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes)
+	n, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes, memory)
 	if err != nil {
 		reject := &toolrejection.ToolReject{}
 		if errors.As(err, &reject) {
@@ -215,7 +227,7 @@ func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string
 	return nil
 }
 
-func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, target mutationTarget, maxBytes int64) (int64, error) {
+func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, target mutationTarget, maxBytes int64, memory *toolcontract.ProgramMemory) (int64, error) {
 	in, err := fseffect.OpenRead(source.Location)
 	if err != nil {
 		return 0, err
@@ -240,7 +252,7 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 	}
 	mode := info.Mode().Perm()
 	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{
-		Mode:   &mode,
+		Mode: &mode, Memory: memory,
 		Target: target, Source: contextio.Reader{Context: ctx, Source: io.LimitReader(in, readLimit)},
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
 			if staged.Bytes <= maxBytes {

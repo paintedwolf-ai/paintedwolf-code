@@ -103,7 +103,7 @@ func runCp(inv *invocation) error {
 		return err
 	}
 	recursive, noClobber := inv.flag("-r"), inv.flag("-n")
-	operation, err := inv.owners.Operations.Copy.Begin(native.CopyInput{Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"), MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")})
+	operation, err := inv.owners.Operations.Copy.Begin(native.CopyInput{Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"), MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.memory)
 	if err != nil {
 		return err
 	}

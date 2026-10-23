@@ -94,7 +94,7 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	if hash != textfile.SHA256(body) || size != int64(len(body)) || capture != "metadata_only" {
 		t.Fatalf("large revision = hash %s, size %d, capture %s", hash, size, capture)
 	}
-	evidence, err := captureAgentFileAt(testMutationTarget(path).Location)
+	evidence, err := captureAgentFileAt(testMutationTarget(path).Location, t.Context(), nil)
 	testutil.FailErr(t, "capture large source", err)
 	if evidence.content != nil || evidence.size != size || evidence.sha256 != hash {
 		t.Fatalf("large source capture = %d retained bytes, size %d, hash %s", len(evidence.content), evidence.size, evidence.sha256)

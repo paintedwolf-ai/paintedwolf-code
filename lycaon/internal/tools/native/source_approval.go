@@ -35,7 +35,7 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 }
 
 func verifyMutationSnapshot(location fseffect.Location, expected string, directory bool) error {
-	current, err := captureAgentFileAt(location)
+	current, err := captureAgentFileAt(location, context.Background(), nil)
 	return snapshotMatches(location, current, err, expected, directory)
 }
 

@@ -3,6 +3,7 @@ package command_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"strconv"
@@ -20,7 +21,7 @@ import (
 
 func TestProcessAgeSelectionDoesNotClaimUnobservedNativeJob(t *testing.T) {
 	f := newProgramFixture(t)
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"head": {
 			Tool: "read",
 			Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
