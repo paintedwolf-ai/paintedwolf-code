@@ -189,6 +189,9 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	}
 	abs, root, err := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 	if err != nil {
+		if reject := declinedRootReject(tctx, modelPath, err); reject != nil {
+			return Resolved{}, reject
+		}
 		// Grants are consulted only after attached roots decline the path.
 		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
 			return granted, nil
@@ -201,6 +204,9 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
 	if err != nil {
 		return Resolved{}, noRootsReject()
+	}
+	if reject := currentRootReject(tctx, root, abs); reject != nil {
+		return Resolved{}, reject
 	}
 	scopeRel := projectroot.ScopeRel(root, abs)
 	if b != nil {
@@ -280,11 +286,6 @@ func mapResolveErr(err error, modelPath string) error {
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
-	case errors.Is(err, projectroot.ErrUnknownRootLabel):
-		return &toolrejection.ToolReject{
-			Code: "UNKNOWN_ROOT_LABEL",
-			Data: map[string]any{"path": modelPath, "reason": err.Error()},
-		}
 	case errors.Is(err, projectroot.ErrPathEscape):
 		return &toolrejection.ToolReject{
 			Code: "SURVEY_PATH_ESCAPE",

@@ -40,7 +40,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	}
 
 	scope, ref := approvalScopeRef(action)
-	cfg := g.store.Get(scope, ref)
+	cfg := g.store.EffectiveConfig(ref)
 	layers := EffectiveApprovalRuleLayers(ctx, g.store, g.sources.ApprovalRules, scope, ref)
 
 	// The path resolver applies the same predicate, so no card offers what it refuses.

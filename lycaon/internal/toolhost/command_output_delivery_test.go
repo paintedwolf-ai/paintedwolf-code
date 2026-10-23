@@ -65,7 +65,7 @@ func decodeProgramOutcome(t *testing.T, raw string) command.ProgramOutcome {
 
 func TestOutputDeliveryHeadTailNoticeAndSedNextLines(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 16000 // 12 KiB budget: 6 KiB head + 6 KiB tail
 	}
 
@@ -183,7 +183,7 @@ func TestOutputCopyIsReadOnlyAndRefusesMutation(t *testing.T) {
 
 func TestGoTest200kLinesSummarySurvives(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 200000 // large tier: 64 KiB (32 KiB head + 32 KiB tail)
 	}
 
@@ -257,7 +257,7 @@ func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 	writeSizedFile("tier80k.txt", 1900) // ~81.7 KiB: exceeds 64 KiB (large)
 
 	// Small context tier (16384 tokens -> 12 KiB budget)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 16384
 	}
 	singleRaw, err := f.Call(t, t.Context(), "cat medium.txt")
@@ -281,7 +281,7 @@ func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 	}
 
 	// Medium context tier (65536 tokens -> 32 KiB budget)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 65536
 	}
 	med20kRaw, err := f.Call(t, t.Context(), "cat tier20k.txt")
@@ -296,7 +296,7 @@ func TestContextProfileBudgetsAndActiveStreamSplitting(t *testing.T) {
 	}
 
 	// Large context tier (200000 tokens -> 64 KiB budget)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 200000
 	}
 	large45kRaw, err := f.Call(t, t.Context(), "cat tier45k.txt")
@@ -349,7 +349,7 @@ func TestPipeStagesProduceZeroRetentionRowsAndFailedChildRetainsStderr(t *testin
 
 func TestSourceMappingsConfirmHeadAndTailAndMapScratchReadsBackToSource(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.ModelContextWindow = 16000 // 12 KiB budget
 	}
 
@@ -444,7 +444,7 @@ func TestScreenedSecretsAreRedactedOnceAndMatchOutputCopy(t *testing.T) {
 func TestDeliveryWindowSurvivesRecorderReopenAndRejectsIncompleteDescriptor(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
 	immediate := &tools.ToolInvocationOut{}
-	f.Configure = func(tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000; tc.Effects.Out = immediate }
+	f.Context = func(_ string, tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000; tc.Effects.Out = immediate }
 	body := strings.Repeat("line for retained output\n", 2000)
 	testutil.FailErr(t, "write window fixture", os.WriteFile(filepath.Join(f.Dir, "window.txt"), []byte(body), 0600))
 	raw, err := f.Call(t, t.Context(), "cat window.txt")
@@ -485,7 +485,7 @@ func TestChangedScratchCopyCannotReuseOriginalMappings(t *testing.T) {
 
 func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	f.Configure = func(tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000 }
+	f.Context = func(_ string, tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000 }
 	secret := "tiny-key"
 	matcher := secretmatch.NewInertMatcher()
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {

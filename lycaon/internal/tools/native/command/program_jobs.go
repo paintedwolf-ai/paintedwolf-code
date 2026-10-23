@@ -91,9 +91,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
 			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
-			if ctx.Err() != nil {
+			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				status := j.signalStatus(handle)
-				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
 			return result.Status, err

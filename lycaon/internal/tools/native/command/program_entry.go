@@ -319,8 +319,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
-		Environment: programEnvironment(tc),
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -448,6 +448,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
 			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
 			enrichProgramReject(reject, refusal.Command, span)

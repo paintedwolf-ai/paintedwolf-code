@@ -133,6 +133,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		}
 		mgr.SetEffectiveCatalogDeps(deps.Catalog.ModuleRoot, deps.Catalog.Effective, deps.Settings.Service.TrustSurfaces)
 		mgr.Profiles.SetSkillsGate(deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceSkills, deps.Storage.Projects))
+		mgr.Profiles.SetApprovals(deps.Settings.Service.Approvals)
 	}
 	if deps.Catalog.ViewCache != nil {
 		mgr.Catalog.SetCatalogViewCache(deps.Catalog.ViewCache)

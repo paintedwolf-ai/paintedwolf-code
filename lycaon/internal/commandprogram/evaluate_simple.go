@@ -243,6 +243,10 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
+		if syncErr := f.syncDirectory(ctx, spec.Name == "cd" && err == nil && result.Status == 0); syncErr != nil {
+			child.settle(result, errors.Join(err, syncErr))
+			return f.expansionRefusal(s.SyntaxLocation, syncErr)
+		}
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
 			child.close()

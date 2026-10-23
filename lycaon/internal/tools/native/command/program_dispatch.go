@@ -107,7 +107,7 @@ type evaluatedChild struct {
 }
 
 // pathCommands run on the frame's own directory state.
-var pathCommands = map[string]bool{"cd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
+var pathCommands = map[string]bool{"cd": true, "pwd": true, "basename": true, "dirname": true, "realpath": true, "readlink": true, "native_path": true}
 
 // Fork captures this frame's directory for an isolated frame.
 func (d *ProgramDispatcher) Fork(context.Context) (commandprogram.Dispatch, func(), error) {
@@ -501,6 +501,19 @@ func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolc
 func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
 	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	return marker.BeforeNativeOwner(ctx, child.bound, d.run.tc.Identity.ToolCallID, child.review)
+}
+
+type admissionMarker struct {
+	invocation.ProgramAdmissionRecorder
+	started bool
+}
+
+func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelToolCallID string, inputs toolcontract.ReviewedOperationInputs) error {
+	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, modelToolCallID, inputs); err != nil {
+		return err
+	}
+	m.started = true
+	return nil
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {

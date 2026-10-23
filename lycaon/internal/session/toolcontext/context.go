@@ -41,6 +41,9 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Local.ContainerRecorder = m.loopbackProv
 	}
 	if m != nil && m.projects != nil && tctx.Identity.ProjectID != "" {
+		// The view precedes the roots it qualifies, so a change between them
+		// reads as later than this context.
+		tctx.Source.RootHistory = m.workspace.RootHistory().View(tctx.Identity.ProjectID)
 		roots, err := m.workspace.Roots(ctx, sess)
 		if err != nil {
 			return tools.ToolContext{}, err
