@@ -46,6 +46,13 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
+	sourcefeed.StopProjectWatch(ctx, id)
+	deleted := false
+	defer func() {
+		if !deleted {
+			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
+		}
+	}()
 	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id, func(completed, total int) {
 		report(wire.ProjectRemovalProgress{Phase: "chats", Completed: completed, Total: total})
 	}); err != nil {
@@ -63,6 +70,7 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 	if err := s.Registry.Delete(mutationCtx, id); err != nil {
 		return err
 	}
+	deleted = true
 	if removeSecretValues != nil {
 		if err := removeSecretValues(); err != nil {
 			slog.WarnContext(ctx, "remove managed secrets after project delete", "project_id", id, "err", err)
@@ -78,7 +86,6 @@ func (s *Removal) finishProjectDeletion(ctx context.Context, p *project.Project,
 	s.Roots.forgetRemovedEditorDocuments(dependents)
 	s.sourceViews.InvalidateProjectSourceViews(id)
 	s.Roots.releaseUnattachedSourceRoots(ctx, removedRootPaths)
-	sourcefeed.StopProjectWatch(ctx, id)
 	// Project deletion removes only engine-managed storage.
 	if err := project.RemoveHostDataDir(s.DataDir, id); err != nil {
 		slog.WarnContext(ctx, "remove project host data", "project_id", id, "err", err)
