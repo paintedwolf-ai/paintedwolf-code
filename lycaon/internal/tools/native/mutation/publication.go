@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -76,6 +77,7 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 	if err == nil {
 		return nil
 	}
+	err = nativeutility.ResourceRejection(err)
 	cmd := "redirect"
 	if operator != "" {
 		cmd = "redirect " + operator

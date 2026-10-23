@@ -1,9 +1,10 @@
 package query
 
 import (
+	"math/bits"
+
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
-	"math/bits"
 )
 
 // inputPositions retains one newline bit per consumed byte, rather than a copy

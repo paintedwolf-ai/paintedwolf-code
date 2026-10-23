@@ -4,14 +4,14 @@
   "kind": "runtime_service",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured537 receiver lines and22 methods of ExecutionRevisions as the single native capture/revision owner. Its two ports are the existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming proofs, verification and publication pins share exact identities and admission lifetimes; a separate reader or accountant would split that contract. Proof vectors reserve retained capacity before growth, one admitted block buffer survives to Close, and source bytes are verified before delivery. Exact100MB retention, mutation/seek, cancellation/refusal/release, encoded identity and source-write fixtures support this ceiling. Method, dependency or size changes require renewed review.",
+  "reason": "Retain the measured 537 receiver lines and 22 methods of ExecutionRevisions as the single native capture/revision owner. Its two ports are the existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming proofs, verification and publication pins share exact identities and admission lifetimes; a separate reader or accountant would split that contract. Proof vectors reserve retained capacity before growth, one admitted block buffer survives to Close, and source bytes are verified before delivery. Exact100MB retention, mutation/seek, cancellation/refusal/release, encoded identity and source-write fixtures support this ceiling. Method, dependency or size changes require renewed review.",
   "reviewed_commit": "b49f967c1f5c0a7ceafa99228d14771f56550cbe",
   "ceiling": 22,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
     "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
     "lycaon/internal/tools/native/execution_capture_test.go": "8a8bc6b53b189b270e0092828c743c3bdfbce55c14dcf3ea4edee688ff659420",
-    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "2ce11ab72aa45467a4f8e61ff8deca5bd34c15ebf9c0d87fcc41e74ef91bf9f4"
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "055324a956e75c2c1dd396e332b066d3938f5e23a35b4aa0518f4c59e14d1ffa"
   },
   "reviewed_shape": "a638377370c4cccf88d0f97c7516c5904c46cec0ef2a40acde7adcde3af15718"
 }
