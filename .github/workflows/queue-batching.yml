@@ -1,0 +1,59 @@
+name: Automatic queue batching
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  pull_request_target:
+    types: [labeled, unlabeled, converted_to_draft, synchronize, closed]
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+  statuses: read
+jobs:
+  enforce-hold:
+    if: github.event_name == 'pull_request_target' && github.event.action == 'labeled' && github.event.label.name == 'no-combine'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Split batches containing a no-combine PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -c 'import os; from ci_policy.queue_batching.github import enforce_holds; enforce_holds(os.environ["GITHUB_REPOSITORY"])'
+  reconcile:
+    concurrency:
+      group: automatic-queue-batching
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Only default-branch controller code executes with write credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Configure the controller identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          gh auth setup-git
+      - name: Reconcile waiting queue entries and merge holds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.queue_batching.coordinator
